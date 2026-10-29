@@ -44,6 +44,122 @@ drift from it unnoticed. Test-only; the normative spec-012 fixture stays untouch
        reject's `Reason:` (read with `wingfoil memory history <task-id>`), each with the command that
        shows it resolved and what that command printed; then what else changed on the next pass. -->
 
+### design (architect, 2026-10-29)
+
+**Which templates.** "The shipped templates" are the Memory scaffolds `memoryTemplateMd(type)` generates in
+`src/storage/templates.ts`, which `templateScaffold` (and so `wingfoil init`) writes to
+`.wingfoil/memory/templates/<type>.md` of a new project, with the scaffolded `memory.yaml` (`memoryYaml()`) that
+points at them: eight types, `adr, bug, decision-log, plan, release, release-line, task, tech-spec`. Not this
+repository's own `.wingfoil/memory/templates/` (hand-authored, with `tmpl_version`, `head -12
+.wingfoil/memory/templates/task.md`), which no user project receives (`bug-266` Notes). The Memory part of the
+scaffold is the same for both templates: a scratch script comparing the `.wingfoil/memory.yaml` and
+`.wingfoil/memory/templates/*` entries of `templateScaffold(resolveTemplate('scrum'))` and `…('kanban')` printed
+`true` (neither generator takes the template definition), so one golden covers both.
+
+**Prototype** (a scratch script outside the worktree, against `dist/` built from `c3027988`): the shipped
+`memory.yaml` and eight templates written into a fresh git repository, plus fixed pillar files (below); one
+`memory.memoryAdd` per type through `CORE_MODULES`, `title: "Golden <type>"` (plan:
+`set: ['workflow=sw-life-cycle', 'phase=inception', 'scope=rl-001']`); `memory.memorySubmit` on every element but
+the task (subjects printed `wf(adr): submit adr-001-golden-adr` … `wf(plan): submit
+sw-life-cycle-inception-plan`); then `assembleExecutionContext(repo, { role: 'developer', element: { type: 'task',
+id: 'task-001-golden-task' }, stateRef: 'HEAD' })`. It returned `ok`, `notes: []`, no warnings, and a 223-line,
+7381-byte payload: `## 1. Task` with the draft task, `## 4. Relevant Memory (7 documents)` with
+`adr:adr-001-golden-adr`, `bug:bug-001-golden-bug`, `decision-log:dl-001-golden-decision-log`,
+`plan:sw-life-cycle-inception-plan`, `release:release-001`, `release-line:rl-001`,
+`tech-spec:spec-001-golden-tech-spec` (each in by its one shared title word, T4 score 1, ordered type then id).
+Two runs gave byte-identical payloads once the header's `state:` is fixed (`cmp` silent). The payload shows what
+the hand-built golden never did: `format: 1` in every frontmatter block, the template's `""` rendered as `''`
+(the plan's `element`, `parent`), the plan's `workflow`/`phase`, the post-submit states (`pending`, the plan
+`active`), and the template bodies, the `adr`/`tech-spec` `supersedes:` note included. The real `state:` sha
+varies between runs: every commit `memory add`/`submit` writes carries the author date and the
+`WingFoil-Version: <semver> (<sha>)` trailer (`git log --format='%(trailers:key=WingFoil-Version,valueonly)'` on
+the scratch repository printed `0.3.1 (c3027988…)`).
+
+**Shape of the test** (subject to D1–D4):
+
+- New suite `test/core/context-shipped-templates.test.ts`; new golden
+  `test/fixtures/context/golden-payload-shipped-templates.md`. `test/fixtures/context/golden-payload.md` and
+  `test/core/context-payload-format.test.ts` (the `spec-012` §7 normative pair) and `src/core/context.ts` stay
+  untouched.
+- Setup: `makeTempGitRepo()` (`test/storage/helpers/git-fixture.ts`); write the
+  `templateScaffold(resolveTemplate('scrum'))` entries whose path is `.wingfoil/memory.yaml` or under
+  `.wingfoil/memory/templates/`, exactly as generated; add the fixed pillars — `dna.yaml` = the `DNA_YAML` shape of
+  `context-payload-format.test.ts` reduced to `project.name: Golden`, one module `core`/`src/core`, `stacks`
+  (TypeScript/language, TDD), team member `Golden User` (`developer`), role `developer`, `paths.sources: [ src/ ]`;
+  `roles.yaml` = `developer: [testing]`, `global: []`; `directives/custom/testing.md` = that suite's
+  `directiveMd('testing', '# Testing\n\nWrite the test first.')`; one `commitAll`. Then the adds and submits above
+  through `CORE_MODULES` (the pattern of `test/core/memory-add-date-author.test.ts`: in process, the same `CoreFn`
+  the CLI calls; no CLI spawn, so no `test/cli/helpers/spawn-cli.ts` and no npm). Add order `adr, bug,
+  decision-log, release, release-line, task, tech-spec`, then `plan`; every `{n}` is `001`.
+- Assertion: line 2 of the returned `payload` matches
+  `^<!-- format: 1 \| role: developer \| element: task:task-001-golden-task \| state: [0-9a-f]{40} -->$` and its
+  sha equals `context.stateRef` and `git rev-parse HEAD`; with that one line's sha replaced by
+  `0123456789abcdef0123456789abcdef01234567` (the normative golden's), the payload equals the golden file byte for
+  byte (`toBe(readFileSync(…, 'utf-8'))`). Also `notes` → `[]` and `warnings` → `undefined`, as the prototype
+  returned.
+- A second `it`: the Memory entries of the scrum and kanban scaffolds are equal (`toEqual`), so the golden speaks
+  for both templates.
+- The suite's header comment says what a failure means: a shipped template, the scaffolded `memory.yaml`, the
+  `memory add`/`submit` rendering or the serializer changed; the golden is regenerated from the received payload
+  and its diff is reviewed by the approver (`dl-150` (B)).
+
+**AC classification.**
+
+| AC | Class | Why | What qa pins |
+|----|-------|-----|--------------|
+| A test builds a context from documents created by the shipped templates and compares it with a golden; `src/core/context.ts` unchanged | characterization | the behaviour exists: the prototype built the payload at `c3027988` with no source change | the suite and golden above; the golden is the real output of the builder (the notes name the command that produced it), never typed by hand; `git diff release/0.3 -- src/` empty |
+
+No red-first AC, so no fabricated red: the suite passes on its first run. Coverage cannot drop (no `src/` change).
+
+**Files expected to change.** New: `test/core/context-shipped-templates.test.ts`,
+`test/fixtures/context/golden-payload-shipped-templates.md`. Changed: this task file only. No `.wingfoil/` file, no
+workflow, no spec, no documentation: no `version:` bump, and no test pinning a phase list, a step list or a count
+of a workflow is affected (no workflow changes); `.wingfoil/` is untouched, so no `npm run check:mcp` proof is owed.
+No BDD change: the AC adds a test, not a behaviour of `P5.4.4`.
+
+**Existing tests run** (in the worktree, at `c3027988`, one jest at a time, `--maxWorkers=2`, no slot):
+
+- `npx jest test/core/context-payload-format.test.ts test/core/context.test.ts test/core/context-builder.test.ts
+  test/core/builtin-directive-templates.test.ts test/storage/templates.test.ts
+  test/memory/history-scaffold-copy.test.ts test/core/memory-add-date-author.test.ts` → `Test Suites: 7 passed`,
+  `Tests: 231 passed`.
+- `npx jest test/lint/control-characters.test.ts test/lint/lint-clean.test.ts test/lint/no-fabricated-stderr.test.ts`
+  → `Test Suites: 3 passed`, `Tests: 24 passed`. The prototype payload holds no non-ASCII character at all
+  (`grep -nP '[^\x00-\x7F]'` printed nothing), so it passes the control-character gate as it stands and as the
+  wider Unicode rule `task-317` adds.
+
+**Spec amendments.** None required: `spec-012` §7 ("Normative example") names `golden-payload.md` as the one
+normative fixture, and this second golden is not normative (D5).
+
+**Decisions for the approver** (design gate):
+
+- **D1 — what the context is built from.** (a) The whole `wingfoil init` scaffold (`initWingfoilProject`): the
+  prototype's payload is 309 lines and carries the scaffolded `dna.yaml`, `roles.yaml` and seven directive bodies
+  (four built-in, three custom), so every edit to a built-in directive or the DNA scaffold also changes this
+  golden. (b) The shipped `memory.yaml` and Memory templates with fixed pillar files (above): 223 lines, changing
+  only with the Memory templates, `memory.yaml`'s path/id patterns and plan machine, `memory add`/`submit` rendering
+  or the serializer. **Recommendation: (b)**, the scope of `bug-266`; the directive and DNA scaffolds have their own
+  pins (`test/core/builtin-integrity.test.ts`, `test/storage/templates.test.ts`).
+- **D2 — element and states.** The element is the `task` as `memory add` leaves it (`draft`; a draft element
+  assembles), the other seven are submitted once, because `spec-012` §6 drops `draft` documents from §4.
+  **Recommendation: yes**; nothing is approved, so no approver identity enters the fixture.
+- **D3 — the header's sha.** Replace the sha on line 2 only, after asserting it is the commit's 40-hex sha, rather
+  than pin fixed commit dates (the `WingFoil-Version` trailer still moves the sha with every build).
+  **Recommendation: yes.**
+- **D4 — regeneration.** (a) None: the failing `toBe` shows the diff and the golden is rewritten by hand from the
+  received payload. (b) An opt-in `WF_UPDATE_GOLDEN=1` that writes the received payload to the golden and then
+  fails the test anyway, so a run can never pass by writing and the change lands as a git diff.
+  **Recommendation: (b)**, so the task that next changes a template (`task-321`) regenerates it mechanically and the
+  approver reviews the diff; (a) if the approver prefers no write path in a test.
+- **D5 — `spec-012` §7.** No amendment; the new golden is a regression pin, the normative example stays
+  `golden-payload.md`. **Recommendation: no amendment.**
+- **D6 — order with `task-321`.** `task-321` adds `contributor`, `credit`, `reported_by` and release fields to the
+  shipped scaffolds; once this golden is in `release/0.3`, that change fails this suite, and the regenerated golden
+  is a file `task-321` must list in its design and change in its red/green, its diff reviewed with it. If
+  `task-321` merges first while this task is in flight, this task's golden (a red file, T4) needs a qa amendment
+  through the approval queue. **Recommendation: merge this task before `task-321`'s design**, and hand `task-321` a
+  note naming the suite and the golden.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
