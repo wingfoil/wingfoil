@@ -9,7 +9,8 @@
  * - `dna remove` called with no options object at all (the MCP Tool's arguments are optional);
  * - `memory add`'s `singleOption` keeps the LAST of a repeated option;
  * - `memory add` re-throws a failure that is neither a `StorageError` nor a `ValidationError`;
- * - `directive remove` returns the inventory loader's refusal for an invalid directive file.
+ * - `directive remove` returns the HEAD inventory loader's refusal for a committed invalid directive file
+ *   (task-311: an uncommitted one no longer decides).
  *
  * Every write lands in a throwaway temp git repo. Deterministic (REQ-SYS-07): fixed fixtures, fixed
  * git identity from the fixture helper, no clock.
@@ -110,10 +111,15 @@ describe('src/core/index.ts arms with no other test (task-189, bug-161)', () => 
     expect(execFileSync('git', ['-C', repo, 'status', '--porcelain'], { encoding: 'utf-8' })).toBe('');
   });
 
-  it('directive remove: an invalid directive file is the inventory loader\'s VALIDATION refusal', async () => {
+  // task-311 (bug-108, dl-080 (B)) rewrote this pin on purpose: `directive remove` now resolves the
+  // directive at HEAD, so the file that decides the refusal is the COMMITTED one, named at its revision,
+  // and an uncommitted invalid file no longer refuses anything (the working tree only words a refusal).
+  it('directive remove: a COMMITTED invalid directive file is the HEAD inventory loader\'s VALIDATION refusal', async () => {
     // A file the loader cannot skip: it reads fine but carries no frontmatter, so the whole pillar is
     // refused (loaders.ts `parseDirectiveFile`) before the name is looked up.
     writeFileSync(join(repo, '.wingfoil', 'directives', 'custom', 'broken.md'), 'no frontmatter here\n', 'utf-8');
+    execFileSync('git', ['-C', repo, 'add', '--', '.wingfoil/directives/custom/broken.md']);
+    execFileSync('git', ['-C', repo, 'commit', '--quiet', '-m', 'fixture: commit a directive with no frontmatter']);
 
     const result = await op('directive', 'directiveRemove')({ root: repo, positional: 'anything' });
 
@@ -121,5 +127,17 @@ describe('src/core/index.ts arms with no other test (task-189, bug-161)', () => 
     expect(exitCodeForResult(result)).toBe(1);
     expect(result.ok === false && result.error.code).toBe('VALIDATION');
     expect(result.ok === false && result.error.message).toContain('E_MISSING_FRONTMATTER');
+    expect(result.ok === false && result.error.message).toContain('HEAD:.wingfoil/directives/custom/broken.md');
+  });
+
+  it('directive remove: an UNCOMMITTED invalid directive file no longer decides — the name is unknown at HEAD', async () => {
+    writeFileSync(join(repo, '.wingfoil', 'directives', 'custom', 'broken.md'), 'no frontmatter here\n', 'utf-8');
+
+    const result = await op('directive', 'directiveRemove')({ root: repo, positional: 'anything' });
+
+    expect(result.ok).toBe(false);
+    expect(exitCodeForResult(result)).toBe(1);
+    expect(result.ok === false && result.error.code).toBe('NOT_FOUND');
+    expect(result.ok === false && result.error.message).toBe('unknown directive: anything');
   });
 });

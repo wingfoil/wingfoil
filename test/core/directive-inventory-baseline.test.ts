@@ -28,7 +28,7 @@
  * Determinism (REQ-SYS-07): fixed fixture texts, fixed step order, no clock.
  */
 import { execFileSync } from 'node:child_process';
-import { existsSync, writeFileSync } from 'node:fs';
+import { existsSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { CORE_MODULES, loadDirectiveListing, loadDirectives, loadRolesYaml } from '../../src/core';
@@ -48,6 +48,7 @@ const SPARE_PATH = '.wingfoil/directives/custom/spare.md';
 const KEEPER_PATH = '.wingfoil/directives/custom/keeper.md';
 const GLOBAL_RULE_PATH = '.wingfoil/directives/custom/global-rule.md';
 const BUILTIN_PATH = '.wingfoil/directives/built-in/documentation.md';
+const GHOST_PATH = '.wingfoil/directives/custom/ghost.md';
 
 const DNA_YAML = `version: 1.1
 modules:
@@ -93,6 +94,17 @@ const ROLES_WITH_SPARE = ROLES_YAML.replace('    - keeper\n', '    - keeper\n   
 
 const directiveMd = (id: string, kind: 'custom' | 'built-in'): string =>
   `---\nid: ${id}\nname: "${id}"\ntype: directive\nkind: ${kind}\ntitle: "${id}"\n---\n\n# ${id}\n`;
+
+/**
+ * task-311's W-uncommitted explanation (design D5, approved verbatim at its design gate, 2026-10-29): the
+ * refusal `directive remove` returns when no commit records `<name>` but a working-tree file defines it.
+ * The first sentence stays P3.2's `unknown directive: <name>`; the rest is the working tree WORDING the
+ * refusal, never deciding it (`command-baseline`, dl-080 (B)).
+ */
+const workingTreeOnly = (name: string, path: string, porcelain: string): string =>
+  `unknown directive: ${name} — the working tree's '${path}' defines it [git status '${porcelain}'], but no commit ` +
+  `of this repository records it, and a directive is resolved from the committed repository (dl-080); commit ` +
+  `'${path}' first, then retry`;
 
 interface AssignValue {
   readonly directives: readonly string[];
@@ -380,13 +392,16 @@ describe('directive remove answers REQ-SEC-07 (b) from the committed roles.yaml 
 
   // --- AC4: the directive file itself uncommitted ------------------------------------------------
   //
-  // Characterization. `task-092`'s write rule already answers this and answers it correctly, and the
-  // point of pinning it here is that the inventory change must NOT quietly replace that answer with
-  // `unknown directive: <id>` — the refusal a user needs names the file and its `git status` code.
+  // task-311 (bug-108, dl-080 (B)) rewrote this pin on purpose. `task-096` kept `directive remove`'s
+  // name lookup on the working tree so that an untracked file would meet the write guard's refusal;
+  // `command-baseline` and `dl-080` then ruled that a read which can refuse resolves at `HEAD`, the
+  // working tree only WORDING the refusal. So an untracked directive is now `unknown directive: <id>`
+  // (no commit records it), and the sentence after it says what the working tree holds — the
+  // explanation task-311's design fixes verbatim (D5, approved at its design gate on 2026-10-29).
 
-  it('AC4: an UNTRACKED directive file is not removable — the write guard refuses, and the file survives', async () => {
+  it('AC4 (task-311 AC1 (b)): an UNTRACKED directive file is unknown at HEAD — NOT_FOUND, explained, and the file survives', async () => {
     repo = seedRepo();
-    writeFixtureFile(repo, '.wingfoil/directives/custom/ghost.md', directiveMd('ghost', 'custom'));
+    writeFixtureFile(repo, GHOST_PATH, directiveMd('ghost', 'custom'));
     const before = head(repo);
     const unchanged = snapshotPersistence(repo);
 
@@ -395,9 +410,9 @@ describe('directive remove answers REQ-SEC-07 (b) from the committed roles.yaml 
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(exitCodeForResult(result)).toBe(1);
-    expect(result.error.message).toContain('refusing to commit .wingfoil/directives/custom/ghost.md');
-    expect(result.error.message).toContain("[git status '??']");
-    expect(existsSync(join(repo, '.wingfoil/directives/custom/ghost.md'))).toBe(true);
+    expect(result.error.code).toBe('NOT_FOUND');
+    expect(result.error.message).toBe(workingTreeOnly('ghost', GHOST_PATH, '??'));
+    expect(existsSync(join(repo, GHOST_PATH))).toBe(true);
     expect(head(repo)).toBe(before);
     assertPersistenceUnchanged(repo, unchanged);
   });
@@ -436,6 +451,150 @@ describe('directive remove answers REQ-SEC-07 (b) from the committed roles.yaml 
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error.message).toBe('unknown directive: nope');
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// `directive remove` — the directive ITSELF is resolved at HEAD (task-311, bug-108, dl-080 (B))
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * task-311 AC1 (red-first). `directiveRemoveFn` step 3 resolved `<name>` from the working tree — the one
+ * gating read `command-baseline` still listed as deviating (`bug-108`). It now resolves at `HEAD`: a
+ * directive no commit records is `unknown directive: <name>` whatever the disk holds, a directive `HEAD`
+ * records still resolves when the disk lost or renamed it, and the working tree only words the refusal.
+ *
+ * The write half is unchanged (design gate D2 (a), 2026-10-29): a target resolved at `HEAD` but deleted on
+ * disk meets `requireUnmodifiedTarget` (`src/core/write-guard.ts`). Its wording below is copied from a real
+ * run on this base: in a `wingfoil init --template scrum` project with a committed `custom/spare.md`, `rm` of
+ * that file then `wingfoil directive create --name spare` printed `error: refusing to commit
+ * .wingfoil/directives/custom/spare.md: … [git status ' D'] — the file is not in the working tree. …`, exit 1,
+ * and after `git rm --cached` the same with `[git status 'D '] — the file is not in the index, the file is
+ * not in the working tree` — the same guard, reached today by another verb, not a text this task invents.
+ */
+describe('directive remove resolves the directive it deletes at HEAD (task-311, bug-108)', () => {
+  let repo: string;
+
+  afterEach(() => removeTempDir(repo));
+
+  it('AC1 (a): a directive committed at HEAD but DELETED on disk is not unknown — the write guard refuses it (D2 (a))', async () => {
+    // bug-108's reproduction: today `unknown directive: spare`, although `HEAD` holds the blob.
+    repo = seedRepo();
+    rmSync(join(repo, SPARE_PATH));
+    const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
+
+    const result = await remove(repo, 'spare');
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(exitCodeForResult(result)).toBe(1);
+    expect(result.error.code).toBe('VALIDATION');
+    expect(result.error.message).not.toContain('unknown directive');
+    expect(result.error.message).toContain(`refusing to commit ${SPARE_PATH}`);
+    expect(result.error.message).toContain("[git status ' D']");
+    expect(result.error.message).toContain('the file is not in the working tree');
+    expect(head(repo)).toBe(before);
+    expect(gitOut(repo, ['cat-file', '-t', `HEAD:${SPARE_PATH}`])).toBe('blob');
+    assertPersistenceUnchanged(repo, unchanged);
+  });
+
+  it('AC1 (a): the same after a `git rm` — the deletion staged, neither index nor disk holding the file', async () => {
+    repo = seedRepo();
+    git(repo, ['rm', '--quiet', SPARE_PATH]);
+    const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
+
+    const result = await remove(repo, 'spare');
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(exitCodeForResult(result)).toBe(1);
+    expect(result.error.code).toBe('VALIDATION');
+    expect(result.error.message).not.toContain('unknown directive');
+    expect(result.error.message).toContain(`refusing to commit ${SPARE_PATH}`);
+    expect(result.error.message).toContain("[git status 'D ']");
+    expect(result.error.message).toContain('the file is not in the index');
+    expect(result.error.message).toContain('the file is not in the working tree');
+    expect(head(repo)).toBe(before);
+    assertPersistenceUnchanged(repo, unchanged);
+  });
+
+  it('AC1 (c): a STAGED, never-committed directive file is unknown at HEAD — the explanation names the index state', async () => {
+    repo = seedRepo();
+    writeFixtureFile(repo, GHOST_PATH, directiveMd('ghost', 'custom'));
+    git(repo, ['add', '--', GHOST_PATH]);
+    const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
+
+    const result = await remove(repo, 'ghost');
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(exitCodeForResult(result)).toBe(1);
+    expect(result.error.code).toBe('NOT_FOUND');
+    expect(result.error.message).toBe(workingTreeOnly('ghost', GHOST_PATH, 'A '));
+    expect(existsSync(join(repo, GHOST_PATH))).toBe(true);
+    expect(head(repo)).toBe(before);
+    assertPersistenceUnchanged(repo, unchanged);
+  });
+
+  it('AC1 (d): an id that exists only in the working-tree copy of a committed file is unknown, explained by that file', async () => {
+    // The mirror of the assign-side pin above: `spare.md` is committed as `spare` and edited on disk to `renamed`.
+    repo = seedRepo();
+    writeFileSync(join(repo, SPARE_PATH), directiveMd('renamed', 'custom'), 'utf-8');
+    const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
+
+    const result = await remove(repo, 'renamed');
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(exitCodeForResult(result)).toBe(1);
+    expect(result.error.code).toBe('NOT_FOUND');
+    expect(result.error.message).toBe(workingTreeOnly('renamed', SPARE_PATH, ' M'));
+    expect(head(repo)).toBe(before);
+    assertPersistenceUnchanged(repo, unchanged);
+  });
+
+  it('AC1 (d): the COMMITTED id of that file still resolves, and the write guard refuses its uncommitted edit', async () => {
+    // Today `unknown directive: spare` — the working tree's `id: renamed` hides what `HEAD` records.
+    repo = seedRepo();
+    writeFileSync(join(repo, SPARE_PATH), directiveMd('renamed', 'custom'), 'utf-8');
+    const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
+
+    const result = await remove(repo, 'spare');
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(exitCodeForResult(result)).toBe(1);
+    expect(result.error.code).toBe('VALIDATION');
+    expect(result.error.message).toContain(`refusing to commit ${SPARE_PATH}`);
+    expect(result.error.message).toContain("[git status ' M']");
+    expect(existsSync(join(repo, SPARE_PATH))).toBe(true);
+    expect(head(repo)).toBe(before);
+    assertPersistenceUnchanged(repo, unchanged);
+  });
+
+  it('AC1 (e): an untracked custom file shadowing a committed built-in does not decide — the built-in refusal fires', async () => {
+    // dl-037's custom-wins precedence applies to what HEAD records; the untracked shadow is not in it.
+    repo = seedRepo();
+    const shadow = '.wingfoil/directives/custom/documentation.md';
+    writeFixtureFile(repo, shadow, directiveMd('documentation', 'custom'));
+    const before = head(repo);
+    const unchanged = snapshotPersistence(repo);
+
+    const result = await remove(repo, 'documentation');
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(exitCodeForResult(result)).toBe(1);
+    expect(result.error.message).toContain('built-in directives cannot be removed');
+    expect(existsSync(join(repo, shadow))).toBe(true);
+    expect(existsSync(join(repo, BUILTIN_PATH))).toBe(true);
+    expect(head(repo)).toBe(before);
+    assertPersistenceUnchanged(repo, unchanged);
   });
 });
 
