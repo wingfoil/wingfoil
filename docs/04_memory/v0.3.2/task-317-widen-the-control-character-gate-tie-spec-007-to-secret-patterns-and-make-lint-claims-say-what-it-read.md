@@ -209,6 +209,14 @@ field (`grep -c "^version:"` on `spec-007` → `0`; its frontmatter holds `tmpl_
   and the developer run the scan on their files before each commit; after green, `npx jest
   test/lint/control-characters.test.ts` does it.
 
+### design gate (approver, 2026-10-29)
+
+Design gate approved by the approver on 2026-10-29T10:59:09+01:00, in the orchestrator's chat:
+- D1 — (a): the gate flags the Unicode categories Cf, Zl, Zp, Zs other than U+0020, and the C1 range U+0080–U+009F.
+- D2 — yes: an exported, empty `ALLOWED_INVISIBLE_CHARACTERS`, pinned to `[]`.
+- D3 — (a): the rest of `bug-330`'s Expected Behavior (the summary tells files read from items checked) is done in this task.
+- D4 — (a): the developer prepares the `spec-007` §2 amendment (the "case-insensitive unless noted" sentence and a revision note), uncommitted, for the approver's `memory amend` (dl-047).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
