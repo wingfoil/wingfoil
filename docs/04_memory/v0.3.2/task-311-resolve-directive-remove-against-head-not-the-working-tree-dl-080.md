@@ -373,6 +373,16 @@ character for character (`—` is U+2014). The symlink pin reads `result.error.d
 (the existing `task-143` shape). The D6 pin calls `loadDirectivesAtHead` directly and `directiveAssign` through
 `CORE_MODULES`; how the skipped link is reported on `assign` is not pinned.
 
+### stop-the-line ruling (approver, 2026-10-29)
+
+The refactor stopped at `a9127326f` (W0-R7: a fix needing files the design did not declare). Ruled by the approver on 2026-10-29T13:23:33+01:00, in
+the orchestrator's chat:
+- D1 — (a): the fourth explanation variant of `a9127326f` is accepted as written (a directive the working tree defines through
+  an in-root symlinked directory: it names the link target and that no commit records it as a directive).
+- D2 — (a): the developer edits the two existing tests the design did not list, which the change moves — the spy target of
+  `test/core/loaders-at-rev.test.ts:356` (`listBlobEntriesAtRev`) and the expected `details` of
+  `test/cli/program.integration.test.ts:1235` (the HEAD skip warning first); both join the task's file list.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
