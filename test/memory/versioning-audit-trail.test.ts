@@ -26,6 +26,7 @@ import { requireGitIdentity } from '../../src/core/git-identity';
 import { commitPaths } from '../../src/storage';
 import { auditAttribution, reconstructMemoryTransitions } from '../../src/memory';
 import { git, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
+import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
 
 const DOC_PATH = 'docs/04_memory/v0.1/task-101-doc.md';
 
@@ -139,6 +140,9 @@ describe('P1.2 — Error: no configured git identity (BDD scenario 3)', () => {
   it('refuses the state change with exit 1 and the exact message, and commits nothing', () => {
     // Production call order (task-019's whole point): every mutation gates on requireGitIdentity
     // BEFORE ever calling commitPaths — so with no identity configured, commitPaths is never invoked.
+    // task-316 (bug-271): the full writes-nothing snapshot, on this unborn branch (`head` and
+    // `symbolicHead` read back `''`; the untracked `empty.gitconfig` is in `status` before and after).
+    const snapshot = snapshotPersistence(dir);
     const result = requireGitIdentity(dir);
 
     expect(result).toMatchObject({ ok: false, error: { code: 'VALIDATION', message: IDENTITY_ERROR } });
@@ -146,6 +150,8 @@ describe('P1.2 — Error: no configured git identity (BDD scenario 3)', () => {
 
     // Nothing was committed — no HEAD exists at all in this fresh repo.
     expect(() => git(dir, ['rev-parse', 'HEAD'])).toThrow();
+    // ...and no file, ref or branch changed anywhere (test/storage/helpers/persistence-snapshot.ts).
+    assertPersistenceUnchanged(dir, snapshot);
   });
 
   it('defense-in-depth: even if a caller ignored the guard, git itself refuses to commit with no identity', () => {

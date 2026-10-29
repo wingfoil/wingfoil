@@ -20,6 +20,8 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { withoutCallerNpmConfig } from './helpers/npm-env';
+
 const REPO_ROOT = join(__dirname, '..', '..');
 const LICENSE_PATH = join(REPO_ROOT, 'LICENSE');
 
@@ -102,6 +104,7 @@ describe('LICENSE file (task-070) — AC3 shipped in the tarball', () => {
     const raw = execFileSync('npm', ['pack', '--dry-run', '--json', '--ignore-scripts'], {
       cwd: REPO_ROOT,
       encoding: 'utf-8',
+      env: withoutCallerNpmConfig(process.env),
     });
     const [result] = JSON.parse(raw) as { files: { path: string }[] }[];
     const paths = (result?.files ?? []).map((f) => f.path);

@@ -12,16 +12,17 @@
  * with the record — and checks that the compiled CLI stamps that record: `--version`, the trailer of
  * a commit it writes, and the `wingfoil` field `memory history` reads back from it.
  */
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { git, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
+import { withoutCallerNpmConfig } from './helpers/npm-env';
+import { CLI_ENTRY, runCliEntry, spawnCapture } from './helpers/spawn-cli';
 
 const REPO_ROOT = join(__dirname, '..', '..');
 const WRITER = join(REPO_ROOT, 'scripts', 'write-build-info.cjs');
-const DIST_CLI = join(REPO_ROOT, 'dist', 'cli.js');
 const PKG = JSON.parse(readFileSync(join(REPO_ROOT, 'package.json'), 'utf-8')) as {
   version: string;
   scripts: Record<string, string>;
@@ -156,7 +157,7 @@ describe('the compiled CLI stamps the record it was built with', () => {
   });
 
   it('`wingfoil --version` prints `<semver> (<sha>)`', () => {
-    const run = spawnSync(process.execPath, [DIST_CLI, '--version'], { encoding: 'utf-8' });
+    const run = spawnCapture(process.execPath, [CLI_ENTRY, '--version']);
     expect(run.status).toBe(0);
     expect(run.stdout).toBe(`${PKG.version} (${info().commit})\n`);
   });
@@ -164,7 +165,7 @@ describe('the compiled CLI stamps the record it was built with', () => {
   it('a commit the compiled CLI writes carries `WingFoil-Version: <semver> (<sha>)`, and `memory history` reports it', () => {
     const repo = makeTempGitRepo();
     try {
-      const cli = (...args: string[]) => spawnSync(process.execPath, [DIST_CLI, ...args], { cwd: repo, encoding: 'utf-8' });
+      const cli = (...args: string[]) => runCliEntry(repo, args);
       expect(cli('init', '--template', 'scrum').status).toBe(0);
       const stamp = `${PKG.version} (${info().commit})`;
       expect(git(repo, ['log', '-1', '--format=%(trailers:key=WingFoil-Version,valueonly)']).trim()).toBe(stamp);
@@ -205,7 +206,12 @@ describe('task-282 AC 1 — PACK_INPUTS and inputStatus (write-build-info.cjs)',
   });
 
   it('every file npm packs outside dist/ falls under a PACK_INPUTS entry', () => {
-    const out = execFileSync('npm', ['pack', '--dry-run', '--json', '--ignore-scripts'], { cwd: REPO_ROOT, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'] });
+    const out = execFileSync('npm', ['pack', '--dry-run', '--json', '--ignore-scripts'], {
+      cwd: REPO_ROOT,
+      encoding: 'utf-8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: withoutCallerNpmConfig(process.env),
+    });
     const [packed] = JSON.parse(out.slice(Math.max(0, out.search(/^\[/m)))) as { files: { path: string }[] }[];
     const outside = packed!.files.map((file) => file.path).filter((path) => !path.startsWith('dist/'));
     expect(outside.length).toBeGreaterThan(0);
