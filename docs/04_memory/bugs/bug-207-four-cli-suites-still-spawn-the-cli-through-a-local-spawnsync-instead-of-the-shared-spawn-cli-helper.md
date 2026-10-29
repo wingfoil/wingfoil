@@ -38,3 +38,7 @@ Four CLI-spawning suites and five script-spawning suites keep local `spawnSync` 
 
 Captured on 2026-10-02 by `bug-ingest-rel-v0.3-w1b4-review-findings-plan`, from the independent reviews of wave 1
 batch B4 (`dev-loop-rel-v0.3-plan`), against `main` at `243f8f05` (B4 merges up to `ea637c43`).
+
+### Retrospective
+
+Closed by task-316: the 21 local spawns of `dist/cli.js` in 15 suites go through `test/cli/helpers/spawn-cli.ts`, whose docblock names the four declared exceptions (non-CLI spawns, the live child of `agent-execute-launch`, the CLI in a shell pipeline, the `.cjs` fixtures), and `test/lint/cli-spawn-helper.test.ts` fails a new local spawn. Lesson: a hygiene fix without a guard grows back — `bug-197` counted four such suites in v0.3, fifteen had appeared by v0.3.2.
