@@ -439,6 +439,15 @@ gates and the 28 parity suites) → `Test Suites: 39 passed, 39 total`, `Tests: 
 test/cli/lint-claims.test.ts test/validation/secret-patterns-spec.test.ts` → no line. The same command from
 `27f93d95b` lists one sha, `e1329b64c`: the qa's own red amendment, not a developer commit.
 
+### sync with release/0.3 (developer, 2026-10-29)
+
+`git rev-list --count HEAD..release/0.3` → `19` after the review fixes; `git merge --no-edit release/0.3` → merge commit
+`fe51d55a` (parents `881716e3`, `a355db3b`), no conflict, `git diff --stat HEAD^1 HEAD` → `5 files changed, 685
+insertions(+), 2 deletions(-)`; the three pending amendments stayed unstaged. The merge brings other tasks' files under
+the widened gate, so: `npx jest test/lint test/docs test/cli/lint-claims.test.ts --maxWorkers=2` → `Test Suites: 40
+passed, 40 total`, `Tests: 459 passed, 459 total` (the invisible-character gate among them); `npx tsc --noEmit -p
+tsconfig.json` → exit 0. After the merge `git rev-list --count HEAD..release/0.3` → `0`.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
