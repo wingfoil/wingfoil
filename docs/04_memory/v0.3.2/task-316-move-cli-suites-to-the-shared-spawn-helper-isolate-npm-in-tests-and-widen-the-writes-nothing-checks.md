@@ -221,6 +221,58 @@ Design gate approved by the approver on 2026-10-29T10:59:09+01:00, in the orches
 - D4 — yes: the npm guard reads direct `('npm', …)` calls only; npm inside a shell string is named in its docblock as outside the scan.
 - D5 — (a): no new element for `test/storage/helpers/persistence-snapshot.ts` running git with no `env`; `bug-446` (triaged, v0.4) states the Expected Behavior that covers it, and the developer names the helper here as covered by it.
 
+### red (qa, 2026-10-29)
+
+**Red commit `aea344cd`** (`git log --oneline -1` → `aea344cd3 test(lint): task-316 — failing test: CLI spawns through
+the shared helper, npm spawns without the caller's npm_config_*`), test files only: `test/lint/cli-spawn-helper.test.ts`
+(new), `test/lint/npm-caller-config.test.ts` (new), `test/cli/spawn-cli.test.ts` (one case added),
+`test/memory/entry.test.ts`, `test/memory/versioning-audit-trail.test.ts`. No new export is imported, so no `.d.cts`.
+Base unchanged: `git rev-list --count HEAD..release/0.3` → `0`, no merge. No fixture of command output: the guards read
+the source tree and inline strings, the timeout case spawns a real `node -e` child.
+
+**Run.** `npx jest test/lint/cli-spawn-helper.test.ts test/lint/npm-caller-config.test.ts test/cli/spawn-cli.test.ts
+test/memory/entry.test.ts test/memory/versioning-audit-trail.test.ts --maxWorkers=2` → `Test Suites: 3 failed, 2 passed,
+5 total`, `Tests: 3 failed, 25 passed, 28 total` (cli-spawn-helper 1 failed / 5, npm-caller-config 1 / 5, spawn-cli
+1 / 11, entry 0 / 3, versioning-audit-trail 0 / 4; per-file counts from the run's `--json` output).
+`npx tsc --noEmit -p tsconfig.json` → only `test/cli/spawn-cli.test.ts(56,79): error TS2353: Object literal may only
+specify known properties, and 'timeout' does not exist in type 'SpawnCaptureOptions'` (intended, D3).
+`npx jest test/lint --maxWorkers=2` → `Test Suites: 3 failed, 10 passed, 13 total`, `Tests: 3 failed, 123 passed, 126
+total`: the two new guards, and `typecheck-clean.test.ts` on that same TS2353 (it runs the tsc above; it passes once
+green adds the field). Every other lint suite passes. A first version of `npm-caller-config.test.ts` used `['pack']` in
+its inline cases and `test/lint/pack-ignore-scripts.test.ts` flagged them (`lint/npm-caller-config.test.ts: npm pack —
+['pack']`); the inline cases now use `['view', 'wingfoil']`, which no lifecycle guard reads.
+
+**Per AC** (first failing assertion of each failing test):
+- **AC1 (red-first, D1 (a))**, `test/lint/cli-spawn-helper.test.ts`:
+  - "every spawn of dist/cli.js under test/ goes through test/cli/helpers/spawn-cli.ts" → `expect(offenders).toEqual([])`
+    at line 95, received the 20 sites of the design, each `file:line spawnSync` (agent-execute-config-arg:65,
+    agent-execute-launch:84, agent-execute-step:70, agent-execute:59, build-info:159, :167, config-missing-refusal:24,
+    derived-option-namespace:105, dirty-target-refusal:33, e2e-smoke:224, :408, extra-operand-refusal:32,
+    format-key:26, operand-error-shape:31, workflow-list-diagnostics:26, :34, :44, :58,
+    workflow-start-plan-patterns:49, core/dna-agent-adapter-runs:166).
+  - passing on first run: "is not vacuous: …" (the allowed site is exactly `cli/agent-execute-launch.integration.test.ts
+    spawn`, pinned by file and helper rather than line so green's edits do not move it; the walk contains
+    `cli/workflow-rekey.integration.test.ts`); the three "can fail" / "does not flag" cases on inline strings of the
+    design.
+  - D3 sub-pin, `test/cli/spawn-cli.test.ts` "a child that outlives the given timeout is killed, and that throws like
+    any other signal (task-316)" → `Expected pattern: /ended on signal SIGTERM/`, `Received function did not throw`
+    (line 56): under `isolatedModules` the unknown `timeout` is dropped and the child exits 0 after 5 s; at tsc the
+    TS2353 above.
+- **AC2 (red-first)**, `test/lint/npm-caller-config.test.ts`:
+  - "every direct npm spawn under test/ passes an environment stripped by withoutCallerNpmConfig" →
+    `expect(offenders).toEqual([])` at line 98, received the eight sites of the design: `cli/build-info.test.ts:208`,
+    `cli/check-governance.test.ts:552`, `cli/license-file.test.ts:102`, `cli/npm-distribution.test.ts:103`, `:121`,
+    `cli/publish-metadata.test.ts:111`, `core/builtin-directive-templates.test.ts:298`,
+    `release-health/measure.test.ts:523`.
+  - passing on first run: "is not vacuous: …" (at least 10 sites, `cli/publish-pipeline.test.ts` and
+    `cli/publish-secrets.test.ts` among the passing ones, the latter through `env: npmEnv()`); the inline cases (no
+    `env` and `env: { ...process.env }` flagged; an inline strip across lines passes; `env: npmEnv()` passes with a
+    stripping `npmEnv` and is flagged with one that keeps `process.env`).
+- **AC3 (characterization)**, passes on first run: `test/memory/entry.test.ts` "refuses the write with the exact
+  confinement message and commits/writes nothing" and `test/memory/versioning-audit-trail.test.ts` "refuses the state
+  change with exit 1 and the exact message, and commits nothing" each take `snapshotPersistence` before the refused call
+  and `assertPersistenceUnchanged` after the existing checks (import `../storage/helpers/persistence-snapshot`).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
