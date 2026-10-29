@@ -58,3 +58,10 @@ The byte format is pinned only on hand-written frontmatter that matches no templ
 
 Captured on 2026-10-06 by `bug-ingest-rel-v0.3-w2b4a-review-findings-plan`, from the independent reviews of
 `task-255` and `task-257` (W2 B4a, `dev-loop-rel-v0.3-plan`), checked against `main` at `b0c3e472`.
+
+### Retrospective
+
+Closed by `task-318`: `test/core/context-shipped-templates.test.ts` builds the `spec-012` §7 payload from one
+element per shipped Memory template (`memory add`, then `memory submit` on all but the draft task) and compares it
+byte for byte with `test/fixtures/context/golden-payload-shipped-templates.md`, so a template change shows up as a
+golden diff the approver reviews (`dl-150` (B)). None further.
