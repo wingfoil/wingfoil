@@ -132,6 +132,52 @@ the engine.
   interventions apart, and summarises the measures in this plan. Only the supervision writes this plan; tasks, bugs,
   task worktrees and `memory add` (serially) are the orchestrator's.
 
+- **W0-R4 correction (2026-10-28, approver).** `task-305`'s design reclassified its AC 1 and AC 2 red-first (the text
+  they pin was not written yet: `grep -c "dl-206"` and `grep -c "no-merges"` → `0` on both files), so W0-R4's reason
+  "all characterization" no longer held; the approver kept the three-agent schema, red being still a separate qa agent
+  and `green` `distinct_from: [red]`.
+
+## Rulings W1 (approver, 2026-10-29)
+
+- **W1-R1 — start after the weekly usage reset.** The account's weekly limit (all models) stood at 77 % at the close of
+  `w0` (2026-10-29 08:50, resetting 2026-10-30 05:00); `w0` (5 tasks) consumed about 105 M cache-read tokens in phase
+  agents and as many in the orchestrator session (Execution Notes, W0 measures). `w1` (13 tasks) opens after the reset;
+  until then only the close-out, the push and the preparation run.
+- **W1-R2 — a fresh orchestrator session for `w1`.** The `w0` orchestrator's context stood at 52 % at the close; `w1`
+  runs in a new session with an updated prompt carrying the lessons of W1-R4. The `w0` session ends.
+- **W1-R3 — structure kept, batched.** W0-R1 (the Agent tool, same reason), W0-R2, W0-R5 … W0-R10 hold for `w1`. Every
+  task runs the four-agent schema of W0-R4. The 13 tasks run in batches of about four in parallel; the orchestrator
+  proposes the batches and their merge order from the files each design declares (`task-316` after `task-308`'s
+  infrastructure, already merged; `task-320` after `task-319`, their `depends_on`), and the approver rules.
+- **W1-R4 — lessons of `w0`, written into the orchestrator's instructions.**
+  1. Repository files never cite an approval-queue identifier as a source; a note states the gate, who ruled, when and
+     what (the `w0` identifiers that reached task and bug notes resolve through the table "W0 approval gates" below).
+  2. Each queue entry's commands are an executable file the approver runs, never text to paste (`fb23de26`'s `Reason:`
+     was truncated in a paste).
+  3. After an approver's command, the orchestrator writes only once the approver's commit is in `git log`, never on the
+     file on disk (`8d6c005f` before `c745e4df`).
+  4. Hand `assign` commits use the canonical subject `wf(<type>): assign release <version> to <id>` (`9cdea2e3`,
+     `8d6c005f`, accepted as they are by the approver; `bug-448`).
+  5. `npm run check:governance -- --base release/0.3` after every hand commit and before every merge into `release/0.3`.
+  6. The qa runs `test/lint/` on the red files before the red commit, and copies fixtures from real command output,
+     naming the command (`task-306`'s red invented `stderr: ''` and an empty stdout for an npm `--json` error).
+  7. The design lists every test that pins a phase list of a workflow it changes (`task-306` missed
+     `test/core/workflow-status.test.ts`).
+  8. The done step checks, for each bug it closes, that the bug's Expected Behavior is met in full, and points to the
+     follow-up bug otherwise (`bug-278` → `bug-446`, amended afterwards).
+- **W1-R5 — red amendments a review asks for** are made by the task's qa agent without a queue entry (a standing
+  approval, extending the ruling given for `task-306`), each recorded by the orchestrator as an autonomous decision; a
+  red amendment for any other reason goes through the queue.
+- **W1-R6 — the approver reads the queue at set times** (about every two hours while a wave runs) and answers the open
+  entries together, the queue wait having been `w0`'s largest (Execution Notes, W0 measures).
+- **W1-R7 — no template pack in `v0.3.2`.** WingFoil-Templates published `base@2.0.1`, `software@1.0.0` and
+  `methodology/scrum@1.0.0` on 2026-10-28, which meets `dl-186` Q3's condition; the ruling of the release-planning
+  plan stands (`v0.3.2` adopts no pack) and the adoption is taken up at `v0.4`'s release-planning.
+- **W1-R8 — push at the close of `w0`.** This plan's branch merges into `release/0.3` (the `w0` smoke report and the
+  amends of this checkpoint), then the approver pushes `release/0.3` after the secret sweep and the governance check;
+  the push uses `--no-verify` and its governance run is red on `9cdea2e3` / `8d6c005f` only, as accepted (the same at
+  `v0.3.2`'s merge forward, `bug-448`).
+
 ## Phases / Steps
 
 ### W0 — wave `w0`
@@ -188,6 +234,28 @@ Rows in `## Scope changes` for any task admitted since `commit-backlog`, the cou
 `w1` appended to `waves:` — an uncommitted edit of `patch-v0.3.2` the approver commits with `memory amend`. The `w1`
 rulings, including whether the trial's structure changes, are appended to this plan as `## Rulings W1`.
 
+### W1 — wave `w1`
+
+#### W1.1 — `tasks` → `dev-loop` per task (13 tasks, in batches, W1-R3)
+
+`task-309` (`bug-025`, `bug-251`), `task-310` (`bug-199`, `bug-411`), `task-311` (`bug-108`), `task-312` (`bug-254`,
+`bug-255`, `bug-316`), `task-313` (`bug-216`, `bug-262`, `bug-360`), `task-314` (`bug-283`), `task-315` (`bug-115`,
+`bug-116`), `task-316` (`bug-207`, `bug-209`, `bug-271`; `depends_on: [task-308]`), `task-317` (`bug-246`, `bug-247`,
+`bug-330`), `task-318` (`bug-266`), `task-319` (`bug-386`, `bug-387`), `task-320` (`bug-357`, `bug-385`, `bug-407`;
+`depends_on: [task-319]`), `task-321` (`bug-393`, `bug-409`, `bug-338`, `bug-350`). Steps as W0.1, with W1-R4.
+
+#### W1.2 — `wave-checks` · qa (supervision)
+
+As W0.2, report `docs/07_gates/rl-v1/rel-v0.3.2-w1-e2e-smoke.md`.
+
+#### W1.3 — `re-sweep` · tech-lead · approver gate
+
+As W0.3.
+
+#### W1.4 — `re-plan` · tech-lead · approver checkpoint
+
+As W0.4, appending `w2`.
+
 ### Close-out (per wave)
 
 Secret sweep and `scanProjectSurface` from a checkout with `dist/`; `npm run check:governance -- --base
@@ -208,7 +276,109 @@ origin/release/0.3`; push only on approver instruction.
 
 - 2026-10-28: plan branch `design/dev_loop_v0.3.2` cut from `release/0.3` (`7ce9d88d`); `memory add` → `326e7f3a`;
   rulings W0-R1 … W0-R10 given by the approver.
+- 2026-10-28: plan submitted `d720c100` (`active`). The orchestrator session started at 11:16 (`release/0.3` =
+  `7ce9d88d`, `origin` `0 0`).
+- 2026-10-28: `task-308` (start 11:18, done 14:33): design gate with three rulings; its full suite found a red gate
+  already on `release/0.3` (`test/workflow/release-kind-rule.test.ts`, `"patch-v0.3.2: features"`), a stop-the-line:
+  `bug-445` filed, triaged into `v0.3.2` and fixed by a new `w0` task, `task-331`, admitted `[pending → backlog]`
+  (`c1458e0d`); `task-308`'s AC 5 accepted with that one pre-existing failure. Review: four findings fixed in the task,
+  one pre-existing → `bug-446` (`v0.4`). Merged `854d0cad`. `bug-278` amended afterwards (`fb23de26`) to record that the
+  fix covers only the fixture's git, the remainder being `bug-446`.
+- 2026-10-28: `task-305`, `task-307`, `task-331` in parallel (start 14:35, done 17:21; merged `6957efd6`, `70dd3779`,
+  `ceee2cf7`), `task-306` after `task-305` (start 17:22, done 2026-10-29 08:39, merged `4a917ab8`). Amends recorded with
+  the approves: `dl-159` (`fce7e35e`), `dl-089` (`9944927c`), spec-015 §3 (`38b537c8`). `task-306` stopped once (its red
+  broke `test/lint/no-fabricated-stderr.test.ts`; its design missed `test/core/workflow-status.test.ts`): both accepted
+  in the task, the red amended twice by its qa agent.
+- 2026-10-28: stop-the-line of the line: two hand `assign` commits with a non-canonical subject (`9cdea2e3`,
+  `8d6c005f`) fail `check:governance`; the approver kept them (no rewrite of `wf()` history) and accepted a red
+  governance run at the push and at the merge forward (`bug-448`, `v0.4`, records the rule gap).
+- 2026-10-29: `w0` complete — five tasks `done` (`task-305`, `task-306`, `task-307`, `task-308`, `task-331`), bugs
+  `closed`: `bug-066`, `bug-208`, `bug-278`, `bug-336`, `bug-405`, `bug-428`, `bug-429`, `bug-433`, `bug-443`,
+  `bug-445`; new bugs `bug-446`, `bug-447`, `bug-448` triaged `v0.4`; `release/0.3` = `d96db3ae`, not pushed.
+- 2026-10-29 (W0.2, supervision): wave-checks at `f8a0a917` (this branch after merging `release/0.3` at `4a917ab8`):
+  `node scripts/e2e-smoke.cjs --candidate --report docs/07_gates/rl-v1/rel-v0.3.2-w0-e2e-smoke.md` → PASS 82/82
+  (`87892109`); `docs.parity` (the ten suites of `bindings.yaml`) → 10/10 suites, 65/65 tests; the six
+  `docs/examples/*/run.sh` → exit 0, each ending in OK, with `wingfoil` on `PATH` the wave's build `0.3.1 (f8a0a917)`.
+- 2026-10-29 (W0.3): re-sweep — no bug with an empty `release`; 21 decision-logs carry none (16 `ready`, 5
+  `in-discussion`), none a patch's bug fix (R3 A3): left to `v0.4`'s `reconcile-governance`. No ADR `pending`.
+- 2026-10-29 (W0.4): re-plan — `task-331` recorded in `patch-v0.3.2`'s `## Scope changes` (27 vs 26, +3.8 %, under the
+  W0-R6 (6) signal of 32); `w1` appended to `waves:`; rulings W1-R1 … W1-R8.
+
+#### W0 approval gates
+
+The identifiers `Q-nn` some task and bug notes of `w0` cite name the entries of the approval queue the orchestrator
+kept outside the repository (W0-R5); this table is their record.
+
+| Gate | Opened | Element | Kind | Ruling and evidence |
+|---|---|---|---|---|
+| Q-01 | 2026-10-28 11:29 | `task-308` | design | approved 11:36 — D1 (a), D2, D3 |
+| Q-02 | 12:47 | `task-308` | stop-the-line, triage, finding | 14:09 — `bug-445` into `v0.3.2`, fixed by a new `w0` task; AC 5 accepted with the pre-existing failure; a comment the task made false fixed in it |
+| Q-03 | 14:11 | `bug-445`, `task-331` | triage, admission | `6274d15b` `[open → triaged]`, `c1458e0d` `[pending → backlog]` |
+| Q-04 | 14:18 | `bug-446` | triage | `c745e4df` `[open → triaged]`, `v0.4` |
+| Q-05 | 14:22 | `task-308` | approve | `437098b9` |
+| Q-06 | 14:41 | `bug-278` | amend | `fb23de26` (its `Reason:` truncated in a paste) |
+| Q-07 | 14:42 | `task-331` | design | approved 15:09 — D1 (a), D2 (a) |
+| Q-08 | 14:44 | `task-307` | design | approved 15:09 — D1, D2; D3 no (`dl-167` (a)) |
+| Q-09 | 14:53 | `task-305` | design | approved 15:09 — D1 … D6 as recommended |
+| Q-10 | 16:55 | `release/0.3` | stop-the-line | 17:22 — (b): `9cdea2e3` / `8d6c005f` kept, a red governance run accepted at the push |
+| Q-11 | 17:06 | `dl-159`, `task-305` | amend, approve | `fce7e35e`, `07e7e888` |
+| Q-12 | 17:16 | `task-331` | approve | `efe25660` |
+| Q-13 | 17:19 | `dl-089`, `task-307` | amend, approve | `9944927c`, `2b93dcef` |
+| Q-14 | 17:37 | `task-306` | design | approved 20:37 — D1, D2 (a), D3 … D5; F2 in the task; F1 → `bug-447` |
+| Q-15 | 20:38 | `bug-447` | triage | `6d80fec5` `[open → triaged]`, `v0.4` |
+| Q-16 | 21:25 | `task-306` | stop-the-line | 21:34 — the extra test file accepted; the red amended by its qa agent |
+| Q-17 | 22:58 | spec-015, `task-306` | amend, approve | `38b537c8`, `1f5ef607` (2026-10-29); the two `Q-10` commits accepted at the merge forward, `bug-448` |
+| Q-18 | 2026-10-29 08:40 | `bug-448` | triage | `ba543a4f` `[open → triaged]`, `v0.4` |
+
+#### W0 measures
+
+From the orchestrator's event log, verified by the supervision against `git log`, the task notes and the transcripts.
+- **Time.** Wave 2026-10-28 11:16 → 2026-10-29 08:39 (the night included, `task-306`'s approve waited from 22:58 to
+  08:38). Per task (start → `done`): `task-308` 3 h 15; `task-305`, `task-307`, `task-331` 2 h 46 each (in parallel);
+  `task-306` 15 h 17, of which 3 h waited on its design gate and about 9 h 40 on its approve.
+- **Waits over 15 minutes:** nine in the log — the approval queue: 85 min (`task-308`'s stop), 15 – 27 min for four
+  entries, 179 min (`task-306`'s design); the heavy-gate slot: 31 to about 58 min for three tasks, the machine's load
+  held above `dl-170`'s threshold by another project's coverage runs, which do not take the slot — plus one the log
+  missed, the night on `task-306`'s approve (queued 22:58, approved 08:38).
+- **Approver.** 18 queue entries: 5 design gates, 5 approves, 4 amends (with their approves or alone), 4 triages, 3
+  stop-the-line rulings; rejects: none. Direct chat messages to the two sessions: recorded per message in the log.
+- **Stop-the-line:** three — a pre-existing red gate (`bug-445`), the non-canonical `assign` subjects (an orchestrator
+  defect), `task-306`'s red defect and extra file.
+- **Review findings:** 15 over five tasks (0 blocker), 11 introduced by the task's own change and fixed in it, 4
+  pre-existing (two became `bug-446` and `bug-448`).
+- **Autonomy.** Every phase agent launched through the Agent tool (W0-R1), 19 agent transcripts; no PATH-guard failure.
+  Supervision interventions in the orchestrator's work: five (a relay of an approver ruling; two process changes the
+  approver asked for — four more fields in the event log, queue commands as files; a correction of the event log; a
+  finding the orchestrator missed, `bug-278`'s owed amend), plus one wrong recommendation of the supervision to the
+  approver, withdrawn.
+- **Tokens** (`tokens.cjs` over the transcripts, deduplicated per message; output not measured — a transcript's
+  `output_tokens` is a streaming snapshot): the 19 phase agents input 1,666, cache read 105.3 M, cache write 7.93 M; the
+  orchestrator session input 814, cache read 104.8 M, cache write 1.56 M; the supervision session (to the close of
+  `w0`) input 584, cache read 58.1 M, cache write 1.24 M.
 
 ### Retrospective
 
-- None yet.
+- The approval queue is the dev-loop's longest wait (W0 measures); answering several entries at once (15:09) cut
+  three waits together. Proposal for `dl-203`'s coordinator: gates batched by design, and a standing rule for the
+  approvals that can be read off evidence.
+- Release-planning closed with a red gate on its own output: `patch-v0.3.2` was submitted with `features: []`, which
+  `memory.yaml` (`lists: [ features ]`) allows and `test/workflow/release-kind-rule.test.ts` refused (`bug-445`). No full
+  suite ran after define-scope. Proposal: `commit-backlog` runs the full suite before closing.
+- The supervision first recommended filling `features:` by amend; `memory.yaml`'s `lists:` makes `[]` the declared
+  value for a patch, as the orchestrator's analysis showed. A recommendation about a Memory field reads `memory.yaml`
+  first.
+- A hand `bug-ingest` during the dev-loop: `workflow start bug-ingest --dry-run` derived the element of an unrelated
+  open ingest run (`dl-188`, the inheritance of AGENTS.md §6), so `bug-445` … `bug-448` were filed with `memory add`
+  and no ingest plan. Proposal: state how a bug-ingest opened inside a dev-loop task inherits that task.
+- Closing a bug whose fix covers part of its Expected Behavior needs the split stated in the bug (`bug-278` → `bug-446`,
+  found by the supervision after the close; `bug-443` keeps its minor part in `task-307`'s notes only, by the
+  approver's choice).
+- The red invented output shapes twice (`task-306`); the design missed a pinned phase list; a red broke a lint gate in
+  its own file. W1-R4 (6), (7) carry the fixes into the instructions.
+- Task and bug notes cited approval-queue identifiers that do not resolve from the repository (the "W0 approval gates"
+  table now records them; W1-R4 (1)).
+- Interleaved writers: the orchestrator committed an `assign` on the file the approver's running command had already
+  changed, three seconds before the approve's commit. W1-R4 (3).
+- The `agent execute` channel stayed unused (W0-R1): a desktop session's Bash has no terminal, and a `claude -p` custom
+  adapter would pass `--dry-run` but needs a configuration change and an unattended permission mode. Input for
+  `dl-188` and `dl-203`.
