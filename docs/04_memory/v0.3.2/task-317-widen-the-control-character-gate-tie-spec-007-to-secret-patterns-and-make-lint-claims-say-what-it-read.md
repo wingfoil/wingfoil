@@ -45,6 +45,170 @@ ties spec-007 §2 to `SECRET_PATTERNS`. `bug-330`: `lint-claims` with no argumen
        reject's `Reason:` (read with `wingfoil memory history <task-id>`), each with the command that
        shows it resolved and what that command printed; then what else changed on the next pass. -->
 
+### design (architect, 2026-10-29)
+
+**Inputs read.** `depends_on: []` (no dl-015 gate); no handover. Base: `release/0.3` `12aa212c` + the start commit
+`b703d98a` and the three bug syncs (`git log --oneline release/0.3..HEAD` → four commits, head `4eae1160`). Cited
+elements: `spec-007` is `approved`, `dl-097` and `dl-073` are `ready` (`grep -n "^status:"` on each). No BDD scenario
+covers the gate, the claim lint or the pattern table (`grep -rln -i "lint-claims\|claim lint\|SECRET_PATTERNS\|bidi"
+docs/02_requirements` → no output; the same grep over `docs/04_memory/design/specs docs/04_memory/design/dls` lists
+`spec-007` and `dl-078`, the positive case: `dl-078` is the `Reason:` block's control-character rule, not the
+repository gate). No AC contradicts a ratified DL; one sentence of `spec-007` §2 disagrees with its own table (D4).
+
+**Existing tests on every file this task changes**, before any pin (one jest process, `--maxWorkers=2`, no slot):
+`npx jest test/lint/control-characters.test.ts test/memory/submit-commit-body.test.ts test/validation/secret-scan.test.ts
+test/cli/lint-claims.test.ts test/cli/governance-workflow.test.ts --maxWorkers=2` → `Test Suites: 5 passed, 5 total`,
+`Tests: 135 passed, 135 total`. No workflow, phase or step list changes, so no test pinning one is affected; nothing
+under `.wingfoil/` changes, so `npm run check:mcp` is not required.
+
+**What the widened gate flags today** (scratch script outside the worktree: every `git ls-files` path except `.png`
+and `.gif`, decoded as UTF-8, matched against `[\p{Cf}\p{Zl}\p{Zp}\p{Zs}\u0080-\u009f]` minus U+0020 — the rule of
+D1 (a) — plus a strict UTF-8 decode of each file). Run on this worktree, on `release/0.3`, on `main` and on the three
+other open w1 task worktrees (`task-311`, `task-316`, `task-318`): each prints exactly one hit,
+`U+2028 1 test/memory/submit-commit-body.test.ts:102`, and `invalid-utf8: []`. Positive case: that hit is the raw
+U+2028 the AC names (`grep -nP '[\x{2028}]' test/memory/submit-commit-body.test.ts` → line 102). So the widening costs
+one escape and breaks no other open task at its current head.
+
+**`spec-007` §2 against `SECRET_PATTERNS`, today** (scratch prototype of the AC2 test, run against `dist/validation`):
+the ten `regex:` strings of the §2 YAML block, translated by the three rules below, equal the ten `RegExp` sources and
+flags in order, and ids, descriptions and severities are equal too (`ids true`, then for each of the ten
+`src true flags true sev true desc true`). AC2 is a characterization, as classified.
+
+#### Per-AC classification and what qa pins
+
+| AC | Class | Why |
+|----|-------|-----|
+| 1 gate widened | red-first | no code point above 0x7F is judged today: `isControlByte` (`test/lint/helpers/control-characters.ts`) reads single bytes |
+| 2 spec-007 ↔ `SECRET_PATTERNS` | characterization | the two agree today (prototype above); the test pins an existing equivalence |
+| 3 lint-claims usage line | red-first | `node scripts/lint-claims.cjs` → stdout `claim lint: 0 warnings in 0 files (warn-only), 0 files read`, exit 0; `node scripts/lint-claims.cjs 2>&1 >/dev/null \| wc -c` → `0` |
+
+**AC1 — qa, in `test/lint/control-characters.test.ts`** (the existing `it`s stay as they are; the developer writes
+the helper in green, and the developer, not qa, escapes `submit-commit-body.test.ts`). New exports the tests import
+from `./helpers/control-characters`:
+- `invisibleCharacterPositions(text: string): { line: number; column: number; codePoint: number }[]` — every code
+  point that is Unicode category `Cf` (format: bidi controls, zero-width, U+FEFF, U+00AD, …), `Zl` (U+2028), `Zp`
+  (U+2029), `Zs` other than U+0020 (U+00A0, U+2009, U+3000, …) or a C1 control (U+0080–U+009F), in order. `line` is one
+  more than the LFs before it (U+2028 does not start a line); `column` is 1-based in code points from the line start
+  (an astral character counts one).
+- `ALLOWED_INVISIBLE_CHARACTERS: readonly { path: string; codePoint: number }[]` — `[]` (D2).
+- `InvisibleCharacterFinding` `{ path, line, column, codePoint }`;
+  `scanTrackedFilesForInvisibleCharacters(root: string, allowed = ALLOWED_INVISIBLE_CHARACTERS): InvisibleCharacterFinding[]`
+  — same file set as `scanTrackedFiles` (tracked, regular, not on `BINARY_EXTENSIONS`), sorted by path, then line and
+  column; a finding whose `{path, codePoint}` is on `allowed` is dropped. Text decoded with `bytes.toString('utf-8')`,
+  which keeps a leading BOM (checked: `Buffer.from('\ufeffa','utf-8').toString('utf-8').codePointAt(0)` → `feff`).
+- `formatInvisibleCharacterFindings(findings): string` — one line each, `<path>: U+<hex, upper case, at least 4
+  digits> at line <L>, column <C>`, joined by `\n`.
+
+Pins (characters written as `\u` escapes in the test source, never raw):
+1. `it.each` flagged, each in `'a' + ch + 'b'` → `[{ line: 1, column: 2, codePoint }]`: U+202A, U+202E, U+2066,
+   U+2069, U+2028, U+2029, U+0080, U+0085, U+009F, U+00A0, U+00AD, U+200B, U+200D, U+FEFF.
+2. Accepted → `[]`: `'a b\tc'` (U+0020, tab), `'café — ✓'`, and U+2027 (visible punctuation, category `Po`).
+3. Positions: `'one\ntwo \u2028x'` → `[{ line: 2, column: 5, codePoint: 0x2028 }]`; `'\u{1F600}\u202E'` →
+   column 2; a leading U+FEFF read through the scan (point 4) → line 1, column 1.
+4. Scan over a temp repo (`makeTempGitRepo`, `writeFixtureFile`, `git add .`, as the existing scan tests):
+   `src/planted.ts` = `export const b = "x\u202Ey";\n` and a clean file → `[{ path: 'src/planted.ts', line: 1,
+   column: 20, codePoint: 0x202e }]`, formatted `src/planted.ts: U+202E at line 1, column 20`; a `.png` holding U+2028
+   is skipped; an untracked file holding one is not read; with `allowed = [{ path: 'src/planted.ts', codePoint:
+   0x202e }]` → `[]`, and the same file also holding U+2028 still reports the U+2028.
+5. `expect(ALLOWED_INVISIBLE_CHARACTERS).toEqual([])`.
+6. `it('finds no invisible format or separator character in this repository')`: `scanTrackedFilesForInvisibleCharacters(REPO_ROOT)`,
+   throwing `invisible-character gate failed:\n<formatted>` when not empty, as the byte `it` does.
+
+Expected reds: `npx tsc --noEmit` → TS2305 (the four exports do not exist); jest → `TypeError: … is not a function`
+(`isolatedModules`). After green adds the helper but before the escape, pin 6 fails on
+`test/memory/submit-commit-body.test.ts: U+2028 at line 102, …` — the defect itself; green escapes it.
+
+**AC2 — qa, new file `test/validation/secret-patterns-spec.test.ts`.** Approach: an exact comparison of sources and
+flags, the first option of `bug-247`. It reads the real
+`docs/04_memory/design/specs/spec-007-secret-hygiene-patterns.md` from the repository root, takes the first `yaml`
+fence between the `### 2. Pattern set` and `### 3.` headings, loads it with `js-yaml` (`patterns` array), and, index by
+index against `SECRET_PATTERNS` (`src/validation/secret-scan`): equal `id`, `description`, `severity`, and
+`translate(spec.regex)` equal to `{ source: pattern.regex.source, flags: pattern.regex.flags }`, both sources with
+`\/` normalized to `/` (identical in a non-`u` RegExp; `new RegExp('[/]a/b').source` → `[/]a\/b`, so V8 does not
+normalize it). `translate` lives in the test file and models exactly the translation `secret-scan.ts`'s header
+declares: (1) a leading `(?i)` → flag `i`; `(?im)` → flag `i`, the `m` dropped (the scan runs one line at a time);
+(2) a `(?-i:X)` group → `X` inline, every literal letter outside it, outside a `[...]` class and not after a `\`,
+case-folded to `[Xx]`, and no `i` flag (`caseless`, `bug-228`); (3) any other inline modifier `(?` + letter or `-`
+throws `unmodelled inline modifier`, as does `(?-i:` without a leading `(?i)`. Why exact rather than a shared corpus:
+the prototype shows the exact form holds for all ten with these three rules, it fails on any one-character drift on
+either side, and rule (3) makes a spec edit using syntax the translation does not model fail loudly instead of
+passing; a corpus checks only the lines someone thought of. Pins: the ten-way equality (one `it.each` per id, so a
+failure names the pattern); the id list of the spec equals the id list of `SECRET_PATTERNS` (order included); the
+translator's own cases — `translate("(?i)ab\\sc")` → `{ source: 'ab\\sc', flags: 'i' }`,
+`translate("(?i)(ab)(?-i:[a-z]+)x")` → `{ source: '([Aa][Bb])[a-z]+[Xx]', flags: '' }`, `(?s)x` and `(?-i:x)` throw;
+and that the comparison can fail: one spec string with `{16,}` replaced by `{15,}` (made in the test from the loaded
+value, not a literal) is not equal to its pattern's source. Characterization: green on first run. The qa records in
+the notes a deliberate drift run in a scratch copy (not committed) showing the suite turn red.
+
+**AC3 — qa, in `test/cli/lint-claims.test.ts`**, through the file's existing `spawnCapture` (no new spawn helper):
+`spawnCapture('node', [SCRIPT], { cwd: REPO_ROOT })` → `status` `0`; `stdout` exactly
+`claim lint: 0 warnings in 0 files (warn-only), 0 files read\n` (today's output of `node scripts/lint-claims.cjs`, kept as it is); `stderr` exactly
+one line:
+`claim lint: no --base and no file given, so nothing was read. Usage: node scripts/lint-claims.cjs [--root <dir>] [--base <rev>] [--format text|github] [<file>…]; --base <rev> reads the Memory documents <rev>...HEAD added or modified (only their items holding an added line), <file>… reads those files whole.\n`
+The same stderr line with `--format github` and with `--root <REPO_ROOT>` alone; and `stderr` `''` (a real spawn's
+answer, not a fixture) when a file is given (`flagged.md`), so the line fires only when nothing is named. Expected red:
+the stderr assertions fail (the script writes nothing to stderr today). If the approver takes D3, qa also pins the
+summary (D3's text) on the existing `flagged.md`/`clean.md` run and on the `--base` temp repo.
+
+#### Files to touch
+
+- `test/lint/control-characters.test.ts` — red (qa).
+- `test/validation/secret-patterns-spec.test.ts` — new, red commit (qa), characterization.
+- `test/cli/lint-claims.test.ts` — red (qa).
+- `test/lint/helpers/control-characters.ts` — green: the AC1 exports; one walk of the tracked files shared by both
+  scans (a private generator of `{ path, bytes }`), so the walk is written once; header comment widened.
+- `test/memory/submit-commit-body.test.ts` — green: line 102's raw U+2028 written as `\u2028` (the asserted message,
+  `\\u{2028}`, does not change: the test still passes).
+- `scripts/lint-claims.cjs` — green: the stderr line when `options.base === undefined && options.files.length === 0`,
+  in `main` (after `parseArgs`, before printing the report; exit stays `0`); the usage comment gains the no-argument
+  behaviour. With D3 also `scripts/lint-claims.d.cts` (`ClaimLintReport.items`).
+- `docs/04_memory/design/specs/spec-007-secret-hygiene-patterns.md` — only with D4: §2's sentence and a Revision note,
+  prepared by the developer, left uncommitted (`dl-047`), recorded by the approver's `memory amend`.
+- This task file (notes).
+
+**Version bumps: none.** None of the four versioned configuration files changes; the files above carry no `version:`
+field (`grep -c "^version:"` on `spec-007` → `0`; its frontmatter holds `tmpl_version` only).
+
+#### Decisions for the approver
+
+- **D1 — the character set of AC1.** The AC names bidi controls, U+2028/U+2029 and U+0080–U+009F; `bug-246`'s
+  Expected Behavior also lists U+00A0, U+200B–U+200F and U+FEFF. (a) the Unicode categories `Cf`, `Zl`, `Zp`, `Zs`
+  except U+0020, and U+0080–U+009F — covers the AC and the bug in full, and future characters of the same kind;
+  (b) an explicit list of the code points the bug names. Recommendation: (a); the repository holds no such character
+  besides the one being escaped (scan above), so the wider rule costs nothing today.
+- **D2 — the allow-list.** `bug-246` asks for a declared, versioned allow-list (none needed today); the AC is silent.
+  Recommendation: add it as an empty exported constant beside `BINARY_EXTENSIONS`, pinned to `[]`, so the bug is
+  closed in full at the cost of one parameter.
+- **D3 — `bug-330`'s second half.** Its Expected Behavior also asks the summary to tell files read from items checked;
+  AC3 covers only the usage line. (a) add it here: the summary becomes `…, <R> file(s) read, <C> of <T> items checked`
+  (`T` = items in the files read, `C` = the items linted: all of them for a whole file, those holding an added line
+  under `--base`), with `ClaimLintReport.items: { checked, total }`; same file, a few lines; (b) leave it out and point
+  `bug-330` to a follow-up bug at done. Recommendation: (a); the existing assertions use prefix matches
+  (`/claim lint: 5 warnings in 1 file \(warn-only\)/`) and keep passing.
+- **D4 — `spec-007` §2's case-sensitivity sentence.** §2 says all regexes are case-insensitive unless noted, while the
+  YAML marks case-insensitivity per pattern with `(?i)`/`(?im)` on four of ten, and the code (and AC2's test) treat the
+  other six as case-sensitive. (a) amend §2's sentence to "case-sensitive unless the regex opens with `(?i)` or
+  `(?im)`", and add a Revision note naming the translation rules and the parity test; (b) leave the spec as it is.
+  Recommendation: (a), so the test's reading of the table rests on the spec's own words; a wording correction, no
+  pattern changes.
+
+#### Risks for other open tasks
+
+- `task-316` (CLI suites to the shared spawn helper, a new `test/lint/` guard on npm spawns, edits in `test/memory/`):
+  `test/cli/lint-claims.test.ts` already uses `spawnCapture` and spawns `node`, not `npm`, so the guard should not
+  flag it; if `task-316` touches `test/memory/submit-commit-body.test.ts` line 102 the second branch to merge resolves
+  a one-line conflict. Any file `task-316` adds with a raw invisible character fails the widened gate after this task
+  merges — writing escapes keeps both green.
+- `task-318` (context golden): a golden copied from real output that held such a character would fail the gate; its
+  worktree holds none today (scan above). `task-311`, `task-310`, `task-315` (`src/cli`): no shared file.
+- Every later Memory note: the gate reads `docs/04_memory/` too; a note that pastes a raw U+2028 or NBSP fails `npm
+  test`. Notes name such characters as `U+XXXX`.
+- The editing tool itself is the cause `bug-246` names: writing these notes, it turned five typed `\u` escapes
+  (U+FEFF, U+2028 twice, U+202E twice) into the raw characters (the scratch scan above, re-run on this worktree before
+  the commit, flagged them in this file; rewritten as escapes, re-run → only the `submit-commit-body.test.ts` hit). qa
+  and the developer run the scan on their files before each commit; after green, `npx jest
+  test/lint/control-characters.test.ts` does it.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
