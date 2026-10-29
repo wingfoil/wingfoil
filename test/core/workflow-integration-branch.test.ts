@@ -154,9 +154,9 @@ describe('task-288 AC 2 — dev-loop.yaml merges from / into the integration bra
 });
 
 describe('task-288 AC 3 — release-publishing `tag` on the integration branch (1.8 → 1.9), the bound pre-check', () => {
-  it('the phase order is unchanged; `tag` pre-checks the integration branch first and evidence-only last', () => {
+  it('the phase order is unchanged but for task-306\'s merge-forward, appended last; `tag` pre-checks the integration branch first and evidence-only last', () => {
     const wf = workflow('release-publishing');
-    expect(wf.phases.map((p) => p.name)).toEqual(['release-commit', 'staging-rehearsal', 'tag', 'publish', 'mark-released']);
+    expect(wf.phases.map((p) => p.name)).toEqual(['release-commit', 'staging-rehearsal', 'tag', 'publish', 'mark-released', 'merge-forward']);
     expect(phaseOf(wf, 'tag').checks?.pre).toEqual([
       ON_INTEGRATION_BRANCH,
       'phase-branch-merged-to-integration-branch',
@@ -288,5 +288,49 @@ describe('task-288 D5 — sw-life-cycle.yaml (1.1 → 1.2) and release-cycle.yam
     const entry = historyEntry(rest, version);
     expect(entry).toBeDefined();
     expect(entry).toContain('dl-159');
+  });
+});
+
+/**
+ * task-306 AC 1 (red-first; `bug-428`, `release-planning-rel-v0.3.2-plan` R8) — `release-publishing` declares the
+ * merge forward of a patch line as its last phase, `merge-forward`: optional (a minor does no work in it), role
+ * `tech-lead`, under the approver's approval, recorded by `workflow finalize` (`spec-017` §4.10: an optional last
+ * phase is never skipped). Read at `HEAD`, like the rest of this file; the version pin is "≥" plus the history entry
+ * naming task-306 and bug-428 (bug-314).
+ */
+describe('task-306 AC 1 — release-publishing ends with the merge-forward phase (2.0 → 2.1)', () => {
+  it('merge-forward is the last phase: optional, role tech-lead, the approver\'s approval, the merge and one agent step, no checks or produces', () => {
+    const wf = workflow('release-publishing');
+    expect(wf.phases[wf.phases.length - 1]?.name).toBe('merge-forward');
+    const phase = phaseOf(wf, 'merge-forward');
+    expect(phase.optional).toBe(true);
+    expect(phase.role).toBe('tech-lead');
+    expect(phase.approval).toEqual({ by_role: 'approver' });
+    expect(phase.actions).toEqual(['git.merge(from: integration_branch, ff: false)', 'agent.execute']);
+    expect(phase.checks).toBeUndefined();
+    expect(phase.produces).toBeUndefined();
+  });
+
+  it('the registry loads at HEAD with no error, and its only warnings are the 65 unbound checks', () => {
+    const { diagnostics } = loadWorkflowRegistryAtHead(ROOT);
+    const codes = diagnostics.map((d) => d.code);
+    expect(codes.filter((code) => code.startsWith('E_'))).toEqual([]);
+    expect(new Set(codes)).toEqual(new Set(['W_WORKFLOW_UNBOUND_TOKEN']));
+    expect(codes.length).toBe(65);
+  });
+
+  it("the merge-forward merge is a bound manual step", () => {
+    const { bindings } = loadWorkflowRegistryAtHead(ROOT);
+    expect(resolveToken('git.merge(from: integration_branch, ff: false)', 'action', bindings).kind).toBe('manual');
+  });
+
+  it('`version:` is 2.1 or later, with a 2.1 entry naming task-306 and bug-428', () => {
+    const raw = atHead(PUBLISHING_FILE);
+    const { value, rest } = versionLine(raw);
+    expect(value).toBeGreaterThanOrEqual(2.1);
+    expect(raw).toMatch(/2\.1 [^;]*task-306/);
+    const entry = rest.split(/;|\(prev /).find((segment) => /(^|[\s(])2\.1([\s):,]|$)/.test(segment) && segment.includes('task-306'));
+    expect(entry).toBeDefined();
+    expect(entry).toContain('bug-428');
   });
 });

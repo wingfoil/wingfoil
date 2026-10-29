@@ -21,6 +21,29 @@ import type { NpmViewAnswer } from '../../scripts/wait-npm-version.cjs';
 
 const SCRIPT = join(__dirname, '..', '..', 'scripts', 'wait-npm-version.cjs');
 
+/**
+ * npm 11's answer to `npm view … --json` when it fails (task-306 review R1, captured with npm 11.6.2 against an
+ * in-process registry): exit 1, the error as a JSON object on stdout, and the same error as `npm error` lines on
+ * stderr. E404 is the shape of a version the package does not list yet (a staged, unapproved one).
+ */
+const npmJsonError = (code: string, summary: string, detail: string): string =>
+  `${JSON.stringify({ error: { code, summary, detail } }, null, 2)}\n`;
+const E404_DETAIL = (version: string): string =>
+  `The requested resource 'undefined@${version}' could not be found or you do not have permission to access it.\n\nNote that you can also install from a\ntarball, folder, http url, or git url.`;
+const e404Stdout = (version: string): string => npmJsonError('E404', `No match found for version ${version}`, E404_DETAIL(version));
+const e404Stderr = (version: string): string =>
+  [
+    'npm error code E404',
+    `npm error 404 No match found for version ${version}`,
+    'npm error 404',
+    `npm error 404  The requested resource 'undefined@${version}' could not be found or you do not have permission to access it.`,
+    'npm error 404',
+    'npm error 404 Note that you can also install from a',
+    'npm error 404 tarball, folder, http url, or git url.',
+    'npm error A complete log of this run can be found in: /home/runner/.npm/_logs/2026-10-28T21_24_25_855Z-debug-0.log',
+    '',
+  ].join('\n');
+
 interface Recorded {
   readonly args: readonly string[];
   readonly timeoutMs: number | undefined;
@@ -48,6 +71,8 @@ function harness(...list: NpmViewAnswer[]) {
         calls.push({ args, timeoutMs: options?.timeoutMs });
         return list[Math.min(calls.length - 1, list.length - 1)] as NpmViewAnswer;
       },
+      // task-306 (bug-433): a listed version is live once its tarball answers 200; here it always does.
+      probe: async () => ({ status: 200 }),
     },
   };
 }
@@ -62,19 +87,33 @@ describe('waitForNpmVersion failure classes (task-229 F3)', () => {
   });
 
   it.each([
-    ['npm error code E401\nnpm error 401 Unauthorized - GET https://registry.npmjs.org/wingfoil', 'E401'],
-    ['npm ERR! code E403\nnpm ERR! 403 Forbidden - GET https://registry.npmjs.org/wingfoil', 'E403'],
-  ])('fails at once on a permanent npm answer (%#: %s)', async (stderr, code) => {
-    const h = harness({ status: 1, stdout: '', stderr });
+    [
+      'npm error code E401\nnpm error 401 Unauthorized - GET https://registry.npmjs.org/wingfoil\n',
+      npmJsonError('E401', '401 Unauthorized - GET https://registry.npmjs.org/wingfoil', ''),
+      'E401',
+    ],
+    [
+      'npm ERR! code E403\nnpm ERR! 403 403 Forbidden - GET https://registry.npmjs.org/wingfoil\n',
+      npmJsonError(
+        'E403',
+        '403 Forbidden - GET https://registry.npmjs.org/wingfoil',
+        'In most cases, you or one of your dependencies are requesting\na package version that is forbidden by your security policy, or\non a server you do not have access to.',
+      ),
+      'E403',
+    ],
+  ])('fails at once on a permanent npm answer (%#: %s)', async (stderr, stdout, code) => {
+    const h = harness({ status: 1, stdout, stderr });
     const result = await waitForNpmVersion(h.options);
     expect(result).toMatchObject({ ok: false, attempts: 1 });
     expect(h.slept).toEqual([]);
     expect(result.message).toContain(code);
     expect(result.message).toMatch(/waiting will not change/);
+    // review R1: npm's own answer is described by its code, not by the `{` its --json error opens with.
+    expect(result.message).not.toContain('exit 1: {');
   });
 
   it.each([
-    ['E404', { status: 1, stdout: '', stderr: 'npm error code E404\nnpm error 404 No match found for version 0.3.0' }],
+    ['E404', { status: 1, stdout: e404Stdout('0.3.0'), stderr: e404Stderr('0.3.0') }],
     ['empty output', { status: 0, stdout: '', stderr: '' }],
     ['ETIMEDOUT', { status: 1, stdout: '', stderr: 'npm error code ETIMEDOUT' }],
     ['ECONNRESET', { status: 1, stdout: '', stderr: 'npm ERR! code ECONNRESET' }],
@@ -88,13 +127,25 @@ describe('waitForNpmVersion failure classes (task-229 F3)', () => {
     expect(result.message).toMatch(/is not live on npm after 30 s/);
   });
 
+  it('E404 until the deadline: the last answer names E404, not a bare `{` (review R1)', async () => {
+    const h = harness({ status: 1, stdout: e404Stdout('0.3.0'), stderr: e404Stderr('0.3.0') });
+    const result = await waitForNpmVersion(h.options);
+    expect(result).toMatchObject({ ok: false, attempts: 4 });
+    expect(result.message).toContain('E404');
+    expect(result.message).not.toContain('exit 1: {');
+  });
+
   it('a transient answer followed by the version succeeds', async () => {
-    const h = harness({ status: null, stdout: '', stderr: '', timedOut: true }, { status: 0, stdout: '0.3.0\n', stderr: '' });
+    // task-306: the version's answer is npm's JSON (`version dist.tarball --json`), then the tarball answers 200.
+    const h = harness(
+      { status: null, stdout: '', stderr: '', timedOut: true },
+      { status: 0, stdout: `${JSON.stringify({ version: '0.3.0', 'dist.tarball': 'https://registry.npmjs.org/wingfoil/-/wingfoil-0.3.0.tgz' }, null, 2)}\n`, stderr: '' },
+    );
     expect(await waitForNpmVersion(h.options)).toMatchObject({ ok: true, attempts: 2 });
   });
 
   it('passes the per-call timeout to every npm call', async () => {
-    const h = harness({ status: 1, stdout: '', stderr: 'npm error code E404' });
+    const h = harness({ status: 1, stdout: e404Stdout('0.3.0'), stderr: e404Stderr('0.3.0') });
     await waitForNpmVersion(h.options);
     expect(NPM_VIEW_TIMEOUT_MS).toBeGreaterThan(0);
     expect(NPM_VIEW_TIMEOUT_MS).toBeLessThanOrEqual(120_000);

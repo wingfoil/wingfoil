@@ -180,6 +180,13 @@ Items 0 (patch scope selected by the retrospective), 3 (`memory.yaml`: `release.
 task per line), the `patch-cycle.yaml` part of item 4, and 5 (the `dl-095` pin per line) stay deferred. Items 1,
 2 and 4 below keep their text as the statement of what moved.
 
+*(Amended 2026-10-28, approver ruling R8 of `release-planning-rel-v0.3.2-plan`.)* Item 5 is ruled and leaves the
+deferred part: a patch line pins only published versions of its own `X.Y`; a merge forward keeps `main`'s pin,
+with or without a conflict on it (`git-conventions` §1 rule 5), and `main` moves its pin only by a switch commit of
+its own; with every pin advance `advance-pinned-build` also updates the project-status sentence of `AGENTS.md` §1,
+and only that sentence. Owner: `task-305` (`bug-429`), on `release/0.3`, which writes it into
+`release-planning.yaml`'s `advance-pinned-build` (version 2.4); it reaches `main` by the merge forward.
+
 0. *(Added 2026-10-07, approver, with `dl-163`.)* **The retrospective selects the patch scope, by hand, from v0.3
    on.** In `additional-points` the approver rules on three inputs: the consumer notes `dl-163` R6 admits into a
    patch, a review of every element whose `release` is the next minor (for v0.3: `release: "v0.4"`), and
@@ -197,7 +204,8 @@ task per line), the `patch-cycle.yaml` part of item 4, and 5 (the `dl-095` pin p
    affects both.
 4. Workflows: a `patch-cycle.yaml` (`dl-092` Q1 option (C), if the retrospective wants it) and a parametric base
    branch in `dev-loop.yaml` (`git.merge(to: …)`) and `release-publishing.yaml` (phase `tag`).
-5. `dl-095`: the pinned build per line (each line moves its own pin forward; a merge forward keeps `main`'s).
+5. `dl-095`: the pinned build per line (each line moves its own pin forward; a merge forward keeps `main`'s). *(Ruled
+   2026-10-28, see the amendment above.)*
 
 6. *(Added 2026-10-16, approver.)* Two smaller one-line assumptions, deferred with this part: `.githooks/pre-push`
    takes a new branch's base from `origin/main` (on a branch cut from `release/X.Y` it checks more commits than needed,

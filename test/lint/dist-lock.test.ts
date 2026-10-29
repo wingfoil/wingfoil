@@ -21,15 +21,41 @@
  *   refused run cannot release the lock of the run that holds it;
  * - `jest.config.js` wires the setup and the teardown that do this.
  *
+ * And, since task-308 (`bug-336`, `bug-066`):
+ * - the build writes into a staging directory (`.jest-dist.next`) while the previous `dist/` stays in
+ *   place, and is renamed onto `dist/` only once it has finished; a build that throws, writes nothing, or
+ *   is killed mid-way leaves the previous `dist/` intact, and the next run recovers from the leftover;
+ * - a `dist/` that cannot be moved or removed (EACCES, e.g. owned by root after a container run) rejects
+ *   with a diagnostic naming the path and the cause, not a raw stack;
+ * - the staging and previous directories are ignored by git and by ESLint.
+ *
  * Deterministic in outcome: the waits are bounded and polled, and no assertion depends on how long a
  * step took — only on the order of the events.
  */
-import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { spawn, spawnSync } from 'node:child_process';
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { acquireDistLock, distLockPath, prepareDist, releaseDistLock } from '../dist-lock.cjs';
+import {
+  acquireDistLock,
+  distLockPath,
+  distPreviousPath,
+  distStagingPath,
+  isPidAlive,
+  prepareDist,
+  releaseDistLock,
+} from '../dist-lock.cjs';
 
 const REPO_ROOT = join(__dirname, '..', '..');
 
@@ -46,6 +72,34 @@ function deadPid(): number {
 function holder(lockPath: string): number {
   return Number(readFileSync(lockPath, 'utf-8').trim());
 }
+
+/** A file's content, or `<missing>` when it does not exist: an assertion then shows which. */
+function contentOf(path: string): string {
+  return existsSync(path) ? readFileSync(path, 'utf-8') : '<missing>';
+}
+
+/** Give every directory under (and including) `dir` its write bit back, so the temp root can be removed. */
+function restoreModes(dir: string): void {
+  if (!existsSync(dir) || !statSync(dir).isDirectory()) return;
+  chmodSync(dir, 0o755);
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (entry.isDirectory()) restoreModes(join(dir, entry.name));
+  }
+}
+
+/**
+ * What a promise rejected with, or `null` if it resolved. Rejections are checked by shape, not with
+ * `toBeInstanceOf(Error)`: an error node's `fs` raises comes from another realm than jest's sandbox.
+ */
+async function rejectionOf(promise: Promise<unknown>): Promise<unknown> {
+  return promise.then(
+    () => null,
+    (err: unknown) => err,
+  );
+}
+
+/** `chmod` does not bind root, so the EACCES pins run only for another uid. */
+const itUnlessRoot = process.getuid?.() === 0 ? it.skip : it;
 
 describe('dist/ lock (task-146, bug-095) — one jest run at a time owns a worktree\'s dist/', () => {
   let root: string;
@@ -105,23 +159,165 @@ describe('dist/ lock (task-146, bug-095) — one jest run at a time owns a workt
     expect(readFileSync(join(root, 'dist', 'cli.js'), 'utf-8')).toBe('in use by the other run\n');
   });
 
-  it('with the lock free, removes the previous dist/, builds, and keeps holding the lock', async () => {
+  it('with the lock free, builds into the staging directory while the previous dist/ stays, then swaps it in (task-308 AC1, bug-336)', async () => {
     mkdirSync(join(root, 'dist'));
     writeFileSync(join(root, 'dist', 'stale.js'), 'from an earlier build\n');
-    const order: string[] = [];
+    const seen: Array<{ outDir: string; outDirOnEntry: boolean; previousPresent: boolean; holder: number }> = [];
     await prepareDist({
       repoRoot: root,
-      build: () => {
-        order.push(`build (dist present: ${existsSync(join(root, 'dist'))}, holder: ${holder(lockPath)})`);
+      build: (outDir) => {
+        seen.push({
+          outDir,
+          outDirOnEntry: existsSync(outDir),
+          previousPresent: existsSync(join(root, 'dist', 'stale.js')),
+          holder: holder(lockPath),
+        });
+        mkdirSync(outDir);
+        writeFileSync(join(outDir, 'cli.js'), 'new build\n');
       },
       pid: process.pid,
       waitMs: 1_000,
       pollMs: 10,
       log,
     });
-    expect(order).toEqual([`build (dist present: false, holder: ${process.pid})`]);
+    expect(seen).toEqual([
+      { outDir: distStagingPath(root), outDirOnEntry: false, previousPresent: true, holder: process.pid },
+    ]);
+    expect(readdirSync(join(root, 'dist'))).toEqual(['cli.js']);
+    expect(contentOf(join(root, 'dist', 'cli.js'))).toBe('new build\n');
     expect(holder(lockPath)).toBe(process.pid);
+    expect(readdirSync(root).sort()).toEqual(['.jest-dist.lock', 'dist']);
   });
+
+  it('places the staging and previous directories in the worktree root, next to dist/ (task-308 AC1)', () => {
+    expect(distStagingPath(root)).toBe(join(root, '.jest-dist.next'));
+    expect(distPreviousPath(root)).toBe(join(root, '.jest-dist.prev'));
+  });
+
+  it('exports the liveness check the teardown reuses (task-308 AC4)', () => {
+    expect(isPidAlive(process.pid)).toBe(true);
+    expect(isPidAlive(deadPid())).toBe(false);
+  });
+
+  it('builds dist/ in a fresh worktree that has none yet (task-308 AC1)', async () => {
+    await prepareDist({
+      repoRoot: root,
+      build: (outDir) => {
+        mkdirSync(outDir);
+        writeFileSync(join(outDir, 'cli.js'), 'first build\n');
+      },
+      pid: process.pid,
+      waitMs: 1_000,
+      pollMs: 10,
+      log,
+    });
+    expect(contentOf(join(root, 'dist', 'cli.js'))).toBe('first build\n');
+    expect(readdirSync(root).sort()).toEqual(['.jest-dist.lock', 'dist']);
+  });
+
+  it('a build that throws leaves the previous dist/ intact, removes its staging, and rethrows its own error (task-308 AC1)', async () => {
+    mkdirSync(join(root, 'dist'));
+    writeFileSync(join(root, 'dist', 'cli.js'), 'previous build\n');
+    const failure = new Error('build interrupted');
+    const err = await rejectionOf(
+      prepareDist({
+        repoRoot: root,
+        build: (outDir) => {
+          mkdirSync(outDir);
+          writeFileSync(join(outDir, 'cli.js'), 'partial\n');
+          throw failure;
+        },
+        pid: process.pid,
+        waitMs: 1_000,
+        pollMs: 10,
+        log,
+      }),
+    );
+    expect(err).toBe(failure);
+    expect(contentOf(join(root, 'dist', 'cli.js'))).toBe('previous build\n');
+    expect(readdirSync(root).sort()).toEqual(['.jest-dist.lock', 'dist']);
+  });
+
+  it('a build that writes nothing is refused, and the previous dist/ stays (task-308 AC1)', async () => {
+    mkdirSync(join(root, 'dist'));
+    writeFileSync(join(root, 'dist', 'cli.js'), 'previous build\n');
+    const err = await rejectionOf(
+      prepareDist({ repoRoot: root, build: () => undefined, pid: process.pid, waitMs: 1_000, pollMs: 10, log }),
+    );
+    expect(typeof (err as { message?: unknown } | null)?.message).toBe('string');
+    expect((err as Error).message).toMatch(/wrote nothing/);
+    expect((err as Error).message).toContain(distStagingPath(root));
+    expect(contentOf(join(root, 'dist', 'cli.js'))).toBe('previous build\n');
+  });
+
+  it(
+    'a run killed in the middle of its build leaves the previous dist/ intact, and the next run recovers (task-308 AC1, bug-336)',
+    async () => {
+      mkdirSync(join(root, 'dist'));
+      writeFileSync(join(root, 'dist', 'cli.js'), 'previous build\n');
+      const scratch = mkdtempSync(join(tmpdir(), 'wf-dist-lock-kill-'));
+      const marker = join(scratch, 'build-started');
+      try {
+        // The child takes the lock and starts a build that writes part of its output, says so, then blocks:
+        // it is killed there, as a jest run interrupted by Ctrl-C or a timeout would be.
+        const script = [
+          `const fs = require('node:fs');`,
+          `const path = require('node:path');`,
+          `const { prepareDist } = require(${JSON.stringify(join(REPO_ROOT, 'test', 'dist-lock.cjs'))});`,
+          `prepareDist({`,
+          `  repoRoot: ${JSON.stringify(root)}, waitMs: 1000, pollMs: 10, log: () => {},`,
+          `  build: (outDir) => {`,
+          `    fs.mkdirSync(outDir);`,
+          `    fs.writeFileSync(path.join(outDir, 'cli.js'), 'partial\\n');`,
+          `    fs.writeFileSync(${JSON.stringify(marker)}, '');`,
+          `    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 60000);`,
+          `  },`,
+          `}).catch((err) => { process.stderr.write(String(err && err.stack || err) + '\\n'); process.exit(3); });`,
+        ].join('\n');
+        const child = spawn(process.execPath, ['-e', script], { stdio: ['ignore', 'ignore', 'pipe'] });
+        let stderr = '';
+        child.stderr.on('data', (chunk: Buffer) => {
+          stderr += chunk.toString();
+        });
+        const exited = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve) => {
+          child.on('exit', (code, signal) => resolve({ code, signal }));
+        });
+        for (let poll = 0; poll < 600 && !existsSync(marker) && child.exitCode === null && child.signalCode === null; poll += 1) {
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+        if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+        const exit = await exited;
+
+        expect(contentOf(join(root, 'dist', 'cli.js'))).toBe('previous build\n');
+        expect({ buildStarted: existsSync(marker), exit, stderr }).toEqual({
+          buildStarted: true,
+          exit: { code: null, signal: 'SIGKILL' },
+          stderr: '',
+        });
+
+        // The next run takes over the dead run's lock, discards its partial staging, and builds afresh.
+        const outDirOnEntry: boolean[] = [];
+        await prepareDist({
+          repoRoot: root,
+          build: (outDir) => {
+            outDirOnEntry.push(existsSync(outDir));
+            mkdirSync(outDir);
+            writeFileSync(join(outDir, 'cli.js'), 'after recovery\n');
+          },
+          pid: process.pid,
+          waitMs: 1_000,
+          pollMs: 10,
+          log,
+        });
+        expect(outDirOnEntry).toEqual([false]);
+        expect(contentOf(join(root, 'dist', 'cli.js'))).toBe('after recovery\n');
+        expect(readdirSync(root).sort()).toEqual(['.jest-dist.lock', 'dist']);
+      } finally {
+        rmSync(scratch, { recursive: true, force: true });
+      }
+    },
+    60_000,
+  );
 
   it('takes over a lock left by a run that died before its teardown', async () => {
     const dead = deadPid();
@@ -161,6 +357,113 @@ describe('dist/ lock (task-146, bug-095) — one jest run at a time owns a workt
   });
 });
 
+describe('dist/ that cannot be replaced (task-308 AC2, bug-066) — a diagnostic naming the path and the cause', () => {
+  let root: string;
+  const log = (): void => undefined;
+
+  beforeEach(() => {
+    root = mkdtempSync(join(tmpdir(), 'wf-dist-lock-eacces-'));
+    mkdirSync(join(root, 'dist'));
+    writeFileSync(join(root, 'dist', 'cli.js'), 'previous build\n');
+  });
+
+  afterEach(() => {
+    restoreModes(root);
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  itUnlessRoot('a previous build that cannot be removed fails the setup with the path, the code and the remedy, after the swap', async () => {
+    // The shape a root-owned dist/ takes: a directory inside it the user cannot write.
+    mkdirSync(join(root, 'dist', 'cli'));
+    writeFileSync(join(root, 'dist', 'cli', 'a.js'), 'owned by someone else\n');
+    chmodSync(join(root, 'dist', 'cli'), 0o555);
+    try {
+      const err = await rejectionOf(
+        prepareDist({
+          repoRoot: root,
+          build: (outDir) => {
+            mkdirSync(outDir);
+            writeFileSync(join(outDir, 'new.js'), 'new build\n');
+          },
+          pid: process.pid,
+          waitMs: 1_000,
+          pollMs: 10,
+          log,
+        }),
+      );
+      expect(typeof (err as { message?: unknown } | null)?.message).toBe('string');
+      const message = (err as Error).message;
+      expect(message).toMatch(/^jest globalSetup: cannot remove /);
+      expect(message).toContain(join(root, '.jest-dist.prev'));
+      expect(message).toContain('EACCES');
+      expect(message).toContain('bug-066');
+      expect(message).toContain('sudo rm -rf');
+      expect(((err as Error).cause as NodeJS.ErrnoException | undefined)?.code).toBe('EACCES');
+      expect((err as Error).stack).not.toMatch(/^\s+at /m);
+      expect(existsSync(join(root, 'dist', 'new.js'))).toBe(true);
+    } finally {
+      restoreModes(root);
+    }
+  });
+
+  itUnlessRoot('a dist/ that cannot be moved aside fails the setup naming dist/ and the code, and stays as it was', async () => {
+    try {
+      const err = await rejectionOf(
+        prepareDist({
+          repoRoot: root,
+          build: (outDir) => {
+            mkdirSync(outDir);
+            writeFileSync(join(outDir, 'cli.js'), 'new build\n');
+            // The worktree root loses its write bit: dist/ can no longer be renamed.
+            chmodSync(root, 0o555);
+          },
+          pid: process.pid,
+          waitMs: 1_000,
+          pollMs: 10,
+          log,
+        }),
+      );
+      expect(typeof (err as { message?: unknown } | null)?.message).toBe('string');
+      const message = (err as Error).message;
+      expect(message).toMatch(/^jest globalSetup: cannot replace /);
+      expect(message).toContain(join(root, 'dist'));
+      expect(message).toContain('EACCES');
+      expect(contentOf(join(root, 'dist', 'cli.js'))).toBe('previous build\n');
+    } finally {
+      restoreModes(root);
+    }
+  });
+
+  itUnlessRoot('a leftover previous build that cannot be removed is refused before building, naming it', async () => {
+    mkdirSync(join(root, '.jest-dist.prev', 'cli'), { recursive: true });
+    writeFileSync(join(root, '.jest-dist.prev', 'cli', 'a.js'), 'left by a killed run\n');
+    chmodSync(join(root, '.jest-dist.prev', 'cli'), 0o555);
+    let built = false;
+    try {
+      const err = await rejectionOf(
+        prepareDist({
+          repoRoot: root,
+          build: () => {
+            built = true;
+          },
+          pid: process.pid,
+          waitMs: 1_000,
+          pollMs: 10,
+          log,
+        }),
+      );
+      expect(typeof (err as { message?: unknown } | null)?.message).toBe('string');
+      const message = (err as Error).message;
+      expect(message).toMatch(/^jest globalSetup: cannot remove /);
+      expect(message).toContain(join(root, '.jest-dist.prev'));
+      expect(built).toBe(false);
+      expect(contentOf(join(root, 'dist', 'cli.js'))).toBe('previous build\n');
+    } finally {
+      restoreModes(root);
+    }
+  });
+});
+
 describe('dist/ lock wiring (task-146, bug-095)', () => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const config = require(join(REPO_ROOT, 'jest.config.js')) as { globalSetup?: string; globalTeardown?: string };
@@ -184,5 +487,45 @@ describe('dist/ lock wiring (task-146, bug-095)', () => {
       const ignored = spawnSync('git', ['check-ignore', '-q', path], { cwd: REPO_ROOT });
       expect([path, ignored.status]).toEqual([path, 0]);
     }
+  });
+
+  it('the staging and previous build directories are git-ignored (task-308 AC1)', () => {
+    for (const path of ['.jest-dist.next/cli.js', '.jest-dist.prev/cli.js']) {
+      const ignored = spawnSync('git', ['check-ignore', '-q', path], { cwd: REPO_ROOT });
+      expect([path, ignored.status]).toEqual([path, 0]);
+    }
+  });
+
+  it('the staging and previous build directories are ignored by ESLint (task-308 AC1)', () => {
+    const probe = spawnSync(
+      process.execPath,
+      [
+        '-e',
+        `const { ESLint } = require('eslint');
+         const eslint = new ESLint({ cwd: process.cwd() });
+         Promise.all(['.jest-dist.next/cli.js', '.jest-dist.prev/cli.js'].map((p) => eslint.isPathIgnored(p).then((i) => [p, i])))
+           .then((r) => process.stdout.write(JSON.stringify(r)));`,
+      ],
+      { cwd: REPO_ROOT, encoding: 'utf-8' },
+    );
+    expect([probe.status, probe.signal, probe.stderr]).toEqual([0, null, '']);
+    expect(JSON.parse(probe.stdout)).toEqual([
+      ['.jest-dist.next/cli.js', true],
+      ['.jest-dist.prev/cli.js', true],
+    ]);
+  });
+
+  it('the build the setup composes still mirrors package.json\'s build script (task-308, characterization)', () => {
+    // test/global-setup.cjs runs tsc and the build record into the staging directory itself; this pin
+    // makes a change to the `build` script fail here rather than drift silently from the setup.
+    const pkg = JSON.parse(readFileSync(join(REPO_ROOT, 'package.json'), 'utf-8')) as { scripts: Record<string, string> };
+    expect(pkg.scripts.build).toBe('tsc -p tsconfig.build.json && node scripts/write-build-info.cjs');
+  });
+
+  it('this run\'s setup left a complete dist/ and no staging or previous directory (task-308, characterization)', () => {
+    expect(existsSync(join(REPO_ROOT, 'dist', 'cli.js'))).toBe(true);
+    expect(existsSync(join(REPO_ROOT, 'dist', 'build-info.json'))).toBe(true);
+    expect(existsSync(join(REPO_ROOT, '.jest-dist.next'))).toBe(false);
+    expect(existsSync(join(REPO_ROOT, '.jest-dist.prev'))).toBe(false);
   });
 });

@@ -457,7 +457,7 @@ non-blank (`--reason` itself stays optional, `dl-027`).
             - `e2e-smoke` *(dl-023: `fresh-init` → `drive-cli` → `mcp-registration` → `gate`)* →
               `release-submit` (`pre-release-checks` → `enter-releasing` → `approve-release`) →
               `release-publishing` (`release-commit` → `staging-rehearsal` → `tag` on the integration branch →
-              `publish` → `mark-released`; a patch's `release/X.Y` is then merged forward into `main` by hand, no phase declares it yet, `git-conventions` §1) →
+              `publish` → `mark-released` → `merge-forward`, optional: a patch's `release/X.Y` merged forward into `main`, a minor recording it with `workflow finalize`, `git-conventions` §1 rule 6) →
               `release-health` *(dl-089: `measure` → `compare` → `propose`
               against `docs/08_health/metrics.yaml`; not a gate)* → `retrospective` (`explore` →
               `collect-feedback` → `additional-points` → `capture` → `approve`, → decision-logs).

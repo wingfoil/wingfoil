@@ -22,7 +22,8 @@
 # promote stages with — which npm dist-tag the version gets (`--allow-published`: a re-run may come after the version
 # went live), and `deploy` runs only for `latest`, or on `workflow_dispatch` (the approver's deliberate deployment).
 # For `latest`, `build` then waits until npm serves exactly that version (`scripts/wait-npm-version.cjs`, the bounded
-# poll of publish.yml's release and mcp-registry jobs, approver ruling D2 (b)): the site follows npm, so a failed or
+# poll of publish.yml's release and mcp-registry jobs, approver ruling D2 (b)), that is until npm lists it and its
+# tarball answers HTTP 200 (task-306, bug-433): the site follows npm, so a failed or
 # rejected publish deploys nothing. Recovery after a late approval is publish.yml's: Re-run failed jobs.
 #
 # Permissions: read-only at the top; the deploy job alone holds `pages: write` and `id-token: write`, the set

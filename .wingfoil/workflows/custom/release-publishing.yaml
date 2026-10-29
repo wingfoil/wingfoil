@@ -14,7 +14,7 @@ description: >-
   local staging registry, tag the candidate, publish it to the npm registry, and mark the release
   element as released. A candidate that has not passed both the e2e-smoke gate and the staging
   rehearsal is not tagged (dl-099 §1).
-version: 2.0                     # 1.2 spec-003 alignment (task-199): the two agent.execute steps are one (the instructions are the description, dl-090 Q6 (b)), git and approver tokens take key: value arguments (spec-003 open question 6); 1.3 task-214: the tag phase names the release bump commit's files, SECURITY.md among them (its supported row follows package.json's minor, dl-127); 1.4 dl-099 §1–§2 (task-219): the release commit is its own phase, `release-commit`, so the `staging-rehearsal` phase (qa) runs on the candidate it cuts, and `tag` tags the candidate the rehearsal's transcript names; 1.5 dl-130 steps 1 and 4 (task-229): `publish` declares the service verify sweep as a `checks.pre` (warn), and its description names publish.yml's `release` job, which creates the GitHub Release once npm serves the version; 1.6 dl-130 step 2, bug-173, bug-174 (task-238): `publish` names publish.yml's `mcp-registry` job (the MCP Registry listing over GitHub OIDC), where npm's Staged Packages tab is, the automated review before Approve and the npx form of npm ≥ 11.15.0, and its post check names the listing; 1.7 dl-136 (task-244, approver rulings D3, D7): publish.yml's `release` job attaches the tag run's four test reports to the GitHub Release, `publish` produces the summary and coverage-summary.json committed under docs/07_gates/ keyed by version, its post check names the attached reports, and `release-commit`'s CHANGELOG section links the summary as the Release asset's absolute URL (review F5); 1.8 task-282 (bug-312, bug-310; dl-099 §1, task-219 D2): `tag` also pre-checks `evidence-only-since-candidate`, that the commits between the candidate and the tip change only the evidence paths its binding declares, and `staging-rehearsal` says what CI does: a gate run per candidate, while publish.yml's stage job stages the tagged build in CI; 1.9 task-288 (dl-159 A1.8, approver rulings D1–D3): `tag` tags on the release's integration branch, `on: integration_branch`, a minor on the pushed main and a patch on the pushed release/X.Y; its pre-checks on-branch-is-main and release-branch-merged-to-main become on-integration-branch, bound to scripts/integration-branch.cjs --check-head, and phase-branch-merged-to-integration-branch; 2.0 task-303 (dl-186 Q6, review finding 1), comment only: the unbound phase-branch-merged-to-integration-branch says a command decides it once the phase branches are declared, not that it is a reading
+version: 2.1                     # 1.2 spec-003 alignment (task-199): the two agent.execute steps are one (the instructions are the description, dl-090 Q6 (b)), git and approver tokens take key: value arguments (spec-003 open question 6); 1.3 task-214: the tag phase names the release bump commit's files, SECURITY.md among them (its supported row follows package.json's minor, dl-127); 1.4 dl-099 §1–§2 (task-219): the release commit is its own phase, `release-commit`, so the `staging-rehearsal` phase (qa) runs on the candidate it cuts, and `tag` tags the candidate the rehearsal's transcript names; 1.5 dl-130 steps 1 and 4 (task-229): `publish` declares the service verify sweep as a `checks.pre` (warn), and its description names publish.yml's `release` job, which creates the GitHub Release once npm serves the version; 1.6 dl-130 step 2, bug-173, bug-174 (task-238): `publish` names publish.yml's `mcp-registry` job (the MCP Registry listing over GitHub OIDC), where npm's Staged Packages tab is, the automated review before Approve and the npx form of npm ≥ 11.15.0, and its post check names the listing; 1.7 dl-136 (task-244, approver rulings D3, D7): publish.yml's `release` job attaches the tag run's four test reports to the GitHub Release, `publish` produces the summary and coverage-summary.json committed under docs/07_gates/ keyed by version, its post check names the attached reports, and `release-commit`'s CHANGELOG section links the summary as the Release asset's absolute URL (review F5); 1.8 task-282 (bug-312, bug-310; dl-099 §1, task-219 D2): `tag` also pre-checks `evidence-only-since-candidate`, that the commits between the candidate and the tip change only the evidence paths its binding declares, and `staging-rehearsal` says what CI does: a gate run per candidate, while publish.yml's stage job stages the tagged build in CI; 1.9 task-288 (dl-159 A1.8, approver rulings D1–D3): `tag` tags on the release's integration branch, `on: integration_branch`, a minor on the pushed main and a patch on the pushed release/X.Y; its pre-checks on-branch-is-main and release-branch-merged-to-main become on-integration-branch, bound to scripts/integration-branch.cjs --check-head, and phase-branch-merged-to-integration-branch; 2.0 task-303 (dl-186 Q6, review finding 1), comment only: the unbound phase-branch-merged-to-integration-branch says a command decides it once the phase branches are declared, not that it is a reading; 2.1 task-306 (bug-428, bug-433, bug-405, release-planning v0.3.2 R8, approver rulings D1–D6): + merge-forward, the last phase, optional, role tech-lead, under the approver's approval: a patch's release/X.Y merged forward after the tag and mark-released, as git-conventions §1 rule 6 lists its commands, a minor recording it with workflow finalize (spec-017 §4.10); publish waits until the version's dist.tarball answers HTTP 200 and says tests.passing is the run on the release commit
 element: release
 
 phases:
@@ -101,7 +101,10 @@ phases:
       job creates the GitHub Release with the version's CHANGELOG.md section as its notes, and its
       `mcp-registry` job publishes the MCP Registry listing of `server.json` with `mcp-publisher login
       github-oidc` (dl-130 step 2, bug-173); each polls npm for a bounded time, and if the approval comes
-      later the approver re-runs the failed jobs (dl-130 step 1). The `release` job also attaches the
+      later the approver re-runs the failed jobs (dl-130 step 1). Each waits with
+      scripts/wait-npm-version.cjs until `npm view` lists the version and the version's `dist.tarball`
+      answers HTTP 200 to a `HEAD` request: npm lists a version minutes before its registry serves the
+      tarball, so "listed" alone is not "installable" (bug-433). The `release` job also attaches the
       gate's four test reports of the tag's run as Release assets — jest-results.json, coverage-summary.json,
       lcov.info and test-results.md (dl-136 Q1 (c), Q3 (a)). Once the Release exists, fetch the two kept
       in the repository, `gh release download <tag> --pattern test-results.md --pattern
@@ -111,7 +114,10 @@ phases:
       Before the tag is pushed, the service verify sweep lists every pending and active `service` element's
       `verify` command; the approver runs each and records its result with the date in this phase's plan
       (dl-130 step 4, Q3 (a): it reports and blocks nothing). The runbook in publish.yml's header lists the
-      one-time registry-side setup this step presupposes.
+      one-time registry-side setup this step presupposes. The pre-check `tests.passing` is the run on the
+      release commit: the candidate the tag names, before the tag is pushed, run as the CI gate job runs
+      it, with no git identity, `npm run test:no-identity -- --maxWorkers=2` (bug-405;
+      release-publishing-rel-v0.3-plan D1).
     role: tech-lead
     actions:
       - agent.execute        # push the tag (publish.yml runs gate → stage → promote, `npm stage publish`, → release, the GitHub Release, and mcp-registry, the MCP Registry listing, once the version is live), then report the stage id promote printed; nothing is live yet
@@ -121,7 +127,7 @@ phases:
       - "docs/07_gates/rl-{release.release-line}/rel-{release.version}-coverage-summary.json"
     checks:
       pre: ["tests.passing", "services.verify-sweep"]   # dl-130 Q3 (a): the sweep is bound at severity warn
-      post: ["staged version approved on npm, live on the npm registry, its GitHub Release created with the test reports attached and its MCP Registry listing published"]   # dl-130 Action 2: the Release (task-229) and the listing (task-238) are checked in the same prose check, so the unbound-check count does not move
+      post: ["staged version approved on npm, installable from the npm registry once its tarball answers HTTP 200, its GitHub Release created with the test reports attached and its MCP Registry listing published"]   # dl-130 Action 2: the Release (task-229) and the listing (task-238) are checked in the same prose check, so the unbound-check count does not move
     approval: { by_role: approver }   # the npm-publish environment deployment AND the npm stage approval (adr-011 point 3, dl-087 Q2 (iii))
 
   - name: mark-released
@@ -129,3 +135,25 @@ phases:
     role: tech-lead
     actions:
       - element.set_state(released)            # release: releasing -> released
+
+  - name: merge-forward                      # task-306 (bug-428; release-planning v0.3.2 R8; dl-159, dl-185 C1 (b))
+    description: >-
+      A patch only: merge its maintenance line `release/X.Y` forward into `main` with `--no-ff`,
+      after the tag and `mark-released`, so `main` carries every fix the patch shipped (dl-159,
+      dl-185 C1 (b): the merge comes when the patch line's state is final). The approver records this
+      phase with `workflow finalize` first, the go-ahead, and the run's plan is ended with `workflow end`
+      and merged into `release/X.Y`, which is pushed, so the merge forward brings the `done` plan with it
+      (approver ruling D2 (a)). Then, in a detached worktree at `origin/main`'s head, the commands
+      git-conventions §1 rule 6 lists, in its order: the merge with rule 5's resolutions, the version-bump
+      test and the governance check, the push, and the fast-forward of the shared working tree. A conflict
+      rule 5 does not resolve is aborted (`git merge --abort`), recorded in the plan and resolved by a
+      developer before the merge is retried. A minor has no merge forward, its integration branch being
+      `main` itself: the approver records the phase with `workflow finalize` and a `--reason`
+      saying it has nothing to merge forward. Optional only in that a minor does no work in it: an
+      optional last phase is never skipped (spec-017 §4.10), so every release records it.
+    role: tech-lead
+    optional: true
+    actions:
+      - 'git.merge(from: integration_branch, ff: false)'   # in the detached worktree: git merge --no-ff --no-commit of the patch's release/X.Y (git-conventions §1 rule 6)
+      - agent.execute        # the version-bump test and the governance check, the push and the fast-forward of the shared working tree, as git-conventions §1 rule 6 lists them
+    approval: { by_role: approver }   # the go-ahead, recorded with workflow finalize before the merge (approver ruling D2 (a))

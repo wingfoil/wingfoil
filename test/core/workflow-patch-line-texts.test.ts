@@ -14,7 +14,7 @@
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 
-import { loadWorkflowRegistryAtHead } from '../../src/core';
+import { loadWorkflowRegistryAtHead, loadWorkflowRegistryAtRev } from '../../src/core';
 import type { Phase, Workflow } from '../../src/workflow/schema';
 
 const ROOT = join(__dirname, '..', '..');
@@ -95,5 +95,88 @@ describe('task-291 AC 3 — release-planning `advance-pinned-build` merges the p
     const { value, rest } = versionLine(atHead(RELEASE_PLANNING_FILE));
     expect(value).toBeGreaterThanOrEqual(2.3);
     expect(historyEntry(rest, '2.3')).toBeDefined();
+  });
+});
+
+/**
+ * task-305 (`dl-206` Q1 (i), Q2 (i); `dl-159` A2 item 5; `bug-429`; release-planning v0.3.2 R8) — AC 2, red-first
+ * (design D1, approver-accepted): `triage-bugs` and `define-scope` name the eligibility test of a `kind: patch`
+ * release, `git log --no-merges release/X.Y..main -- <file>` (`--no-merges` per R8, design D5 (a)), and the
+ * re-capture of an element that exists only on `main`; `advance-pinned-build` states the pin per line (a patch line
+ * pins only its own X.Y; the merge forward keeps `main`'s pin, D3 (a)), that each pin advance updates only the
+ * project-status sentence of `AGENTS.md` §1 (D4 (a)), and that its check needs the line's own `node_modules`
+ * (design gate D6, F2). The task-291 sentences of `advance-pinned-build` stay (characterization, above and below).
+ * The three phases' `checks` are unchanged against the design's read commit (the conformance suites list their
+ * tokens). Version pin: ">= 2.4" plus the 2.4 entry naming task-305 (bug-314), the 2.3 entry still naming task-291.
+ */
+const DESIGN_READ_REV = '0fcb59ee8e69bcba30d547aa2156670b4f603b4b';
+
+/** The `;`- or `(prev`-delimited history segment naming `version` as a word and `task`. */
+function historyEntryOf(rest: string, version: string, task: string): string | undefined {
+  const word = new RegExp(`(^|[\\s(])${version.replace('.', '\\.')}([\\s):,]|$)`);
+  return rest.split(/;|\(prev /).find((segment) => word.test(segment) && segment.includes(task));
+}
+
+function phaseAtRev(rev: string, wfName: string, name: string): Phase {
+  const wf = loadWorkflowRegistryAtRev(ROOT, rev).workflows.find((w) => w.name === wfName);
+  if (wf === undefined) throw new Error(`${wfName} is not in the registry at ${rev}`);
+  const found = wf.phases.find((p) => p.name === name);
+  if (found === undefined) throw new Error(`${wfName} has no phase '${name}' at ${rev}`);
+  return found;
+}
+
+describe('task-305 AC 2 — release-planning names the patch eligibility test and the pin per line (dl-206, dl-159 A2 item 5)', () => {
+  for (const name of ['triage-bugs', 'define-scope']) {
+    it(`${name}'s description: a \`kind: patch\` release's eligibility test with --no-merges, and the re-capture (dl-206 Q1 (i), Q2 (i))`, () => {
+      const text = flat(phaseOf(workflow('release-planning'), name).description ?? '');
+      expect(text).toContain('`kind: patch`');
+      expect(text).toContain('`git log --no-merges release/X.Y..main -- <file>`');
+      expect(text).toContain('dl-206 Q2 (i)');
+      expect(text).toContain('dl-206 Q1 (i)');
+      expect(text).not.toContain('`git log release/X.Y..main -- <file>`');
+    });
+  }
+
+  it("advance-pinned-build's description: the pin per line as ruled — a patch line pins only its own X.Y, the merge forward keeps main's pin", () => {
+    const text = flat(phaseOf(workflow('release-planning'), 'advance-pinned-build').description ?? '');
+    expect(text).toContain('dl-159 A2 item 5');
+    expect(text).toContain('a patch line pins only published versions of its own X.Y');
+    expect(text).toContain("the merge forward keeps `main`'s pin");
+    expect(text).toContain('git-conventions §1 rule 5');
+    expect(text).not.toContain('not ruled');
+  });
+
+  it("advance-pinned-build's description: each pin advance updates the project-status sentence of AGENTS.md §1, and only that sentence", () => {
+    const text = flat(phaseOf(workflow('release-planning'), 'advance-pinned-build').description ?? '');
+    expect(text).toContain('the project-status sentence of `AGENTS.md` §1, and only that sentence');
+  });
+
+  it("advance-pinned-build's description: the check needs the line's own node_modules, npm ci in the release worktree (design gate D6, F2)", () => {
+    const text = flat(phaseOf(workflow('release-planning'), 'advance-pinned-build').description ?? '');
+    expect(text).toContain('node_modules');
+    expect(text).toContain('npm ci');
+    expect(text).toContain('release worktree');
+  });
+
+  it("advance-pinned-build keeps task-291's merge-forward sentence and the wingfoil-cli re-check (characterization)", () => {
+    const text = flat(phaseOf(workflow('release-planning'), 'advance-pinned-build').description ?? '');
+    expect(text).toContain("merges the patch's line forward after the patch's tag");
+    expect(text).toContain('`release/X.Y` into `main`, never back');
+    expect(text).toContain('dl-185 C4 (i)');
+    expect(text).toContain('re-checks the `wingfoil-cli` directive (dl-163 S3e)');
+  });
+
+  it("the checks of advance-pinned-build, define-scope and triage-bugs are unchanged since the design's read (characterization)", () => {
+    const wf = workflow('release-planning');
+    for (const name of ['advance-pinned-build', 'define-scope', 'triage-bugs']) {
+      expect(phaseOf(wf, name).checks).toEqual(phaseAtRev(DESIGN_READ_REV, 'release-planning', name).checks);
+    }
+  });
+
+  it('release-planning.yaml is version 2.4 or later; its 2.4 entry names task-305 and its 2.3 entry still names task-291', () => {
+    const { value, rest } = versionLine(atHead(RELEASE_PLANNING_FILE));
+    expect(value).toBeGreaterThanOrEqual(2.4);
+    expect(historyEntryOf(rest, '2.4', 'task-305')).toBeDefined();
+    expect(historyEntryOf(rest, '2.3', 'task-291')).toBeDefined();
   });
 });

@@ -48,8 +48,11 @@
  * table of `retro-<previous version>`: `element` → adopted (effective when the linked metric improved or its floor
  * went from breached to held, else no effect yet); `covered`, `restated`, `superseded` → superseded; `declined`, no
  * row or no retrospective → not adopted (the last two: no disposition recorded); any other outcome → not adopted,
- * noted `unrecognised outcome "<x>"` (review F2). A metric's own `tolerance` that is neither `<N>pp` nor `<N>%`, or
- * is in a unit none of its parts uses, is refused, exit 2 (review F4).
+ * noted `unrecognised outcome "<x>"` (review F2). When the previous release is `kind: patch` (its report's
+ * `release.kind`), no retrospective is read — a patch runs none (`dl-092` Q2 (ii)) — and every proposal settles as
+ * `pending`, noted `disposed of by the next minor's retrospective (dl-167 (a))` (`bug-443`). A metric's own
+ * `tolerance` that is neither `<N>pp` nor `<N>%`, or is in a unit none of its parts uses, is refused, exit 2
+ * (review F4).
  *
  * Deterministic (REQ-SYS-07): no clock, no randomness; every list in catalogue order or sorted. It runs no git itself.
  *
@@ -479,8 +482,17 @@ function dispositions(retroText) {
   return out;
 }
 
-/** Settle each previous proposal (`dl-089` §4, approver ruling G): `{ id, metric, settled, outcome, element, note }`. */
-function settle(previousProposals, retroText, comparison) {
+/** The note a patch's proposals settle with: a patch runs no retrospective (`bug-443`, release-planning v0.3.2 R8). */
+const PATCH_PENDING_NOTE = "disposed of by the next minor's retrospective (dl-167 (a))";
+
+/**
+ * Settle each previous proposal (`dl-089` §4, approver ruling G): `{ id, metric, settled, outcome, element, note }`.
+ * With `previousKind` `'patch'` every proposal is `pending` and `retroText` is not read (`bug-443`).
+ */
+function settle(previousProposals, retroText, comparison, previousKind) {
+  if (previousKind === 'patch') {
+    return previousProposals.map((p) => ({ id: p.id, metric: p.metric, settled: 'pending', outcome: null, element: null, note: PATCH_PENDING_NOTE }));
+  }
   const rows = dispositions(retroText);
   return previousProposals.map((p) => {
     const row = rows.get(p.id);
@@ -720,10 +732,13 @@ async function compareRelease(root, options) {
   const memoryYamlPath = join(root, '.wingfoil', 'memory.yaml');
   const memoryYaml = existsSync(memoryYamlPath) ? yaml.load(readFileSync(memoryYamlPath, 'utf-8')) : {};
 
-  // The previous run's proposals, settled against its retrospective (dl-089 §4).
+  // The previous run's proposals, settled against its retrospective (dl-089 §4), or pending for a patch (bug-443).
   let previousNote = null;
   let settled = [];
-  if (previousMd !== null && existsSync(previousMd)) {
+  if (previousMd !== null && existsSync(previousMd) && previous.release.kind === 'patch') {
+    // A patch runs no retrospective (dl-092 Q2 (ii)): no retro-<patch> lookup, every proposal pending (bug-443).
+    settled = settle(parseProposals(readFileSync(previousMd, 'utf-8')), null, comparison, 'patch');
+  } else if (previousMd !== null && existsSync(previousMd)) {
     const retroPattern = memoryYaml && memoryYaml.types && memoryYaml.types['decision-log'] ? String(memoryYaml.types['decision-log'].path) : null;
     const retroPath = retroPattern === null ? null : join(root, retroPattern.replace('{id}', `retro-${previous.release.version}`));
     const retroText = retroPath !== null && existsSync(retroPath) ? readFileSync(retroPath, 'utf-8') : null;

@@ -72,7 +72,8 @@ These are the input the retrospective's additional-points gate disposes of.>
 |---|---|---|
 <every RH-<previous version>-NN of the previous report's Markdown: adopted and effective | adopted, no
 effect yet | not adopted | superseded (dl-089 §4), read from the `Release health` table of the
-retro-<previous version> decision-log (below)>
+retro-<previous version> decision-log (below); pending when the previous release is a patch, which runs
+no retrospective (below)>
 
 ## Improvements
 
@@ -98,3 +99,8 @@ to held; otherwise no effect yet); covered, restated and superseded as supersede
 adopted; a proposal with no row, or a release with no retrospective, as not adopted with "no disposition
 recorded"; any other outcome as not adopted with `unrecognised outcome "<x>"` (approver ruling G,
 2026-10-13; review F2).
+
+When the previous release is `kind: patch` (the `release.kind` of its JSON report), no retrospective is
+read, because a patch runs none (`dl-092` Q2 (ii)): every proposal settles as `pending`, noted "disposed
+of by the next minor's retrospective (dl-167 (a))", with no linked element (`bug-443`). How that minor's
+run then settles them is left to `dl-167` (release-planning v0.3.2 ruling R8).

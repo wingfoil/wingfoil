@@ -11,8 +11,14 @@
  * the recovery is to re-run the failed job once the version is live (the header runbook of `publish.yml`).
  * `task-238`'s `mcp-registry` job needs the same wait.
  *
+ * task-306 (`bug-433`): npm lists a version minutes before its registry serves the tarball, so a listed version is
+ * not yet installable. The script asks `npm view <name>@<version> version dist.tarball --json`, and the version is
+ * live only once npm answers that exact version and the tarball URL it names answers HTTP 200 to a `HEAD` request
+ * (each request bounded by TARBALL_TIMEOUT_MS). Any other tarball answer is "not live yet", bounded by the deadline.
+ *
  * It fails at once when npm cannot be run, or answers E401/E403; every other non-answer (E404 — the staged,
- * unapproved version —, empty output, a network error, a call killed after NPM_VIEW_TIMEOUT_MS) is "not live yet".
+ * unapproved version —, empty or unparsable output, a network error, a call killed after NPM_VIEW_TIMEOUT_MS, a
+ * tarball answering anything but 200) is "not live yet".
  *
  * Usage: node scripts/wait-npm-version.cjs <vX.Y.Z> --timeout-minutes <n ≥ 0> --interval-seconds <n ≥ 1>
  *        (CI passes "$GITHUB_REF_NAME"; the tag must name package.json's version, as the gate asserted)
@@ -34,6 +40,12 @@ const RELEASE_TAG = /^v((0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*))$/;
 const NPM_VIEW_TIMEOUT_MS = 60_000;
 
 /**
+ * The bound of one tarball request (task-306, `bug-433`). A request still unanswered after it is aborted and counts
+ * as "not live yet".
+ */
+const TARBALL_TIMEOUT_MS = 30_000;
+
+/**
  * npm error codes that waiting cannot cure: authentication (E401) and permission (E403). A version still in npm's
  * stage queue answers E404; network codes (ETIMEDOUT, ECONNRESET, EAI_AGAIN, …) and E5xx are transient.
  */
@@ -46,20 +58,94 @@ function npmErrorCode(stderr) {
 }
 
 /**
- * The `npm` arguments that ask the registry for one exact version.
+ * The `npm` arguments that ask the registry for one exact version and its tarball URL, as JSON (task-306).
  *
  * @param {string} name
  * @param {string} version
  * @returns {string[]}
  */
 function npmViewArgs(name, version) {
-  return ['view', `${name}@${version}`, 'version'];
+  return ['view', `${name}@${version}`, 'version', 'dist.tarball', '--json'];
+}
+
+/**
+ * The tarball URL of `version` when npm's JSON answer lists exactly that version with a non-empty `dist.tarball`.
+ *
+ * @param {string} stdout `npm view <spec> version dist.tarball --json`'s output
+ * @param {string} version the version awaited
+ * @returns {string | undefined}
+ */
+function listedTarball(stdout, version) {
+  let parsed;
+  try {
+    parsed = JSON.parse(stdout);
+  } catch {
+    return undefined;
+  }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return undefined;
+  const tarball = parsed['dist.tarball'];
+  if (parsed.version !== version || typeof tarball !== 'string' || tarball === '') return undefined;
+  return tarball;
+}
+
+/**
+ * Ask whether `url` is served: one `HEAD` request, following redirects, aborted after `options.timeoutMs`.
+ *
+ * @param {string} url
+ * @param {{ timeoutMs: number }} options
+ * @returns {Promise<{ status: number | null, timedOut?: boolean, error?: string }>}
+ */
+async function probeTarball(url, options) {
+  try {
+    const response = await fetch(url, { method: 'HEAD', redirect: 'follow', signal: globalThis.AbortSignal.timeout(options.timeoutMs) });
+    return { status: response.status };
+  } catch (error) {
+    // Read by shape, not `instanceof`: fetch's errors may come from another realm (a DOMException, a test VM).
+    const { name, message, cause } = /** @type {{ name?: unknown, message?: unknown, cause?: { message?: unknown } }} */ (
+      error !== null && typeof error === 'object' ? error : {}
+    );
+    if (name === 'TimeoutError' || name === 'AbortError') return { status: null, timedOut: true };
+    const text = typeof message === 'string' ? message : String(error);
+    const why = cause !== null && typeof cause === 'object' && typeof cause.message === 'string' ? `: ${cause.message}` : '';
+    return { status: null, error: `${text}${why}` };
+  }
+}
+
+/** @param {string} url @param {{ status: number | null, timedOut?: boolean, error?: string }} answer */
+function describeTarball(url, answer) {
+  if (answer.status !== null) return `npm lists it, its tarball ${url} answers HTTP ${answer.status}`;
+  if (answer.timedOut === true) {
+    return `npm lists it, the tarball request was killed after ${Math.round(TARBALL_TIMEOUT_MS / 1000)} s (${url})`;
+  }
+  return `npm lists it, the tarball request to ${url} failed: ${answer.error ?? 'no error text'}`;
+}
+
+/**
+ * The error npm 11 prints on stdout under `--json` (`{"error":{"code","summary","detail"}}`), as `<code>: <summary>`
+ * (task-306 review R1), or `undefined` when stdout is not that object.
+ *
+ * @param {string} stdout
+ * @returns {string | undefined}
+ */
+function jsonError(stdout) {
+  let parsed;
+  try {
+    parsed = JSON.parse(stdout);
+  } catch {
+    return undefined;
+  }
+  const error = parsed !== null && typeof parsed === 'object' ? parsed.error : undefined;
+  if (error === null || typeof error !== 'object') return undefined;
+  const parts = [error.code, error.summary].filter((part) => typeof part === 'string' && part.trim() !== '');
+  return parts.length > 0 ? parts.map((part) => part.trim().split('\n')[0]).join(': ') : undefined;
 }
 
 /** @param {{ status: number | null, stdout: string, stderr: string, timedOut?: boolean }} answer */
 function describeAnswer(answer) {
-  const said = `${answer.stdout}\n${answer.stderr}`.split('\n').map((l) => l.trim()).filter((l) => l !== '');
   if (answer.timedOut === true) return `npm view killed after ${Math.round(NPM_VIEW_TIMEOUT_MS / 1000)} s`;
+  const fromJson = jsonError(answer.stdout);
+  if (fromJson !== undefined) return `npm view exit ${answer.status}: ${fromJson}`;
+  const said = `${answer.stdout}\n${answer.stderr}`.split('\n').map((l) => l.trim()).filter((l) => l !== '');
   return `npm view exit ${answer.status}${said.length > 0 ? `: ${said[0]}` : ''}`;
 }
 
@@ -67,25 +153,36 @@ function describeAnswer(answer) {
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 /**
- * Poll until npm answers `version`, at most `timeoutMs` after the first attempt. The clock, the sleep and npm
- * are injected, so the poll is testable without waiting or a registry.
+ * Poll until npm answers `version` and its tarball answers HTTP 200, at most `timeoutMs` after the first attempt.
+ * The clock, the sleep, npm and the tarball probe are injected, so the poll is testable without waiting or a
+ * registry.
  *
  * @param {{
  *   name: string, version: string, timeoutMs: number, intervalMs: number,
  *   view: (args: string[], options: { timeoutMs: number }) => Promise<{ status: number | null, stdout: string, stderr: string, timedOut?: boolean }>,
+ *   probe: (url: string, options: { timeoutMs: number }) => Promise<{ status: number | null, timedOut?: boolean, error?: string }>,
  *   now: () => number, sleep: (ms: number) => Promise<void>, log: (line: string) => void,
  * }} options
  * @returns {Promise<{ ok: boolean, attempts: number, message: string }>}
  */
 async function waitForNpmVersion(options) {
-  const { name, version, timeoutMs, intervalMs, view, now, sleep, log } = options;
+  const { name, version, timeoutMs, intervalMs, view, probe, now, sleep, log } = options;
   const spec = `${name}@${version}`;
   const start = now();
   for (let attempts = 1; ; attempts += 1) {
     const answer = await view(npmViewArgs(name, version), { timeoutMs: NPM_VIEW_TIMEOUT_MS });
-    if (answer.status === 0 && answer.stdout.trim() === version) {
-      log(`attempt ${attempts}: ${spec} is live`);
-      return { ok: true, attempts, message: `${spec} is live on npm (${plural(attempts, 'attempt')})` };
+    const tarball = answer.status === 0 ? listedTarball(answer.stdout, version) : undefined;
+    /** @type {string} */
+    let last;
+    if (tarball !== undefined) {
+      const served = await probe(tarball, { timeoutMs: TARBALL_TIMEOUT_MS });
+      if (served.status === 200) {
+        log(`attempt ${attempts}: ${spec} is live`);
+        return { ok: true, attempts, message: `${spec} is live on npm (${plural(attempts, 'attempt')})` };
+      }
+      last = describeTarball(tarball, served);
+    } else {
+      last = describeAnswer(answer);
     }
     if (answer.status === null && answer.timedOut !== true) {
       return { ok: false, attempts, message: `npm could not be run: ${answer.stderr.trim() || 'no error text'}` };
@@ -98,7 +195,7 @@ async function waitForNpmVersion(options) {
         message: `npm answered ${code} for ${spec} (${describeAnswer(answer)}): an authentication or permission error, which waiting will not change`,
       };
     }
-    log(`attempt ${attempts}: ${spec} not live yet (${describeAnswer(answer)})`);
+    log(`attempt ${attempts}: ${spec} not live yet (${last})`);
     const elapsed = now() - start;
     if (elapsed >= timeoutMs) {
       return {
@@ -106,7 +203,7 @@ async function waitForNpmVersion(options) {
         attempts,
         message:
           `${spec} is not live on npm after ${Math.round(timeoutMs / 1000)} s (${plural(attempts, 'attempt')}). ` +
-          `Last answer: ${describeAnswer(answer)}. Approve the staged version on npm, then re-run this job`,
+          `Last answer: ${last}. Approve the staged version on npm, then re-run this job`,
       };
     }
     await sleep(Math.min(intervalMs, timeoutMs - elapsed));
@@ -197,6 +294,7 @@ if (require.main === module) {
       timeoutMs: args.timeoutMs,
       intervalMs: args.intervalMs,
       view: npmView,
+      probe: probeTarball,
       now: () => Date.now(),
       sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
       log: (line) => process.stdout.write(`${line}\n`),
@@ -208,4 +306,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { NPM_VIEW_TIMEOUT_MS, npmView, npmViewArgs, waitForNpmVersion };
+module.exports = { NPM_VIEW_TIMEOUT_MS, TARBALL_TIMEOUT_MS, npmView, npmViewArgs, probeTarball, waitForNpmVersion };
