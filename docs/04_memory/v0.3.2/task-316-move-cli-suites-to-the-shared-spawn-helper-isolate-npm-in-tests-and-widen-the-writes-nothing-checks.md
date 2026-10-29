@@ -47,6 +47,171 @@ in `test/memory` use the narrow check.
        reject's `Reason:` (read with `wingfoil memory history <task-id>`), each with the command that
        shows it resolved and what that command printed; then what else changed on the next pass. -->
 
+### design (architect, 2026-10-29)
+
+**Inputs read.** Base: `release/0.3` `12aa212c` + the start commit `75ee932f` and the three bug syncs
+(`git log --oneline release/0.3..HEAD` → four commits, head `b088560b`). `depends_on: [task-308]` (dl-015): its
+Execution Notes read in full; what this task builds on: `test/storage/helpers/git-fixture.ts` spawns git through
+`fixtureGitEnv()` (no global or system config, no caller `GIT_*`), `dist/` is swapped in atomically by
+`test/dist-lock.cjs`, and the dead-run fixture sweep is in `test/global-teardown.cjs`; none of those files changes here.
+Bugs `bug-207`, `bug-209`, `bug-271` read; release-planning rulings R5/R8 and S6 read: S6 lists no spec amend for this
+task. No approved tech-spec, BDD scenario or directive governs the test helpers (`grep -rln -i "spawn-cli\|spawnCapture\|
+npm_config\|withoutCallerNpmConfig\|persistence-snapshot\|snapshotPersistence" docs/04_memory/design .wingfoil/directives
+docs/02_requirements` → only `dl-057` line 106, about `NPM_CONFIG_USERCONFIG` in the publish pipeline, no conflict), so no
+spec or `.feature` change. `dl-121` (`ready`) T1 binds the two new guards: each one's title and docblock say exactly
+what it asserts. No AC contradicts a ratified DL.
+
+**The sites, by grep on this base** (a scratch probe outside the worktree, not committed, running the regexes the guards
+are to use):
+- *CLI spawns not through the helper.* A child-process call (`spawnSync|execFileSync|execFile|spawn`) whose command is
+  `process.execPath` or `'node'` and whose argument array starts with `CLI_ENTRY` or with a same-file `const` assigned
+  `join(…'dist', 'cli.js')`, in any `test/**/*.ts` except `test/cli/helpers/spawn-cli.ts` → **21 sites in 15 suites**:
+  `cli/agent-execute-config-arg.integration.test.ts:65`, `cli/agent-execute-launch.integration.test.ts:84` and `:104`
+  (async `spawn`), `cli/agent-execute-step.integration.test.ts:70`, `cli/agent-execute.integration.test.ts:59`,
+  `cli/build-info.test.ts:159`, `:167`, `cli/config-missing-refusal.integration.test.ts:24`,
+  `cli/derived-option-namespace.test.ts:105`, `cli/dirty-target-refusal.integration.test.ts:33`,
+  `cli/e2e-smoke.test.ts:224`, `:408`, `cli/extra-operand-refusal.integration.test.ts:32`,
+  `cli/format-key.integration.test.ts:26`, `cli/operand-error-shape.integration.test.ts:31`,
+  `cli/workflow-list-diagnostics.integration.test.ts:26`, `:34`, `:44`, `:58`,
+  `cli/workflow-start-plan-patterns.integration.test.ts:49`, `core/dna-agent-adapter-runs.test.ts:166`. The "seven" of
+  the Description are the seven `test/cli` suites that import nothing from the helper (`grep -c helpers/spawn-cli` → `0`):
+  config-missing-refusal, derived-option-namespace, dirty-target-refusal, extra-operand-refusal, format-key,
+  operand-error-shape, workflow-list-diagnostics; `build-info.test.ts` and `core/dna-agent-adapter-runs.test.ts` import
+  nothing from it either, and five suites import `CLI_ENTRY` but spawn it locally (the four `agent-execute*`, for an
+  `env`, and `workflow-start-plan-patterns`, for a `timeout`).
+- *npm spawns.* `<helper>('npm', …)` (`execFileSync|spawnSync|execFile|spawn|execSync`, the first argument the literal
+  `'npm'`, a multi-line call included) over `test/**/*.ts` → **10 sites**; 2 pass the clean environment
+  (`cli/publish-pipeline.test.ts:112` `env: withoutCallerNpmConfig(process.env)`, `cli/publish-secrets.test.ts:356`
+  `env: npmEnv()`, whose body spreads `withoutCallerNpmConfig(process.env)`), and **the eight that do not**:
+  `cli/build-info.test.ts:208`, `cli/check-governance.test.ts:552`, `cli/license-file.test.ts:102`,
+  `cli/npm-distribution.test.ts:103`, `:121`, `cli/publish-metadata.test.ts:111`,
+  `core/builtin-directive-templates.test.ts:298`, `release-health/measure.test.ts:523` (all `npm pack --dry-run --json
+  --ignore-scripts`, options without `env`). Outside the textual guard: npm run through a shell,
+  `cli/publish-secrets.test.ts:386` (`bash -c "npm publish …"`, already `env: npmEnv()`).
+- *Probes.* `npm_config_loglevel=silent NPM_CONFIG_DRY_RUN=false node -e …` running `npm pack --dry-run --json
+  --ignore-scripts` with every `npm_config_*` stripped → `stripped env: entries 552 has dist/cli.js true npm_config keys
+  left 0`: the stripped environment packs the manifest. `spawnSync(node, ['-e', <stdin reader>])` without `input` and
+  with `input: ''` → both `end 0 notty`: the `input: ''` of config-missing-refusal and operand-error-shape is the
+  default, so moving them to `spawnCapture` (which passes no `input`) changes nothing.
+
+**Existing tests of every file this task changes**, before any pin (one jest process at a time, `--maxWorkers=2`, under
+the heavy-gate slot):
+- `npx jest test/cli/config-missing-refusal.integration.test.ts test/cli/derived-option-namespace.test.ts
+  test/cli/dirty-target-refusal.integration.test.ts test/cli/extra-operand-refusal.integration.test.ts
+  test/cli/format-key.integration.test.ts test/cli/operand-error-shape.integration.test.ts
+  test/cli/workflow-list-diagnostics.integration.test.ts test/core/dna-agent-adapter-runs.test.ts
+  test/cli/build-info.test.ts test/cli/agent-execute.integration.test.ts
+  test/cli/agent-execute-config-arg.integration.test.ts test/cli/agent-execute-step.integration.test.ts
+  test/cli/agent-execute-launch.integration.test.ts test/cli/workflow-start-plan-patterns.integration.test.ts
+  test/cli/e2e-smoke.test.ts test/cli/spawn-cli.test.ts --maxWorkers=2` → `Test Suites: 16 passed, 16 total`,
+  `Tests: 295 passed, 295 total`.
+- `npx jest test/cli/check-governance.test.ts test/cli/license-file.test.ts test/cli/npm-distribution.test.ts
+  test/cli/publish-metadata.test.ts test/core/builtin-directive-templates.test.ts test/release-health/measure.test.ts
+  test/cli/publish-pipeline.test.ts test/cli/publish-secrets.test.ts test/memory/entry.test.ts
+  test/memory/versioning-audit-trail.test.ts test/lint/pack-ignore-scripts.test.ts test/lint/no-signal-as-exit.test.ts
+  test/lint/no-fabricated-stderr.test.ts test/storage/persistence-snapshot.test.ts --maxWorkers=2` → `Test Suites: 14
+  passed, 14 total`, `Tests: 383 passed, 383 total`.
+- Nothing under `.wingfoil/` changes (no workflow, phase or step), so `npm run check:mcp` is not required and no test
+  pins a phase list this task could move.
+
+**Design.**
+- *`test/cli/helpers/spawn-cli.ts`.* `SpawnCaptureOptions` gains `readonly timeout?: number`, passed through to
+  `spawnSync` (D3). A child killed by its timeout ends on a signal, so `spawnCapture` throws `node ended on signal
+  SIGTERM, not an exit`, as it does for any signal. `runCliEntry` keeps its two parameters; a suite that needs `env` or
+  `timeout` calls `spawnCapture('node', [CLI_ENTRY, ...args], { cwd, env, timeout })`, the shape `workflow-rekey`,
+  `workflow-adopt` and `history-show-signature` already use. The module docblock names the declared exceptions (below).
+- *The 15 suites (AC1, green).* Each local CLI spawn becomes `runCliEntry(cwd, args)` (no `env`) or `spawnCapture(…)`
+  (with `env`/`timeout`); the local `const CLI = join(…'dist', 'cli.js')` goes, `CLI_ENTRY` is imported; the local
+  `status: number | null` and `?? ''` fallbacks go with it. Assertions are not changed. Per suite: the four
+  `agent-execute*` keep their `env` construction and pass it; `agent-execute-launch`'s synchronous `execute()` moves
+  (its `signal` field becomes `null`: `spawnCapture` returns only exits); `workflow-start-plan-patterns`' `start()`
+  passes `timeout: 20_000` and its `timedOut` is `false` on every return (a timeout now throws, failing the test as the
+  `timedOut: false` match did); `e2e-smoke.test.ts` moves its two direct CLI calls (`:224` init, `:408` `invoke`), its
+  script spawns stay; `build-info.test.ts` moves `:159` and `:167`, its `WRITER` script spawn stays.
+- *Declared exceptions (AC1's "named exception").* (i) **Script-spawning suites and call sites**: a spawn of anything
+  other than this repository's `dist/cli.js` — `scripts/*.cjs`, `bash`, `npm`, `git`, `tar`, `node -e`, the fake agent,
+  and the pinned build `node_modules/wingfoil-released/dist/cli.js` — stays local; `bug-207`'s five
+  (`mcp-registration`, `check-lockfile-pins`, `publish-metadata`, `publish-pipeline`, `publish-secrets`) are this
+  class. (ii) **A live child**: `agent-execute-launch.integration.test.ts`'s async `spawn` (`:104`), which signals the
+  running command; `spawnCapture` is synchronous. (iii) **The CLI inside a shell pipeline**:
+  `piped-output-drain.integration.test.ts` (`bash -c … "$0"` with `CLI_ENTRY` as `$0`). (iv) **JavaScript fixtures**,
+  which cannot import a `.ts` helper: `test/fixtures/smoke/wingfoil-proxy.cjs`, `test/cli/fixtures/cli-harness.cjs`.
+- *`test/lint/cli-spawn-helper.test.ts` (new, AC1 guard, D1).* Sorted walk of `test/**/*.ts`, itself and
+  `cli/helpers/spawn-cli.ts` excluded, the regex of "The sites" above; the allowed list is exactly
+  `cli/agent-execute-launch.integration.test.ts` with helper `spawn` (exception (ii)); exceptions (i), (iii), (iv) are
+  outside the regex by construction and named in the docblock.
+- *The eight npm sites (AC2, green).* Each gets `env: withoutCallerNpmConfig(process.env)` in its options, imported
+  from `test/cli/helpers/npm-env.ts`; the literal `<helper>('npm', [ … ])` call stays at each site, because
+  `test/lint/pack-ignore-scripts.test.ts` finds the pack sites by that literal and asserts it finds
+  `cli/npm-distribution.test.ts` and at least four `pack` sites.
+- *`test/lint/npm-caller-config.test.ts` (new, AC2 guard).* Same walk; for each `<helper>('npm'` match, the call text up
+  to its balanced closing parenthesis; a site passes when that text contains `withoutCallerNpmConfig(`, or its `env:` is
+  a call `<fn>()` to a function declared in the same file whose body contains `withoutCallerNpmConfig(`
+  (`publish-secrets`' `npmEnv`). The docblock states that npm run through a shell string is outside the scan (D4).
+- *`test/memory/entry.test.ts`, `test/memory/versioning-audit-trail.test.ts` (AC3).* `snapshotPersistence(repo)` before
+  the refused call, `assertPersistenceUnchanged(repo, snapshot)` after it, beside the existing checks.
+
+**AC classification and what qa must pin.**
+- **AC1 — red-first with a guard (D1 (a)); characterization for the moved suites themselves.** Red file:
+  `test/lint/cli-spawn-helper.test.ts`. Pins: (a) `it` "every spawn of dist/cli.js under test/ goes through
+  test/cli/helpers/spawn-cli.ts": offenders `toEqual([])`; today it fails listing the 20 sites above other than
+  `agent-execute-launch:104` (a genuine red, measured by the probe); (b) non-vacuous: the scan finds the one allowed
+  site, and the walk includes a file that spawns through the helper (`cli/workflow-rekey.integration.test.ts`); (c) "can
+  fail" cases on inline strings, as `no-signal-as-exit.test.ts` does: `spawnSync(process.execPath, [CLI, ...args], …)`
+  with `const CLI = join(__dirname, '..', '..', 'dist', 'cli.js')` → flagged; `spawnSync('node', [CLI_ENTRY, 'x'])` →
+  flagged; `spawnCapture('node', [CLI_ENTRY])` → not flagged; `spawnSync('bash', ['-c', s, CLI_ENTRY])` → not flagged;
+  `spawnSync(process.execPath, [SCRIPT])` → not flagged. Sub-criterion for D3, file `test/cli/spawn-cli.test.ts`:
+  `spawnCapture('node', ['-e', 'setTimeout(() => {}, 5000)'], { timeout: 200 })` throws `/ended on signal SIGTERM/`.
+  Expected reds: `npx tsc --noEmit` TS2353 (`timeout` not in `SpawnCaptureOptions`), and in jest (`isolatedModules`) no
+  throw: the child exits 0 after 5 s. The 15 moved suites keep their test counts (the 295 above, plus the new case): the
+  developer's evidence at green, not a red.
+- **AC2 — red-first** (the eight sites fail today). Red file: `test/lint/npm-caller-config.test.ts`. Pins: (a) offenders
+  `toEqual([])`, failing today with the eight `file:line` above; (b) non-vacuous: at least 10 sites found, including
+  `cli/publish-pipeline.test.ts` and `cli/publish-secrets.test.ts` as passing ones; (c) "can fail" on inline strings: a
+  call without `env` → flagged; `env: withoutCallerNpmConfig(process.env)` → passes; `env: { ...process.env }` →
+  flagged; `env: npmEnv()` with `function npmEnv() { return { ...withoutCallerNpmConfig(process.env) }; }` in the same
+  text → passes, and with an `npmEnv` that does not call it → flagged. No tsc red (no new export).
+- **AC3 — characterization** (the refusals already write nothing). Files: the two `test/memory` suites, edited by qa in
+  the red commit. Pins: in "refuses the write with the exact confinement message and commits/writes nothing"
+  (`entry.test.ts:123`) a `snapshotPersistence(repo)` after `initStorage(repo)` and `assertPersistenceUnchanged(repo,
+  snapshot)` after the existing checks; in "refuses the state change with exit 1 and the exact message, and commits
+  nothing" (`versioning-audit-trail.test.ts:139`) the same around `requireGitIdentity(dir)` on the unborn branch (the
+  helper gives `head` and `symbolicHead` `''`; the untracked `empty.gitconfig` is in `status` before and after). Both
+  pass on first run. Import from `../storage/helpers/persistence-snapshot`.
+- qa runs `npx jest test/lint --maxWorkers=2` with the red files in place before the red commit: the two new guards
+  fail, every other lint suite passes.
+
+**Files to touch.** Red (qa): `test/lint/cli-spawn-helper.test.ts` (new), `test/lint/npm-caller-config.test.ts` (new),
+`test/cli/spawn-cli.test.ts`, `test/memory/entry.test.ts`, `test/memory/versioning-audit-trail.test.ts`. Green
+(developer): `test/cli/helpers/spawn-cli.ts`; the 15 CLI suites `test/cli/agent-execute.integration.test.ts`,
+`test/cli/agent-execute-config-arg.integration.test.ts`, `test/cli/agent-execute-step.integration.test.ts`,
+`test/cli/agent-execute-launch.integration.test.ts`, `test/cli/build-info.test.ts`,
+`test/cli/config-missing-refusal.integration.test.ts`, `test/cli/derived-option-namespace.test.ts`,
+`test/cli/dirty-target-refusal.integration.test.ts`, `test/cli/e2e-smoke.test.ts`,
+`test/cli/extra-operand-refusal.integration.test.ts`, `test/cli/format-key.integration.test.ts`,
+`test/cli/operand-error-shape.integration.test.ts`, `test/cli/workflow-list-diagnostics.integration.test.ts`,
+`test/cli/workflow-start-plan-patterns.integration.test.ts`, `test/core/dna-agent-adapter-runs.test.ts`; the npm suites
+`test/cli/check-governance.test.ts`, `test/cli/license-file.test.ts`, `test/cli/npm-distribution.test.ts`,
+`test/cli/publish-metadata.test.ts`, `test/core/builtin-directive-templates.test.ts`,
+`test/release-health/measure.test.ts` (`build-info.test.ts` is in both lists). 27 files, no `src/`, no `scripts/`, no
+`.wingfoil/`, no doc. No `version:` bump: none of these files carries one. `grep -ln "^version"` on the 25 existing
+files → only `test/release-health/measure.test.ts`, whose hit (line 107, `version: 1.0`) is inside a YAML fixture string,
+not a version of the file; the same grep on `.wingfoil/dna.yaml` counts `1`, the positive case. The four configuration
+files are not touched.
+
+**Decisions for the approver.**
+- D1 — AC1 is labelled characterization, but `bug-207` is itself the residual of `bug-197`: it counted four CLI suites
+  in v0.3, this base has fifteen, and nothing stops a sixteenth. (a) add the `test/lint/cli-spawn-helper.test.ts`
+  guard, making AC1 red-first, as AC2's guard does for npm; (b) move the suites only, characterization. **Recommend
+  (a).**
+- D2 — scope of "every suite spawning `dist/cli.js`": (a) all 21 sites in 15 suites, with the four declared exceptions
+  above; (b) only the seven `test/cli` suites the Description counts. **Recommend (a)**: the AC's words and the guard of
+  D1 need it; the other eight suites take the same mechanical change.
+- D3 — `workflow-start-plan-patterns` needs a `timeout`: (a) `SpawnCaptureOptions` gains `timeout`, and a timeout throws
+  as any signal does; (b) name it a fifth exception. **Recommend (a)**, one optional field.
+- D4 — the npm guard reads `<helper>('npm', …)` calls only; npm inside a shell string (`publish-secrets.test.ts:386`,
+  already clean) is named outside it in the docblock. **Recommend yes**: a shell string has no reliable textual shape.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
