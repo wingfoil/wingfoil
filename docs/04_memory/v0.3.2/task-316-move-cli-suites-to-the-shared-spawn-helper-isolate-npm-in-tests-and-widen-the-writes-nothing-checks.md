@@ -273,6 +273,124 @@ its inline cases and `test/lint/pack-ignore-scripts.test.ts` flagged them (`lint
   change with exit 1 and the exact message, and commits nothing" each take `snapshotPersistence` before the refused call
   and `assertPersistenceUnchanged` after the existing checks (import `../storage/helpers/persistence-snapshot`).
 
+### green (developer, 2026-10-29)
+
+**Base.** At the start `git rev-list --count HEAD..release/0.3` → `5` (the `bug-449` ingest): merged with
+`git merge --no-edit release/0.3` → `2e508b1a`, no conflict. Green commit `86d1876a` (`fix(test): task-316 — CLI suites
+spawn through the shared helper, npm spawns without the caller's npm_config_* (bug-207, bug-209)`), 22 test files, no
+`src/`, no `scripts/`, no `.wingfoil/`, no doc (`git show --stat 86d1876a`). No red file changed (T4, below).
+
+**`test/cli/helpers/spawn-cli.ts` (D3 (a)).** `SpawnCaptureOptions` gains `readonly timeout?: number`, passed to
+`spawnSync`. One deviation from the design's expectation, found by the red case itself: `npx jest
+test/cli/spawn-cli.test.ts` with the field only passed through → `Expected pattern: /ended on signal SIGTERM/`,
+`Received message: "spawnSync node ETIMEDOUT"`. node's `spawnSync` reports a timed-out child with both an `error`
+(`code: 'ETIMEDOUT'`) and `signal: 'SIGTERM'`, and `spawnCapture` threw the error first. The helper now treats that
+pair as a signal end: it throws `<command> ended on signal SIGTERM, not an exit (killed after its <n> ms timeout)`;
+any other spawn error is thrown as before. The red test is right (the design ruled "a timeout throws like any other
+signal"); the implementation needed the branch. The module docblock names the four declared exceptions (the
+non-CLI spawns, the live child of `agent-execute-launch`, the CLI in a shell pipeline, the `.cjs` fixtures), in the
+words of `test/lint/cli-spawn-helper.test.ts`.
+
+**AC1 — the 21 sites in 15 suites (D2 (a)).** Every local spawn of `dist/cli.js` now goes through the helper:
+- `runCliEntry(cwd, args)` (no `env`): `config-missing-refusal`, `dirty-target-refusal`, `extra-operand-refusal`,
+  `operand-error-shape` (their local `runCli` and `const CLI` removed; `existsSync(CLI)` → `existsSync(CLI_ENTRY)`),
+  `derived-option-namespace` and `core/dna-agent-adapter-runs` (their closure `runCli(args)` keeps its name and
+  returns `runCliEntry(repo, args)`, typed `SpawnedRun`), `format-key` (`run`), `workflow-list-diagnostics` (four
+  calls), `build-info` `:167` (`cli`).
+- `spawnCapture(process.execPath, [CLI_ENTRY, …], { cwd, env })`: the four `agent-execute*` suites (their `env`
+  construction unchanged), `e2e-smoke` `:224` (init) and `:408` (`invoke`), `build-info` `:159` (`--version`, no
+  `cwd`, as before). These keep `process.execPath` rather than `'node'`: the child is the same node binary as before,
+  and `agent-execute-config-arg` asserts the MCP config the child writes names `process.execPath`.
+  `agent-execute-launch`'s synchronous `execute()` returns `signal: null` (a signal end now throws); its async
+  `spawn` (`:104`, exception (ii)) is unchanged.
+- `spawnCapture('node', …, { cwd, timeout: 20_000 })`: `workflow-start-plan-patterns`' `start()`, `timedOut: false`
+  on every return (a timeout throws).
+- `e2e-smoke`'s `const DIST_CLI` is gone; its other uses (`runSmoke`'s `commandArgs`, `WINGFOIL: node …`, `ARGV`)
+  read `CLI_ENTRY`. The local `status: number | null` types and `?? ''` fallbacks went with the local spawns
+  (the `Run` of `agent-execute` and `agent-execute-step`, `run` of `agent-execute-config-arg` are now `status:
+  number`). No assertion changed.
+- Evidence: each of the 15 suites imports the helper (`for f in <the 15>; do grep -c "helpers/spawn-cli'" $f; done`
+  → `1` fifteen times); `grep -rnE "const \w+ = join\([^)]*'dist', 'cli\.js'\)" test` → only the guard's own docblock
+  and inline case (`lint/cli-spawn-helper.test.ts:39`, `:110`).
+
+**AC2 — the eight npm sites.** Each `execFileSync('npm', ['pack', '--dry-run', '--json', '--ignore-scripts'], {…})`
+gains `env: withoutCallerNpmConfig(process.env)`, imported from `test/cli/helpers/npm-env.ts`; the literal call
+stays, so `test/lint/pack-ignore-scripts.test.ts` still finds every pack site (it passes, run below):
+`cli/build-info.test.ts`, `cli/check-governance.test.ts`, `cli/license-file.test.ts`, `cli/npm-distribution.test.ts`
+(two), `cli/publish-metadata.test.ts`, `core/builtin-directive-templates.test.ts`, `release-health/measure.test.ts`.
+`grep -rc "withoutCallerNpmConfig(process.env)" --include=*.ts test | grep -v ":0$"` → those seven files (one each,
+`npm-distribution` two), plus `publish-pipeline` and `publish-secrets` (already clean) and the guard's inline cases.
+
+**AC3.** Met by the red commit (characterization); green changes neither file.
+
+**red → green.**
+- `npx jest test/lint/cli-spawn-helper.test.ts test/lint/npm-caller-config.test.ts test/cli/spawn-cli.test.ts
+  test/memory/entry.test.ts test/memory/versioning-audit-trail.test.ts test/lint/pack-ignore-scripts.test.ts
+  --maxWorkers=2` with only the passed-through field → `Tests: 1 failed, 29 passed, 30 total` (the ETIMEDOUT case
+  above); after the helper branch, `npx jest test/cli/spawn-cli.test.ts --maxWorkers=2` → `Tests: 11 passed, 11 total`.
+- The 15 moved suites plus `spawn-cli.test.ts`, the design's command, under the slot → `Test Suites: 16 passed, 16
+  total`, `Tests: 296 passed, 296 total` (the design's 295 plus the red timeout case: no test lost).
+- `npx jest test/cli/check-governance.test.ts test/cli/license-file.test.ts test/cli/npm-distribution.test.ts
+  test/cli/publish-metadata.test.ts test/core/builtin-directive-templates.test.ts test/release-health/measure.test.ts
+  test/lint --maxWorkers=2` → `Test Suites: 19 passed, 19 total`, `Tests: 369 passed, 369 total` (both new guards
+  green: offenders `[]`).
+- `npx tsc --noEmit -p tsconfig.json` → no output, exit 0 (the red TS2353 is gone).
+
+### refactor (developer, 2026-10-29)
+
+No further code change: the green diff is the mechanical move the design describes. Gates, heavy ones each after
+`waitslot.sh`, `--maxWorkers=2`, foreground in a tracked command, on `86d1876a` with the three bug amendments
+(below) in the working tree:
+- `npm test -- --maxWorkers=2` → `Test Suites: 514 passed, 514 total`, `Tests: 9055 passed, 9055 total`. This
+  includes the document-parity suites (`test/docs/`, `docs.parity`) and `test/docs/cli-reference.test.ts`; no CLI,
+  help or doc change here.
+- `npm run test:coverage -- --maxWorkers=2` → `All files | 99.37 | 97.51 | 98.18 | 99.73` (statements, branches,
+  functions, lines), `Tests: 9055 passed`. Coverage measures `src/`; this task changes none of it.
+- `npm run lint` → no output, exit 0. `npm run typecheck` (both tsc configs) → exit 0. `npm run docs:api` → exit 0.
+- End of refactor: `git rev-list --count HEAD..release/0.3` → `49` (task-317, task-318 and the task-332 ingest
+  merged): `git merge --no-edit release/0.3` → `045b3fbf`, no conflict, nothing incoming touches a file of this task
+  (`git diff --name-only HEAD...release/0.3` before the merge: of `test/`, only `lint-claims`,
+  `context-shipped-templates`, `control-characters`, `submit-commit-body`, `secret-patterns-spec` and a fixture).
+  After it `npx jest test/lint --maxWorkers=2` → `Test Suites: 13 passed, 13 total`, `Tests: 153 passed, 153 total`
+  (both guards still clean over the merged tree, the new control-character gate among them), and the full suite
+  again, recorded in the self-review.
+
+### self-review (developer, 2026-10-29)
+
+- **AC1** met: the guard `test/lint/cli-spawn-helper.test.ts` passes (offenders `[]`, the one allowed site
+  `cli/agent-execute-launch.integration.test.ts spawn` found), the helper's docblock names the exceptions. `bug-207`'s
+  Expected Behavior ("every suite that spawns the CLI does so through `spawn-cli.ts`; the script-spawning suites
+  either use a shared helper too or are named as the declared exception") is met in full: exception (i) of the
+  docblock and the guard names the script spawns.
+- **AC2** met: `test/lint/npm-caller-config.test.ts` passes; `bug-209`'s Expected Behavior (every test-spawned npm
+  gets the stripped environment, and a guard fails a new site) is met for direct calls; npm inside a shell string is
+  outside the scan by the approver's D4 ruling, and its one instance (`publish-secrets.test.ts`, `bash -c "npm
+  publish …"`) already passes `env: npmEnv()`.
+- **AC3** met by the red commit; `bug-271`'s Expected Behavior met in full.
+- **D5 (a).** `test/storage/helpers/persistence-snapshot.ts` runs git with no `env`; it is covered by `bug-446`
+  (triaged, v0.4, Expected Behavior: a jest run gives the same result whatever the developer's global or system git
+  config) and is not changed here.
+- **T4.** `git log --first-parent --no-merges --format=%h aea344cd3..HEAD -- test/lint/cli-spawn-helper.test.ts
+  test/lint/npm-caller-config.test.ts test/cli/spawn-cli.test.ts test/memory/entry.test.ts
+  test/memory/versioning-audit-trail.test.ts` → empty (0 lines); the positive case, the same command on
+  `test/cli/helpers/spawn-cli.ts`, → `86d1876a2`.
+- **Same class in files touched.** No other local spawn of `dist/cli.js` or bare npm spawn is left in them (the two
+  guards walk all of `test/`). `test/core/dna-agent-adapter-runs.test.ts:56` runs `git rev-parse` through
+  `execFileSync` with the caller's environment: a git-environment instance, `bug-446`'s class, not this task's.
+- **Invisible characters.** The task's grep over the 22 changed test files → no hit (exit 1).
+- Full suite on the merged head `045b3fbf`, with these notes and the bug amendments in the working tree, after
+  `waitslot.sh`: `npm test -- --maxWorkers=2` → `Test Suites: 516 passed, 516 total`, `Tests: 9119 passed, 9119 total`.
+
+### Pending amendments (approver)
+
+Left uncommitted in the worktree; the gates above ran with them in place.
+- `bug-207-four-cli-suites-still-spawn-the-cli-through-a-local-spawnsync-instead-of-the-shared-spawn-cli-helper`:
+  adds `### Retrospective`. `--reason "Add the Retrospective of the bug closed by task-316 (dl-115 Q2 (a))."`
+- `bug-209-five-suites-spawn-npm-pack-with-the-caller-s-npm-config-environment-and-no-guard-requires-a-clean-one`:
+  adds `### Retrospective`. `--reason "Add the Retrospective of the bug closed by task-316 (dl-115 Q2 (a))."`
+- `bug-271-the-writes-nothing-tests-in-test-memory-still-use-the-narrow-check-bug-194-replaced-in-core-and-cli-a-commit-count-and-git-status-or-head-alone`:
+  adds `### Retrospective`. `--reason "Add the Retrospective of the bug closed by task-316 (dl-115 Q2 (a))."`
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -280,3 +398,11 @@ its inline cases and `test/lint/pack-ignore-scripts.test.ts` flagged them (`lint
      printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
      Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
      here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+
+- The design's probe did not run the timeout edge the D3 pin rests on: node's `spawnSync` reports a timed-out child
+  with both an `ETIMEDOUT` error and the signal, so a helper that throws its error first never reaches the signal
+  message (`Received message: "spawnSync node ETIMEDOUT"` at green). Proposal: a design that rules on a spawn's
+  failure shape runs that failure once and records what node returns.
+- The heavy-gate slot dominated the phase: the targeted run of the 16 moved suites waited from about 11:25 to 13:04
+  for its slot, and `release/0.3` moved 49 commits during refactor (`git rev-list --count HEAD..release/0.3` → `49`),
+  so the full suite ran twice.
