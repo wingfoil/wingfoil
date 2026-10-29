@@ -306,7 +306,7 @@ function formatClaimReport(report, format) {
   );
   const withWarnings = new Set(report.warnings.map((warning) => warning.file)).size;
   lines.push(
-    `claim lint: ${report.warnings.length} warnings in ${withWarnings} file${withWarnings === 1 ? '' : 's'} (warn-only), ` +
+    `claim lint: ${report.warnings.length} warning${report.warnings.length === 1 ? '' : 's'} in ${withWarnings} file${withWarnings === 1 ? '' : 's'} (warn-only), ` +
       `${report.files.length} file${report.files.length === 1 ? '' : 's'} read, ` +
       `${report.items.checked} of ${report.items.total} item${report.items.total === 1 ? '' : 's'} checked`,
   );
