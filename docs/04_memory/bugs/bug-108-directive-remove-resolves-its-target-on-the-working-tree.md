@@ -72,3 +72,15 @@ deviation that nothing scheduled.
   inaccurate message on a path a user reaches by deleting a file by hand. Not scheduled to v0.2: the
   rule it deviates from is not merged yet, and the fix is small enough to ride with the next
   directives work.
+- fix (2026-10-29): `task-311-resolve-directive-remove-against-head-not-the-working-tree-dl-080`. `directive remove`
+  resolves the directive at `HEAD` (`loadDirectiveInventoryAtHead`); a directive committed and deleted on disk meets
+  the write guard (`[git status ' D'] — the file is not in the working tree`), and an untracked one is `unknown
+  directive: <name>` followed by what the working tree holds and its `git status` code — the wording approved at
+  that task's design gate (2026-10-29, D5), in place of the write guard's "carries uncommitted modifications".
+
+### Retrospective
+
+- Filed late: proposed twice by `task-096` before `task-094`'s reviewer filed it (the Notes above). Fixed with one
+  design choice no earlier note had met: a directive file committed as a symbolic link cannot be resolved from any
+  commit, and parsing the link's text at a commit refused every `directive assign` in such a repository; the fix
+  task skips such an entry at `HEAD` (its design gate, D1 (a) and D6 (a)).
