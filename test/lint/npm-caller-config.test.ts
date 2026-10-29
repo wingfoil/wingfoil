@@ -16,6 +16,11 @@
  * `<fn>` declared in the same file has a body (up to its balanced closing brace) that contains
  * `withoutCallerNpmConfig(`. Every other call is an offender, with its `file:line`.
  *
+ * Not detected: the check is that the call text CONTAINS `withoutCallerNpmConfig(` anywhere, not that
+ * the `env` the child receives is its result. A call whose text names it without using it passes — a
+ * contrived `env: withoutCallerNpmConfig(process.env) ? process.env : process.env`, or the name in a
+ * comment inside the call — and is kept out by review, not by this gate.
+ *
  * Outside the scan: npm run through a shell string (`bash -c "npm publish …"`), which has no
  * reliable textual shape — such a call must pass the stripped environment by review.
  *

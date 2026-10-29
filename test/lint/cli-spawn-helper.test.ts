@@ -25,6 +25,13 @@
  * (iv) JavaScript fixtures, which cannot import a `.ts` helper (`fixtures/smoke/wingfoil-proxy.cjs`,
  *     `cli/fixtures/cli-harness.cjs`) — outside the walk, which reads `*.ts` only.
  *
+ * Not detected — it reads the call text only, so a spawn of the CLI in any other shape passes it:
+ * - the entry passed through a variable: `const argv = [CLI_ENTRY]; spawnSync(process.execPath, argv)`;
+ * - a node flag before the entry: `spawnSync(process.execPath, ['--no-warnings', CLI_ENTRY])`;
+ * - the entry built as one path string: a `const` assigned `join(REPO_ROOT, 'dist/cli.js')`, which is
+ *   not the `join(…'dist', 'cli.js')` shape the local-constant pattern reads.
+ * Such a spawn is kept out by review, not by this gate.
+ *
  * Textual: a matching call in a comment or a string is flagged too. Deterministic: a sorted walk over
  * a fixed source tree and a pure regex scan — no clock, no subprocess.
  */
