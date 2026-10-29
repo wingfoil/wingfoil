@@ -59,3 +59,7 @@ The two storage-layer refusals keep the narrow form `bug-194` named.
 
 Captured on 2026-10-06 by `bug-ingest-rel-v0.3-w2b4b-review-findings-plan`, from `task-184`'s developer notes
 (W2 B4b, `dev-loop-rel-v0.3-plan`), checked against `main` at `f15096a2`, after `task-259`'s merge.
+
+### Retrospective
+
+Closed by task-316: both refusal tests take `snapshotPersistence(repo)` before the refused call and `assertPersistenceUnchanged(repo, snapshot)` after their existing checks (characterization, in the red commit `aea344cd`). The snapshot helper itself spawns git with no `env`; `bug-446` covers it.
