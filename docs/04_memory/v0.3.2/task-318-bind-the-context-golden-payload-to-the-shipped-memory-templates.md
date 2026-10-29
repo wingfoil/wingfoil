@@ -160,6 +160,16 @@ normative fixture, and this second golden is not normative (D5).
   through the approval queue. **Recommendation: merge this task before `task-321`'s design**, and hand `task-321` a
   note naming the suite and the golden.
 
+### design gate (approver, 2026-10-29)
+
+Design gate approved by the approver on 2026-10-29T10:59:09+01:00, in the orchestrator's chat:
+- D1 — (b): the context is built from the shipped `memory.yaml` and Memory templates with fixed pillar files, not the full init scaffold.
+- D2 — yes: the task stays `draft`; the other seven types are submitted once; no approval, so no approver identity in the fixture.
+- D3 — yes: only the header sha (payload line 2) is normalised, after asserting it equals `HEAD` and `context.stateRef`.
+- D4 — (a): no regeneration path in the test; a changed golden is rewritten by hand from the failing diff.
+- D5 — yes: no `spec-012` §7 amendment; the new golden is not normative.
+- D6 — yes: `task-321` does not start before this task is merged; its design is told to list this suite and golden among its files.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
