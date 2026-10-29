@@ -62,3 +62,12 @@ cause of both `bug-073` and the five characters above) goes unnoticed unless a r
 Captured on 2026-10-05 by `bug-ingest-rel-v0.3-w2b2-review-findings-plan`, from the independent reviews of wave 2
 batch B2 (`dev-loop-rel-v0.3-plan`: `task-173` review F1, the widening the developer reported as a candidate),
 re-checked against `main` at `d3724884`.
+
+### Retrospective
+
+- The gate judged bytes because its AC (`task-173`) named a byte class; the class of invisible characters is a
+  property of decoded text, so a byte rule could never see it. Fixed by `task-317`: the scan decodes each tracked
+  text file and judges code points by Unicode category (Cf, Zl, Zp, Zs other than U+0020) plus the C1 range, with
+  an empty, declared allow-list (`ALLOWED_INVISIBLE_CHARACTERS`). The cause named in Actual Behavior recurred while
+  the fix was designed: the editing tool turned five typed escapes in that task's own notes into raw characters,
+  and the scan, run before the commit, caught them.
