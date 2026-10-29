@@ -35,6 +35,11 @@ with that id that is not committed at HEAD, the same kind of explanation the unk
 (`src/core/directive-assign.ts:194`–`198`): the working tree defines it, the change is not committed, and a binding
 references only what the repository records (REQ-SYS-08, dl-080). Nothing is written.
 
+The same holds for a directive file **committed as a symbolic link**: since `task-311` (its design gate, D6 (a)) the
+directive read at a commit skips such an entry, so `directive assign --directive <id>` of it says only `unknown
+directive: <id>`. The refusal adds that `HEAD` records that path as a symbolic link, whose target no commit holds — the
+explanation `directive remove` gives for it.
+
 ## Actual Behavior
 
 `checkAssignable` returns `NOT_FOUND` with the message `unknown directive: <id>`
@@ -47,6 +52,9 @@ pins the bare message.
   `directive remove` of an uncommitted directive explains the working-tree difference, so `directive assign` becomes the
   one directive command that does not.
 - The refusal is correct (dl-080: the binding is resolved at HEAD); only its explanation is missing.
+- 2026-10-29, `task-311`'s independent review: the symlink-skip case joins the Expected Behavior. Reproduced with
+  that task's code build: a committed `custom/lnk.md` symbolic link to an in-root directive text, then
+  `directive assign --directive lnk --role qa` → `error: unknown directive: lnk`, exit 1.
 
 ## Triage & Execution Notes
 

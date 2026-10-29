@@ -1234,7 +1234,12 @@ types:
       expect(result.status).toBe(1);
       expect(JSON.parse(result.stderr)).toEqual({
         error: 'unknown directive: ghost',
+        // task-311: `directive remove` resolves at HEAD, whose skip warning comes first, then the working tree's.
         details: [
+          {
+            detail:
+              "directive entry '.wingfoil/directives/custom/ghost.md' skipped at HEAD: it is a symbolic link, whose target no commit records",
+          },
           {
             detail:
               "directive entry '.wingfoil/directives/custom/ghost.md' skipped: it is a symbolic link whose target does not exist",

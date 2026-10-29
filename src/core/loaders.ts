@@ -41,7 +41,7 @@ import {
 } from '../validation/format';
 import { Workflow, WorkflowsYaml } from '../workflow/schema';
 
-import { atHeadOr, listPathsAtCommit, resolveRevision } from './revision';
+import { atHeadOr, listBlobEntriesAtCommit, resolveRevision } from './revision';
 import { BINDINGS_FILE, BindingsYaml } from '../workflow/bindings';
 import {
   BindingsContext,
@@ -728,7 +728,9 @@ export interface DirectiveInventory {
 /**
  * The working-tree directive inventory, warnings included: the form a caller with a channel of its
  * own reads. `directives list` puts the warnings in its payload (`dl-042`), so they reach `--format
- * json` readers and MCP clients; `directive remove` puts them in its refusal's `details`. `src/core`
+ * json` readers and MCP clients. `directive remove` decides at `HEAD` ({@link loadDirectiveInventoryAtHead},
+ * task-311) and reads this only to word a refusal it has already decided, adding these warnings to its
+ * `details`. `src/core`
  * never prints them itself (task-143 review: a stray stderr line breaks spec-005 §3.2's one-object
  * error under `--format json`).
  *
@@ -803,7 +805,8 @@ export function loadDirectives(root: string): DirectiveFile[] {
  * untracked directive file used to be bindable, and the committed `roles.yaml` then named a directive
  * present in no commit — a dangling reference by construction, since every other clone gets the
  * binding without the file (REQ-SYS-08's referential integrity, the same way `bug-082` broke it for
- * `--role`).
+ * `--role`). `directive remove` resolves the directive it deletes from the same tree, through
+ * {@link loadDirectiveInventoryAtHead}, which also reports the symbolic links this skips (task-311).
  *
  * Unlike every other committed-baseline loader, this one needs a **directory listing at a revision**
  * (`storage.listPathsAtRev`, task-096) rather than one `readPathAtRev`: the pillar's members are
@@ -825,9 +828,10 @@ export function loadDirectivesAtHead(root: string): DirectiveFile[] {
 /**
  * Load and validate every Directives file **as commit `rev` holds it** (task-137, `spec-012` §2
  * `stateRef`) — the general form of {@link loadDirectivesAtHead}, which is this at `'HEAD'`: the
- * `.md` files `storage.listPathsAtRev` lists under `.wingfoil/directives/` at that commit, in its
+ * `.md` files `storage.listBlobEntriesAtRev` lists under `.wingfoil/directives/` at that commit, in its
  * sorted order, all read in one batch with `storage.readPathsAtRev` at the resolved sha (task-283). An empty array when the commit holds no
- * directive file; a later commit and the working tree are never read.
+ * directive file; a later commit and the working tree are never read. An entry the commit records as a
+ * **symbolic link** is skipped, never parsed: its blob is the link's target text, not a directive (task-311 D6 (a)).
  *
  * @param rev - A revision naming one commit, resolved once (`resolveRevision`, `./revision.ts`).
  * @throws `RevisionError` when `rev` is malformed or names no commit — never an empty array.
@@ -847,7 +851,24 @@ export function loadDirectivesAtCommit(root: string, sha: string): DirectiveFile
 }
 
 function directivesAt(root: string, sha: string, label: string): DirectiveFile[] {
-  const paths = listPathsAtCommit(root, sha, DIRECTIVES_DIR_PATH).filter((path) => path.endsWith('.md'));
+  return directiveEntriesAt(root, sha, label).files;
+}
+
+/**
+ * The directives commit `sha` holds, with the `.md` entries it records as **symbolic links** set apart
+ * (task-311, `dl-080` (B)). A link is a blob whose text is its target, not a directive: parsing that text
+ * refused every read of the pillar at the commit (`E_MISSING_FRONTMATTER`), so one committed link made
+ * every `directive assign` fail (task-311 D6 (a)). It is skipped, never parsed; `symlinks` lists it
+ * root-relative, in the listing's sorted order, for a caller with a channel to report it.
+ */
+function directiveEntriesAt(
+  root: string,
+  sha: string,
+  label: string,
+): { readonly files: DirectiveFile[]; readonly symlinks: string[] } {
+  const entries = listBlobEntriesAtCommit(root, sha, DIRECTIVES_DIR_PATH).filter((entry) => entry.path.endsWith('.md'));
+  const symlinks = entries.filter((entry) => entry.symlink).map((entry) => entry.path);
+  const paths = entries.filter((entry) => !entry.symlink).map((entry) => entry.path);
   // One batched read (`readPathsAtRev`, one `git cat-file --batch`) for every directive, not one `git show`
   // each (task-283, `bug-309`: 13 spawns per `workflow next` on this repository). `task-096`'s suite pins
   // this read by name, through the `../storage` barrel.
@@ -861,7 +882,39 @@ function directivesAt(root: string, sha: string, label: string): DirectiveFile[]
     if (raw === null) return;
     files.push(parseDirectiveFile(raw, `${label}:${path}`, path.slice(DIRECTIVES_DIR_PATH.length + 1)));
   });
-  return files;
+  return { files, symlinks };
+}
+
+/**
+ * The directive inventory **as `HEAD` records it**, with what it had to skip (task-311, `bug-108`,
+ * `dl-080` (B)): the committed counterpart of {@link loadDirectiveInventory}, read by the gate that
+ * resolves the directive `directive remove` deletes.
+ *
+ * `files` is {@link loadDirectivesAtHead}'s answer. A `.md` entry `HEAD` records as a symbolic link is
+ * skipped — no commit holds the directive it points at — and named twice: in `symlinks` (root-relative,
+ * sorted), and in `warnings` as `directive entry '<path>' skipped at HEAD: it is a symbolic link, whose
+ * target no commit records`. A repository with no commit yet answers the empty inventory. A committed
+ * file that fails to parse or validate stays fatal (`ValidationError`, naming `HEAD:<path>`), as every
+ * directive read is.
+ */
+export interface HeadDirectiveInventory extends DirectiveInventory {
+  /** The `.md` paths `HEAD` records as symbolic links, root-relative and sorted; empty when none. */
+  readonly symlinks: readonly string[];
+}
+
+/** See {@link HeadDirectiveInventory}. */
+export function loadDirectiveInventoryAtHead(root: string): HeadDirectiveInventory {
+  return atHeadOr(
+    root,
+    (): HeadDirectiveInventory => {
+      const { files, symlinks } = directiveEntriesAt(root, resolveRevision(root, 'HEAD'), 'HEAD');
+      const warnings = symlinks.map(
+        (path) => `directive entry '${path}' skipped at HEAD: it is a symbolic link, whose target no commit records`,
+      );
+      return { files, warnings, symlinks };
+    },
+    { files: [], warnings: [], symlinks: [] },
+  );
 }
 
 /**
