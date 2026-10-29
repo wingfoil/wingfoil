@@ -45,6 +45,237 @@ the committed state, the working tree only wording the message.
        reject's `Reason:` (read with `wingfoil memory history <task-id>`), each with the command that
        shows it resolved and what that command printed; then what else changed on the next pass. -->
 
+### design (architect, 2026-10-29)
+
+**Inputs read.** `depends_on: []` (no dl-015 gate); no handover. Base: `release/0.3` `12aa212c` + `wf(task): start`
+`86769a5d` + `wf(bug): sync bug-108 [planned → in-progress]` `d45996b9` (`git log --oneline -3` → those three). Cited
+elements: `dl-080` `ready` (option (B), approve `333a3c0f`); `spec-008-cli-grammar` and `spec-006-core-domain-api`
+`approved` (`grep -n "^status" …` → `status: approved` on both); directive `command-baseline` `version: "1.7"`, whose
+*Two baselines for a gating read* and *Where the shipped code still deviates* paragraphs name `bug-108` as the one
+deviation left and prescribe its repair: resolve at `HEAD`, "the working tree may be read to explain a refusal, never
+to decide one". No AC contradicts a ratified DL or approved spec; one approved spec the ACs do not name also states the
+deviation (D3).
+
+**The defect, reproduced on this base** (a scratch directory outside the repository, `node <worktree>/dist/cli.js
+init --template Scrum`, a custom directive `spare` copied from `custom/determinism.md` with its `id:` changed and
+committed):
+- `rm .wingfoil/directives/custom/spare.md; directive remove spare` → `error: unknown directive: spare`, exit 1; with
+  `--format json` → `{"error":"unknown directive: spare"}`, exit 1. That is `bug-108`: `HEAD` holds the blob.
+- an untracked `custom/ghost.md` (`id: ghost`): `directive remove ghost` → `error: refusing to commit
+  .wingfoil/directives/custom/ghost.md: it carries uncommitted modifications this operation does not own [git status '??']
+  — the file is not in the index, the file is not tracked at HEAD. …`, exit 1 (same text under `--format json`).
+  Staged (`git add`), the same refusal with `[git status 'A '] — the file is not tracked at HEAD`.
+- a committed **symlinked** directive file (`custom/benign.md` → a file outside the project, `git ls-tree HEAD` → mode
+  `120000`): `directive remove benign` → exit 0, `wf(directive): remove benign` (the working-tree read follows the link);
+  but `directive assign --directive spare --role qa` in the same repository → `error: cannot resolve the directive
+  inventory: a file committed under '.wingfoil/directives' (at HEAD) is not readable as a directive:
+  E_MISSING_FRONTMATTER (HEAD:.wingfoil/directives/custom/benign.md): directive file has no frontmatter block. …`, exit 1.
+  `loadDirectivesAtHead` (`src/core/loaders.ts`, `directivesAt`) lists the link with `listPathsAtCommit` and parses the
+  link's target text as a directive. So a plain swap of `loadDirectiveInventory` for `loadDirectivesAtHead` in
+  `directiveRemoveFn` would refuse **every** `directive remove` in such a repository (D1; the `assign` half is a
+  defect outside this task, reported, not fixed).
+
+**Existing tests on every file this task changes**, run before any pin (one jest process each, `--maxWorkers=2`, no slot):
+- `npx jest --maxWorkers=2 test/core/directive-remove.test.ts test/core/directive-inventory-baseline.test.ts
+  test/core/directive-remove-confinement.test.ts test/core/core-index-arms.test.ts
+  test/core/write-guard-uninspectable-target.test.ts test/core/write-guard-dirty-target.test.ts
+  test/core/write-guard-committed-paths.test.ts test/core/loaders.test.ts test/directives/schema.test.ts
+  test/directives/workflow-adopt-directives.test.ts test/docs/workflow-rekey-docs.test.ts test/docs/dl-086-citations.test.ts
+  test/docs/cli-reference.test.ts test/cli/directive-inventory-at-head.integration.test.ts
+  test/cli/commit-failure-rollback.integration.test.ts test/cli/dry-run.integration.test.ts test/core/builtin-asset.test.ts
+  test/docs/req-sec-06-confinement-text.test.ts` → `Test Suites: 18 passed, 18 total`, `Tests: 317 passed, 317 total`.
+- `npx jest --maxWorkers=2 test/core/parity.test.ts test/cli/operand-error-shape.integration.test.ts
+  test/cli/help-positional-required.integration.test.ts test/cli/program.integration.test.ts
+  test/mcp/read-only-agent-channel.test.ts test/core/production-registry.test.ts` → `Test Suites: 6 passed, 6 total`,
+  `Tests: 166 passed, 166 total`.
+- `npm run check:mcp` (pinned 0.3.1 and the code build, nothing under `.wingfoil/` changed yet) → `.mcp.json "wingfoil"
+  runs the pinned wingfoil 0.3.1, advertising [prompts, resources, tools] (prompts: 8, resources: 4, tools: 0)` / `the
+  build under development (dist/cli.js) serves [prompts, resources, tools] (prompts: 8, resources: 4, tools: 0); every
+  listed Resource read and Prompt get answered`, exit 0. The developer re-runs it after the directive edit (AC3).
+
+**Every suite that exercises `directive remove`** (`grep -rnc "'directive', 'remove'\|directiveRemove\|directive remove"
+test/`, then read): `test/core/directive-remove.test.ts`, `test/core/directive-inventory-baseline.test.ts`,
+`test/core/directive-remove-confinement.test.ts`, `test/core/core-index-arms.test.ts`,
+`test/core/write-guard-uninspectable-target.test.ts`, `test/core/write-guard-dirty-target.test.ts`,
+`test/core/write-guard-committed-paths.test.ts`, `test/core/builtin-asset.test.ts`, `test/core/parity.test.ts`,
+`test/core/production-registry.test.ts`, `test/cli/directive-inventory-at-head.integration.test.ts`,
+`test/cli/commit-failure-rollback.integration.test.ts`, `test/cli/dry-run.integration.test.ts`,
+`test/cli/program.integration.test.ts`, `test/cli/operand-error-shape.integration.test.ts`,
+`test/cli/help-positional-required.integration.test.ts`, `test/mcp/read-only-agent-channel.test.ts`,
+`test/docs/req-sec-06-confinement-text.test.ts`. Of these, `task-316` may move the `test/cli/*.integration.test.ts`
+ones that still spawn `dist/cli.js` by hand; `test/cli/directive-inventory-at-head.integration.test.ts` already uses
+`./helpers/spawn-cli` (`runCliEntry`, its line 32), so the CLI pins below go there. No workflow is changed, so no
+phase-list or step-count pin is affected. Traced against the new behaviour, three existing pins collide (they encode
+the working-tree decision) and change in red: `directive-inventory-baseline.test.ts` "AC4: an UNTRACKED directive file
+is not removable — the write guard refuses" (asserts `refusing to commit …` / `[git status '??']`);
+`core-index-arms.test.ts` "directive remove: an invalid directive file is the inventory loader's VALIDATION refusal"
+(an **uncommitted** `broken.md` decides today); `directive-remove-confinement.test.ts` "still removes a symlinked
+directive FILE inside a real custom/ directory" (D1). The other remove pins hold unchanged: the out-of-root
+`custom/` case keeps its `outside the project root` wording through the explanation below; the in-root aliased
+`custom/` (`bug-124`) is committed before the alias, so `HEAD` resolves it and `requireInspectableTarget` still refuses;
+the unknown-name, traversal-shaped-name and skipped-entry-warning pins keep their exact `toEqual`.
+
+**Design.**
+- *`src/core/loaders.ts`.* New `loadDirectiveInventoryAtHead(root): DirectiveInventory` beside
+  `loadDirectiveInventory`: `HEAD` resolved once (`atHeadOr` → `{ files: [], warnings: [] }` when there is no commit),
+  entries from `listBlobEntriesAtCommit(root, sha, DIRECTIVES_DIR_PATH)` (`src/core/revision.ts`, the symlink-aware
+  listing the Memory scan uses since task-171), `.md` only; a regular blob is read in the one batched `readPathsAtRev`
+  and parsed by `parseDirectiveFile` (fatal on a parse or schema failure, as every directive read); a **symlink** entry
+  is skipped with the warning `directive entry '<path>' skipped at HEAD: it is a symbolic link, whose target no commit
+  records`. Not added to the `src/core` barrel (imported from `./loaders` by `index.ts`). `loadDirectivesAtHead` is not
+  changed (its other callers, `checkAssignable` and the context at a revision, stay as they are; finding F1). Its TSDoc
+  sentence "the only gate that consults this (`checkAssignable`)" stays true; `loadDirectiveInventory`'s TSDoc
+  ("`directive remove` puts them in its refusal's `details`") is reworded to the new role of the working-tree read.
+- *`src/core/index.ts` `directiveRemoveFn`.* Step 3 resolves `<name>` with `selectDirectivesById` over
+  `loadDirectiveInventoryAtHead(root).files`. A `ValidationError` from it → `VALIDATION`, `cannot resolve the directive
+  inventory: a file committed under '.wingfoil/directives' (at HEAD) is not readable as a directive: <error.message>.
+  A directive is resolved from the directives the repository records (dl-080), so the committed files must be valid; fix
+  it and commit the fix, then retry.`, `details: { issues }` — the shape of `checkAssignable`'s refusal; any other error
+  propagates. On a match, steps 4–7 run unchanged on the `HEAD`-resolved path (custom check, confinement, `HEAD`
+  referrer check, `requireUnmodifiedTarget`, delete + commit). A directive committed at `HEAD` and deleted on disk
+  therefore reaches `requireUnmodifiedTarget`, which refuses with `[git status ' D'] — the file is not in the working
+  tree` (D2). On no match the refusal is decided: `NOT_FOUND`, exit 1, message `unknown directive: <name>` plus the
+  explanation below; `details.issues` = the `HEAD` skip warnings (sorted path order) then the working-tree inventory's
+  warnings (traversal order), the key omitted when both are empty.
+- *The explanation* (a new private helper in `index.ts`, or `directive-assign.ts` beside `workingTreeWouldDefine`; it
+  never throws: any failure leaves the bare message). It reads `loadDirectiveInventory(root)` and
+  `selectDirectivesById` for `<name>`; no working-tree match → no suffix. On a match at root-relative POSIX path `P`,
+  the first that applies:
+  - (W-out) `resolveRealPathInRoot(root, P)` is not `within` → ` — the working tree's '<P>' defines it, but it resolves
+    to '<real>', outside the project root, and no commit of this repository records it (dl-080)`;
+  - (W-link) `HEAD` lists `P` as a symbolic link → ` — the working tree's '<P>' defines it, but HEAD records that path as
+    a symbolic link, whose target no commit holds, so the directive cannot be resolved from the committed repository
+    (dl-080)`;
+  - (W-uncommitted) otherwise → ` — the working tree's '<P>' defines it [git status '<XY>'], but no commit of this
+    repository records it, and a directive is resolved from the committed repository (dl-080); commit '<P>' first, then
+    retry`, the bracket omitted when `pathPorcelainStatus` throws.
+  The shape mirrors `checkAssignable`'s unknown-role sentence (`workingTreeWouldDefine`, `src/core/directive-assign.ts`):
+  P3.2's `unknown directive: <id>` stays the first sentence.
+- *TSDoc.* `directiveRemoveFn`'s step 3 ("This read stays on the **working tree**, deliberately") is rewritten to the
+  `HEAD` resolution, the explanation, and the three cases the old text argued about.
+- *`.wingfoil/directives/custom/command-baseline.md` (AC3), a hand edit committed by the developer.* No command writes it:
+  `directive create` makes a new file and refuses an occupied one, and the closed `wf(directive)` verbs are `create`,
+  `assign`, `remove`. Version `1.7` → `1.8`, `**Date:** 2026-10-29`; *Where the shipped code still deviates* and the
+  `dl-086` bullet ("stays owed to `HEAD` (`bug-108`, below)") state that `directive remove` resolves at `HEAD` since
+  `task-311` and that the working tree only words its refusal; *Revision 1.8* appended ("the rule text is unchanged").
+  Commit subject per D4. Proof: `npm run check:mcp` exit 0 after the edit, `test/directives/schema.test.ts` (version
+  `≥ 1.4` plus the Revision 1.4 line) still green.
+- *Docs (the developer commits).* `docs/cli-reference.md`: the "One known defect breaks this rule today: `directive
+  remove` …" sentence (lines 169–170) goes; the `directive remove` entry's *Errors* line says an unknown name includes a
+  directive no commit records, and that the message says when the working tree holds one. No `version:` on it.
+  `docs/user-guide.md` §6.2 already says to commit first; unchanged. P3.3's BDD scenarios do not touch the baseline; no
+  `.feature` change.
+- *Spec amendments, prepared by the developer and left uncommitted* (dl-047; recorded by the approver's `memory amend` at
+  review): `spec-008-cli-grammar` §11 — `directive remove` (the directive its `<name>` names, its referrer check; the
+  working tree only words a refusal) joins the committed-at-`HEAD` row, the row "working tree, a defect" is removed, and
+  a `**Revision (2026-10-29, task-311-…)**` note is added; and, if D3 is (a), `spec-006-core-domain-api` §6 — item 5's
+  "(`bug-108-…`, open)" and the table's "working tree, deviating" row, with a Revision note. Revision notes, no
+  `version:` (dl-047).
+
+**Files expected to change.** `src/core/index.ts`, `src/core/loaders.ts` (and `src/core/directive-assign.ts` only if the
+explanation helper lands there), `.wingfoil/directives/custom/command-baseline.md`, `docs/cli-reference.md`, the red
+tests below, this task file, `bug-108` (status syncs only); uncommitted: `docs/04_memory/design/specs/spec-008-cli-grammar.md`
+and, under D3 (a), `spec-006-core-domain-api.md`. `src/storage/commit.ts` is read only. **Version bumps:** only
+`command-baseline` `1.7` → `1.8`; no `dna.yaml`, `memory.yaml`, `workflows.yaml` or `roles.yaml` change.
+
+**AC classification and what qa must pin.** Interface: `directiveRemoveFn()` (the `CORE_MODULES` operation, as
+`test/core/directive-remove.test.ts` resolves it) with `{ root, positional }`, and `exitCodeForResult`; the CLI through
+`runCliEntry` in `test/cli/directive-inventory-at-head.integration.test.ts`. Fixtures: the existing `seedRepo` /
+`directiveMd` helpers of `test/core/directive-inventory-baseline.test.ts` and `makeInitializedRepo` /
+`renderCustomDirective` of `test/core/directive-remove-confinement.test.ts`; persistence via `snapshotPersistence` /
+`assertPersistenceUnchanged`. Every refusal pin also asserts `HEAD` unchanged and the files on disk unchanged. No new
+export is needed by a red test (the new loader is the developer's; a unit test of it is the developer's own).
+- **AC1 — red-first** (reproduced above). In `test/core/directive-inventory-baseline.test.ts`, describe "directive remove
+  answers REQ-SEC-07 (b) …" or a new describe beside it:
+  (a) committed custom directive deleted on disk → `ok: false`, exit 1, `code: 'VALIDATION'`, message contains `refusing
+  to commit <path>` and `[git status ' D']` and `the file is not in the working tree`, and does **not** contain `unknown
+  directive` (red today: `unknown directive: spare`); the same after a `git rm` (`[git status 'D ']`, the file neither in
+  the index nor on disk) is optional;
+  (b) replace the colliding "AC4: an UNTRACKED directive file …" pin: `code: 'NOT_FOUND'`, exit 1, message `toBe`
+  `unknown directive: ghost — the working tree's '.wingfoil/directives/custom/ghost.md' defines it [git status '??'], but
+  no commit of this repository records it, and a directive is resolved from the committed repository (dl-080); commit
+  '.wingfoil/directives/custom/ghost.md' first, then retry`; the file survives;
+  (c) the same file staged (`git add`) → the same message with `[git status 'A ']`;
+  (d) a directive committed and then **edited on disk to a new id** (`spare.md` with `id: renamed`, uncommitted):
+  `remove renamed` → `NOT_FOUND`, the W-uncommitted message with `'.wingfoil/directives/custom/spare.md'` and
+  `[git status ' M']`; `remove spare` → the existing `requireUnmodifiedTarget` refusal (`refusing to commit …`);
+  (e) an untracked `custom/documentation.md` (`id: documentation`) shadowing `seedRepo`'s committed built-in
+  `documentation` → `built-in directives cannot be removed` (`HEAD` resolves the built-in; today the untracked custom
+  file wins `dl-037`'s precedence and the refusal is another one);
+  (f) a still-referenced, unknown or built-in name keeps its message (existing pins, not rewritten).
+  In `test/core/core-index-arms.test.ts`, replace the colliding pin: the `broken.md` (no frontmatter) **committed** →
+  `VALIDATION`, message contains `E_MISSING_FRONTMATTER` and `HEAD:.wingfoil/directives/custom/broken.md`; and, new, the
+  same file **uncommitted** → `remove anything` is `NOT_FOUND` `unknown directive: anything` (the working tree no longer
+  decides). In `test/core/directive-remove-confinement.test.ts`, per D1 (a): the "symlinked directive FILE" pin becomes
+  `NOT_FOUND`, message starting `unknown directive: benign — the working tree's '.wingfoil/directives/custom/benign.md'
+  defines it, but HEAD records that path as a symbolic link`, `details.issues` containing `directive entry
+  '.wingfoil/directives/custom/benign.md' skipped at HEAD: it is a symbolic link, whose target no commit records`, the
+  link and its target intact, `HEAD` unchanged; the out-of-root `custom/` pins stay as they are (they assert
+  `toContain` the path and `outside the project root`, which W-out keeps) — qa adds `code: 'NOT_FOUND'` there only if it
+  wants the decision pinned. CLI, `test/cli/directive-inventory-at-head.integration.test.ts`: `remove` of a committed
+  directive deleted on disk → status 1, stderr starts `error: refusing to commit .wingfoil/directives/custom/` and
+  contains `[git status ' D']`; `remove` of an untracked one → status 1, stderr `toBe` `error: ` + the (b) message; both
+  also with `--format json` (`JSON.parse(stdout or stderr as the suite reads it).error` equal to the same text) and
+  `--dry-run` (same status and message). The fixture texts are copied from the real outputs of the scratch run above for
+  the parts that exist today (`refusing to commit …`, `[git status '…']`, `the file is not in the working tree`); the
+  W-* sentences are this design's contract, not an existing output, and qa names this subsection as their source.
+- **AC2 — characterization** (a spec text, not code; no test). The developer prepares the `spec-008` §11 amendment
+  uncommitted; review checks it with `git diff -- docs/04_memory/design/specs/spec-008-cli-grammar.md`.
+- **AC3 — characterization**, but its pin does not exist yet, so it is a red-first **text** pin, a real red today:
+  `test/directives/schema.test.ts` (or a new `test/docs/directive-remove-baseline-docs.test.ts`): `command-baseline.md`
+  has `Number(version) >= 1.8` and a line matching `^\*\*Revision 1\.8 \(2026-10-29, \`task-311-`; its *Where the
+  shipped code still deviates* paragraph does not contain `This read stays on the **working tree**` nor `filed as`
+  … `(\`open\`)` for `bug-108`; and `docs/cli-reference.md` no longer contains `One known defect breaks this rule today`
+  (`grep -c` → `1` today). Version pinned as `≥` with its history line (bug-314).
+
+**Decisions for the approver.**
+- **D1 — a directive file committed as a symbolic link.** `HEAD` records the link, not the directive, so its id cannot
+  be read from any commit. (a) The `HEAD` inventory skips a symlink entry with a warning; removing a symlinked directive
+  file is `NOT_FOUND` with the W-link explanation (bug-044's "benign case" removal, pinned only by
+  `directive-remove-confinement.test.ts` and specified nowhere — `grep -rln "benign" docs/04_memory/design
+  docs/02_requirements .wingfoil` → no spec, DL or feature on it — stops working; `git rm` by hand remains).
+  (b) Follow a committed link at `HEAD` when its target text resolves to a path committed at `HEAD` inside the
+  repository, skip it otherwise (the pinned fixture's target is outside, so it changes the same way as (a)).
+  (c) Keep the working-tree read for a symlinked leaf only — a third category of gating read, which `command-baseline`
+  forbids. **Recommendation: (a).** It is the one-baseline answer, and it keeps one committed symlink from refusing every
+  removal, which a plain move to `loadDirectivesAtHead` would do.
+- **D2 — a directive committed at `HEAD` and deleted on disk.** (a) Refuse through `requireUnmodifiedTarget` (`[git status
+  ' D'] — the file is not in the working tree`), the write half as `directive create` already applies it to a target at
+  `HEAD` but absent on disk (`write-guard-dirty-target.test.ts`, bug-078 R4). (b) Commit the deletion: the working tree
+  holds no content to lose. **Recommendation: (a)** — it is the bug's Expected Behavior ("a message saying so"), changes
+  no write rule, and (b) would make the write half depend on which modification the target carries.
+- **D3 — `spec-006-core-domain-api` §6** (normative, per `command-baseline`) names the same deviation (item 5,
+  "`bug-108-…`, open"; table row "working tree, deviating"). The ACs name only `spec-008` §11. (a) Prepare the
+  `spec-006` §6 amendment too, uncommitted, in the same review; (b) leave it to a later task. **Recommendation: (a)**:
+  otherwise the normative text names a fixed defect as open.
+- **D4 — the subject of the AC3 commit.** AC3 says "a `wf(directive)` change", but no verb writes a directive edit, and a
+  `wf()` subject must name a tool operation (`git-conventions` §4: the verbs are a closed list; a commit that is not a
+  Memory operation takes `docs({module}): {task.id} — <summary>`). (a) `docs(directive): task-311 —
+  command-baseline 1.8: directive remove resolves at HEAD (bug-108)`, the form of `202c5b89` and `54d1e9c0`
+  (`git log -- .wingfoil/directives/custom/wingfoil-cli.md`); (b) `wf(directive): …` by hand. **Recommendation: (a).**
+- **D5 — the explanation wording** (W-out, W-link, W-uncommitted above), modelled on `checkAssignable`'s unknown-role
+  sentence. Recommendation: approve as written, so red pins it verbatim.
+
+**Candidate findings (not filed).**
+- F1 — `directive assign` refuses every id in a repository that commits a symlinked directive file:
+  `loadDirectivesAtHead` → `directivesAt` (`src/core/loaders.ts`) parses the link's target text. Command and output in
+  the reproduction above. Expected: a symlink entry at `HEAD` is known as one (`listBlobEntriesAtCommit`) and skipped
+  with a warning or refused naming it, never parsed as a directive. The same reader serves the context at a revision
+  (`loadDirectivesAtCommit`). Suggested severity: low.
+- F2 — `directive assign` of an untracked directive says only `unknown directive: ghost`
+  (`test/cli/directive-inventory-at-head.integration.test.ts` pins it, line 77), while its unknown-role refusal and,
+  after this task, `directive remove` say the file is in the working tree but not committed. Expected: the same
+  explanation. Suggested severity: low.
+
+**Risks for the other open `w1` tasks.** `task-316`: the CLI pins go into a suite already on `spawn-cli`; if it rewrites
+that suite's local `wingfoil()` wrapper, the merge is mechanical. `task-317`: the new messages contain `—` (U+2014) and
+`'`, no control or format character; `npx jest test/lint --maxWorkers=2` on red is enough. `task-318`: the context golden
+(`test/fixtures/context/golden-payload.md`) holds a synthetic `testing` directive, not `command-baseline`
+(`grep -n "directive" test/fixtures/context/golden-payload.md` → `begin:directive:testing` only), and
+`loadDirectivesAtHead`/`loadDirectivesAtCommit` are not changed, so no golden moves. `task-310`: shares
+`src/core/loaders.ts` (`loadDirectiveInventory`'s TSDoc) and the directive suites; a textual merge only. `task-315`:
+none (help and `program.ts` untouched; `program.integration.test.ts` exercises only `directive remove`'s usage).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
