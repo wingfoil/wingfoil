@@ -11,7 +11,7 @@ features: []              # REQUIRED — feature IDs covered by this release, e.
 requirements: "docs/04_memory/design/dls/dl-186-wingfoil-s-own-development-moves-onto-the-v0.3-workflow-engine-in-a-fixed-order-pin-templates-then-state-adoption-before-v0.4-s-planning.md"       # REQUIRED — path to per-release backlog JSON, e.g. "docs/03_backlog/04_backlog/by-release/v0.1.json"
 release-line: "v1"       # REQUIRED — version of the parent release-line, e.g. "v1"; the file sits under the release-line's id, planning/rl-v1/ (memory.yaml `release` path)
 backlog_committed: 26     # optional — set at release-planning's commit-backlog: the count of the release's tasks then (dl-100 §2); the growth threshold's baseline (memory.yaml `release.growth_threshold`)
-waves: [w0]              # optional — the release's wave keys, e.g. [w0] (dl-100 §1 (a)); a non-empty list fixed at commit-backlog; each later wave is appended at the previous wave's re-plan (every listed wave runs at once)
+waves: [w0, w1]          # optional — the release's wave keys, e.g. [w0] (dl-100 §1 (a)); a non-empty list fixed at commit-backlog; each later wave is appended at the previous wave's re-plan (every listed wave runs at once)
 tmpl_version: 261012   # Original template version
 ---
 
@@ -85,6 +85,7 @@ v0.3 left, taken while it is cheap and before v0.4 changes the engine.
 
 | Task | From | Admitted at | Count vs backlog_committed |
 |---|---|---|---|
+| `task-331` | `bug-445` (a pre-existing red gate found by `task-308`'s full suite, stop-the-line; approver rulings of 2026-10-28: triaged into v0.3.2, fixed by a new w0 task) | admitted `[pending → backlog]` during `w0` (`c1458e0d`, 2026-10-28), recorded at `wave.re-plan` of `w0` | 27 vs 26 (+3.8 %) |
 
 ## Execution Notes
 
