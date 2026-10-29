@@ -276,6 +276,18 @@ that suite's local `wingfoil()` wrapper, the merge is mechanical. `task-317`: th
 `src/core/loaders.ts` (`loadDirectiveInventory`'s TSDoc) and the directive suites; a textual merge only. `task-315`:
 none (help and `program.ts` untouched; `program.integration.test.ts` exercises only `directive remove`'s usage).
 
+### design gate (approver, 2026-10-29)
+
+Design gate approved by the approver on 2026-10-29T10:59:09+01:00, in the orchestrator's chat, every decision as recommended:
+- D1 — (a): the HEAD inventory skips a directive file committed as a symlink, with a warning; removing it is `NOT_FOUND` with the link explanation.
+- D2 — (a): a directive committed at HEAD but deleted on disk is refused through `requireUnmodifiedTarget` (`' D'`).
+- D3 — (a): the developer also prepares the `spec-006` §6 amendment, uncommitted (dl-047), with the `spec-008` §11 one.
+- D4 — (a): the `command-baseline` change is committed as `docs(directive): task-311 — command-baseline 1.8: …`.
+- D5 — yes: the three explanation messages as written above; red pins them verbatim.
+- D6 — (a): candidate finding F1 is fixed in this task: the directive read at a commit (`directivesAt` in `src/core/loaders.ts`, used by `directive assign`) skips a symlink entry as the new HEAD inventory does; the design's file list is unchanged.
+- D7 — (a): candidate finding F2 (`directive assign` of an untracked directive gives no working-tree explanation) is filed as a bug by the orchestrator, proposed for v0.4.
+- D8 — yes: `task-309`, `task-310` and `task-313`, which also change `src/core/loaders.ts`, start only after this task is merged.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
