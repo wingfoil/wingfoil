@@ -183,6 +183,70 @@ Design gate approved by the approver on 2026-10-30T10:38:05+01:00, in the orches
 - D4 — yes: one `docs/cli-reference.md` sentence, no new BDD scenario.
 - D5 — (a): the candidate finding (`help memory addd` ignores the second operand) is filed as a bug by the orchestrator, proposed for v0.4.
 
+### red (qa, 2026-10-30)
+
+**Red commit `c61e9ebb`** (`git log --oneline -1` → `c61e9ebbb test(cli): task-315 — failing test: help hints the closest
+command, help help prints its own help`), test files only: `test/cli/operand-error-shape.integration.test.ts` (the
+header bullet on `bug-115` / `bug-116` rewritten, and the `describe('AC 3 — bug-115 / bug-116 stay out of scope
+(characterization)')` replaced by `describe('AC 3 — task-315: …')`, as the design asked) and `test/cli/program.test.ts`
+(three tests added to `describe("buildProgram — the exit callback's own behaviour …")`). No new export, so no `.d.cts`.
+Base unchanged: `git rev-list --count HEAD..release/0.3` → `0`, no merge. The spawns go through `runCliEntry`
+(`test/cli/helpers/spawn-cli.ts`).
+
+**The contract pinned is the design gate's, not the design's AC 2 table.** The approver ruled D1 (b) on 2026-10-30:
+`help help`, `help help help` and `<noun> help help` exit `0` and print the help command's own help. The design's exit-2
+`the built-in command 'help' has no help of its own` pins are therefore not written. The help text is copied from a run
+on the code build: `buildProgram(CORE_MODULES, …)`, then `program._getHelpCommand().helpInformation()` (and the same on
+the `memory` noun), printed `"Usage: help [command]\n\ndisplay help for command\n"` at both levels — the detached
+built-in has no parent, so its usage line carries no `wingfoil` prefix. The pins therefore require the first stdout line
+to match `/^Usage: (wingfoil )?help \[command\]$/` (`(wingfoil memory )?` / `(wingfoil dna )?` under a noun), stdout to
+contain `display help for command`, stdout not to be the root's or the noun's help (`Usage: wingfoil [options]
+[command]`, `Usage: wingfoil memory [options] [command]` absent), stderr to contain no `unknown command` and to be
+empty — the same stderr `help` and `help dna` have at exit 0 (`missing-verb-exit-code.integration.test.ts` AC4).
+
+**Today's behaviour, measured on the code build** (`node dist/cli.js <args>`, stderr tail, from a scratch directory):
+`help memroy` → exit `2`, `error: unknown command 'memroy'`, no `hint:`; `memroy` → `… 'memroy'` / `hint: did you mean
+"memory"?`; `dnaa` → `hint: did you mean "dna"?`; `nosuchnoun` → no `hint:`; `--format json help memroy` →
+`{"error":"unknown command 'memroy'"}`; `memory help addd` → `error: missing required argument: <command>` / `hint:
+usage: wingfoil memory help addd <command>`; `help help` → exit `2`, the root help on stderr, then `error: unknown
+command 'help'`; `memory help help` → exit `2`, `error: missing required argument: <command>`.
+
+**Run.** `npx jest test/cli/program.test.ts test/cli/operand-error-shape.integration.test.ts --maxWorkers=2` → `Test
+Suites: 2 failed, 2 total`, `Tests: 13 failed, 76 passed, 89 total`; per file: `program.test.ts` `5 failed, 41 passed,
+46 total`, `operand-error-shape.integration.test.ts` `8 failed, 35 passed, 43 total`. `npx tsc --noEmit -p
+tsconfig.json` → exit `0`, no output. `npx jest test/lint --maxWorkers=2` → `Test Suites: 13 passed, 13 total`, `Tests:
+153 passed, 153 total`. The invisible-character `grep -nP` on both files → no output, exit `1`.
+
+**Per AC** (first failing assertion of each red test):
+- **AC 1 (red-first)**, `operand-error-shape.integration.test.ts`:
+  - "`wingfoil help memroy` names `memory` on the `hint:` line, at exit 2 (bug-115, AC 1)" → line 151,
+    `expect(result.stderr.endsWith(…'memroy'\nhint: did you mean "memory"?\n)).toBe(true)`: received `false`.
+  - "`wingfoil help %s` refuses with the same `error:`/`hint:` lines as the direct path (AC 1)", `memroy` and `dnaa` →
+    line 160, `toEqual`: the expected `hint: did you mean "memory"?` (`"dna"?`) line is missing. The `nosuchnoun` row
+    passes on first run (no hint on either path: the unchanged case).
+  - "under `--format json` the `help memroy` refusal carries the same `hint` (AC 1)" → line 168, the `hint` key missing.
+  - "one level down, `wingfoil memory help addd` and `memory help memroy` are unknown-command refusals (AC 1, D3)" →
+    line 174, `endsWith(…'addd'\nhint: did you mean "add"?\n)` received `false` (today the missing-argument shape).
+  - `program.test.ts`, "`help <near-miss>` gets the closest-command `hint:` line, at the root and under a noun (task-315,
+    `bug-115`, AC 1)" (`--format yaml help dnaa`, then `--format yaml dna help sett`) → line 603, received `error:
+    unknown command 'dnaa'\n` without the `hint:` line.
+  - `program.test.ts`, "the help command is found by consulting Commander's built-ins, not by its name: a renamed one
+    still hints (task-315, AC 1)" (`program.helpCommand('assist [command]')`, `--format json assist dnaa`) → line 618,
+    received `{"error":"missing required argument: <command>","hint":"usage: wingfoil assist dnaa <command>"}`.
+- **AC 2 (red-first)**:
+  - `operand-error-shape.integration.test.ts`, "`wingfoil %j` prints the help command's own help at exit 0 (bug-116,
+    AC 2)", rows `["help","help"]`, `["help","help","help"]`, `["memory","help","help"]` → line 194,
+    `expect(result.status).toBe(0)`: received `2`.
+  - `program.test.ts`, "`%j` prints the built-in `%s` command's own help at exit 0, no unknown-command line (task-315,
+    `bug-116`, AC 2)", rows `help help`, `dna help help`, and the renamed `assist assist` (after
+    `program.helpCommand('assist [command]')`: the built-in is recognised by consultation, not by the string `help`) →
+    line 634, `expect(exitSpy).toHaveBeenCalledWith(0)`: received `2`.
+- **AC 3 (characterization by command, no test)**: as the design states — the `spec-005` §3.1 amendment is checked by
+  command at self-review; red adds no test for it.
+
+**Unchanged, still true after the fix:** `program.test.ts` "`help <unknown>` gets the unknown-command line …"
+(`nosuchnoun`), and `missing-verb-exit-code.integration.test.ts` AC3/AC4 (not edited).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
