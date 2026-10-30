@@ -104,6 +104,15 @@ unrecognized key does not fail Pass 1 — it is preserved on the parsed object. 
 compatibility is only useful if the operator is actually told about the unknown key; the warning
 must fire, not silently pass.
 
+**A typed catchall declares its extra keys.** One object schema is open by design rather than by
+tolerance: `spec-002`'s `Paths`, where a project may add its own category, takes
+`.catchall(z.array(z.string()))` instead of `.passthrough()`. Its extra keys are declared — each is
+validated by the catchall in Pass 1, and one of the wrong shape fails there — so they are not unknown
+and raise no warning. A key absent from a schema's `shape` is therefore unknown only when the schema
+has no catchall or a `.passthrough()` one (a `z.unknown()` catchall). The catchall is read
+structurally, from Zod 4's `def.catchall.def.type`: `unknown` for `.passthrough()`, `never` for
+`.strict()` (whose extra keys fail Pass 1 before the warning runs), absent on a plain object.
+
 **Known-defective mechanism (do not reproduce).** A prior draft of this policy compared the keys
 of the *parsed* object against the keys of the *raw* input:
 
@@ -134,6 +143,12 @@ interface HasElement { readonly element: unknown }
 
 // (isHasShape / isHasElement / isPlainObject: the obvious structural type guards.)
 
+/** True when `schema` declares a typed catchall: `def.catchall.def.type` neither `unknown` nor `never`. */
+function hasTypedCatchall(schema: HasShape): boolean {
+  const type = (schema as { def?: { catchall?: { def?: { type?: unknown } } } }).def?.catchall?.def?.type
+  return type !== undefined && type !== 'unknown' && type !== 'never'
+}
+
 /**
  * Recursively collect the paths of every raw key not declared in the schema's shape. Top-level
  * unknowns are reported by bare name (`mysteryField`); nested unknowns carry a dotted / indexed
@@ -148,7 +163,7 @@ function collectUnknownFields(
   const out: string[] = []
   for (const key of Object.keys(raw)) {
     const path = prefix ? `${prefix}.${key}` : key
-    if (!known.has(key)) { out.push(path); continue }
+    if (!known.has(key)) { if (!hasTypedCatchall(schema)) out.push(path); continue }
     // Known key: descend when the declared field is itself a passthrough object schema (or an
     // array of them) AND the raw value has the matching shape. Anything else (scalars, records,
     // mismatched raw shapes) is left to Pass-1's own field-level validation.
@@ -187,8 +202,8 @@ export function emitUnknownFieldWarning(
 `runValidation` listing above) — so the warning fires exactly once per successful Pass-1 parse,
 using the schema's own declared shape as ground truth, independent of what `.passthrough()` did
 to the output object. Nested objects: the same diff is applied recursively at each nesting level
-that itself has a `.passthrough()` schema, so unknown fields inside nested config blocks are
-reported too, not only at the document root.
+that itself is an object schema (`.passthrough()`, or one with a typed catchall), so unknown fields
+inside nested config blocks are reported too, not only at the document root.
 
 The warning is never written from inside a loader: `emitUnknownFieldWarning` raises it
 (`<file>: unknown field(s) ignored: <paths>`) through the warning sink of `src/validation/warning.ts`
@@ -289,3 +304,12 @@ from inside the loaders under every format, so a `json` refusal's stderr was a t
 error object. The listing's last line now calls `reportWarning`. It is now raised through a sink the CLI renders in the active format, like every other
 warning (`task-169`'s renderer), rather than suppressed: a misspelt key stays visible to a script.
 Edited in place without a supersede or a state change (`dl-047`).
+
+**Revision (2026-10-30, `task-312`, the fix task of `bug-316`)
+— §2: a typed catchall declares its extra keys, per `bug-316`.** `spec-002` lets a project add its own
+`paths` category, yet the warning reported every such category as "ignored" while `wingfoil paths <name>`
+served it. `Paths` now takes `.catchall(z.array(z.string()))`, and §2 states the rule the listing
+follows: a key absent from `shape` is unknown only when the schema has no catchall or a passthrough one.
+The listing gains `hasTypedCatchall`, and the "Trigger point" paragraph no longer limits the recursion to
+`.passthrough()` levels. No other section changed. Edited in place without a supersede or a state change
+(`dl-047`).
