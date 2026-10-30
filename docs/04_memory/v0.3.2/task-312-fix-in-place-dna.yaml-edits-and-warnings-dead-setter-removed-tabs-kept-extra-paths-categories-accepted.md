@@ -45,6 +45,110 @@ inline comment into spaces. `bug-316`: the DNA loader warns on every extra `path
        reject's `Reason:` (read with `wingfoil memory history <task-id>`), each with the command that
        shows it resolved and what that command printed; then what else changed on the next pass. -->
 
+### design (architect, 2026-10-30)
+
+**Inputs read.** `depends_on: []` (no dl-015 gate); no handover. Base: `release/0.3` `f52abb6e` + the start commit
+`c362c3f8` and the three bug syncs (`git log --oneline -5` → head `f7626abf`). Specs: `spec-002-dna-yaml-schema` and
+`spec-009-validation-strategy` are `approved` (`grep -n "^status" docs/04_memory/design/specs/spec-00{2,9}*.md`).
+`dl-081`'s rule as `src/dna/path.ts` states it ("accepts unknown keys when reading a document and refuses to write
+one") is untouched by this task.
+
+**Reproductions, on the code build of this worktree** (`node dist/cli.js --version` → `0.3.1 (f52abb6e…)`), in a
+scratch repository outside the worktree scaffolded by `init --template Scrum`:
+- `bug-255`: line 9 set to `  name: ab`, a tab, `# your project name`, committed; `dna set project.name --value cd`
+  → exit 0, and `sed -n 9p .wingfoil/dna.yaml | od -c` → `n a m e : c d ␠ # …` (the tab is one space); `--value c`
+  → two spaces. The path is `applyDnaEditInText` → `editSetScalar` → `rewriteKeyLine` (`src/dna/edit.ts`), which
+  counts every character before `#` as one column.
+- `bug-316`: `extras: ["notes/"]` added under `paths:` and committed. `dna show paths` → stderr `warning:
+  .wingfoil/dna.yaml: unknown field(s) ignored: paths.extras`, exit 0, and the payload carries `extras`;
+  `paths extras` → the same warning, then `{"category": "extras", "paths": ["notes/"]}`, exit 0 — the field the warning
+  calls "ignored" is served. With `mystery: 1` appended at the root, `paths extras --format json` → `{"warning":
+  ".wingfoil/dna.yaml: unknown field(s) ignored: paths.extras, mystery"}`. `dna add paths.extras --value x` → `error:
+  unknown DNA field 'paths.extras': 'extras' is not declared under 'paths'`, exit 1 (the write side stays closed).
+- `bug-254`: `grep -rn "setDnaValueInText(" src | grep -v "^src/dna/set.ts"` → nothing (exit 1);
+  `grep -rn setDnaValueInText src test | wc -l` → `44`; `src/core/index.ts:30` imports only `DNA_KEY_ALIASES,
+  splitDnaPath` from `../dna/set`. `edit.ts` imports `inlineCommentIndex` and `valueOf` from `./set`: those two stay.
+- No existing test pins the `paths` warning: `grep -rn "ignored: paths" test src` → only the header comment of
+  `test/core/paths-health.test.ts:7` (history of `task-222`), so "the test that pins the warning" of `bug-316`'s
+  Expected Behavior is the new one below.
+
+**AC classification and what qa must pin.** All new tests go in NEW files (so the developer may reword the
+`setDnaValueInText` comments of the existing test files, which the red commit must not touch — T4).
+
+| AC | Class | Pin |
+|----|-------|-----|
+| 1 | **red-first** (proposed, D1) for the export; characterization for "no caller" | New `test/dna/set-exports.test.ts`: `import * as dna from '../../src/dna'` and `import * as set from '../../src/dna/set'`; `expect(Object.keys(dna)).not.toContain('setDnaValueInText')`, same for `set` (red: runtime, both keys present today; no TS2305, a namespace import compiles either way). Characterization in the same file: `set` still exports `inlineCommentIndex`, `valueOf`, `splitDnaPath`, `isValidKeyPath`, `quoteDnaSegment`, `DNA_KEY_ALIASES`, and `dna` still exports `splitDnaPath`, `isValidKeyPath`, `quoteDnaSegment`, `DNA_KEY_ALIASES`, `applyDnaEditInText`. The "nothing else referenced it" half is the grep above, recorded, no test. |
+| 2 | red-first | New `test/dna/edit-comment-gap.test.ts`, calling `applyDnaEditInText(text, { kind: 'set-scalar', path: [...], value }, intended)` with `intended` the whole expected document (`load` of the expected text). Red cases (tab today becomes `' '`): (a) `project:\n  name: ab\t# your project name\n`, path `[{key:'project'},{key:'name'}]`, value `'cd'` → `project:\n  name: cd\t# your project name\n`; (b) a key on a `- ` line and one under it: `modules:\n  - name: core\n    path: ab\t# where it lives\n`, path `[{key:'modules'},{index:0},{key:'path'}]`, value `'cd'` → tab kept; (c) CRLF: `project:\r\n  name: ab\t# c\r\n` → `project:\r\n  name: cd\t# c\r\n`; under D2 (a) also (d) shorter value `'c'` → `  name: c\t# your project name` and (e) longer value `'a-much-longer-name'` → `  name: a-much-longer-name\t# your project name`. Characterization: (f) a space gap, same width: `name: ab   # c` → `name: cd   # c`; (g) a space gap keeps its column when the value changes width (the `version: 1.1 … # [AUTHORING] config-file format version` case of `test/dna/set-in-text.test.ts`'s second test, value `'1.2'` → `#` at the same index; ported from the suite AC 1 deletes); (h) a `#` inside a quoted value is not a comment: `motto: 'not # a comment'   # but this one is\n`, value `'plain'` → `motto: plain               # but this one is\n` (ported: the only test of `inlineCommentIndex`'s quote handling is in the suite being deleted). End to end, in new `test/core/dna-set-tab-before-comment.test.ts`, the bug's own reproduction through the registered `dna set` op (as `test/core/dna-set.test.ts` drives it) on a temp repo: the committed `dna.yaml` line keeps `\t#`. |
+| 3 | red-first | New `test/core/paths-extra-category.test.ts`, shaped like `test/core/paths-health.test.ts` (its `DNA_FIXTURE`, `withWarningSink`, `loadDnaYaml`, the `paths` op). Red: (a) fixture + `  extras: [ notes/ ]` → warnings `[]` and `dna.paths.extras` `['notes/']`; (b) the `paths` op with positional `extras` → `{ ok: true, value: { category: 'extras', paths: ['notes/'] } }` with warnings `[]`; (c) fixture + extras + a root `mystery: 1` → exactly one warning matching `/dna\.yaml: unknown field\(s\) ignored: mystery$/` (today `paths.extras, mystery`); under D3 (A) also (d) `  extras: 3` → `loadDnaYaml` throws, message matching `/paths\.extras/`. Characterization: (e) `mystery: 1` alone, and a nested `team` key `mystery: 1`, still warn (`… ignored: mystery`, `… ignored: team.mystery`); (f) `dna add paths.extras --value x` still refused, `unknown DNA field 'paths.extras'` (the write side is closed, dl-081). Unit, in `test/validation/warning.test.ts` (D3 (A)): `z.object({ known: z.string() }).catchall(z.array(z.string()))` with `{ known: 'x', extra: ['y'] }` → nothing written (red); the existing passthrough cases stay as they are. Warning texts are copied from a real run (the probe lines above); the label comes from `loadDnaYaml(<abs root>)` and qa records the command that printed it. |
+
+**Design.**
+- **AC 1** (`bug-254`): delete `setDnaValueInText` and every helper only it uses from `src/dna/set.ts`
+  (`KeyLine`, `Resolution`, `KEY_LINE`, `indentOf`, `hasContinuation`, `resolveKeyPath`, `replaceLeafValue`,
+  `insertKeyPath`, `renderScalar`, `readsBackAs`, the `js-yaml` import); keep `inlineCommentIndex` / `valueOf`
+  (their TSDoc names one write path now). Drop the re-export from `src/dna/index.ts`. Reword the TSDoc that cites it:
+  `src/dna/set.ts` (header, `splitDnaPath`), `src/dna/edit.ts` (header), `src/directives/roles-edit.ts:13` — the
+  last one is outside the Implementation Notes' file list, declared here (it is in `bug-254`'s Expected Behavior).
+  Delete `test/dna/set-in-text.test.ts` (24 tests) in green; reword the comments in `test/dna/set.test.ts:13`,
+  `test/dna/edit.test.ts:3-12`, `test/core/dna-set-comment-preservation.test.ts:146`, so that
+  `grep -rn setDnaValueInText src test` is empty.
+- **AC 2** (`bug-255`): in `rewriteKeyLine`, take the original gap = the whitespace run right before the `#` in
+  `key.rest`. D2 (a): a gap holding a tab is kept verbatim whatever the new width; a space-only gap keeps today's
+  column rule (which, at an unchanged width, is the same gap). `test/dna/edit.test.ts:515` (`paths:      # the paths`)
+  must stay green unchanged. Same-class check: `grep -rn "' '.repeat(column" src` → `src/dna/edit.ts:203` and
+  `src/dna/set.ts:328` (`replaceLeafValue`, deleted by AC 1); `roles-edit.ts:289-290` keeps a comment with its own
+  leading whitespace, so it has no such instance.
+- **AC 3** (`bug-316`), D3 (A): `Paths` becomes `.catchall(z.array(z.string()))` (spec-002: "Each maps to an
+  ordered `string[]`"), and `collectUnknownFields` (`src/validation/warning.ts`) treats a key absent from `shape` as
+  unknown only when the schema has no catchall or a passthrough one (`schema.def.catchall.def.type === 'unknown'`,
+  read structurally; Zod 4.6.7: `.passthrough()` → `unknown`, `.catchall(z.array(...))` → `array`, a plain object →
+  no catchall, `.strict()` → `never`, which fails Pass 1 before the warning runs). No schema in `src/` has a typed
+  catchall today (`grep -rn "catchall" src` → nothing), so only `paths` changes. The write side is not touched:
+  `path.ts` reads `def.shape`, so `dna add paths.extras` stays refused.
+
+**Files to touch.** `src/dna/set.ts`, `src/dna/index.ts`, `src/dna/edit.ts`, `src/dna/schema.ts`,
+`src/validation/warning.ts`, `src/directives/roles-edit.ts` (TSDoc only); tests: delete `test/dna/set-in-text.test.ts`,
+comments in `test/dna/set.test.ts`, `test/dna/edit.test.ts`, `test/core/dna-set-comment-preservation.test.ts`; red adds
+the five files above (`test/validation/warning.test.ts` gains cases). Optional, D4: a scenario in
+`docs/02_requirements/02_bdd/features/p2-dna/P2.5-paths.feature`. No `.wingfoil/` file, no workflow, no CLI help text,
+so no `version:` bump, no `npm run check:mcp`, no `docs/cli-reference.md` change, and no test pinning a phase or
+step list is affected. Pending amendments (prepared uncommitted by the developer, `dl-047`): `spec-009` §2 (the
+listing and the rule: a declared catchall makes extra keys known) with a Revision note; `spec-002` Categories (an
+extra category is a `string[]`, validated, loads without a warning; the write verbs still refuse it) with a Revision
+note; the `### Retrospective` subsection `bug-254` and `bug-255` lack (`bug-316` has one).
+
+**Existing tests of the files to change**, run before any change: `npx jest test/dna test/validation/warning.test.ts
+test/validation/two-pass.test.ts test/core/dna-set-comment-preservation.test.ts test/core/paths-health.test.ts
+test/core/dna-set.test.ts test/core/dna-mutation-surface.test.ts test/directives/roles-edit.test.ts
+test/cli/unknown-field-warning.integration.test.ts test/core/format-key.test.ts --maxWorkers=2` → `Test Suites: 21
+passed, 21 total`, `Tests: 538 passed, 538 total`.
+
+**Decisions for the approver.**
+- D1 — AC 1's class. (a) red-first for "not exported" (the pin above), characterization for "no caller"; (b) keep it
+  characterization, evidence by grep only, no test. Recommendation: (a) — the AC's observable is new, and the pin keeps
+  the dead export from coming back.
+- D2 — the gap rule when the width changes (`bug-255` asks for the rule to be stated). (a) a gap holding a tab is
+  kept verbatim, a space-only gap keeps its column; (b) verbatim only at an unchanged width, column alignment (spaces)
+  otherwise; (c) tab-stop arithmetic. Recommendation: (a) — a tab is never turned into spaces, the column rule for
+  spaces (pinned by `test/dna/edit.test.ts`) is unchanged, and no tab width is assumed.
+- D3 — how `paths` admits extras. (A) a typed catchall `string[]` on `Paths` + the warning reads the catchall (an
+  extra category that is not a list of strings becomes a validation error at `paths.<name>`, where today it loads with
+  a warning and `paths <name>` answers `no paths mapped`); (B) keep `.passthrough()` and mark `Paths` as open in a
+  registry in `src/validation/warning.ts` (no shape check); (C) special-case the `paths` key in the warning. Each
+  contradicts the letter of `spec-009` §2 ("the same diff is applied recursively at each nesting level that itself
+  has a `.passthrough()` schema"), hence the amendment. Recommendation: (A) — declared in the schema, the one source
+  of truth `path.ts` already reads, and it matches spec-002's "Each maps to an ordered `string[]`".
+- D4 — a BDD scenario in `P2.5-paths.feature` ("a project-specific category is served with no warning"). Recommendation:
+  yes, written by the developer in green, the red test of AC 3 (b) naming it.
+
+**Risks for the other open w1 tasks.** No file overlap with the files `task-313` (`src/memory/schema.ts`,
+`src/memory/audit.ts`), `task-310` (`src/core/directives-list.ts`), `task-320` (`scripts/release-health/measure.cjs`,
+`bindings.yaml`) or `task-321` (`src/storage/templates.ts`, `test/cli/init-command.test.ts`, user docs) declare. The
+warning-rule change in `src/validation/warning.ts` reaches every loader (`emitUnknownFieldWarning` in
+`src/validation/two-pass.ts` and three calls in `src/core/loaders.ts`), but changes only schemas with a typed catchall,
+of which `Paths` is the only one: a `task-313` change that added `.catchall(<type>)` to a `memory.yaml` schema would
+silence that schema's unknown-field warning, and should be checked at merge. `task-321`'s scaffold of `paths` is
+unaffected (its `health` example is a declared category).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
