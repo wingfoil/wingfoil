@@ -462,6 +462,20 @@ T4: `git log --first-parent --no-merges --format=%h 70531e91e..HEAD -- <the seve
   owes the bug: an unreadable configuration file is a ConfigFileUnreadableError mapped to IO on the configuration readers;
   the two write paths left out are bug-454."`
 
+### sync with release/0.3 (developer, 2026-10-30)
+
+`git rev-list --count HEAD..release/0.3` → `73` (task-315 among them, which changed `docs/cli-reference.md`). The two
+pending bug amendments were stashed (`git stash push -- <bug-025, bug-251>`, `git status --short` → empty), then
+`git merge --no-edit release/0.3` → merge commit `6743aeb64` (no conflict; trailers added by amend), then `git stash pop`
+→ both amendments re-applied cleanly (no conflict markers: `grep -c '^<<<<<<<'` on both → `0`). After the merge
+`git rev-list --count HEAD..release/0.3` → `0`; of this task's files the merge changed only `docs/cli-reference.md`
+(`git diff --name-only HEAD^1 HEAD -- src/core/loaders.ts src/core/index.ts docs/cli-reference.md` →
+`docs/cli-reference.md`), and both of this task's sentences are still there (`grep -c` on them → `2`).
+Checks: `npx tsc --noEmit -p tsconfig.json` → exit 0; `npx jest test/docs test/core/config-file-unreadable-paths.test.ts
+test/core/project-directives.test.ts test/cli/directive-missing-field.integration.test.ts
+test/cli/config-missing-refusal.integration.test.ts test/mcp/config-missing-refusal.test.ts --maxWorkers=2` →
+`Test Suites: 34 passed, 34 total`, `Tests: 360 passed, 360 total`. The full suite is left to the wave checks.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
