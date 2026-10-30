@@ -339,6 +339,117 @@ hit.
 one above. The `memory/release` case expects the `warnings` field absent, not empty. The `--type nosuch` core case
 accepts `warnings` absent or empty.
 
+### green (developer, 2026-10-30)
+
+**Green commit `a6ec916c`** (`git log --oneline -1 a6ec916c8` → `a6ec916c8 fix(memory): task-314 — typed Memory reads warn
+only about files that type can hold (bug-283)`), `git show --stat --format= a6ec916c8` → `src/core/index.ts`,
+`src/memory/query.ts`, `src/storage/memory-path.ts`, `src/workflow/deduce.ts` (`4 files changed, 94 insertions(+), 31
+deletions(-)`), all four in the design's list; no red file touched.
+
+- `src/storage/memory-path.ts`: `pathPatternRegExp` exported, its body moved byte for byte from `src/workflow/deduce.ts`
+  (the doc comment extended to name its two readers); `src/workflow/deduce.ts` imports it from `../storage/memory-path`
+  (the module, not the barrel), no other change there.
+- `src/memory/query.ts`: a private `DocumentReports` (the scan options plus `reportsNewer`) taken by `readableDocuments`
+  and `findFirst`, and a private `typeScopedReports(memoryYaml, type, options)` returning `scan` (an `onDiagnostic` that
+  passes a report on only when `pathPatternRegExp(<type>.path)` matches its `file`: the unparsable and the link kinds)
+  and `documents` (`reportsNewer`: the document's own `type:` is `type`, design gate D2 (a)); an undeclared type has no
+  pattern and reports nothing (D3 (a)). `listMemoryDocumentsByType`, `findMemoryDocumentByTypeAndId` and
+  `findMemoryDocumentByTypeAndIdAtRev` use it (D1 (c)); `MemorySearchOptions.type` filters the documents and scopes the
+  reports in the same pass. No options passed: the reports are untouched (`typeScopedReports` returns `options` as is).
+- `src/core/index.ts` (`memorySearchFn` only): `--type` goes to `searchMemoryDocuments` instead of filtering the ranked
+  array; `--status` still filters it. The result set and order are unchanged (the type filter is per document, the sort
+  is total).
+
+**red → green.** `npx jest test/mcp/resource-warnings-type-scope.test.ts test/memory/query-type-scoped-warnings.test.ts
+test/core/memory-search-type-warnings.test.ts --maxWorkers=2` → red: `Tests: 16 failed, 4 passed, 20 total` (red notes);
+green: `Test Suites: 3 passed, 3 total`, `Tests: 20 passed, 20 total`. Neighbours (the design's fifteen suites plus
+`test/agent`): `npx jest --maxWorkers=2 <the fifteen files of the design's "Existing tests" list> test/agent` →
+`Test Suites: 27 passed, 27 total`, `Tests: 529 passed, 529 total`. `npx tsc --noEmit -p tsconfig.json` → exit `0`.
+
+### refactor (developer, 2026-10-30)
+
+Refactor commit ``24a0436d` (`git log --oneline -1 24a0436db` → `24a0436db refactor(memory): task-314 — scope the WIP-limit read too,
+document the typed warnings (bug-283)`; `git diff --stat a6ec916c8 24a0436db` → `6 files changed, 157 insertions(+), 13
+deletions(-)`: `src/memory/query.ts`, `src/mcp/memory-resource.ts`, `docs/cli-reference.md`, the P1.5 feature and the two
+new test files below)`. Base: `git rev-list --count HEAD..release/0.3` → `0` at the start and at the end of
+refactor, no merge.
+
+- Doc comments: `src/memory/query.ts` (module header "Tolerant reads", `listMemoryDocumentsByType`, both
+  `findMemoryDocumentByTypeAndId*`, `searchMemoryDocuments`), `src/mcp/memory-resource.ts` (the two call-site comments,
+  comments only: `git diff a6ec916c8 -- src/mcp/memory-resource.ts | grep '^[-+] ' | grep -v '^[-+] *//'` → no output).
+- **Same class in a touched file** (W0-R6): `loadTypeDocumentCopiesAtRevs` (`src/memory/query.ts`), the read of one type
+  behind the WIP-limit count (`requireWipSlot`, `src/core/memory-transition.ts`), lists the type's static directory and
+  reported every unreadable file in it — for `release`, the `release-line` files of `docs/04_memory/planning/`. It now
+  uses `typeScopedReports` too. Pinned by a new test of mine, `test/memory/type-document-copies-scoped-warnings.test.ts`
+  (this repository's `release` / `release-line` patterns): with `src/memory/query.ts` of `a6ec916c` (`git stash push
+  src/memory/query.ts`) → `Tests: 2 failed, 2 total`; with the fix → passes, and `test/core/memory-wip-limits.test.ts` with
+  it → `Test Suites: 2 passed`, `Tests: 33 passed, 33 total`. A decision for the approver (below), since D1 (c) named the
+  four readers of the design's table.
+- New unit test of the moved export, `test/storage/memory-path-pattern-regexp.test.ts` (5 tests: file-name token,
+  directory token, `release` against `release-line`, `task`'s every-path case, escaped literals) → passes.
+- `docs/cli-reference.md` (`memory search` entry, D4): one sentence — with `--type`, the warnings name only the files
+  that type could hold. `docs/02_requirements/02_bdd/features/p1-memory/P1.5-memory-search.feature` (D4): scenario
+  "Edge - a typed search warns only about files of that type", whose test is
+  `test/core/memory-search-type-warnings.test.ts` (red's).
+- AC2: `spec-004` §2.2 and a Revision note prepared uncommitted (pending amendment below).
+
+Gates (heavy ones after `waitslot.sh`, `--maxWorkers=2`, one jest at a time, with the pending amendments in the tree):
+- `npm run lint` → exit `0`. `npm run docs:api` → exit `0`. `npm run typecheck` (both configs) → exit `0`.
+- `npm run test:coverage -- --maxWorkers=2` → `All files | 99.31 | 97.42 | 98.19 | 99.68` (statements, branches,
+  functions, lines; > 80 % on every column); `Test Suites: 1 failed, 523 passed, 524 total`, `Tests: 2 failed, 9186
+  passed, 9188 total` (1265 s). The one failing suite is `test/storage/git-root.test.ts` ("returns null when no ancestor
+  directory contains .git" → received `"/tmp"`; "throws E_NO_GIT_ROOT when not inside a git repository at all" →
+  received `E_NOT_AT_GIT_ROOT`). Not this task's: the host has an empty directory `/tmp/.git` (`ls -la /tmp/.git` → only
+  `.` and `..`, dated 2026-10-29 17:09, before this task's green), so a temp dir under `/tmp` has a git ancestor;
+  `git diff --stat release/0.3 -- src/storage/git-root.ts test/storage/git-root.test.ts` → no output; alone (`npx jest
+  test/storage/git-root.test.ts`) → `Tests: 2 failed, 4 passed, 6 total`. Reported as a candidate finding, not fixed
+  and `/tmp/.git` not touched (W0-R6).
+- `npm test -- --maxWorkers=2` → `Test Suites: 1 failed, 523 passed, 524 total`, `Tests: 2 failed, 9186 passed,
+  9188 total` (769 s), with this file's notes and the two pending amendments in the tree: the same two
+  `test/storage/git-root.test.ts` tests, for the same `/tmp/.git`, and nothing else.
+- Document parity (`docs.parity`): the `test/docs/` suites ran in both full runs (`find test/docs -name "*.test.ts" | wc -l` → `29`; the only failing suite of either run is
+  `test/storage/git-root.test.ts`, so all 29 passed);
+  `npx jest test/docs/cli-reference.test.ts --maxWorkers=2` with the new sentence → passed (with the five task suites:
+  `Test Suites: 5 passed, 5 total`, `Tests: 29 passed, 29 total`).
+
+### self-review (developer, 2026-10-30)
+
+Against code-review, on `git diff release/0.3...HEAD` plus the working tree:
+- **AC1 (red-first) — met.** The twenty red tests pass (above); each typed reader of the design's table is scoped:
+  `memory/{type}` and `memory/{type}/{id}` (`test/mcp/resource-warnings-type-scope.test.ts`), the three primitives
+  (`test/memory/query-type-scoped-warnings.test.ts`), `memory search --type` through `CORE_MODULES` and the CLI with
+  `--format console` and `--format json` (`test/core/memory-search-type-warnings.test.ts`). Positive cases of the absence
+  claims: the adr read still reports both adr lines, `memory/task` every unparsable file, a search without `--type` all
+  four lines (characterization), so the scoping drops only other types' files.
+- **AC2 (characterization) — prepared**, uncommitted, for the approver's `memory amend` (`dl-047`).
+- **bug-283's Expected Behavior — met in full**: "a file that only the other types' `path` patterns can produce is left
+  out of this type's warnings; a file this type's pattern could have produced is still reported" is exactly the
+  `scan` rule; the newer-format kind has a readable `type:` and follows it (D2 (a)). Its Notes' limit holds for `task`
+  only (`release` / `release-line` are told apart by the full pattern, `test/storage/memory-path-pattern-regexp.test.ts`).
+  Its missing `### Retrospective` is prepared as a pending amendment.
+- Determinism: no new iteration over an unordered set; the reports keep path order (the scans are unchanged).
+- Untyped readers unchanged: `loadMemoryDocuments*`, `findMemoryDocumentById*`, `searchMemoryDocuments` without `type`
+  pass their options through as before (`test/core/memory-scan-tolerant.test.ts`, `test/mcp/resource-warnings.test.ts`
+  green).
+- Invisible characters: `grep -nP '[\x{0080}-\x{009F}…]'` over every changed file before each commit → no hit.
+- T4: `git log --first-parent --no-merges --format=%h da0e81b73..HEAD -- test/core/memory-search-type-warnings.test.ts
+  test/mcp/resource-warnings-type-scope.test.ts test/memory/query-type-scoped-warnings.test.ts` → no output (no red file changed since
+  the red commit).
+
+### Pending amendments (approver)
+
+- `spec-004-mcp-surface-contract` (§2.2, the collection and single-document sentences, and a Revision note of
+  2026-10-30): `--reason "Record task-314's §2.2 amendment: a typed Memory read reports only the unreadable files its
+  type can hold — by the type's path pattern, or by type: for a newer-format document (bug-283)."`
+- `bug-283-the-memory-type-mcp-resource-warns-about-unreadable-documents-of-every-type-not-only-of-the-type-it-lists`
+  (its `### Retrospective`, appended): `--reason "Add the retrospective of bug-283, fixed by task-314."`
+
+### Decisions for the approver (developer)
+
+- **D6 — the WIP-limit read.** `loadTypeDocumentCopiesAtRevs` was scoped in this task as the same class in a touched
+  file (W0-R6), beyond the four readers D1 (c) named: a `memory` transition checked against a limit now warns only about
+  the unreadable files of the type it counts. Recommendation: accept; the alternative is to revert that hunk and file it.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -346,3 +457,12 @@ accepts `warnings` absent or empty.
      printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
      Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
      here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+
+- The design's file list missed one typed reader in a file it named: `loadTypeDocumentCopiesAtRevs` (`src/memory/query.ts`,
+  behind `requireWipSlot`) had the same defect and was fixed at refactor as the same class (`24a0436d`, decision D6).
+  Evidence: `grep -n "onDiagnostic" src/memory/query.ts` lists it beside the three primitives the design scoped; the
+  design's reader table was built from `grep -rn "onDiagnostic" src` at the call sites, which shows `requireWipSlot`'s
+  own `onDiagnostic` but not that it reads one type. Proposal: a design that scopes "every typed reader" lists the
+  exported functions taking a `type` argument (`grep -n "type: string" <module>`), not only the call sites.
+- A stray empty `/tmp/.git` on the host fails `test/storage/git-root.test.ts` in every full run (2 tests, coverage and
+  `npm test` above); a gate in a shared `/tmp` depends on no other process creating a `.git` there.
