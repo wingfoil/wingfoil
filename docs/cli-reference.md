@@ -24,7 +24,9 @@ with `error: WingFoil not initialized (no .wingfoil/ directory at the project ro
 first`. When `.wingfoil/` exists but lacks the file the command needs, the error names that file from
 the project root — `error: .wingfoil/dna.yaml is missing: restore it from git, or re-create it (…)` —
 and a file that does not validate is named the same way (`(.wingfoil/dna.yaml)`), never by its path on
-your machine.
+your machine. New in 0.3.2: a file that exists but cannot be read is named the same way, with the cause —
+`error: .wingfoil/dna.yaml cannot be read: permission denied`, `error: .wingfoil/dna.yaml is a directory,
+not a file` (exit `1`).
 
 ### Argument grammar
 
@@ -1021,7 +1023,9 @@ The payload also carries `warnings`, which lists what the entries cannot show:
 
 - **Commit:** none.
 - **Errors:** no `.wingfoil/` at the project root → exit `1`, `WingFoil not initialized (no .wingfoil/ directory at the project root): run 'wingfoil init' first`;
-  `.wingfoil/directives/` itself unreadable, or an invalid directive file or `roles.yaml` → exit `1`.
+  `.wingfoil/directives/` itself unreadable, or an invalid directive file or `roles.yaml` → exit `1`. A
+  directive file missing a required header field (`id`, `name`, `type`, `kind`, `title`) is refused with
+  `invalid directive: missing required field '<field>'`, after the file's name (new in 0.3.2).
 
 ### `wingfoil directive create`
 
