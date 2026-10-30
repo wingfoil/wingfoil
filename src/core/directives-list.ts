@@ -18,15 +18,19 @@
  *   dl-037 was raised about, in the one command whose purpose is directive visibility.
  *
  * **Warnings** (`dl-042-directives-list-output-contract` A + D, task-055-auto-load-directives-by-role).
- * The payload is {@link DirectiveListing} — `entries` plus a `warnings` channel — so the two things a
- * reader cannot see in the inventory are said out loud: which of two same-id files is in force, and
- * whether a role is bound at all. Neither is computed here. Without a role filter the warnings are
- * {@link selectDirectivesById}'s shadow warnings over every file, followed by
+ * The payload is {@link DirectiveListing} — `entries` plus a `warnings` channel — so the three things a
+ * reader cannot see in the inventory are said out loud: which of two same-id files is in force, which
+ * bindings name a directive that has no file, and whether a role is bound at all. Without a role filter
+ * the warnings are one per `roles.yaml` binding that names a directive no file defines (task-310,
+ * bug-411 — the dangling-binding text {@link resolveRoleDirectives} uses, and a `global:` entry's own
+ * form), then {@link selectDirectivesById}'s shadow warnings over every file, then
  * {@link directiveScopeWarnings}' report of every directive whose `scope: global` frontmatter disagrees
- * with `roles.yaml`'s `global:` list (task-144, bug-148 — `roles.yaml` decides); with `--role` they are exactly
- * {@link resolveRoleDirectives}' warnings for that role (no-assignments, dangling binding, shadowed
- * ids). Both live in `./context.ts`, so the precedence rule the listing reports is the one context
- * assembly applies — it is never implemented twice.
+ * with `roles.yaml`'s `global:` list (task-144, bug-148 — `roles.yaml` decides); with `--role` and a
+ * `roles.yaml` they are exactly {@link resolveRoleDirectives}' warnings for that role (no-assignments,
+ * dangling binding, shadowed ids), and with `--role` but no `roles.yaml` there is no role warning at all
+ * — nothing was read that could bind the role, as in context assembly (task-310, bug-199). The shadow
+ * and per-role rules live in `./context.ts`, so the precedence rule the listing reports is the one
+ * context assembly applies — it is never implemented twice.
  *
  * **Placement.** This lives in `src/core` rather than `src/directives` for the same reason
  * `resolveRoleDirectives` does: the {@link DirectiveFile} shape it operates on is declared in
@@ -37,14 +41,11 @@
  * is `loadDirectives`'s own lexicographic path order; the per-directive `roles` array is built by
  * walking `assignments`' role names in sorted order, never in YAML mapping order.
  */
-import { join } from 'path';
-
-import { documentExists } from '../storage';
 import type { DirectiveFrontmatter, RolesYaml } from '../directives/schema';
 
 import { resolveRoleDirectives, selectDirectivesById } from './context';
 import { directiveScopeWarnings } from './directive-scope';
-import { loadDirectiveInventory, loadRolesYaml, type DirectiveFile } from './loaders';
+import { ConfigFileMissingError, loadDirectiveInventory, loadRolesYaml, type DirectiveFile } from './loaders';
 
 /**
  * {@link DirectiveListEntry.assignment} for a directive no role names and `roles.yaml`'s `global`
@@ -96,14 +97,12 @@ export interface DirectiveListEntry {
 export interface DirectiveListing {
   /** One entry per directive file on disk — never deduplicated (see the module doc comment). */
   readonly entries: readonly DirectiveListEntry[];
-  /** Without a role filter: shadowed ids, then `scope`/`roles.yaml` disagreements (task-144). With a
-   * role filter: no-assignments, dangling-binding and shadowed-id warnings. Fixed order, empty when
-   * there is nothing to report. */
+  /** The loader's skipped entries first. Then, without a role filter: dangling bindings (task-310),
+   * shadowed ids, `scope`/`roles.yaml` disagreements (task-144). With a role filter and a `roles.yaml`:
+   * no-assignments, dangling-binding and shadowed-id warnings; with no `roles.yaml`, none. Fixed order,
+   * empty when there is nothing to report. */
   readonly warnings: readonly string[];
 }
-
-/** `roles.yaml` as seen when the file is absent: nothing bound, no globals. */
-const NO_BINDINGS: RolesYaml = { assignments: {}, global: [] };
 
 /**
  * Invert `roles.yaml`'s `assignments` (role → directive ids) into directive id → role names.
@@ -132,6 +131,32 @@ function rolesByDirectiveId(rolesYaml: RolesYaml | undefined): Map<string, strin
   return byId;
 }
 
+/**
+ * The unfiltered listing's dangling-binding warnings (task-310, bug-411; `dl-042` D): one per binding in
+ * `rolesYaml` that names a directive id no file in `directiveFiles` defines. Ids ascending; for each id,
+ * a `global:` entry first — `directive '<id>' bound to every role (roles.yaml 'global') has no directive
+ * file`, since it has no single role to name — then one `directive '<id>' bound to role '<role>' has no
+ * directive file` per role whose own assignments name it, roles ascending: the text
+ * {@link resolveRoleDirectives} gives under `--role`, so each line reads the same in both views. A
+ * warning, never an error. Empty without a `roles.yaml`: nothing is bound, so nothing can dangle.
+ */
+function danglingBindingWarnings(
+  directiveFiles: readonly DirectiveFile[],
+  rolesYaml: RolesYaml | undefined,
+  byId: ReadonlyMap<string, readonly string[]>,
+): string[] {
+  if (rolesYaml === undefined) return [];
+  const defined = new Set(directiveFiles.map((file) => file.frontmatter.id));
+  const globalIds = new Set(rolesYaml.global);
+  const bound = [...new Set([...globalIds, ...byId.keys()])].filter((id) => !defined.has(id)).sort();
+  const warnings: string[] = [];
+  for (const id of bound) {
+    if (globalIds.has(id)) warnings.push(`directive '${id}' bound to every role (roles.yaml 'global') has no directive file`);
+    for (const role of byId.get(id) ?? []) warnings.push(`directive '${id}' bound to role '${role}' has no directive file`);
+  }
+  return warnings;
+}
+
 /** Render {@link DirectiveListEntry.assignment} from the entry's `roles`/`global` pair. */
 function renderAssignment(roles: readonly string[], isGlobal: boolean): string {
   const parts = isGlobal ? [GLOBAL_ASSIGNMENT, ...roles] : [...roles];
@@ -144,7 +169,9 @@ function renderAssignment(roles: readonly string[], isGlobal: boolean): string {
  *
  * `rolesYaml` is optional: `undefined` means the project has no `roles.yaml`, which is "nothing is
  * bound yet" (every entry `unassigned`), not a failure — the Directives files and `roles.yaml` are
- * independent artefacts (REQ-SYS-02) and directives can exist before anyone binds them.
+ * independent artefacts (REQ-SYS-02) and directives can exist before anyone binds them. With no
+ * `roles.yaml` the listing asserts nothing about any role: under `role` there is no no-assignments
+ * warning (task-310, bug-199), as context assembly resolves nothing without the file.
  *
  * The `role` filter keeps an entry when that role's own `assignments` name it **or** when it is
  * `global`, because `spec-012` §5 makes globals unconditional for every role. An unbound or unknown
@@ -179,10 +206,32 @@ export function buildDirectiveListing(
       assignment: renderAssignment(roles, isGlobal),
     });
   }
-  const warnings = role === undefined
-    ? [...selectDirectivesById(directiveFiles).warnings, ...directiveScopeWarnings(directiveFiles, rolesYaml)]
-    : resolveRoleDirectives(directiveFiles, rolesYaml ?? NO_BINDINGS, role).warnings;
+  let warnings: readonly string[];
+  if (role === undefined) {
+    warnings = [
+      ...danglingBindingWarnings(directiveFiles, rolesYaml, byId),
+      ...selectDirectivesById(directiveFiles).warnings,
+      ...directiveScopeWarnings(directiveFiles, rolesYaml),
+    ];
+  } else {
+    warnings = rolesYaml === undefined ? [] : resolveRoleDirectives(directiveFiles, rolesYaml, role).warnings;
+  }
   return { entries, warnings: [...skippedWarnings, ...warnings] };
+}
+
+/**
+ * `.wingfoil/roles.yaml`, or `undefined` when it is absent (task-310, bug-455): only the loader's
+ * {@link ConfigFileMissingError} — `ENOENT`, a dangling link included — reads as "no `roles.yaml`"; any
+ * other failure (a link loop, `EACCES`, a directory, an invalid document) propagates. The rule
+ * `absentAsNull` applies in `./workflow-registry.ts`, kept private here (design gate D5 (a)).
+ */
+function readRolesYaml(root: string): RolesYaml | undefined {
+  try {
+    return loadRolesYaml(root);
+  } catch (error) {
+    if (error instanceof ConfigFileMissingError) return undefined;
+    throw error;
+  }
 }
 
 /**
@@ -190,10 +239,12 @@ export function buildDirectiveListing(
  * {@link buildDirectiveListing}, kept separate so the annotation rules stay unit-testable without
  * touching disk.
  *
- * `.wingfoil/roles.yaml` is read only when it exists; when it does exist it goes through the same
- * validating `loadRolesYaml` every other consumer uses, so a malformed or schema-invalid file still
- * raises a `ValidationError` (surfaced as `VALIDATION`, exit 1) rather than being silently downgraded
- * to "nothing is bound". Only a genuinely absent file is tolerated.
+ * `.wingfoil/roles.yaml` is read through {@link readRolesYaml}: the same validating `loadRolesYaml`
+ * every other consumer uses, so a malformed or schema-invalid file still raises a `ValidationError`
+ * (surfaced as `VALIDATION`, exit 1), and a file that exists but cannot be read (a symbolic-link loop,
+ * `EACCES`, a directory) raises the loader's unreadable-file error (`IO`, exit 1) rather than being
+ * silently downgraded to "nothing is bound" (task-310, bug-455). Only a genuinely absent file — `ENOENT`,
+ * a dangling link included — is tolerated.
  *
  * The directive files come from {@link loadDirectiveInventory}, so an entry it skipped (a dangling
  * symbolic link, task-143) is named in the listing's `warnings` instead of failing the whole read.
@@ -202,6 +253,6 @@ export function buildDirectiveListing(
  */
 export function loadDirectiveListing(root: string, role?: string): DirectiveListing {
   const { files, warnings } = loadDirectiveInventory(root);
-  const rolesYaml = documentExists(join(root, '.wingfoil', 'roles.yaml')) ? loadRolesYaml(root) : undefined;
+  const rolesYaml = readRolesYaml(root);
   return buildDirectiveListing(files, rolesYaml, role, warnings);
 }

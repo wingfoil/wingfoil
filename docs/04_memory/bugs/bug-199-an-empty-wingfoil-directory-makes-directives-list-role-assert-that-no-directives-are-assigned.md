@@ -2,7 +2,7 @@
 id: bug-199-an-empty-wingfoil-directory-makes-directives-list-role-assert-that-no-directives-are-assigned
 type: bug
 title: "An empty .wingfoil directory makes directives list --role assert that no directives are assigned"
-status: planned
+status: closed
 severity: "low"           # REQUIRED — critical | high | medium | low
 release-origin: "v0.3"     # optional — release where the bug was FOUND (dl-016), e.g. "v0.1"
 release: "v0.3.2"            # optional — fix/implementation release, stamped by release-planning/build-backlog (dl-016)
@@ -38,3 +38,7 @@ An `incomplete` warning naming what is missing, or no role assertion when `roles
 
 Captured on 2026-10-02 by `bug-ingest-rel-v0.3-w1b3-review-findings-plan`, from the independent reviews of wave 1
 batch B3 (`dev-loop-rel-v0.3-plan`).
+
+### Retrospective
+
+None.
