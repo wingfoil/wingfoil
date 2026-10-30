@@ -395,6 +395,92 @@ test passes. `npx jest test/lint --maxWorkers=2` with the files in place → `Te
 **For the developer.** The gone-at-`HEAD` governance pin asserts only `/newer format/` and not `/does not parse/`: the design names
 no parenthetical for that reason. `DOT_SEGMENT_REFUSAL` expects the two path issues in `types` order (`t`, then `r`).
 
+### green (developer, 2026-10-30)
+
+PATH guard: `command -v wingfoil` → the task's PATH shim, `wingfoil --version` → `0.3.1
+(a62881b2…)`. Base: `git rev-list --count HEAD..release/0.3` → `0` at the start and at the end of refactor, no merge.
+
+**Commit `39815420`** (`fix(memory): task-313 — refuse a type path or id_pattern no add can use at load, and read no
+status from a newer-format past revision (bug-216, bug-262, bug-360)`), as the design and the gate rulings say:
+- `src/memory/schema.ts`: `MemoryTypeEntry` gains a `.superRefine` — `typePathIssue` (absolute first: a leading `/` or
+  `\`, or a drive letter `X:` → `must be a relative path`; then a segment split on `/` and `\` equal to `.` or `..` →
+  `holds a '.' or '..' segment`; empty segments accepted, D2 (a)) and one issue per `idPatternIssues` entry on
+  `id_pattern` (D1 (a), D3 (a)). The issue paths are `['path']` / `['id_pattern']`, which Zod nests to
+  `types.<type>.<field>`; `types` is walked in insertion order by the record schema.
+- `src/memory/audit.ts`: `parseStatus` checks `newerFormatIssue(parsed, MEMORY_TEMPLATE_FORMAT, label)` after the YAML
+  parse and returns it as `unreadable`; `unreadableReason` renders an `E_INVALID_FORMAT` issue as `<code>: <message>`
+  (the scan channel's form) and keeps the parse error's message otherwise. Strict mode throws it unchanged. TSDoc of
+  `parseStatus`, `StatusRead`, `ReconstructOptions.strict` and `MemoryTransition.unreadable` widened.
+- `src/core/index.ts`: TSDoc of `MemoryHistoryEntryView.unreadable` only.
+- `scripts/check-governance.cjs` (D4 (a)): `readOrReport` names `a revision is written in a newer format (<first line>)`
+  when `isNewerFormatError(error)`, `a revision's frontmatter does not parse (…)` otherwise; `readFrontmatterFields`
+  checks the same counter and returns `{ unreadable: 'E_INVALID_FORMAT: …', newer: true }`, and the gone-at-`HEAD`
+  reader names `a revision is written in a newer format (E_INVALID_FORMAT: …)`. The supersedes-pair and
+  status-outside-wf readers already skip an `unreadable` revision, so they skip a newer one the same way. The summary
+  line's parenthetical gains "or is in a newer format".
+
+**Commit `4c113c51`** (`docs(cli): …`): `docs/cli-reference.md` `memory add` *Errors* exit `1` and `memory history`,
+each a "New in 0.3.2" sentence as the design asked. The `E_PATH_OUTSIDE_TYPE_FOLDER` sentence of `memory add` gives no
+literal-`..` example on this base (`grep -n "literal" docs/cli-reference.md` → no hit in that entry), so nothing was
+removed from it.
+
+**Red → green.** `npx jest --maxWorkers=2` on red's eleven suites (the list of `### red`) → `Test Suites: 11 passed, 11
+total`, `Tests: 228 passed, 228 total` (red: 10 failed suites, 29 failed tests). `npx tsc --noEmit -p tsconfig.json` →
+exit 0.
+
+### refactor (developer, 2026-10-30)
+
+No structural refactor beyond green: `typePathIssue` and `unreadableReason` are the two helpers. Gates, the heavy ones
+each in the heavy-gate slot (dl-170), `--maxWorkers=2`, in the worktree, with the pending amendments in the working tree:
+- `npm test -- --maxWorkers=2` → `Test Suites: 1 failed, 529 passed, 530 total`, `Tests: 1 failed, 9320 passed, 9321
+  total`: `test/docs/name-resolvability.test.ts` "finds no unresolved name the allowlist does not list" reported the
+  two Revision headings of the spec-001 and spec-008 amendments, which cited this task by its full id; its
+  `memory.yaml` piece was read as an unresolved config name. Fixed in the amendments (the heading cites `task-313` and
+  names the task in words); `npx jest --maxWorkers=2 test/docs/name-resolvability.test.ts` → `Tests: 11 passed, 11
+  total`.
+- `npm run test:coverage -- --maxWorkers=2` (the whole suite again, after the fix) → `Test Suites: 530 passed, 530
+  total`, `Tests: 9321 passed, 9321 total`; `All files` 99.32 % statements, 97.43 % branches, 98.16 % functions,
+  99.7 % lines. `src/memory/schema.ts` 100/100/100/100; `src/memory/audit.ts` 100/98.59/100/100 (uncovered branch
+  line 381, the `?? error.message` fallback of `unreadableReason` for a `ValidationError` with no issue, which
+  `parseYaml` never throws).
+- `npm run lint` → exit 0, no output. `npm run docs:api` → exit 0, no output. `npm run typecheck` (both tsc
+  configs) → exit 0, no output.
+- `docs.parity` and `test/docs/cli-reference.test.ts` ran inside both full runs above (all of `test/docs/` passed in
+  the coverage run).
+- T4: `git log --first-parent --no-merges --format=%h 8afe963ff..HEAD -- <the 13 files of 8afe963ff>` → empty.
+
+### self-review (developer, 2026-10-30)
+
+Against `code-review`, with the design gate's rulings:
+- AC 1: `schema.test.ts` (6 refusals, 5 accepted), `loaders.test.ts` (working tree and `HEAD`), both path-token suites
+  (core and CLI, nothing written) and P1.13 scenario 12 in `element-schema.test.ts` pass (the red → green run above).
+- AC 2: `schema.test.ts` (5 single issues, the two-issue order, the accepted patterns and every live `id_pattern`) and
+  `memory-yaml-id-pattern.integration.test.ts` (`memory search` console and JSON, `memory add` with no `--set n:0`
+  advice) pass.
+- AC 3: `audit-parent-unreadable.test.ts` (tolerant, strict, `format: 1`, absent, `1.5`), `memory-history.test.ts`,
+  `memory-history-newer-format.integration.test.ts` and the two governance cases pass; the existing `/does not
+  parse/` pins pass unchanged (`check-governance.test.ts` whole in the coverage run).
+- AC 4: the spec-001 text is prepared as a pending amendment below (path rule, `id_pattern` at load, past-revision
+  format in history, Revision note), with spec-008 §10's row (D5 (a)).
+- Same class in the files touched: the governance blob reader `readFrontmatterFields` serves three readers; all three
+  now treat a newer-format revision as unreadable (above). The workflow loader's `id_pattern` check already used
+  `idPatternIssues` (`grep -n idPatternIssues src/workflow/schema.ts` → line 67).
+- Absence claims, each with its positive case: no repository revision is in a newer format (`git log -G '^format:
+  [2-9]' -- docs/04_memory docs/05_plans` was the design's check; the governance run after submit is the positive
+  case below); the live `memory.yaml` passes both rules (the characterization test reading it passes).
+- spec-008 §10 row: the design said a symlink still reaches `E_PATH_OUTSIDE_TYPE_FOLDER`; `src/storage/memory-path.ts`
+  lines 176–199 show a symlink leaving the project is `E_PATH_ESCAPES_ROOT` and the type-folder check is a
+  string-normalized comparison, so the amended row names only a token value as the remaining cause.
+
+### Pending amendments (approver)
+
+Prepared in the worktree, uncommitted; the gates above ran with them in place.
+- `spec-001-memory-yaml-schema` — `--reason "Record task-313's load-time checks of a type's path and id_pattern and the format check of a past revision in memory history, with a Revision note (bug-216, bug-262, bug-360; design gate 2026-10-30)."`
+- `spec-008-cli-grammar` — `--reason "Amend the §10 E_PATH_OUTSIDE_TYPE_FOLDER row: a literal .. in a type path is now refused when memory.yaml loads, so the row names only a token value as its cause (task-313, bug-360, design gate D5 (a))."`
+- `bug-216` — `--reason "Add the Retrospective of the bug task-313 closes, recording that the refusal uses the E_VALIDATION form ruled at the design gate (D1 (a))."`
+- `bug-262` — `--reason "Add the Retrospective of the bug task-313 closes."`
+- `bug-360` — `--reason "Fill the Retrospective of the bug task-313 closes."`
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -402,3 +488,9 @@ no parenthetical for that reason. `DOT_SEGMENT_REFUSAL` expects the two path iss
      printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
      Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
      here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+
+- A spec Revision heading that cites a task by its full id breaks `test/docs/name-resolvability.test.ts` when the id
+  holds a file name (`memory.yaml`): the full run reported it as an unresolved config name (refactor above). Proposal:
+  the resolvability scan skips a token matching a Memory id pattern, or the dev-loop notes say to cite such a task
+  by its short id.
+- The dl-170 heavy-gate slot held each of the three heavy runs 20–50 minutes behind the other w1 tasks' gates.
