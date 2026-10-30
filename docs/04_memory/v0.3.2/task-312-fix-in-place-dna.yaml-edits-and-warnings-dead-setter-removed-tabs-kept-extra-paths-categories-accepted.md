@@ -158,6 +158,62 @@ Design gate approved by the approver on 2026-10-30T18:40:13+01:00, in the orches
   spec-002 Categories are amended by the developer, uncommitted, for the approver's `memory amend`.
 - D4 — yes: a P2.5 BDD scenario "a project-specific category is served with no warning", written by the developer in green and named by the AC3 test.
 
+### red (qa, 2026-10-30)
+
+**Red commit `51212d04`** (`git log --oneline -1` → `51212d044 test(dna): task-312 — failing test: …`), five NEW test
+files, no existing file touched (so the developer may reword the comments of the existing suites, T4):
+`test/dna/set-exports.test.ts`, `test/dna/edit-comment-gap.test.ts`, `test/core/dna-set-tab-before-comment.test.ts`,
+`test/core/paths-extra-category.test.ts`, `test/validation/warning-catchall.test.ts`. The design placed the catchall unit
+case in `test/validation/warning.test.ts`; it is in the new `warning-catchall.test.ts` instead, so that every red file is
+new and `warning.test.ts` stays the developer's. No new export is imported, so no `.d.cts`. Base unchanged:
+`git rev-list --count HEAD..release/0.3` → `0`, no merge.
+
+**Run.** `npx jest test/dna/set-exports.test.ts test/dna/edit-comment-gap.test.ts
+test/core/dna-set-tab-before-comment.test.ts test/core/paths-extra-category.test.ts
+test/validation/warning-catchall.test.ts --maxWorkers=2` → `Test Suites: 5 failed, 5 total`, `Tests: 14 failed, 18
+passed, 32 total` (set-exports 2 failed / 13, edit-comment-gap 5 / 8, dna-set-tab-before-comment 1 / 1,
+paths-extra-category 4 / 7, warning-catchall 2 / 3). `npx tsc --noEmit -p tsconfig.json` → exit 0, no error (the reds
+are runtime assertions; a namespace import compiles with or without the export). `npx jest test/lint --maxWorkers=2`
+with the files in place → `Test Suites: 13 passed`, `Tests: 153 passed`.
+
+**Fixtures from real runs.** The warning texts of AC 3 were printed by the code build of this branch
+(`node dist/cli.js --version` → `0.3.1 (f7626abf…)`) on a scratch repository carrying the test's fixture:
+`loadDnaYaml(process.cwd())` under `withWarningSink`, from `dist/core` and `dist/validation/warning`, printed
+`.wingfoil/dna.yaml: unknown field(s) ignored: paths.extras, mystery` (extras + root `mystery: 1`),
+`… ignored: paths.extras` with paths `{"sources":["src/"],"extras":3}` (`extras: 3`: loads today), `… ignored:
+team.mystery` (`mystery: 1` under `team:`) and `… ignored: mystery` (root `mystery: 1` alone); `node dist/cli.js dna add
+paths.extras --value x` on it, committed → `error: unknown DNA field 'paths.extras': 'extras' is not declared under
+'paths'`, exit 1.
+
+**Per AC** (first failing assertion of each red test):
+- **AC 1 (red-first, D1 (a))**, `test/dna/set-exports.test.ts`: "src/dna/set.ts does not export it" and "the dna module
+  barrel (src/dna/index.ts) does not re-export it" → `Expected value: not "setDnaValueInText"`, the received key list
+  carries it. The test assembles the name from two parts so that this file is not a hit of the AC's grep. Characterization,
+  pass: `set` still exports `inlineCommentIndex`, `valueOf`, `splitDnaPath`, `isValidKeyPath`, `quoteDnaSegment`,
+  `DNA_KEY_ALIASES`; the barrel still exports `splitDnaPath`, `isValidKeyPath`, `quoteDnaSegment`, `DNA_KEY_ALIASES`,
+  `applyDnaEditInText` (11 tests). "No production caller" is the design's grep, no test.
+- **AC 2 (red-first, D2 (a))**, `test/dna/edit-comment-gap.test.ts`, through `applyDnaEditInText` with `set-scalar` and
+  the parse of the expected text as `intended`: (a) same width → expected `  name: cd<TAB># your project name`, received
+  `  name: cd # your project name`; (b) `path:` under a `- name: core` entry → received `    path: cd # where it lives`;
+  (c) CRLF → received `  name: cd # c`; (d) value `c` → received `  name: c  # your project name` (two spaces); (e) value
+  `a-much-longer-name` → received `… a-much-longer-name # your project name`. Characterization, pass: (f) a space gap at
+  the same width, (g) `version: 1.1` → `'1.2'` with the `#` in its column, (h) a `#` inside a quoted value — (g) and (h)
+  carried over from the in-text setter's suite AC 1 deletes. End to end, `test/core/dna-set-tab-before-comment.test.ts`
+  ("the committed project.name line reads `  name: cd<TAB># your project name`", the registered `dna.dnaSet` op on a temp
+  repository, `git show HEAD:.wingfoil/dna.yaml`) → expected `"  name: cd\t# your project name"`, received
+  `"  name: cd # your project name"`.
+- **AC 3 (red-first, D3 (A), D4)**, `test/core/paths-extra-category.test.ts`: (a) "a dna.yaml declaring paths.extras loads
+  with no unknown-field warning" → expected `[]`, received `[".wingfoil/dna.yaml: unknown field(s) ignored:
+  paths.extras"]`; (b) "P2.5 "a project-specific category is served with no warning": `paths extras` returns its
+  directories" (the scenario D4 has the developer write in green) → the same received warning; (c) extra category + root
+  `mystery: 1` → pattern `/dna\.yaml: unknown field\(s\) ignored: mystery$/`, received `"… ignored: paths.extras,
+  mystery"`; (d) `extras: 3` → `Received function did not throw` (expected a throw naming `paths.extras`).
+  Characterization, pass: (e) a root `mystery: 1` and a `team.mystery` still warn, exact texts; (f) `dnaAdd` on
+  `paths.extras` → `ok: false`, exit 1, `unknown DNA field 'paths.extras'`. Unit, `test/validation/warning-catchall.test.ts`:
+  "a key covered by a typed catchall raises no warning" → received `["cfg.yaml: unknown field(s) ignored: extra"]`; "a
+  nested typed-catchall block under a passthrough root …" → received `["cfg.yaml: unknown field(s) ignored:
+  block.extra"]`. Characterization, pass: the passthrough root's `mystery` still warns beside the nested catchall.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
