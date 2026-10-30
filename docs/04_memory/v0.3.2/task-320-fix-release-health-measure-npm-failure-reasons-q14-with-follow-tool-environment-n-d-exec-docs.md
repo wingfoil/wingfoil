@@ -157,6 +157,68 @@ Design gate approved by the approver on 2026-10-30T18:40:13+01:00, in the orches
 - D4 — yes: the reason ends with ` (script <event>: <command>)`, or ` (script: <command>)` when npm prints no banner; no `npm error path`.
 - D5 — drop: the tool environment drops jest's eleven agent variables, the AC's form, rather than passing an explicit reporter.
 
+### red (qa, 2026-10-30)
+
+**Red commit `d2e2cd8e5`** (`git log --oneline -1` → `d2e2cd8e5 test(release-health): task-320 — failing test: …`), test
+files only: `test/release-health/measure.test.ts`, `test/release-health/measure-followups.test.ts`,
+`test/release-health/bindings-and-deps.test.ts`. No new export, so no `.d.cts` change and no TS2305 red: every case goes
+through `measureToolchain` and `measureRelease`, as the design says. Base unchanged: `git rev-list --count
+HEAD..release/0.3` → `0`, no merge.
+
+**Fixtures** (AC1a), copied from three real `npm ci` runs (npm 11.6.2, `npm --version`), each in a scratch directory
+outside the worktree after `npm install --ignore-scripts` wrote its lockfile, with `npm ci >ci.out 2>ci.err`:
+- `lc`, `package.json` `{"name":"lc","version":"1.0.0","scripts":{"prepare":"npm run build","build":"exit 2"}}` → exit
+  2; `NPM_CI_NESTED_PREPARE_STDOUT` / `_STDERR`;
+- `lc2`, `{"name":"lc2","version":"1.0.0","scripts":{"prepare":"exit 4"}}` → exit 4; `NPM_CI_DIRECT_PREPARE_STDOUT` /
+  `_STDERR`;
+- `app`, `{"name":"app","version":"1.0.0","dependencies":{"dep":"file:../dep"}}`, `dep` with
+  `{"name":"dep","version":"1.0.0","scripts":{"install":"exit 3"}}` → exit 3, stdout empty (0 bytes); only
+  `NPM_CI_DEPENDENCY_INSTALL_STDERR`, the stub's stdout left out (the runner reads a missing one as empty).
+The scratch directory of each is written `/home/user/<name>` and the home directory `/home/user`, as the existing
+fixtures; a script comparing each constant with the redacted file printed `true` five times.
+
+**Run.** `npx jest test/release-health/measure.test.ts test/release-health/measure-followups.test.ts
+test/release-health/bindings-and-deps.test.ts --maxWorkers=2` → `Test Suites: 3 failed, 3 total`, `Tests: 9 failed, 79
+passed, 88 total` (per file: measure 4 failed / 71, measure-followups 1 / 7, bindings-and-deps 4 / 10; every failing
+test is a new task-320 test, every existing test passes). `npx tsc --noEmit -p tsconfig.json` → exit 0, no error.
+`npx eslint` on the three files → exit 0. `npx jest test/lint --maxWorkers=2` → `Test Suites: 13 passed, 13 total`,
+`Tests: 153 passed, 153 total`.
+
+**Per AC** (first failing assertion of each test):
+- **AC1 (red-first), npm script** — `measure.test.ts`, `describe` "task-320 AC1 — an npm lifecycle failure's reason
+  names the failing script", `it.each` over three cases; each expects all seven entries `not-measurable` with the reason
+  below and `install` the only call:
+  - "a nested prepare (prepare runs npm run build)" → expected `npm ci failed (exit 2): npm error code 2 (script
+    prepare: npm run build)`, received `npm ci failed (exit 2): npm error code 2`;
+  - "a direct prepare" → expected `… npm error code 4 (script prepare: exit 4)`, received `npm ci failed (exit 4): npm
+    error code 4`;
+  - "a dependency's install script, with no banner on stdout" → expected `… npm error code 3 (script: exit 3)`,
+    received `npm ci failed (exit 3): npm error code 3`.
+  The existing EUSAGE, E404 cases are unchanged and pass.
+- **AC1 (red-first), Q14 `--follow`** — `measure-followups.test.ts`, "task-320 AC1 — Q14 counts a moved decision-log's
+  age from its add, following the rename" › "a decision-log added by a plain commit outside the type's path, then moved
+  with git mv: aged from the add": `dl-150-moved` (`in-discussion`) added by `docs: draft dl-150-moved` at
+  `docs/drafts/` on 2026-08-30, moved with `git mv` to `docs/memory/dls/` on 2026-09-01, point on 2026-09-05. A guard
+  asserts `git log --diff-filter=A` without `--follow` names the move commit (passes). Then expected `median_age_days: 6`,
+  `oldest_age_days: 6`, received `4` for both (counted from the move).
+- **AC2 (red-first)** — `measure.test.ts`, "task-320 AC2 — the tool environment drops jest's agent variables" › "no
+  tool inherits any of the eleven, whoever launches the run; PATH and the existing drops as before": the eleven names of
+  `@jest/core`'s `AGENT_ENV_VARS` set to `1` in `process.env` for the case (restored in `finally`), per call
+  `[step, names present]` expected `[step, []]`; received for `install` the eleven names, `AI_AGENT` first.
+- **AC3 (red-first, D3)** — `bindings-and-deps.test.ts`, "task-320 AC3 — n -d exec is documented with a writable
+  N_PREFIX":
+  - `it.each` over the header of `scripts/release-health/measure.cjs` (the text before its first `*/`),
+    `.wingfoil/workflows/bindings.yaml` and `.wingfoil/WORKFLOW.md` (D1): at least one `n -d exec` (not preceded by a
+    word character or `-`), and the lines where one is not immediately preceded by `N_PREFIX=<non-space> ` expected
+    `[]`; received, in order, the measure.cjs header line 41, the bindings.yaml line 177 and the WORKFLOW.md line 460;
+  - "bindings.yaml is at version 2.9 or later, with a 2.9 entry naming task-320" → `Expected: >= 2.9`, `Received: 2.8`.
+
+**For the developer.** The pin reads the whole raw text of `bindings.yaml` and `WORKFLOW.md`, so the 2.9 history entry
+must not itself contain a bare `n -d exec`, and the `N_PREFIX` placeholder must contain no space (for example
+`N_PREFIX=<writable-dir>`), since every occurrence must be preceded by `N_PREFIX=\S+ ` on its own line: the design's
+reverted trial wording (`N_PREFIX=<a directory you can write> n -d exec`, and a 2.9 entry "gives n -d exec with the
+writable N_PREFIX") would fail it. A line wrap between `N_PREFIX=…` and `n -d exec` fails it too.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
