@@ -260,6 +260,94 @@ error / HEAD unreadable (git cannot run, or not a repository)`; the binding comm
 branch or detached` and `a HEAD git cannot read`; the 2.8 history entry is a `;`-delimited segment naming `2.8` as a
 word and `task-319`.
 
+### green (developer, 2026-10-30)
+
+**Green commit `961fe7ad6`** (`git log --oneline -1` → `961fe7ad6 fix(integration-branch): task-319 — exit 2 for an
+unreadable HEAD, a minor's version must be vX.Y (bug-386, bug-387)`): `git show --stat --format= 961fe7ad6` →
+`.wingfoil/workflows/bindings.yaml`, `scripts/integration-branch.cjs`, `scripts/integration-branch.d.cts`, `31
+insertions(+), 13 deletions(-)` — the design's two files plus the `.d.cts` docblock the qa flagged (same class). No red
+file touched; no other file.
+
+- `scripts/integration-branch.cjs`: `MINOR_VERSION = /^v(0|[1-9]\d*)\.(0|[1-9]\d*)$/`; `integrationBranch` refuses a
+  `minor`, `''` or absent kind whose version does not match it with `a minor's version must be vX.Y, got "<v>" (dl-092,
+  dl-159)` (D2); the unknown-kind refusal still comes first. The `--check-head` branch writes a `readHeadBranch` refusal
+  to stderr with exit `2` (D1 (a)); `checkHead` keeps exit `0` / `1`. Header: the minor row reads `version vX.Y`, the
+  refusal sentence names the minor, the `--check-head` line reads `exit 0 pass, 1 refusal (another branch, or detached),
+  2 refused release / usage error / HEAD unreadable (git cannot run, or not a repository)`.
+- `.wingfoil/workflows/bindings.yaml` 2.7 → 2.8: `on-integration-branch`'s `args.version` =
+  `'^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(\.[1-9][0-9]*)?$'` (D3); the comment above it states `Exit 1 = HEAD on another
+  branch or detached` and that exit 2 covers a refused kind or version and `a HEAD git cannot read`, and that the
+  script ties each shape to its kind; the `version:` line gains the 2.8 entry naming task-319, bug-386, bug-387.
+- `scripts/integration-branch.d.cts`: the `integrationBranch` docblock states the minor rule (it said only the patch
+  one).
+
+**red → green.** `npx jest test/cli/integration-branch.test.ts test/core/workflow-integration-branch.test.ts
+--maxWorkers=2` → red (qa notes): `Tests: 30 failed, 61 passed, 91 total`; green: `Test Suites: 2 passed, 2 total`,
+`Tests: 91 passed, 91 total`.
+
+**The bug reproductions, re-run on green** (worktree; the two environment cases in scratch directories outside it):
+`node scripts/integration-branch.cjs --kind minor --version v0.4` → `main`, exit `0`; `--kind minor --version v0.4.0` →
+stderr `a minor's version must be vX.Y, got "v0.4.0" (dl-092, dl-159)`, exit `2`; `--version v0.3.1` (no kind) → the
+same message with `"v0.3.1"`, exit `2`; `--kind patch --version v0.3.2` → `release/0.3`, exit `0`; `--kind patch
+--version v0.3.0` → the patch message, exit `2`; `--check-head --kind patch --version v0.3.2` on the task branch →
+stderr `HEAD is on task/task-319-…, not on release/0.3, …`, exit `1`; `GIT_CEILING_DIRECTORIES=<parent>` in an empty
+directory, `--check-head --kind minor --version v0.4` → stderr `could not read HEAD: fatal: not a git repository (or any
+of the parent directories): .git`, exit `2`; the same with `PATH` = an empty directory and node by absolute path →
+stderr `could not read HEAD: spawnSync git ENOENT`, exit `2`.
+
+**The binding, on both builds.** `npm run -s check:mcp` → exit `0`: `.mcp.json "wingfoil" runs the pinned wingfoil
+0.3.1 … (prompts: 8, resources: 4, tools: 0)` and `the build under development (dist/cli.js) serves … every listed
+Resource read and Prompt get answered`. After the green commit, `workflow list --format json` → exit `0` and
+diagnostics `{"W_WORKFLOW_UNBOUND_TOKEN":65}` on both `node $(pwd)/dist/cli.js` and
+`node node_modules/wingfoil-released/dist/cli.js` (0.3.1), the 65 of the baseline; `--format console` on the code build
+→ exit `0`, 65 lines naming `W_WORKFLOW_UNBOUND_TOKEN`.
+
+### refactor (developer, 2026-10-30)
+
+Base: `git rev-list --count HEAD..release/0.3` → `0` at the start and at the end of refactor, no merge. T4:
+`git log --first-parent --no-merges --format=%h ba82cbd82..HEAD -- test/cli/integration-branch.test.ts
+test/core/workflow-integration-branch.test.ts` → no output. No refactor commit: green needed none (one constant, one
+branch, one guard).
+
+Gates (heavy ones after `waitslot.sh`, `--maxWorkers=2`, one jest at a time in the worktree):
+- `npm test -- --maxWorkers=2` → `Test Suites: 1 failed, 518 passed, 519 total`, `Tests: 2 failed, 9176 passed, 9178
+  total`. The two failures are `test/storage/git-root.test.ts` (`findGitRoot` "returns null when no ancestor directory
+  contains .git" → `Received: "/tmp"`; `resolveProjectRoot` "throws E_NO_GIT_ROOT …" → `Received: "E_NOT_AT_GIT_ROOT"`),
+  from the machine, not this task: `ls -la /tmp/.git` → an empty directory dated 2026-10-29 17:09, so `/tmp` reads as a
+  repository root to a fixture made under `os.tmpdir()`; `git diff --stat release/0.3...HEAD -- src test/storage` → no
+  output. Reported as a candidate finding, not fixed. Every other suite passed, the ten `docs.parity` suites
+  (`test/docs/cli-reference.test.ts` … `test/docs/workflow-md.test.ts`) and `test/lint/` (incl. `cli-spawn-helper`,
+  `npm-caller-config`, `version-bump` and the invisible-character gate) among them: the run's reporter lists only failing
+  suites, and the one it listed is `git-root`.
+- `npm run test:coverage -- --maxWorkers=2` → `All files | 99.31 | 97.42 | 98.18 | 99.68` (statements, branches,
+  functions, lines; > 80 % on every column), the same two `git-root` failures and counts as `npm test` (`Tests: 2 failed,
+  9176 passed, 9178 total`), hence exit `1`; the threshold itself is met.
+- `npm run lint` → exit `0`. `npm run docs:api` → exit `0`. `npm run typecheck` (both `tsc --noEmit` configs) → exit `0`.
+- No CLI or help change of the `wingfoil` binary, so `docs/cli-reference.md` unchanged (its suite passed above).
+- Invisible characters: the `grep -nP` of the brief over the three changed files → no output (exit `1`).
+
+### self-review (developer, 2026-10-30)
+
+Against `code-review`, on `git diff release/0.3...HEAD`:
+- **AC1** — met: a HEAD git cannot read exits `2` (both causes reproduced above), another branch or a detached HEAD
+  exits `1` (red's kept pins pass), and the header and the binding comment say so (red's two text pins pass).
+  `bug-386` Expected Behavior met in full: a code distinct from the refusal (`2`), the header and the comment state it.
+- **AC2** — met: a minor's (and a no-kind release's) malformed version is refused with exit `2` and a message naming the
+  value; the binding's pattern admits only `vX.Y` and `vX.Y.Z` (Z ≥ 1), and the script ties each to its kind (D3).
+  `bug-387` Expected Behavior met in full ("the binding's pattern, or the script, ties the version's shape to the
+  kind": both do their part). Every release of rl-v1 still passes (red's characterization pin).
+- Same class in the files touched: the `.d.cts` docblock of `integrationBranch` (fixed); `readHeadBranch`'s `.d.cts`
+  docblock states the refusal, not an exit code, so it stays true. The usage string's `--kind <minor|patch>` and
+  `<vX.Y[.Z]>` stay true.
+- Determinism: no clock, randomness or unordered iteration added. Callers: nothing but the binding executes the script
+  (design's `grep`), so the new exit `2` and the refusals reach no other caller.
+- Bugs' Retrospectives: `grep -n "^### Retrospective" -A2` on the `bug-386` and `bug-387` files → line 56 and line 57,
+  each followed by `None.`, so no amendment is owed.
+
+### Pending amendments (approver)
+
+None.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -267,3 +355,11 @@ word and `task-319`.
      printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
      Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
      here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+
+- The full suite and the coverage run each failed only `test/storage/git-root.test.ts`, because an empty `/tmp/.git`
+  (`ls -la /tmp/.git` → a directory dated 2026-10-29 17:09) makes `os.tmpdir()` read as a repository: a fixture that
+  needs "outside any repository" depends on a machine-wide directory any process can create. Proposal: such fixtures
+  set `GIT_CEILING_DIRECTORIES` to the fixture's parent (`grep -n GIT_CEILING test/cli/integration-branch.test.ts` → no
+  output: this task's "outside any repository" pin, which passed in both runs, does not set it either).
+- The heavy-gate slot was shared by several tasks of the wave: typecheck and coverage each waited behind other tasks'
+  runs (`ps -eo pid,etime,args | grep waitslot` → three waiters at once), most of this phase's wall time.
