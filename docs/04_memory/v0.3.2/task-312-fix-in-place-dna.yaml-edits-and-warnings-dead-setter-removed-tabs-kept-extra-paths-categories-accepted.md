@@ -231,6 +231,114 @@ so the "nothing else changes" guarantee stays.
 `Tests: 153 passed`; `npx jest test/core/dna-set-tab-before-comment.test.ts --maxWorkers=2` on the green → `Test Suites: 1
 passed`, `Tests: 1 passed`; the invisible-character grep on the file → no hit.
 
+### green (developer, 2026-10-30)
+
+**Commit `5ab7b2f3`** (`git log --oneline -1 5ab7b2f3a` → `5ab7b2f3a fix(dna): task-312 — dead setter removed, tab before a
+comment kept, extra paths categories accepted (bug-254, bug-255, bug-316)`), 11 files, `78 insertions(+), 444
+deletions(-)` (`git diff --stat 5ab7b2f3a~1 5ab7b2f3a`). Base unchanged: `git rev-list --count HEAD..release/0.3` → `0`
+at the start and at the end of refactor, no merge.
+
+- **AC 1 (`bug-254`).** `src/dna/set.ts` loses `setDnaValueInText` and every helper only it used (`KeyLine`,
+  `Resolution`, `KEY_LINE`, `indentOf`, `hasContinuation`, `resolveKeyPath`, `replaceLeafValue`, `insertKeyPath`,
+  `renderScalar`, `readsBackAs`) and its `js-yaml` import; `inlineCommentIndex` and `valueOf` stay (imported by
+  `src/dna/edit.ts:28`). `src/dna/index.ts` drops the re-export. `test/dna/set-in-text.test.ts` is deleted; its two
+  cases still relevant are red's (g) and (h) in `test/dna/edit-comment-gap.test.ts`. TSDoc reworded in `src/dna/set.ts`
+  (header, `splitDnaPath`, `inlineCommentIndex`), `src/dna/edit.ts` (header) and `src/directives/roles-edit.ts:13`;
+  comments reworded in `test/dna/set.test.ts`, `test/dna/edit.test.ts`, `test/core/dna-set-comment-preservation.test.ts`.
+  `grep -rn setDnaValueInText src test` → no output, exit 1.
+- **AC 2 (`bug-255`, D2 (a)).** `rewriteKeyLine` (`src/dna/edit.ts`) reads the whitespace run written before the `#`;
+  when it holds a tab it is kept as written, whatever the new width; a space-only gap keeps the column rule unchanged.
+  Same-class check: `grep -rn "' '.repeat(column" src` → only `src/dna/edit.ts:214`, the space-only branch (the
+  other instance, `replaceLeafValue` in `set.ts`, went with AC 1).
+- **AC 3 (`bug-316`, D3 (A), D4).** `Paths` (`src/dna/schema.ts`) takes `.catchall(z.array(z.string()))` in place of
+  `.passthrough()`. `collectUnknownFields` (`src/validation/warning.ts`) skips a key absent from `shape` when the schema
+  has a typed catchall, read by the new `hasTypedCatchall` from Zod 4's `def.catchall.def.type` (not `unknown` =
+  passthrough, not `never` = strict). Probe of the four shapes:
+  `node -e "…z.object({}).passthrough() / .catchall(z.array(z.string())) / z.object({}) / .strict() … def.catchall?.def.type"`
+  → `unknown`, `array`, `undefined`, `never`. `src/dna/path.ts` still reads only `def.shape`, so the write verbs refuse
+  `paths.extras` (red's (f) passes). D4: scenario "a project-specific category is served with no warning" added to
+  `docs/02_requirements/02_bdd/features/p2-dna/P2.5-paths.feature`, the one red's AC 3 (b) test names.
+
+**Red → green.** `npx jest <red's five files> --maxWorkers=2`: at red `Tests: 14 failed, 18 passed, 32 total`; on
+`5ab7b2f3` `Tests: 1 failed, 31 passed, 32 total` — the one failure was the red test's whole-file assertion, which did not
+expect `dl-174` (a)'s version raise (reported, amended by the qa in `b8b1ac92`, see the red amendment above); on the
+current head `Test Suites: 5 passed, 5 total`, `Tests: 32 passed, 32 total`. `npx tsc --noEmit -p tsconfig.json` → exit 0.
+
+**End to end, code build of this branch** (`node dist/cli.js --version` → `0.3.1 (0603a26b…)`, dist rebuilt by the jest
+global setup), in a scratch repository outside the worktree scaffolded by `init --template Scrum`:
+`extras: ["notes/"]` added under `paths:` and committed; `node dist/cli.js paths extras` → `{"category": "extras",
+"paths": ["notes/"]}` (pretty-printed), exit 0, no warning line on stderr; `--format json` → `{"category":"extras",
+"paths":["notes/"]}`, exit 0, no warning. `project.name` line set to `  name: ab`, a tab, `# your project name`,
+committed; `dna set project.name --value c` → exit 0, and `grep -n "  name: c" .wingfoil/dna.yaml | od -c` →
+`n a m e : c \t # y o u r …` (the tab kept at a shorter width, D2 (a)).
+
+### refactor (developer, 2026-10-30)
+
+No further code change after green: the implementation is the minimum, and lint is clean. The gates ran with the
+pending amendments below in the working tree, each heavy one after the slot wait, `--maxWorkers=2`:
+- `npm run test:coverage -- --maxWorkers=2` → `All files | 99.35 | 97.51 | 98.15 | 99.69` (statements, branches,
+  functions, lines; > 80 % on every column); `Test Suites: 1 failed, 531 passed, 532 total`, `Tests: 1 failed, 9295
+  passed, 9296 total`. The failure was `test/docs/name-resolvability.test.ts` "finds no unresolved name the allowlist
+  does not list": the two Revision notes I had prepared named this task by its full id, whose `dna.yaml` reads as a
+  config name (`…spec-002-dna-yaml-schema.md|config|task-312-fix-in-place-dna.yaml-…`). Both now name it `task-312`;
+  `npx jest test/docs/name-resolvability.test.ts --maxWorkers=2` → `Tests: 11 passed, 11 total`.
+- `npm test -- --maxWorkers=2` (after the fix above) → `Test Suites: 532 passed, 532 total`, `Tests: 9296 passed, 9296 total`.
+- `npm run -s lint` → exit 0. `npm run -s docs:api` → exit 0. `npm run -s typecheck` (both tsc configs) → exit 0.
+- Document parity (`docs.parity`): the `test/docs` suites are part of the two full runs above; no CLI command, help
+  text or `docs/cli-reference.md` entry changed (`git diff --stat release/0.3...HEAD -- src/cli docs/cli-reference.md`
+  → no output), so `test/docs/cli-reference.test.ts` has nothing new to check and passes in the full run.
+- No `.wingfoil/` file changed (`git diff --stat release/0.3...HEAD -- .wingfoil` → no output): no `version:` bump, no
+  `npm run check:mcp`.
+
+**T4.** `git log --first-parent --no-merges --format=%h 51212d044..HEAD -- test/dna/set-exports.test.ts
+test/dna/edit-comment-gap.test.ts test/core/dna-set-tab-before-comment.test.ts test/core/paths-extra-category.test.ts
+test/validation/warning-catchall.test.ts` → `b8b1ac923` only: the qa's red amendment, ruled by the approver on
+2026-10-30. No commit of mine touches red's files.
+
+**Invisible characters.** The grep of the prompt over every file I changed or prepared → no hit, before each commit.
+
+### self-review (developer, 2026-10-30)
+
+Against `code-review`, on `git diff release/0.3...HEAD` plus the uncommitted amendments:
+- AC 1 met: red's `set-exports.test.ts` passes (the two keys absent, the eleven kept exports present) and the grep is
+  empty (green above). Positive case of the absence: the same grep on `e86c85e5` (`git grep -n setDnaValueInText
+  e86c85e5 -- src test | wc -l`) → `44`.
+- AC 2 met: red's (a)–(e) pass for a tab gap at equal, shorter and longer widths, on a `- ` line and in a CRLF file;
+  (f)–(h) keep the space-only column rule and the quoted `#`; `test/dna/edit.test.ts`'s `paths:      # the paths` case
+  is unchanged and passes (in the full run).
+- AC 3 met: red's (a)–(d) pass (no warning, served, only `mystery` named, `extras: 3` refused at `paths.extras`), and
+  (e)–(f) keep the warning elsewhere and the write side closed; the unit cases of `warning-catchall.test.ts` pass,
+  and the passthrough cases of `test/validation/warning.test.ts` are unchanged and pass.
+- Scope: the files touched are the design's list (`git diff --stat release/0.3...HEAD -- src test docs/02_requirements`
+  names `src/dna/{set,index,edit,schema}.ts`, `src/validation/warning.ts`, `src/directives/roles-edit.ts`, the three
+  reworded test files, the deleted suite, red's five files and `P2.5-paths.feature`).
+- Determinism: no clock, randomness or unordered iteration added; `hasTypedCatchall` is a pure read of the schema.
+- Same class: the column rule had one more instance (`set.ts`'s `replaceLeafValue`), deleted with AC 1.
+- `bug-316`'s Expected Behavior asks that "the test that pins the warning for `paths` is updated": no test pinned it
+  (design: `grep -rn "ignored: paths" test src` → a header comment only); the new pin is red's
+  `test/core/paths-extra-category.test.ts`. `bug-255`'s alternative "or the rule … is stated" is met by stating it in
+  `rewriteKeyLine`'s TSDoc and in that bug's Retrospective.
+
+### Pending amendments (approver)
+
+Edited in this worktree, left uncommitted, for the approver's `memory amend` (each verified by the full runs above):
+- `spec-009-validation-strategy` — §2 gains "A typed catchall declares its extra keys", the listing gains
+  `hasTypedCatchall`, the "Trigger point" recursion no longer names `.passthrough()` alone, and a Revision note.
+  `--reason "Record in §2 that a typed catchall declares its extra keys, so the unknown-field warning skips them (bug-316, task-312), with a Revision note."`
+- `spec-002-dna-yaml-schema` — Categories states that a project's own category is declared by a typed catchall,
+  validated as a `string[]`, loads with no warning and stays refused by the write verbs; the Zod listing gains the
+  catchall and the `health` line `task-222` added; the opening paragraph names `Paths` as the one non-passthrough
+  object; a Revision note.
+  `--reason "State in Categories that a project's own paths category is declared by a typed catchall and loads with no warning (bug-316, task-312), with a Revision note."`
+- `bug-254-setdnavalueintext-is-still-exported-from-src-dna-with-its-own-test-suite-but-no-production-code-calls-it-since-task-193`
+  — the missing `### Retrospective`.
+  `--reason "Add the Retrospective subsection the bug lacked, written by its fix task task-312."`
+- `bug-255-an-in-place-dna.yaml-edit-replaces-the-tab-before-an-inline-comment-with-spaces` — the missing
+  `### Retrospective`.
+  `--reason "Add the Retrospective subsection the bug lacked, written by its fix task task-312, stating the gap rule."`
+
+`bug-316` already has its Retrospective ("None."); nothing to amend there.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -238,3 +346,12 @@ passed`, `Tests: 1 passed`; the invisible-character grep on the file → no hit.
      printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
      Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
      here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+
+- The red's whole-file assertion of `test/core/dna-set-tab-before-comment.test.ts` did not expect `dl-174` (a)'s
+  `version:` raise; at red it was never reached, because the line assertion before it failed first. Green stopped on it
+  (`5ab7b2f3`: `Tests: 1 failed, 31 passed`, diff `- version: 1.1` / `+ version: 1.2`) and the qa amended it
+  (`b8b1ac92`), one extra round trip. Proposal: a red whole-file expectation of a wingfoil write is derived from a real
+  write on the base (the dl-174 raise included), not from the fixture by hand.
+- A full task id containing `dna.yaml` reads as a config name to `test/docs/name-resolvability.test.ts` when cited in a
+  spec (`…|config|task-312-fix-in-place-dna.yaml-…`), so the two Revision notes name the task `task-312`. Proposal:
+  either the scanner recognises a Memory id, or `id_pattern` slugs avoid file-name-shaped words.
