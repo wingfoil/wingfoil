@@ -331,6 +331,94 @@ undefined`.
 **For the developer.** `EPERM` and the `<rel> cannot be read (<code>)` form are pinned only through `ELOOP`; `EPERM` has no
 pin (no portable trigger). `loadWorkflowsYaml`'s `workflows/bindings.yaml` reader is not pinned separately.
 
+### green (developer, 2026-10-30)
+
+**Green commit `1bbfac7e1`** (`git log --oneline -1` → `1bbfac7e1 fix(core): task-309 — P3.5 missing-field message,
+unreadable config file named relative (bug-025, bug-251)`); `git show --stat 1bbfac7e1` → `src/core/index.ts`,
+`src/core/loaders.ts` only, the files the design declared. No red file touched.
+- AC1 (D1 (a), D2 (a), D3 (a)): `parseDirectiveFile` runs the Zod pass through `withMissingFieldMessages`: on a
+  `ValidationError`, an issue whose `path` is a key of `REQUIRED_DIRECTIVE_KEYS` (the `DirectiveFrontmatter.shape` fields
+  that reject `undefined`, computed from the schema: `id`, `name`, `type`, `kind`, `title`) and that the parsed frontmatter
+  does not carry gets the message `invalid directive: missing required field '<key>'`; code, path, file, order and exit
+  code kept; a key present as `null` or a number keeps Zod's text. `src/directives/schema.ts` unchanged.
+- AC2 (D4, D5 (a)): `ConfigFileUnreadableError` (`relativePath`, `code` = the errno, the D4 messages) beside
+  `ConfigFileMissingError`; one helper `configReadError` maps `ENOENT` → missing, any other string errno → unreadable, an
+  error without a string `code` → returned unchanged (re-thrown). `readConfigFile` and `loadWorkflowsYaml`'s `read` (still
+  `null` when absent) use it, so the manifest, every included file and `workflows/bindings.yaml` are covered.
+  `coreErrorOf` maps the new class to `{ code: 'IO', message }`; the barrel exports it. TSDoc of `readConfigFile`,
+  `coreErrorOf`, `loadOrError` and `loadConfigOrError` updated.
+
+**red → green.** `npx jest --maxWorkers=2` on the seven red files (the red notes' command) → red `Tests: 30 failed, 37
+passed, 67 total`; green `Test Suites: 7 passed, 7 total`, `Tests: 67 passed, 67 total`. `npx tsc --noEmit -p
+tsconfig.json` → exit 0; `npx eslint src/core/loaders.ts src/core/index.ts` → exit 0.
+
+### refactor (developer, 2026-10-30)
+
+Commit `34538616f` (`git show --stat 34538616f` → `docs/cli-reference.md`, `test/core/config-file-unreadable-paths.test.ts`).
+- **The qa's three gaps**, a new test file of mine, `test/core/config-file-unreadable-paths.test.ts`: (1) `EPERM`:
+  `readDocument` steered (`jest.mock` of `src/storage`, armed only for the read) to throw an errno-shaped `EPERM` for
+  `dna.yaml` → `ConfigFileUnreadableError`, `code` `EPERM`, `.wingfoil/dna.yaml cannot be read: permission denied`, `IO`,
+  and `dnaShow` resolves `{ ok: false, error: { code: 'IO', … } }`; (2) `workflows/bindings.yaml` a directory in a Scrum
+  scaffold → `loadWorkflowsYaml` throws `.wingfoil/workflows/bindings.yaml is a directory, not a file`, `IO`; (3) MCP
+  `prompts/get developer-session` (`registerRolePrompts`, in-memory client) over a `roles.yaml` that is a directory →
+  rejects with `.wingfoil/roles.yaml is a directory, not a file`, no host path, no raw text. Run: `npx jest --maxWorkers=2
+  test/core/config-file-unreadable-paths.test.ts` → `Tests: 3 passed, 3 total`; with `src/core/loaders.ts` and
+  `src/core/index.ts` restored to `1bbfac7e1^` in the working tree (then put back) → `Tests: 3 failed, 3 total`.
+- `docs/cli-reference.md` (no `version:` on the file): "Where to run it" gains the 0.3.2 sentence on a file that exists
+  but cannot be read (`cannot be read: permission denied`, `is a directory, not a file`, exit `1`); the `directives list`
+  *Errors* line names `invalid directive: missing required field '<field>'`.
+- Same class in the files touched: `grep -n "readDocument(" src/core/loaders.ts` → lines 238 (`readConfigFile`), 537
+  (the workflows reader), 849 (a directive file: an unreadable one is skipped with a warning by design, task-143) — no
+  other unmapped working-tree config read.
+
+Base: `git rev-list --count HEAD..release/0.3` → `0` and `git rev-list --count HEAD..origin/release/0.3` → `0` (after
+`git fetch`), at the start and at the end of refactor: no merge. T4: `git log --first-parent --no-merges --format=%h
+70531e91e..HEAD -- <the seven red files>` → no output.
+
+Gates (heavy ones after `waitslot.sh`, `--maxWorkers=2`, one jest at a time, the two pending bug amendments in the tree):
+- `npm test -- --maxWorkers=2` → `Test Suites: 1 failed, 521 passed, 522 total`, `Tests: 2 failed, 9190 passed, 9192
+  total` (`Time: 3574.588 s`). The one failing suite is `test/storage/git-root.test.ts` ("returns null when no ancestor
+  directory contains .git" received `"/tmp"`; "throws E_NO_GIT_ROOT" received `E_NOT_AT_GIT_ROOT`): the host has an empty
+  directory `/tmp/.git` (`ls -ld /tmp/.git` → `drwxr-xr-x … 2026-10-29_17:09:14 /tmp/.git`, `ls -A /tmp/.git | wc -l` →
+  `0`), so `os.tmpdir()` sits inside an apparent repository. Not this task's: `git diff --stat release/0.3...HEAD --
+  src/storage test/storage` → no output; alone, `npx jest test/storage/git-root.test.ts` → `Tests: 2 failed, 4 passed`.
+  Reported as a candidate finding; the directory was not removed (not created by this task).
+- `npm run test:coverage -- --maxWorkers=2` → `All files | 99.3 | 97.4 | 98.15 | 99.69` (statements, branches,
+  functions, lines; > 80 % on every column), the same single failing suite; `src/core/loaders.ts` `99.12 | 93.54 | 98.78
+  | 99.66` (uncovered line 369, the `loadDnaYaml` YAML-parse arm, not changed here).
+- `npm run lint` → exit 0. `npm run docs:api` → exit 0. `npm run typecheck` (both configs) → exit 0.
+- Document parity and `test/docs/cli-reference.test.ts`: the 29 `test/docs/*.test.ts` suites ran in the full run above
+  and passed (the only failing suite was `test/storage/git-root.test.ts`). `test/lint` (the `cli-spawn-helper`,
+  `npm-caller-config` and invisible-character gates) passed in the same run; the invisible-character grep on every file I
+  changed → no hit before each commit.
+
+### self-review (developer, 2026-10-30)
+
+Against `code-review`, on `git diff release/0.3...HEAD`:
+- AC1 met: the P3.5 string is the issue's message on the working-tree (`loadDirectiveInventory`) and committed
+  (`loadDirectivesAtHead`, `HEAD:`-labelled) loaders, on `directives list` (console and json) and `directive assign`
+  (`test/core/project-directives.test.ts`, `test/cli/directive-missing-field.integration.test.ts`, all passing); the
+  positive negatives (`name: ~`, `name: 42`) keep Zod's text. bug-025's Expected Behavior (both `Then` clauses) holds.
+- AC2 met: EACCES, EPERM, EISDIR and the `(<code>)` form (ELOOP) on `dna.yaml`, `memory.yaml`, `roles.yaml`, the
+  workflows manifest, an included file and `bindings.yaml`; `IO`, exit 1; the CLI (`dna show`, `paths`, `mcp`, `memory
+  search`, `directives list`, json) and MCP (`wingfoil://dna`, `wingfoil://memory/task[/…]`, `wingfoil://workflows`,
+  `prompts/get`) print the repository-relative message with no host path and no raw errno text; ENOENT unchanged (the
+  existing `it.each` passes). bug-251's Expected Behavior holds in full.
+- No `src/mcp` or `src/directives` file changed (`git diff --stat release/0.3...HEAD -- src` → `src/core/index.ts`,
+  `src/core/loaders.ts`); task-314's ground (`memorySearchFn`, the Memory section of `docs/cli-reference.md`) untouched:
+  my hunks are in `coreErrorOf`, the barrel and the two cli-reference lines the design named.
+- Determinism: `REQUIRED_DIRECTIVE_KEYS` follows the schema's declaration order; no wall clock, no randomness.
+
+### Pending amendments (approver)
+
+Left uncommitted in the worktree (`git status --short` → the two bug files, ` M`):
+- `bug-025-directive-validation-message-not-emitted` — appends `### Retrospective`. `--reason "Add the Retrospective
+  subsection the closing task-309 owes the bug: the P3.5 message is worded in parseDirectiveFile for every absent required
+  key."`
+- `bug-251-a-configuration-file-that-exists-but-cannot-be-read-…-over-mcp` — appends `### Retrospective`. `--reason "Add
+  the Retrospective subsection the closing task-309 owes the bug: an unreadable configuration file is a
+  ConfigFileUnreadableError mapped to IO on every working-tree reader."`
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -338,3 +426,5 @@ pin (no portable trigger). `loadWorkflowsYaml`'s `workflows/bindings.yaml` reade
      printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
      Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
      here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+
+- The full suite and the coverage run each took about an hour under the slot (`Time: 3574.588 s`), most of it queued behind other tasks' gates; both failed only `test/storage/git-root.test.ts`, because of an empty `/tmp/.git` on the host (`ls -A /tmp/.git | wc -l` → `0`). Proposal: make the test's "outside any repository" fixture independent of what sits above `os.tmpdir()`.
