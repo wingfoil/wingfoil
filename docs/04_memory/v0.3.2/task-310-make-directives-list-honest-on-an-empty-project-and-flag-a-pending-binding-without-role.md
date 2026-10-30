@@ -309,6 +309,89 @@ total` (per file: directives-list 17 failed / 64, directives-list-bindings 3 / 3
 **For the developer.** The P3.4 scenario "Edge - a role binding names a missing directive" (D4 (a)) is yours to commit; the
 first AC2 case is titled after it. No ambiguity found; no candidate finding.
 
+### green (developer, 2026-10-30)
+
+**Green commit `d5f4d25bc`** (`git log --oneline -1` → `d5f4d25bc fix(directives): task-310 — directives list honest without
+roles.yaml, dangling bindings unfiltered, unreadable roles.yaml refused (bug-199, bug-411, bug-455)`); `git show --stat
+d5f4d25bc` → `src/core/directives-list.ts`, `docs/cli-reference.md`,
+`docs/02_requirements/02_bdd/features/p3-directives/P3.4-directives-list.feature`, the design's list exactly. No red file
+touched, no new export.
+- `src/core/directives-list.ts`: a private `readRolesYaml(root)` (`loadRolesYaml`, `ConfigFileMissingError` → `undefined`, any
+  other throw propagates — D5 (a)); the `documentExists`/`join` imports and `NO_BINDINGS` removed. `buildDirectiveListing`:
+  with `role` and no `roles.yaml` the role warnings are `[]` (D3 (a)); without `role` the warnings are
+  `danglingBindingWarnings` (private: ids bound in `assignments` or `global` that no file in the inventory defines, ascending;
+  per id the global form first, then the kind-2 text per role ascending, from `rolesByDirectiveId` — D1 (a)), then the shadow
+  warnings, then the scope warnings (D2 (a)); the loader's skipped entries still lead. Module comment,
+  `DirectiveListing.warnings`, `buildDirectiveListing` and `loadDirectiveListing` TSDoc restated.
+- P3.4 gains `Scenario: Edge - a role binding names a missing directive` (D4 (a)), the text the design gate approved; red's
+  first AC2 case is titled after it.
+- `docs/cli-reference.md` `directives list`: the unfiltered bullet names the dangling bindings, the `--role` bullet says the
+  no-assignments warning needs a `roles.yaml`, *Errors* names the unreadable `roles.yaml` (exit `1`, `.wingfoil/roles.yaml
+  cannot be read (…)`) and the absent one / dangling link (nothing bound), each "new in 0.3.2". No `version:` on either file.
+
+**red → green.** `npx jest --maxWorkers=2 test/core/directives-list.test.ts
+test/cli/directives-list-bindings.integration.test.ts test/cli/config-missing-refusal.integration.test.ts` → red: `Tests: 22
+failed, 64 passed, 86 total` (red notes); green: `Test Suites: 3 passed, 3 total`, `Tests: 86 passed, 86 total`.
+`npx tsc --noEmit -p tsconfig.json` → exit 0; `npx eslint src/core/directives-list.ts` → exit 0.
+
+**Live check** (code build `node <worktree>/dist/cli.js`, `--version` → `0.3.1 (d5f4d25bc…)`, scratch repositories outside the
+worktree, removed after): `git init`, one commit, `mkdir .wingfoil` → `--format json directives list --role developer` →
+`{"entries":[],"warnings":[]}`, exit 0, console the same pretty-printed (bug-199). `init --template scrum`, `ghost-directive`
+added under `qa:`, committed → `--format json directives list` → `warnings` `["directive 'ghost-directive' bound to role 'qa'
+has no directive file"]` (bug-411). `roles.yaml` a link to itself → `directives list` → `error: .wingfoil/roles.yaml cannot be
+read (ELOOP)`, exit 1; `--format json directives list --role developer` → `{"error":".wingfoil/roles.yaml cannot be read
+(ELOOP)"}`, exit 1; a dangling link → exit 0, `warnings: []` (bug-455). This repository: `node dist/cli.js --format json
+directives list` → 14 entries, `warnings: []`.
+
+### refactor (developer, 2026-10-30)
+
+No structural change beyond green: the two helpers are private and each is used once. Base: `git rev-list --count
+HEAD..release/0.3` → `0`, no merge. Gates, with the three pending amendments in the working tree (heavy ones after
+`waitslot.sh`, `--maxWorkers=2`, foreground or tracked, one jest at a time):
+- `npm run test:coverage -- --maxWorkers=2` → `Test Suites: 529 passed, 529 total`, `Tests: 9306 passed, 9306 total`;
+  `All files | 99.32 | 97.45 | 98.16 | 99.7` (statements, branches, functions, lines; > 80 % on every column);
+  `directives-list.ts | 100 | 100 | 100 | 100`.
+- `npm test -- --maxWorkers=2` → `Test Suites: 529 passed, 529 total`, `Tests: 9306 passed, 9306 total` (2179 s, under load).
+  It and the coverage run collect `test/` whole (`jest.config.js` `roots`), so the document-parity suites under `test/docs/`
+  (`cli-reference.test.ts` included) ran and passed in both.
+- `npm run lint` → exit 0, no output. `npm run docs:api` → exit 0, no output. `npm run typecheck` (both `tsc --noEmit`
+  configs) → exit 0, no output.
+- **AC4:** `git diff --stat release/0.3...HEAD -- src/core/context.ts` → no output.
+- **T4:** `git log --first-parent --no-merges --format=%h 4e275dd64..HEAD -- test/core/directives-list.test.ts
+  test/cli/directives-list-bindings.integration.test.ts test/cli/config-missing-refusal.integration.test.ts` → no output.
+
+### self-review (developer, 2026-10-30)
+
+Against code-review, AC by AC:
+- AC1 — the rewritten `D —` pin, the four cases of "--role with no roles.yaml makes no role assertion" and the CLI AC1 pair
+  pass; with a `roles.yaml`, `--role` still returns `resolveRoleDirectives`' warnings unchanged (the existing `D —` cases and
+  "one rule" pass).
+- AC2 — the six cases of "the unfiltered listing reports a dangling binding", the four rewritten unfiltered pins and the CLI
+  case pass; every case checks exit 0 (a warning, `dl-042` D). The positive case of "no dangling warning without a
+  `roles.yaml`" is the same describe's ghost cases.
+- AC3 — the loop and the closed-directory link are refused `IO`, exit 1 (core and CLI); the directory and mode-000 file stay
+  refused; the dangling link reads as absent (its positive case: the ELOOP refusal above).
+- AC4 — above. AC5 — the spec-012 §5.1 edit is in the working tree, uncommitted: `git diff --stat --
+  docs/04_memory/design/specs/spec-012-context-loader-relevance-filtering.md` → `1 file changed, 25 insertions(+), 3
+  deletions(-)` (Kind 1 bullet, the closing paragraph of §5.1, a Revision (2026-10-30) note; the table unchanged).
+- Same class in the files touched: `grep -n "documentExists\|existsSync" src/core/directives-list.ts` → no output (the only
+  existence probe was the one replaced). Docs: `grep -rn "no directives assigned\|has no directive file\|dangling binding"
+  docs/*.md docs/examples README.md AGENTS.md .wingfoil/README.md` outside `docs/cli-reference.md` → no output, so no other
+  user doc restates the old behaviour.
+- Invisible characters: the `grep -nP` of the brief on every changed file → no output.
+
+### Pending amendments (approver)
+
+Edited in this worktree, uncommitted (`git status --short` lists the three files):
+- `spec-012-context-loader-relevance-filtering` — `--reason "State in §5.1 that kind 1 needs a roles.yaml and what the
+  unfiltered directives list warns and in which order, per task-310 (bug-199, bug-411, bug-455), with a Revision note."`
+- `bug-199-an-empty-wingfoil-directory-makes-directives-list-role-assert-that-no-directives-are-assigned` — `--reason "Add the
+  Retrospective subsection the bug lacked (None), as dl-115 Q2 (a) asks of a bug closed by task-310."`
+- `bug-411-directives-list-reports-a-role-bound-to-a-missing-directive-only-when-role-names-that-role` — `--reason "Record
+  that task-310 fixes the unfiltered listing and that the error half of the Expected Behavior is met by npm run
+  check:role-directives, per design gate D6 (a)."`
+- `bug-455-…`: none — its `### Retrospective` exists (`grep -n "^### Retrospective"` → line 46).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -316,3 +399,7 @@ first AC2 case is titled after it. No ambiguity found; no candidate finding.
      printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
      Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
      here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+
+- The refactor gates ran `npm test` and `npm run test:coverage` separately; both run the same `jest.config.js` suite set
+  (`Tests: 9306 passed, 9306 total` each), about 17 and 36 minutes under shared load. Proposal: accept the coverage run as
+  the `npm test` gate when no latency suite is in scope, halving the slot time of a refactor phase.
