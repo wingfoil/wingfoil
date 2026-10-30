@@ -465,6 +465,36 @@ the change, `BDD` after. `npx jest test/core/memory-search-type-warnings.test.ts
 `Test Suites: 14 passed, 14 total`, `Tests: 159 passed, 159 total`. `npx tsc --noEmit -p tsconfig.json` → exit `0`. The
 invisible-character `grep -nP` over the file → no hit.
 
+### independent review (2026-10-30) and fixes (developer)
+
+The independent review approved with fixes: 0 blockers, 3 should-fix; it judged decision D6 (the WIP-limit read
+scoped too) sound. Finding 1 (the P1.5 citation in the typed-search suite) was fixed by the qa in `ffbd019f`, the only
+commit on a red file. Fixes here, commit `f3490d19` (`git show --stat --format= f3490d196` → `docs/cli-reference.md`,
+`test/memory/type-scoped-newer-format-by-type.test.ts`):
+- Finding 2 — the pending amendments (still uncommitted): the `spec-004` Revision note and `bug-283`'s Retrospective
+  now also name the read of one type behind the WIP-limit count (`loadTypeDocumentCopiesAtRevs`, `requireWipSlot`);
+  `spec-004` §2.2's single-document sentence now says "the files that type can hold — by path, or by `type:` for a
+  newer-format document", and its paragraph is rewrapped (`awk 'NR>=108 && NR<=130 && length>120'` on the spec → no
+  output). `docs/cli-reference.md` (`memory search`) gains the clause "a `--type` that `memory.yaml` does not declare
+  prints no warnings" (D3 (a)).
+- Finding 3 — the other direction of D2 (a) is pinned in a new test of mine,
+  `test/memory/type-scoped-newer-format-by-type.test.ts`: a `type: bug`, `format: 99` document at
+  `docs/memory/adr/bug-009-odd.md` is reported to the bug listing, both bug lookups and `searchMemoryDocuments` with
+  `type: 'bug'`, and to none of the adr ones (nor to `loadTypeDocumentCopiesAtRevs` for `adr`) → `Tests: 7 passed, 7
+  total`.
+- The nit (a stray backtick in the refactor notes) is left as is: the notes only gain lines.
+
+Base: `release/0.3` had moved and touched `docs/cli-reference.md` (`comm -12` of the two sides' file lists → that file
+only), so `git merge --no-edit release/0.3` → merge commit `60f4247a` (no conflict; trailers added by amend).
+
+Runs: the six task suites with `test/lint` and `test/docs` (`npx jest --maxWorkers=2 …`) → `Test Suites: 48 passed, 48
+total`, `Tests: 496 passed, 496 total`. `npm run lint` → exit `0`; `npm run typecheck` → exit `0`, before and after the
+merge. `npm test -- --maxWorkers=2` after `waitslot.sh`, with the pending amendments in the tree: before the merge →
+`Test Suites: 525 passed, 525 total`, `Tests: 9197 passed, 9197 total`; after it → `Test Suites: 525 passed, 525
+total`, `Tests: 9236 passed, 9236 total`. `test/storage/git-root.test.ts` passes again: `ls -d /tmp/.git` → `No such
+file or directory` (the stray directory is gone). T4: `git log --first-parent --no-merges --format=%h da0e81b73..HEAD --
+<the three red files>` → `ffbd019f2` only (the qa's review amendment); from `ffbd019f2..HEAD` → no output.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
