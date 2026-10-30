@@ -66,3 +66,7 @@ every other errno.
 Captured on 2026-10-06 by `bug-ingest-rel-v0.3-w2b3-review-findings-plan`, from the independent review of
 `task-179` (W2 B3, `dev-loop-rel-v0.3-plan`, review F7), reproduced against `main` at `29d2aea2` with the code
 build.
+
+### Retrospective
+
+Closed by task-309 for the configuration **readers**: a configuration file that exists but cannot be read is a `ConfigFileUnreadableError` (`src/core/loaders.ts`) naming the file repository-relative and the cause (`cannot be read: permission denied` for `EACCES`/`EPERM`, `is a directory, not a file` for `EISDIR`, `cannot be read (<code>)` otherwise), raised by `readConfigFile` (`dna.yaml`, `memory.yaml`, `roles.yaml`) and by the Workflow pillar's working-tree reader (manifest, included files, `bindings.yaml`; a symbolic-link loop is unreadable, not absent), and mapped by `coreErrorOf` to the `IO` refusal, exit 1, on the CLI and over MCP. Left out: two write paths still read their file with Node's raw error and the host path, `directive assign` (`roles.yaml`, `src/core/directive-assign.ts`) and `workflow create` / `remove` (`workflows.yaml`, `src/core/workflow-create-remove.ts`); they are `bug-454`. `directives list` still takes a `roles.yaml` that is a symbolic-link loop for an absent one (`src/core/directives-list.ts`, an `existsSync` pre-check before `loadRolesYaml`): `bug-455`. Lesson: `readConfigFile` had unrouted readers beside it; a fix to one reader is checked against every read of the same file, writers included.
