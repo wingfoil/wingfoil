@@ -219,6 +219,65 @@ must not itself contain a bare `n -d exec`, and the `N_PREFIX` placeholder must 
 reverted trial wording (`N_PREFIX=<a directory you can write> n -d exec`, and a 2.9 entry "gives n -d exec with the
 writable N_PREFIX") would fail it. A line wrap between `N_PREFIX=…` and `n -d exec` fails it too.
 
+### green (developer, 2026-10-30)
+
+Base: `git rev-list --count HEAD..release/0.3` → `0` at the start, no merge. Green commit `4b2777542` (`fix(release-health):
+task-320 — …`), three files: `scripts/release-health/measure.cjs`, `.wingfoil/workflows/bindings.yaml`,
+`.wingfoil/WORKFLOW.md` (D1); no test file touched, no new export.
+- AC1 (npm script, D4): a new `npmScript(result)` reads npm's `npm error command <cmd>` line (also `npm ERR!`; `command
+  failed` skipped; a leading `sh -c ` dropped), then the last stdout banner pair `> <name>@<version> <event>` / `> <cmd>`;
+  `failure` appends ` (script <event>: <cmd>)`, or ` (script: <cmd>)` with no banner, and nothing when npm names no script.
+- AC1 (Q14): the fallback `git log --diff-filter=A` gains `--follow` (one path).
+- AC2 (D5): `TOOL_ENV_DROPPED` gains jest's eleven `AGENT_ENV_VARS`, its comment saying why.
+- AC3: `N_PREFIX=<writable-dir> n -d exec …` in the `measure.cjs` header, the `bindings.yaml` release-health comment
+  and `.wingfoil/WORKFLOW.md`, each with why (`n` caches under `N_PREFIX`, default `/usr/local`); the header also
+  documents the dropped agent variables, the reason's script suffix and Q14's `--follow`. `bindings.yaml` 2.8 → 2.9,
+  its 2.9 entry naming task-320 and bug-407 with no bare `n -d exec`.
+
+Red → green: `npx jest test/release-health/measure.test.ts test/release-health/measure-followups.test.ts
+test/release-health/bindings-and-deps.test.ts --maxWorkers=2` → red `Tests: 9 failed, 79 passed, 88 total` (qa's
+run), green `Test Suites: 3 passed, 3 total`, `Tests: 88 passed, 88 total`.
+
+### refactor (developer, 2026-10-30)
+
+No code change after green: the three touched files hold no other `n -d exec` (`grep -n "n -d exec"` on each → only
+the `N_PREFIX=` lines: measure.cjs 41, bindings.yaml 177, WORKFLOW.md 460). Gates, heavy ones after `waitslot.sh`,
+`--maxWorkers=2`, one jest at a time:
+- `npm test -- --maxWorkers=2` → `Test Suites: 528 passed, 528 total`, `Tests: 9289 passed, 9289 total`.
+- `npm run test:coverage -- --maxWorkers=2` → `All files | 99.32 | 97.45 | 98.16 | 99.7` (statements, branches,
+  functions, lines; > 80 % each), `Tests: 9289 passed, 9289 total`.
+- `npm run lint` → exit 0; `npm run docs:api` → exit 0; `npm run typecheck` (both configs) → exit 0.
+- docs.parity: `npx jest` on the ten suites of the `docs.parity` binding plus `test/lint/version-bump.test.ts` →
+  `Test Suites: 11 passed, 11 total`, `Tests: 97 passed, 97 total`. No CLI or help change, so `docs/cli-reference.md`
+  unchanged.
+- `npm run check:mcp` (the `.wingfoil/` change against the pinned build) → exit 0.
+- End of refactor: `git rev-list --count HEAD..release/0.3` → `0`, no merge.
+
+T4: `git log --first-parent --no-merges --format=%h d2e2cd8e5..HEAD -- test/release-health/measure.test.ts
+test/release-health/measure-followups.test.ts test/release-health/bindings-and-deps.test.ts` → no output.
+
+### self-review (developer, 2026-10-30)
+
+Against code-review, on `git diff release/0.3...HEAD`:
+- AC1 met: the three npm ci cases pass with the D4 reasons; the EUSAGE / E404 / ELSPROBLEMS cases, whose stderr has no
+  `npm error command` line, keep their reasons (they pass unchanged in the same run). `bug-357`'s Expected Behavior
+  "a reason names the `npm run` script that failed": Q01/Q02's reasons already name their script by label, and an
+  `npm run` failure prints no `npm error command` line (design's real run), so the suffix applies to `npm ci`'s
+  lifecycle scripts, the case the bug reports. Q14 follows renames (the moved decision-log aged 6 days, not 4).
+- AC2 met: no call of the ten inherits any of the eleven names; `PATH`, `WINGFOIL_LATENCY`, `GIT_DIR` as before.
+- AC3 met: the pin passes on all three sources; `bindings.yaml` ≥ 2.9 with its entry.
+- Not pinned by a test: the `npm ERR!` (npm ≤ 8) prefix of `NPM_COMMAND_RE`, kept for symmetry with `reasonLine`'s
+  `NPM_NOISE_RE`; no fixture of that npm's real output exists in the repository to copy (W1 rule on fixtures).
+- Same class in touched files: none left (grep above). Outside the touched files: `dl-089` line 463 keeps its form
+  (approver ruling D2, no amend).
+- The eleven names are a second copy of jest's list (the first in `test/cli/latency-report-pass.test.ts`), as `bug-385`
+  records; unchanged by this task.
+
+### Pending amendments (approver)
+
+None. Each bug of the task's `bug:` list already has a `### Retrospective` (`grep -c "^### Retrospective"` on the
+three bug files → `1` each, "None." written at capture), and the design gate ruled no amend of `dl-089` (D2).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -226,3 +285,5 @@ writable N_PREFIX") would fail it. A line wrap between `N_PREFIX=…` and `n -d 
      printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
      Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
      here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+
+None.
