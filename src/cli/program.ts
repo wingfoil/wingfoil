@@ -100,10 +100,20 @@ export async function buildProgram(modules: readonly CoreModule[], options: Buil
   // *root* program is the one object every copy of this closure shares, and Commander has already put
   // the invocation's operands there (`Command#_parseCommand`'s `this.args = operands.concat(unknown)`,
   // set before it dispatches) with the global options removed.
+  //
+  // ONE INCOMPLETE INVOCATION IS A HELP REQUEST TO ANSWER (task-315, `bug-116`): asking the built-in
+  // help command for its own help (`wingfoil help help`, `wingfoil memory help help`). Commander finds
+  // no registered command of that name and takes the incomplete-invocation path; the request is answered
+  // instead — the help command's own help on stdout, the help Commander printed to stderr withheld by
+  // `writeErr` below — and the outcome is re-classified as the help display it is
+  // (`commander.helpDisplayed` at `0`), so `classifyParseOutcome` still chooses the code.
   program.exitOverride((error) => {
-    const termination = classifyParseOutcome(error);
+    const request = helpCommandRequest(program);
+    const answer = classifyParseOutcome(error).needsErrorLine ? builtinHelpSubject(request) : undefined;
+    const termination = classifyParseOutcome(answer !== undefined ? { code: 'commander.helpDisplayed', exitCode: 0 } : error);
+    answer?.outputHelp();
     if (termination.needsErrorLine) {
-      const { reason, hint } = incompleteInvocationReason(program.args);
+      const { reason, hint } = incompleteInvocationReason(program, request);
       emitError(reason, { format: activeFormat(program), ...(hint !== undefined ? { hint } : {}) });
     }
     const deferred = exitWith(termination.exitCode);
@@ -124,9 +134,13 @@ export async function buildProgram(modules: readonly CoreModule[], options: Buil
   // `--format` is read when the error fires; Commander has parsed the root program's options by then,
   // wherever on the command line they stand. Installed before the first `.command()`, like the callback
   // above, because `copyInheritedSettings` copies the output configuration at registration time.
+  // The help Commander prints before a request for the built-in help command's own help is not written
+  // in any format: the request is answered on stdout by the callback above (task-315, `bug-116`).
   program.configureOutput({
     writeErr: (text) => {
-      if (activeFormat(program) === 'console') process.stderr.write(text);
+      if (activeFormat(program) === 'console' && builtinHelpSubject(helpCommandRequest(program)) === undefined) {
+        process.stderr.write(text);
+      }
     },
     outputError: (text) => {
       emitError(...commanderRefusal(program, text, activeFormat(program)));
@@ -381,22 +395,82 @@ function commanderRefusal(program: Command, text: string, format: OutputFormat):
 }
 
 /**
- * The names (and aliases) of the commands an unknown command was typed among: walk the root program's
- * operands from the top, descending into each known command, and stop at the first operand no command
- * at that level answers to — the one Commander refused. The list is the one Commander itself would
- * consider there (`Help#visibleCommands`, its built-in `help` included).
+ * The deepest command the root program's operands name: walk them from the top, descending into each
+ * registered command (by name or alias, as `Command#_findCommand` matches), and stop at the first
+ * operand no registered command at that level answers to — the one Commander refused, or the one it
+ * dispatched to its built-in help command.
+ *
+ * @returns the command reached, and the index in `program.args` of the operand the walk stopped at
+ *   (`program.args.length` when every operand named a command).
  */
-function commandsBeside(program: Command): string[] {
+function deepestCommand(program: Command): { level: Command; stop: number } {
   let level = program;
+  let stop = 0;
   for (const operand of program.args) {
     const next = level.commands.find((command) => command.name() === operand || command.aliases().includes(operand));
     if (next === undefined) break;
     level = next;
+    stop += 1;
   }
+  return { level, stop };
+}
+
+/**
+ * The names (and aliases) of the commands an unknown command was typed among: those of the level
+ * {@link deepestCommand} reaches, the list Commander itself would consider there
+ * (`Help#visibleCommands`, its built-in `help` included).
+ */
+function commandsBeside(program: Command): string[] {
   return program
     .createHelp()
-    .visibleCommands(level)
+    .visibleCommands(deepestCommand(program).level)
     .flatMap((command) => [command.name(), ...command.aliases()]);
+}
+
+/**
+ * The commands Commander adds to a level of its own: `Help#visibleCommands` (the public listing,
+ * built-ins included) minus the level's registered `commands`. On commander@15 that is the implicit
+ * help command of a command with subcommands, whatever its name (`Command#helpCommand` can rename it),
+ * and nothing on a leaf. Consulted rather than assumed, so no string decides it (task-315, `bug-116`).
+ */
+function builtinCommands(level: Command): Command[] {
+  return level
+    .createHelp()
+    .visibleCommands(level)
+    .filter((command) => !level.commands.includes(command));
+}
+
+/** A request for help through Commander's built-in help command, at the level it was typed at. */
+interface HelpCommandRequest {
+  /** The command the help command was typed under: the root program, or a noun. */
+  readonly level: Command;
+  /** The operand after the help command — the command whose help is asked for — when there is one. */
+  readonly subject: string | undefined;
+}
+
+/**
+ * The help request the invocation makes, if any (task-315): the operand {@link deepestCommand} stops at
+ * names one of that level's {@link builtinCommands} — matched by name, as `Command#_parseCommand`
+ * matches its help command — and the operand after it is the subject. Any operand after the subject is
+ * ignored, as Commander ignores it.
+ */
+function helpCommandRequest(program: Command): HelpCommandRequest | undefined {
+  const { level, stop } = deepestCommand(program);
+  const operand = program.args[stop];
+  if (operand === undefined) return undefined;
+  if (!builtinCommands(level).some((command) => command.name() === operand)) return undefined;
+  return { level, subject: program.args[stop + 1] };
+}
+
+/**
+ * The built-in command a help request asks about, when it asks about one — `wingfoil help help`,
+ * `wingfoil memory help help` (task-315, `bug-116`, design gate D1 (b)): the help command's own help
+ * is the answer. Commander's `_findCommand` does not see a built-in, so it would refuse the request.
+ */
+function builtinHelpSubject(request: HelpCommandRequest | undefined): Command | undefined {
+  if (request?.subject === undefined) return undefined;
+  const { level, subject } = request;
+  return builtinCommands(level).find((command) => command.name() === subject);
 }
 
 /**
@@ -409,22 +483,39 @@ function commandsBeside(program: Command): string[] {
  *   `missing required argument: <command>`, with the incomplete invocation and the token that would
  *   complete it as the `hint:` line, `usage: wingfoil dna <command>`. `<command>` rather than `<verb>`
  *   matches Commander's own placeholder in the usage line it prints above, under `console`.
- * - `wingfoil help nosuchnoun` → `unknown command 'nosuchnoun'`, byte-for-byte the reason `wingfoil
- *   nosuchnoun` emits, because asking about an unknown noun through `help` is the same mistake and a
- *   script should have one shape to grep. It carries no `hint:` line: the suggestion on this path is
- *   `bug-115`'s (v0.4), out of task-179's scope.
+ * - `wingfoil help nosuchnoun`, `wingfoil help memroy`, `wingfoil memory help addd` — a help request
+ *   ({@link helpCommandRequest}) whose subject names no command of its level → `unknown command
+ *   '<subject>'`, byte-for-byte the reason `wingfoil nosuchnoun` emits, because asking about an unknown
+ *   command through `help` is the same mistake and a script should have one shape to grep; and the same
+ *   `hint:` line, `did you mean "memory"?`, when a command of that level is within the distance
+ *   `./suggest.ts` allows (task-315, `bug-115`).
  *
- * @param operands - the root program's `args`: the invocation's operands, global options already
+ * A help request about a built-in (`wingfoil help help`) never arrives here: the exit callback answers
+ * it with the help command's own help (task-315, `bug-116`).
+ *
+ * @param program - the root program; its `args` are the invocation's operands, global options already
  *   removed by Commander itself. This function never re-parses argv.
+ * @param request - the invocation's help request, from {@link helpCommandRequest}.
  * @returns the reason, and the hint when there is one.
  */
-function incompleteInvocationReason(operands: readonly string[]): { reason: string; hint?: string } {
-  const [first, second] = operands;
-  // `help <name>` reaches the incomplete-invocation path only when `<name>` matched no command —
+function incompleteInvocationReason(
+  program: Command,
+  request: HelpCommandRequest | undefined,
+): { reason: string; hint?: string } {
+  // A help request reaches the incomplete-invocation path only when its subject matched no command —
   // `Command#_dispatchHelpCommand` falls through to `_dispatchSubcommand`, whose `if (!subCommand)`
-  // raises it. `help` alone and `help <known-noun>` exit 0 and never arrive here.
-  if (first === 'help' && second !== undefined) return { reason: `unknown command '${second}'` };
-  return { reason: missingOperandReason('command'), hint: `usage: ${['wingfoil', ...operands, '<command>'].join(' ')}` };
+  // raises it. A bare `help` and `help <known-command>` exit 0 and never arrive here.
+  if (request?.subject !== undefined) {
+    const suggested = closestCommand(request.subject, commandsBeside(program));
+    return {
+      reason: `unknown command '${request.subject}'`,
+      ...(suggested !== undefined ? { hint: unknownCommandHint(suggested) } : {}),
+    };
+  }
+  return {
+    reason: missingOperandReason('command'),
+    hint: `usage: ${['wingfoil', ...program.args, '<command>'].join(' ')}`,
+  };
 }
 
 /**
