@@ -305,6 +305,96 @@ Design gate approved by the approver on 2026-10-30T18:40:13+01:00, in the orches
 - D6 — (b), for bug-360 only: one BDD scenario for P1.13 pinning the load-time refusal of a type `path` that holds a `..` segment or is
   absolute; no new scenario for bug-216 or bug-262.
 
+### red (qa, 2026-10-30)
+
+**Red commit `8afe963f`** (`git log --oneline -1` → `8afe963ff test(memory): task-313 — failing test: memory.yaml path and
+id_pattern refused at load, newer-format past revisions unreadable in history`). Base unchanged: `git rev-list --count
+HEAD..release/0.3` → `0`, no merge. PATH guard: `command -v wingfoil` → the task's shim, `wingfoil --version` → `0.3.1
+(55a6d534…)`. No new export is imported: `npx tsc --noEmit -p tsconfig.json` → exit 0, no error.
+
+**Files** (T4 covers all of them): `test/memory/schema.test.ts`, `test/memory/element-schema.test.ts`,
+`test/core/loaders.test.ts`, `test/core/helpers/path-token-fixture.ts`, `test/core/memory-add-path-tokens.test.ts`,
+`test/cli/memory-add-path-tokens.integration.test.ts`, `test/core/memory-element-format.test.ts` (fixture line only),
+`test/memory/audit-parent-unreadable.test.ts`, `test/core/memory-history.test.ts`, `test/cli/check-governance.test.ts`,
+`test/cli/memory-yaml-id-pattern.integration.test.ts` (new), `test/cli/memory-history-newer-format.integration.test.ts`
+(new), and `docs/02_requirements/02_bdd/features/p1-memory/P1.13-memory-element-schema.feature` (scenario 12, D6 (b)).
+
+**Fixtures changed as the design asked.** `memory-element-format.test.ts`: `id_pattern "task-{counter:3}-{slug}"` →
+`"task-{n}-{slug}"`, every assertion unchanged (the suite passes on this base). `path-token-fixture.ts`: types `t` and `r`
+leave the shared project (it keeps `plan` and `w`); `writeDotSegmentProject` holds them, with `DOT_SEGMENT_REFUSAL`
+(the `memory add` refusal naming both types in `types` order); `TYPE_FOLDER_MESSAGE` and `ROOT_ESCAPE_PREFIX` are gone and
+the four `t`/`r` tests of the two path-token suites became AC 1's red tests. The wrapper text of `DOT_SEGMENT_REFUSAL`
+and of AC 2's `memory add` pin was copied from a real run of the code build (`node <worktree>/dist/cli.js memory add
+--type t --title x --set scope=a --set name=one` in a scratch project whose `t` and `r` declare `waiting: [ nope ]` →
+exit 1, `error: cannot resolve the memory type registry: the committed '.wingfoil/memory.yaml' (at HEAD) is not
+readable as a Memory configuration: E_VALIDATION types.t.states.waiting.0 (HEAD:.wingfoil/memory.yaml): …; E_VALIDATION
+types.r.states.waiting.0 …. An element is created against the types the repository records (dl-080), so the committed
+file must be valid; fix it and commit the fix, then retry.`); `memory search x --format json` on the same project →
+exit 1, stdout empty, `{"error":"E_VALIDATION types.t.states.waiting.0 (.wingfoil/memory.yaml): …"}` on stderr (the shape
+AC 2's JSON pin uses). bug-262's history on a scratch Scrum project (`init --template scrum`, `memory add --type task
+--title "Older probe"`, the two hand commits) → exit 0, the submit entry `"from": "draft", "to": "pending"`: the defect.
+
+**Run.** `npx jest --maxWorkers=2 test/memory/schema.test.ts test/memory/element-schema.test.ts test/core/loaders.test.ts
+test/core/memory-add-path-tokens.test.ts test/cli/memory-add-path-tokens.integration.test.ts
+test/core/memory-element-format.test.ts test/memory/audit-parent-unreadable.test.ts test/core/memory-history.test.ts
+test/cli/memory-yaml-id-pattern.integration.test.ts test/cli/memory-history-newer-format.integration.test.ts
+test/cli/check-governance.test.ts` → `Test Suites: 10 failed, 1 passed, 11 total`, `Tests: 29 failed, 199 passed, 228
+total` (`memory-element-format` passes whole). Every failing test is a red-first test below; every characterization
+test passes. `npx jest test/lint --maxWorkers=2` with the files in place → `Test Suites: 13 passed`, `Tests: 153 passed`.
+
+**Per AC** (first failing assertion of each red test):
+- **AC 1 (red-first), `path`.**
+  - `schema.test.ts` "a type `path` is one relative path …": `docs/04_memory/../../outside/{id}.md`,
+    `docs/04_memory/./{id}.md`, `../escaped/{id}.md` (holds a '.' or '..' segment) and `/tmp/abs/{id}.md`,
+    `\\server\{id}.md`, `C:/x/{id}.md` (must be a relative path) → `expect(MemoryYaml.safeParse(…).success).toBe(false)`:
+    received `true` (6 tests). Characterization, pass: `rl-{release-line}`, `{scope}`, `v0.1`, `..x` and `docs//x` (D2 (a)).
+  - `loaders.test.ts`: `loadMemoryYaml` and, committed, `loadMemoryYamlAtHead` → `expected the read to throw, it returned`
+    (2 tests; the expected message is `E_VALIDATION types.bug.path (.wingfoil/memory.yaml|HEAD:.wingfoil/memory.yaml):
+    path "docs/memory/bug/../../outside/{id}.md" holds a '.' or '..' segment`).
+  - `memory-add-path-tokens.test.ts` (core) `--type t` / `--type r` → `expect(result.error.message).toBe(DOT_SEGMENT_REFUSAL)`:
+    received the `E_PATH_OUTSIDE_TYPE_FOLDER` / `E_PATH_ESCAPES_ROOT` message (2 tests). Then: exit 1, no file at
+    `docs/t-one.md` / `../r-one.md`, `HEAD` unchanged, `git status --porcelain` empty, persistence snapshot unchanged.
+  - `memory-add-path-tokens.integration.test.ts` (CLI) `--type t` / `--type r` → `[status, stdout, stderr]` expected
+    `[1, '', 'error: ' + DOT_SEGMENT_REFUSAL + '\n']`, received the storage refusal line (2 tests).
+  - BDD, `element-schema.test.ts` "P1.13 scenario 12": the `..` and the absolute path → `success` expected `false`,
+    received `true` (2 tests); then exactly one issue, `[message, ['types', 'bug', 'path']]`.
+- **AC 2 (red-first), `id_pattern`.**
+  - `schema.test.ts` "a type `id_pattern` is checked by idPatternIssues at load": `task-{n:0}-{slug}`,
+    `task-{counter:3}-{slug}`, `TASK_{n}`, `retro-{release.version}`, `""` → `success` expected `false`, received `true`
+    (5 tests); `TASK_{Slug}` → two issues expected, received `[]` (1 test). Characterization, pass: `p-{n:2}-{slug}`,
+    `t-{nnn}`, `r-{date}-{author}-{kind}-{n}`, and every `id_pattern` of the live `.wingfoil/memory.yaml`.
+  - `memory-yaml-id-pattern.integration.test.ts` (Scrum project, `bug-{n:0}-{slug}` committed): `memory search x` →
+    expected `[1, '', 'error: E_VALIDATION types.bug.id_pattern (.wingfoil/memory.yaml): id_pattern "bug-{n:0}-{slug}":
+    malformed token {n:0}\n']`, received status `0` and the search result; `--format json` → `expect(run.status).toBe(1)`,
+    received `0`; `memory add --type bug --title X` → expected the committed-`memory.yaml` refusal around
+    `E_VALIDATION types.bug.id_pattern (HEAD:.wingfoil/memory.yaml): …`, received `error: missing value for token {n:0}:
+    give it with --set n:0=<value>` (bug-216's advice); then no `--set n:0` on stderr, nothing written (3 tests).
+- **AC 3 (red-first), newer format in history.**
+  - `audit-parent-unreadable.test.ts`: tolerant → the second transition expected `['draft', null, 'E_INVALID_FORMAT: this
+    file is written in format 2; this WingFoil reads up to format 1: upgrade WingFoil']`, received `'pending'`; strict →
+    `expect(thrown).toBeInstanceOf(ValidationError)`, received `undefined` (2 tests). Characterization, pass: `format: 1`,
+    an absent `format` and `format: 1.5` read the status, tolerant and strict.
+  - `memory-history.test.ts` (core) → entries expected `['submit', 'draft', null, <E_INVALID_FORMAT reason>]`, received
+    `'pending'`; then the third entry `from: null`, and `warnings` `toEqual` `['W_MEMORY_UNREADABLE (<path>): unreadable
+    frontmatter in <path>: <reason> (at <submit sha>)']` (1 test).
+  - `memory-history-newer-format.integration.test.ts` (CLI, bug-262's steps, `--format json`) → the same entries
+    assertion, received `'pending'`; then stderr `toBe` the one JSON line `{"warning":"W_MEMORY_UNREADABLE (…) (at <submit
+    sha>)"}\n` (1 test). The design wrote the default rendering's `warning: …` line; `--format json` is used instead so the
+    pin does not depend on the default `console` rendering, which `docs/cli-reference.md` says will change (P5.1.4). The
+    JSON warning shape was copied from a real run (`node <worktree>/dist/cli.js memory history task-001-older-probe
+    --format json` on the scratch project after a revision with `status: [draft` → exit 0, stderr
+    `{"warning":"W_MEMORY_UNREADABLE (docs/memory/task/task-001-older-probe.md): unreadable frontmatter in … (5:1) (at
+    <sha>)"}` and a newline).
+  - `check-governance.test.ts` "a revision written in a newer format" (D4 (a)): a bracketed approve whose revision is in
+    format 2, and the same approve on a document gone at `HEAD` (the blob reader) → `reasons` expected
+    `[stringMatching(/newer format/)]`, received `[]` (2 tests); then the reason contains `E_INVALID_FORMAT` (strict read
+    only), never `/does not parse/`, and no finding on the commit.
+- **AC 4 (characterization, documentation):** nothing pinned in red; the spec-001 and spec-008 text is the developer's
+  pending amendment.
+
+**For the developer.** The gone-at-`HEAD` governance pin asserts only `/newer format/` and not `/does not parse/`: the design names
+no parenthetical for that reason. `DOT_SEGMENT_REFUSAL` expects the two path issues in `types` order (`t`, then `r`).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
