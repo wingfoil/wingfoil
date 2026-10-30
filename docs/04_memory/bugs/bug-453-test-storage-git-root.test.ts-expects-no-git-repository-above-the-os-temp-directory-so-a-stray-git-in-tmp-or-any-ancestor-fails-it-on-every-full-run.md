@@ -28,7 +28,8 @@ tmpl_version: 261010   # Orignal template version
 
 ## Expected Behavior
 
-The suite gives the same result whatever sits above the OS temp directory: its no-repository fixture stops the upward search
+Every suite with an "outside any repository" fixture (this one, `test/cli/integration-branch.test.ts`) gives the same result whatever
+sits above the OS temp directory: its no-repository fixture stops the upward search
 itself (for example `GIT_CEILING_DIRECTORIES`, or a parameter of `findGitRoot`'s test seam), so a `.git` in `/tmp` or in any
 ancestor cannot reach it.
 
@@ -40,6 +41,8 @@ The fixture is a plain temp directory; `findGitRoot` walks up past it and stops 
 
 - Found on 2026-10-30 in `w1` of `patch-v0.3.2`: the full runs of `task-309`, `task-314`, `task-315` and `task-319` each failed these
   2 tests; the empty `/tmp/.git` (created 2026-10-29 17:09 by an unknown process) was removed on the approver's instruction.
+- 2026-10-30, the independent review of `task-319`: the "outside any repository" fixture of `test/cli/integration-branch.test.ts`
+  has the same dependence (it sets no `GIT_CEILING_DIRECTORIES`); the Expected Behavior covers every such fixture under `test/`.
 - Same family as `bug-446` (a test result that depends on the developer's machine), a different mechanism.
 
 ## Triage & Execution Notes
