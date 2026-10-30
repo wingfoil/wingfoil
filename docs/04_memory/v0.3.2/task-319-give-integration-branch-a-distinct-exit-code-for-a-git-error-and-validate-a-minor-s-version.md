@@ -182,6 +182,13 @@ output). Green runs `npm run check:mcp` after the bindings edit.
   other placeholder, so the pattern is the union of the two kinds' forms and the script ties a form to its kind (what
   `bug-387`'s Expected Behavior allows: "the binding's pattern, or the script"). **Recommend yes.**
 
+### design gate (approver, 2026-10-30)
+
+Design gate approved by the approver on 2026-10-30T10:38:05+01:00, in the orchestrator's chat:
+- D1 — (a): a HEAD git cannot read exits 2; the binding comment says what 2 covers; no spec amendment.
+- D2 — yes: a release with no kind follows the minor's vX.Y rule and message, and a minor's vX.Y.0 is refused.
+- D3 — yes: the binding's version pattern is the union of the two kinds' forms; the script ties each form to its kind.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
