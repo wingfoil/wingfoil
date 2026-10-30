@@ -278,6 +278,35 @@ Against code-review, on `git diff release/0.3...HEAD`:
 None. Each bug of the task's `bug:` list already has a `### Retrospective` (`grep -c "^### Retrospective"` on the
 three bug files → `1` each, "None." written at capture), and the design gate ruled no amend of `dl-089` (D2).
 
+### red amendment (qa, 2026-10-30)
+
+**What.** Red commit `f9d87b771` (`git log --oneline -1` → `f9d87b771 test(release-health): task-320 — red amendment: a
+git dependency's npm error command is not a script`), `test/release-health/measure.test.ts` only: a fourth case in the
+`it.each` of "task-320 AC1 — an npm lifecycle failure's reason names the failing script", "a git dependency (npm's `npm
+error command` line is git's, not a script's): no script suffix", with the fixture `NPM_GIT_DEPENDENCY_STDERR`; every
+one of the seven entries is expected `not-measurable` with exactly `npm ci failed (exit 128): npm error code 128`.
+
+**Why.** A review-asked red amendment (the independent review's finding on the green at `0ce15c037`, approved as a
+standing rule for review-asked red amendments): the green reads any `npm error command <cmd>` line as a script, but npm
+prints that line for a failing git dependency too, with no `npm error command failed` line and no `sh -c ` prefix, so the
+reason ended `(script: git --no-replace-objects ls-remote …)`, against approver ruling D4 (a script suffix only when npm
+names the lifecycle script that failed).
+
+**Producing command.** npm 11.6.2, a scratch package outside the worktree, `package.json`
+`{"name":"gitdep","version":"1.0.0","dependencies":{"x":"git+file:///nonexistent/repo.git"}}`. `npm ci` cannot reach
+git there: with no lockfile it exits 1 with `npm error code EUSAGE`, and no lockfile can be written for a dependency
+that does not resolve. So the fixture is `npm install --offline >inst.out 2>inst.err` → exit 128, stdout empty (left out
+of the stub), stderr `npm error code 128`, `npm error An unknown git error occurred`, `npm error command git
+--no-replace-objects ls-remote file:///nonexistent/repo.git`, git's two `fatal:` lines, npm's access-rights advice and
+the log pointer; copied verbatim but for the home directory (`/home/user`); a comparison with the redacted file printed
+`true`.
+
+**Run.** `npx jest test/release-health/measure.test.ts --maxWorkers=2` → `Tests: 1 failed, 71 passed, 72 total`, the
+one failure this case: expected `npm ci failed (exit 128): npm error code 128`, received `npm ci failed (exit 128): npm
+error code 128 (script: git --no-replace-objects ls-remote file:///nonexistent/repo.git)` (for each of the seven
+entries). `npx tsc --noEmit -p tsconfig.json` → exit 0; `npx eslint` on the file → exit 0; `npx jest test/lint
+--maxWorkers=2` → `Test Suites: 13 passed, 13 total`, `Tests: 153 passed, 153 total`.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
