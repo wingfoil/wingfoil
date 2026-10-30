@@ -11,6 +11,7 @@
 import { z } from 'zod';
 
 import { formatField, MEMORY_TEMPLATE_FORMAT, MEMORY_YAML_FORMAT } from '../validation/format';
+import { idPatternIssues } from '../validation/id';
 
 const RESERVED_STATE = 'deprecated';
 
@@ -206,8 +207,40 @@ export const MemoryTypeEntry = z
      */
     amendable: z.boolean().optional(),
   })
-  .passthrough();
+  .passthrough()
+  /**
+   * The load-time checks of a type's patterns (spec-001, task-313). `path` must be one relative path
+   * with no `.` or `..` segment (`bug-360`, REQ-SEC-06): an absolute pattern or a dot segment would let
+   * `memory add` write outside the folder the pattern names, so the file is refused before any document
+   * is created. `id_pattern`, when present, is checked by the same {@link idPatternIssues} rule a
+   * workflow action's override is (spec-009 Pass 2, `bug-216`), one issue per problem, in its order.
+   */
+  .superRefine((value, ctx) => {
+    const pathIssue = typePathIssue(value.path);
+    if (pathIssue !== null) {
+      ctx.addIssue({ code: 'custom', message: `path "${value.path}" ${pathIssue}`, path: ['path'] });
+    }
+    if (value.id_pattern !== undefined) {
+      for (const issue of idPatternIssues(value.id_pattern)) {
+        ctx.addIssue({ code: 'custom', message: `id_pattern "${value.id_pattern}": ${issue}`, path: ['id_pattern'] });
+      }
+    }
+  });
 export type MemoryTypeEntry = z.infer<typeof MemoryTypeEntry>;
+
+/**
+ * Why a type's `path` pattern is refused, or `null` when it is accepted (spec-001, task-313, `bug-360`).
+ * Absolute — a leading `/` or `\`, or a drive letter `X:` — is checked first; otherwise a segment (split on
+ * `/` and `\`) equal to `.` or `..` is refused. An empty segment is not (it moves no document out of its
+ * folder), nor is a segment that merely contains dots (`v0.1`, `{id}.md`, `..x`).
+ */
+function typePathIssue(pattern: string): string | null {
+  if (/^[/\\]/.test(pattern) || /^[A-Za-z]:/.test(pattern)) return 'must be a relative path';
+  if (pattern.split(/[/\\]/).some((segment) => segment === '.' || segment === '..')) {
+    return "holds a '.' or '..' segment";
+  }
+  return null;
+}
 
 /**
  * `memory.yaml`'s top-level shape. `version` is `z.number().positive()`, NOT `.int()` — the file's

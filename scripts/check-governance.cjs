@@ -315,7 +315,9 @@ function readBlobTexts(root, requests) {
 
 /**
  * A Markdown text's frontmatter `status` and `type`: `null` when there is no text, `{ unreadable }` when
- * the frontmatter does not parse, else the two fields (`null` where absent or not a string).
+ * the frontmatter does not parse, `{ unreadable, newer: true }` when it is written in a newer element
+ * `format` (task-313, `bug-262`: its fields are not read, as `reconstructMemoryTransitions` does not read
+ * them), else the two fields (`null` where absent or not a string).
  */
 function readFrontmatterFields(dist, text, label) {
   if (text === null) return null;
@@ -327,6 +329,8 @@ function readFrontmatterFields(dist, text, label) {
   } catch (error) {
     return { unreadable: error instanceof Error ? error.message.split('\n')[0] : String(error) };
   }
+  const newer = dist.validation.newerFormatIssue(parsed, dist.validation.MEMORY_TEMPLATE_FORMAT, label);
+  if (newer !== null) return { unreadable: `${newer.code}: ${newer.message}`, newer: true };
   const field = (name) => (parsed !== null && typeof parsed === 'object' && typeof parsed[name] === 'string' ? parsed[name] : null);
   return { status: field('status'), type: field('type'), supersedes: field('supersedes'), id: field('id') };
 }
@@ -723,19 +727,24 @@ function checkGovernance(root, options = {}) {
   });
 
   const byOrder = (a, b) => order.get(a) - order.get(b);
-  /** Run `read`; on a revision whose frontmatter does not parse, report `shas` as not checked instead. */
+  /**
+   * Run `read`; on a revision whose frontmatter does not parse, or that is written in a newer element
+   * format (task-313), report `shas` as not checked instead.
+   */
   const readOrReport = (path, shas, read) => {
     try {
       return read();
     } catch (error) {
       // Both reads are strict: they read every revision's `status` and throw on a revision whose
-      // frontmatter does not parse (`reconstructMemoryTransitions` is tolerant only for `memory
-      // history`, task-171). The document's commits are reported as not checked, naming the error,
-      // rather than stopping the whole check or passing them as checked.
+      // frontmatter does not parse, or that is written in a newer element format (task-313)
+      // (`reconstructMemoryTransitions` is tolerant only for `memory history`, task-171). The
+      // document's commits are reported as not checked, naming the error, rather than stopping the
+      // whole check or passing them as checked.
       if (!(error instanceof dist.validation.ValidationError)) throw error;
       const first = error.message.split('\n')[0];
+      const why = dist.validation.isNewerFormatError(error) ? 'a revision is written in a newer format' : "a revision's frontmatter does not parse";
       for (const sha of [...shas].sort(byOrder)) {
-        stateUnchecked.push({ sha, subject: subjects.get(sha), reason: `${path}: a revision's frontmatter does not parse (${first})` });
+        stateUnchecked.push({ sha, subject: subjects.get(sha), reason: `${path}: ${why} (${first})` });
       }
       return null;
     }
@@ -792,7 +801,9 @@ function checkGovernance(root, options = {}) {
       const before = readFrontmatterFields(dist, texts[index * 2], `${entry.path}@${entry.parent}`);
       const after = readFrontmatterFields(dist, texts[index * 2 + 1], `${entry.path}@${entry.sha}`);
       if ((before && before.unreadable) || (after && after.unreadable)) {
-        stateUnchecked.push({ sha: entry.sha, subject: subjects.get(entry.sha), reason: `${entry.path}: a revision's frontmatter does not parse` });
+        const newer = [before, after].find((fields) => fields && fields.newer);
+        const reason = newer ? `a revision is written in a newer format (${newer.unreadable})` : "a revision's frontmatter does not parse";
+        stateUnchecked.push({ sha: entry.sha, subject: subjects.get(entry.sha), reason: `${entry.path}: ${reason}` });
         return;
       }
       const derivedFrom = before?.status ?? null;
@@ -975,7 +986,7 @@ function formatReport(report) {
     `gated: ${gated.length} findings on ${commitsWith(gated)} commits${gated.length ? ` (${countByRule(gated)})` : ''}`,
     `history: ${history.length} findings on ${commitsWith(history)} commits${history.length ? ` (${countByRule(history)})` : ''}`,
     `state not checked: ${report.stateUnchecked.length} entries on ${commitsWith(report.stateUnchecked)} commits ` +
-      '(history with no machine, no named document, a document gone at HEAD, or a revision that does not parse)',
+      '(history with no machine, no named document, a document gone at HEAD, or a revision that does not parse or is in a newer format)',
   );
   return lines.join('\n');
 }

@@ -30,7 +30,7 @@
  *   derived from git log ... no drift" -> {@link verifyTransitionConsistency}.
  */
 import { isConfiguredIdentity } from '../core';
-import { isAttributableIdentity, parseYaml, ValidationError } from '../validation';
+import { E_INVALID_FORMAT, EXIT_VALIDATION, isAttributableIdentity, MEMORY_TEMPLATE_FORMAT, newerFormatIssue, parseYaml, ValidationError } from '../validation';
 
 import { parseApproverTrailerLine, parseReasonBlock, parseVersionTrailer } from './commit-message';
 import { getMemoryHistory } from './history';
@@ -306,8 +306,9 @@ export interface MemoryTransition {
    */
   readonly wingfoil: string | null;
   /**
-   * Present only when this commit's frontmatter does not parse (task-171, `bug-188`): the first line
-   * of the parse error. `toState` is then `null`, and so is the `fromState` of every commit whose first
+   * Present only when this commit's revision cannot be read (task-171, `bug-188`): the first line of
+   * the parse error when its frontmatter does not parse, or `E_INVALID_FORMAT: <message>` when it is
+   * written in a newer element format (task-313, `bug-262`). `toState` is then `null`, and so is the `fromState` of every commit whose first
    * parent holds that revision, since the state between them could not be read. Absent on every other
    * transition, so their shape is unchanged.
    */
@@ -319,9 +320,10 @@ export interface MemoryTransition {
  * {@link reconstructMemoryTransitions}' batched read — without validating it against any type's Zod
  * schema: this is a historical-snapshot read, not a live document validation. Its `status` is `null`
  * if the revision does not hold the path (`raw` is `null`), has no frontmatter block, or the
- * frontmatter has no string `status` field. A frontmatter that does not parse is returned as
- * `unreadable`, never thrown here (task-171, `bug-188`): one bad revision used to make the whole
- * history unreadable.
+ * frontmatter has no string `status` field. A frontmatter that does not parse, or that is written in a
+ * newer element `format` (`dl-149`, task-313, `bug-262`: only a newer integer format is checked, as on a
+ * current document), is returned as `unreadable`, never thrown here (task-171, `bug-188`): one bad
+ * revision used to make the whole history unreadable.
  *
  * The path read is the one the element occupied **at that revision** — `MemoryHistoryEntry.path` for
  * the commit, `MemoryHistoryEntry.parentPath` for its first parent, both produced by the same
@@ -358,11 +360,31 @@ function parseStatus(raw: string | null, label: string): StatusRead {
   }
   if (parsed === null || typeof parsed !== 'object') return { status: null };
 
+  // task-313 (`bug-262`, `dl-149`): a revision written in a newer element format is not read either —
+  // its `status` may not mean what this build's machine means — and is unreadable like a parse error.
+  const newer = newerFormatIssue(parsed, MEMORY_TEMPLATE_FORMAT, label);
+  if (newer !== null) return { status: null, unreadable: new ValidationError([newer], EXIT_VALIDATION) };
+
   const status = (parsed as Record<string, unknown>).status;
   return { status: typeof status === 'string' ? status : null };
 }
 
-/** What {@link parseStatus} found: the `status`, and the parse error when the frontmatter did not parse. */
+/**
+ * The {@link MemoryTransition.unreadable} text of a revision {@link parseStatus} could not read, or
+ * `undefined` when it read it: `<code>: <message>` for a newer format (`E_INVALID_FORMAT`, the form the
+ * scan's `W_MEMORY_UNREADABLE` report uses, task-313), the parse error's message otherwise.
+ */
+function unreadableReason(error: ValidationError | undefined): string | undefined {
+  if (error === undefined) return undefined;
+  const issue = error.issues[0];
+  if (issue?.code === E_INVALID_FORMAT) return `${issue.code}: ${issue.message}`;
+  return issue?.message ?? error.message;
+}
+
+/**
+ * What {@link parseStatus} found: the `status`, and the error when the revision could not be read — its
+ * frontmatter does not parse, or it is written in a newer element format (task-313).
+ */
 interface StatusRead {
   readonly status: string | null;
   readonly unreadable?: ValidationError;
@@ -371,9 +393,10 @@ interface StatusRead {
 /** Options of {@link reconstructMemoryTransitions}. */
 export interface ReconstructOptions {
   /**
-   * What a revision whose frontmatter does not parse means (task-171). Tolerant (the default, `memory
-   * history`, `bug-188`): a transition with `toState: null` and {@link MemoryTransition.unreadable}.
-   * Strict: the parse error (`ValidationError`) is thrown, because a check must never pass a commit
+   * What a revision that cannot be read means — its frontmatter does not parse (task-171), or it is
+   * written in a newer element format (task-313). Tolerant (the default, `memory history`, `bug-188`): a
+   * transition with `toState: null` and {@link MemoryTransition.unreadable}. Strict: the error
+   * (`ValidationError`) is thrown, because a check must never pass a commit
    * whose state it could not read — {@link verifyTransitionConsistency} and
    * `scripts/check-governance.cjs` read strictly and report such a commit as "state not checked".
    */
@@ -443,7 +466,7 @@ export function reconstructMemoryTransitions(
     // Strict: neither the commit's revision nor its parent's may go unread (task-171, `bug-188`).
     const strictFailure = read.unreadable ?? before.unreadable;
     if (strict && strictFailure !== undefined) throw strictFailure;
-    const unreadable = read.unreadable?.issues[0]?.message ?? read.unreadable?.message;
+    const unreadable = unreadableReason(read.unreadable);
     transitions.push({
       sha: entry.sha,
       authorName: entry.authorName,
