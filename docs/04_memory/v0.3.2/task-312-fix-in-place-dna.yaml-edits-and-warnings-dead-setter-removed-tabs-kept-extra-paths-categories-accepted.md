@@ -339,6 +339,32 @@ Edited in this worktree, left uncommitted, for the approver's `memory amend` (ea
 
 `bug-316` already has its Retrospective ("None."); nothing to amend there.
 
+### review fixes (developer, 2026-10-30)
+
+The independent review approved with fixes; finding 1 (should-fix, introduced by this task's fix) is fixed here.
+The approver ruled on 2026-10-30 that it is fixed in this task, extending the scope by three files:
+`src/core/index.ts`, `src/dna/path.ts`, `src/agent/execute.ts`.
+
+**Commit `d4a5a57e`** (`git log --oneline -1` → `d4a5a57e9 docs(dna): task-312 — review fix: comments name the paths
+catchall`), comments only (`git diff --stat HEAD~1 HEAD` → `3 files changed, 9 insertions(+), 6 deletions(-)`):
+- `src/core/index.ts`, `pathsFn`'s TSDoc: it described `dna.paths` as `.passthrough()` with "five named categories";
+  it now names the seven declared categories and the typed catchall, and keeps `Array.isArray` as the guard of a
+  category that is absent (code unchanged).
+- `src/dna/path.ts:17`: "every node is `.passthrough()`" now names `paths`'s typed catchall as the exception.
+- `src/agent/execute.ts:588` (step 6): "`paths` is passthrough" now says `runs` is a declared category and `paths`
+  admits a project's own categories through its typed catchall.
+- Same-class sweep: `grep -rniE "paths.{0,40}passthrough|passthrough.{0,40}paths" src` → only the reworded
+  `src/dna/path.ts:17`; `grep -rn "five named categories\|five categories" src` → no output.
+
+**Gates.** `npx jest test/agent/execute.test.ts test/agent/execute-config-arg.test.ts test/core/paths-extra-category.test.ts
+test/core/paths-health.test.ts test/dna/path.test.ts test/dna/path-quoting.test.ts test/docs/api-docs.test.ts
+--maxWorkers=2` → `Test Suites: 7 passed, 7 total`, `Tests: 88 passed, 88 total`; `npm run -s lint` → exit 0;
+`npm run -s docs:api` → exit 0; `npx tsc --noEmit -p tsconfig.json` → exit 0; `npx tsc --noEmit -p tsconfig.build.json`
+(after the slot wait) → exit 0. The full suite was not re-run: the change is to comments only, which no test reads
+except the API-docs gate run above, and the full run on the green head (`Tests: 9296 passed, 9296 total`, refactor
+above) covers the code. The four pending amendments stay uncommitted and were in the tree for these runs. Finding 2 (the
+short-id bug-sync subjects) is filed as `bug-458`, finding 3 is `bug-260`: both are cited in the Retrospective below.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -353,5 +379,8 @@ Edited in this worktree, left uncommitted, for the approver's `memory amend` (ea
   (`b8b1ac92`), one extra round trip. Proposal: a red whole-file expectation of a wingfoil write is derived from a real
   write on the base (the dl-174 raise included), not from the fixture by hand.
 - A full task id containing `dna.yaml` reads as a config name to `test/docs/name-resolvability.test.ts` when cited in a
-  spec (`…|config|task-312-fix-in-place-dna.yaml-…`), so the two Revision notes name the task `task-312`. Proposal:
-  either the scanner recognises a Memory id, or `id_pattern` slugs avoid file-name-shaped words.
+  spec (`…|config|task-312-fix-in-place-dna.yaml-…`), so the two Revision notes name the task `task-312`. This is the
+  known `bug-260` (triaged, v0.4), met again here.
+- The three bug-sync commits carry the short id in their subjects (`wf(bug): sync bug-254 [in-progress → in-review]`,
+  and the same for `bug-255`, `bug-316`), and `npm run -s check:governance -- --base origin/release/0.3` accepted them
+  with `gated: 0 findings`; the independent review flagged them, and the gap is filed as `bug-458`.
