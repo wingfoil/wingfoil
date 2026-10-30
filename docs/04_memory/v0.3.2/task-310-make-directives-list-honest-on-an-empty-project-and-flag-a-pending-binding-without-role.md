@@ -237,6 +237,78 @@ Design gate approved by the approver on 2026-10-30T19:01:03+01:00, in the orches
 - D5 — (a): the absent-versus-unreadable reader is a private `readRolesYaml` in `src/core/directives-list.ts`; `loaders.ts` is not touched.
 - D6 — (a): bug-411's "an error wherever configuration is checked" is recorded at done as met by `npm run check:role-directives`; no follow-up bug.
 
+### red (qa, 2026-10-30)
+
+**Red commit `4e275dd64`** (`git log --oneline -1` → `4e275dd64 test(directives): task-310 — failing test: …`), test files
+only: `test/core/directives-list.test.ts` (five existing pins rewritten, three new describes),
+`test/cli/directives-list-bindings.integration.test.ts` (new), `test/cli/config-missing-refusal.integration.test.ts` (one
+describe added inside task-309's `bug-251` describe). No new export is imported, so no `.d.cts`. Base unchanged:
+`git rev-list --count HEAD..release/0.3` → `0`, no merge.
+
+**Fixtures from real runs** (code build `node <worktree>/dist/cli.js`, `--version` → `0.3.1 (dc56337f0…)`, scratch repositories
+outside the worktree, uid `1000`): `git init`, an empty commit, `mkdir .wingfoil` → `--format json directives list --role
+developer` → `{"entries":[],"warnings":["no directives assigned to role 'developer'"]}`, exit 0; the console run prints the same
+payload pretty-printed on stdout, stderr empty. `init --template scrum`, `ghost-directive` added first under `qa:`, committed →
+`--format json directives list` → 10 entries, `warnings: []`, exit 0; `--role qa` → `["directive 'ghost-directive' bound to
+role 'qa' has no directive file"]`. Scaffold with `roles.yaml` a link to itself → `directives list` exit 0, stderr empty;
+`--format json directives list --role developer` → the bug-199 payload. The expected texts are the design's (approved D1–D6 (a)).
+
+**Run.** `npx jest --maxWorkers=2 test/core/directives-list.test.ts test/cli/directives-list-bindings.integration.test.ts
+test/cli/config-missing-refusal.integration.test.ts` → `Test Suites: 3 failed, 3 total`, `Tests: 22 failed, 64 passed, 86
+total` (per file: directives-list 17 failed / 64, directives-list-bindings 3 / 3, config-missing-refusal 2 / 19).
+`npx tsc --noEmit -p tsconfig.json` → exit 0, no output. `npx eslint` on the three files → exit 0.
+`npx jest test/lint --maxWorkers=2` with the files in place → `Test Suites: 13 passed`, `Tests: 153 passed, 153 total`.
+
+**Per AC** (first failing assertion of each red test):
+- **AC1 (red-first)**:
+  - `test/core/directives-list.test.ts`, "D — --role with no roles.yaml at all makes no role assertion: no warning, exit 0
+    (task-310, bug-199)" (rewrite of the old "… is an unbound role: warning, exit 0") → `toEqual({ entries: [], warnings: [] })`,
+    received `warnings: ["no directives assigned to role 'developer'"]`.
+  - new describe "--role with no roles.yaml makes no role assertion (task-310, bug-199)": "an empty .wingfoil/ (the bug's own
+    case) …", "a roles.yaml that is a dangling symbolic link reads as absent: --role warns nothing (bug-455)" → the same received
+    warning; "no roles.yaml and a dangling directive symlink: --role warns exactly the skipped entry" → `+ "no directives
+    assigned to role 'developer'"` after the skip warning; "buildDirectiveListing with no roles.yaml and a role returns no role
+    warning" → expected `[]`, received the same warning.
+  - CLI, `test/cli/directives-list-bindings.integration.test.ts` AC1: the json run → status 0, then `JSON.parse(stdout)`
+    `toEqual({ entries: [], warnings: [] })` received the warning; the console run → `Expected substring: not "no directives
+    assigned"`.
+  - With a `roles.yaml` unchanged (characterization, passes): the existing `D —` cases and "one rule" of "the warnings channel
+    (dl-042 A + D)".
+- **AC2 (red-first)**:
+  - new describe "the unfiltered listing reports a dangling binding (task-310, bug-411)", each case also checking
+    `exitCodeForResult` 0: "Edge - a role binding names a missing directive: the warnings name "ghost-directive" and role "qa""
+    (D4's scenario text) → expected the qa line, received `[]`; "a `global:` entry with no file is named as bound to every role",
+    "one id bound to two roles and global: three warnings, the global one first, then roles ascending", "two dangling ids are
+    named in ascending id order" → received `[]`; "the order is skipped entries, dangling bindings, shadowed ids, scope
+    disagreements" → `- "directive 'ghost-directive' bound to role 'qa' has no directive file"` missing between the skip and the
+    shadow warning. Characterization, passes: "with no roles.yaml there is no dangling-binding warning".
+  - rewritten pins (the design's arrays): "A — without --role, a shadowed id is reported …" → missing the
+    `no-direct-db-access`/`developer` line; "lists the other directives, exit 0, with a warning naming the link" → missing the
+    three lines `code-review`/`reviewer`, `no-direct-db-access`/`developer`, `security-secrets` global; "a global id with no
+    directive file is not a scope disagreement …" → expected the `security-secrets` global line, received `[]`. "A — no
+    duplicate ids means an empty warnings array …" now writes a `roles.yaml` whose bindings all resolve (`developer: [testing]`,
+    `global: []`) and passes.
+  - CLI, `test/cli/directives-list-bindings.integration.test.ts` AC2 (scaffold, `ghost-directive` under `qa:`, committed) →
+    status 0, then `warnings` expected the qa line, received `[]`.
+- **AC3 (red-first for the loop and the link into a closed directory; characterization for the rest)**:
+  - new describe "a roles.yaml that exists but cannot be read is refused (task-310, bug-455)", each case without and with
+    `--role developer`: "a symbolic link to itself, … : IO, exit 1, "cannot be read (ELOOP)"" and "a symbolic link into a
+    directory with mode 000, … : IO, exit 1, "permission denied"" (unprivileged only, mode restored in `finally`) →
+    `exitCodeForResult` expected `1`, received `0`. The refusal is then checked `toEqual({ code: 'IO', message })` and the
+    message for neither spelling of the repository path nor `too many symbolic links`.
+  - characterization, pass: "a directory, …" (`.wingfoil/roles.yaml is a directory, not a file`), "the file with mode 000, …"
+    (`… cannot be read: permission denied`, unprivileged only), "a dangling symbolic link reads as no roles.yaml: ok, every entry
+    unassigned, no warning".
+  - CLI, `test/cli/config-missing-refusal.integration.test.ts` "task-310 (bug-455) — roles.yaml a symbolic link to itself":
+    `` `wingfoil directives list` `` (first stderr line `error: .wingfoil/roles.yaml cannot be read (ELOOP)`) and
+    `` `wingfoil --format json directives list` `` (`{ error: '.wingfoil/roles.yaml cannot be read (ELOOP)' }`) → status expected
+    `1`, received `0`; both also run task-309's `expectNoRawText` plus `ELOOP: too many`.
+- **AC4, AC5 (characterization)**: no test, as the design states (`git diff --stat` on `src/core/context.ts` at refactor and
+  review; the spec-012 pending amendment).
+
+**For the developer.** The P3.4 scenario "Edge - a role binding names a missing directive" (D4 (a)) is yours to commit; the
+first AC2 case is titled after it. No ambiguity found; no candidate finding.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
