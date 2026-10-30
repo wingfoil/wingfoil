@@ -348,6 +348,24 @@ Against `code-review`, on `git diff release/0.3...HEAD`:
 
 None.
 
+### independent review (2026-10-30) and fixes (developer)
+
+Independent review at `d8b36a890`: approve, 0 blockers, 0 majors, two follow-ups.
+- Follow-up 1 (same class, in a file this task touches): the `USAGE` string of `scripts/integration-branch.cjs` read
+  `[--kind <minor|patch>]` while the header reads `[--kind <minor|patch|"">]`, and the empty kind is accepted. Fixed in
+  `ec4dfb1c0` (`git show --stat --format= ec4dfb1c0` → `scripts/integration-branch.cjs | 2 +-`):
+  `node scripts/integration-branch.cjs` → stderr `usage: node scripts/integration-branch.cjs [--check-head] [--kind
+  <minor|patch|"">] --version <vX.Y[.Z]>`, exit `2`. No test pins the usage line: `grep -rn "usage: node
+  scripts/integration-branch.cjs" test/` → no output; the red file pins only the prefix (`grep -n "usage"
+  test/cli/integration-branch.test.ts` → line 190, `toMatch(/^usage:/)`), so T4 holds.
+- Follow-up 2: covered by `bug-453`, not changed here.
+
+Runs: `npx jest test/cli/integration-branch.test.ts test/core/workflow-integration-branch.test.ts --maxWorkers=2` →
+`Test Suites: 2 passed, 2 total`, `Tests: 91 passed, 91 total`; `npx jest test/lint --maxWorkers=2` → `Test Suites: 13
+passed, 13 total`, `Tests: 153 passed, 153 total`; `npx eslint scripts/integration-branch.cjs` → exit `0`. T4:
+`git log --first-parent --no-merges --format=%h ba82cbd82..HEAD -- test/cli/integration-branch.test.ts
+test/core/workflow-integration-branch.test.ts` → no output. Status stays `in-review`.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
