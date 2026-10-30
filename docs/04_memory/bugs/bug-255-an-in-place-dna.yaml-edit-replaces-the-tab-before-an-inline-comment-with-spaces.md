@@ -53,3 +53,9 @@ A tab before an inline comment becomes one or more spaces on every in-place rewr
 
 Captured on 2026-10-06 by `bug-ingest-rel-v0.3-w2b3-review-findings-plan`, from the independent review of
 `task-193` (W2 B3, `dev-loop-rel-v0.3-plan`), reproduced against `main` at `29d2aea2` with the code build.
+
+### Retrospective
+
+None beyond the rule the fix states (`task-312`, `rewriteKeyLine`): a gap holding a tab is kept as written at any
+width, a space-only gap keeps its column. No test before `task-312` held a tab before an inline comment
+(`git grep -lP '\\t#|\t#' 51212d044^ -- test` → no output).
