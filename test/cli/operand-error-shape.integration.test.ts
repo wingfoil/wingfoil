@@ -9,7 +9,9 @@
  *   table is derived from `CORE_MODULES`, never hand-copied, so a verb registered later is covered.
  * - An unknown command (`bug-104`): Commander's `(Did you mean memory?)` becomes
  *   `hint: did you mean "memory"?`, with WingFoil's own Levenshtein-distance-≤-2 match (`spec-008` §1).
- * - `bug-115` / `bug-116` (v0.4) are out of scope: the `help <unknown>` path keeps its text.
+ * - `help <unknown>` is the unknown-command refusal of the direct path, `hint:` line included, at the
+ *   root and under a noun (task-315, `bug-115`); `help help` asks for the help command's own help and
+ *   gets it at exit 0, with no false `unknown command` (task-315, `bug-116`, design gate D1 (b)).
  * - The DNA path verbs refuse a surplus operand at registration like every other command (`bug-180`).
  * - The global `--format` is checked first by every command, the bootstrap ones included (`bug-226`).
  *
@@ -137,18 +139,65 @@ describe('task-179 — one shape for missing-operand and unknown-command refusal
     });
   });
 
-  describe('AC 3 — bug-115 / bug-116 stay out of scope (characterization)', () => {
-    it('`wingfoil help memroy` keeps its error line and gets no hint (bug-115)', () => {
+  describe('AC 3 — task-315: `help <unknown>` gets the closest-command hint, `help help` its own help', () => {
+    /** The `error:` and `hint:` lines of a refusal: what follows Commander's help text under `console`. */
+    const refusalLines = (stderr: string): string[] =>
+      stderr.split('\n').filter((line) => line.startsWith('error: ') || line.startsWith('hint: '));
+
+    it('`wingfoil help memroy` names `memory` on the `hint:` line, at exit 2 (bug-115, AC 1)', () => {
       const result = runCliEntry(repo, ['help', 'memroy']);
       expect(result.status).toBe(2);
-      expect(result.stderr.endsWith("error: unknown command 'memroy'\n")).toBe(true);
-      expect(result.stderr).not.toContain('hint:');
+      expect(result.stdout).toBe('');
+      expect(result.stderr.endsWith(`error: unknown command 'memroy'\nhint: did you mean "memory"?\n`)).toBe(true);
     });
 
-    it('`wingfoil help help` keeps its text (bug-116)', () => {
-      const result = runCliEntry(repo, ['help', 'help']);
+    it.each(['memroy', 'nosuchnoun', 'dnaa'])(
+      '`wingfoil help %s` refuses with the same `error:`/`hint:` lines as the direct path (AC 1)',
+      (name) => {
+        const viaHelp = runCliEntry(repo, ['help', name]);
+        const direct = runCliEntry(repo, [name]);
+        expect(viaHelp.status).toBe(2);
+        expect(refusalLines(viaHelp.stderr)).toEqual(refusalLines(direct.stderr));
+        expect(refusalLines(viaHelp.stderr).some((line) => line.startsWith('hint: '))).toBe(name !== 'nosuchnoun');
+      },
+    );
+
+    it('under `--format json` the `help memroy` refusal carries the same `hint` (AC 1)', () => {
+      const result = runCliEntry(repo, ['--format', 'json', 'help', 'memroy']);
       expect(result.status).toBe(2);
-      expect(result.stderr.endsWith("error: unknown command 'help'\n")).toBe(true);
+      expect(JSON.parse(result.stderr)).toEqual({ error: "unknown command 'memroy'", hint: 'did you mean "memory"?' });
+    });
+
+    it('one level down, `wingfoil memory help addd` and `memory help memroy` are unknown-command refusals (AC 1, D3)', () => {
+      const near = runCliEntry(repo, ['memory', 'help', 'addd']);
+      expect(near.status).toBe(2);
+      expect(near.stderr.endsWith(`error: unknown command 'addd'\nhint: did you mean "add"?\n`)).toBe(true);
+      expect(near.stderr).not.toContain('missing required argument');
+
+      const far = runCliEntry(repo, ['memory', 'help', 'memroy']);
+      expect(far.status).toBe(2);
+      expect(far.stderr.endsWith("error: unknown command 'memroy'\n")).toBe(true);
+      expect(far.stderr).not.toContain('hint:');
+      expect(far.stderr).not.toContain('missing required argument');
+    });
+
+    // Design gate D1 (b): asking for the help command's help is answered with it, at exit 0. The text is
+    // Commander's help of its built-in `help [command]` command (usage + description, measured on the
+    // code build through `Command#_getHelpCommand().helpInformation()`); the `wingfoil …` prefix of the
+    // usage line is admitted, not required.
+    it.each([
+      [['help', 'help'], /^Usage: (wingfoil )?help \[command\]$/],
+      [['help', 'help', 'help'], /^Usage: (wingfoil )?help \[command\]$/],
+      [['memory', 'help', 'help'], /^Usage: (wingfoil memory )?help \[command\]$/],
+    ] as const)('`wingfoil %j` prints the help command\'s own help at exit 0 (bug-116, AC 2)', (args, usage) => {
+      const result = runCliEntry(repo, [...args]);
+      expect(result.status).toBe(0);
+      expect(result.stderr).not.toContain('unknown command');
+      expect(result.stderr).toBe('');
+      expect(result.stdout.split('\n')[0]).toMatch(usage);
+      expect(result.stdout).toContain('display help for command');
+      expect(result.stdout).not.toContain('Usage: wingfoil [options] [command]');
+      expect(result.stdout).not.toContain('Usage: wingfoil memory [options] [command]');
     });
   });
 
