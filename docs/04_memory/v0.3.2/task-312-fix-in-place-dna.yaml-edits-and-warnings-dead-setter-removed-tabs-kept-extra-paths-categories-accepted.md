@@ -149,6 +149,15 @@ of which `Paths` is the only one: a `task-313` change that added `.catchall(<typ
 silence that schema's unknown-field warning, and should be checked at merge. `task-321`'s scaffold of `paths` is
 unaffected (its `health` example is a declared category).
 
+### design gate (approver, 2026-10-30)
+
+Design gate approved by the approver on 2026-10-30T18:40:13+01:00, in the orchestrator's chat:
+- D1 — (a): AC1 is red-first for "not exported" (a runtime check of the module namespaces), with grep evidence for "no production caller".
+- D2 — (a): a gap holding a tab before an inline comment is kept as written at any width of the new value; a space-only gap keeps today's column rule.
+- D3 — (A): `Paths` takes `.catchall(z.array(z.string()))` and the unknown-field warning skips keys a typed catchall covers; spec-009 §2 and
+  spec-002 Categories are amended by the developer, uncommitted, for the approver's `memory amend`.
+- D4 — yes: a P2.5 BDD scenario "a project-specific category is served with no warning", written by the developer in green and named by the AC3 test.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
