@@ -260,6 +260,15 @@ under the new rule.
 - `src/core/index.ts` is shared with any task editing another operation there (`task-311`, merged): a local hunk
   in `memorySearchFn`.
 
+### design gate (approver, 2026-10-30)
+
+Design gate approved by the approver on 2026-10-30T10:38:05+01:00, in the orchestrator's chat:
+- D1 — (c): every type-scoped reader is scoped — `memory/{type}`, `memory search --type`, `memory/{type}/{id}` and the at-commit lookup behind `agent execute`.
+- D2 — (a): a newer-format document's type is decided by its readable `type:`, as listing membership is.
+- D3 — (a): an undeclared type gets no warnings.
+- D4 — yes: one P1.5 BDD scenario and one `docs/cli-reference.md` sentence.
+- D5 — (a): the candidate finding (`memory search --type nosuch` accepted silently) is filed as a bug by the orchestrator, proposed for v0.4.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
