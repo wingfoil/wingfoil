@@ -10,6 +10,9 @@
  * `@REQ-STATE-10`) are exercised by the "Process conformance" blocks: a clean range reports nothing, and a range
  * with one injected defect of each kind 1–5 reports exactly that defect.
  *
+ * task-320 (red-first): an `npm ci` lifecycle failure's reason names the failing script (`bug-357` (a)), and no tool
+ * inherits jest's agent variables (`bug-385`); see the blocks headed task-320 below.
+ *
  * Deterministic: every date is fixed; the external reader is a stub; no clock, no network.
  */
 import { createHash } from 'node:crypto';
@@ -1030,6 +1033,67 @@ describe('the toolchain half — a tool that fails is not-measurable with the re
     expect(m['Q17']).toMatchObject({ status: 'not-measurable', reason: 'npm view wingfoil version --json failed (exit 1): npm error code E404' });
     for (const x of Object.values(m)) expect(x.reason ?? '').not.toMatch(/_logs|complete log/);
     noZero(Object.values(m));
+  });
+});
+
+// ── task-320: the failing npm script named (bug-357 (a)) and jest's agent variables dropped (bug-385) ──────────
+//
+// Real `npm ci` output (npm 11.6.2), copied verbatim but for the directories: the scratch directory each ran in is
+// written `/home/user/<name>` and the home directory `/home/user`, as the fixtures above. (i) a package whose `prepare`
+// is `npm run build` and `build` is `exit 2` (exit 2); (ii) a package whose `prepare` is `exit 4` (exit 4); (iii) a
+// package depending on `file:../dep`, whose `install` is `exit 3` (exit 3, nothing on stdout: npm prints no banner for a
+// dependency's script). The commands that produced them are in task-320's Execution Notes.
+const NPM_CI_NESTED_PREPARE_STDOUT = '\n> lc@1.0.0 prepare\n> npm run build\n\n\n> lc@1.0.0 build\n> exit 2\n\n';
+const NPM_CI_NESTED_PREPARE_STDERR = 'npm error code 2\nnpm error path /home/user/lc\nnpm error command failed\nnpm error command sh -c npm run build\nnpm error A complete log of this run can be found in: /home/user/.npm/_logs/2026-10-30T17_41_57_787Z-debug-0.log\n';
+const NPM_CI_DIRECT_PREPARE_STDOUT = '\n> lc2@1.0.0 prepare\n> exit 4\n\n';
+const NPM_CI_DIRECT_PREPARE_STDERR = 'npm error code 4\nnpm error path /home/user/lc2\nnpm error command failed\nnpm error command sh -c exit 4\nnpm error A complete log of this run can be found in: /home/user/.npm/_logs/2026-10-30T17_41_58_257Z-debug-0.log\n';
+const NPM_CI_DEPENDENCY_INSTALL_STDERR = 'npm error code 3\nnpm error path /home/user/depfail/dep\nnpm error command failed\nnpm error command sh -c exit 3\nnpm error A complete log of this run can be found in: /home/user/.npm/_logs/2026-10-30T17_41_59_011Z-debug-0.log\n';
+
+// Red amendment (asked by the review): a failing git dependency, where npm prints an `npm error command` line that is
+// git's, not a lifecycle script's (no `npm error command failed`, no `sh -c `). Real output of `npm install --offline` on a
+// package depending on `git+file:///nonexistent/repo.git` (npm 11.6.2, exit 128; `npm ci` refuses it with EUSAGE before
+// reaching git, since no lockfile can be written), the home directory written `/home/user`.
+const NPM_GIT_DEPENDENCY_STDERR = "npm error code 128\nnpm error An unknown git error occurred\nnpm error command git --no-replace-objects ls-remote file:///nonexistent/repo.git\nnpm error fatal: '/nonexistent/repo.git' does not appear to be a git repository\nnpm error fatal: Could not read from remote repository.\nnpm error\nnpm error Please make sure you have the correct access rights\nnpm error and the repository exists.\nnpm error A complete log of this run can be found in: /home/user/.npm/_logs/2026-10-30T20_37_51_557Z-debug-0.log\n";
+
+/** jest's `AGENT_ENV_VARS` (`@jest/core`): with one set and no reporter configured, jest 30 switches to its agent reporter. */
+const JEST_AGENT_ENV_VARS = ['AI_AGENT', 'AUGMENT_AGENT', 'CLAUDE_CODE', 'CLAUDECODE', 'CODEX_SANDBOX', 'CODEX_THREAD_ID', 'CURSOR_AGENT', 'GEMINI_CLI', 'GOOSE_PROVIDER', 'OPENCODE', 'REPL_ID'];
+
+describe('task-320 AC1 — an npm lifecycle failure\'s reason names the failing script (bug-357 (a), approver ruling D4)', () => {
+  it.each([
+    ['a nested prepare (prepare runs npm run build)', { status: 2, stdout: NPM_CI_NESTED_PREPARE_STDOUT, stderr: NPM_CI_NESTED_PREPARE_STDERR }, 'npm ci failed (exit 2): npm error code 2 (script prepare: npm run build)'],
+    ['a direct prepare', { status: 4, stdout: NPM_CI_DIRECT_PREPARE_STDOUT, stderr: NPM_CI_DIRECT_PREPARE_STDERR }, 'npm ci failed (exit 4): npm error code 4 (script prepare: exit 4)'],
+    ['a dependency\'s install script, with no banner on stdout', { status: 3, stderr: NPM_CI_DEPENDENCY_INSTALL_STDERR }, 'npm ci failed (exit 3): npm error code 3 (script: exit 3)'],
+    ['a git dependency (npm\'s `npm error command` line is git\'s, not a script\'s): no script suffix', { status: 128, stderr: NPM_GIT_DEPENDENCY_STDERR }, 'npm ci failed (exit 128): npm error code 128'],
+  ])('%s: all seven not-measurable with the script in the reason', async (_case, install, reason) => {
+    const { tree, scratch } = toolTree();
+    const { tools, calls } = stubTools({ install });
+    const entries = await measureToolchain(tree, scratch, { tools });
+    expect(entries.map((m) => [m.id, m.status, m.reason])).toEqual(TOOL_IDS.map((id) => [id, 'not-measurable', reason]));
+    expect(calls.map((c) => c.step)).toEqual(['install']);
+  });
+});
+
+describe('task-320 AC2 — the tool environment drops jest\'s agent variables (bug-385, approver ruling D5)', () => {
+  it('no tool inherits any of the eleven, whoever launches the run; PATH and the existing drops as before', async () => {
+    const saved = Object.fromEntries(JEST_AGENT_ENV_VARS.map((name) => [name, process.env[name]]));
+    try {
+      for (const name of JEST_AGENT_ENV_VARS) process.env[name] = '1';
+      const { tree, scratch } = toolTree();
+      const { tools, calls } = stubTools();
+      await measureToolchain(tree, scratch, { tools });
+      expect(calls.map((c) => c.step)).toEqual(['install', 'build', 'typecheck', 'lint', 'test', 'coverage', 'examples/01-first', 'examples/02-second', 'latency', 'npm-view']);
+      for (const c of calls) {
+        expect([c.step, JEST_AGENT_ENV_VARS.filter((name) => c.env[name] !== undefined)]).toEqual([c.step, []]);
+        expect(String(c.env['PATH']).split(delimiter)[0]).toBe(dirname(process.execPath));
+        expect(c.env['WINGFOIL_LATENCY']).toBeUndefined();
+        expect(c.env['GIT_DIR']).toBeUndefined();
+      }
+    } finally {
+      for (const [name, value] of Object.entries(saved)) {
+        if (value === undefined) delete process.env[name];
+        else process.env[name] = value;
+      }
+    }
   });
 });
 
