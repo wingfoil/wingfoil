@@ -382,6 +382,22 @@ Pending amendments, final list (replaces the list above for the approver's `memo
 - `bug-116-help-help-reports-unknown-command-for-a-command-that-exists`: `--reason "Add the Retrospective subsection the
   bug carries when task-315 closes it (dl-115 Q2 (a))."`
 
+### sync with release/0.3 (developer, 2026-10-30)
+
+`git rev-list --count HEAD..release/0.3` → `11` after the review fixes. The four uncommitted amendments were stashed
+(`git stash push -- <spec-005, spec-008, bug-115, bug-116>`, then `git status --short` → no output), and `git merge
+--no-edit release/0.3` → merge commit `14e64349` (trailers added by amend), no conflict, three new bug files only.
+task-311's amendment of `spec-008` (`4c0bd5b8`) was already in this branch's base before the merge (`git merge-base
+--is-ancestor 4c0bd5b81 ab7897aba` → exit 0), so the `spec-008` edit had been made on its text: `git stash pop` →
+exit 0, no conflict, no re-application needed; no conflict marker in the four files (`grep -n "^<<<<<<<\|^>>>>>>>"` →
+exit 1). In `spec-008`, task-311's Revision paragraph (line 1376) precedes this task's (line 1383); its §11 change is
+untouched. The `--reason` texts are unchanged.
+
+With the amendments in the tree: `npx jest test/docs test/cli/program.test.ts
+test/cli/operand-error-shape.integration.test.ts --maxWorkers=2` → `Test Suites: 31 passed, 31 total`, `Tests: 398
+passed, 398 total`; `npx tsc --noEmit -p tsconfig.json` → exit 0. After the merge `git rev-list --count
+HEAD..release/0.3` → `0`.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
