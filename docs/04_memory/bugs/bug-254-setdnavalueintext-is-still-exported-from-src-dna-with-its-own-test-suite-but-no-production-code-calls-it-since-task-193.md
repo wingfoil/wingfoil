@@ -53,3 +53,9 @@ Dead code with a live test suite: the suite keeps passing whatever the productio
 
 Captured on 2026-10-06 by `bug-ingest-rel-v0.3-w2b3-review-findings-plan`, from the independent review of
 `task-193` (W2 B3, `dev-loop-rel-v0.3-plan`, review F2), checked against `main` at `29d2aea2`.
+
+### Retrospective
+
+The dead export lived 24 days after `task-193` removed its last caller (`2026-10-06` capture → `2026-10-30` fix): a
+function with its own passing suite looks used. `task-312` adds `test/dna/set-exports.test.ts`, which pins the
+absence of the export so it cannot come back unnoticed.
