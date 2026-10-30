@@ -45,6 +45,143 @@ not validate a minor's version, and the binding's pattern admits a patch form fo
        reject's `Reason:` (read with `wingfoil memory history <task-id>`), each with the command that
        shows it resolved and what that command printed; then what else changed on the next pass. -->
 
+### design (architect, 2026-10-29)
+
+**Inputs read.** `depends_on: []` (no dl-015 gate); no handover. Base: `release/0.3` `13c019509` + the start commit
+`f3cead30f` and the two bug syncs (`git log --oneline release/0.3..HEAD` → three commits, head `f83ff82ec`). Ratified
+sources: `dl-159` and `dl-092` `ready`, `spec-003-workflows-yaml-schema` `approved` (`grep -n "^status:"` on each).
+`spec-003` Layer 3 (lines 539–545) gives a check's exit `2` the meaning "binding misconfiguration: the phase is blocked,
+and the gate does not count as failed" and any other status "an error" (D1). No BDD scenario, spec or directive names
+the script or its exit codes (`grep -rln -i "integration.branch\|integration_branch" docs/02_requirements
+docs/04_memory/design/specs` → no output; the four directives that name the integration branch never cite
+`integration-branch.cjs` with an exit code: `grep -n -i "integration-branch"` on them → no output), so no spec,
+directive or `.feature` change, and no pending amendment is expected.
+
+**The defects, reproduced on this base** (scratch outside the worktree, not committed):
+- `bug-386`: `node scripts/integration-branch.cjs --check-head --kind patch --version v0.3.2` in the worktree →
+  stderr `HEAD is on task/task-319-…, not on release/0.3, the integration branch of v0.3.2 (dl-159)`, exit `1`; the same
+  command (`--kind minor --version v0.4`) in an empty directory with `GIT_CEILING_DIRECTORIES` at its parent → stderr
+  `could not read HEAD: fatal: not a git repository (or any of the parent directories): .git`, exit `1`; and with a
+  `PATH` holding only `node` (no `git`) → stderr `could not read HEAD: spawnSync git ENOENT`, exit `1`.
+- `bug-387`: `node scripts/integration-branch.cjs --kind minor --version <v>` for `garbage`, `v0.3.1`, `v0.4.0`, `v01.3`
+  → stdout `main`, exit `0` each; `--version garbage` with no `--kind` → `main`, exit `0`.
+- Every release's version in this repository: `grep -n "^kind:\|^version:" docs/04_memory/planning/rl-v1/*.md` → the
+  five minors (`minor-v0.1` … `minor-v1.0`, no `kind` line, pre-dl-092 or omitted) are `vX.Y`; the three patches
+  (`patch-v0.2.2`, `patch-v0.3.1`, `patch-v0.3.2`) are `vX.Y.Z` with Z ≥ 1. The tightened rules refuse none of them.
+
+**Callers and pins.** Nothing executes the script but the binding (`grep -rn "integration-branch\.cjs"
+--exclude-dir={node_modules,dist,.git,docs} .` → only the script itself, `bindings.yaml`, `release-publishing.yaml`,
+`dev-loop.yaml`, `.wingfoil/WORKFLOW.md`, `AGENTS.md` (prose, none states an exit code) and two tests; no npm script,
+hook or CI job: `grep -rn integration-branch .githooks .github package.json` → no output). Tests that pin the script's
+behaviour or the binding:
+- `test/cli/integration-branch.test.ts` — four existing pins collide with the ACs and change in red (qa): line 51
+  `['minor', 'v0.4.0', 'main']` (AC2: refused), lines 56–58 "a minor ignores the version" (AC2: refused, `got ""`),
+  line 61 `['absent', {}]` (AC2: refused, `got ""`), lines 193–197 "outside any repository: exit 1" (AC1: exit 2).
+- `test/core/workflow-integration-branch.test.ts` — lines 195–201 pin the binding's `args` exactly and lines 209–213 the
+  `version` pattern's good/bad values (AC2: both change in red); line 222 `version ≥ 2.3` stays true.
+- `test/core/release-publishing-merge-forward.test.ts:136` pins `bindings.yaml` `version ≥ 2.7` with a 2.7 entry (stays
+  true after 2.8); `test/lint/version-bump.test.ts` enforces the 2.7 → 2.8 bump.
+- No workflow's phase or step list changes (`release-publishing.yaml` and `dev-loop.yaml` are not edited), so no
+  phase-list pin is touched; the 29 suites that read `bindings.yaml` (`grep -rln "bindings.yaml" test/ | grep
+  "\.test\.ts$" | wc -l` → 29) were run below.
+
+**Existing tests, before any pin** (in the worktree, one jest process each, `--maxWorkers=2`, no slot):
+- `npx jest test/cli/integration-branch.test.ts test/core/workflow-integration-branch.test.ts test/workflow/bindings.test.ts
+  test/core/release-publishing-merge-forward.test.ts test/core/workflow-repository-conformance.test.ts
+  test/cli/evidence-only-tag.test.ts test/core/workflow-manual-prose-checks.test.ts test/lint/version-bump.test.ts
+  --maxWorkers=2` → `Test Suites: 8 passed, 8 total`, `Tests: 206 passed, 206 total`.
+- `npx jest $(grep -rln "bindings.yaml" test/ | grep "\.test\.ts$" | sort) test/lint --maxWorkers=2` → `Test Suites:
+  42 passed, 42 total`, `Tests: 847 passed, 847 total` (the 29 bindings readers plus `test/lint/`, which carries the
+  `cli-spawn-helper`, `npm-caller-config` and invisible-character gates; the script test spawns `scripts/*.cjs`, an
+  exception (i) of the first, and no npm, so neither gate is in reach).
+- `npm run -s check:mcp` on the unmodified tree → exit `0`, the pinned 0.3.1 and `dist/cli.js` both serve prompts 8,
+  resources 4, every Resource read answered.
+- The proposed `version` pattern, proved before green on a scratch copy of `.wingfoil/` (a fresh repository, the one
+  `args.version` value replaced): `node node_modules/wingfoil-released/dist/cli.js workflow list --format json` → exit
+  `0`, `{"W_WORKFLOW_UNBOUND_TOKEN":65}`, the same 65 as this branch; the code build `node dist/cli.js` → the same. Green
+  re-runs `npm run check:mcp` on the real edit.
+
+**Design.**
+- *`scripts/integration-branch.cjs` (AC2).* A second constant `MINOR_VERSION = /^v(0|[1-9]\d*)\.(0|[1-9]\d*)$/` (no
+  leading zeros, as `PATCH_VERSION`). `integrationBranch(release)` keeps its signature and order: an unknown `kind` is
+  refused first (message unchanged); then for `minor`, `undefined` or `''` the version must match `MINOR_VERSION`, else
+  `{ ok: false, message: \`a minor's version must be vX.Y, got "${version ?? ''}" (dl-092, dl-159)\` }` (one message for
+  a minor and a release with no kind, which the header already calls a pre-dl-092 minor; D2); then the patch rule,
+  unchanged. Print mode already exits `2` with the message on stderr for any `ok: false`, so no CLI change for AC2.
+- *`scripts/integration-branch.cjs` (AC1).* `readHeadBranch` keeps its signature and messages. The `--check-head` branch
+  of the main block separates the two outcomes: `head.ok === false` → its message on stderr, `process.exitCode = 2`;
+  otherwise `checkHead(…)` as today, exit `0` / `1`. The docblock states it: line 8 becomes `kind: minor, or no kind (a
+  pre-dl-092 release), version vX.Y → main`, line 10 `Any other kind, a minor whose version is not vX.Y, or a patch
+  whose version is not vX.Y.Z with Z ≥ 1, is refused with a message naming the value.`, and the two mode lines become
+  `print mode → stdout the branch · exit 0, or 2 on a refused release / usage error` and `--check-head → HEAD's branch
+  must be that branch · exit 0 pass, 1 refusal (another branch, or detached), 2 refused release / usage error / HEAD
+  unreadable (git cannot run, or not a repository)`. The usage string's `<vX.Y[.Z]>` stays.
+- *`.wingfoil/workflows/bindings.yaml` (AC1, AC2), `version: 2.7 → 2.8`.* `on-integration-branch`'s `args.version`
+  becomes `'^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(\.[1-9][0-9]*)?$'`: exactly the union of a minor's `vX.Y` and a patch's
+  `vX.Y.Z` (Z ≥ 1), no leading zeros — `v0.3`, `v0.3.1`, `v10.20.3` pass; `v0.3.0`, `v01.3`, `v0.3.1-rc.1`, `v0.3.1;x`,
+  `0.3.1`, `-v0.3`, `garbage` fail (`node -e` with `new RegExp(…)` over those values → exactly that split). A placeholder
+  pattern sees one argument only (`src/workflow/bindings.ts` `Args`: one pattern per placeholder), so the tie of a shape
+  to its `kind` is the script's (D3). `args.kind` is unchanged. The comment above the binding ends, in place of
+  `Exit 2 = a kind or a patch version the derivation refuses.`: `Exit 1 = HEAD on another branch or detached. Exit 2 = a
+  kind or a version the derivation refuses (a minor's is vX.Y, a patch's vX.Y.Z with Z ≥ 1), or a HEAD git cannot read
+  (git cannot run, or not a repository): the phase is blocked, not failed (spec-003 Layer 3). The version pattern admits
+  only those two shapes; the script ties each to its kind, which a placeholder pattern cannot see.` The `version:` line
+  gains `; 2.8 task-319 (bug-386, bug-387): on-integration-branch exits 2 when git cannot read HEAD, and its version
+  pattern admits only a minor's vX.Y and a patch's vX.Y.Z with Z ≥ 1, the script refusing a version of the other
+  kind's shape`.
+- Not changed: `.wingfoil/WORKFLOW.md` (line 413 says the check "refuses a HEAD on any other branch", still true),
+  `release-publishing.yaml` (the description states no exit code), `AGENTS.md`.
+
+**AC classification and what qa must pin.**
+- **AC1 — red-first** (reproduced above: both outcomes exit `1` today). File `test/cli/integration-branch.test.ts`,
+  its fixture repository and `run()` helper (a `scripts/*.cjs` spawn, outside the `cli-spawn-helper` gate), and
+  `test/core/workflow-integration-branch.test.ts` for the binding comment. Pins: (a) change "outside any repository" to
+  exit `2`, stderr matching `/^could not read HEAD: /`, stdout `''`; (b) a new case, git not runnable: `run()` with
+  `env: { ...process.env, PATH: <a mkdtemp dir holding only a symlink 'node' → process.execPath> }` (or spawn
+  `process.execPath` with `PATH` set to an empty temp dir — `process.execPath` is absolute, so node still starts) → exit
+  `2`, stderr exactly `could not read HEAD: spawnSync git ENOENT\n` (copied from the run above); `run()` gains an
+  optional `env` parameter; (c) unchanged and kept: wrong branch exit `1`, detached exit `1`, pass exit `0`, derivation
+  refusal exit `2`; (d) the script header, read as text from `scripts/integration-branch.cjs` (the docblock before
+  `'use strict'`, whitespace-flattened as task-276's tests do): contains `1 refusal (another branch, or detached)` and
+  `2 refused release / usage error / HEAD unreadable (git cannot run, or not a repository)`; (e) the `bindings.yaml`
+  comment block of `on-integration-branch` (the raw lines from the end of the `evidence-only-since-candidate` line to
+  the `on-integration-branch:` line, flattened): contains `Exit 1 = HEAD on another branch or detached` and `a HEAD git
+  cannot read`, no longer `Exit 2 = a kind or a patch version the derivation refuses`; (f) `bindings.version ≥ 2.8`
+  with a 2.8 history entry naming `task-319` (the file's `historyEntry` helper; "≥" plus the history line, bug-314).
+  Expected red: jest assertion failures (exit 1 ≠ 2, text absent); no tsc red (no new export).
+- **AC2 — red-first** (reproduced above: every minor version passes). Pins, `test/cli/integration-branch.test.ts`:
+  (a) in-process `integrationBranch` — accepted: `minor v0.4`, `minor v10.20`, no kind (`undefined`, `''`) with `v0.3`
+  → `main`; refused with `{ ok: false, message: "a minor's version must be vX.Y, got \"<v>\" (dl-092, dl-159)" }` for
+  kind `minor` and for kind `''` / `undefined`, each with `v0.4.0`, `v0.3.1`, `garbage`, `v01.3`, `0.4`, `v0.4-rc.1`;
+  `{ kind: 'minor' }` and `{}` → refused with `got ""`; replace the colliding pins (lines 51, 56–58, 61) accordingly;
+  patch and unknown-kind cases unchanged (an unknown kind with a malformed version still gets the kind message: pin
+  `{ kind: 'major', version: 'garbage' }` → `kindMessage('major')`); (b) CLI print mode: `--kind minor --version garbage`
+  and `--version v0.3.1` (no kind) → exit `2`, stdout `''`, stderr the message plus `\n`; (c) `--check-head --kind minor
+  --version v0.4.0` on the fixture's `main` → exit `2` (refused before HEAD is read). In
+  `test/core/workflow-integration-branch.test.ts`: (d) the exact `args` (`toEqual`) with the new `version` pattern; (e)
+  the pattern accepts `v0.3`, `v0.3.1`, `v10.20.3` and refuses `v0.3.0`, `v01.3`, `v0.3.1-rc.1`, `0.3.1`, `v0.3.1;x`,
+  `-v0.3`, `garbage`; (f) every release under `docs/04_memory/planning/rl-v1/` (read at HEAD, as the file's helpers
+  read) is accepted both by the pattern and by `integrationBranch({ kind, version })` — characterization, passes today
+  and after. Expected red: assertion failures only.
+- Every red test passes `npx jest test/lint --maxWorkers=2` with the files in place before the red commit.
+
+**Files to touch.** `scripts/integration-branch.cjs`, `.wingfoil/workflows/bindings.yaml`; tests
+`test/cli/integration-branch.test.ts`, `test/core/workflow-integration-branch.test.ts`. **Version bumps:**
+`bindings.yaml` 2.7 → 2.8, the only file with a `version:` (`grep -n "^version" scripts/integration-branch.cjs` → no
+output). Green runs `npm run check:mcp` after the bindings edit.
+
+**Decisions for the approver.**
+- D1 — the exit code of a HEAD git cannot read. (a) `2`, as the AC says: `spec-003` Layer 3 gives `2` "the phase is
+  blocked, and the gate does not count as failed", the effect wanted, though its label is "binding misconfiguration";
+  (b) `3`, which `spec-003` reads as "an error". **Recommend (a)**, the AC and `bug-386`'s Expected Behavior, with no
+  spec amendment: the binding comment says what `2` covers here.
+- D2 — a release with no `kind` takes the minor's rule (`vX.Y`), with the minor's message, and a minor's `vX.Y.0` is
+  refused (the release's version is `vX.Y`; `vX.Y.0` is its tag, `git-conventions` §3). **Recommend yes**: every
+  minor here is `vX.Y` (grep above), and `memory add`'s `minor-{version}` id pattern shapes them so.
+- D3 — "the binding's version pattern matches only the forms each kind allows": a placeholder pattern cannot read the
+  other placeholder, so the pattern is the union of the two kinds' forms and the script ties a form to its kind (what
+  `bug-387`'s Expected Behavior allows: "the binding's pattern, or the script"). **Recommend yes.**
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
