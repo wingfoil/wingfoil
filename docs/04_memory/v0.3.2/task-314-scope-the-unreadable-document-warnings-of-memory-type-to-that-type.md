@@ -44,6 +44,222 @@ type, because `listMemoryDocumentsByType` reports them before the type filter.
        reject's `Reason:` (read with `wingfoil memory history <task-id>`), each with the command that
        shows it resolved and what that command printed; then what else changed on the next pass. -->
 
+### design (architect, 2026-10-29)
+
+**Inputs read.** `bug-283` (its Expected Behavior decides by location, and its Notes say a shared directory prefix
+can only be reported to every type that shares it); `spec-004` §2.2 (`approved`; the paragraph "A Memory read
+reports the files it could not read") and its 2026-10-06 Revision note; `spec-017` §1.4 (`approved`), which
+already fixes the path-pattern rule this task needs; `src/memory/query.ts`, `src/mcp/memory-resource.ts`,
+`src/core/index.ts` (`memorySearchFn`), `src/workflow/deduce.ts` (`pathPatternRegExp`, `readElements`),
+`src/storage/memory-path.ts`, `src/memory/add.ts` (`sequencePathRegExp`). `depends_on` is empty, so there are no
+upstream Execution Notes to read (`dl-015`).
+
+**Reproduced on the code build** (the worktree's `dist/` at `b3c0b970`, through the shim: `wingfoil --version` →
+`0.3.1 (b3c0b9700b8eff957d2a8fba6f28f98dea98006b)`), in a scratch repository outside the worktree (`git init`,
+`wingfoil init --template Scrum`, `wingfoil memory add --type bug --title "a bug"`, then a file
+`docs/memory/adr/adr-001-x.md` with the frontmatter `id: adr-001-x`, `type: adr`, `title: [unclosed`):
+
+- `wingfoil memory search --type bug` (and the same with `--format console`) → exit `0`, the one bug match, and on
+  stderr `warning: W_MEMORY_UNREADABLE (docs/memory/adr/adr-001-x.md): unreadable frontmatter in
+  docs/memory/adr/adr-001-x.md: unexpected end of the stream within a flow collection (4:1)`. With `--format json`
+  the stderr line is `{"warning":"W_MEMORY_UNREADABLE (docs/memory/adr/adr-001-x.md): …"}`. `--type adr` and
+  `--type nosuch` print the same warning, exit `0`, `"no documents matched the query"`.
+- `listMemoryDocumentsByType(root, y, t, { onDiagnostic })` from `dist/memory/query.js` → for `t` = `bug`, `adr` and
+  `task` the same diagnostic (`file: docs/memory/adr/adr-001-x.md`, `path: ''`, the message above).
+- `findMemoryDocumentByTypeAndId(root, y, 'bug', 'bug-001-a-bug', { onDiagnostic })` → resolves the bug **and**
+  reports the adr file (it sorts before the bug, so the lookup passes it): `memory/{type}/{id}` has the same defect.
+  The not-found lookup `bug-999` reports it too.
+- After adding `docs/memory/adr/adr-002-future.md` (`type: adr`, `format: 99`) and committing:
+  `listMemoryDocumentsByType(…, 'bug', …)` reports it as `unreadable frontmatter in docs/memory/adr/adr-002-future.md:
+  E_INVALID_FORMAT: this file is written in format 99; this WingFoil reads up to format 1: upgrade WingFoil`, and
+  `findMemoryDocumentByTypeAndIdAtRev(root, 'HEAD', y, 'bug', 'bug-001-a-bug', { onDiagnostic })` reports both adr
+  files (the at-commit lookup behind `agent execute`'s `requireElement`, `src/agent/execute.ts`).
+
+**How "a path the type's `path` pattern can produce" is decided.** By the rule `spec-017` §1.4 already states and
+the deduction already implements: in a `path` pattern a token in the file name stands for one name, a token in a
+directory for one or more directories. The code is `pathPatternRegExp` in `src/workflow/deduce.ts` (private), which
+`readElements` uses to tell a frontmatter-less Memory document from a non-document. No new matcher: the function
+moves, unchanged, to `src/storage/memory-path.ts` (the module whose header says it is the one place that handles a
+type's `path` pattern) as an export, and both `src/workflow/deduce.ts` and `src/memory/query.ts` import it from
+`../storage/memory-path` (as `src/memory/entry.ts` imports `resolveConfinedMemoryPath`). It cannot stay in
+`src/workflow`: `deduce.ts` imports `src/memory/query.ts`, so the reverse import would close a load-time cycle.
+`sequencePathRegExp` in `src/memory/add.ts` is not reused: it makes a file-name token multi-segment and embeds the
+`id_pattern`, a counter's rule, not §1.4's. Applied to this repository's `.wingfoil/memory.yaml` (a sample path of
+each type, every token replaced by `x1`, tested against every type's regex; `node -e …` over
+`dist/core/loaders.js`): `release-line`, `release`, `adr`, `decision-log`, `tech-spec`, `bug`, `service` and
+`change-proposal` paths are produced by their own type and by `task` only; `plan` and `task` by themselves only. So
+every typed read here is decidable except `task`'s: `task`'s pattern `docs/04_memory/{release}/{id}.md` produces
+every path under `docs/04_memory/`, and a typed read of `task` keeps reporting every unreadable file there, as
+`bug-283`'s Notes accept. `release` and `release-line` are told apart (`planning/{id}.md` against
+`planning/rl-{release-line}/{id}.md`).
+
+**Which diagnostic is decided how.** Three kinds of `W_MEMORY_UNREADABLE` reach a typed read: an unparsable
+frontmatter and a symbolic link have no readable `type:`, so they are kept when the type's pattern produces their
+`file`; a document in a newer `format:` has a readable frontmatter, and is kept when its `type:` is the type read,
+the same rule that decides membership in the listing (decision D2).
+
+**The readers of the unreadable-document warnings** (`grep -rn "onDiagnostic" src`), and what this task does:
+
+| Reader | Primitive | Typed? | This task | Test that pins it |
+|---|---|---|---|---|
+| MCP `wingfoil://memory/{type}` (`memory.list`, `src/mcp/memory-resource.ts`) | `listMemoryDocumentsByType` | yes | scoped (AC 1) | new red test (below); `test/mcp/resource-warnings.test.ts` stays green |
+| CLI `memory search --type <t>` (`memorySearchFn`, `src/core/index.ts`) | `searchMemoryDocuments` | yes, by `--type` | scoped (AC 1) | new red test; `test/core/memory-scan-tolerant.test.ts` stays green |
+| MCP `wingfoil://memory/{type}/{id}` (`memory.show`) | `findMemoryDocumentByTypeAndId` | yes | scoped, same class in a touched file (D1) | new red test; `test/mcp/resource-warnings.test.ts` stays green |
+| `agent execute` `requireElement` NOT_FOUND `details.unreadable` (`src/agent/execute.ts`) | `findMemoryDocumentByTypeAndIdAtRev` | yes | scoped by the primitive, same class in `query.ts` (D1) | new red test at the primitive |
+| `memory search` without `--type`; MCP `wingfoil://memory/search` (zero arguments) | `searchMemoryDocuments` | no | unchanged: every file | characterization in the new test; `test/core/memory-scan-tolerant.test.ts` |
+| `memory history`, the transition verbs (`src/core/memory-transition.ts`), `findMemoryDocumentById` | by id, untyped | no | unchanged | existing |
+| agent context / Prompt / session Resource (`src/core/context.ts`, `src/core/relevance.ts`, `src/mcp/prompt.ts`), workflow deduction (`src/core/workflow-deduction.ts`) | `loadMemoryDocuments*` | no | unchanged | existing |
+
+`memorySearch` is `mutates: false`, so over MCP it is only the zero-argument Resource: `--type` exists on the CLI
+alone (`src/core/index.ts` `memorySearch` registration).
+
+**Implementation shape (for green; qa does not test the internals).** In `src/memory/query.ts` one private helper
+builds, for (`memoryYaml`, `type`, `options`), the scoped `onDiagnostic` (path test) and the newer-format test by
+`type:`; `listMemoryDocumentsByType`, `findMemoryDocumentByTypeAndId` and `findMemoryDocumentByTypeAndIdAtRev` use
+it. `searchMemoryDocuments` gains an optional `type` in `MemorySearchOptions` (it filters the documents and scopes
+the reports in one pass, so the newer-format kind can be decided by `type:`), and `memorySearchFn` passes `--type`
+to it instead of filtering the array afterwards; the result is the same set and order (the filter is per document,
+the sort is total). An undeclared type produces no path, so it is told about no file (D3).
+`src/mcp/memory-resource.ts` changes only in its comments (the call already passes `onDiagnostic`).
+
+#### Acceptance criteria — classification and what qa must pin
+
+| AC | Class | Why |
+|---|---|---|
+| 1 — typed reads warn only on files the type's pattern can produce | **red-first** | the behaviour is new: the reproduction above shows every typed read reporting the adr file |
+| 2 — `spec-004` §2.2 states it | **characterization** | a spec text prepared uncommitted by the developer (`dl-047`), recorded by the approver's `memory amend`; no test |
+
+**AC 1 — qa pins (red-first).** Fixture: a temporary repository (`makeTempGitRepo`, `writeFixtureFile`, `commitAll`
+from `test/storage/helpers/git-fixture`) whose `.wingfoil/memory.yaml` copies **this repository's** patterns for
+`task` (`docs/04_memory/{release}/{id}.md`), `bug` (`docs/04_memory/bugs/{id}.md`), `adr`
+(`docs/04_memory/design/adrs/{id}.md`), `release-line` (`docs/04_memory/planning/{id}.md`) and `release`
+(`docs/04_memory/planning/rl-{release-line}/{id}.md`), so the undecidable `task` case is the real one (W0-R9). Files:
+a readable bug `docs/04_memory/bugs/bug-001-valid.md`; an unparsable adr `docs/04_memory/design/adrs/adr-001-broken.md`
+(frontmatter `id: adr-001-broken`, `type: adr`, `title: [unclosed`, the shape of the reproduction); an unparsable bug
+`docs/04_memory/bugs/bug-002-broken.md`; a newer-format adr `docs/04_memory/design/adrs/adr-002-future.md`
+(`format: 99`); an unparsable release-line `docs/04_memory/planning/rl-v9-broken.md`; all committed (`commitAll`). The
+diagnostic text is the real one: `unreadable frontmatter in <file>: unexpected end of the stream within a flow
+collection (4:1)` (`listMemoryDocumentsByType` in the reproduction above, adjust the `(line:col)` to the fixture's
+own line, or match `unreadable frontmatter in <file>: ` as `test/mcp/resource-warnings.test.ts` does); the
+newer-format one contains `E_INVALID_FORMAT`.
+
+1. `test/mcp/resource-warnings-type-scope.test.ts` (new), through `connectReadOnlyClient(root)`
+   (`test/mcp/helpers/channel-enumeration`):
+   - `readResource({ uri: 'wingfoil://memory/bug' })` → listing `['bug-001-valid']`; `warnings` holds exactly the
+     line of `bug-002-broken.md` (red: today it also holds both adr files and the release-line file).
+   - `wingfoil://memory/adr` → `warnings` holds the lines of `adr-001-broken.md` and `adr-002-future.md`, in path
+     order, and no bug or planning file (red).
+   - `wingfoil://memory/release` → no `warnings` field: `rl-v9-broken.md` sits directly in `planning/`, which only
+     `release-line` (and `task`) produce (red). `wingfoil://memory/release-line` → its line only (red).
+   - `wingfoil://memory/task` → every unparsable file under `docs/04_memory/` (the bug, the adr, the release-line;
+     the newer-format adr is **not** in it, its `type:` being `adr`), the undecidable case (red on the newer-format
+     line only, passes today otherwise).
+   - `wingfoil://memory/bug/bug-404` (not found, so the lookup passes every file) → refused with `error.data.details`
+     holding exactly the `bug-002-broken.md` line (red: today it holds the line of every unreadable file of the
+     fixture). `wingfoil://memory/bug/bug-001-valid` → resolves, no `warnings` field (characterization: in this
+     layout `bugs/bug-001-valid.md` sorts before every other unreadable file; the cross-type pass before a match is
+     pinned in point 2).
+2. `test/memory/query-type-scoped-warnings.test.ts` (new), at the primitives (existing exports, no new interface):
+   - `listMemoryDocumentsByType(root, loadMemoryYaml(root), 'bug', { onDiagnostic })` → diagnostics' `file`s
+     `[docs/04_memory/bugs/bug-002-broken.md]` (red).
+   - a second fixture with the Scrum template's flat layout (`docs/memory/adr/{id}.md`, `docs/memory/bug/{id}.md`),
+     where `adr` sorts before `bug`: `findMemoryDocumentByTypeAndId(root, y, 'bug', 'bug-001-a-bug', { onDiagnostic })`
+     and `findMemoryDocumentByTypeAndIdAtRev(root, 'HEAD', y, 'bug', 'bug-001-a-bug', { onDiagnostic })` resolve
+     the bug and report **nothing** (red: today both report `docs/memory/adr/adr-001-x.md` and
+     `adr-002-future.md`, as reproduced above). The same lookups for `'adr', 'adr-404'` report both adr files.
+   - a symbolic link `docs/memory/adr/adr-003-link.md` → reported to `adr`, not to `bug` (red).
+   - `listMemoryDocumentsByType(…, 'nosuch', …)` → no diagnostic (red; D3).
+3. `test/core/memory-search-type-warnings.test.ts` (new), through `CORE_MODULES`'s `memorySearch` op (as
+   `test/core/memory-scan-tolerant.test.ts`'s `op()` helper): `{ root, options: { type: 'bug' } }` → `ok`, matches
+   `['bug-001-valid']`, `warnings` exactly the `bug-002-broken.md` line (red); `{ options: { type: 'adr' } }` → the
+   two adr lines and `message: "no documents matched the query"` (red); no `options` → every line, all five files of
+   the fixture in path order (characterization: unchanged); `{ options: { type: 'nosuch' } }` → no warnings (red, D3).
+   One CLI run of `memory search --type bug` through `runCliEntry` (`test/cli/helpers/spawn-cli.ts`, the only
+   allowed spawn of `dist/cli.js`, `test/lint/cli-spawn-helper.test.ts`) with `--format console` and with
+   `--format json`: exit `0`, stderr exactly one `W_MEMORY_UNREADABLE (docs/04_memory/bugs/bug-002-broken.md)` line
+   (red).
+
+qa: run `npx jest test/lint --maxWorkers=2` with the red files in place (the `cli-spawn-helper`,
+`npm-caller-config` and control-character gates) and `npx tsc --noEmit` before the red commit. Every red here is an
+assertion failure: no test imports a new export, so there is no TS2305 and no runtime `TypeError`.
+
+**AC 2 — the developer prepares, uncommitted** (`dl-047`): `spec-004` §2.2, the sentences "A collection read
+(`wingfoil://memory/{type}`) scans every document and reports every such file" and the single-document one, to say
+that a typed read reports a file whose frontmatter does not parse, and a link, when the type's `path` pattern can
+produce its path (`spec-017` §1.4's token rule), and a newer-format document when its `type:` is the type read; a
+directory several types' patterns produce is reported to each (this repository's `task`). Plus a Revision note
+(2026-10, `task-314`, `bug-283`). The `memory amend spec-004-mcp-surface-contract` `--reason` is proposed in the
+developer's `### Pending amendments (approver)`. No other spec states the CLI's `--type` warnings: `spec-008` and
+`spec-017` §1.4 are unchanged (§1.4 is cited, not changed).
+
+#### Files expected to change
+
+- `src/storage/memory-path.ts` — gains the export `pathPatternRegExp`, moved from `src/workflow/deduce.ts`, with its
+  doc comment (TypeDoc `notDocumented` gate). Not re-exported from `src/storage/index.ts` (imported by path, as
+  `resolveConfinedMemoryPath` is).
+- `src/workflow/deduce.ts` — imports it instead of defining it; no behaviour change.
+- `src/memory/query.ts` — the scoped reports in the three type-scoped primitives; `MemorySearchOptions.type`.
+- `src/core/index.ts` — `memorySearchFn` passes `--type` to the scan.
+- `src/mcp/memory-resource.ts` — comments only.
+- `docs/cli-reference.md` — one sentence in the `memory search` entry: with `--type`, the warnings name only files
+  that type could hold.
+- `docs/02_requirements/02_bdd/features/p1-memory/P1.5-memory-search.feature` — one scenario "Edge - a typed search
+  warns only about files of that type" (D4).
+- `docs/04_memory/design/specs/spec-004-mcp-surface-contract.md` — uncommitted (AC 2).
+- tests: the three new red files (qa); the developer may add a unit test of `pathPatternRegExp` in a new file.
+
+The Implementation Notes named only `src/memory/query.ts` and `src/mcp/memory-resource.ts`; the four other source
+and doc files above are this design's declaration (W0-R7). **No `version:` bump**: none of these files carries a
+`version:` field (`grep -n "^version" docs/cli-reference.md
+docs/02_requirements/02_bdd/features/p1-memory/P1.5-memory-search.feature
+docs/04_memory/design/specs/spec-004-mcp-surface-contract.md` → nothing), and no `.wingfoil/` file changes, so
+`npm run check:mcp` is not needed. No workflow changes, so no test pins a phase or step list this task affects.
+
+#### Existing tests of the files to change, run
+
+`npx jest --maxWorkers=2 test/memory/query.test.ts test/memory/query-tolerant.test.ts
+test/memory/query-element-format.test.ts test/core/memory-scan-tolerant.test.ts test/core/memory-search.test.ts
+test/core/memory-element-format.test.ts test/mcp/resource-warnings.test.ts test/mcp/read-only-resources.test.ts
+test/mcp/error-details.test.ts test/workflow/deduce.test.ts test/core/workflow-deduction-bracketless-unreadable.test.ts
+test/storage/memory-path.test.ts test/storage/memory-path-type-folder.test.ts
+test/storage/memory-path-type-folder-root-level.test.ts test/storage/memory-path-confinement.test.ts` in the task
+worktree at `b3c0b970` → `Test Suites: 15 passed, 15 total`, `Tests: 211 passed, 211 total`. Every fixture of
+`test/mcp/resource-warnings.test.ts` and `test/core/memory-scan-tolerant.test.ts` puts its unreadable files on the
+type's own path (`docs/04_memory/bugs/…` read as `bug`, `docs/04_memory/v0.1/…` read as `task`), so they stay green
+under the new rule.
+
+#### Decisions for the approver
+
+- **D1 — which typed readers are scoped.** (a) only the two the AC names (`memory/{type}`, `memory search --type`);
+  (b) also `memory/{type}/{id}`, same class in `src/mcp/memory-resource.ts`, reproduced above; (c) also the
+  at-commit lookup `findMemoryDocumentByTypeAndIdAtRev`, same class in `src/memory/query.ts`, whose reports reach
+  `agent execute`'s NOT_FOUND `details.unreadable` (`spec-016` does not state their content, so no amend there).
+  **Recommendation (c):** one rule in the type-scoped primitives of the file the task touches (W0-R6 (1)), and
+  `spec-004` §2.2's single-document sentence is amended with the collection one.
+- **D2 — the newer-format document.** (a) decided by its readable `type:`, as membership in the listing is; (b)
+  decided by path, like the other two kinds. **Recommendation (a):** under (b) a newer-format `type: bug` document
+  outside `bug`'s folder would be neither listed nor reported by `memory/bug`, and one of another type inside it
+  would be reported there.
+- **D3 — an undeclared type** (`memory search --type nosuch`; the MCP Resource already refuses one as "resource not
+  found"). (a) no warning: no file is a path that type can produce; (b) every warning, as today. **Recommendation
+  (a)**, the rule applied as stated.
+- **D4 — documentation.** Add the `P1.5` scenario and the `docs/cli-reference.md` sentence above (the developer
+  commits them; neither is a Memory element). **Recommendation: yes**, so the user-facing contract of `--type`
+  states what the code does.
+
+#### Risks for the other open `w1` tasks
+
+- `task-309` (`src/core/loaders.ts`, `src/directives/schema.ts`): no shared file; this task only calls
+  `loadMemoryYaml`.
+- `task-315` (`src/cli/program.ts`, `src/cli/suggest.ts`): no shared file; `memory search`'s options are not
+  changed.
+- `task-319` (`scripts/integration-branch.cjs`, `bindings.yaml`): no overlap.
+- `task-313` (`src/memory/schema.ts`, `src/memory/audit.ts`): this task imports the `MemoryYaml` type only.
+- `task-321` edits `docs/cli-reference.md` (its `init` entry): a textual merge in another entry, low risk; whichever
+  merges second runs `test/docs/cli-reference.test.ts` after `git merge --no-edit release/0.3`.
+- `src/core/index.ts` is shared with any task editing another operation there (`task-311`, merged): a local hunk
+  in `memorySearchFn`.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
