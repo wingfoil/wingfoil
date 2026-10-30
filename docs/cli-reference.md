@@ -1020,17 +1020,23 @@ The payload also carries `warnings`, which lists what the entries cannot show:
 - an entry under `.wingfoil/directives/` that cannot be read (a symbolic link whose target does not
   exist, a file or directory without permission, a directory link back to one of its own parents),
   which is skipped and named there while the other directives are listed;
-- without `--role`, every id defined by two files (and the one in force), and every directive whose
-  declared `scope` contradicts `roles.yaml`'s `global:` list (`roles.yaml` decides) or is a value
-  other than `global`. A directive that declares no `scope` is not reported;
+- without `--role`, every binding in `roles.yaml` that names a directive with no file (one warning per
+  role, and one for a `global:` entry; new in 0.3.2), every id defined by two files (and the one in
+  force), and every directive whose declared `scope` contradicts `roles.yaml`'s `global:` list
+  (`roles.yaml` decides) or is a value other than `global`. A directive that declares no `scope` is not
+  reported;
 - with `--role`, a role with no assignments of its own, a binding with no directive file, and
-  shadowed ids.
+  shadowed ids. The no-assignments warning needs a `roles.yaml`: with none, nothing is bound and no
+  role warning is printed (new in 0.3.2).
 
 - **Commit:** none.
 - **Errors:** no `.wingfoil/` at the project root → exit `1`, `WingFoil not initialized (no .wingfoil/ directory at the project root): run 'wingfoil init' first`;
   `.wingfoil/directives/` itself unreadable, or an invalid directive file or `roles.yaml` → exit `1`. A
   directive file missing a required header field (`id`, `name`, `type`, `kind`, `title`) is refused with
   `invalid directive: missing required field '<field>'`, after the file's name (new in 0.3.2).
+  A `roles.yaml` that exists but cannot be read (a symbolic-link loop included) → exit `1`,
+  `.wingfoil/roles.yaml cannot be read (…)`; an absent one, or a symbolic link whose target does not
+  exist, means nothing is bound (new in 0.3.2).
 
 ### `wingfoil directive create`
 
