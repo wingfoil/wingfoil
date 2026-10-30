@@ -307,6 +307,34 @@ error code 128 (script: git --no-replace-objects ls-remote file:///nonexistent/r
 entries). `npx tsc --noEmit -p tsconfig.json` → exit 0; `npx eslint` on the file → exit 0; `npx jest test/lint
 --maxWorkers=2` → `Test Suites: 13 passed, 13 total`, `Tests: 153 passed, 153 total`.
 
+### review fixes (developer, 2026-10-30)
+
+The independent review approved with fixes: 0 blockers, 1 should-fix, 0 follow-ups. The should-fix: `npmScript`
+counted any `npm error command <cmd>` line as a script, and npm prints one for a failing git dependency as well, so the
+reason gained ` (script: git --no-replace-objects ls-remote …)`, against ruling D4. The qa added the red case
+`f9d87b771` (the fourth AC1 case of `test/release-health/measure.test.ts`, expecting `npm ci failed (exit 128): npm
+error code 128`; notes `8d1992b0d`), which the qa recorded failing on `0ce15c037`.
+
+Fix commit `eaf607e2d` (`git show --stat --format= eaf607e2d` → `scripts/release-health/measure.cjs | 16
+++++++++++++----`, the only file). The rule: a `command` line is a lifecycle script only when the output also carries
+npm's `npm error command failed` line (`NPM_COMMAND_FAILED_RE`, `measure.cjs` line 1252). npm prints that line for a
+failed lifecycle script; the git dependency's output has no such line. I chose the `command failed` line over the
+`sh -c ` prefix because the prefix depends on npm's script shell, while the three lifecycle fixtures and the git fixture
+all agree with the `command failed` line. The header states the rule (line 52). No red file touched.
+
+Runs, from this worktree:
+- `npx jest test/release-health/measure.test.ts test/release-health/measure-followups.test.ts
+  test/release-health/bindings-and-deps.test.ts --maxWorkers=2` → `Test Suites: 3 passed, 3 total`, `Tests: 89 passed,
+  89 total`.
+- One slot-taking run only: `npm run test:coverage -- --maxWorkers=2`, after `waitslot.sh`. It runs the same jest
+  config and suite set as `npm test`, whose script `scripts/run-tests.cjs` adds only the opt-in latency pass, so a second
+  full run was not needed. → `Test Suites: 528 passed, 528 total`, `Tests: 9290 passed, 9290 total`, `All files | 99.32
+  | 97.44 | 98.16 | 99.7` (statements, branches, functions, lines).
+- `npm run lint` → exit 0; `npm run docs:api` → exit 0; `npm run typecheck` → exit 0.
+- T4: `git log --first-parent --no-merges --format=%h d2e2cd8e5..HEAD --` on the three red files → `f9d87b771` only,
+  the qa's red amendment made at the review's request; no developer commit.
+- `git rev-list --count HEAD..release/0.3` → `0`, no merge. Status stays `in-review`.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
