@@ -64,4 +64,8 @@ B7 follow-ups (`dev-loop-rel-v0.3-plan`), re-checked on `main` at `bd55f70e` wit
 
 ### Retrospective
 
-None.
+- Fixed by `task-313`: `MemoryTypeEntry` refuses an absolute `path` or a `.`/`..` segment at load
+  (`E_VALIDATION types.<type>.path`, `path "<pattern>" holds a '.' or '..' segment` / `must be a relative path`),
+  so `memory add` writes nothing and every other `memory.yaml` reader refuses the file too. P1.13 gained scenario
+  12 for it (approver design gate 2026-10-30, D6 (b)). The storage guards `E_PATH_ESCAPES_ROOT` and
+  `E_PATH_OUTSIDE_TYPE_FOLDER` stay as defence in depth.
