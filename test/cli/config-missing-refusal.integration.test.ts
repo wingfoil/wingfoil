@@ -15,7 +15,7 @@
  *
  * The MCP Resource half of `bug-245` and `bug-251` is `test/mcp/config-missing-refusal.test.ts`.
  */
-import { chmodSync, existsSync, mkdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { WINGFOIL_NOT_INITIALIZED } from '../../src/core';
@@ -171,6 +171,42 @@ describe('a read on an absent, incomplete or invalid configuration names no host
       } finally {
         chmodSync(path, 0o644);
       }
+    });
+
+    // task-310 (bug-455), RED-FIRST: a roles.yaml that is a symbolic link to itself used to read as
+    // absent (`existsSync` is false on a loop) and list every directive `unassigned`, exit 0; it is now
+    // refused as an unreadable file (design gate D5 (a)).
+    describe('task-310 (bug-455) — roles.yaml a symbolic link to itself', () => {
+      const looped = (): string => {
+        const repo = scaffolded();
+        rmSync(join(repo, '.wingfoil', 'roles.yaml'));
+        symlinkSync('roles.yaml', join(repo, '.wingfoil', 'roles.yaml'));
+        return repo;
+      };
+      const expectNoLoopText = (repo: string, text: string): void => {
+        expectNoRawText(repo, text);
+        expect(text).not.toContain('ELOOP: too many');
+      };
+
+      it('`wingfoil directives list`', () => {
+        const repo = looped();
+
+        const result = runCliEntry(repo, ['directives', 'list']);
+
+        expect(result.status).toBe(1);
+        expect(result.stderr.split('\n')[0]).toBe('error: .wingfoil/roles.yaml cannot be read (ELOOP)');
+        expectNoLoopText(repo, result.stderr);
+      });
+
+      it('`wingfoil --format json directives list`', () => {
+        const repo = looped();
+
+        const result = runCliEntry(repo, ['--format', 'json', 'directives', 'list']);
+
+        expect(result.status).toBe(1);
+        expect(JSON.parse(result.stderr)).toEqual({ error: '.wingfoil/roles.yaml cannot be read (ELOOP)' });
+        expectNoLoopText(repo, result.stderr);
+      });
     });
   });
 });
