@@ -255,6 +255,82 @@ Design gate approved by the approver on 2026-10-30T10:38:05+01:00, in the orches
 - D4 — approved as written: EACCES/EPERM `<rel> cannot be read: permission denied`; EISDIR `<rel> is a directory, not a file`; any other errno `<rel> cannot be read (<code>)`; CoreError `IO`, exit 1; a missing file stays `NOT_FOUND`.
 - D5 — (a): `loadWorkflowsYaml`'s working-tree reader is mapped in this task.
 
+### red (qa, 2026-10-30)
+
+**Red commit `70531e91e`** (`git log --oneline -1` → `70531e91e test(core): task-309 — failing test: P3.5 missing-field
+message, unreadable config file named relative`), test files only (`git show --stat HEAD` → 7 files, 528 insertions, 22
+deletions): `test/core/project-directives.test.ts`, `test/cli/directive-missing-field.integration.test.ts` (new),
+`test/core/config-file-missing.test.ts`, `test/core/core-index-arms.test.ts`, `test/core/load-or-error-throw-arm.test.ts`
+(new), `test/cli/config-missing-refusal.integration.test.ts`, `test/mcp/config-missing-refusal.test.ts`. No new symbol is
+imported (the new class is asserted by `name`, `relativePath`, `code`, `message`), so no `.d.cts` is needed. Base
+unchanged: `git rev-list --count HEAD..release/0.3` → `0`, no merge. Run as uid 1000 (`id -u` → `1000`), so the
+permission pins ran; each is skipped when `process.getuid() === 0` and restores the mode in `finally`.
+
+**Run.** `npx jest --maxWorkers=2 test/core/project-directives.test.ts test/cli/directive-missing-field.integration.test.ts
+test/core/config-file-missing.test.ts test/core/core-index-arms.test.ts test/core/load-or-error-throw-arm.test.ts
+test/cli/config-missing-refusal.integration.test.ts test/mcp/config-missing-refusal.test.ts` → `Test Suites: 6 failed, 1
+passed, 7 total`, `Tests: 30 failed, 37 passed, 67 total` (project-directives 3 failed / 16, directive-missing-field
+3 / 3, config-file-missing 11 / 14, core-index-arms 1 / 7, load-or-error-throw-arm 0 / 1, CLI config-missing-refusal
+7 / 17, MCP config-missing-refusal 5 / 9). `npx tsc --noEmit -p tsconfig.json` → no output, exit 0. `npx eslint` on the
+seven files → exit 0. `npx jest test/lint --maxWorkers=2` with the files in place → `Test Suites: 13 passed`, `Tests: 153
+passed`. The invisible-character grep on the seven files → no hit.
+
+**Fixtures.** bug-025's directive file verbatim; the `name: y` file and the `name: ~` / `name: 42` variants from the
+design's reproduction; every repository scaffolded by `initWingfoilProject(repo, 'Scrum')` or the CLI's `init --template
+scrum`, so the workflow pins use the shipped manifest and its include `workflows/custom/bug-ingest.yaml` (asserted present
+in the manifest before it is replaced). The received texts below are the current code's real output, as is the
+reproduction run on the code build in a scratch repository: `node <worktree>/dist/cli.js directives list` → exit 1,
+`error: E_VALIDATION name (.wingfoil/directives/custom/no-direct-db-access.md): Invalid input: expected string, received
+undefined`.
+
+**Per AC** (first failing assertion of each red test):
+- **AC1 (red-first)**, `test/core/project-directives.test.ts`, describe "P3.5 — Error - a directive file missing required
+  header fields (task-309, bug-025)":
+  - "working tree: loadDirectiveInventory reports the file invalid with the P3.5 message" → `issues` `toEqual`: expected
+    `"message": "invalid directive: missing required field 'name'"`, received `"Invalid input: expected string, received
+    undefined"`.
+  - "HEAD: loadDirectivesAtHead reports the committed file invalid …, labelled HEAD:" → the same diff, `file:
+    'HEAD:.wingfoil/directives/custom/no-direct-db-access.md'`.
+  - "D2 (a): every other absent required key is worded the same way, in schema order" → `id`, `type`, `kind`, `title`
+    each received Zod's text (`- Expected - 4 / + Received + 4`).
+  - pass on first run (contract and negatives, D2 (a)): "the pinned message is the one the feature file states", and
+    "a name that is present but null (`name: ~`) / a number (`name: 42`) keeps Zod's own text".
+  - `test/cli/directive-missing-field.integration.test.ts`: "`directives list` reports the file invalid …" → first
+    stderr line expected `error: E_VALIDATION name (…no-direct-db-access.md): invalid directive: missing required field
+    'name'`, received `… Invalid input: expected string, received undefined`; "`--format json directives list` …" →
+    `{ error }` differs the same way; "`directive assign` on a committed nameless file …" → `toContain` `E_VALIDATION
+    name (HEAD:…): invalid directive: missing required field 'name'` not found in the task-311 refusal.
+- **AC2 (red-first)**, loader level, `test/core/config-file-missing.test.ts` (the "propagates as it was" pin replaced;
+  the ENOENT `it.each` unchanged):
+  - "dna.yaml / memory.yaml / roles.yaml is a directory: …" → `not.toContain("illegal operation on a directory")`,
+    received `"EISDIR: illegal operation on a directory, read"`.
+  - "… with mode 000: …" and "… a symbolic link to itself: …" → `not.toContain(<repo>)`, received `"EACCES: permission
+    denied, open '<repo>/.wingfoil/<file>'"` / `"ELOOP: too many symbolic links encountered, open '<repo>/…'"`.
+  - `loadWorkflowsYaml` (D5 (a)): "the manifest workflows.yaml is a directory" and "a file the manifest includes
+    (workflows/custom/bug-ingest.yaml) is a directory" → `"EISDIR: illegal operation on a directory, read"`.
+  - core operation, `test/core/core-index-arms.test.ts` "loadOrError: a dna.yaml that is a directory is the IO refusal
+    naming the file, exit 1 (bug-251)" → `dnaShow` rejects with `EISDIR: illegal operation on a directory, read` (at
+    `readConfigFile`) instead of resolving `{ code: 'IO', message: '.wingfoil/dna.yaml is a directory, not a file' }`.
+  - characterization, passes on first run: `test/core/load-or-error-throw-arm.test.ts` "an Error with no errno code from
+    the dna.yaml read is re-thrown by `dna show`" (`jest.mock` of `src/storage`, `readDocument` throws `new Error('boom')`
+    for `dna.yaml` only while armed).
+  - CLI, `test/cli/config-missing-refusal.integration.test.ts` describe "bug-251 — a configuration file that exists but
+    cannot be read (task-309)": `dna.yaml` a directory, `dna show` / `paths` / `mcp` → expected `error: .wingfoil/dna.yaml
+    is a directory, not a file`, received `error: EISDIR: illegal operation on a directory, read`; `--format json dna
+    show` → the same in `{ error }`; `memory.yaml` (`memory search x`), `roles.yaml` (`directives list`) → the same
+    for their file; `dna.yaml` mode 000 → received `error: EACCES: permission denied, open '<repo>/.wingfoil/dna.yaml'`.
+  - MCP, `test/mcp/config-missing-refusal.test.ts` describe "bug-251 (MCP) …": `wingfoil://dna`,
+    `wingfoil://memory/task`, `wingfoil://memory/task/task-001`, `wingfoil://workflows` (file a directory) → `toContain`
+    `.wingfoil/<file> is a directory, not a file`, received `MCP error -32603: EISDIR: illegal operation on a directory,
+    read`; `memory.yaml` mode 000 → received `MCP error -32603: EACCES: permission denied, open '<repo>/…'`. No pin
+    asserts the JSON-RPC code (dl-157 (A)). The optional `prompts/get` with an unreadable `roles.yaml` is not pinned.
+- Every message pin also asserts the text holds neither spelling of the repository path nor Node's raw text
+  (`permission denied, open`, `illegal operation on a directory`, `too many symbolic links`; the CLI and MCP pins add
+  `EISDIR`, `EACCES`).
+
+**For the developer.** `EPERM` and the `<rel> cannot be read (<code>)` form are pinned only through `ELOOP`; `EPERM` has no
+pin (no portable trigger). `loadWorkflowsYaml`'s `workflows/bindings.yaml` reader is not pinned separately.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
