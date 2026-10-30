@@ -57,3 +57,12 @@ rejects.
 Captured on 2026-10-05 by `bug-ingest-rel-v0.3-w1b5-review-findings-plan`, from the independent reviews of wave 1
 batch B5 (`dev-loop-rel-v0.3-plan`), reproduced against `main` at `1127a0fd` with the code build
 (`npm run -s build && node dist/cli.js`).
+
+### Retrospective
+
+- Fixed by `task-313`: `MemoryTypeEntry` runs `idPatternIssues` on a type's `id_pattern` at load, so every
+  `memory.yaml` reader refuses a malformed one before `memory add` can advise `--set n:0=<value>`. The message is
+  not the one Expected Behavior sketched (`memory.yaml: types.bug.id_pattern: …`, which no loader prints) but the
+  form every `memory.yaml` refusal prints, `E_VALIDATION types.bug.id_pattern (.wingfoil/memory.yaml): id_pattern
+  "bug-{n:0}-{slug}": malformed token {n:0}` (approver design gate 2026-10-30, D1 (a)); it names the type and the
+  issue, as Expected Behavior asks.
