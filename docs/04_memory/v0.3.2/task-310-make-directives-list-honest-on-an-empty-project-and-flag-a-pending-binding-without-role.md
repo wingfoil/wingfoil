@@ -47,6 +47,185 @@ a binding to a directive that does not exist is flagged only with `--role`.
        reject's `Reason:` (read with `wingfoil memory history <task-id>`), each with the command that
        shows it resolved and what that command printed; then what else changed on the next pass. -->
 
+### design (architect, 2026-10-30)
+
+**Inputs read.** `depends_on: []` (no dl-015 gate); no handover. Base: `release/0.3` `f52abb6e2` (task-314 merged; task-309
+merged at `bca02f1f5` before it) + `wf(bug): sync bug-455 [triaged → planned]` `cbb4d3279` + `wf(task): start` `0c5a09208` +
+the three `[planned → in-progress]` syncs `e4a0c4cb9`, `58bf52702`, `dc56337f0` (`git log --oneline -6`; `git rev-list --count
+HEAD..release/0.3` → `0`). task-309's Execution Notes read: `readConfigFile` maps `ENOENT` to `ConfigFileMissingError` and
+any other errno to `ConfigFileUnreadableError` (`<rel> cannot be read: permission denied` / `<rel> is a directory, not a
+file` / `<rel> cannot be read (<code>)`), which `coreErrorOf` turns into `IO`, exit 1; `loadRolesYaml` already reads through
+it, and `absentAsNull` (`src/core/workflow-registry.ts`) is the existing "absent → nothing, anything else refuses" rule.
+Cited elements, `grep -n "^status"`: `spec-012-context-loader-relevance-filtering` and `spec-013` `approved`; `dl-029`,
+`dl-042`, `dl-051`, `dl-047` `ready`. No AC contradicts them (dl-042 D asks for a warning, not an error, which AC2 keeps);
+the choices the ACs leave open are D1–D6.
+
+**The three defects, reproduced** (code build `node <worktree>/dist/cli.js`, `--version` → `0.3.1 (f52abb6e2…)`, scratch
+repositories outside the worktree, uid 1000):
+- bug-199: `git init`, one commit, `mkdir .wingfoil` → `directives list --role developer --format json` →
+  `{"entries":[],"warnings":["no directives assigned to role 'developer'"]}`, exit 0 (console the same, pretty-printed);
+  unfiltered → `{"entries":[],"warnings":[]}`, exit 0.
+- bug-411: `init --template scrum`, `ghost-directive` added under `qa:` in `roles.yaml`, committed → `directives list
+  --format json` → `warnings: []`; `--role qa` → `["directive 'ghost-directive' bound to role 'qa' has no directive file"]`.
+  A dangling **global** (`ghost-global` under `global:`) → unfiltered `[]`, `--role developer` → `["directive
+  'ghost-global' bound to role 'developer' has no directive file"]`.
+- bug-455, same scaffold: `roles.yaml` a link to itself → `--format json directives list` → exit 0, 10 entries, every
+  `assignment` `unassigned`, `warnings: []`; `--role developer` → the bug-199 warning, exit 0. A link into a directory with
+  mode 000 (`ln -s ../locked/roles.yaml`, `chmod 000 locked`; Node's read → `EACCES`) → the same exit-0 listing. Already
+  refused since task-309: `roles.yaml` a directory → `{"error":".wingfoil/roles.yaml is a directory, not a file"}`, exit 1
+  (console `error: …`); the file itself mode 000 → `.wingfoil/roles.yaml cannot be read: permission denied`, exit 1. A
+  dangling link and an absent file → exit 0, every entry `unassigned`, `warnings: []`.
+- Fresh scaffolds are clean: `init --template scrum` and `--template Kanban` (identical `roles.yaml`) → unfiltered
+  `warnings: []`; `--role` for the six bound roles `[]`, for `facilitator`/`approver` the kind-1 warning. This repository
+  (`node dist/cli.js directives list`, unfiltered and each of the eight roles) → `[]` everywhere.
+
+**Where it goes wrong.** `loadDirectiveListing` (`src/core/directives-list.ts:205`) reads `roles.yaml` only when
+`documentExists` (`existsSync`) is true, and `existsSync` is false for a link loop and for a link whose target cannot be
+stat'ed (bug-455). `buildDirectiveListing` passes `rolesYaml ?? NO_BINDINGS` to `resolveRoleDirectives`, so a missing file
+becomes a role with no assignments (bug-199); the unfiltered branch calls only `selectDirectivesById` and
+`directiveScopeWarnings`, neither of which looks at bindings (bug-411). Context assembly already behaves as AC1 asks:
+`assembleExecutionContext` resolves nothing when `loadRolesYamlAtRev` is `null` (`src/core/context.ts:854-855`), so no
+kind-1 warning without a `roles.yaml`.
+
+**Design** (all in `src/core/directives-list.ts`; `src/core/context.ts`, `src/core/loaders.ts`, `src/core/directive-scope.ts`
+and `src/core/workflow-registry.ts` unchanged; no new export).
+- *bug-455 (AC3).* A private `readRolesYaml(root)`: `loadRolesYaml(root)`, a `ConfigFileMissingError` → `undefined`, any
+  other throw propagates — the `absentAsNull` rule (D5). `documentExists`/`join` imports go. Then a loop → `ELOOP` →
+  `.wingfoil/roles.yaml cannot be read (ELOOP)`, a link into a closed directory → `… cannot be read: permission denied`, both
+  `IO`, exit 1 through the existing `loadOrError`; a dangling link → `ENOENT` → absent, as now.
+- *bug-199 (AC1).* In `buildDirectiveListing`, with `role` and `rolesYaml === undefined` the role warnings are `[]`
+  (only the loader's skipped warnings remain) and the entries are what they are today (none: nothing is bound or global).
+  With a `roles.yaml` the `--role` warnings stay exactly `resolveRoleDirectives`' (D3).
+- *bug-411 (AC2).* A private `danglingBindingWarnings(directiveFiles, rolesYaml)` for the unfiltered listing: `[]` without a
+  `roles.yaml`; otherwise, for every id named in `assignments` or `global` that no file in the inventory defines, ascending by
+  id: if `global` lists it, `directive '<id>' bound to every role (roles.yaml 'global') has no directive file`, then one
+  `directive '<id>' bound to role '<role>' has no directive file` per role whose own assignments name it, roles ascending
+  (the kind-2 text verbatim; `rolesByDirectiveId` already gives the roles sorted and deduplicated) (D1). Unfiltered order:
+  skipped entries, dangling bindings, shadowed ids, scope disagreements (D2). An id whose only file is a skipped entry is
+  dangling, as it already is under `--role` (`test/core/directives-list.test.ts:446`).
+- *TSDoc.* The module comment ("Warnings"), `DirectiveListing.warnings`, `buildDirectiveListing` ("`rolesYaml` is optional")
+  and `loadDirectiveListing` ("read only when it exists … Only a genuinely absent file is tolerated") restated.
+- *Docs (the developer commits; no `version:` on either file).* `docs/cli-reference.md` `directives list` (lines 1008–1035):
+  the unfiltered bullet gains "every binding in `roles.yaml` that names a directive with no file"; the `--role` bullet says
+  the no-assignments warning needs a `roles.yaml`; *Errors* gains a `roles.yaml` that exists but cannot be read (a
+  symbolic-link loop included) → exit `1`, `.wingfoil/roles.yaml cannot be read (…)`, while an absent one or a dangling link
+  means nothing is bound (new in 0.3.2). P3.4 BDD scenario under D4.
+- *Spec (AC5, prepared uncommitted by the developer, recorded by the approver's `memory amend`, dl-047).*
+  `spec-012-context-loader-relevance-filtering` §5.1: the Kind 1 bullet says it needs a `roles.yaml` (with none, nothing is
+  asserted about any role, as in context assembly); the last paragraph ("without a role filter … kind 3 only", already stale
+  since task-143's skipped entries and task-144's scope warnings) states the unfiltered listing's warnings and order — skipped
+  entries, kind 2 for every binding with the global form above, kind 3, then spec-013's scope disagreements; a Revision
+  (2026-10-30) note naming task-310 and bug-199/bug-411/bug-455. §5.1's table (the resolver's three kinds) is unchanged.
+
+**Files expected to change.** `src/core/directives-list.ts`; `docs/cli-reference.md`;
+`docs/02_requirements/02_bdd/features/p3-directives/P3.4-directives-list.feature` (D4 (a)); the red tests below; this task
+file; bug-199, bug-411, bug-455 (status syncs; Retrospective subsections and any Expected-Behavior note as pending
+amendments); spec-012 (pending amendment, uncommitted). **Version bumps:** none — no `.wingfoil/` file, and none of the
+files above carries a `version:`; `npm run check:mcp` is therefore not required by this design. No workflow is changed, so no
+phase-list or step-count pin is affected.
+
+**Existing tests of the files this task changes**, run before any pin (worktree, one jest process, `--maxWorkers=2`, no
+slot, load 6.2): `npx jest --maxWorkers=2 test/core/directives-list.test.ts test/core/directive-assign.test.ts
+test/core/directive-inventory-baseline.test.ts test/core/builtin-directive-templates.test.ts
+test/cli/program.integration.test.ts test/cli/config-missing-refusal.integration.test.ts test/core/config-file-missing.test.ts
+test/core/config-file-unreadable-paths.test.ts test/core/context.test.ts` → `Test Suites: 9 passed, 9 total`, `Tests: 301
+passed, 301 total`. To know which existing pins encode the old behaviour, the design above was prototyped in a scratch copy
+outside the worktree (`git archive HEAD`, not committed anywhere) and 26 suites run there (the nine above plus
+`test/cli/e2e-smoke.test.ts`, `fresh-init-transitions`, `console-format-fallback`, `extra-operand-refusal`,
+`test/core/production-registry.test.ts`, `reconcile-governance-role-directives`, `test/directives/`) → `Tests: 6 failed, 612
+passed, 618 total`: five in `test/core/directives-list.test.ts` (below) and one in
+`test/core/reconcile-governance-role-directives.test.ts` that reads git `HEAD`, which the archive copy has none of — in the
+worktree `npx jest --maxWorkers=2 test/core/reconcile-governance-role-directives.test.ts` → `Tests: 7 passed, 7 total`. No
+other file pins either warning text on the unfiltered listing (`grep -rn "no directives assigned\|has no directive file"
+test scripts docs/examples`: the other hits are `--role`, context or pinned-build pins).
+
+**AC classification and what qa must pin.** Interfaces: the registered operation through the file's `runList` /
+`listingOk` helpers, `buildDirectiveListing` and `exitCodeForResult` (all exported today: **qa imports no new symbol**, so
+`npx tsc --noEmit` stays green on red); the CLI through `runCliEntry` (`test/cli/helpers/spawn-cli.ts`). Fixtures: the
+file's `directiveDoc`, `ROLES_YAML`, `makeTempGitRepo`/`writeFixtureFile`; CLI repositories from `runCliEntry(repo, ['init',
+'--template', 'scrum'])` as task-309's describe does. Messages are the reproduction's real output above.
+- **AC1 (red-first)**, `test/core/directives-list.test.ts`. Rewrite "D — --role with no roles.yaml at all is an unbound role:
+  warning, exit 0" (it pins bug-199): same fixture → `listingOk(repo, { role: 'developer' })` `toEqual` `{ entries: [],
+  warnings: [] }` and `exitCodeForResult` 0; retitle it. Add: the bug's own case, `.wingfoil/` an empty directory, `--role
+  developer` → `{ entries: [], warnings: [] }`, exit 0; no `roles.yaml` plus a dangling directive symlink, `--role developer`
+  → warnings exactly the skip warning; unit, `buildDirectiveListing([<one file>], undefined, 'developer').warnings` `toEqual`
+  `[]`. "With a `roles.yaml` unchanged" is already pinned (characterization, passes before and after): the `D —` cases at
+  :379/:385 and "one rule" at :407. CLI, in a new describe of `test/cli/config-missing-refusal.integration.test.ts` or a new
+  `test/cli/directives-list-bindings.integration.test.ts`: `git init`, `mkdir .wingfoil` (no init) → `runCliEntry(repo,
+  ['--format', 'json', 'directives', 'list', '--role', 'developer'])` → status 0, `JSON.parse(stdout)` `toEqual` `{ entries: [],
+  warnings: [] }`, and the console run's stdout does not contain `no directives assigned`.
+- **AC2 (red-first)**, `test/core/directives-list.test.ts`, a new describe "the unfiltered listing reports a dangling binding
+  (task-310, bug-411)": `ROLES_YAML` plus a `qa: [testing, ghost-directive]` variant and a `global:` gaining `ghost-global`,
+  with `testing`, `security-secrets`, `code-review`, `no-direct-db-access` installed → `listingOk(repo).warnings` `toEqual`
+  `["directive 'ghost-directive' bound to role 'qa' has no directive file"]`, then (global case) `["directive 'ghost-global'
+  bound to every role (roles.yaml 'global') has no directive file"]`; one id bound to two roles and global → three warnings,
+  the global one first, roles ascending; two dangling ids → ascending by id; the order with a shadow and a scope warning →
+  skipped, dangling, shadow, scope; exit 0 in every case (a warning, not an error); no `roles.yaml` → no dangling warning.
+  Four existing pins encode the old unfiltered output and are rewritten (the prototype run above names them): "A — without
+  --role, a shadowed id is reported…" (:364) → `[<no-direct-db-access/developer dangling>, SHADOW_WARNING]`; "A — no
+  duplicate ids means an empty warnings array…" (:371) → keep its intent by giving that test a `roles.yaml` whose bindings all
+  resolve (`developer: [testing]`, `global: []`); "lists the other directives, exit 0, with a warning naming the link" (:433)
+  → `[WARNING, "directive 'code-review' bound to role 'reviewer' has no directive file", "directive 'no-direct-db-access'
+  bound to role 'developer' has no directive file", "directive 'security-secrets' bound to every role (roles.yaml 'global')
+  has no directive file"]`; "a global id with no directive file is not a scope disagreement" (:571) → `["directive
+  'security-secrets' bound to every role (roles.yaml 'global') has no directive file"]`, title kept (still no scope
+  warning). CLI: the bug's steps on a scaffold (`ghost-directive` under `qa:`, committed) → `['--format', 'json', 'directives',
+  'list']` status 0, `warnings` `toEqual` the qa line. Under D4 (a) the core describe's first case is titled after the new
+  scenario.
+- **AC3 (red-first for the loop and the link into a closed directory; characterization for the rest)**,
+  `test/core/directives-list.test.ts`, a new describe "a roles.yaml that exists but cannot be read is refused (task-310,
+  bug-455)", each without and with `{ role: 'developer' }`: `roles.yaml` a link to itself (`symlinkSync('roles.yaml',
+  join(repo, '.wingfoil', 'roles.yaml'))`) → `result.ok` false, `error` `toEqual` `{ code: 'IO', message: '.wingfoil/roles.yaml
+  cannot be read (ELOOP)' }`, `exitCodeForResult` 1; unprivileged only (`typeof process.getuid === 'function' &&
+  process.getuid() !== 0`, mode restored in `finally`), a link to `../locked/roles.yaml` with `locked` mode 000 → `{ code: 'IO',
+  message: '.wingfoil/roles.yaml cannot be read: permission denied' }`. Characterization (pass before and after): `roles.yaml` a
+  directory → `.wingfoil/roles.yaml is a directory, not a file`; the file mode 000 (unprivileged) → `… cannot be read:
+  permission denied`; a dangling link (`symlinkSync(join(repo, 'gone.yaml'), …)`) → ok, every entry `unassigned`, `warnings: []`
+  (and `[]` under `--role`, which is AC1's red). Every message also not containing the repository path (both spellings,
+  `realpathSync`) nor `too many symbolic links`. CLI, beside task-309's describe in
+  `test/cli/config-missing-refusal.integration.test.ts`: scaffold, `roles.yaml` replaced by a link to itself → `['directives',
+  'list']` status 1, first stderr line `toBe` `error: .wingfoil/roles.yaml cannot be read (ELOOP)`; `['--format', 'json',
+  'directives', 'list']` → `JSON.parse(stderr)` `toEqual` `{ error: '.wingfoil/roles.yaml cannot be read (ELOOP)' }`; its
+  `expectNoRawText` plus `ELOOP: too many`.
+- **AC4 (characterization)**: no test; at refactor and review `git diff --stat release/0.3...HEAD -- src/core/context.ts` →
+  no output, recorded in the notes.
+- **AC5 (characterization)**: no test; the uncommitted spec-012 edit is listed under Pending amendments with its `--reason`
+  and shown by `git diff -- docs/04_memory/design/specs/spec-012-context-loader-relevance-filtering.md`.
+
+**Decisions for the approver.**
+- **D1 — the unfiltered dangling-binding text.** (a) One warning per binding: the kind-2 text verbatim for a role's own
+  assignment, and `directive '<id>' bound to every role (roles.yaml 'global') has no directive file` for a `global:` entry
+  (no role to name); ascending by id, the global one first, then roles ascending. (b) One warning per id naming every role.
+  **Recommendation: (a)** — "as `--role` does" (AC2) is the same sentence, and `check:role-directives`' per-role reading stays
+  one-to-one.
+- **D2 — position.** (a) Skipped entries, dangling bindings, shadowed ids, scope disagreements (§5.1's kind 2 before kind
+  3). (b) Appended after the scope warnings. **Recommendation: (a).**
+- **D3 — `--role` with no `roles.yaml`.** (a) No warning at all (the loader's skipped entries only), entries as today
+  (none). (b) A file-level warning `.wingfoil/roles.yaml is absent: no directive is bound to any role` on both views, which
+  also changes the unfiltered listing of every project without one (two more existing pins, :493 and :586) and adds a text no
+  spec defines. **Recommendation: (a)** — the AC's wording, and what context assembly already does.
+- **D4 — BDD.** (a) Add to P3.4 `Scenario: Edge - a role binding names a missing directive` / `Given ".wingfoil/roles.yaml"
+  binds "ghost-directive" to role "qa"` / `And no directive file defines "ghost-directive"` / `When I run "wingfoil directives
+  list"` / `Then the listing's warnings name "ghost-directive" and role "qa"`, committed by the developer, transcribed by qa's
+  first AC2 case (as task-143 and task-144 did). (b) No scenario. **Recommendation: (a).**
+- **D5 — the absent-vs-unreadable reader.** (a) A private `readRolesYaml` in `src/core/directives-list.ts` with
+  `absentAsNull`'s rule. (b) Move `absentAsNull` to `src/core/loaders.ts` as a shared export (touches
+  `src/core/workflow-registry.ts` and `loaders.ts`, which task-313 edits). **Recommendation: (a).**
+- **D6 — bug-411's "and is an error wherever configuration is checked".** dl-042 D keeps it a warning in `directives list`;
+  the repository check that turns it into an error is `npm run check:role-directives` (exit 1 on any role's warning, roles from
+  `dna.yaml` `team.roles`; it runs the pinned build, so it sees the unfiltered change only when the pin advances). (a) The done
+  step states in bug-411 that this half is met by that check, no follow-up. (b) A follow-up bug for a configuration
+  validator. **Recommendation: (a).**
+
+**Candidate findings (not filed).** None: every surface reproduced above is one this design fixes.
+
+**Risks for the other open `w1` tasks.** `task-313` (`src/core/loaders.ts`): this design changes no line of it (it imports
+`ConfigFileMissingError` and `loadRolesYaml`, already exported). `task-312` (`src/dna`), `task-320` (`bindings.yaml`,
+release health): no overlap. `task-321` (init scaffold): it does not list `roles.yaml` or the shipped directives; should it
+change either, a scaffold binding with no file now shows in the unfiltered listing, which
+`test/core/builtin-directive-templates.test.ts` ("a fresh project … reports 0 warnings") would catch. When the pin later
+reaches 0.3.2, `check:role-directives` sees no kind-1 warning on a project with no `roles.yaml`; its fixtures always write one.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
