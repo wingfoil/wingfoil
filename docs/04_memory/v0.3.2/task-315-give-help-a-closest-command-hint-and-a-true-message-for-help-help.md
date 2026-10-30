@@ -46,6 +46,134 @@ special case for the string `help`.
        reject's `Reason:` (read with `wingfoil memory history <task-id>`), each with the command that
        shows it resolved and what that command printed; then what else changed on the next pass. -->
 
+### design (architect, 2026-10-29)
+
+**Inputs read.** `depends_on: []` (no dl-015 gate); no handover. Base: `release/0.3` `13c01950` + the start commit
+`c0f3caa4` and the two bug syncs (`git log --oneline -3` → `3155afc6`, `1bd7862a`, `c0f3caa4`). Ruling:
+`release-planning-rel-v0.3.2-plan` R8 (`sed -n 118p`): `bug-116` "true message at exit 2". Specs: `spec-005` and
+`spec-008` are `approved` (`grep -m1 '^status'` on each). BDD: `P5.1.4-cli-ux.feature` has the unknown-command
+scenario (`wingfoil memroy add`), none for `help` (`grep -n "help" …/P5.1.4-cli-ux.feature` → only the `--help`
+scenario, lines 2 and 9).
+
+**The defects, reproduced on this base** (code build `node dist/cli.js`, built by the orchestrator; stderr tail):
+- `bug-115`: `help memroy` → exit `2`, Commander's root usage on stderr, then `error: unknown command 'memroy'` and no
+  `hint:`; `--format json help memroy` → `{"error":"unknown command 'memroy'"}`. The direct `memroy` → `error: unknown
+  command 'memroy'` / `hint: did you mean "memory"?`; `--format json memroy` →
+  `{"error":"unknown command 'memroy'","hint":"did you mean \"memory\"?"}`.
+- `bug-116`: `help help` → exit `2`, `error: unknown command 'help'`; `help help help` → the same; `--format json help
+  help` → `{"error":"unknown command 'help'"}`.
+- Same class one level down (`incompleteInvocationReason`, `src/cli/program.ts` line 426, matches only
+  `first === 'help'`): `memory help memroy` → `error: missing required argument: <command>` / `hint: usage: wingfoil
+  memory help memroy <command>`; `memory help help` → the same shape, `… memory help help <command>`; `dna help dna`
+  → the same. All three false, all exit `2`. (`memory help` and `memory help add` → exit `0`.)
+- The literal `'help'` is the special case `bug-116`'s Notes forbid, and it breaks as soon as the built-in is not
+  called `help`: in scratch, `buildProgram(CORE_MODULES, …)` then `program.helpCommand('assist [command]')` and
+  `parseAsync(['node','wingfoil','assist','memroy'])` → exit `2`, `error: missing required argument: <command>` /
+  `hint: usage: wingfoil assist memroy <command>`; `assist assist` → the same; `assist memory` → exit `0`, memory's help.
+
+**Commander's built-in commands, with evidence.** commander@15.0.0 (`node_modules/commander/package.json` line 3) adds
+exactly one command of its own, the implicit help command: `Command#_getHelpCommand()` (`lib/command.js` lines
+464-476) creates it lazily as `help [command]` on a command that has subcommands and no action handler; it is never
+pushed into `this.commands`, so `_findCommand('help')` (lines 1661-1666) misses it, and `_parseCommand` recognises it
+by `operands[0] === this._getHelpCommand().name()` (lines 1573-1577). `--help`/`--version` are options, not commands.
+The public way to see it is `Help#visibleCommands(cmd)` (`lib/help.js` lines 41-54: `cmd.commands` plus the help
+command), which `commandsBeside` already uses. Measured on this build (scratch script, `program.createHelp()
+.visibleCommands(level)` minus `level.commands`, for the root and each noun): root, `agent`, `directive`,
+`directives`, `dna`, `memory`, `workflow` → one built-in each, `{name: 'help', aliases: [], usage: '[command]'}`;
+`init`, `mcp`, `paths` → none. So "Commander's built-in commands at a level" = `visibleCommands(level)` minus
+`level.commands`, never a string.
+
+**Design (`src/cli/program.ts` only).**
+- Replace the `first === 'help'` branch of `incompleteInvocationReason` by a walk of `program.args`, from the root, the
+  way `commandsBeside` walks: at each level, an operand naming a command of `level.commands` descends; an operand naming
+  one of the level's **built-in** commands (above) is a help request, and the operand after it is its subject. The
+  function then takes the `program` (it is private, so no export changes). Cases, at the level `L` the help request was
+  made at, `P` = the operands walked to reach `L` (empty at the root):
+  1. subject names a built-in of `L` (`help help`, `memory help help`, `help help help` — the surplus after the subject
+     is ignored, as Commander does) → reason `the built-in command '<subject>' has no help of its own`, hint
+     `usage: wingfoil <P…> <built-in name> <built-in usage()>` (`usage: wingfoil help [command]`,
+     `usage: wingfoil memory help [command]`) — wording: D2;
+  2. any other subject (it matched no command of `L`, or Commander would have printed its help at exit `0`) → reason
+     `unknown command '<subject>'`, byte-for-byte the direct path's, and the hint `unknownCommandHint(closestCommand(
+     subject, <the names and aliases of visibleCommands(L)>))` when one is within distance 2, the same call
+     `commanderRefusal` makes — so `help memroy` and `memroy` print the same two lines, `help nosuchnoun` still no hint.
+  3. no help request on the walk → today's missing-operand reason and hint, unchanged.
+  `commandsBeside(program)` already yields `visibleCommands(L)` for both `help memroy` (stops at `help`, level root) and
+  `memory help memroy` (stops at `help`, level `memory`), so it is reused, not duplicated.
+- Reword the TSDoc of `incompleteInvocationReason` (its bullet at lines 412-415: "It carries no `hint:` line: the suggestion on this
+  path is `bug-115`'s (v0.4)") and the exit-callback comment where it names the case, to state the three cases.
+  `src/cli/suggest.ts` needs no code change (`closestCommand`, `unknownCommandHint` reused as they are); its header
+  TSDoc stays true.
+- No new export, so the red has no `tsc` error (TS2305) and no runtime TypeError: every red is an assertion failure.
+
+**Existing tests on every file this task changes, and on the help path**, before any pin (one jest process, under the
+slot, `--maxWorkers=2`): `npx jest --maxWorkers=2 test/cli/suggest.test.ts test/cli/program.test.ts
+test/cli/operand-error-shape.integration.test.ts test/cli/missing-verb-exit-code.integration.test.ts
+test/cli/commander-parse-exit-codes.integration.test.ts test/cli/parse-error-format.integration.test.ts
+test/cli/help-describes-every-command.test.ts test/core/exit-code.test.ts test/docs/cli-reference.test.ts
+test/docs/exit-codes-parity.test.ts test/docs/command-surface-specs.test.ts test/docs/name-resolvability.test.ts
+test/lint` → `Test Suites: 25 passed, 25 total`, `Tests: 398 passed, 398 total`.
+- Two existing pins collide with AC1/AC2 and are changed by red (qa): `test/cli/operand-error-shape.integration.test.ts`
+  `describe('AC 3 — bug-115 / bug-116 stay out of scope (characterization)')` — "`wingfoil help memroy` keeps its
+  error line and gets no hint" and "`wingfoil help help` keeps its text" — and the file's header bullet (line 12,
+  "`bug-115` / `bug-116` (v0.4) are out of scope"). Still true after the fix, unchanged: `program.test.ts` "`help
+  <unknown>` gets the unknown-command line" (`nosuchnoun`, no near match) and `missing-verb-exit-code` AC3 (error lines
+  of `help nosuchnoun` and `nosuchnoun` equal) and AC4 (`help`, `help dna` exit `0`).
+- No workflow, phase or step changes, and nothing under `.wingfoil/` (`git diff` will touch none), so no phase-list
+  test applies and `npm run check:mcp` is not required.
+
+**AC classification and what qa must pin.** Both reds go in existing files; spawn only through
+`test/cli/helpers/spawn-cli.ts` (`runCliEntry`/`runCliHarness`), never a local spawn of `dist/cli.js`
+(`test/lint/cli-spawn-helper.test.ts`). Run `npx jest test/lint --maxWorkers=2` and `npx tsc --noEmit` before the red
+commit. Expected strings below are this design's (the behaviour does not exist yet); the "today" strings are copied
+from the runs above.
+
+| AC | Class | What qa pins |
+|---|---|---|
+| 1 | red-first (reproduced above) | **Integration**, `test/cli/operand-error-shape.integration.test.ts`, the AC 3 `describe` rewritten as `task-315` (`runCliEntry(repo, args)`, the suite's repo): (a) `['help','memroy']` → status `2`, stdout `''`, stderr ends with `error: unknown command 'memroy'\nhint: did you mean "memory"?\n`; (b) for each of `memroy`, `nosuchnoun`, `dnaa`: the `error:`/`hint:` lines of `['help', x]` equal those of `[x]` (the `hint:` present for `memroy` and `dnaa`, absent for `nosuchnoun`); (c) `['--format','json','help','memroy']` → `JSON.parse(stderr)` equals `{ error: "unknown command 'memroy'", hint: 'did you mean "memory"?' }`; (d) nested (D3): `['memory','help','addd']` → stderr ends with `error: unknown command 'addd'\nhint: did you mean "add"?\n`, `['memory','help','memroy']` → ends with `error: unknown command 'memroy'\n`, no `hint:`, and neither contains `missing required argument`. Header bullet line 12 updated. **Unit**, `test/cli/program.test.ts`, `describe("buildProgram — the exit callback's own behaviour …")` (`buildFixtureProgramWithRealExitCallback`, `parseIgnoringFallout`, `written(stderrSpy)`, `exitSpy`; fixture nouns `dna` (show, set), `memory` (add), `paths`): `'--format','yaml','help','dnaa'` → stderr `error: unknown command 'dnaa'\nhint: did you mean "dna"?\n`, exit `2`; `'dna','help','sett'` → `error: unknown command 'sett'\nhint: did you mean "set"?\n`; and the built-in found by consultation, not by name: after `program.helpCommand('assist [command]')` on the built program, `'--format','json','assist','dnaa'` → `{"error":"unknown command 'dnaa'","hint":"did you mean \"dna\"?"}` + `\n`, exit `2` |
+| 2 | red-first (reproduced above) | **Integration**, same rewritten `describe`: `['help','help']` and `['help','help','help']` → status `2`, stdout `''`, stderr does not contain `unknown command`, ends with `error: the built-in command 'help' has no help of its own\nhint: usage: wingfoil help [command]\n`; `['--format','json','help','help']` → `{ error: "the built-in command 'help' has no help of its own", hint: 'usage: wingfoil help [command]' }`; nested (D3): `['memory','help','help']` → ends with `error: the built-in command 'help' has no help of its own\nhint: usage: wingfoil memory help [command]\n`. **Unit**, `program.test.ts`, same `describe`: `'--format','yaml','help','help'` → that pair of lines, exit `2`; `'--format','json','dna','help','help'` → `{"error":"the built-in command 'help' has no help of its own","hint":"usage: wingfoil dna help [command]"}` + `\n`; renamed built-in: after `program.helpCommand('assist [command]')`, `'--format','json','assist','assist'` → `{"error":"the built-in command 'assist' has no help of its own","hint":"usage: wingfoil assist [command]"}` + `\n`, exit `2` (today: `missing required argument: <command>`, measured above — the pin that no string `help` decides it). The wording is D2's; if the approver changes it, qa pins the ruled text |
+| 3 | characterization by command, no test | The `spec-005` edit (D1) is prepared by the developer in green, uncommitted (`dl-047`), and checked by command at self-review: `` grep -c 'carries no `hint:` yet' docs/04_memory/design/specs/spec-005-cli-command-contract.md `` → `0` (today `1`, line 179), the new sentences present, and a Revision paragraph in `## Process Notes`. No test pins spec prose for this case (`` grep -rn 'carries no `hint:`' test/ `` → no output, exit `1`), and a red on an uncommitted amendment would fail on `release/0.3` until the approver's `memory amend` |
+
+**Files expected to change.** `src/cli/program.ts` (green); `test/cli/operand-error-shape.integration.test.ts`,
+`test/cli/program.test.ts` (red); `docs/cli-reference.md` (refactor, D4: one sentence in `### Exit codes` after the
+`hint:` paragraph, lines 85-88); uncommitted, for the approver's `memory amend`: `spec-005-cli-command-contract`
+§1 (Rules), §3.1 (the unknown-command bullet) and a Revision paragraph, and, if D1 (a), `spec-008-cli-grammar` §5
+(lines 411-420) with its Revision paragraph. No `version:` bump: none of these files has a `version:` field (specs:
+`dl-047`; `head -3 docs/cli-reference.md` → no frontmatter), and nothing under `.wingfoil/` changes. `src/cli/suggest.ts`
+unchanged.
+
+**Decisions for the approver.**
+- **D1 — the specs read literally say `help help` exits `0`; R8 says exit `2`.** `spec-005` §1 Rules (lines 58-61) and
+  `spec-008` §5 (lines 418-420): "an explicit request for help by name (`wingfoil help`, `wingfoil help
+  <known-command>`) … exits `0`"; `help` is a known command (`wingfoil --help` lists `help [command]`). (a) Keep R8:
+  exit `2` with the true message, and amend `spec-005` §1 and §3.1 and `spec-008` §5 to name `help <built-in>` as a
+  refusal (the help command has no help to satisfy the request with: `helpCommand.helpOption(false)`, `lib/command.js` line 425);
+  (b) exit `0` and print the help command's own usage, which needs no spec change but contradicts R8. Recommendation:
+  (a), which widens the task's amendments from `spec-005` §3.1 to `spec-005` §1 + §3.1 and `spec-008` §5.
+- **D2 — the wording.** Proposed: `error: the built-in command '<name>' has no help of its own` /
+  `hint: usage: wingfoil [<noun>] <name> [command]` (lower-case initial, no period, `spec-005` §3.1; the hint in the
+  missing-operand shape the help path already uses). Recommendation: accept.
+- **D3 — scope: the same defect one level down.** `<noun> help <unknown>` and `<noun> help help` print a false
+  `missing required argument: <command>` (measured above) from the same function; W0-R6 (1) puts a same-class instance in
+  the touched file in the task. Recommendation: include (AC1 (d), AC2 nested pins).
+- **D4 — user docs.** One sentence in `docs/cli-reference.md` `### Exit codes` ("`wingfoil help memroy` gets the same
+  `hint:` line; `wingfoil help help` is refused with `error: the built-in command 'help' has no help of its own`"), and
+  no new BDD scenario (`P5.1.4-cli-ux.feature`'s unknown-command scenario already states the rule for every route).
+  Recommendation: accept; the CHANGELOG stays `user-docs`'.
+
+**Candidate finding (not fixed, not filed).** `src/cli/program.ts` / Commander's `help [command]`: `node dist/cli.js
+help memory add` and `help memory addd` → exit `0`, stdout `Usage: wingfoil memory [options] [command]` — the operand
+after the first is ignored in silence, so a typo is not refused and `help memory add` does not show `memory add`'s
+help (that is `memory help add`, exit `0`, `Usage: wingfoil memory add [options]`). Expected: either the help of
+`memory add`, or a surplus-operand refusal at exit `2` (`spec-005` §1, "an operand beyond the one the command
+declares"). Suggested severity: low. Outside this task (the success path of the help command, not the refusal path).
+
+**Risks for the other open `w1` tasks.** `src/cli/program.ts` and `test/cli/program.test.ts`: no other open `w1` task
+names them (`grep -n "program.ts\|program.test" docs/04_memory/v0.3.2/task-3{09,10,14,19}-*.md` → no output); task-310
+and task-311 use `test/cli/program.integration.test.ts`, a different file. `docs/cli-reference.md`: `task-321` (backlog)
+also edits it (another section, `init`): a textual merge only. `spec-005`: no other `v0.3.2` task amends it (S6 lists
+`spec-005` §3.1 for this task alone). task-309, task-314, task-319: no shared file.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
