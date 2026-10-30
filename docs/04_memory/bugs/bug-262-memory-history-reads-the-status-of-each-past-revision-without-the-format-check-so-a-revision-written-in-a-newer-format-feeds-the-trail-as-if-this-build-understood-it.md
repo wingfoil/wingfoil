@@ -59,3 +59,11 @@ The trail states a transition read from a document this build declares it cannot
 
 Captured on 2026-10-06 by `bug-ingest-rel-v0.3-w2b4a-review-findings-plan`, from the independent review of
 `task-257` (W2 B4a, `dev-loop-rel-v0.3-plan`), checked against `main` at `b0c3e472`.
+
+### Retrospective
+
+- Fixed by `task-313`: the audit reader checks a past revision's `format` after parsing it, so `memory history`
+  reports a newer-format revision as unreadable (`to: null`, `unreadable: E_INVALID_FORMAT: …`, a
+  `W_MEMORY_UNREADABLE` warning naming the commit), and the strict readers — the transition-consistency check and
+  `scripts/check-governance.cjs`, its blob reader included — report the commit as state not checked with a reason
+  of its own (approver design gate 2026-10-30, D4 (a)).
