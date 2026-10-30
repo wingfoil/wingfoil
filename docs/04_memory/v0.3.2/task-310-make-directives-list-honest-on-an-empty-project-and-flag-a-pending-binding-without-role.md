@@ -226,6 +226,17 @@ change either, a scaffold binding with no file now shows in the unfiltered listi
 `test/core/builtin-directive-templates.test.ts` ("a fresh project … reports 0 warnings") would catch. When the pin later
 reaches 0.3.2, `check:role-directives` sees no kind-1 warning on a project with no `roles.yaml`; its fixtures always write one.
 
+### design gate (approver, 2026-10-30)
+
+Design gate approved by the approver on 2026-10-30T19:01:03+01:00, in the orchestrator's chat:
+- D1 — (a): the unfiltered listing warns once per dangling binding — the existing `--role` text for a role's own assignment, and
+  `directive '<id>' bound to every role (roles.yaml 'global') has no directive file` for a global; ids ascending, the global first, then roles ascending.
+- D2 — (a): the unfiltered warnings run skipped, dangling, shadow, scope (spec-012 §5.1's order).
+- D3 — (a): `--role` with no `roles.yaml` prints no role warning, as context assembly does.
+- D4 — (a): the P3.4 scenario "Edge - a role binding names a missing directive" is added, committed by the developer; red's test follows its text.
+- D5 — (a): the absent-versus-unreadable reader is a private `readRolesYaml` in `src/core/directives-list.ts`; `loaders.ts` is not touched.
+- D6 — (a): bug-411's "an error wherever configuration is checked" is recorded at done as met by `npm run check:role-directives`; no follow-up bug.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
