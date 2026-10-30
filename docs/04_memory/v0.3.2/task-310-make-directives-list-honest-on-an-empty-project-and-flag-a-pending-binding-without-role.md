@@ -392,6 +392,32 @@ Edited in this worktree, uncommitted (`git status --short` lists the three files
   check:role-directives, per design gate D6 (a)."`
 - `bug-455-…`: none — its `### Retrospective` exists (`grep -n "^### Retrospective"` → line 46).
 
+### review fixes (developer, 2026-10-30)
+
+Independent review: approve with fixes, 0 blockers, two should-fix findings, both introduced by this task. Fix commit
+`fb442d912` (`git show --stat --format= fb442d912` → `src/core/directives-list.ts | 2 +-`); no red file touched.
+- R1 — the pending bug-411 amendment overstated `npm run check:role-directives`: the script runs `directives list --role <r>`
+  only for the roles `dna.yaml` `team.roles` declares (`grep -n "team.roles" scripts/check-role-directives.cjs` → lines 4,
+  15, 22, 89), and it is not shipped (`node -e 'console.log(JSON.stringify(require("./package.json").files))'` →
+  `["dist","README.md"]`). The note now says the error half is met on this repository only, for those roles; a dangling
+  binding under a role `team.roles` does not declare stays a warning, and a consumer project has no such check. D6 (a) kept.
+  The amendment stays uncommitted; its `--reason` is revised below.
+- R2 — `src/core/directives-list.ts` module comment: "the two things a reader cannot see" → "the three things", matching the
+  three it lists (`grep -n "three things" src/core/directives-list.ts` → line 21). `grep -n "two things"` on the file and on
+  `docs/cli-reference.md` → no output.
+
+Revised pending amendment: `bug-411-directives-list-reports-a-role-bound-to-a-missing-directive-only-when-role-names-that-role`
+— `--reason "Record that task-310 fixes the unfiltered listing and that the error half of the Expected Behavior is met on this
+repository only, by npm run check:role-directives for the roles dna.yaml team.roles declares, per design gate D6 (a)."` The
+other two pending amendments (spec-012, bug-199) are unchanged.
+
+Runs: `npx jest --maxWorkers=2 test/core/directives-list.test.ts test/cli/directives-list-bindings.integration.test.ts
+test/cli/config-missing-refusal.integration.test.ts test/core/builtin-directive-templates.test.ts
+test/docs/cli-reference.test.ts` → `Test Suites: 5 passed, 5 total`, `Tests: 109 passed, 109 total`. `npm run lint` → exit 0;
+`npm run docs:api` → exit 0; `npx tsc --noEmit -p tsconfig.json` and (after the slot) `-p tsconfig.build.json` → exit 0. No
+full suite: the code change is one word of a comment, and the amendment is a Memory document no test reads by content.
+Status stays `in-review`.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
