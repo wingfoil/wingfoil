@@ -12,6 +12,8 @@
  *   failing — the coupling of `UNCHECKABLE_RE` to `check-governance.cjs`'s authority message (P02's half is pinned
  *   by measure.test.ts);
  * - ruling A (red-first): G07 is `not-measurable`, with the reason, at a point with no `team.members`.
+ * - task-320 AC1 (red-first, `bug-357` (b)): Q14's fallback, the oldest commit adding a decision-log's file, follows
+ *   a move: a decision-log added by a plain commit and later moved with `git mv` is aged from the add, not the move.
  *
  * A compact fixture repository of its own (measure.test.ts's builders are not exported): identities and dates go
  * per command, never through `git config` (`dl-089` §6). Deterministic: fixed dates, offline, no toolchain.
@@ -35,6 +37,7 @@ const ADA = { name: 'Ada Approver', email: 'ada@wingfoil.dev' };
 const DEV = { name: 'Dev Eloper', email: 'dev@wingfoil.dev' };
 const DAY0 = '2026-08-30T10:00:00+00:00';
 const DAY1 = '2026-09-01T10:00:00+00:00';
+const POINT_DAY = '2026-09-05T10:00:00+00:00';
 
 const MEMORY_YAML = `version: 1
 types:
@@ -225,5 +228,24 @@ describe('F8 (5) — P05 and an approval made before dna.yaml existed (character
     const p05 = processConformance(r.root, git(r.root, ['rev-parse', 'HEAD']).trim(), null).find((m) => m.id === 'P05')!;
     expect(p05).toMatchObject({ failing: [], raw: { unchecked: 1, approvals: 1 } });
     expect(first).toMatch(/^[0-9a-f]{40}$/);
+  });
+});
+
+describe('task-320 AC1 — Q14 counts a moved decision-log\'s age from its add, following the rename (bug-357 (b))', () => {
+  it('a decision-log added by a plain commit outside the type\'s path, then moved with git mv: aged from the add', async () => {
+    const r = repo();
+    const base = r.commit('chore: configure wingfoil', { author: ADA, date: DAY0, files: baseFiles(true) });
+    const IN_DISCUSSION = DL_DOC('dl-150-moved').replace('status: ready', 'status: in-discussion');
+    // DAY0: added by a plain commit (no `wf(decision-log): add` subject), at a path outside `docs/memory/dls/{id}.md`.
+    r.commit('docs: draft dl-150-moved', { date: DAY0, files: { 'docs/drafts/dl-150-moved.md': IN_DISCUSSION } });
+    // DAY1: moved into the type's path, content unchanged.
+    mkdirSync(join(r.root, 'docs', 'memory', 'dls'), { recursive: true });
+    git(r.root, ['mv', 'docs/drafts/dl-150-moved.md', 'docs/memory/dls/dl-150-moved.md']);
+    r.commit('docs: move dl-150-moved into the memory', { date: DAY1 });
+    const point = r.commit('docs: note', { date: POINT_DAY, files: { 'docs/note.md': 'Note.\n' } });
+    expect(git(r.root, ['log', '--format=%s', '--diff-filter=A', point, '--', 'docs/memory/dls/dl-150-moved.md']).trim()).toBe('docs: move dl-150-moved into the memory');
+    const report = await measureRelease(r.root, { release: 'v0.2', at: point, previous: base, ...OFFLINE });
+    // DAY0 (08-30) → POINT_DAY (09-05) is 6 days; counted from the move (DAY1, 09-01) it would be 4.
+    expect(entry(report, 'Q14')).toMatchObject({ status: 'measured', value: { count: 1, median_age_days: 6 }, raw: { in_discussion: 1, oldest_age_days: 6 } });
   });
 });

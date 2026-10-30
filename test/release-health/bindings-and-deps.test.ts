@@ -8,6 +8,10 @@
  * - bug-332 (red-first): `ajv`, which the release-health tests and `compare.cjs` import, is a declared
  *   devDependency at major 8, the lockfile's root entry agreeing; the installed copy is major 8.
  *
+ * - task-320 AC3 (red-first, `bug-407`; approver rulings D1, D3): every `n -d exec` the operator is given — in the
+ *   header of `scripts/release-health/measure.cjs`, in `bindings.yaml` and in `.wingfoil/WORKFLOW.md` — carries the
+ *   writable `N_PREFIX` it needs when `n`'s default prefix is root-owned; `bindings.yaml` (≥ 2.9) records it.
+ *
  * Version pins are "at least" (bug-314): a later writer of the same file bumps it again and keeps this entry.
  * Deterministic: reads committed files only.
  */
@@ -70,5 +74,31 @@ describe('bug-332 — ajv is a declared devDependency', () => {
   it('the installed ajv is major 8 (characterization: hoisted through @modelcontextprotocol/sdk today)', () => {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     expect((require('ajv/package.json') as { version: string }).version).toMatch(/^8\./);
+  });
+});
+
+describe('task-320 AC3 — n -d exec is documented with a writable N_PREFIX (bug-407)', () => {
+  /** The leading block comment of `measure.cjs`, up to its first `*\/`: the header the operator reads. */
+  const measureHeader = (): string => {
+    const text = read('scripts/release-health/measure.cjs');
+    return text.slice(0, text.indexOf('*/'));
+  };
+  const SOURCES: ReadonlyArray<[string, () => string]> = [
+    ['the header of scripts/release-health/measure.cjs', measureHeader],
+    [BINDINGS, () => read(BINDINGS)],
+    ['.wingfoil/WORKFLOW.md', () => read('.wingfoil/WORKFLOW.md')],
+  ];
+
+  it.each(SOURCES)('%s: every `n -d exec` is immediately preceded by `N_PREFIX=<non-space> ` on its line', (_name, text) => {
+    const lines = text().split('\n');
+    const occurrences = lines.flatMap((line) => [...line.matchAll(/(?<![\w-])n -d exec/g)].map((m) => ({ line, before: line.slice(0, m.index) })));
+    expect(occurrences.length).toBeGreaterThanOrEqual(1);
+    expect(occurrences.filter((o) => !/N_PREFIX=\S+ $/.test(o.before)).map((o) => o.line.trim())).toEqual([]);
+  });
+
+  it('bindings.yaml is at version 2.9 or later, with a 2.9 entry naming task-320', () => {
+    const { version, history } = versionLine(BINDINGS);
+    expect(version).toBeGreaterThanOrEqual(2.9);
+    expect(history.split(/;|\(prev /).find((segment) => /(^|[\s(])2\.9([\s):,]|$)/.test(segment) && segment.includes('task-320'))).toBeDefined();
   });
 });
