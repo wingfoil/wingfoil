@@ -30,7 +30,7 @@ const PATCH_VERSION = /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.([1-9]\d*)$/;
 /** A minor version: vX.Y, no leading zeros (task-319, bug-387; a minor's vX.Y.0 is its tag, not its version). */
 const MINOR_VERSION = /^v(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 
-const USAGE = 'usage: node scripts/integration-branch.cjs [--check-head] [--kind <minor|patch>] --version <vX.Y[.Z]>';
+const USAGE = 'usage: node scripts/integration-branch.cjs [--check-head] [--kind <minor|patch|"">] --version <vX.Y[.Z]>';
 
 /**
  * The integration branch of a release (dl-159 point 4). Pure.
