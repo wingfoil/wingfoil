@@ -58,6 +58,8 @@ describe('task-312 AC 2 — `dna set` keeps the tab before an inline comment in 
     expect(result.ok).toBe(true);
     const committed = execFileSync('git', ['-C', repo, 'show', 'HEAD:.wingfoil/dna.yaml'], { encoding: 'utf-8' });
     expect(committed.split('\n')[2]).toBe('  name: cd\t# your project name');
-    expect(committed).toBe(DNA_FIXTURE.replace('  name: ab\t', '  name: cd\t'));
+    // Nothing else changes, except the `version:` raise every wingfoil write of dna.yaml makes (dl-174 (a),
+    // task-299; `test/core/dna-set-comment-preservation.test.ts` AC(a) pins it).
+    expect(committed).toBe(DNA_FIXTURE.replace('  name: ab\t', '  name: cd\t').replace('version: 1.1\n', 'version: 1.2\n'));
   });
 });
