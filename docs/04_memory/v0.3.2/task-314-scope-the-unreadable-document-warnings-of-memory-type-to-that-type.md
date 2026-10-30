@@ -269,6 +269,76 @@ Design gate approved by the approver on 2026-10-30T10:38:05+01:00, in the orches
 - D4 — yes: one P1.5 BDD scenario and one `docs/cli-reference.md` sentence.
 - D5 — (a): the candidate finding (`memory search --type nosuch` accepted silently) is filed as a bug by the orchestrator, proposed for v0.4.
 
+### red (qa, 2026-10-30)
+
+**Red commit `da0e81b7`** (`git log --oneline -1` → `da0e81b73 test(memory): task-314 — failing test: typed Memory
+reads warn only about files that type can hold`), test files only, three new suites:
+`test/mcp/resource-warnings-type-scope.test.ts`, `test/memory/query-type-scoped-warnings.test.ts`,
+`test/core/memory-search-type-warnings.test.ts`. No new export is imported, so there is no `.d.cts` and no TS2305.
+Base unchanged: `git rev-list --count HEAD..release/0.3` → `0`, no merge.
+
+**Fixtures.** The MCP, core and first primitive fixtures copy this repository's `.wingfoil/memory.yaml` patterns for
+`release-line`, `release`, `task`, `adr` and `bug`, with the five files the design names (a readable bug, an unparsable
+bug, an unparsable adr, a `format: 99` adr, an unparsable release-line directly in `planning/`). The expected warning
+lines are copied from a real run of the code build (`wingfoil --version` → `0.3.1 (b3c0b970…)`) over the same files in
+a scratch repository outside the worktree: `wingfoil memory search --type bug --format console` and `--type adr
+--format console` → exit `0`, four `warning: W_MEMORY_UNREADABLE (…)` lines each (the three unparsable files ending
+`unexpected end of the stream within a flow collection (4:1)`, the adr one `E_INVALID_FORMAT: this file is written in
+format 99; this WingFoil reads up to format 1: upgrade WingFoil`); `--type bug --format json` → the same four lines as
+`{"warning":"…"}`. The second primitive fixture copies the `adr` and `bug` entries of the `.wingfoil/memory.yaml` that
+`wingfoil init --template Scrum` wrote in a scratch repository (`docs/memory/adr/{id}.md`, `docs/memory/bug/{id}.md`,
+`format: 1`), with a readable `bug-001-a-bug`, an unparsable `adr-001-x`, a `format: 99` `adr-002-future` and a symbolic
+link `adr-003-link.md` → `adr-001-x.md`, all committed.
+
+**Run.** `npx jest test/mcp/resource-warnings-type-scope.test.ts test/memory/query-type-scoped-warnings.test.ts
+test/core/memory-search-type-warnings.test.ts --maxWorkers=2` → `Test Suites: 3 failed, 3 total`, `Tests: 16 failed, 4
+passed, 20 total` (resource-warnings-type-scope 6 failed / 7, query-type-scoped-warnings 5 / 7,
+memory-search-type-warnings 5 / 6). `npx tsc --noEmit -p tsconfig.json` → exit `0`, no error. `npx eslint` on the three
+files → exit `0`. `npx jest test/lint --maxWorkers=2` with the files in place → `Test Suites: 13 passed, 13 total`,
+`Tests: 153 passed, 153 total` (the `cli-spawn-helper`, `npm-caller-config` and control-character gates included; the
+CLI is spawned only through `runCliEntry`, no npm spawn). The invisible-character `grep -nP` over the three files → no
+hit.
+
+**Per AC** (every red is an assertion failure; the first failing assertion line of each test):
+- **AC1 (red-first)**, `test/mcp/resource-warnings-type-scope.test.ts`:
+  - "memory/bug carries the warning of its own unparsable file only" → line 90 `expect(result.warnings).toEqual(…)`:
+    received three more lines (both adr files and the release-line file).
+  - "memory/adr carries the unparsable and the newer-format adr, in path order, …" → line 95: received two more (the
+    bug and the release-line files).
+  - "memory/release carries no warnings field: …" → line 100 `not.toHaveProperty('warnings')`: received all four lines.
+  - "memory/release-line carries the warning of its own unparsable file only" → line 105: three more.
+  - "memory/task, whose pattern produces every path under docs/04_memory/, carries every unparsable file but not the
+    newer-format adr" → line 110: one more, the `format: 99` adr line (D2 (a)).
+  - "a bug lookup that finds nothing names only the unreadable bug file in error.data.details" (`memory/bug/bug-404`) →
+    line 128: three more `details` entries.
+  - characterization, passes on first run: "a bug lookup that resolves carries no warnings field" (`bug-001-valid`).
+- **AC1 (red-first)**, `test/memory/query-type-scoped-warnings.test.ts`:
+  - "a bug listing reports only the unreadable file on a bug path" (`listMemoryDocumentsByType`) → line 72: three more
+    files.
+  - "an undeclared type reports no file (design gate D3 (a))" (`'nosuch'`) → line 78: received all four files.
+  - "findMemoryDocumentByTypeAndId resolves the bug and reports none of the adr files it passed" (Scrum layout) → line
+    116: received the three adr files.
+  - "findMemoryDocumentByTypeAndIdAtRev at HEAD resolves the bug and reports none …" → line 123: the three adr files.
+  - "the symbolic link on an adr path is reported to an adr listing, not to a bug listing" → line 144 (the bug half):
+    the three adr files.
+  - characterization, pass on first run: "an adr lookup that finds nothing reports every unreadable adr file, the link
+    included, in path order" and the same at `HEAD` (the fixture's only unreadable files are adr ones).
+- **AC1 (red-first)**, `test/core/memory-search-type-warnings.test.ts` (the `memorySearch` op of `CORE_MODULES`, and the
+  CLI through `runCliEntry`):
+  - "--type bug: the bug match, and the warning of the unreadable bug file only" → line 75: three more lines.
+  - "--type adr: no match, and the two adr lines in path order" → line 82: two more.
+  - "--type nosuch, an undeclared type: no warning (design gate D3 (a))" → line 88: all four lines.
+  - "--format console: exit 0, and one warning line on stderr, …" → line 104: three more stderr lines (exit `0` holds).
+  - "--format json: exit 0, and one JSON warning line on stderr, …" → line 111: three more.
+  - characterization, passes on first run: "no --type: every unreadable file of the fixture, in path order" (four
+    lines; the design's "all five files" counts the readable bug, which warns about nothing).
+- **AC2 (characterization)**: no test, a spec text (`spec-004` §2.2) the developer prepares uncommitted for the
+  approver's `memory amend` (`dl-047`).
+
+**For the developer.** The warning lines are compared whole (`toEqual`), so the order is path order and the text the
+one above. The `memory/release` case expects the `warnings` field absent, not empty. The `--type nosuch` core case
+accepts `warnings` absent or empty.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
