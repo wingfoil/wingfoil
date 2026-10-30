@@ -189,6 +189,77 @@ Design gate approved by the approver on 2026-10-30T10:38:05+01:00, in the orches
 - D2 — yes: a release with no kind follows the minor's vX.Y rule and message, and a minor's vX.Y.0 is refused.
 - D3 — yes: the binding's version pattern is the union of the two kinds' forms; the script ties each form to its kind.
 
+### red (qa, 2026-10-30)
+
+**Red commit `ba82cbd82`** (`git log --oneline -1` → `ba82cbd82 test(integration-branch): task-319 — failing test: exit 2
+for an unreadable HEAD, a minor's version must be vX.Y`), test files only: `test/cli/integration-branch.test.ts`,
+`test/core/workflow-integration-branch.test.ts`. No new export, so no `.d.cts`. Base unchanged: `git rev-list --count
+HEAD..release/0.3` → `0`, no merge.
+
+**Fixture outputs, copied from real runs** (scratch directories outside the worktree, not committed):
+- `PATH=<a directory holding only a symlink node → node> node scripts/integration-branch.cjs --check-head --kind minor
+  --version v0.4` → stderr `could not read HEAD: spawnSync git ENOENT` and a newline (`od -c` → `… E N O E N T \n`),
+  exit `1`. The test spawns `process.execPath` (absolute) with `PATH` = an empty `mkdtemp` directory: the same stderr.
+- `GIT_CEILING_DIRECTORIES=<parent> node scripts/integration-branch.cjs --check-head --kind minor --version v0.4` in an
+  empty directory → stderr `could not read HEAD: fatal: not a git repository (or any of the parent directories): .git`,
+  exit `1` (pinned by prefix `/^could not read HEAD: /`, as task-288's pin did).
+- In the worktree, `node scripts/integration-branch.cjs --kind minor --version garbage` and `--version v0.3.1` → stdout
+  `main`, exit `0` each; `--check-head --kind minor --version v0.4.0` → stderr `HEAD is on task/task-319-…, not on main,
+  the integration branch of v0.4.0 (dl-159)`, exit `1`.
+
+**Run.** `npx jest test/cli/integration-branch.test.ts test/core/workflow-integration-branch.test.ts --maxWorkers=2` →
+`Test Suites: 2 failed, 2 total`, `Tests: 30 failed, 61 passed, 91 total` (integration-branch 26 failed / 60,
+workflow-integration-branch 4 failed / 31). `npx tsc --noEmit -p tsconfig.json` → exit `0`, no output (no missing export
+is involved). `npx eslint` on the two files → exit `0`. `npx jest test/lint --maxWorkers=2` with the files in place →
+`Test Suites: 13 passed, 13 total`, `Tests: 153 passed, 153 total`. The invisible-character `grep -nP` over the two
+files → no output.
+
+**Per AC** (first failing assertion of each test; every red is a jest assertion, none a crash):
+- **AC1 (red-first)**:
+  - `test/cli/integration-branch.test.ts` "task-319 AC1 — outside any repository: exit 2, could not read HEAD, nothing on
+    stdout" (rewrites task-288's "outside any repository: exit 1") → `expect(result.status).toBe(2)`: `Expected: 2`,
+    `Received: 1`.
+  - "task-319 AC1 — git cannot run (no git on PATH): exit 2, could not read HEAD: spawnSync git ENOENT" (`run()` gained
+    an optional `env`) → `toEqual`: `- "status": 2` / `+ "status": 1`, the stderr already equal.
+  - "task-319 AC1 — the script's header states the exit codes of --check-head › exit 1 is a refusal …" (docblock before
+    `'use strict'`, `*` markers removed, whitespace-flattened) → `Expected substring: "1 refusal (another branch, or
+    detached)"`.
+  - `test/core/workflow-integration-branch.test.ts` "AC1 — the comment above the binding states exit 1 …" (raw lines
+    from the end of the `evidence-only-since-candidate:` line to `on-integration-branch:`) → `Expected substring: "Exit 1
+    = HEAD on another branch or detached"`; it also asserts `a HEAD git cannot read` and the absence of `Exit 2 = a kind
+    or a patch version the derivation refuses`.
+  - "AC1, AC2 — `version:` is 2.8 or later with a 2.8 entry naming task-319" (≥ plus the history entry, bug-314; the
+    file's `historyEntry` gained an optional task parameter, default `task-288`) → `Expected: >= 2.8`, `Received: 2.7`.
+  - Kept unchanged and passing: wrong branch exit `1`, detached exit `1`, the two passes exit `0`, the derivation
+    refusal exit `2`.
+- **AC2 (red-first)**:
+  - `test/cli/integration-branch.test.ts`, in-process: "task-319 AC2 — a minor with no version …" and "… no kind with no
+    version is refused with `got ""`" (replace task-288's "a minor ignores the version" and the `{}` → `main` case) →
+    `- "message": "a minor's version must be vX.Y, got \"\" (dl-092, dl-159)"` / `+ "branch": "main"`; the 18 cases
+    "task-319 AC2 — kind %p, version %p is refused with the minor message" (kind `minor`, `''`, `undefined` × `v0.4.0`,
+    `v0.3.1`, `garbage`, `v01.3`, `0.4`, `v0.4-rc.1`) → the same diff, e.g. `- "message": "a minor's version must be
+    vX.Y, got \"v0.4.0\" (dl-092, dl-159)"` / `+ "branch": "main"`. Task-288's `['minor', 'v0.4.0', 'main']` row is
+    replaced by `['minor', 'v10.20', 'main']` (passes).
+  - CLI print mode: "task-319 AC2 — a minor of version garbage: …" and "… no --kind, version v0.3.1: exit 2, nothing on
+    stdout, the minor message on stderr" → `- "status": 2` / `+ "status": 0`, `+ "stdout": "main\n"`.
+  - `--check-head`: "task-319 AC2 — a minor of version v0.4.0 on main is refused before HEAD is read: exit 2" →
+    `- "status": 2` / `+ "status": 1`, stderr the HEAD-refusal line instead of the minor message.
+  - `test/core/workflow-integration-branch.test.ts` "the binding runs the script in check mode, …" (the exact `args`
+    rewritten to the D3 pattern) → `- "version": "^v(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(\\.[1-9][0-9]*)?$"` / `+
+    "version": "^v[0-9]+\\.[0-9]+(\\.[0-9]+)?$"`; "task-319 AC2 — the `version` pattern accepts a minor's vX.Y and a
+    patch's vX.Y.Z (Z ≥ 1) and refuses anything else" → `Expected pattern: not /^v[0-9]+\.[0-9]+(\.[0-9]+)?$/`,
+    `Received string: "v0.3.0"`.
+  - Characterization, passes on first run: "task-319 AC2 — an unknown kind with a malformed version still gets the
+    kind message" (`{ kind: 'major', version: 'garbage' }` → `kindMessage('major')`); "AC2 (characterization) — every
+    release of rl-v1 at HEAD passes the version pattern and the derivation" (the eight files `git ls-tree --name-only
+    HEAD docs/04_memory/planning/rl-v1/` lists, frontmatter read with `git show HEAD:<path>`).
+
+**For the developer.** The pins expect exactly the design's texts: the minor message `a minor's version must be vX.Y,
+got "<v>" (dl-092, dl-159)`; the header phrases `1 refusal (another branch, or detached)` and `2 refused release / usage
+error / HEAD unreadable (git cannot run, or not a repository)`; the binding comment phrases `Exit 1 = HEAD on another
+branch or detached` and `a HEAD git cannot read`; the 2.8 history entry is a `;`-delimited segment naming `2.8` as a
+word and `task-319`.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
