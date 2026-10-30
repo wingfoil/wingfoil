@@ -278,3 +278,96 @@ describe('MemoryYaml — validates the real, live .wingfoil/memory.yaml', () => 
     expect(exemptOf('task')).toBeUndefined();
   });
 });
+
+/**
+ * task-313 AC 1 (`bug-360`, REQ-SEC-06; approver design gate 2026-10-30, D1 (a), D2 (a), D3 (a)) — a type's `path`
+ * is refused at load when it is absolute or holds a `.`/`..` segment: one issue per `path`, at
+ * `types.<type>.path`, the absolute check first. An empty segment is not refused (D2 (a)), and a segment that only
+ * contains dots beside a token or text is not a dot segment.
+ */
+describe('MemoryYaml — a type `path` is one relative path with no `.`/`..` segment (task-313 AC 1, bug-360)', () => {
+  const withPath = (path: string): unknown => ({ ...MINIMAL_VALID, types: { task: { ...MINIMAL_VALID.types.task, path } } });
+  const issuesOf = (input: unknown): Array<{ path: readonly PropertyKey[]; message: string }> => {
+    const result = MemoryYaml.safeParse(input);
+    return result.success ? [] : result.error.issues.map((issue) => ({ path: issue.path, message: issue.message }));
+  };
+
+  it.each([
+    ['docs/04_memory/../../outside/{id}.md'],
+    ['docs/04_memory/./{id}.md'],
+    ['../escaped/{id}.md'],
+  ])('red-first: refuses %s, naming the pattern: "holds a \'.\' or \'..\' segment"', (path) => {
+    expect(MemoryYaml.safeParse(withPath(path)).success).toBe(false);
+    expect(issuesOf(withPath(path))).toEqual([{ path: ['types', 'task', 'path'], message: `path "${path}" holds a '.' or '..' segment` }]);
+  });
+
+  it.each([
+    ['/tmp/abs/{id}.md'],
+    ['\\\\server\\{id}.md'],
+    ['C:/x/{id}.md'],
+  ])('red-first: refuses the absolute %s, naming the pattern: "must be a relative path"', (path) => {
+    expect(MemoryYaml.safeParse(withPath(path)).success).toBe(false);
+    expect(issuesOf(withPath(path))).toEqual([{ path: ['types', 'task', 'path'], message: `path "${path}" must be a relative path` }]);
+  });
+
+  it.each([
+    ['docs/04_memory/planning/rl-{release-line}/{id}.md'],
+    ['docs/05_plans/{scope}/{id}.md'],
+    ['docs/v0.1/{id}.md'],
+    ['docs/..x/{id}.md'],
+    ['docs//x/{id}.md'],
+  ])('characterization: accepts %s (dots inside a segment, an empty segment — D2 (a))', (path) => {
+    expect(issuesOf(withPath(path))).toEqual([]);
+    expect(MemoryYaml.safeParse(withPath(path)).success).toBe(true);
+  });
+});
+
+/**
+ * task-313 AC 2 (`bug-216`, spec-009 Pass 2; approver design gate 2026-10-30, D1 (a), D3 (a)) — a type's
+ * `id_pattern` is checked at load by `idPatternIssues`, as a workflow action's override is
+ * (`test/workflow/schema.test.ts`): one issue per problem, at `types.<type>.id_pattern`, message
+ * `id_pattern "<pattern>": <issue>`.
+ */
+describe('MemoryYaml — a type `id_pattern` is checked by idPatternIssues at load (task-313 AC 2, bug-216)', () => {
+  const withIdPattern = (idPattern: string): unknown => ({
+    ...MINIMAL_VALID,
+    types: { task: { ...MINIMAL_VALID.types.task, id_pattern: idPattern } },
+  });
+  const issuesOf = (input: unknown): Array<{ path: readonly PropertyKey[]; message: string }> => {
+    const result = MemoryYaml.safeParse(input);
+    return result.success ? [] : result.error.issues.map((issue) => ({ path: issue.path, message: issue.message }));
+  };
+
+  it.each([
+    ['task-{n:0}-{slug}', 'malformed token {n:0}'],
+    ['task-{counter:3}-{slug}', 'malformed token {counter:3}'],
+    ['TASK_{n}', 'pattern contains character(s) outside [a-z0-9-.]: T, A, S, K, _'],
+    ['retro-{release.version}', 'dotted token {release.version} is not defined until dl-090'],
+    ['', 'pattern is empty'],
+  ])('red-first: refuses %j with one issue: %s', (idPattern, issue) => {
+    expect(MemoryYaml.safeParse(withIdPattern(idPattern)).success).toBe(false);
+    expect(issuesOf(withIdPattern(idPattern))).toEqual([{ path: ['types', 'task', 'id_pattern'], message: `id_pattern "${idPattern}": ${issue}` }]);
+  });
+
+  it('red-first: a pattern with two problems gets two issues, in idPatternIssues order', () => {
+    expect(issuesOf(withIdPattern('TASK_{Slug}'))).toEqual([
+      { path: ['types', 'task', 'id_pattern'], message: 'id_pattern "TASK_{Slug}": pattern contains character(s) outside [a-z0-9-.]: T, A, S, K, _' },
+      { path: ['types', 'task', 'id_pattern'], message: 'id_pattern "TASK_{Slug}": malformed token {Slug}' },
+    ]);
+  });
+
+  it.each([['p-{n:2}-{slug}'], ['t-{nnn}'], ['r-{date}-{author}-{kind}-{n}']])('characterization: accepts %s', (idPattern) => {
+    expect(issuesOf(withIdPattern(idPattern))).toEqual([]);
+  });
+
+  it('characterization: accepts every `id_pattern` of the live .wingfoil/memory.yaml, each on its own', () => {
+    const live = load(readFileSync(join(__dirname, '..', '..', '.wingfoil', 'memory.yaml'), 'utf-8')) as {
+      types: Record<string, { id_pattern?: string }>;
+    };
+    const patterns = Object.values(live.types).flatMap((type) => (type.id_pattern === undefined ? [] : [type.id_pattern]));
+    expect(patterns.length).toBeGreaterThan(0);
+    for (const idPattern of patterns) {
+      expect({ idPattern, issues: issuesOf(withIdPattern(idPattern)) }).toEqual({ idPattern, issues: [] });
+    }
+  });
+});

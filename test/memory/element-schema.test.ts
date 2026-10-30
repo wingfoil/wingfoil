@@ -2,7 +2,7 @@
  * P1.13 (US-0A-04) — Memory Element Schema (`memory.yaml`) acceptance fit-criteria
  * (task-024-implement-memory-element-schema).
  *
- * These tests drive the three P1.13 acceptance scenarios
+ * These tests drive P1.13 acceptance scenarios 1–4 and 12
  * (docs/02_requirements/02_bdd/features/p1-memory/P1.13-memory-element-schema.feature) through the
  * REAL Zod schema (`src/memory/schema.ts`, spec-001-memory-yaml-schema) and the REAL state-machine
  * resolver (`src/memory/state-machine.ts`, REQ-STATE-08) — no mocks, no hand-built machines except
@@ -202,5 +202,31 @@ describe('P1.13 scenario 4 — a type named after a configuration commit scope f
 
   it('accepts a name that only contains a reserved one (`workflow-run`)', () => {
     expect(MemoryYaml.safeParse(withType('workflow-run')).success).toBe(true);
+  });
+});
+
+/**
+ * P1.13 scenario 12 (task-313, `bug-360`, REQ-SEC-06; approver design gate 2026-10-30, D6 (b)) — a type `path` that
+ * holds a `..` segment or is absolute is refused when the schema is validated, at `types.<type>.path`, with the
+ * exact message the scenario quotes. The loader and `memory add` refusals are `test/core/loaders.test.ts` and the
+ * path-token suites (`test/core/memory-add-path-tokens.test.ts`).
+ */
+describe("P1.13 scenario 12 — a type path that holds a '..' segment or is absolute is refused at load", () => {
+  const withBugPath = (path: string) => ({ version: 1.1, types: { bug: { path } } });
+  const issuesOf = (path: string): unknown[] => {
+    const result = MemoryYaml.safeParse(withBugPath(path));
+    return result.success ? [] : result.error.issues.map((issue) => [issue.message, issue.path]);
+  };
+
+  it("red-first: a `..` segment fails validation at types.bug.path: path \"…\" holds a '.' or '..' segment", () => {
+    expect(MemoryYaml.safeParse(withBugPath('docs/memory/bug/../../outside/{id}.md')).success).toBe(false);
+    expect(issuesOf('docs/memory/bug/../../outside/{id}.md')).toEqual([
+      [`path "docs/memory/bug/../../outside/{id}.md" holds a '.' or '..' segment`, ['types', 'bug', 'path']],
+    ]);
+  });
+
+  it('red-first: an absolute path fails validation at types.bug.path: path "…" must be a relative path', () => {
+    expect(MemoryYaml.safeParse(withBugPath('/tmp/abs/{id}.md')).success).toBe(false);
+    expect(issuesOf('/tmp/abs/{id}.md')).toEqual([[`path "/tmp/abs/{id}.md" must be a relative path`, ['types', 'bug', 'path']]]);
   });
 });

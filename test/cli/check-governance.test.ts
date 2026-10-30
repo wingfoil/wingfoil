@@ -439,6 +439,40 @@ describe('a document whose frontmatter does not parse at some commit', () => {
   });
 });
 
+// task-313 AC 3 (`bug-262`; approver design gate 2026-10-30, D4 (a)): a revision written in a newer `format` is not read
+// for its status, so the check reports its commit as state not checked, with a reason of its own (never "does not
+// parse", which would be false), and raises no finding on it — both through the strict transition read and through
+// the blob reader of a document gone at HEAD.
+describe('a revision written in a newer format (task-313 AC 3, D4 (a))', () => {
+  const newer = (id: string, status: string): string => `---\nid: "${id}"\ntype: task\ntitle: "Task ${id}"\nstatus: ${status}\nformat: 2\n---\n\nNewer.\n`;
+
+  it('red-first: a bracketed commit whose revision is in format 2 is state not checked, naming the newer format and E_INVALID_FORMAT; no finding', () => {
+    const f = fixture();
+    f.pending('t-1');
+    const approve = f.commit('wf(task): approve t-1 [pending → backlog]' + approval(), { 'docs/memory/task/t-1.md': newer('t-1', 'backlog') }, APPROVER);
+    f.task('t-1', 'backlog', 'docs: rewrite t-1 in format 1');
+    const report = checkGovernance(f.root);
+    const reasons = report.stateUnchecked.filter((entry) => entry.sha === approve).map((entry) => entry.reason);
+    expect(reasons).toEqual([expect.stringMatching(/newer format/)]);
+    expect(reasons[0]).toContain('E_INVALID_FORMAT');
+    expect(reasons[0]).not.toMatch(/does not parse/);
+    expect(rulesOf(report, approve)).toEqual([]);
+  });
+
+  it('red-first: a document gone at HEAD whose revision is in format 2 is state not checked by the blob reader, naming the newer format; no finding', () => {
+    const f = fixture();
+    f.pending('t-1');
+    const approve = f.commit('wf(task): approve t-1 [pending → backlog]' + approval(), { 'docs/memory/task/t-1.md': newer('t-1', 'backlog') }, APPROVER);
+    git(f.root, ['rm', '--quiet', 'docs/memory/task/t-1.md']);
+    f.commit('wf(task): deprecate t-1 [backlog → deprecated]\n\nReason: Removed.', {});
+    const report = checkGovernance(f.root);
+    const reasons = report.stateUnchecked.filter((entry) => entry.sha === approve).map((entry) => entry.reason);
+    expect(reasons).toEqual([expect.stringMatching(/newer format/)]);
+    expect(reasons[0]).not.toMatch(/does not parse/);
+    expect(rulesOf(report, approve)).toEqual([]);
+  });
+});
+
 // task-171 review F1: `reconstructMemoryTransitions` became tolerant for `memory history` (bug-188); the
 // check must still read strictly, or a revision it cannot read passes as checked (fail open).
 describe('a bracketless or unnamed touch whose revision does not parse (task-171 review)', () => {
