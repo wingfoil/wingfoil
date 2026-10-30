@@ -49,7 +49,9 @@
  * 2). A check that runs and fails is a measured failure. A failure's reason is npm's `npm error code …` line when
  * there is one, never npm's pointer to its dated debug log, followed, when npm names the lifecycle script that failed,
  * by ` (script <event>: <command>)`, or ` (script: <command>)` when npm prints no banner for it (a dependency's
- * script; bug-357); it names paths relative to the worktree, never the worktree's random temporary path.
+ * script; bug-357) — a script only when npm's output carries its `npm error command failed` line, so a failing git
+ * dependency's `npm error command git …` adds nothing; it names paths relative to the worktree, never the worktree's
+ * random temporary path.
  * - Q01 `npm run build`, `npm run typecheck`, `npm run lint`, all three run: `true` when each exits 0;
  * - Q02 `npm test -- --json --outputFile=…`: jest's counts; disabled = skipped + todo; failing = failed tests plus
  *   suites that failed to run, each named;
@@ -1244,17 +1246,23 @@ function toolError(label, result, name = '*') {
   return codes.includes(result.status) ? `${label} exited ${result.status}, which means the tool itself could not run` : null;
 }
 
-/** npm's line naming the lifecycle script that failed (`npm error command sh -c <command>`); `command failed` is not one. */
+/** npm's line naming the command that failed (`npm error command sh -c <command>`); `command failed` is not one. */
 const NPM_COMMAND_RE = /^npm (?:error|ERR!) command (?!failed$)(?:sh -c )?(.+)$/;
+/** npm's marker of a failed lifecycle script: without it, a `command` line is another program's (a git dependency's). */
+const NPM_COMMAND_FAILED_RE = /^npm (?:error|ERR!) command failed$/;
 
 /**
  * The lifecycle script an npm failure names (bug-357 (a), approver ruling D4): ` (script <event>: <command>)`, the event
  * read from the last banner of stdout (`> <name>@<version> <event>` then `> <command>`) whose command is the failing
- * one, else ` (script: <command>)` (a dependency's script prints no banner); `''` when npm names no script.
+ * one, else ` (script: <command>)` (a dependency's script prints no banner); `''` when npm names no script. A command
+ * counts as a script only when the output carries npm's `npm error command failed` line, which npm prints for a failed
+ * lifecycle script alone: a failing git dependency's `npm error command git …` names git, not a script.
  */
 function npmScript(result) {
   const lines = (text) => String(text).split('\n').map((line) => line.trim());
-  const command = [...lines(result.stderr), ...lines(result.stdout)].map((line) => NPM_COMMAND_RE.exec(line)).find((match) => match !== null)?.[1];
+  const all = [...lines(result.stderr), ...lines(result.stdout)];
+  if (!all.some((line) => NPM_COMMAND_FAILED_RE.test(line))) return '';
+  const command = all.map((line) => NPM_COMMAND_RE.exec(line)).find((match) => match !== null)?.[1];
   if (command === undefined) return '';
   const out = lines(result.stdout);
   let event = null;
