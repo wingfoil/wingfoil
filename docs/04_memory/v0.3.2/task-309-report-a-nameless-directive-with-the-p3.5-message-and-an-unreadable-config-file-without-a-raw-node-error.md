@@ -46,6 +46,206 @@ ENOENT.
        reject's `Reason:` (read with `wingfoil memory history <task-id>`), each with the command that
        shows it resolved and what that command printed; then what else changed on the next pass. -->
 
+### design (architect, 2026-10-29)
+
+**Inputs read.** `depends_on: []` (no dl-015 gate); no handover. Base: `release/0.3` `13c019509` (task-311 merged) +
+`wf(task): start` `a0e199934` + `wf(bug): sync bug-025 [planned → in-progress]` `7260d54c5` + `wf(bug): sync bug-251
+[planned → in-progress]` `095ba5bcd` (`git log --oneline -4`). task-311's Execution Notes read: it added
+`loadDirectiveInventoryAtHead` and `directiveEntriesAt` (a committed symlink is skipped, never parsed) to
+`src/core/loaders.ts`; every directive reader, working tree and commit, still goes through the one
+`parseDirectiveFile`, which is where AC1 lands, and `directive remove`/`assign` embed its `error.message` in their
+`cannot resolve the directive inventory: …` refusal, so they carry the new wording unchanged. Cited elements:
+`spec-013-directive-frontmatter-schema` and `spec-009-validation-strategy` `approved` (`grep -n "^status" …` →
+`status: approved` on both); P3.5's third scenario (`docs/02_requirements/02_bdd/features/p3-directives/P3.5-project-directives.feature:19-23`);
+`dl-157` `ready`, option (A) ruled 2026-10-06 for v0.4 (`git log -1 --format=%B 55085f7de`): the JSON-RPC code of a
+configuration refusal changes in v0.4, not here. No AC contradicts an approved spec or a ready DL; the choices the ACs
+leave open are D1–D5.
+
+**Both defects, reproduced on this base** (code build `node <worktree>/dist/cli.js`, `--version` → `0.3.1 (095ba5bcd…)`,
+a scratch repository outside the worktree, `init --template Scrum`, uid 1000):
+- bug-025, the bug's fixture file `custom/no-direct-db-access.md` (no `name`): `directives list` → exit 1,
+  `error: E_VALIDATION name (.wingfoil/directives/custom/no-direct-db-access.md): Invalid input: expected string, received undefined`;
+  `--format json` → `{"error":"<the same text>"}`. Committed, `directive assign --directive determinism --role qa` →
+  exit 1, `error: cannot resolve the directive inventory: a file committed under '.wingfoil/directives' (at HEAD) is not
+  readable as a directive: E_VALIDATION name (HEAD:.wingfoil/directives/custom/no-direct-db-access.md): Invalid input:
+  expected string, received undefined. A binding is validated …`. Over MCP (stdio client on `dist/cli.js mcp`),
+  `prompts/get developer-session` → `-32603`, `E_VALIDATION name (…): Invalid input: expected string, received undefined`.
+  A file with only `name: y` → four issues, in this order: `id` (`… received undefined`), `type` (`Invalid input:
+  expected "directive"`), `kind`, `title` (`… received undefined`). `name: ~` → `… received null`; `name: 42` →
+  `… received number`; `name: ""` loads (exit 0).
+- bug-251: `chmod 000 .wingfoil/dna.yaml` → `dna show`, `paths`, `mcp </dev/null` each exit 1 with `error: EACCES:
+  permission denied, open '<abs>/.wingfoil/dna.yaml'` (`--format json` → `{"error":"EACCES: …"}`); `memory.yaml` → `memory
+  search x` the same line for `memory.yaml`; `roles.yaml` → `directives list` the same for `roles.yaml`;
+  `dna.yaml` a directory → `error: EISDIR: illegal operation on a directory, read` (json the same); `dna.yaml` a
+  symlink to itself → `error: ELOOP: too many symbolic links encountered, open '<abs>/.wingfoil/dna.yaml'`; a dangling
+  symlink → `.wingfoil/dna.yaml is missing: …` (ENOENT, already mapped). Over MCP: `wingfoil://memory/task` and
+  `wingfoil://memory/task/task-001` (memory.yaml 000) → `-32603`, `EACCES: permission denied, open '<abs>/.wingfoil/memory.yaml'`;
+  `wingfoil://workflows` (workflows.yaml 000) → `-32603`, the same for `workflows.yaml`; `prompts/get developer-session`
+  (roles.yaml 000) → `-32603`, the same for `roles.yaml`. (`<abs>` = the scratch repository's absolute path, printed in full.)
+
+**Where each surface goes wrong.** `readConfigFile` (`src/core/loaders.ts`) maps only ENOENT, so `loadDnaYaml`,
+`loadMemoryYaml` and `loadRolesYaml` throw Node's error; `coreErrorOf` (`src/core/index.ts`) returns `null` for it, so
+`loadOrError` re-throws and the CLI prints `error.message`; `withRefusalDetails` (`src/mcp/read-only.ts`) re-throws it
+too. `loadWorkflowsYaml`'s reader (`documentExists(path) ? readDocument(path) : null`, same file) is a second instance of
+the class, outside `readConfigFile`: it serves `wingfoil://workflows` and `wingfoil://workflows/{name}`
+(`src/mcp/workflow-resource.ts`) and `loadWorkflowRegistry` — W0-R6 puts it in this task (D5). No `src/mcp` file needs
+an edit: the MCP surfaces take the new error through `coreErrorOf` and its message.
+
+**Design.**
+- *AC1, `parseDirectiveFile` (`src/core/loaders.ts`).* Wrap its `runValidation(DirectiveFrontmatter, …)`: on a
+  `ValidationError`, each issue whose `path` is a top-level key the schema requires (a `DirectiveFrontmatter.shape` field
+  that rejects `undefined`: `id`, `name`, `type`, `kind`, `title` today) and whose value in the parsed frontmatter is
+  `undefined` (key absent) gets the message `invalid directive: missing required field '<key>'`; code (`E_VALIDATION`),
+  `path`, `file` and issue order unchanged; every other issue (a wrong type, `null`, a non-object frontmatter) keeps
+  Zod's text; re-thrown as a `ValidationError` with the same `exitCode`. Every reader takes it: `loadDirectiveInventory`
+  / `loadDirectives` (working tree: `directives list`, the MCP role Prompts, context assembly) and `directiveEntriesAt`
+  (`loadDirectivesAtHead`/`AtRev`/`AtCommit`, `loadDirectiveInventoryAtHead`: `directive assign`, `directive remove`,
+  `workflow next`). `src/directives/schema.ts` is not changed (D3), so spec-013's *Reference implementation* block stays
+  true. The rendered line becomes `E_VALIDATION name (.wingfoil/directives/custom/no-direct-db-access.md): invalid
+  directive: missing required field 'name'` (D1).
+- *AC2, `readConfigFile` (`src/core/loaders.ts`).* A new `ConfigFileUnreadableError extends Error`, beside
+  `ConfigFileMissingError` and exported from the `src/core` barrel the same way: `name = 'ConfigFileUnreadableError'`,
+  `relativePath`, and `code` = the original errno (kept, as the missing-file class keeps `ENOENT`). `readConfigFile`
+  maps ENOENT as now; any other error carrying a string `code` becomes it, with the message (D4):
+  `EACCES`/`EPERM` → `<rel> cannot be read: permission denied`; `EISDIR` → `<rel> is a directory, not a file`; any other
+  code → `<rel> cannot be read (<code>)` (the form `cannotBeRead` uses for a skipped directive entry). An error without a
+  string `code` propagates unchanged (the `loadOrError` throw arm stays for programmer errors). `loadWorkflowsYaml`'s
+  `read` keeps "absent → `null`" and maps the rest the same way, labelled `.wingfoil/<file>` (manifest, an included
+  workflow file, `workflows/bindings.yaml`). `coreErrorOf` maps a `ConfigFileUnreadableError` to `{ code: 'IO', message }`
+  (spec-006 §2's code list; spec-005 §3 "`IO` is reserved for a failure of the storage itself"; exit 1 through `EXIT_CODE_BY_ERROR`); the ENOENT arm is unchanged. The
+  CLI then prints `error: <message>` (json `{"error": "<message>"}`), the `mcp` pre-flight (`loadDnaRoleSet`) refuses
+  with the same line, and an MCP read rejects with the message (`withRefusalDetails` re-throws a refusal without details
+  as it was). `absentAsNull` (`src/core/workflow-registry.ts`) still swallows only the missing class.
+- *TSDoc.* `ConfigFileMissingError`'s and `readConfigFile`'s ("any other failure propagates unchanged") and
+  `coreErrorOf`'s list ("a missing file (`ENOENT`): `NOT_FOUND`") are updated; the new class carries TSDoc (`npm run docs:api`).
+- *Docs (the developer commits; no `version:` on either file).* `docs/cli-reference.md` "Where to run it" (line 25–27):
+  one sentence that a file that exists but cannot be read is named the same way (`error: .wingfoil/dna.yaml cannot be
+  read: permission denied`, `… is a directory, not a file`); the `directives list` entry's *Errors* line (line 1024): a
+  directive file missing a required field is refused with `invalid directive: missing required field '<field>'`.
+- *Specs.* None required: no spec names `readConfigFile`, `ConfigFileMissingError` or a config read failure
+  (`grep -rln "ConfigFileMissingError\|readConfigFile\|is missing: restore" docs/04_memory/design/specs` → no file), and
+  the P3.5 message is the feature file's. Under D3 (b) only, `spec-013` *Reference implementation* would need a
+  Revision note.
+
+**Files expected to change.** `src/core/loaders.ts`, `src/core/index.ts` (`coreErrorOf`, barrel export),
+`docs/cli-reference.md`, the red tests below (and a developer unit test if a helper is added), this task file,
+`bug-025` and `bug-251` (status syncs only). Read only: `src/directives/schema.ts`, `src/mcp/*`,
+`src/core/workflow-registry.ts`. **Version bumps:** none — no `dna.yaml`, `memory.yaml`, `workflows.yaml`, `roles.yaml`
+or directive changes, and nothing under `.wingfoil/` is touched, so `npm run check:mcp` is not required by this design
+(the developer runs it in refactor anyway). No workflow is changed: no phase-list or step-count pin is affected.
+
+**Existing tests of the files this task changes**, run before any pin (one jest process, `--maxWorkers=2`, no slot,
+load 6.5): `npx jest --maxWorkers=2 test/core/loaders.test.ts test/core/loaders-at-rev.test.ts
+test/core/config-file-missing.test.ts test/cli/config-missing-refusal.integration.test.ts
+test/mcp/config-missing-refusal.test.ts test/core/dna-role-set.test.ts test/core/core-index-arms.test.ts
+test/directives/schema.test.ts test/core/project-directives.test.ts test/core/directives-list.test.ts
+test/core/pillar-isolation.test.ts test/mcp/error-details.test.ts test/mcp/read-only-resources.test.ts
+test/core/workflow-registry-template-not-file.test.ts test/core/directive-inventory-baseline.test.ts
+test/mcp/role-prompts.test.ts` → `Test Suites: 16 passed, 16 total`, `Tests: 258 passed, 258 total`. No test pins
+Zod's text for a directive (`grep -rln "received undefined" test | xargs grep -li directive` → none). Two existing pins
+encode the behaviour AC2 changes and are rewritten in red: `test/core/config-file-missing.test.ts` "any other read
+failure propagates as it was (a directory where the file should be)" (it would still pass, since `code: 'EISDIR'` is
+kept, but its title becomes false), and `test/core/core-index-arms.test.ts` "loadOrError: a loader failure that is not an
+expected domain failure propagates as a throw", whose own comment says bug-251's fix must move its trigger.
+`test/core/memory-element-format.test.ts` "(red-first) memory history over an unreadable directory rethrows … (EACCES)"
+reads a Memory directory, not a config file: unaffected.
+
+**AC classification and what qa must pin.** Both ACs **red-first** (reproduced above; nothing implements either).
+Interfaces: `loadDirectiveInventory`, `loadDirectivesAtHead`, `loadDnaYaml`, `loadMemoryYaml`, `loadRolesYaml`,
+`loadWorkflowsYaml`, `coreErrorOf`, `exitCodeForResult` (all exported today; **qa imports no new symbol**, so `npx tsc
+--noEmit` stays green on red — the new class is asserted by `name`, `relativePath`, `code` and `message` on the caught
+error); the CLI through `runCliEntry` (`test/cli/helpers/spawn-cli.ts`); MCP through `connectReadOnlyClient`
+(`test/mcp/helpers/channel-enumeration.ts`). Fixtures: `makeTempGitRepo` / `writeFixtureFile` / `commitAll` / `git`
+(`test/storage/helpers/git-fixture`), `initWingfoilProject(repo, 'Scrum')` as `core-index-arms.test.ts` seeds. Every
+permission case is guarded `typeof process.getuid === 'function' && process.getuid() !== 0` (`test/core/loaders.test.ts:234`)
+and restores the mode in `finally`; the EISDIR and ELOOP cases run as any user. No pin asserts the JSON-RPC code
+(`dl-157` (A) changes it in v0.4). Every message pin also asserts the text contains neither the repository path (both
+spellings, `realpathSync`) nor Node's raw text (`permission denied, open`, `illegal operation on a directory`, `too
+many symbolic links`).
+- **AC1.** In `test/core/project-directives.test.ts`, a new describe "P3.5 — Error - a directive file missing required
+  header fields", fixture = bug-025's file verbatim (`---`, `id: no-direct-db-access`, `type: directive`, `kind: custom`,
+  `title: "No direct DB access"`, `---`, blank, `rule body`) at `.wingfoil/directives/custom/no-direct-db-access.md`:
+  (a) `loadDirectiveInventory(repo)` throws a `ValidationError` whose `issues` `toEqual` `[{ code: 'E_VALIDATION', path:
+  'name', file: '.wingfoil/directives/custom/no-direct-db-access.md', message: "invalid directive: missing required field
+  'name'" }]` and whose `message` `toBe` `E_VALIDATION name (.wingfoil/directives/custom/no-direct-db-access.md): invalid
+  directive: missing required field 'name'`; the expected string is also asserted to occur in the feature file's line
+  `And the message is "…"` (read the file, so the pin follows the contract); (b) committed, `loadDirectivesAtHead(repo)`
+  → the same issue with `file: 'HEAD:.wingfoil/directives/custom/no-direct-db-access.md'`; (c) under D2 (a), a file with
+  only `name: y` (copied from the reproduction) → four issues `id`, `type`, `kind`, `title`, in that order, each
+  `invalid directive: missing required field '<key>'`; (d) negatives that keep Zod's text: `name: ~` → `Invalid input:
+  expected string, received null`, `name: 42` → `… received number`. CLI, a new
+  `test/cli/directive-missing-field.integration.test.ts` (on `runCliEntry`; repository from `runCliEntry(repo, ['init',
+  '--template', 'scrum'])`): `directives list` → status 1, first stderr line `toBe` `error: ` + (a)'s message; `--format
+  json` → `JSON.parse(stderr)` `toEqual` `{ error: <(a)'s message> }`; the file committed, `directive assign --directive
+  determinism --role qa` → status 1, stderr contains `E_VALIDATION name (HEAD:.wingfoil/directives/custom/no-direct-db-access.md):
+  invalid directive: missing required field 'name'`, `HEAD` unchanged.
+- **AC2, loader level**, `test/core/config-file-missing.test.ts`: replace the "propagates as it was" pin with, for each
+  of `dna.yaml`/`loadDnaYaml`, `memory.yaml`/`loadMemoryYaml`, `roles.yaml`/`loadRolesYaml` (`it.each`, the existing
+  table): (i) the file replaced by a directory → caught error `name` `'ConfigFileUnreadableError'`, `relativePath`
+  `.wingfoil/<file>`, `code` `'EISDIR'`, `message` `toBe` `.wingfoil/<file> is a directory, not a file`, and
+  `coreErrorOf(error)` `toEqual` `{ code: 'IO', message: error.message }`; (ii) unprivileged, `chmod 000` → `code`
+  `'EACCES'`, message `.wingfoil/<file> cannot be read: permission denied`, the same `coreErrorOf`; (iii) the file a
+  symlink to itself (`symlinkSync('<file>', join(repo, '.wingfoil', '<file>'))`) → `code` `'ELOOP'`, message
+  `.wingfoil/<file> cannot be read (ELOOP)`. Plus `loadWorkflowsYaml`: `workflows.yaml` a directory → `.wingfoil/workflows.yaml
+  is a directory, not a file`; a manifest including `workflows/custom/x.yaml` that is a directory → `.wingfoil/workflows/custom/x.yaml
+  is a directory, not a file`; both `coreErrorOf` → `IO`. The existing ENOENT `it.each` stays as it is.
+- **AC2, core operation**, `test/core/core-index-arms.test.ts`: the EISDIR pin becomes `op('dna', 'dnaShow')({ root })`
+  resolving `ok: false`, `error` `toEqual` `{ code: 'IO', message: '.wingfoil/dna.yaml is a directory, not a file' }`,
+  `exitCodeForResult` 1. The throw arm moves to a new `test/core/load-or-error-throw-arm.test.ts` (characterization: it
+  passes before and after): `jest.mock('../../src/storage', …)` keeping `jest.requireActual` and making `readDocument`
+  throw `new Error('boom')` (no `code`) for a path ending in `dna.yaml` → `op('dna', 'dnaShow')` rejects with `boom`.
+- **AC2, CLI**, `test/cli/config-missing-refusal.integration.test.ts`, a new describe "bug-251 — a configuration file that
+  exists but cannot be read", on scaffolded repositories (`init --template scrum`): `dna.yaml` a directory → `['dna',
+  'show']`, `['paths']`, `['mcp']` each status 1, first stderr line `toBe` `error: .wingfoil/dna.yaml is a directory, not a
+  file`; `['--format', 'json', 'dna', 'show']` → `JSON.parse(stderr)` `toEqual` `{ error: '.wingfoil/dna.yaml is a
+  directory, not a file' }`; `memory.yaml` a directory → `['memory', 'search', 'x']` `error: .wingfoil/memory.yaml is a
+  directory, not a file`; `roles.yaml` a directory → `['directives', 'list']` `error: .wingfoil/roles.yaml is a directory,
+  not a file`; unprivileged, `dna.yaml` `chmod 000` → `['dna', 'show']` `error: .wingfoil/dna.yaml cannot be read:
+  permission denied`. `expectNoHostPath` of the file plus the raw-text negatives above.
+- **AC2, MCP**, `test/mcp/config-missing-refusal.test.ts`, a new describe beside the bug-245 one (same `readFailure`):
+  `dna.yaml` a directory → `wingfoil://dna`; `memory.yaml` a directory → `wingfoil://memory/task` and
+  `wingfoil://memory/task/task-001`; `workflows.yaml` a directory (fixture: the manifest and one included workflow
+  copied from a scaffolded `init --template scrum` repository, then the manifest replaced by a directory) →
+  `wingfoil://workflows`; each `error.message` `toContain` the matching `… is a directory, not a file`; unprivileged,
+  `memory.yaml` `chmod 000` → `wingfoil://memory/task` `toContain` `.wingfoil/memory.yaml cannot be read: permission
+  denied`; `expectNoHostPath` on `{ message, data }` and the raw-text negatives. `prompts/get` with an unreadable
+  `roles.yaml` is optional (through `test/mcp/role-prompts.test.ts`'s setup).
+
+**Decisions for the approver.**
+- **D1 — what "the message is" means for P3.5.** (a) The issue's `message` is exactly `invalid directive: missing required
+  field 'name'`; the rendered refusal keeps `E_VALIDATION name (<file>): ` in front, which is what names the file the
+  first `Then` reports invalid. (b) The whole refusal reason is the bare string (the file only in `details`).
+  **Recommendation: (a)** — it meets both `Then` clauses and keeps the one rendering every validation refusal has.
+- **D2 — which fields.** (a) Every required key of `DirectiveFrontmatter` (`id`, `name`, `type`, `kind`, `title`), absent
+  key only; `null` and wrong types keep Zod's text. (b) `name` only. **Recommendation: (a)**: the scenario is titled
+  "missing required header fields", the message names its field, and (b) would word one missing key differently from
+  the four beside it.
+- **D3 — where the wording lives.** (a) `parseDirectiveFile` in `src/core/loaders.ts`, the one parse both baselines
+  share (and the place `E_MISSING_FRONTMATTER` is already worded). (b) A per-field Zod `error` in `src/directives/schema.ts`,
+  which spec-013's *Reference implementation* quotes verbatim, so spec-013 would need a Revision note.
+  **Recommendation: (a).**
+- **D4 — the unreadable-file wording and code.** `EACCES`/`EPERM` → `<rel> cannot be read: permission denied`; `EISDIR` →
+  `<rel> is a directory, not a file` (both bug-251's Expected Behavior verbatim); any other errno → `<rel> cannot be read
+  (<code>)`; `CoreError` code `IO`, exit 1 (a missing file stays `NOT_FOUND`). **Recommendation: approve as written**, so
+  red pins it verbatim.
+- **D5 — `loadWorkflowsYaml`'s working-tree reader** (`wingfoil://workflows`, `wingfoil://workflows/{name}`), the same
+  class outside `readConfigFile`. (a) Map it in this task (W0-R6: a same-class instance in a file the task touches);
+  an unreadable included file is the same thrown refusal, not a new diagnostic. (b) Leave it for a later task.
+  (c) Make an unreadable included file a spec-003 diagnostic beside `E_WORKFLOW_FILE_NOT_FOUND`, which amends spec-003.
+  **Recommendation: (a).**
+
+**Candidate findings (not filed).** None outside this task's ground: every raw-error surface reproduced above is one
+this design fixes.
+
+**Risks for the other open `w1` tasks.** `task-310` (`src/core/directives-list.ts`): `directives list` reads `roles.yaml`
+through `documentExists ? loadRolesYaml : undefined` (its line 205); a change there keeps the new error if it still
+calls `loadRolesYaml`; `test/core/directives-list.test.ts` untouched by this design. `task-313` (`src/memory/schema.ts`,
+`src/memory/audit.ts`): `parseMemoryYaml` in `loaders.ts` is not changed here; any loaders edit of its is a textual
+merge only. `task-314` (`src/mcp/memory-resource.ts`, spec-004): this design changes no `src/mcp` file; the new MCP pins
+live in `test/mcp/config-missing-refusal.test.ts`, which task-314 does not list. `task-315` and `task-319`: no
+overlap. task-317's invisible-character gate: the new messages hold only `'` and ASCII; red runs `npx jest test/lint
+--maxWorkers=2`. The two repository gates: CLI pins on `runCliEntry` only (no local spawn of `dist/cli.js`), no npm spawn.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
