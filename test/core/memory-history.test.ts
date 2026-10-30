@@ -20,7 +20,7 @@
 import { CORE_MODULES } from '../../src/core';
 import type { CoreFn } from '../../src/core/registry';
 import { exitCodeForResult, exitCodeForThrow } from '../../src/core/exit-code';
-import { commitAll, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
+import { commitAll, git, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
 
 const MEMORY_YAML = `version: 1
 types:
@@ -363,5 +363,52 @@ describe('CORE_MODULES memory.memoryHistory — the `wingfoil` field (task-192, 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect((result.value.entries[3] as HistoryEntry & { wingfoil: string | null }).wingfoil).toBeNull();
+  });
+});
+
+/**
+ * task-313 AC 3 (`bug-262`; approver design gate 2026-10-30) — a past revision written in a newer `format` is reported
+ * as unreadable, through the channel `memory history` uses for a revision whose frontmatter does not parse
+ * (task-257's `W_MEMORY_UNREADABLE`): its entry has no `to` and an `unreadable` naming `E_INVALID_FORMAT`, the next
+ * entry no `from`, and one warning names the file and the commit. bug-262's steps: add (format 1, draft) → submit
+ * (format 2, pending) → reject (format 1, draft).
+ */
+describe('CORE_MODULES memory.memoryHistory — a past revision in a newer format (task-313 AC 3, bug-262)', () => {
+  const PROBE = 'docs/memory/task/task-001-older-probe.md';
+  const NEWER = 'E_INVALID_FORMAT: this file is written in format 2; this WingFoil reads up to format 1: upgrade WingFoil';
+  let repo: string;
+  let submit: string;
+
+  const probe = (status: string, format: number): string =>
+    ['---', 'id: task-001-older-probe', 'type: task', 'title: "Older probe"', `status: ${status}`, `format: ${format}`, '---', '', 'Body.', ''].join('\n');
+
+  beforeEach(() => {
+    repo = makeTempGitRepo();
+    writeFixtureFile(repo, '.wingfoil/memory.yaml', 'version: 1\ntypes:\n  task:\n    path: "docs/memory/task/{id}.md"\n');
+    writeFixtureFile(repo, PROBE, probe('draft', 1));
+    commitAll(repo, 'wf(task): add task-001-older-probe');
+    writeFixtureFile(repo, PROBE, probe('pending', 2));
+    commitAll(repo, 'wf(task): submit task-001-older-probe');
+    submit = git(repo, ['rev-parse', 'HEAD']).trim();
+    writeFixtureFile(repo, PROBE, probe('draft', 1));
+    commitAll(repo, 'wf(task): reject task-001-older-probe [pending → draft]');
+  });
+
+  afterEach(() => removeTempDir(repo));
+
+  it('red-first: exit 0; the submit entry has to null and the E_INVALID_FORMAT reason, the reject entry from null; one warning naming the commit', async () => {
+    const result = await memoryHistoryFn()({ root: repo, positional: 'task-001-older-probe' });
+    expect(exitCodeForResult(result)).toBe(0);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const entries = result.value.entries as unknown as ReadonlyArray<Record<string, unknown>>;
+    expect(entries.map((entry) => [entry.operation, entry.from, entry.to, entry.unreadable ?? null])).toEqual([
+      ['add', null, 'draft', null],
+      ['submit', 'draft', null, NEWER],
+      ['reject', null, 'draft', null],
+    ]);
+    expect(entries[1]!.sha).toBe(submit);
+    expect('unreadable' in entries[2]!).toBe(false);
+    expect(result.warnings).toEqual([`W_MEMORY_UNREADABLE (${PROBE}): unreadable frontmatter in ${PROBE}: ${NEWER} (at ${submit})`]);
   });
 });

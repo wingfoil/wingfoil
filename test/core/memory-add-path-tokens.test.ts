@@ -6,10 +6,13 @@
  * - red-first: a value holding a `..` or `.` segment (ruling D3), an absolute path or an empty segment is a
  *   usage error (`UsageError`, exit 2) naming the token, decided in `parseSetOptions` before anything is
  *   read or written — for `memory add` and `workflow start` alike;
- * - red-first: a committed `path` whose literal `..` takes a well-spelled value out of the type's folder is
- *   refused, nothing written: `VALIDATION`, exit 1 (ruling D1), the `E_PATH_OUTSIDE_TYPE_FOLDER` message;
- * - characterization: a nested, well-spelled value is accepted; a root escape is still
- *   `E_PATH_ESCAPES_ROOT` (`VALIDATION`, exit 1).
+ * - characterization: a nested, well-spelled value is accepted.
+ *
+ * task-313 AC 1 (`bug-360`) — a committed `path` holding a literal `..` no longer loads: `memory add` on either
+ * type of the second fixture project is refused before anything is computed or written, `VALIDATION`, exit 1, the
+ * `memory.yaml` refusal naming both types (approver design gate 2026-10-30, D1 (a), D3 (a)). The type-folder and
+ * root-escape guards those types reached before are pinned at storage level
+ * (`test/storage/memory-path-type-folder.test.ts`).
  *
  * The CLI's exit codes and stderr are `test/cli/memory-add-path-tokens.integration.test.ts`; the pure
  * resolver is `test/storage/memory-path-type-folder.test.ts`.
@@ -24,7 +27,7 @@ import type { CoreResult } from '../../src/core/types';
 import { UsageError } from '../../src/core/usage-error';
 import { git, makeTempGitRepo, removeTempDir } from '../storage/helpers/git-fixture';
 import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
-import { ROOT_ESCAPE_PREFIX, SPELLING_REFUSALS, TYPE_FOLDER_MESSAGE, writePathTokenProject } from './helpers/path-token-fixture';
+import { DOT_SEGMENT_REFUSAL, SPELLING_REFUSALS, writeDotSegmentProject, writePathTokenProject } from './helpers/path-token-fixture';
 
 function operation(module: 'memory' | 'workflow', name: string): CoreFn<unknown, unknown> {
   const found = enumerateOperations(CORE_MODULES).find((entry) => entry.module.name === module && entry.operation.name === name);
@@ -83,31 +86,29 @@ describe('task-281 AC 3 (bug-325) — memory add / workflow start: a path-token 
   });
 });
 
-describe("task-281 AC 3 (bug-325) — the resolved document must lie in its type's folder (ruling D1: exit 1)", () => {
+describe("task-313 AC 1 (bug-360) — a committed `path` holding a literal `..` is refused at load (exit 1), nothing written", () => {
   let repo: string;
   beforeEach(() => {
     repo = makeTempGitRepo();
-    writePathTokenProject(repo);
+    writeDotSegmentProject(repo);
   });
   afterEach(() => removeTempDir(repo));
 
-  it("red-first: a committed `path` whose literal `..` leaves docs/t/ is refused, VALIDATION, E_PATH_OUTSIDE_TYPE_FOLDER's message, nothing written", async () => {
+  it.each([
+    ['t', 'docs/t-one.md'],
+    ['r', '../r-one.md'],
+  ])('red-first: memory add --type %s → VALIDATION, the memory.yaml refusal naming both types, exit 1, nothing written', async (type, wouldBe) => {
+    const before = git(repo, ['rev-parse', 'HEAD']).trim();
     const unchanged = snapshotPersistence(repo);
-    const result = await add(repo, { type: 't', title: 'x', set: ['scope=a', 'name=one'] });
-    expect(existsSync(join(repo, 'docs', 't-one.md'))).toBe(false);
-    expect(result).toEqual({ ok: false, error: { code: 'VALIDATION', message: TYPE_FOLDER_MESSAGE } });
-    expect(exitCodeForResult(result)).toBe(1);
-    assertPersistenceUnchanged(repo, unchanged);
-  });
-
-  it('characterization: a committed `path` leaving the project root is still E_PATH_ESCAPES_ROOT (VALIDATION, exit 1), nothing written', async () => {
-    const unchanged = snapshotPersistence(repo);
-    const result = await add(repo, { type: 'r', title: 'x', set: ['scope=a', 'name=one'] });
+    const result = await add(repo, { type, title: 'x', set: ['scope=a', 'name=one'] });
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error.code).toBe('VALIDATION');
-    expect(result.error.message.startsWith(ROOT_ESCAPE_PREFIX)).toBe(true);
+    expect(result.error.message).toBe(DOT_SEGMENT_REFUSAL);
     expect(exitCodeForResult(result)).toBe(1);
+    expect(existsSync(join(repo, wouldBe))).toBe(false);
+    expect(git(repo, ['rev-parse', 'HEAD']).trim()).toBe(before);
+    expect(git(repo, ['status', '--porcelain'])).toBe('');
     assertPersistenceUnchanged(repo, unchanged);
   });
 });

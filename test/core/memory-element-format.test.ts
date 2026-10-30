@@ -55,7 +55,7 @@ const MEMORY_YAML = `version: 1
 types:
   task:
     path: "docs/memory/task/{id}.md"
-    id_pattern: "task-{counter:3}-{slug}"
+    id_pattern: "task-{n}-{slug}"
     amendable: true
     template:
       file: "memory/templates/task.md"

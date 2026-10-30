@@ -1238,8 +1238,9 @@ export interface MemoryHistoryEntryView {
    */
   readonly wingfoil: string | null;
   /**
-   * Present only when this commit's frontmatter does not parse (task-171, `bug-188`): why, as the
-   * first line of the parse error. `to` is then `null`, and so is the next entry's `from`.
+   * Present only when this commit's revision cannot be read (task-171, `bug-188`): why, as the first
+   * line of the parse error, or `E_INVALID_FORMAT: <message>` when the revision is written in a newer
+   * element format (task-313, `bug-262`). `to` is then `null`, and so is the next entry's `from`.
    */
   readonly unreadable?: string;
 }

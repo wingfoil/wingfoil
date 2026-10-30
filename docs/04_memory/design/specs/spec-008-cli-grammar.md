@@ -689,7 +689,7 @@ anything is read, so they are usage errors (§5), each with its own message:
 | A value that would take the id outside `[a-z0-9-.]` (`spec-009` §1) | `error: value for token {<name>} is not a valid [a-z0-9-.] piece: "<value>"` | `1` |
 | An `{author}` token whose git author name has no `[a-z0-9]` character once slugged | `error: value for token {author} is empty once the git author name "<name>" is slugged` | `1` |
 | A `{date}` token while `GIT_AUTHOR_DATE` holds a date git cannot parse | `error: E_GIT_READ_FAILED: git var GIT_AUTHOR_IDENT failed in <root>: fatal: invalid date format: <value>` | `1` |
-| The committed `path`, rendered and normalized, leaves the type's folder — the part of `path` up to the last `/` before its first `{` — while staying in the project root (a `path` holding a literal `..`) | `error: E_PATH_OUTSIDE_TYPE_FOLDER: Memory entries must reside in their type's folder: '<rendered>' resolves to '<normalized>', outside '<folder>' (path '<path>': {<token>}="<value>", …)` | `1` |
+| The committed `path`, rendered and normalized, leaves the type's folder — the part of `path` up to the last `/` before its first `{` — while staying in the project root (a token value that carries the rendered path out of the folder; a `path` holding a literal `..` is refused when `memory.yaml` loads, `spec-001`) | `error: E_PATH_OUTSIDE_TYPE_FOLDER: Memory entries must reside in their type's folder: '<rendered>' resolves to '<normalized>', outside '<folder>' (path '<path>': {<token>}="<value>", …)` | `1` |
 
 The rows with exit `1` depend on the committed `memory.yaml` (`dl-080` (B): a gating read at `HEAD`), which
 is what separates them from the rows with exit `2` — the same malformed-versus-unresolvable line §5 draws for a
@@ -1387,3 +1387,12 @@ since `task-103`, and since `task-315` with the same closest-command `hint:` lin
 unknown command. The exit code (`2`) and every other rule are unchanged; `wingfoil help help` stays an explicit request
 for help by name, at exit `0`. Edited in place without a supersede or a state change (`dl-047`), pending the approver's
 `memory amend`.
+
+**Revision (2026-10-30, `task-313`, the task validating `memory.yaml` id patterns and type paths)
+— §10's `E_PATH_OUTSIDE_TYPE_FOLDER` row no longer names a literal `..` as its cause.** `bug-360`: a type `path`
+that is absolute or holds a `.`/`..` segment is now refused when `memory.yaml` loads (`spec-001`, `E_VALIDATION`,
+exit `1`), before `memory add` renders anything, so it never reaches this row. The row keeps the guard as defence
+in depth and names the cause that can still reach it: a token value that carries the rendered path out of the
+folder, which the `--set` spelling rows above refuse first for a value given on the command line (approver design
+gate 2026-10-30, D5 (a)). Its message and exit code are unchanged. Edited in place without
+a supersede or a state change (`dl-047`), pending the approver's `memory amend`.

@@ -4,12 +4,14 @@
  *
  * - `plan` at `docs/05_plans/{scope}/{id}.md`, `id_pattern: "{workflow}-{phase}-plan"` (this repository's own
  *   shape), and a startable workflow `w` with no element, so `workflow start w --set scope=…` reaches the same
- *   token filler;
- * - `t` at `docs/t/{scope}/../../{id}.md` — a committed pattern whose literal `..` takes a well-spelled value
- *   out of the type's folder (`docs/t/`) while staying inside the project root: the type-folder refusal
- *   (`E_PATH_OUTSIDE_TYPE_FOLDER`, approver ruling D1: exit 1, `VALIDATION`);
- * - `r` at `docs/t/{scope}/../../../../{id}.md` — the same, leaving the project root: `E_PATH_ESCAPES_ROOT`,
- *   kept as the positive case of the root confinement (REQ-SEC-06).
+ *   token filler.
+ *
+ * task-313 AC 1 (`bug-360`) — a second project, {@link writeDotSegmentProject}, holds the two types whose
+ * committed `path` carries a literal `..`, which `memory.yaml` now refuses at load:
+ * - `t` at `docs/t/{scope}/../../{id}.md` (would leave the type's folder, staying inside the project root);
+ * - `r` at `docs/t/{scope}/../../../../{id}.md` (would leave the project root).
+ * They left the shared project, whose `memory.yaml` would otherwise no longer load for `plan` either. The
+ * type-folder and root-escape guards keep their storage-level pins (`test/storage/memory-path-type-folder.test.ts`).
  *
  * Not a `.test.ts` file, so Jest never collects it as a suite.
  */
@@ -27,20 +29,6 @@ types:
     states:
       sequence: [ draft, active, done ]
       waiting: [ active ]
-  t:
-    path: "docs/t/{scope}/../../{id}.md"
-    id_pattern: "t-{name}"
-    template:
-      file: "memory/templates/t.md"
-      frontmatter:
-        required: [ id, type, title, status ]
-  r:
-    path: "docs/t/{scope}/../../../../{id}.md"
-    id_pattern: "r-{name}"
-    template:
-      file: "memory/templates/r.md"
-      frontmatter:
-        required: [ id, type, title, status ]
 `;
 
 const PLAN_TEMPLATE = `---
@@ -93,8 +81,6 @@ export function writePathTokenProject(root: string): void {
   writeFixtureFile(root, '.wingfoil/workflows/custom/w.yaml', W);
   writeFixtureFile(root, '.wingfoil/memory.yaml', MEMORY_YAML);
   writeFixtureFile(root, '.wingfoil/memory/templates/plan.md', PLAN_TEMPLATE);
-  writeFixtureFile(root, '.wingfoil/memory/templates/t.md', scaffold('t'));
-  writeFixtureFile(root, '.wingfoil/memory/templates/r.md', scaffold('r'));
   writeFixtureFile(root, '.wingfoil/dna.yaml', DNA_YAML);
   writeFixtureFile(root, 'README.md', '# Fixture\n');
   commitAll(root, 'fixture');
@@ -111,13 +97,45 @@ export const SPELLING_REFUSALS: ReadonlyArray<readonly [label: string, value: st
   ['a `.` segment (ruling D3)', './x', `invalid flag value: --set scope holds a '.' or '..' path segment: "./x"`],
 ];
 
-/**
- * The type-folder refusal of `t` with `--set scope=a --set name=one` (ruling D1: exit 1, `VALIDATION`): the
- * `StorageError` message, which carries its code as a prefix (`src/storage/errors.ts`).
- */
-export const TYPE_FOLDER_MESSAGE =
-  `E_PATH_OUTSIDE_TYPE_FOLDER: Memory entries must reside in their type's folder: 'docs/t/a/../../t-one.md' resolves to 'docs/t-one.md', outside 'docs/t/' ` +
-  `(path 'docs/t/{scope}/../../{id}.md': {scope}="a", {id}="t-one")`;
+/** task-313 AC 1 — the `memory.yaml` of {@link writeDotSegmentProject}: the types `t` and `r`, in that order. */
+const DOT_SEGMENT_MEMORY_YAML = `version: 1.0
+types:
+  t:
+    path: "docs/t/{scope}/../../{id}.md"
+    id_pattern: "t-{name}"
+    template:
+      file: "memory/templates/t.md"
+      frontmatter:
+        required: [ id, type, title, status ]
+  r:
+    path: "docs/t/{scope}/../../../../{id}.md"
+    id_pattern: "r-{name}"
+    template:
+      file: "memory/templates/r.md"
+      frontmatter:
+        required: [ id, type, title, status ]
+`;
 
-/** The start of the kept root-escape refusal of `r` with `--set scope=a --set name=one`. */
-export const ROOT_ESCAPE_PREFIX = `E_PATH_ESCAPES_ROOT: Memory entries must reside within the project root: 'docs/t/a/../../../../r-one.md' resolves to '`;
+/** Write and commit the task-313 AC 1 project at `root`: the shared project's files, with types `t` and `r` only. */
+export function writeDotSegmentProject(root: string): void {
+  writeFixtureFile(root, '.wingfoil/workflows.yaml', 'version: 1.0\ninclude:\n  - workflows/custom/w.yaml\n');
+  writeFixtureFile(root, '.wingfoil/workflows/custom/w.yaml', W);
+  writeFixtureFile(root, '.wingfoil/memory.yaml', DOT_SEGMENT_MEMORY_YAML);
+  writeFixtureFile(root, '.wingfoil/memory/templates/t.md', scaffold('t'));
+  writeFixtureFile(root, '.wingfoil/memory/templates/r.md', scaffold('r'));
+  writeFixtureFile(root, '.wingfoil/dna.yaml', DNA_YAML);
+  writeFixtureFile(root, 'README.md', '# Fixture\n');
+  commitAll(root, 'fixture');
+}
+
+/**
+ * task-313 AC 1 (approver design gate 2026-10-30, D1 (a), D3 (a)) — what `memory add` reports on that project, for
+ * either type: the committed `memory.yaml` does not load, both types refused in `types` order. The wrapper around the
+ * issues is the one `memory add` prints today for any committed `memory.yaml` schema refusal (copied from a run of
+ * the code build on a project whose `t` and `r` declare `waiting: [ nope ]`).
+ */
+export const DOT_SEGMENT_REFUSAL =
+  `cannot resolve the memory type registry: the committed '.wingfoil/memory.yaml' (at HEAD) is not readable as a Memory configuration: ` +
+  `E_VALIDATION types.t.path (HEAD:.wingfoil/memory.yaml): path "docs/t/{scope}/../../{id}.md" holds a '.' or '..' segment; ` +
+  `E_VALIDATION types.r.path (HEAD:.wingfoil/memory.yaml): path "docs/t/{scope}/../../../../{id}.md" holds a '.' or '..' segment. ` +
+  `An element is created against the types the repository records (dl-080), so the committed file must be valid; fix it and commit the fix, then retry.`;

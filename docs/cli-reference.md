@@ -567,6 +567,12 @@ Without `--workflow`, `memory add` links nothing and its commit is unchanged.
     Also a document the committed `path` would put outside the project root (`E_PATH_ESCAPES_ROOT: …`) or
     outside the type's folder, the part of `path` before its first `{token}`
     (`E_PATH_OUTSIDE_TYPE_FOLDER: Memory entries must reside in their type's folder: …`). Nothing is written.
+    New in 0.3.2: a committed `memory.yaml` whose type `path` is absolute or holds a `.` or `..` segment, or
+    whose type `id_pattern` is malformed, is refused before anything is computed or written
+    (`cannot resolve the memory type registry: … E_VALIDATION types.bug.path (HEAD:.wingfoil/memory.yaml): path
+    "docs/memory/bug/../../outside/{id}.md" holds a '.' or '..' segment …`, or
+    `… id_pattern "bug-{n:0}-{slug}": malformed token {n:0} …`); every other command that reads `memory.yaml`
+    refuses it with the same `E_VALIDATION` issue.
   - Exit `1`, with `--workflow`: a `<ref>` that names no open instance (`workflow is not open: <ref>`, or
     `unknown workflow: <ref>`, as `workflow next` answers it); a `--step` that is not a ready step of the instance
     (`step '<key>' is not on the frontier of <instance>`); no ready step that adds this type
@@ -947,6 +953,9 @@ New in 0.3: a revision of the document whose frontmatter is not valid YAML no lo
 command. Its entry has `"to": null`, an extra `"unreadable"` key giving the parse error, and the next
 entry's `from` is `null`. A `W_MEMORY_UNREADABLE` warning on stderr names the file and the commit. A
 different Memory document whose frontmatter does not parse is skipped with the same warning.
+New in 0.3.2: a revision written in a newer element `format` than this WingFoil reads is reported the same
+way, its status not read: `"to": null`, `"unreadable": "E_INVALID_FORMAT: this file is written in format 2;
+this WingFoil reads up to format 1: upgrade WingFoil"`, and the warning naming the commit.
 
 - **Commit:** none.
 - **Errors:** missing id → exit `2`; unknown id → exit `1`.

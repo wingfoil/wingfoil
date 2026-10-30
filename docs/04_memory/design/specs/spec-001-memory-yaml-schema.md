@@ -91,6 +91,11 @@ file, nothing written. A scan over many
 documents (`memory search`, a lookup passing it on its way, the snapshot at a commit) leaves it out and
 reports it as `W_MEMORY_UNREADABLE` (`spec-017` §1.4), naming the file and the refusal. Only a newer
 format is checked on an element: its frontmatter is otherwise read loosely, as every other field is.
+A **past revision** in a newer format is not read either (`task-313`, `bug-262`): `memory history` reports
+it as it reports a revision whose frontmatter does not parse — its entry `to: null`, an `unreadable` of
+`E_INVALID_FORMAT: <message>`, the next entry's `from: null`, and a `W_MEMORY_UNREADABLE` warning naming
+the file and the commit — and a strict reader (the transition-consistency check, the governance check)
+refuses it, so the commit is reported as state not checked.
 `memory amend` reads the type's committed template with `memory add`'s reader and refuses it with
 `memory add`'s message.
 
@@ -196,6 +201,13 @@ const TemplateConfig = z.object({
 A placeholder may share a path segment with literal text: `release`'s folder is
 `rl-{release-line}`, the parent release-line's id (`rl-{version}`), because its `release-line` field
 holds that release-line's version (`v1` → `planning/rl-v1/`, `bug-163`).
+`path` is **one relative path**, checked at load (`task-313`, `bug-360`, REQ-SEC-06): a pattern that is
+absolute (a leading `/` or `\`, or a drive letter `X:`) is refused as `path "<pattern>" must be a relative
+path`, and one with a segment (split on `/` and `\`) equal to `.` or `..` as `path "<pattern>" holds a '.'
+or '..' segment` — one `E_VALIDATION` issue at `types.<type>.path`, the absolute check first. Such a pattern
+could place a document outside its type's folder or the project root, so the file is refused before any
+document is created. An empty segment is not refused, nor a segment that only contains dots beside other
+text (`v0.1`, `{id}.md`).
 
 **`amendable` — which types `memory amend` may correct** (`dl-108` A3, `task-127`). `true` lets
 `memory amend` record a content correction on the type's documents in any state, with no state
@@ -258,7 +270,11 @@ expands to an empty string.
 **Per-action override (`dl-107` S3 (a)).** A workflow action may give one add its own pattern, e.g.
 `memory.add(type: decision-log, id_pattern: "retro-{release.version}")`, for an id its type's pattern
 cannot express. The override is declared in the workflow file, where it is used, and is validated
-like any other `id_pattern`. A dotted token such as `{release.version}` reads a field of an element
+like any other `id_pattern`. A type's own `id_pattern` is checked at load by the same rule
+(`idPatternIssues`, `spec-009` Pass 2; `task-313`, `bug-216`): literal characters outside the ID charset,
+a malformed token (`{n:0}`), a dotted token and an empty pattern are each one `E_VALIDATION` issue at
+`types.<type>.id_pattern`, `id_pattern "<pattern>": <issue>`, so a pattern no add could expand never
+loads. A dotted token such as `{release.version}` reads a field of an element
 in the workflow's `element:` chain; that resolution is `dl-090`'s, which `dl-107` names as S3's
 prerequisite, and until it lands only undotted tokens are defined. There is no free-form `--id`.
 
@@ -675,3 +691,14 @@ paragraph after the `lists` one, with the same two semantic checks on its keys. 
 3.5 declares `exempt: { kind: [ minor-v0.1, minor-v0.2, minor-v0.3, minor-v0.4, minor-v1.0 ] }` on `release`.
 Edited in place without a supersede or a state change (`dl-047`), pending the approver's `memory amend` at
 `task-279`'s review.
+
+**Revision (2026-10-30, `task-313`, the task validating `memory.yaml` id patterns and type paths)
+— a type's `path` and `id_pattern` are checked at load, and a past revision's `format` in history.** Approver
+design gate of 2026-10-30, D1 (a) – D5 (a). `bug-360`: the `path` paragraph of `MemoryTypeEntry` states that an
+absolute pattern or a `.`/`..` segment is refused at load, with its two messages. `bug-216`: the per-action
+override paragraph states that a type's own `id_pattern` is checked at load by `idPatternIssues`, as an
+override is. `bug-262`: the element-`format` paragraph states that a past revision in a newer format is an
+unreadable revision for `memory history` and a refusal for a strict reader. Both load-time checks are
+`E_VALIDATION`, exit `1`, like every other refusal of this schema; `src/storage`'s path guards stay as defence
+in depth. Edited in place without a supersede or a state change (`dl-047`), pending the approver's `memory
+amend` at `task-313`'s review.
