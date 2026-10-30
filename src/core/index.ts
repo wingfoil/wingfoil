@@ -1125,13 +1125,13 @@ const NO_MEMORY_SEARCH_MATCHES_MESSAGE = 'no documents matched the query';
  *    guard at all, and resolves to `''` below.
  * 2. **Load `memory.yaml`** via the same `loadOrError` + `loadMemoryYaml` path every other read op uses.
  * 3. **Scan + rank** via {@link searchMemoryDocuments} (task-008: deterministic metadata-before-body
- *    ranking, REQ-SYS-07), narrowed by `--tag` through its own `MemorySearchOptions.tag` — the ONE
- *    filter the scan primitive itself understands.
- * 4. **`--type`/`--status` narrow the already-ranked result** — a plain array filter, not a second
- *    scan pass: both are base frontmatter fields every Memory document carries
- *    (spec-010-memory-frontmatter-schema), and `searchMemoryDocuments` already projects both onto
- *    each match (task-021 added `type` alongside the pre-existing `status`), so no extra file read is
- *    needed.
+ *    ranking, REQ-SYS-07), narrowed by `--tag` and `--type` through its own `MemorySearchOptions` —
+ *    `--type` there, not as a filter of the result, because it also scopes the unreadable-file warnings
+ *    to the files that type can hold (task-314, `bug-283`: its `path` pattern produces the path, or a
+ *    newer-format document's own `type:` is it; an undeclared type is told about no file).
+ * 4. **`--status` narrows the already-ranked result** — a plain array filter, not a second scan pass:
+ *    it is a base frontmatter field every Memory document carries (spec-010-memory-frontmatter-schema),
+ *    and `searchMemoryDocuments` already projects it onto each match, so no extra file read is needed.
  * 5. **Zero matches is `coreOk`, never `coreErr`** (P1.5 BDD "Error - query with no matches" — the
  *    scenario's own title says "Error" but its assertion is exit `0`, so this is deliberately a
  *    successful, empty result carrying the exact message, per spec-005-cli-command-contract §1: a
@@ -1161,11 +1161,12 @@ const memorySearchFn: CoreFn<unknown, MemorySearchResult> = async (params) => {
   const diagnostics: Diagnostic[] = [];
   const scanned = searchMemoryDocuments(root, loaded.value, query, {
     ...(tag !== undefined ? { tag } : {}),
+    ...(type !== undefined ? { type } : {}),
     ...(isArchivedStatus(status) ? { includeArchived: true } : {}),
     onDiagnostic: (diagnostic) => diagnostics.push(diagnostic),
   });
   const matches: MemorySearchResultItem[] = scanned
-    .filter((match) => (type === undefined || match.type === type) && (status === undefined || match.status === status))
+    .filter((match) => status === undefined || match.status === status)
     .map(({ path, id, title, type: docType, status: docStatus, tags }) => ({ path, id, title, type: docType, status: docStatus, tags }));
 
   // task-171 (`bug-031`): a file the scan could not read is a warning, never the search's failure.
