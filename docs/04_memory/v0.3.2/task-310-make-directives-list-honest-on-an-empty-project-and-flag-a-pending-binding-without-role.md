@@ -8,7 +8,7 @@ kind: "fix"               # REQUIRED — feature | fix (dl-133 Q1 (b)): `fix` wh
 priority: "medium"           # optional — high | medium | low
 tags: []               # optional — additional labels, e.g. [architecture, backend]
 ref: ""                # optional — backlog item ID, e.g. "TASK-001"
-bug: [bug-199, bug-411]                # optional — LIST of bug ids this task closes (dl-045). Two cases: a fix task derived from a bug
+bug: [bug-199, bug-411, bug-455]                # optional — LIST of bug ids this task closes (dl-045). Two cases: a fix task derived from a bug
                        # by release-planning, and a bug ABSORBED into an existing task's Acceptance Criteria because that
                        # task already owns the ground. `bug.sync_state` iterates this list; a bug with no task naming it
                        # here never advances past `triaged` (only a reject to `closed`, dl-123). A single string is still accepted for documents predating dl-045.
@@ -27,12 +27,13 @@ a binding to a directive that does not exist is flagged only with `--role`.
 
 - (red-first) With no `roles.yaml`, `directives list --role <r>` makes no role assertion (no "no directives assigned" warning); with a `roles.yaml` the behaviour is unchanged.
 - (red-first) The unfiltered `directives list` warns on a role binding that names a missing directive, as `--role` does (a warning, not an error: `dl-042` D).
+- (red-first) A `roles.yaml` that exists but cannot be read (a symbolic-link loop, EACCES, a directory) is refused by `directives list` as the other configuration readers refuse it since `task-309` (`.wingfoil/roles.yaml cannot be read (…)`, exit 1); only an absent file (ENOENT, a dangling link) reads as "no roles.yaml" (`bug-455`).
 - (characterization) `src/core/context.ts` is not changed (`git diff --stat` shows it untouched).
 - (characterization) spec-012 §5.1 (kind 1 with no `roles.yaml`; the unfiltered listing's kinds) is amended in this task to state the new behaviour (prepared in the task, recorded by the approver's `memory amend` at review, dl-047).
 
 ## Implementation Notes
 
-- **wave:** w1 · Size: S. **Files:** `src/core/directives-list.ts` (or `src/core/directive-scope.ts`), tests. **Bug:** `bug-199`, `bug-411`.
+- **wave:** w1 · Size: S. **Files:** `src/core/directives-list.ts` (or `src/core/directive-scope.ts`), tests. **Bug:** `bug-199`, `bug-411`, `bug-455` (absorbed after `task-309`'s review, 2026-10-30).
 - Source: `release-planning-rel-v0.3.2-plan` (R5 survey, R8 rulings, S6). Run under the autonomy rules R3 of that plan.
 
 ## Execution Notes
