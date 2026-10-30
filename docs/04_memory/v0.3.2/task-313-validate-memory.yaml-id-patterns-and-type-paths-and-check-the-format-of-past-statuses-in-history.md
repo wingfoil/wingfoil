@@ -489,8 +489,7 @@ Prepared in the worktree, uncommitted; the gates above ran with them in place.
      Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
      here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
 
-- A spec Revision heading that cites a task by its full id breaks `test/docs/name-resolvability.test.ts` when the id
-  holds a file name (`memory.yaml`): the full run reported it as an unresolved config name (refactor above). Proposal:
-  the resolvability scan skips a token matching a Memory id pattern, or the dev-loop notes say to cite such a task
-  by its short id.
+- Hit `bug-260` (`triaged`, v0.4) at refactor: `test/docs/name-resolvability.test.ts` reported the full id of this
+  task, whose slug holds `memory.yaml`, as an unresolved config name in the spec-001 and spec-008 Revision headings
+  (refactor above). Workaround: the headings cite the task by its short id, `task-313`.
 - The dl-170 heavy-gate slot held each of the three heavy runs 20–50 minutes behind the other w1 tasks' gates.
