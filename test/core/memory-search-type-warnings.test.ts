@@ -4,6 +4,8 @@
  * when its readable `type:` is `t` (design gate D2 (a)); an undeclared type gets no warning (D3 (a)).
  * A search without `--type` keeps reporting every file it could not read.
  *
+ * BDD: `P1.5-memory-search.feature` "Edge - a typed search warns only about files of that type".
+ *
  * The fixture copies this repository's own `.wingfoil/memory.yaml` patterns for `release-line`,
  * `release`, `task`, `adr` and `bug`. The expected lines are the ones
  * `wingfoil memory search --type bug` printed over the same files, with `--format console` and with
