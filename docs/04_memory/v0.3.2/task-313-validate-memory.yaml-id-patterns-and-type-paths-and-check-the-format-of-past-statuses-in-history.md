@@ -292,6 +292,19 @@ touched only in two TSDoc lines (low conflict risk with a task editing the memor
 
 **Candidate findings (not filed).** None beyond D4 (b)'s `readFrontmatterFields`, which D4 (a) folds into the task.
 
+### design gate (approver, 2026-10-30)
+
+Design gate approved by the approver on 2026-10-30T18:40:13+01:00, in the orchestrator's chat:
+- D1 — (a): the messages are `path "<p>" holds a '.' or '..' segment`, `path "<p>" must be a relative path` and `id_pattern "<p>": <issue>`,
+  the type named by the issue path.
+- D2 — (a): only absolute paths and `.` / `..` segments are refused; empty segments are not part of this task.
+- D3 — (a): the refusal is `E_VALIDATION`, exit 1, like every other `memory.yaml` refusal.
+- D4 — (a): the strict readers refuse a past revision written in a newer format; `scripts/check-governance.cjs` reports it as "state not
+  checked" with its own reason, and its blob reader `readFrontmatterFields` gets the same check in this task (same class, W0-R6 (1)).
+- D5 — (a): spec-008 §10's `E_PATH_OUTSIDE_TYPE_FOLDER` row is amended here, prepared uncommitted for the approver's `memory amend`.
+- D6 — (b), for bug-360 only: one BDD scenario for P1.13 pinning the load-time refusal of a type `path` that holds a `..` segment or is
+  absolute; no new scenario for bug-216 or bug-262.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
