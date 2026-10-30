@@ -174,6 +174,15 @@ and task-311 use `test/cli/program.integration.test.ts`, a different file. `docs
 also edits it (another section, `init`): a textual merge only. `spec-005`: no other `v0.3.2` task amends it (S6 lists
 `spec-005` §3.1 for this task alone). task-309, task-314, task-319: no shared file.
 
+### design gate (approver, 2026-10-30)
+
+Design gate approved by the approver on 2026-10-30T10:38:05+01:00, in the orchestrator's chat:
+- D1 — (b): `help help` (and `<noun> help help`) exits 0 and prints the help command's own usage. This ruling supersedes the "exit 2" that AC 2 and the release-planning ruling R8 state; `bug-116`'s Expected Behavior allows it ("prints the help command's own help at exit 0"). The specs' "help <known-command> exits 0" (spec-005 §1, spec-008 §5) then holds as written: only the spec-005 §3.1 carve-out is amended.
+- D2 — accepted, and moot for `help help` under D1 (b); no exit-2 built-in message is added.
+- D3 — yes: the nested `<noun> help <unknown|help>` case is in the task.
+- D4 — yes: one `docs/cli-reference.md` sentence, no new BDD scenario.
+- D5 — (a): the candidate finding (`help memory addd` ignores the second operand) is filed as a bug by the orchestrator, proposed for v0.4.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
