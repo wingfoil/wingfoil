@@ -78,6 +78,8 @@ import {
 import type { MemoryYaml } from './schema';
 import { isArchivedStatus } from './state-machine';
 import { listBlobsAtRevs, readBlobs, readDocument, readPathsAtRev, splitFrontmatter } from '../storage';
+// The module, not the barrel, as `./entry.ts` imports `resolveConfinedMemoryPath`.
+import { pathPatternRegExp } from '../storage/memory-path';
 // The module, not the `../core` barrel: `src/core` imports this module, and `./revision` depends on
 // `../storage` alone, so nothing here closes a load-time cycle.
 import { listBlobEntriesAtCommit, resolveRevision } from '../core/revision';
@@ -341,14 +343,53 @@ function parseScanned(raw: string, relativePath: string, label: string, options:
 }
 
 /**
+ * The reports of the readers built on a scan's parsed documents ({@link readableDocuments},
+ * {@link findFirst}): {@link MemoryScanOptions}, plus which newer-format documents they report.
+ */
+interface DocumentReports extends MemoryScanOptions {
+  /** Whether the newer-format document `summary` is reported. Omitted: every one is. */
+  readonly reportsNewer?: (summary: MemoryDocumentSummary) => boolean;
+}
+
+/**
+ * The reports of a read of one `type` (task-314, `bug-283`, `spec-004` §2.2): `scan` for the scan, which
+ * reports an unparsable document and a symbolic link only when `type`'s `path` pattern can produce its
+ * path ({@link pathPatternRegExp}, `spec-017` §1.4) — neither has a readable `type:`; `documents` for the
+ * readers of its parsed documents, which report a newer-format document only when its own `type:` is
+ * `type`, the field that decides membership in the read (design gate D2 (a)). A type `memory.yaml` does
+ * not declare produces no path, so its read reports nothing (D3 (a)). A path several types' patterns
+ * produce is reported to each: in this repository `task`'s `docs/04_memory/{release}/{id}.md` produces
+ * every path under `docs/04_memory/`.
+ */
+function typeScopedReports<T extends MemoryScanOptions>(
+  memoryYaml: MemoryYaml,
+  type: string,
+  options: T,
+): { readonly scan: T; readonly documents: DocumentReports } {
+  const report = options.onDiagnostic;
+  if (report === undefined) return { scan: options, documents: options };
+  const declared = Object.prototype.hasOwnProperty.call(memoryYaml.types, type);
+  const produces = declared ? pathPatternRegExp(memoryYaml.types[type]!.path) : null;
+  return {
+    scan: {
+      ...options,
+      onDiagnostic: (diagnostic: Diagnostic) => {
+        if (produces?.test(diagnostic.file) === true) report(diagnostic);
+      },
+    },
+    documents: { onDiagnostic: report, reportsNewer: (summary) => declared && asString(summary.frontmatter.type) === type },
+  };
+}
+
+/**
  * The documents of a scan a **collection** reader may use: one written in a newer format is left out
  * and reported as {@link W_MEMORY_UNREADABLE}, naming the file and the `dl-149` refusal (task-257,
  * `bug-241`), so it is neither read by today's rules nor dropped silently.
  */
-function* readableDocuments(documents: Iterable<ScannedDocument>, options: MemoryScanOptions): Generator<MemoryDocumentSummary> {
+function* readableDocuments(documents: Iterable<ScannedDocument>, options: DocumentReports): Generator<MemoryDocumentSummary> {
   for (const { summary, newer } of documents) {
     if (newer !== null) {
-      options.onDiagnostic?.(newerFormatDiagnostic(newer));
+      if (options.reportsNewer?.(summary) !== false) options.onDiagnostic?.(newerFormatDiagnostic(newer));
       continue;
     }
     yield summary;
@@ -364,11 +405,11 @@ function* readableDocuments(documents: Iterable<ScannedDocument>, options: Memor
 function findFirst(
   documents: Iterable<ScannedDocument>,
   matches: (frontmatter: Record<string, unknown>) => boolean,
-  options: MemoryScanOptions,
+  options: DocumentReports,
 ): MemoryDocumentSummary | undefined {
   for (const { summary, newer } of documents) {
     if (matches(summary.frontmatter)) return refuseNewerElement(summary);
-    if (newer !== null) options.onDiagnostic?.(newerFormatDiagnostic(newer));
+    if (newer !== null && options.reportsNewer?.(summary) !== false) options.onDiagnostic?.(newerFormatDiagnostic(newer));
   }
   return undefined;
 }
@@ -616,8 +657,9 @@ export function listMemoryDocumentsByType(
   type: string,
   options: MemoryTypeScanOptions = {},
 ): MemoryDocumentFrontmatterSummary[] {
+  const reports = typeScopedReports(memoryYaml, type, options);
   const out: MemoryDocumentFrontmatterSummary[] = [];
-  for (const { path, frontmatter } of readableDocuments(scanWorkingTreeDocuments(root, memoryYaml, options), options)) {
+  for (const { path, frontmatter } of readableDocuments(scanWorkingTreeDocuments(root, memoryYaml, reports.scan), reports.documents)) {
     if (asString(frontmatter.type) !== type) continue;
     if (!keptByArchivedDefault(frontmatter, options)) continue;
     out.push({
@@ -653,7 +695,8 @@ export function findMemoryDocumentByTypeAndId(
   id: string,
   options: MemoryTypeScanOptions = {},
 ): MemoryDocumentSummary | undefined {
-  const found = findFirst(scanWorkingTreeDocuments(root, memoryYaml, options), isTypeAndId(type, id), options);
+  const reports = typeScopedReports(memoryYaml, type, options);
+  const found = findFirst(scanWorkingTreeDocuments(root, memoryYaml, reports.scan), isTypeAndId(type, id), reports.documents);
   return found !== undefined && keptByArchivedDefault(found.frontmatter, options) ? found : undefined;
 }
 
@@ -673,7 +716,9 @@ export function findMemoryDocumentByTypeAndIdAtRev(
   options: MemoryTypeScanOptions = {},
 ): MemoryDocumentSummary | undefined {
   const sha = resolveRevision(root, rev);
-  const found = findFirst(parseMemoryDocumentsAtSha(root, sha, rev, scanCommit(root, sha, memoryYaml), options), isTypeAndId(type, id), options);
+  const reports = typeScopedReports(memoryYaml, type, options);
+  const documents = parseMemoryDocumentsAtSha(root, sha, rev, scanCommit(root, sha, memoryYaml), reports.scan);
+  const found = findFirst(documents, isTypeAndId(type, id), reports.documents);
   return found !== undefined && keptByArchivedDefault(found.frontmatter, options) ? found : undefined;
 }
 
@@ -681,6 +726,13 @@ export function findMemoryDocumentByTypeAndIdAtRev(
 export interface MemorySearchOptions extends MemoryScanOptions {
   /** Only include documents whose `tags:` frontmatter contains this exact tag. */
   readonly tag?: string;
+  /**
+   * Only include documents whose frontmatter `type:` is this `memory.yaml` type, and report only the
+   * unreadable files a read of that type reports (task-314, `bug-283`): an unparsable document or a link
+   * on a path the type's `path` pattern can produce, a newer-format document whose `type:` is this one;
+   * nothing for a type `memory.yaml` does not declare. Omitted: every document, every unreadable file.
+   */
+  readonly type?: string;
   /**
    * Opt back into archived documents (`status: deprecated` or `superseded` — `ARCHIVED_STATUSES`,
    * ratified by `dl-028-archived-states-excluded-from-context`) appearing in the result.
@@ -770,13 +822,15 @@ export function searchMemoryDocuments(
 ): MemorySearchMatch[] {
   const needle = query.trim().toLowerCase();
   const matches: MemorySearchMatch[] = [];
+  const reports = options.type === undefined ? { scan: options, documents: options } : typeScopedReports(memoryYaml, options.type, options);
 
-  for (const { path, frontmatter, body } of readableDocuments(scanWorkingTreeDocuments(root, memoryYaml, options), options)) {
+  for (const { path, frontmatter, body } of readableDocuments(scanWorkingTreeDocuments(root, memoryYaml, reports.scan), reports.documents)) {
     // Only an element is a match (task-171, `bug-164`): a file with no `id` or no `type` — a plan
     // `dl-019` grandfathered without frontmatter — is left out, silently: it is not unreadable.
     const id = asString(frontmatter.id);
     const type = asString(frontmatter.type);
     if (id === undefined || type === undefined) continue;
+    if (options.type !== undefined && type !== options.type) continue;
     const status = asString(frontmatter.status);
     if (!options.includeArchived && isArchivedStatus(status)) continue;
     const tags = asStringArray(frontmatter.tags);
