@@ -39,6 +39,13 @@ Reported by a consumer (`reported_by:`), restated; reproduced here.
 ## Triage & Execution Notes
 
 - Filed by the v0.3 retrospective's `capture` (`retrospective-rel-v0.3-plan` S4), on the approver's ruling at `additional-points` (2026-10-21: "as proposed"); source item `FB-06` of `docs/09_retrospectives/rl-v1/rel-v0.3-friction-inventory.md` or `rel-v0.3-feedback-triage.md`. Triage (`open → triaged`) is the approver's.
+- Fixed by `task-310-make-directives-list-honest-on-an-empty-project-and-flag-a-pending-binding-without-role`: the unfiltered
+  `directives list` names every dangling binding, a warning as under `--role` (`dl-042` D). The Expected Behavior's other half,
+  "an error wherever configuration is checked", is met on this repository only, and only for the roles `dna.yaml` `team.roles`
+  declares: `npm run check:role-directives` runs `directives list --role <r>` for each of those roles and exits 1 on any warning.
+  A dangling binding under a `roles.yaml` role that `team.roles` does not declare stays a warning, and a consumer project has no
+  such check (the script is not in the npm package: `package.json` `files` is `dist`, `README.md`). Design gate D6 (a),
+  approved by the approver on 2026-10-30: no follow-up bug.
 
 ### Retrospective
 
