@@ -88,6 +88,8 @@ A suggestion follows on a `hint:` line (the object's `hint` field). New in 0.3: 
 within two edits of a known one is answered in that form —
 `error: unknown command 'memroy'` then `hint: did you mean "memory"?` — where it used to print
 `(Did you mean memory?)`.
+New in 0.3.2: the same holds after the help command — `wingfoil help memroy` and `wingfoil memory help
+addd` get the `hint:` line — and `wingfoil help help` prints the help command's own help at exit `0`.
 When the refusal names a file or explains itself, indented lines follow the `error:` line, one per
 finding (`<file>: <detail>`); under `--format json`/`yaml` they are a `details` array of
 `{"file", "detail"}` entries beside `error`.

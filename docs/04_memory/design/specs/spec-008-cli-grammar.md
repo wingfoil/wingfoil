@@ -409,9 +409,10 @@ not declare** is exit `1` — a validation failure, like an unknown Memory type.
 of failure, not its severity.
 
 A second case the table decides once it is read the same way: a **noun invoked without its verb**
-(`wingfoil dna`), `wingfoil` invoked with no command at all, and `wingfoil help <unknown>` are
-**"missing required argument"** in the exit-`2` row — the case already enumerated there, not a fourth
-one. §1's grammar makes the verb a required argument of the noun, so an invocation that stops at the
+(`wingfoil dna`) and `wingfoil` invoked with no command at all are **"missing required argument"** in
+the exit-`2` row — the case already enumerated there, not a fourth one; `wingfoil help <unknown>` is the
+row's **unknown command**, with the closest-command `hint:` line of §1 (`spec-005` §3.1).
+§1's grammar makes the verb a required argument of the noun, so an invocation that stops at the
 noun is malformed, and it exits `2` with an `error: ` line naming what was missing (`spec-005` §1's
 rule that a non-zero exit always carries an error message admits no exception for it). An argument
 parser that answers such an invocation by printing the command's usage has not thereby emitted the
@@ -1378,3 +1379,11 @@ refuses. Edited in place without a supersede or a state change (`dl-047`), pendi
 records is `unknown directive: <name>`, and the working tree only words that refusal; a directive `HEAD` records but
 the working tree deleted or edited meets the write guard. No command is left on the working tree as a defect. Edited
 in place without a supersede or a state change (`dl-047`), pending the approver's `memory amend`.
+
+**Revision (2026-10-30, `task-315-give-help-a-closest-command-hint-and-a-true-message-for-help-help`) — §5's
+exit-`2` reading of `wingfoil help <unknown>` is corrected, per `bug-115` and `task-315`'s review.** §5 classed it as a
+missing required argument, beside a noun invoked without its verb; the CLI has emitted `unknown command '<name>'` for it
+since `task-103`, and since `task-315` with the same closest-command `hint:` line as the direct path. §5 now names it an
+unknown command. The exit code (`2`) and every other rule are unchanged; `wingfoil help help` stays an explicit request
+for help by name, at exit `0`. Edited in place without a supersede or a state change (`dl-047`), pending the approver's
+`memory amend`.
