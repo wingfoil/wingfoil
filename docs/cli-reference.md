@@ -986,7 +986,9 @@ No match is still a success (exit `0`), with `"matches": []` and
 New in 0.3: every match is a Memory element, with an `id` and a `type`. A Markdown file under a
 Memory directory with neither, such as an old plan with no frontmatter, is left out. A file whose
 frontmatter is not valid YAML, or a symbolic link, is left out too, and a `W_MEMORY_UNREADABLE` warning
-on stderr names it. One bad file no longer fails the search.
+on stderr names it. One bad file no longer fails the search. With `--type`, the warnings name only the
+files that type could hold: a file on a path the type's `path` pattern can produce, or a document in a
+newer `format:` whose `type:` is that type.
 
 - **Commit:** none.
 

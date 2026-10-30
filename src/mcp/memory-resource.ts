@@ -95,7 +95,9 @@ export function registerMemoryResources(server: McpServer, options: RegisterMemo
         // `isArchivedStatus` — are withheld. Since task-171 (`dl-038` option 1) the primitive withholds
         // them by default, so this call site no longer filters: omitting a filter fails closed.
         // A document the scan leaves out (unreadable, a link, a newer `format:`) is reported, and the
-        // report reaches the client as `warnings` (task-195, `bug-231`), as the CLI prints it.
+        // report reaches the client as `warnings` (task-195, `bug-231`), as the CLI prints it. Only the
+        // files this type can hold are reported (task-314, `bug-283`, spec-004 §2.2): the primitive scopes
+        // them by the type's `path` pattern, and a newer-format document by its own `type:`.
         const diagnostics: Diagnostic[] = [];
         const summaries = listMemoryDocumentsByType(root, memoryYaml, type, { onDiagnostic: (diagnostic) => diagnostics.push(diagnostic) })
           .map(({ id, title, status, tags }) => ({
@@ -128,7 +130,8 @@ export function registerMemoryResources(server: McpServer, options: RegisterMemo
         // retrieves one explicitly.
         // The lookup reports the files it could not read on its way (task-195, `bug-231`): beside the
         // document on success, and as the refusal's details when it found nothing, since the document
-        // may be one of them.
+        // may be one of them. As for the collection, only the files this type can hold (task-314,
+        // `bug-283`).
         const diagnostics: Diagnostic[] = [];
         const doc = findMemoryDocumentByTypeAndId(root, memoryYaml, type, id, {
           includeArchived: true,

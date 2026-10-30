@@ -53,7 +53,11 @@
  * cannot read. A document whose frontmatter does not parse, and a symbolic link (never followed and
  * never parsed, by either baseline, `bug-189`), are left out and reported to the caller's
  * {@link MemoryScanOptions.onDiagnostic} as {@link W_MEMORY_UNREADABLE}, in path order. Only the
- * single-file read {@link loadMemoryDocumentSummary} still throws: its caller named that file.
+ * single-file read {@link loadMemoryDocumentSummary} still throws: its caller named that file. A read of
+ * one type — {@link listMemoryDocumentsByType}, the two (`type`, `id`) lookups, and
+ * {@link searchMemoryDocuments} with `type` — reports only the files that type can hold (task-314,
+ * `bug-283`, `spec-004` §2.2): an unparsable document or a link on a path its `path` pattern can
+ * produce, a newer-format document whose own `type:` is it.
  *
  * **The `format` key (task-257, `bug-241`, `dl-149`).** An element keeps the `format` of the template
  * it was copied from and reads with that counter, `MEMORY_TEMPLATE_FORMAT`; absent reads as `1`. An
@@ -649,7 +653,8 @@ function keptByArchivedDefault(frontmatter: Record<string, unknown>, options: Me
  * directory-only filter would wrongly fold sibling types' documents into this type's collection.
  *
  * Archived documents are left out unless `options.includeArchived` (task-171, `dl-038` option 1), and
- * a document the scan cannot read is reported to `options.onDiagnostic` and skipped.
+ * a document the scan cannot read is skipped and reported to `options.onDiagnostic` when this type can
+ * hold it (task-314, `bug-283`): see this module's header.
  */
 export function listMemoryDocumentsByType(
   root: string,
@@ -686,7 +691,8 @@ export function listMemoryDocumentsByType(
  * found" failure is the MCP Resource adapter's job (spec-004 §2.2), not this primitive's.
  *
  * An archived document matches only with `options.includeArchived` (task-171, `dl-038` option 1); the
- * single-document Resource passes it, since REQ-STATE-06 keeps archived content retrievable.
+ * single-document Resource passes it, since REQ-STATE-06 keeps archived content retrievable. A document
+ * it cannot read on the way is reported only when `type` can hold it (task-314, `bug-283`).
  */
 export function findMemoryDocumentByTypeAndId(
   root: string,
@@ -703,7 +709,8 @@ export function findMemoryDocumentByTypeAndId(
 /**
  * {@link findMemoryDocumentByTypeAndId} **at commit `rev`**: the document whose own frontmatter `type`
  * and `id` match, with its frontmatter and body as `rev` holds them; `undefined` when that commit holds
- * none, or holds it archived without `options.includeArchived`.
+ * none, or holds it archived without `options.includeArchived`. It reports the files it cannot read on
+ * the way as its working-tree counterpart does, those `type` can hold only (task-314, `bug-283`).
  *
  * @throws `RevisionError` when `rev` is malformed or names no commit.
  */
@@ -804,7 +811,8 @@ export function validateSearchQuery(query: string): void {
  * **Only elements, never a throw (task-171).** A match has an `id` and a `type` (`bug-164`); a file
  * with neither is left out without a report. A document whose frontmatter does not parse, or a
  * symbolic link, is left out and reported to `options.onDiagnostic` as {@link W_MEMORY_UNREADABLE}
- * (`bug-031`), so one malformed file never fails a search.
+ * (`bug-031`), so one malformed file never fails a search; with `options.type`, only one that type can
+ * hold (task-314, `bug-283`).
  *
  * **REQ-STATE-06:** a document whose frontmatter `status` is archived — `deprecated` or `superseded`
  * (`isArchivedStatus`, `dl-028`) — is excluded by default, so it never appears in these "default
@@ -878,7 +886,8 @@ export interface TypeDocumentCopy {
  * parsed **once** however many revisions hold it. A document counts when its own frontmatter `type` is
  * `type`, as in every Memory scan. A link, an unparsable document and one written in a newer format are
  * left out and reported through `options.onDiagnostic` as {@link W_MEMORY_UNREADABLE} (task-171,
- * task-257), once per blob.
+ * task-257), once per blob, when `type` can hold them, as every read of one type reports (task-314,
+ * `bug-283`): the static directory of `release` is `release-line`'s too.
  *
  * @throws `StorageError` `E_GIT_READ_FAILED` when a revision names no commit or a batch read fails.
  */
@@ -891,6 +900,7 @@ export function loadTypeDocumentCopiesAtRevs(
 ): TypeDocumentCopy[][] {
   const typeEntry = memoryYaml.types[type];
   const directory = typeEntry === undefined ? '' : staticDirPrefix(typeEntry.path);
+  const reports = typeScopedReports(memoryYaml, type, options);
   const listings = listBlobsAtRevs(root, revs, directory).map((blobs) => blobs.filter((blob) => blob.path.endsWith('.md')));
   const reported = new Set<string>();
   const contents = readBlobs(
@@ -900,11 +910,11 @@ export function loadTypeDocumentCopiesAtRevs(
   const parsed = new Map<string, Record<string, unknown> | null>();
   const frontmatterOf = (path: string, oid: string): Record<string, unknown> | null => {
     if (parsed.has(oid)) return parsed.get(oid) as Record<string, unknown> | null;
-    const scanned = parseScanned(contents.get(oid) as string, path, `${oid}:${path}`, options);
+    const scanned = parseScanned(contents.get(oid) as string, path, `${oid}:${path}`, reports.scan);
     let frontmatter: Record<string, unknown> | null = null;
     if (scanned !== undefined) {
-      if (scanned.newer !== null) options.onDiagnostic?.(newerFormatDiagnostic(scanned.newer));
-      else frontmatter = scanned.summary.frontmatter;
+      if (scanned.newer === null) frontmatter = scanned.summary.frontmatter;
+      else if (reports.documents.reportsNewer?.(scanned.summary) !== false) reports.documents.onDiagnostic?.(newerFormatDiagnostic(scanned.newer));
     }
     parsed.set(oid, frontmatter);
     return frontmatter;
@@ -913,7 +923,7 @@ export function loadTypeDocumentCopiesAtRevs(
     const copies: TypeDocumentCopy[] = [];
     for (const blob of blobs) {
       if (blob.symlink) {
-        if (!reported.has(blob.path)) options.onDiagnostic?.(memoryUnreadableDiagnostic(blob.path, SYMLINK_REASON));
+        if (!reported.has(blob.path)) reports.scan.onDiagnostic?.(memoryUnreadableDiagnostic(blob.path, SYMLINK_REASON));
         reported.add(blob.path);
         continue;
       }

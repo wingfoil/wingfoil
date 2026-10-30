@@ -32,3 +32,11 @@ Feature: P1.5 (US-1-08) - wingfoil memory search
     When I run "wingfoil memory search"
     Then that file is not among the results
     And every returned document has an "id" and a "type"
+
+  Scenario: Edge - a typed search warns only about files of that type
+    Given a "bug" file "bugs/bug-002-broken.md" whose frontmatter is not valid YAML
+    And an "adr" file "design/adrs/adr-001-broken.md" whose frontmatter is not valid YAML
+    When I run "wingfoil memory search --type bug"
+    Then the command exits with code 0
+    And a warning "W_MEMORY_UNREADABLE" names "bugs/bug-002-broken.md"
+    And no warning names "design/adrs/adr-001-broken.md", a path the "bug" type's path pattern cannot produce
