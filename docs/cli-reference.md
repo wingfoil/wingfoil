@@ -988,7 +988,8 @@ Memory directory with neither, such as an old plan with no frontmatter, is left 
 frontmatter is not valid YAML, or a symbolic link, is left out too, and a `W_MEMORY_UNREADABLE` warning
 on stderr names it. One bad file no longer fails the search. With `--type`, the warnings name only the
 files that type could hold: a file on a path the type's `path` pattern can produce, or a document in a
-newer `format:` whose `type:` is that type.
+newer `format:` whose `type:` is that type; a `--type` that `memory.yaml` does not declare prints no
+warnings.
 
 - **Commit:** none.
 
