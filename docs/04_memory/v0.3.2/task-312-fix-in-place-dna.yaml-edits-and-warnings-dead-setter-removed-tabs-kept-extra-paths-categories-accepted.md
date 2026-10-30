@@ -214,6 +214,23 @@ paths.extras --value x` on it, committed → `error: unknown DNA field 'paths.ex
   nested typed-catchall block under a passthrough root …" → received `["cfg.yaml: unknown field(s) ignored:
   block.extra"]`. Characterization, pass: the passthrough root's `mystery` still warns beside the nested catchall.
 
+### red amendment (qa, 2026-10-30)
+
+**Commit `b8b1ac92`** (`git log --oneline -1` → `b8b1ac923 test(dna): task-312 — red amendment: …`), one file:
+`test/core/dna-set-tab-before-comment.test.ts`, its last assertion only. A red amendment outside a review, ruled by the
+approver on 2026-10-30.
+
+**What changed, and why.** The whole-file assertion expected the committed `dna.yaml` to be the fixture with only the
+`project.name` line changed. Every wingfoil write of `dna.yaml` also raises its `version:` by 0.1 (`dl-174` (a),
+`task-299`; pinned by `test/core/dna-set-comment-preservation.test.ts` AC(a)), so on the green commit `5ab7b2f3` the
+only difference was `version: 1.1` → `version: 1.2`, while the line assertion (the tab kept) already passed. The
+expectation now applies both changes to the fixture (`  name: ab\t` → `  name: cd\t`, `version: 1.1` → `version: 1.2`),
+so the "nothing else changes" guarantee stays.
+
+**Commands.** `npx tsc --noEmit -p tsconfig.json` → exit 0; `npx jest test/lint --maxWorkers=2` → `Test Suites: 13 passed`,
+`Tests: 153 passed`; `npx jest test/core/dna-set-tab-before-comment.test.ts --maxWorkers=2` on the green → `Test Suites: 1
+passed`, `Tests: 1 passed`; the invisible-character grep on the file → no hit.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
