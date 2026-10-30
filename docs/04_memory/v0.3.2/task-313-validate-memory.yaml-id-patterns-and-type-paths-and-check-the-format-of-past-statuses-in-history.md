@@ -47,6 +47,251 @@ reads past statuses without checking the document's `format`.
        reject's `Reason:` (read with `wingfoil memory history <task-id>`), each with the command that
        shows it resolved and what that command printed; then what else changed on the next pass. -->
 
+### design (architect, 2026-10-30)
+
+**Inputs read.** Branch `task/task-313-…` at `55a6d534` (cut from `release/0.3` `f52abb6e`, task-314's merge, + `wf(task):
+start` `90aaec39` and the three `wf(bug): sync … [planned → in-progress]` of `bug-216`, `bug-262`, `bug-360`; `git log
+--oneline -5`). `depends_on: []` (no dl-015 gate); no handover. `task-309`'s Execution Notes read: it changed
+`readConfigFile` and added `ConfigFileUnreadableError` in `src/core/loaders.ts`; every `memory.yaml` reader
+(`loadMemoryYaml`, `loadMemoryYamlAtHead`/`AtRev`/`AtCommit`) still funnels into the one `parseMemoryYaml` →
+`runValidation(MemoryYaml, …)`, so a rule added to the `MemoryYaml` schema reaches all of them and **`loaders.ts`
+needs no edit** (`grep -n "parseMemoryYaml\|runValidation(MemoryYaml" src/core/loaders.ts` → lines 246, 263–266, 318).
+Cited elements: `spec-001-memory-yaml-schema`, `spec-008-cli-grammar`, `spec-009-validation-strategy`, `spec-017` →
+`status: approved`; `dl-149`, `dl-047`, `dl-080`, `dl-107` → `status: ready` (`grep -m1 "^status:"` on each).
+
+**The three defects, reproduced on this base** (the code build through the shim, `wingfoil --version` → `0.3.1
+(f52abb6e…)`; a scratch repository outside the worktree, `git init`, `wingfoil init --template Scrum`):
+- `bug-216`: `bug`'s `id_pattern` set to `"bug-{n:0}-{slug}"` and committed → `memory search x` exit 0; `memory add
+  --type bug --title X` → exit 1, `error: missing value for token {n:0}: give it with --set n:0=<value>`; with `--set
+  n:0=1` → exit 2, `error: invalid flag value: --set name "n:0" is not a field name ([a-z][a-z0-9_-]*)`. The workflow
+  precedent (an action `memory.add(type: adr, id_pattern: "adr-{n:0}-{slug}")`, committed): `workflow list` → exit 1,
+  `error: E_VALIDATION phases[0].actions[0] (workflows/custom/adr-ingest.yaml): memory.add id_pattern "adr-{n:0}-{slug}": malformed token {n:0}`.
+- `bug-360`: `bug`'s `path` set to `docs/memory/bug/../../outside/{id}.md` and committed → `memory search --type bug x`
+  exit 0; `memory add --type bug --title probe` → exit 0, `"path": "docs/outside/bug-001-probe.md"`, commit `wf(bug):
+  add bug-001-probe`. `../escaped/{id}.md` → exit 1, `error: E_GIT_READ_FAILED: git ls-files … -- ../escaped/ failed in
+  <root>: fatal: ../escaped/: '../escaped/' is outside repository at '<root>'`; `/tmp/abs/{id}.md` → exit 1,
+  `error: E_GIT_READ_FAILED: … -- /tmp/abs/ failed in <root>: fatal: Invalid path '/tmp/abs': No such file or directory`.
+- `bug-262`: `memory add --type task --title "Older probe"` (`format: 1`, `status: draft`); by hand `format: 2` +
+  `status: pending` committed as `wf(task): submit task-001-older-probe`, then `format: 1` + `status: draft` as
+  `wf(task): reject task-001-older-probe [pending → draft]` → `memory history task-001-older-probe` exit 0, three
+  entries, the second `"from": "draft", "to": "pending"`, the third `"from": "pending", "to": "draft"`, no stderr. The
+  channel AC 3 points to, observed on the same repository with a past revision whose `status` does not parse
+  (`status: [draft`): exit 0, that entry `"to": null` with `"unreadable": "missed comma between flow collection
+  entries (5:1)"`, the next entry `"from": null`, and on stderr `warning: W_MEMORY_UNREADABLE
+  (docs/memory/task/task-001-older-probe.md): unreadable frontmatter in docs/memory/task/task-001-older-probe.md:
+  missed comma between flow collection entries (5:1) (at <sha>)`. The current-document scan channel task-257 added
+  (`memory search probe` with the working copy at `format: 2`): `warning: W_MEMORY_UNREADABLE
+  (docs/memory/task/task-001-older-probe.md): unreadable frontmatter in docs/memory/task/task-001-older-probe.md:
+  E_INVALID_FORMAT: this file is written in format 2; this WingFoil reads up to format 1: upgrade WingFoil`.
+- How a `memory.yaml` schema refusal renders today (a committed `waiting: [nope]` on `bug`): `memory add` → exit 1,
+  `error: cannot resolve the memory type registry: the committed '.wingfoil/memory.yaml' (at HEAD) is not readable as
+  a Memory configuration: E_VALIDATION types.bug.states.waiting.0 (HEAD:.wingfoil/memory.yaml): <message>; <next
+  issue>. An element is created against the types the repository records (dl-080), so the committed file must be
+  valid; fix it and commit the fix, then retry.`, `HEAD` unchanged, tree clean; `memory history <id>` → exit 1,
+  `error: E_VALIDATION types.bug.states.waiting.0 (.wingfoil/memory.yaml): <message>`. The new rules ride the same
+  rendering.
+
+**Design.**
+- *AC 1 and AC 2, `src/memory/schema.ts`.* `MemoryTypeEntry` gains a `.superRefine` (or the top-level `MemoryYaml`
+  refinement gains a loop; the issue path is the same, `types.<type>.<field>`) with two rules, in this order per
+  type, insertion order of `types` (REQ-SYS-07):
+  - `path`: absolute when it starts with `/` or `\` or a drive letter `X:`; otherwise split on `/` and `\`, and any
+    segment equal to `.` or `..` is refused. One issue per `path`, first match wins (absolute, then dot segment), on
+    path `['path']`, message `path "<pattern>" must be a relative path` or `path "<pattern>" holds a '.' or '..'
+    segment` (D1, D2). Empty segments are not refused (D2). A segment that merely contains dots next to a token or
+    text (`rl-{release-line}`, `{id}.md`, `v0.1`) is not a dot segment.
+  - `id_pattern`, when present: one issue per entry of `idPatternIssues(pattern)` (`src/validation/id.ts`), on path
+    `['id_pattern']`, message `id_pattern "<pattern>": <issue>` — the workflow loader's form without its
+    `memory.add ` prefix (D1). `idPatternIssues` is unchanged.
+  The refusal is Zod's custom issue, so `toValidationError` renders it `E_VALIDATION types.bug.path
+  (<label>): path "docs/memory/bug/../../outside/{id}.md" holds a '.' or '..' segment`, exit 1, as every other
+  `memory.yaml` schema refusal (D3). Every `memory.yaml` reader takes it, working tree and commit: `memory add`
+  refuses before it computes or writes anything (the `cannot resolve the memory type registry …` wrapper above),
+  read commands print the bare issue, MCP reads reject with it. `src/storage/memory-path.ts`'s
+  `E_PATH_ESCAPES_ROOT` / `E_PATH_OUTSIDE_TYPE_FOLDER` stay as they are: defence in depth, still reachable through
+  a value no `--set` spelled (a derived `{scope}`) and through a symlink, and still pinned at storage level by
+  `test/storage/memory-path-type-folder.test.ts` and `test/storage/memory-path-confinement.test.ts`.
+- *AC 3, `src/memory/audit.ts`.* `parseStatus`, after the YAML parse, checks `newerFormatIssue(parsed,
+  MEMORY_TEMPLATE_FORMAT, label)` (`src/validation/format.ts`, the counter the current-document check uses,
+  `src/memory/query.ts` `newerElementFormat`); a non-null issue returns `{ status: null, unreadable: new
+  ValidationError([issue], EXIT_VALIDATION) }`, so no `status` is read from that revision. In
+  `reconstructMemoryTransitions` the transition's `unreadable` string is `<code>: <message>` for an
+  `E_INVALID_FORMAT` issue — the scan channel's form (`newerFormatDiagnostic`) — and stays the parse error's first
+  line otherwise (every existing pin of the YAML case unchanged). `memoryHistoryFn` (`src/core/index.ts`) needs no
+  code change: it already turns `transition.unreadable` into the `W_MEMORY_UNREADABLE` warning `… (at <sha>)`; only
+  the TSDoc of `MemoryTransition.unreadable` (audit.ts) and `MemoryHistoryEntryView.unreadable` (index.ts), which say
+  "does not parse", are widened. Only a newer integer format is checked; `format: 1.5`/`"2"` keep being read loosely
+  (spec-001: "Only a newer format is checked on an element"). Strict mode (`verifyTransitionConsistency`,
+  `scripts/check-governance.cjs`) throws it like a parse error, so the governance check reports the commit as
+  state not checked rather than passing it (D4).
+- *Docs (the developer commits; no `version:` on either).* `docs/cli-reference.md` `memory add` *Errors*, exit `1`
+  (lines 560–569): a committed `memory.yaml` whose type `path` is absolute or holds a `.`/`..` segment, or whose
+  `id_pattern` is malformed, is refused before anything is written; the `E_PATH_OUTSIDE_TYPE_FOLDER` sentence loses
+  "a `path` holding a literal `..`" as its example. `memory history` (lines 946–949): a past revision written in a
+  newer `format` is reported the same way as one that does not parse, its `unreadable` naming `E_INVALID_FORMAT`.
+- *Specs (pending amendments, prepared uncommitted by the developer, recorded by the approver's `memory amend`,
+  dl-047).* `spec-001`: the `path` paragraph (after "`path` MAY contain named placeholders…") states the refusal of an
+  absolute path and of a `.`/`..` segment at load, with the message; § "`id_pattern` placeholder notation" states
+  that a type's `id_pattern` is checked at load by the same rule as a per-action override (`idPatternIssues`:
+  literal characters, malformed token, dotted token, empty pattern); the element-`format` paragraph states that
+  `memory history` reports a past revision in a newer format as an unreadable revision (`to: null`, `unreadable:
+  E_INVALID_FORMAT: …`, a `W_MEMORY_UNREADABLE` warning naming the commit), and that a strict reader refuses it;
+  a Revision note for task-313. `spec-008` §10, the `E_PATH_OUTSIDE_TYPE_FOLDER` row (line 692): its parenthetical
+  "(a `path` holding a literal `..`)" names a cause the loader now refuses first (D5). `spec-009` is not amended: its
+  §1 Pass-2 list already names the `memory.yaml` `id_pattern` check.
+
+**Files expected to change.** `src/memory/schema.ts`, `src/memory/audit.ts`, `src/core/index.ts` (TSDoc only),
+`scripts/check-governance.cjs` (under D4 (a) only), `docs/cli-reference.md`, the red tests below, this task file,
+`bug-216`/`bug-262`/`bug-360` (status syncs only), and uncommitted: `spec-001`, `spec-008`. Not changed:
+`src/core/loaders.ts`, `src/validation/id.ts`, `src/storage/memory-path.ts`, anything under `.wingfoil/`.
+**Version bumps:** none — no `dna.yaml`, `memory.yaml`, `workflows.yaml`, `roles.yaml` or directive is edited, and
+tech-specs carry no `version` (dl-047). Nothing under `.wingfoil/` changes, so `npm run check:mcp` proves nothing new
+here (and it runs the pinned 0.3.1, which lacks this change); instead every `memory.yaml` this repository ever
+committed was checked against the new rules: 43 revisions of `.wingfoil/memory.yaml`, `docs/self/memory.yaml`,
+`docs/self/.wingfoil/memory.yaml` across `git log --all`, each type's `id_pattern` through `idPatternIssues` (built
+`dist/`) and each `path` through the segment rule → no violation, so no commit-time reader (governance, the
+deduction's snapshot) starts failing on this repository's history. The `wingfoil init` scaffold
+(`src/storage/templates.ts`, `MEMORY_ID_PATTERNS`, `memoryPath`) passes both rules. No workflow is changed: no
+phase-list, step-list or count pin is affected.
+
+**Existing tests of the files this task changes, and of the fixtures it invalidates**, run before any pin (one
+jest process, `--maxWorkers=2`, no slot, load 7.9): `npx jest --maxWorkers=2 test/memory/schema.test.ts
+test/memory/element-schema.test.ts test/memory/element-schema-park-limits.test.ts test/memory/audit.test.ts
+test/memory/audit-parent-state.test.ts test/memory/audit-parent-unreadable.test.ts test/memory/audit-status-shapes.test.ts
+test/memory/history.test.ts test/core/memory-history.test.ts test/core/memory-element-format.test.ts
+test/core/memory-add-path-tokens.test.ts test/cli/memory-add-path-tokens.integration.test.ts
+test/storage/memory-path-type-folder.test.ts test/workflow/schema.test.ts test/validation/id.test.ts
+test/core/loaders.test.ts test/core/loaders-at-rev.test.ts test/docs/memory-types-parity.test.ts
+test/core/format-key.test.ts test/cli/format-key.integration.test.ts test/core/memory-scan-tolerant.test.ts` →
+`Test Suites: 21 passed, 21 total`, `Tests: 465 passed, 465 total`; then `npx jest --maxWorkers=2
+test/cli/check-governance.test.ts test/cli/history-scaffold-phantom.integration.test.ts
+test/cli/history-show-signature.integration.test.ts test/memory/history-parent-path.test.ts
+test/memory/history-rename-path.test.ts test/memory/history-scaffold-copy.test.ts` → `Test Suites: 6 passed`,
+`Tests: 78 passed`.
+
+**Fixtures the change invalidates — qa updates them in red** (the developer may not, T4). A scan of every
+`id_pattern` literal under `src/`, `test/`, `scripts/` through `idPatternIssues` (built `dist/`), and of every
+`path:` with a `.`/`..` segment or a leading `/` in `test/`, finds three memory.yaml fixtures the new rules refuse:
+- `test/core/memory-element-format.test.ts:58`, `id_pattern: "task-{counter:3}-{slug}"` → `malformed token
+  {counter:3}`; the suite never adds by pattern (it tests `format` on amend/transitions), so it becomes
+  `"task-{n}-{slug}"`, every assertion unchanged.
+- `test/core/helpers/path-token-fixture.ts` types `t` (`docs/t/{scope}/../../{id}.md`) and `r`
+  (`docs/t/{scope}/../../../../{id}.md`), shared by `test/core/memory-add-path-tokens.test.ts` and
+  `test/cli/memory-add-path-tokens.integration.test.ts`: with them, the fixture's `memory.yaml` no longer loads, so
+  the `plan` tests of both suites would fail too. `t` and `r` leave the shared fixture (it keeps `plan` and `w`); the
+  four tests on `t`/`r` (core lines 94, 103; CLI lines 41, 50) become AC 1's red tests below, on a second fixture
+  holding those two types. `TYPE_FOLDER_MESSAGE` and `ROOT_ESCAPE_PREFIX` go with them; the type-folder and
+  root-escape guards keep their storage-level pins (`test/storage/memory-path-type-folder.test.ts` lines 59–78).
+  Every other `id_pattern` the scan flagged is a TypeScript template literal (`${…}`) or a workflow-action fixture
+  of `test/workflow/schema.test.ts`, not a `memory.yaml`.
+
+**AC classification and what qa must pin.** AC 1–3 **red-first** (each defect reproduced above; nothing implements
+it). AC 4 **characterization** of documentation: the spec text it asks for is written by the developer as a pending
+amendment; qa pins nothing for it. Interfaces, all exported today — **qa imports no new symbol**, so `npx tsc
+--noEmit` stays green on red: `MemoryYaml` (`src/memory/schema.ts`), `runValidation` / `ValidationError`
+(`src/validation`), `loadMemoryYaml` / `loadMemoryYamlAtHead` (`src/core`), `reconstructMemoryTransitions` /
+`verifyTransitionConsistency` (`src/memory/audit.ts`), the core ops through `coreOperation`/the registry as
+`test/core/memory-history.test.ts` and `test/core/memory-add-path-tokens.test.ts` call them, the CLI through
+`runCliEntry` (`test/cli/helpers/spawn-cli.ts`). Fixtures: `makeTempGitRepo` / `writeFixtureFile` / `commitAll` /
+`git` (`test/storage/helpers/git-fixture`); a scratch project from `runCliEntry(repo, ['init', '--template',
+'scrum'])` with one line of `.wingfoil/memory.yaml` replaced and committed, as the reproductions above. Each "writes
+nothing" pin asserts `git rev-parse HEAD` unchanged and `git status --porcelain` empty, and that no file exists at
+the path the bad pattern would have produced (`docs/outside/`).
+- **AC 1 (path).** Unit, `test/memory/schema.test.ts`, a new describe: `MemoryYaml.safeParse` of `MINIMAL_VALID`
+  with `task.path` set to each of `docs/04_memory/../../outside/{id}.md`, `docs/04_memory/./{id}.md`,
+  `../escaped/{id}.md`, `/tmp/abs/{id}.md`, `\\server\\{id}.md`, `C:/x/{id}.md` → `success: false`, exactly one issue
+  whose `path` `toEqual` `['types', 'task', 'path']` and whose `message` `toBe` `path "<pattern>" holds a '.' or '..'
+  segment` (first three) or `path "<pattern>" must be a relative path` (last three; `../escaped` is a dot segment, not
+  absolute). Negatives that still parse: `docs/04_memory/planning/rl-{release-line}/{id}.md`,
+  `docs/05_plans/{scope}/{id}.md`, `docs/v0.1/{id}.md`, `docs/..x/{id}.md`. Loader level: `loadMemoryYaml(repo)` on a
+  `memory.yaml` with `bug.path: docs/memory/bug/../../outside/{id}.md` throws a `ValidationError` whose `message`
+  `toBe` `E_VALIDATION types.bug.path (.wingfoil/memory.yaml): path "docs/memory/bug/../../outside/{id}.md" holds a
+  '.' or '..' segment`; committed, `loadMemoryYamlAtHead(repo)` → the same with `(HEAD:.wingfoil/memory.yaml)`. Core
+  and CLI, in the two path-token suites (the second fixture, types `t`/`r` as today): `memory add --type t --title x
+  --set scope=a --set name=one` → core: `ok` false, `error.code` `'VALIDATION'`, `error.message` `toBe` `<wrapper>`
+  (the result also carries `details.issues`, so no whole-object `toEqual`); CLI: status 1,
+  stdout `''`, stderr `toBe` `error: <wrapper>\n`, where `<wrapper>` = `cannot resolve the memory type registry: the
+  committed '.wingfoil/memory.yaml' (at HEAD) is not readable as a Memory configuration: E_VALIDATION types.t.path
+  (HEAD:.wingfoil/memory.yaml): path "docs/t/{scope}/../../{id}.md" holds a '.' or '..' segment; E_VALIDATION types.r.path
+  (HEAD:.wingfoil/memory.yaml): path "docs/t/{scope}/../../../../{id}.md" holds a '.' or '..' segment. An element is
+  created against the types the repository records (dl-080), so the committed file must be valid; fix it and commit
+  the fix, then retry.` (the wrapper copied from the reproduction above; both types fail, in `types` order); the
+  same for `--type r`; nothing written. The `plan` tests of both suites stay as they are on the reduced fixture.
+- **AC 2 (id_pattern).** Unit, `test/memory/schema.test.ts`: `task.id_pattern` set to each of `task-{n:0}-{slug}`
+  (`malformed token {n:0}`), `task-{counter:3}-{slug}` (`malformed token {counter:3}`), `TASK_{n}` (`pattern contains
+  character(s) outside [a-z0-9-.]: T, A, S, K, _`), `retro-{release.version}` (`dotted token {release.version} is not
+  defined until dl-090`), `""` (`pattern is empty`) → one issue each, `path` `['types', 'task', 'id_pattern']`,
+  `message` `id_pattern "<pattern>": <issue>` (the issue texts are `idPatternIssues`' own, `test/workflow/schema.test.ts`
+  lines 177–188 pin the same texts for actions); a pattern with two problems (`TASK_{Slug}`) → two issues in
+  `idPatternIssues` order; negatives that parse: every `id_pattern` of `.wingfoil/memory.yaml` (read the file, as the
+  existing suite does) and `p-{n:2}-{slug}`, `t-{nnn}`, `r-{date}-{author}-{kind}-{n}`. CLI, a new describe in
+  `test/cli/memory-add-path-tokens.integration.test.ts` or a new `test/cli/memory-yaml-patterns.integration.test.ts`:
+  the Scrum scratch project with `bug`'s `id_pattern` `"bug-{n:0}-{slug}"` committed → `memory search x` status 1,
+  stderr `toBe` `error: E_VALIDATION types.bug.id_pattern (.wingfoil/memory.yaml): id_pattern "bug-{n:0}-{slug}":
+  malformed token {n:0}\n`; `--format json` → `JSON.parse(stderr)` `toEqual` `{ error: <the same without "error: "
+  and newline> }`; `memory add --type bug --title X` → status 1, stderr `toBe` `error: ` + the wrapper of AC 1 around
+  `E_VALIDATION types.bug.id_pattern (HEAD:.wingfoil/memory.yaml): id_pattern "bug-{n:0}-{slug}": malformed token {n:0}`,
+  nothing written — and stderr does not contain `--set n:0` (bug-216's impossible advice).
+- **AC 3 (format of a past revision).** Unit, `test/memory/audit-parent-unreadable.test.ts` (same helpers):
+  revisions `format: 1, status: draft` (`wf(task): add task-1`) → `format: 2, status: pending` (`wf(task): submit
+  task-1`) → `format: 1, status: draft` (`wf(task): reject task-1 [pending → draft]`). Tolerant
+  `reconstructMemoryTransitions(root, DOC)` → the second transition `toState: null`, `unreadable: 'E_INVALID_FORMAT:
+  this file is written in format 2; this WingFoil reads up to format 1: upgrade WingFoil'`, the third `fromState:
+  null`, `toState: 'draft'`, no `unreadable`. Strict → throws a `ValidationError` whose `issues[0].code` is
+  `E_INVALID_FORMAT`. Negatives: `format: 1` and an absent `format` read the status as today; `format: 1.5` reads the
+  status (loose read). Core/CLI, `test/core/memory-history.test.ts` and a CLI case on `runCliEntry` with bug-262's
+  steps: `memory history task-001-older-probe` → status 0, the second entry `{ …, operation: 'submit', from: 'draft',
+  to: null, unreadable: 'E_INVALID_FORMAT: this file is written in format 2; this WingFoil reads up to format 1:
+  upgrade WingFoil' }`, the third `from: null, to: 'draft'`; stderr `toBe` `warning: W_MEMORY_UNREADABLE
+  (docs/memory/task/task-001-older-probe.md): unreadable frontmatter in docs/memory/task/task-001-older-probe.md:
+  E_INVALID_FORMAT: this file is written in format 2; this WingFoil reads up to format 1: upgrade WingFoil (at <sha of
+  the submit commit>)\n`. Governance (under D4 (a)), `test/cli/check-governance.test.ts`, beside "a document whose
+  frontmatter does not parse at some commit": a bracketed commit whose revision is in format 2 → in
+  `report.stateUnchecked` with a reason matching `/newer format/` and containing `E_INVALID_FORMAT`, and no finding on
+  it; the existing `/does not parse/` pins unchanged.
+- Run `npx jest test/lint --maxWorkers=2` and `npx tsc --noEmit` before the red commit (overrides, w1).
+
+**Decisions for the approver.**
+- **D1 — the messages.** (a) `path "<pattern>" holds a '.' or '..' segment` / `path "<pattern>" must be a relative
+  path` (the wording of `memory add`'s `--set` spelling refusal, task-281) and `id_pattern "<pattern>": <issue>` (the
+  workflow loader's form), the type named by the issue path `types.<type>.<field>`; (b) bug-216's literal form
+  `memory.yaml: types.bug.id_pattern: …`, which no loader prints today. **Recommend (a)**: it is what every other
+  `memory.yaml` refusal prints, and it names the type and the pattern as AC 1 asks.
+- **D2 — which spellings `path` refuses.** (a) absolute and `.`/`..` segments, as AC 1, bug-360 and the spec-001
+  amendment AC 4 name; (b) also empty segments (`docs//x/{id}.md`, a trailing `/`), as `--set` values are. **Recommend
+  (a)**: an empty segment is normalized away and moves no document out of its folder; (b) would widen the task past its
+  criteria.
+- **D3 — the code.** (a) `E_VALIDATION`, exit 1, as the workflow loader's `id_pattern` check and every other
+  `memory.yaml` schema refusal; (b) `E_INVALID_ID_PATTERN_CHARS`, exit 2, which `generateId` throws at add time for
+  bad literal characters. **Recommend (a)**: AC 2 says "as a workflow's does"; spec-009 §1's "a single mapped `E_*`
+  error" is satisfied by `E_VALIDATION`, and `generateId`'s exit-2 check stays as the add-time backstop.
+- **D4 — strict readers.** The same `parseStatus` serves the strict reads (`verifyTransitionConsistency`,
+  `scripts/check-governance.cjs`). (a) strict throws the format refusal like a parse error; the governance check
+  catches it and reports the commit as state not checked with a reason of its own (`<path>: a revision is written in a
+  newer format (<first line>)`, so "does not parse" is never said of it), and its own blob reader
+  `readFrontmatterFields` (`scripts/check-governance.cjs` lines 316–331, used for documents gone at `HEAD`), the
+  same class, gets the same check — in the task (W0-R6 (1)); (b) strict throws, `check-governance.cjs` untouched: its
+  reason would say "a revision's frontmatter does not parse (E_INVALID_FORMAT …)", which is false, and
+  `readFrontmatterFields` stays a follow-up bug; (c) the format check only in tolerant mode. **Recommend (a)**: a check
+  must never pass a commit whose state it did not read (task-171), and (b) leaves a false sentence the change itself
+  causes. It adds `scripts/check-governance.cjs` and `test/cli/check-governance.test.ts` to the files; no repository
+  revision is in a newer format (`git log -G '^format: [2-9]' -- docs/04_memory docs/05_plans` → empty), so this
+  repository's own governance run does not change.
+- **D5 — spec-008 §10.** The `E_PATH_OUTSIDE_TYPE_FOLDER` row of `spec-008` §10 (approved) gives "a `path` holding a
+  literal `..`" as its cause, which after AC 1 is refused at load and never reaches the row. (a) amend the row in this
+  task, beside spec-001 (pending amendment, the guard kept as defence in depth); (b) leave it. **Recommend (a)**.
+- **D6 — BDD.** P1.13 holds the schema refusals as scenarios (`Error - a type takes a name reserved …`). (a) no new
+  scenario: the ACs name none; (b) add one for each refusal. **Recommend (a)**.
+
+**Risks for the other open w1 tasks.** `task-312` (dna.yaml, `src/dna`), `task-310` (`directives list`), `task-320`
+(release-health `measure`, `bindings.yaml`): no shared file. `task-321` (init scaffold): a scaffold `path` or
+`id_pattern` it changes must pass both rules (`test/storage/templates.test.ts` and `test/core/format-init-scaffold.test.ts` read the scaffold's `memory.yaml`);
+today's scaffold passes. Any red test of another w1 task that writes a `memory.yaml` with a `..` path or a malformed
+`id_pattern` fails once this task merges; none of the open tasks' files was checked for that. `src/core/index.ts` is
+touched only in two TSDoc lines (low conflict risk with a task editing the memory verbs, e.g. `task-332`).
+
+**Candidate findings (not filed).** None beyond D4 (b)'s `readFrontmatterFields`, which D4 (a) folds into the task.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
