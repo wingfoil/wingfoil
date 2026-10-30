@@ -47,6 +47,144 @@ the built-in Memory scaffolds lack `contributor`/`credit`/`reported_by` and the 
        reject's `Reason:` (read with `wingfoil memory history <task-id>`), each with the command that
        shows it resolved and what that command printed; then what else changed on the next pass. -->
 
+### design (architect, 2026-10-30)
+
+**Base and reads.** Branch at `3bc1e7dff` (the start and bug-sync commits on top of `cb7e74898`); `git merge-base
+--is-ancestor` → true for `a355db3bf` (task-318), `6ec106fc1` (task-310) and `8083cbd8b` (task-320). Read: the four
+bugs, `task-318`'s Execution Notes (dl-015; its D6 hands this task the shipped-templates golden), `spec-002` (status
+`approved`; `grep -n "does not scaffold it"` → line 287: `init` does not map `paths.health`), the P5.1.1 BDD feature
+(no scenario names the init commit subject: `grep -n "commit"` → lines 23 and 31 only, neither the subject).
+`grep -rn "initialize .wingfoil\|chore(wingfoil)" docs/04_memory/design docs/02_requirements .wingfoil` → nothing: no
+spec, DL or BDD pins the subject, so no amendment is owed for it.
+
+**Where the change lives.** One generator file, `src/storage/templates.ts`: `initProjectCommitMessage` (line 81),
+`dnaYaml` (lines 267–343) and `memoryTemplateMd` (line 579). Nothing in `src/` reads `contributor`, `credit`,
+`reported_by`, `backlog_committed` or `waves` (`grep -rn "reported_by\|backlog_committed\|contributor" src/ | grep -v
+templates.ts` → only a doc comment in `src/dna/schema.ts:114`), so the fields are additive and inert. The scaffolded
+`memory.yaml` is NOT changed (no `required:` field, no `growth_threshold`: the scaffold's workflows have no
+commit-backlog or re-plan phase that would read it), so `task-313`'s load-time path and id_pattern checks are not
+touched.
+
+**Prototype** (applied to the worktree, built, measured, then reverted with `git checkout -- src/storage/templates.ts`;
+`git status --short` → clean; the diff kept outside the repository):
+
+- `initProjectCommitMessage` → `` `chore(wingfoil): initialize .wingfoil/ with the ${def.name} template` ``.
+- `dnaYaml`: above `members: []`, a commented block in the device the scaffold already uses for `technologies` and
+  `agents` — what a member is, that `memory approve` / `memory reject` need a member holding `approver` whose `email`
+  is the git `user.email` (`resolveMemberRoles`, `src/core/approval-authority.ts:52`, matches on email), the example
+  `# members:` / `#   - name: Ada Lovelace` / `#     email: ada@example.com` / `#     roles: [ approver, developer ]`,
+  and `# or run: wingfoil dna add team.members --value "Ada Lovelace" --entry-email ada@example.com --entry-roles
+  approver,developer` (the command of README.md:164 and docs/user-guide.md:155). After `runs: [docs/runs/]`, a
+  commented block: `health` holds exactly one directory (the metric catalogue and its reports), `init` does not map
+  it so `wingfoil paths health` fails until it is added, `# health: [docs/health/]`, `# or run: wingfoil dna add
+  paths.health --value docs/health/`.
+- `memoryTemplateMd`: `adr`, `bug`, `decision-log`, `tech-spec` gain `contributor: ""`, `credit: ""`,
+  `reported_by: []`, each with an inline `# optional — …` comment; `release` gains `backlog_committed:` and
+  `waves: []` (inline comments) and, after the body's placeholder comment, a `## Scope changes` section (a comment and
+  the table header `| Task | From | Admitted at | Count vs backlog_committed |`), all after `status` and before
+  `format`, as `PLAN_TEMPLATE_FIELDS` is placed. Comments carry no WingFoil-internal id (D2).
+
+Measured with that prototype, in a scratch repository outside the worktree (`git init`, local identity), code build
+`node <worktree>/dist/cli.js` (called `$W`):
+
+- `$W init --template Scrum --no-interactive` → exit `0`; `git log --format=%s -1` → `chore(wingfoil): initialize
+  .wingfoil/ with the Scrum template`.
+- `$W paths health` → `error: no paths mapped for category 'health'`, exit `1` (spec-002 kept); `$W dna show team`
+  → exit `0`, `"members": []`; `$W directives list` → exit `0`, nothing on stderr.
+- `$W dna add paths.health --value docs/health/` → exit `0`, then `$W paths health` → `{"category": "health",
+  "paths": ["docs/health/"]}`; the new key lands after `runs:` and ABOVE the commented block (D4).
+- `$W dna add team.members --value "Scratch User" --entry-email scratch@example.com --entry-roles approver,developer`
+  → exit `0`; the block list replaces `members: []` under the commented example, the example stays.
+- `$W memory add --type release --title "First release"` and `--type bug --title "Scratch bug"` → exit `0`; the
+  documents carry the new fields with their inline comments (`renderAddDocument` edits the scaffold text in place,
+  `src/memory/add.ts:286`) and the release body the `## Scope changes` section; `$W memory submit release-001` and
+  the bug's submit → exit `0`, `draft → pending`; `$W memory search --type release` → the release, `pending`.
+- Full suite with the prototype in place (under the slot, `npx jest --maxWorkers=2`) → `Test Suites: 1 failed, 530
+  passed, 531 total`, `Tests: 1 failed, 9356 passed, 9357 total`; the one failure is
+  `test/core/context-shipped-templates.test.ts` › "builds the golden payload from one document per shipped template,
+  byte for byte" — the golden `test/fixtures/context/golden-payload-shipped-templates.md` pins the shipped
+  templates, as `task-318`'s D6 said. No other test pins the scaffold text this task changes:
+  `test/memory/history-scaffold-copy.test.ts` (git's copy detection over the longer `adr` template) still passed.
+
+**AC classification and what qa must pin.**
+
+| AC | Class | Why | What qa pins |
+|----|-------|-----|--------------|
+| 1 — commented `team.members` approver example and commented `paths.health`; scaffold loads with zero errors | red-first | absent today: the generated `dna.yaml` (`templateScaffold(resolveTemplate('scrum'))`) has no `health` and no `# members:` line (`sed -n 308,343p src/storage/templates.ts`) | In `test/storage/templates.test.ts`, for both `TEMPLATES`, modelled on the `technologies` example block of `task-118` (its `ACTIVE_LINE` / `EXAMPLE_HEAD` / `loadAsProject` helpers, lines ~413–500): (i) the scaffolded `dna.yaml` contains a `  # members:` block whose lines, uncommented in place of `  members: []`, load through `loadDnaYaml` with `team.members` → `[{ name: 'Ada Lovelace', email: 'ada@example.com', roles: ['approver', 'developer'] }]`; (ii) a comment line names the `wingfoil dna add team.members … --entry-roles approver,…` command; (iii) a line `  # health: [docs/health/]` exists, and uncommented loads with `paths.health` → `['docs/health/']`; (iv) as written, `loadDnaYaml` gives `team.members` → `[]` and `paths.health` → `undefined` (spec-002: not mapped), `DnaYaml.safeParse` → success. Do NOT pin the file layout after a `dna add` (D4, and `task-312` risk). |
+| 2 — the init commit subject carries no internal feature id; user guide and CLI reference quote the new subject | red-first | today `initProjectCommitMessage` ends with `(P5.1.1)` (line 81) and both docs quote it (user-guide.md:119, cli-reference.md:229) | (i) `test/storage/templates.test.ts`: `initProjectCommitMessage(resolveTemplate('Scrum'))` `toBe('chore(wingfoil): initialize .wingfoil/ with the Scrum template')`, and for every template the message does not match `/\(P\d+(\.\d+)*\)/`; (ii) `test/core/init-project.test.ts`: after `initWingfoilProject` on `makeTempGitRepo()`, `git log --format=%s -1` equals `initProjectCommitMessage(template)` (the real commit, not only the function); (iii) `test/docs/user-guide-scaffold.test.ts` (the task-296 docs-scaffold parity suite): `docs/user-guide.md` contains `` The commit is `<initProjectCommitMessage(Scrum)>` `` and `docs/cli-reference.md` contains `` **Commit:** `chore(wingfoil): initialize .wingfoil/ with the <Template> template` ``, and neither file contains `(P5.1.1)` next to `initialize .wingfoil/`. Update the constant `SCAFFOLD_SUBJECT` in `test/memory/history-scaffold-copy.test.ts` to the new subject (D7: it is the subject the test itself commits, not a pin; the suite passes either way). |
+| 3 — Memory scaffolds carry `contributor`, `credit`, `reported_by`; release scaffold `## Scope changes`, `backlog_committed`, `waves` | red-first | `grep -c "contributor\|reported_by\|credit:" src/storage/templates.ts` → `0`; no `Scope changes` (bug-338, bug-350 steps) | (i) `test/storage/templates.test.ts` (or `test/memory/template-wording.test.ts`, which already iterates the built-in templates): parse each `.wingfoil/memory/templates/<type>.md` frontmatter with js-yaml; for `adr`, `bug`, `decision-log`, `tech-spec` → `contributor: ''`, `credit: ''`, `reported_by: []`; for `release` → keys `backlog_committed` (value `null`) and `waves: []`, and the body has a line `## Scope changes` followed by the table header `\| Task \| From \| Admitted at \| Count vs backlog_committed \|`; the other types (`plan`, `release-line`, `task`) gain none of the provenance keys (D1). No frontmatter comment names a WingFoil-internal id: no `dl-\d`, `spec-\d`, `P\d\.\d` in the scaffold template text (D2). (ii) The golden `test/fixtures/context/golden-payload-shipped-templates.md` is rewritten from the received payload of `test/core/context-shipped-templates.test.ts` (task-318 gate D4 (a): by hand from the failing diff, no write path); the qa notes name the run that produced it. The suite file itself is expected to stay unchanged. The golden's diff must show only the new keys in the four types' and the release's frontmatter blocks and the release's `## Scope changes` body. |
+
+All three ACs are red-first; none is fabricated (each absence above has its command). The red adds no new export,
+so no TS2305 red is expected; the reds are assertion failures. `npx jest test/lint --maxWorkers=2` before the red
+commit: the new scaffold comments use the em dash already present throughout `templates.ts`; the golden payload drops
+frontmatter comments (keys are re-serialized), so it gains no non-ASCII character from them.
+
+**Files expected to change.** `src/storage/templates.ts`; tests `test/storage/templates.test.ts`,
+`test/core/init-project.test.ts`, `test/docs/user-guide-scaffold.test.ts`, `test/memory/history-scaffold-copy.test.ts`
+(the constant), `test/memory/template-wording.test.ts` (only if qa places AC 3 (i) there); the golden
+`test/fixtures/context/golden-payload-shipped-templates.md` (its suite `test/core/context-shipped-templates.test.ts`
+named, expected unchanged); docs `docs/user-guide.md` (line 119 the subject; §4 lines 215–218 may add that the
+`dna.yaml` `init` writes shows `health` and a `team.members` approver as commented examples) and
+`docs/cli-reference.md` (line 229). `test/cli/init-command.test.ts`, named by the Implementation Notes, needs no
+change: it injects a mocked `init` and never sees the subject (`grep -n "chore\|P5.1.1)" test/cli/init-command.test.ts`
+→ only line 14, the describe title `runInit — wizard + --template (P5.1.1)`). No `.wingfoil/` file, no workflow, no spec.
+
+**Version bumps.** None. `docs/user-guide.md` and `docs/cli-reference.md` carry no `version:` header (`git show
+release/0.3:<file> | head -12`); no configuration file changes; the scaffold's own `version: 1` is a new project's
+first content revision and stays. No workflow changes, so no test pinning a phase list, step list or count is
+affected; `.wingfoil/` is untouched, so no `npm run check:mcp` proof is owed.
+
+**Existing tests run** (in the worktree, clean tree after the revert, `--maxWorkers=2`, no slot):
+`npx jest test/storage/templates.test.ts test/cli/init-command.test.ts test/memory/history-scaffold-copy.test.ts
+test/core/context-shipped-templates.test.ts test/docs/user-guide-scaffold.test.ts test/docs/cli-reference.test.ts
+test/memory/template-wording.test.ts test/core/init-project.test.ts test/core/builtin-directive-templates.test.ts
+test/cli/journey-0a.integration.test.ts test/core/format-init-scaffold.test.ts` → `Test Suites: 11 passed, 11
+total`, `Tests: 220 passed, 220 total`. The full suite with the prototype: above.
+
+**Spec amendments.** None. `spec-002` §paths keeps "`init` does not scaffold" `health`: a commented line does not
+map it (`paths health` still exits `1`, measured). No spec states the init commit subject.
+
+**Decisions for the approver** (design gate):
+
+- **D1 — which types carry the provenance fields.** (a) `adr`, `bug`, `decision-log`, `tech-spec` — exactly the
+  scaffolded types whose templates carry them in this repository (`grep -ln contributor .wingfoil/memory/templates/*`
+  → those four plus `change-proposal`, which the scaffold does not have); (b) every scaffolded type.
+  **Recommendation: (a)**, the alignment ruling R8 asks for and bug-338's "the types that take a contribution".
+- **D2 — comment wording in the scaffold.** The fields' comments in this repository cite `dl-020`, `dl-163`, a
+  `kind: repository` service with a `feedback_inbox` and `COLLABORATION.md`, none of which a scaffolded project has.
+  **Recommendation:** the scaffold keeps the fields and the meaning (`optional`, who originated it, free-text credit,
+  provenance only, restate never copy) with no internal id or repository-only concept, in the spirit of bug-409; the
+  same for `backlog_committed` / `waves` / `## Scope changes`, described without `commit-backlog`, `re-plan` or
+  `growth_threshold`, which the scaffold's workflows do not have.
+- **D3 — same-class instances: internal ids in the scaffold's comments.** The generated files' header comments name
+  seven internal ids (a scratch script over `templateScaffold(resolveTemplate('scrum'))` printed `dna.yaml:1 P2.4`,
+  `memory.yaml:1 P1.13`, `memory.yaml:4 REQ-STATE-08`, `memory.yaml:37 spec-001`, `roles.yaml:1 P3.2,P3.7`,
+  `roles.yaml:27 REQ-SEC-08`, `workflows.yaml:1 P4.1`). bug-409's Expected Behavior is about the commit subject only.
+  (a) Remove them in this task (W0-R6: same class, same file); (b) leave them and file a follow-up bug.
+  **Recommendation: (b)** — a different surface (file comments a user may edit, not the history), and `roles.yaml`
+  / `workflows.yaml` are outside the files this task's ACs name; the approver may prefer (a), which costs seven
+  comment lines and no test (`grep -rn "Project DNA (P2.4) — scaffolded\|schema (P1.13) — scaffolded" test/` → none
+  of the scaffold generator's; `test/directives/roles-edit.test.ts:23` holds its own copy).
+- **D4 — where the `health` example sits.** (a) After `runs:` at the end of `paths:` (prototype): after `dna add
+  paths.health` the real key lands above the comment, which then still says "does not map it"; (b) in the header
+  comment above `paths:`, next to the `runs` sentence, so the added key never sits above a stale comment.
+  **Recommendation: (a)**, the device of `technologies` / `agents` (the example next to where the key goes); the
+  same staleness already holds for those two after a `dna add`.
+- **D5 — the scaffolded `memory.yaml`.** Leave it unchanged (no `growth_threshold`, no new `required:`).
+  **Recommendation: yes**: the scaffold's workflows read neither, and a change there would cross `task-313`'s new
+  load-time checks for no behaviour.
+- **D6 — the docs quote.** user-guide §4 (lines 215–218) gains one sentence that the scaffold shows `health` and an
+  approver member as commented examples. **Recommendation: yes**, so the guide states what the file now shows.
+- **D7 — `SCAFFOLD_SUBJECT` in `test/memory/history-scaffold-copy.test.ts`.** Updated by qa in red to the new
+  subject (a fixture constant the test commits itself, not an assertion of `init`'s output). **Recommendation: yes.**
+
+**Risks for the other open w1 tasks.** `task-312` (dna.yaml in-place edits, `src/dna`, `src/validation/warning.ts`):
+no file overlap (this task touches `src/storage/templates.ts` only), but its in-place edit code runs over the new
+commented blocks of the scaffold when a user adds a member or a `health` path; this task's tests pin only exit codes
+and loaded values, never the layout after `dna add`, so a `task-312` change of placement does not break them.
+Whichever of the two merges second runs the other's scaffold-based tests after `git merge --no-edit release/0.3`.
+Any later task that changes a shipped Memory template regenerates the shipped-templates golden again.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
