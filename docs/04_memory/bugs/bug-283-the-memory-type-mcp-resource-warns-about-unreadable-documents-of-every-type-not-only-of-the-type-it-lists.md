@@ -59,3 +59,15 @@ Every unreadable Memory document in the repository is reported on every typed re
 
 Captured on 2026-10-07 by `bug-ingest-rel-v0.3-w3b1-review-findings-plan`, from `task-195`'s review (W3 B1,
 `dev-loop-rel-v0.3-plan`), reproduced against `main` at `0962f85f`.
+
+### Retrospective
+
+- Fixed by `task-314`: every typed read (`wingfoil://memory/{type}`, `wingfoil://memory/{type}/{id}`, `memory search
+  --type`, the at-commit lookup behind `agent execute`, and the read of one type behind the WIP-limit count,
+  `loadTypeDocumentCopiesAtRevs` / `requireWipSlot`) reports an unparsable document or a link only when the
+  type's `path` pattern can produce its path (`spec-017` §1.4, `pathPatternRegExp`, now shared with the workflow
+  deduction), and a newer-format document only when its `type:` is the type read. The Notes' shared-prefix limit
+  holds only for a pattern with a directory token: `release` and `release-line` are told apart by their full
+  patterns; `task`'s `docs/04_memory/{release}/{id}.md` still produces every path under `docs/04_memory/`, so a typed
+  read of `task` reports every unreadable file there. Lesson: a scan that reports before it filters reports to the
+  wrong reader; the filter's rule has to reach the report.
