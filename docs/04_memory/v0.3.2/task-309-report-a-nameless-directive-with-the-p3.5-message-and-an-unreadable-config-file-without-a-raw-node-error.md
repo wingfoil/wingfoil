@@ -419,6 +419,49 @@ Left uncommitted in the worktree (`git status --short` → the two bug files, ` 
   the Retrospective subsection the closing task-309 owes the bug: an unreadable configuration file is a
   ConfigFileUnreadableError mapped to IO on every working-tree reader."`
 
+### independent review (2026-10-30) and fixes (developer)
+
+Independent review at `e633a70a7`: approve with fixes, 0 blockers, 2 should-fix, 2 follow-ups (filed by the
+orchestrator as `bug-454`, `bug-455`). Fix commit `957fe4ecb` (`git show --stat 957fe4ecb` → `src/core/loaders.ts`,
+`test/core/config-file-unreadable-paths.test.ts`); no red file touched.
+- **Should-fix 1 (same class, D5 reader).** `loadWorkflowsYaml`'s `read` no longer pre-checks with `documentExists`
+  (`existsSync`, false for a symbolic-link loop, so a looping manifest read as an empty registry and a looping include as
+  `E_WORKFLOW_FILE_NOT_FOUND`). It reads in a `try`: `ENOENT` (a dangling link included) and `ENOTDIR` (a parent that is a
+  file) return `null`, as the pre-check read them; any other errno goes through `configReadError`. Keeping `ENOTDIR`
+  absent is my choice, so that only the loop changes behaviour; the review asked for `ENOENT` only — the approver may
+  rule otherwise. `documentExists` is no longer imported by `src/core/loaders.ts` (`grep -n documentExists
+  src/core/loaders.ts` → no output). New pins in my own file, describe "loadWorkflowsYaml — a looping workflows file is
+  unreadable, not absent": the manifest a link to itself → `.wingfoil/workflows.yaml cannot be read (ELOOP)`, `IO`; the
+  include `workflows/custom/bug-ingest.yaml` a link to itself → `… cannot be read (ELOOP)`; positive case, the include a
+  dangling link → still `E_WORKFLOW_FILE_NOT_FOUND`, `included workflow file not found: workflows/custom/bug-ingest.yaml`.
+  `npx jest --maxWorkers=2 test/core/config-file-unreadable-paths.test.ts` → `Tests: 6 passed, 6 total`; with the
+  reader of `e633a70a7` in the working tree (then put back) → `Tests: 2 failed, 4 passed`, the two ELOOP pins.
+- **Should-fix 2 (text).** My self-review line above ("bug-251's Expected Behavior holds in full") over-claims: it holds
+  for the configuration readers this task changed, not for two write paths that still read their file with Node's raw
+  error and the host path — `directive assign` (`roles.yaml`, `src/core/directive-assign.ts:381–382`) and `workflow create`
+  / `remove` (`workflows.yaml`, `src/core/workflow-create-remove.ts:190–191`, `:276`), outside this task's files and
+  filed as `bug-454`. The bug-251 Retrospective (pending amendment) and its `--reason` are reworded to claim the readers
+  only, name the part left out with `bug-454`, and, since the text lists readers, `bug-455` (`directives list` takes a
+  looping `roles.yaml` for an absent one).
+
+Gates on `957fe4ecb`, the pending amendments in the tree: `npm run lint` → exit 0; `npm run typecheck` → exit 0;
+targeted (`npx jest --maxWorkers=2` on the 7 red files, my file, `test/core/loaders.test.ts`,
+`test/core/loaders-at-rev.test.ts`, `test/core/workflow-registry-template-not-file.test.ts`,
+`test/mcp/read-only-resources.test.ts`) → `Test Suites: 12 passed`, `Tests: 164 passed`; `npx jest --maxWorkers=2
+test/lint test/docs` → `Test Suites: 42 passed`, `Tests: 462 passed`; full suite after `waitslot.sh`, `npm test --
+--maxWorkers=2` → `Test Suites: 522 passed, 522 total`, `Tests: 9195 passed, 9195 total` (`Time: 782.192 s`; the
+`test/storage/git-root.test.ts` failure of the refactor run is gone: `ls -ld /tmp/.git` → `No such file or directory`).
+T4: `git log --first-parent --no-merges --format=%h 70531e91e..HEAD -- <the seven red files>` → no output. Base:
+`git rev-list --count HEAD..origin/release/0.3` → `0`. Status stays `in-review`.
+
+**Pending amendments (approver), final list** (uncommitted; supersedes the list above for bug-251):
+- `bug-025-directive-validation-message-not-emitted` — appends `### Retrospective`. `--reason "Add the Retrospective
+  subsection the closing task-309 owes the bug: the P3.5 message is worded in parseDirectiveFile for every absent required
+  key."`
+- `bug-251-…-over-mcp` — appends `### Retrospective`. `--reason "Add the Retrospective subsection the closing task-309
+  owes the bug: an unreadable configuration file is a ConfigFileUnreadableError mapped to IO on the configuration readers;
+  the two write paths left out are bug-454."`
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
