@@ -46,6 +46,108 @@ keeps jest's agent variables. `bug-407`: `n -d exec` is documented without a wri
        reject's `Reason:` (read with `wingfoil memory history <task-id>`), each with the command that
        shows it resolved and what that command printed; then what else changed on the next pass. -->
 
+### design (architect, 2026-10-30)
+
+**Inputs read.** `depends_on: [task-319]` (dl-015): its Execution Notes are read; its merge `f8e1387f5` is in this
+branch's history (`git merge-base --is-ancestor f8e1387f5 HEAD` → true). What binds this task: `bindings.yaml` is at
+2.8 on `release/0.3` (task-319), so this branch's bump is 2.8 → 2.9 with its history entry after the 2.8 one; the
+tests that pin `bindings.yaml`'s version all assert "≥" (list below). Ratified sources: `dl-089` and `dl-015` `ready`
+(`grep -m1 "^status"`). The catalogue's Q14 is "median age in days since their `add` commit"
+(`docs/08_health/metrics.yaml` line 282): following a rename keeps that meaning, so no catalogue change. No spec,
+directive or `.feature` names `measure.cjs`'s failure reasons, its tool environment or `N_PREFIX`; no pending
+amendment is expected (D2 on `dl-089`).
+
+**The defects, reproduced on this base** (scratch outside the worktree, not committed):
+- `bug-357` (a): npm 11.6.2 (`npm --version`), a package whose `prepare` runs `npm run build` and `build` is `exit 2`:
+  `npm ci` → exit 2, stdout the banners `> lc@1.0.0 prepare` / `> npm run build` / `> lc@1.0.0 build` / `> exit 2`,
+  stderr `npm error code 2`, `npm error path <dir>`, `npm error command failed`, `npm error command sh -c npm run
+  build` and the log pointer. `reasonLine` keeps `npm error code 2` (lines 1209–1211), so `failure` (line 1236)
+  gives `npm ci failed (exit 2): npm error code 2`: no script. Two more real runs: a direct `"prepare": "exit 4"`
+  (banner `> lc2@1.0.0 prepare` / `> exit 4`, stderr `npm error command sh -c exit 4`) and a `file:` dependency whose
+  `install` is `exit 3` (stdout empty, no banner; stderr `npm error command sh -c exit 3`). `npm run build` alone
+  with `exit 2` prints nothing on stderr (exit 2), so Q01 and Q02, whose reasons already name their script, are
+  unaffected; `npm pack` runs `--ignore-scripts` (line 2206) and `npm ls`/`npm view` run no script: the lifecycle
+  case is `npm ci`'s.
+- `bug-357` (b): a scratch repository, a decision-log added by a plain commit at `old/dl-001.md` (2026-09-01), moved
+  with `git mv` to `new/` (2026-09-05): `git log --diff-filter=A --format=%ct HEAD -- new/dl-001.md` → the move's
+  time `1788602400`; with `--follow` → `1788256800`, the add. On this repository the fallback is reached by no
+  in-discussion decision-log today (a loop over the 31 `grep -l "^status: in-discussion" docs/04_memory/design/dls/*.md`
+  printing those with no `wf(decision-log): add` subject naming them → no line), so Q14's figures here do not move.
+- `bug-385`: `TOOL_ENV_DROPPED` (line 1130) has six names, no agent variable; `node_modules/@jest/core/build/index.js`
+  line 1010 lists the eleven `AGENT_ENV_VARS` (`AI_AGENT`, `AUGMENT_AGENT`, `CLAUDE_CODE`, `CLAUDECODE`,
+  `CODEX_SANDBOX`, `CODEX_THREAD_ID`, `CURSOR_AGENT`, `GEMINI_CLI`, `GOOSE_PROVIDER`, `OPENCODE`, `REPL_ID`).
+- `bug-407`: `grep -c N_PREFIX` on `scripts/release-health/measure.cjs`, `.wingfoil/workflows/bindings.yaml` and
+  `.wingfoil/WORKFLOW.md` → `0` each. On this machine (`n --version` → 10.2.0, `/usr/local/n` owned by root):
+  `n -d exec 22.12.0 node --version` → `mkdir: cannot create directory '/usr/local/n/versions/node/22.12.0':
+  Permission denied` and `Error: sudo required (or change ownership, or define N_PREFIX)`; with `N_PREFIX` set to a
+  writable directory holding 22.12.0 → `v22.12.0`. The same form without `N_PREFIX` is in `.wingfoil/WORKFLOW.md`
+  line 460 (D1) and in `dl-089` line 463 (D2).
+
+**AC classification and what qa pins.** AC 3 is reclassified red-first (D3): the text it pins is not written yet.
+
+| AC | Class | Observable, interface, test file |
+|----|-------|----------------------------------|
+| 1a npm script | red-first | `measureToolchain(tree, scratch, { tools })` with `test/release-health/measure.test.ts`'s `toolTree()` / `stubTools({ install: { status, stdout, stderr } })`, next to the existing "npm ci failing" case. Fixtures copied from real `npm ci` runs (command written in the notes; home directory redacted as the existing fixtures do). Each of the seven entries is `not-measurable` with exactly: (i) nested prepare → `npm ci failed (exit 2): npm error code 2 (script prepare: npm run build)`; (ii) direct prepare → `npm ci failed (exit 4): npm error code 4 (script prepare: exit 4)`; (iii) dependency install script, no banner → `npm ci failed (exit 3): npm error code 3 (script: exit 3)`. The existing EUSAGE, E404 and ELSPROBLEMS reasons stay as they are (already pinned; no `npm error command` line there). |
+| 1b Q14 `--follow` | red-first | `measureRelease(root, { release: 'v0.2', at, previous, offline: true, toolchain: false })` in `test/release-health/measure-followups.test.ts` with its `repo()` / `baseFiles(true)` builders: a decision-log `in-discussion` added by a plain commit (no `wf(decision-log): add`) at a path outside the type's `path` on DAY0, moved with `git(root, ['mv', …])` to `docs/memory/dls/<id>.md` and committed on a later day, the point later still. Q14 is `{ count: 1, median_age_days: <point − DAY0 in days> }`, `raw.oldest_age_days` the same (today it is counted from the move). |
+| 2 agent variables | red-first | Same `measure.test.ts` harness: set all eleven names in `process.env` for the case (restored after it), run `measureToolchain`, and for every recorded call `call.env[name]` is `undefined` for each of the eleven; `PATH`, `WINGFOIL_LATENCY` and `GIT_DIR` as the existing case. |
+| 3 `N_PREFIX` docs | red-first (was characterization) | `test/release-health/bindings-and-deps.test.ts`: in the header of `scripts/release-health/measure.cjs`, the raw text of `.wingfoil/workflows/bindings.yaml` (and `.wingfoil/WORKFLOW.md` if D1 is yes), `n -d exec` occurs at least once and every occurrence is immediately preceded by `N_PREFIX=<non-space> ` on the same line; plus `bindings.yaml` `version` ≥ 2.9 with a 2.9 history entry naming `task-320` (≥ and the history line, bug-314). |
+
+`failure`, `reasonLine`, `q14` and `TOOL_ENV_DROPPED` stay unexported: every case goes through the existing exports
+`measureToolchain` and `measureRelease`, so no TS2305 red. Before the red commit qa runs `npx jest test/lint
+--maxWorkers=2` (no fabricated stderr: every stub's stdout and stderr come from the real runs above).
+
+**Intended implementation** (green). `failure` appends ` (script <event>: <command>)` when the output carries npm's
+`npm error command <cmd>` line other than `command failed` (both `npm error` and `npm ERR!` prefixes; a leading
+`sh -c ` dropped), `<event>` read from the last two-line banner in stdout (`> <name>@<version> <event>` then
+`> <command>`) whose command equals it, else ` (script: <command>)`; no `npm error command` line → the reason is as
+today. Q14's fallback adds `--follow` to its `git log --diff-filter=A` (single path). `TOOL_ENV_DROPPED` gains the
+eleven jest names, its comment saying why (a run's tools are the same whoever launches it). Header lines 37–48
+(toolchain environment, `N_PREFIX`, the reason's script) and 95–96 (Q14 follows renames) and the comment at line 1956
+updated; the `bindings.yaml` comment as below.
+
+**Files to touch.** `scripts/release-health/measure.cjs`; `.wingfoil/workflows/bindings.yaml` (comment and version
+only); `.wingfoil/WORKFLOW.md` line 460 if D1 is yes; tests `test/release-health/measure.test.ts`,
+`test/release-health/measure-followups.test.ts`, `test/release-health/bindings-and-deps.test.ts`. **Version bumps:**
+`bindings.yaml` 2.8 → 2.9 only (`measure.cjs` and `WORKFLOW.md` carry no `version:`). No workflow, phase or step
+changes, so no phase-list or step-count pin is affected.
+
+**Tests that pin `bindings.yaml`'s version or its release-health tokens:** `test/release-health/bindings-and-deps.test.ts`
+(≥ 1.9; the two release-health vectors, which the trial edit below kept passing), `test/core/dev-loop-v1-6.test.ts` (≥ 1.3),
+`test/core/workflow-manual-check.test.ts` (≥ 2.5), `test/core/workflow-integration-branch.test.ts` (≥ 2.3, ≥ 2.8),
+`test/core/release-publishing-merge-forward.test.ts` (≥ 2.7), `test/cli/evidence-only-tag.test.ts` (≥ 2.2),
+`test/lint/version-bump.test.ts` (the bump itself); all "≥", none breaks at 2.9.
+
+**Existing tests and the `.wingfoil/` proof, on this base.**
+- `bash <slot> && npx jest test/release-health test/cli/latency-report-pass.test.ts test/docs/workflow-md.test.ts
+  <the 30 suites of grep -rln "bindings.yaml" test/ ending .test.ts> test/lint --maxWorkers=2` → `Test Suites: 56
+  passed, 56 total`, `Tests: 1119 passed, 1119 total`.
+- `npm run check:mcp` on the clean tree → exit 0 (pinned 0.3.1 and the build both serve prompts 8, resources 4).
+- The planned `bindings.yaml` edit applied on trial (comment: `N_PREFIX=<a directory you can write> n -d exec
+  <NODE_VERSION>`, why, and the `npx -p node@<NODE_VERSION>` form; `version: 2.9` with its entry), then reverted
+  (`git checkout`, `git status --short` → empty): `npm run check:mcp` → exit 0, same two lines;
+  `node node_modules/wingfoil-released/dist/cli.js workflow list --format json` → exit 0, empty stderr;
+  `npx jest test/lint/version-bump.test.ts test/release-health/bindings-and-deps.test.ts test/workflow/bindings.test.ts
+  --maxWorkers=2` → `3 passed`, `Tests: 52 passed`.
+
+**Decisions for the approver.**
+- D1 — `.wingfoil/WORKFLOW.md` line 460 gives the same `n -d exec` form without `N_PREFIX`; it is not in the task's
+  declared files. Recommend **yes, fix it in this task** (one sentence, the same defect and the same Expected
+  Behavior of `bug-407`), and pin it with AC 3.
+- D2 — `dl-089` (ready) line 463 says "measuring under the pin means running the same vector under `n -d exec
+  <NODE_VERSION>`", a note recorded for its next ratification. Recommend **no amend**: it records the rule, not the
+  command an operator types; the operator's forms are the header, the binding comment and `WORKFLOW.md`.
+- D3 — AC 3 reclassified red-first (the text is absent: `grep -c N_PREFIX` → 0 on each file). Recommend **accept**.
+- D4 — the reason's form ` (script <event>: <command>)` / ` (script: <command>)`; a dependency's script has no banner,
+  so its event cannot be read from npm's output (only its command). Recommend **accept**; the alternative, naming
+  `npm error path`, would put a path outside the worktree into a reason for a `file:` dependency.
+- D5 — `bug-385` offers either dropping the variables or giving the spawned jest an explicit reporter. Recommend
+  **drop** (the AC's form): one place, every tool, no change to the commands the catalogue names.
+
+**Risks.** None of `task-310`, `task-312`, `task-313`, `task-321` declares `measure.cjs`, `bindings.yaml`,
+`WORKFLOW.md` or the three test files (their Implementation Notes' `Files:`). The eleven names are a second copy of
+jest's list (the first is `test/cli/latency-report-pass.test.ts` lines 28–31): a jest upgrade adding one changes
+neither, as `bug-385` notes.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
