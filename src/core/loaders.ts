@@ -16,7 +16,7 @@ import { DirectiveFrontmatter, RolesYaml } from '../directives/schema';
 import { checkDirectiveVersion } from '../directives/version';
 import { DnaYaml } from '../dna/schema';
 import { MemoryYaml } from '../memory/schema';
-import { documentExists, extractFrontmatter, readDocument, readPathAtRev, readPathsAtRev } from '../storage';
+import { extractFrontmatter, readDocument, readPathAtRev, readPathsAtRev } from '../storage';
 import {
   Diagnostic,
   DiagnosticsError,
@@ -182,17 +182,62 @@ export class ConfigFileMissingError extends Error {
 }
 
 /**
+ * A configuration file the read needs exists but cannot be read (task-309, `bug-251`): a directory where
+ * the file should be, a mode that denies the read, a symbolic-link loop. Like
+ * {@link ConfigFileMissingError} the message names the file repository-relative and the cause, never the
+ * host's absolute path nor Node's raw text, and the original errno is kept as `code`. `coreErrorOf` maps
+ * it to the `IO` refusal (exit `1`): the storage failed, the project's configuration did not.
+ *
+ * - `EACCES` / `EPERM`: `<rel> cannot be read: permission denied`;
+ * - `EISDIR`: `<rel> is a directory, not a file`;
+ * - any other errno: `<rel> cannot be read (<code>)`.
+ */
+export class ConfigFileUnreadableError extends Error {
+  /**
+   * @param relativePath - the unreadable file, relative to the repository root (`.wingfoil/dna.yaml`).
+   * @param code - Node's errno for the failed read (`EACCES`, `EISDIR`, …), kept as it was.
+   */
+  constructor(
+    readonly relativePath: string,
+    readonly code: string,
+  ) {
+    super(unreadableMessage(relativePath, code));
+    this.name = 'ConfigFileUnreadableError';
+  }
+}
+
+/** {@link ConfigFileUnreadableError}'s message for `code` (the design gate's D4, task-309). */
+function unreadableMessage(relativePath: string, code: string): string {
+  if (code === 'EACCES' || code === 'EPERM') return `${relativePath} cannot be read: permission denied`;
+  if (code === 'EISDIR') return `${relativePath} is a directory, not a file`;
+  return `${relativePath} cannot be read (${code})`;
+}
+
+/**
+ * The WingFoil error a failed read of the configuration file `relativePath` becomes: `ENOENT` is a
+ * {@link ConfigFileMissingError}, any other errno a {@link ConfigFileUnreadableError}. An error without a
+ * string `code` (not a file-system failure: a programmer error) is returned as it was, for the caller to
+ * re-throw unchanged.
+ */
+function configReadError(error: unknown, relativePath: string): unknown {
+  const code = (error as NodeJS.ErrnoException | null)?.code;
+  if (typeof code !== 'string') return error;
+  if (code === 'ENOENT') return new ConfigFileMissingError(relativePath);
+  return new ConfigFileUnreadableError(relativePath, code);
+}
+
+/**
  * Read a working-tree configuration file named repository-relative (`.wingfoil/dna.yaml`): a missing one
- * is a {@link ConfigFileMissingError}, any other failure propagates unchanged. The relative path is also
- * the label every parse and validation issue carries (task-179, `bug-245`), as the `HEAD:`-labelled
- * readers already do.
+ * is a {@link ConfigFileMissingError}, one that exists but cannot be read a {@link ConfigFileUnreadableError}
+ * (task-309, `bug-251`), and a failure that is not a file-system one propagates unchanged. The relative
+ * path is also the label every parse and validation issue carries (task-179, `bug-245`), as the
+ * `HEAD:`-labelled readers already do.
  */
 function readConfigFile(root: string, relativePath: string): string {
   try {
     return readDocument(join(root, relativePath));
   } catch (error) {
-    if ((error as NodeJS.ErrnoException | null)?.code === 'ENOENT') throw new ConfigFileMissingError(relativePath);
-    throw error;
+    throw configReadError(error, relativePath);
   }
 }
 
@@ -483,9 +528,18 @@ function parseYamlOrDiagnostic(
 export function loadWorkflowsYaml(root: string): WorkflowsLoadResult {
   const configDir = join(root, '.wingfoil');
   return loadWorkflowsFrom({
+    // Absent is `null` (an empty registry, or `E_WORKFLOW_FILE_NOT_FOUND`): `ENOENT` (a dangling link
+    // included), or `ENOTDIR` (a parent that is a file), as the former `existsSync` pre-check read them.
+    // Any other failure — a directory, a denied mode, a symbolic-link loop — is refused as
+    // `readConfigFile` refuses it (task-309, `bug-251`, D5 (a)), never mistaken for an absent file.
     read: (file) => {
-      const path = join(configDir, file);
-      return documentExists(path) ? readDocument(path) : null;
+      try {
+        return readDocument(join(configDir, file));
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException | null)?.code;
+        if (code === 'ENOENT' || code === 'ENOTDIR') return null;
+        throw configReadError(error, `.wingfoil/${file}`);
+      }
     },
     // Repository-relative, never the host path (task-179, `bug-245`).
     label: (file) => `.wingfoil/${file}`,
@@ -673,6 +727,38 @@ export interface DirectiveFile {
 export const DIRECTIVES_DIR_PATH = '.wingfoil/directives' as const;
 
 /**
+ * The top-level keys a directive's frontmatter must carry: each {@link DirectiveFrontmatter} field that
+ * rejects an absent value (`id`, `name`, `type`, `kind`, `title` today), read from the schema so the list
+ * cannot drift from it.
+ */
+const REQUIRED_DIRECTIVE_KEYS: ReadonlySet<string> = new Set(
+  Object.entries(DirectiveFrontmatter.shape)
+    .filter(([, field]) => !field.safeParse(undefined).success)
+    .map(([key]) => key),
+);
+
+/**
+ * Run `validate` (the directive frontmatter's Zod pass) and word each issue about a required key that
+ * `data` does not carry as P3.5's message, `invalid directive: missing required field '<key>'` (task-309,
+ * `bug-025`; design gate D1 (a), D2 (a)). Code, path, file, issue order and exit code are unchanged; a key
+ * that is present with the wrong value (`null`, a number) keeps Zod's own text.
+ */
+function withMissingFieldMessages<T>(validate: () => T, data: unknown): T {
+  try {
+    return validate();
+  } catch (error) {
+    if (!(error instanceof ValidationError)) throw error;
+    const present = typeof data === 'object' && data !== null ? (data as Record<string, unknown>) : null;
+    const absent = (key: string): boolean =>
+      present !== null && REQUIRED_DIRECTIVE_KEYS.has(key) && !Object.prototype.hasOwnProperty.call(present, key);
+    const issues = error.issues.map((issue) =>
+      absent(issue.path) ? { ...issue, message: `invalid directive: missing required field '${issue.path}'` } : issue,
+    );
+    throw new ValidationError(issues, error.exitCode);
+  }
+}
+
+/**
  * The Directives pillar's per-file parse, over bytes that may come from anywhere — the working-tree
  * file ({@link loadDirectives}) or a git revision ({@link loadDirectivesAtHead}). `filePath` is a
  * label only: it rides every issue this raises, so an error names the baseline it came from
@@ -707,7 +793,7 @@ function parseDirectiveFile(
   // `version` never fails the pillar (task-144 review, R1): a lossy number or a wrong type is a warning.
   const versionCheck = checkDirectiveVersion(data, frontmatterText);
   if (versionCheck.warning !== null) warn(versionCheck.warning);
-  const frontmatter = runValidation(DirectiveFrontmatter, versionCheck.data, filePath);
+  const frontmatter = withMissingFieldMessages(() => runValidation(DirectiveFrontmatter, versionCheck.data, filePath), versionCheck.data);
   // `join`, so `DirectiveFile.path` carries the platform separator on both loaders — `requireCustomAsset`
   // and `selectDirectivesById` see one spelling whichever baseline produced the file.
   return { path: join('directives', ...relativePath.split('/')), frontmatter };

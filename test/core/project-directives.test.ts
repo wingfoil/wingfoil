@@ -25,13 +25,15 @@
  * applied to REQ-SEC-10's guard. It belongs in this file, and in this task, because the P3.5 change is
  * what arms the bug — see the file-level note there.
  */
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { exitCodeForResult, type CoreResult } from '../../src/core';
 import type { BuiltinTemplateSource } from '../../src/core/builtin-integrity';
 import { initWingfoilProject, initWingfoilStorage } from '../../src/core/init';
-import { git, makeTempGitRepo, removeTempDir } from '../storage/helpers/git-fixture';
+import { loadDirectiveInventory, loadDirectivesAtHead } from '../../src/core/loaders';
+import { ValidationError } from '../../src/validation';
+import { commitAll, git, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
 import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
 
 /** The two production write paths, each invoked with an optional REQ-SEC-10 source-list override. */
@@ -147,3 +149,103 @@ describe.each(WRITE_PATHS)(
     });
   },
 );
+
+/**
+ * task-309 (`bug-025`, P3.5) — the scenario "Error - a directive file missing required header fields":
+ *
+ *   Given a custom directive file lacks its required "name" header
+ *   When directives are loaded
+ *   Then loading reports the file as invalid
+ *   And the message is "invalid directive: missing required field 'name'"
+ *
+ * Design gate (approver, 2026-10-30): D1 (a) the issue's `message` is exactly the scenario's string and the
+ * rendered refusal keeps `E_VALIDATION name (<file>): ` in front (the file the first `Then` reports); D2 (a)
+ * every required key (`id`, `name`, `type`, `kind`, `title`) gets the same wording when ABSENT, while `null`
+ * and a wrong type keep Zod's own text; D3 (a) both baselines (working tree and HEAD) word it alike.
+ *
+ * The fixture is bug-025's file verbatim.
+ */
+describe('P3.5 — Error - a directive file missing required header fields (task-309, bug-025)', () => {
+  const FEATURE = join(
+    __dirname, '..', '..', 'docs', '02_requirements', '02_bdd', 'features', 'p3-directives', 'P3.5-project-directives.feature',
+  );
+  const FILE = '.wingfoil/directives/custom/no-direct-db-access.md';
+  const NAMELESS = '---\nid: no-direct-db-access\ntype: directive\nkind: custom\ntitle: "No direct DB access"\n---\n\nrule body\n';
+  const missing = (key: string): string => `invalid directive: missing required field '${key}'`;
+  const RENDERED = `E_VALIDATION name (${FILE}): ${missing('name')}`;
+
+  let repo: string;
+  beforeEach(() => {
+    repo = makeTempGitRepo();
+    const scaffolded = initWingfoilProject(repo, 'Scrum');
+    if (!scaffolded.ok) throw new Error(`fixture bug: wingfoil init failed — ${scaffolded.error.message}`);
+  });
+  afterEach(() => removeTempDir(repo));
+
+  /** The error a loader throws, or a fixture failure when it throws nothing. */
+  function thrownBy(load: () => unknown): ValidationError {
+    let thrown: unknown;
+    try {
+      load();
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(ValidationError);
+    return thrown as ValidationError;
+  }
+
+  it('the pinned message is the one the feature file states (the pin follows the contract)', () => {
+    const feature = readFileSync(FEATURE, 'utf-8');
+    expect(feature).toContain(`And the message is "${missing('name')}"`);
+  });
+
+  it('working tree: loadDirectiveInventory reports the file invalid with the P3.5 message', () => {
+    writeFixtureFile(repo, FILE, NAMELESS);
+
+    const error = thrownBy(() => loadDirectiveInventory(repo));
+
+    expect(error.issues).toEqual([{ code: 'E_VALIDATION', path: 'name', file: FILE, message: missing('name') }]);
+    expect(error.message).toBe(RENDERED);
+    expect(error.message).not.toContain(repo);
+  });
+
+  it('HEAD: loadDirectivesAtHead reports the committed file invalid with the P3.5 message, labelled HEAD:', () => {
+    writeFixtureFile(repo, FILE, NAMELESS);
+    commitAll(repo, 'fixture: a directive with no name');
+
+    const error = thrownBy(() => loadDirectivesAtHead(repo));
+
+    expect(error.issues).toEqual([{ code: 'E_VALIDATION', path: 'name', file: `HEAD:${FILE}`, message: missing('name') }]);
+    expect(error.message).toBe(`E_VALIDATION name (HEAD:${FILE}): ${missing('name')}`);
+  });
+
+  it('D2 (a): every other absent required key is worded the same way, in schema order', () => {
+    writeFixtureFile(repo, '.wingfoil/directives/custom/only-name.md', '---\nname: y\n---\n\nrule body\n');
+
+    const error = thrownBy(() => loadDirectiveInventory(repo));
+
+    expect(error.issues).toEqual(
+      ['id', 'type', 'kind', 'title'].map((key) => ({
+        code: 'E_VALIDATION',
+        path: key,
+        file: '.wingfoil/directives/custom/only-name.md',
+        message: missing(key),
+      })),
+    );
+  });
+
+  it.each([
+    ['null (`name: ~`)', '~', 'Invalid input: expected string, received null'],
+    ['a number (`name: 42`)', '42', 'Invalid input: expected string, received number'],
+  ])('D2 (a): a name that is present but %s keeps Zod\'s own text', (_label, value, message) => {
+    writeFixtureFile(
+      repo,
+      FILE,
+      `---\nid: no-direct-db-access\nname: ${value}\ntype: directive\nkind: custom\ntitle: "No direct DB access"\n---\n\nrule body\n`,
+    );
+
+    const error = thrownBy(() => loadDirectiveInventory(repo));
+
+    expect(error.issues).toEqual([{ code: 'E_VALIDATION', path: 'name', file: FILE, message }]);
+  });
+});

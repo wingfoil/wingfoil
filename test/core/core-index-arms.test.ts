@@ -4,8 +4,8 @@
  * `directive create`, `directive remove` and `memory add` live with their siblings in
  * `write-guard-committed-paths.test.ts`; the arms here are the rest:
  *
- * - `loadOrError` re-throws a loader failure that is neither a `ValidationError` nor `ENOENT`
- *   (spec-006 §2: only expected domain failures become a `CoreResult`);
+ * - `loadOrError` maps an unreadable configuration file to the `IO` refusal (task-309, `bug-251`); its
+ *   re-throw of a failure that is no expected domain failure is `load-or-error-throw-arm.test.ts`;
  * - `dna remove` called with no options object at all (the MCP Tool's arguments are optional);
  * - `memory add`'s `singleOption` keeps the LAST of a repeated option;
  * - `memory add` re-throws a failure that is neither a `StorageError` nor a `ValidationError`;
@@ -19,7 +19,7 @@ import { execFileSync } from 'node:child_process';
 import { chmodSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { CORE_MODULES, initWingfoilProject, loadDnaYaml } from '../../src/core';
+import { CORE_MODULES, initWingfoilProject, loadDnaYaml, type CoreResult } from '../../src/core';
 import { exitCodeForResult } from '../../src/core/exit-code';
 import type { CoreFn } from '../../src/core/registry';
 import { captureDryRun } from '../../src/storage';
@@ -45,16 +45,19 @@ describe('src/core/index.ts arms with no other test (task-189, bug-161)', () => 
   });
   afterEach(() => removeTempDir(repo));
 
-  it('loadOrError: a loader failure that is not an expected domain failure propagates as a throw', async () => {
-    // A directory where `dna.yaml` should be: the read fails with EISDIR, which is neither a
-    // `ValidationError` nor ENOENT, so no `CoreResult` describes it.
-    // Pins CURRENT behaviour pending bug-251 (`readConfigFile` maps only ENOENT; the CLI then prints a
-    // bare `EISDIR` naming no file). bug-251's fix must move this test's trigger to another non-domain
-    // error: the arm itself (`refusal === null` -> throw) stays correct for programmer errors.
+  // task-309 (bug-251) moved this pin on purpose: an unreadable `dna.yaml` is now an expected domain
+  // failure (`ConfigFileUnreadableError` → `IO`, exit 1, design gate 2026-10-30, D4), so the EISDIR
+  // trigger reaches the `CoreResult` arm. The throw arm itself (`refusal === null` -> throw), which stays
+  // correct for programmer errors, is pinned by `load-or-error-throw-arm.test.ts`.
+  it('loadOrError: a dna.yaml that is a directory is the IO refusal naming the file, exit 1 (bug-251)', async () => {
     rmSync(join(repo, '.wingfoil', 'dna.yaml'));
     mkdirSync(join(repo, '.wingfoil', 'dna.yaml'));
 
-    await expect(op('dna', 'dnaShow')({ root: repo })).rejects.toMatchObject({ code: 'EISDIR' });
+    const result = (await op('dna', 'dnaShow')({ root: repo })) as CoreResult<unknown>;
+
+    expect(result.ok).toBe(false);
+    expect(result.ok === false && result.error).toEqual({ code: 'IO', message: '.wingfoil/dna.yaml is a directory, not a file' });
+    expect(exitCodeForResult(result)).toBe(1);
   });
 
   it('dna remove with no options object removes an optional leaf (the MCP Tool may send no options)', async () => {

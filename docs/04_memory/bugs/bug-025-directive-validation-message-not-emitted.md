@@ -2,7 +2,7 @@
 id: "bug-025-directive-validation-message-not-emitted"
 type: bug
 title: "Directive validation reports the file as invalid but never emits P3.5's required message"
-status: planned
+status: closed
 severity: "low"
 release-origin: "v0.2"
 release: "v0.3.2"
@@ -106,3 +106,7 @@ and tested (`test/directives/schema.test.ts:49`); do not re-open that.
   the uncovered clause be filed as an element rather than left as prose in a done task's notes.
 - `release:` deliberately left empty — scheduling is `release-planning`/`build-backlog`'s stamp
   (dl-016), not this report's.
+
+### Retrospective
+
+Closed by task-309: `parseDirectiveFile` (`src/core/loaders.ts`) words each absent required key of a directive's frontmatter (`id`, `name`, `type`, `kind`, `title`, read from the schema) as `invalid directive: missing required field '<key>'`, on the working-tree and the committed loaders alike, so `directives list`, `directive assign` / `remove` and the MCP role Prompts print the P3.5 message after `E_VALIDATION name (<file>): `; a key present with a wrong value keeps Zod's text. Lesson: the scenario's second `Then` was pinned only once a test read the message from the feature file itself.
