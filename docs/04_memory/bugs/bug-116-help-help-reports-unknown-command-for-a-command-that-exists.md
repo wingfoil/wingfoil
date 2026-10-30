@@ -2,7 +2,7 @@
 id: "bug-116-help-help-reports-unknown-command-for-a-command-that-exists"
 type: bug
 title: "`wingfoil help help` reports `unknown command 'help'` at exit 2 — the exit code is right and the sentence is false, because Commander's built-in help command is not in its own command list"
-status: planned
+status: closed
 severity: "low"
 release-origin: "v0.2"
 release: "v0.3.2"
@@ -59,3 +59,12 @@ about the discriminator `task-103` built rather than about this one word.
 - triage (2026-09-25): **low**. One invocation nobody types by accident, now failing loudly instead of
   quietly. Filed because the message is false and because the underlying shape generalises to any
   Commander built-in.
+
+### Retrospective
+
+- Fixed by `task-315` with the Expected Behavior's first option (design gate D1 (b)): `wingfoil help help`
+  prints the help command's own help at exit 0. The help request is recognised by consulting Commander's
+  built-in commands (`Help#visibleCommands` minus the registered ones), not by the string `help`; a renamed
+  built-in behaves the same (`test/cli/program.test.ts`, the `assist` rows). The design first proposed the
+  second option (a refusal at exit 2, as the release-planning ruling said); the specs' "help by name exits 0"
+  made the first one the cheaper fit.

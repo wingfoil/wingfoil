@@ -2,7 +2,7 @@
 id: "bug-115-the-closest-match-suggestion-never-fires-on-the-help-path"
 type: bug
 title: "`wingfoil memroy` suggests `memory`; `wingfoil help memroy` suggests nothing — the same typo gets help or no help depending on how it is reached"
-status: planned
+status: closed
 severity: "low"
 release-origin: "v0.2"
 release: "v0.3.2"
@@ -56,3 +56,10 @@ correctly-formatted suggestion when `bug-104` is decided — one pass, not two.
 
 - triage (2026-09-25): **low**. The message is correct and the exit code is right; a user loses a
   convenience on one of two routes to the same mistake. Schedule with `bug-104`.
+
+### Retrospective
+
+- Fixed by `task-315`: the help path now reuses the direct path's `closestCommand`/`unknownCommandHint` at the
+  level the help command was typed at, so `wingfoil help memroy` and `wingfoil memroy` print the same
+  `error:`/`hint:` lines (`test/cli/operand-error-shape.integration.test.ts`, task-315's AC 3 block). The
+  carve-out sat in two places, the code and `spec-005` §3.1, and both had to move together.
