@@ -108,9 +108,11 @@ export async function buildProgram(modules: readonly CoreModule[], options: Buil
   // `writeErr` below — and the outcome is re-classified as the help display it is
   // (`commander.helpDisplayed` at `0`), so `classifyParseOutcome` still chooses the code.
   program.exitOverride((error) => {
+    const parsed = classifyParseOutcome(error);
     const request = helpCommandRequest(program);
-    const answer = classifyParseOutcome(error).needsErrorLine ? builtinHelpSubject(request) : undefined;
-    const termination = classifyParseOutcome(answer !== undefined ? { code: 'commander.helpDisplayed', exitCode: 0 } : error);
+    const answer = parsed.needsErrorLine ? builtinHelpSubject(request) : undefined;
+    const termination =
+      answer === undefined ? parsed : classifyParseOutcome({ code: 'commander.helpDisplayed', exitCode: 0 });
     answer?.outputHelp();
     if (termination.needsErrorLine) {
       const { reason, hint } = incompleteInvocationReason(program, request);
@@ -134,8 +136,8 @@ export async function buildProgram(modules: readonly CoreModule[], options: Buil
   // `--format` is read when the error fires; Commander has parsed the root program's options by then,
   // wherever on the command line they stand. Installed before the first `.command()`, like the callback
   // above, because `copyInheritedSettings` copies the output configuration at registration time.
-  // The help Commander prints before a request for the built-in help command's own help is not written
-  // in any format: the request is answered on stdout by the callback above (task-315, `bug-116`).
+  // The help Commander prints before a request for the built-in help command's own help is withheld, in
+  // every format: the callback above answers that request on stdout (task-315, `bug-116`).
   program.configureOutput({
     writeErr: (text) => {
       if (activeFormat(program) === 'console' && builtinHelpSubject(helpCommandRequest(program)) === undefined) {
