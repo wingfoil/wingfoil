@@ -247,6 +247,114 @@ tsconfig.json` → exit `0`, no output. `npx jest test/lint --maxWorkers=2` → 
 **Unchanged, still true after the fix:** `program.test.ts` "`help <unknown>` gets the unknown-command line …"
 (`nosuchnoun`), and `missing-verb-exit-code.integration.test.ts` AC3/AC4 (not edited).
 
+### green (developer, 2026-10-30)
+
+**Green commit `69d854f5`** (`git log --oneline -1` → `69d854f52 fix(cli): task-315 — help hints the closest command,
+help help prints its own help (bug-115, bug-116)`), `src/cli/program.ts` only (`git show --stat --format= 69d854f5` →
+`src/cli/program.ts | 131 +++…`, `111 insertions(+), 20 deletions(-)`); no red file touched, `src/cli/suggest.ts` unchanged, as the design declared.
+
+- The literal `first === 'help'` is gone. `deepestCommand(program)` walks `program.args` through the registered
+  commands (the walk `commandsBeside` already did, factored out and reused by it); `builtinCommands(level)` is
+  `Help#visibleCommands(level)` minus `level.commands`; `helpCommandRequest(program)` is a help request when the operand
+  the walk stops at names one of those built-ins (by name, as `Command#_parseCommand` matches it), its subject the
+  operand after it.
+- AC 1: `incompleteInvocationReason(program, request)` gives a help request with a subject `unknown command
+  '<subject>'` plus `unknownCommandHint(closestCommand(subject, commandsBeside(program)))` when one is within
+  distance 2 — the same call `commanderRefusal` makes on the direct path. No request: the missing-operand shape, unchanged.
+- AC 2 under design gate D1 (b): when the subject names a built-in of its level (`builtinHelpSubject`), the exit
+  callback prints that built-in's help (`Command#outputHelp`, stdout) and re-classifies the outcome as
+  `{ code: 'commander.helpDisplayed', exitCode: 0 }`, so `classifyParseOutcome` still chooses the code (no second
+  decision site); `writeErr` withholds the root/noun help Commander writes to stderr before calling the callback, so
+  stderr stays empty. The help text is Commander's: `Usage: help [command]` / `display help for command` (the detached
+  built-in has no parent, so no `wingfoil` prefix — the red admits both).
+- The TSDoc of `incompleteInvocationReason` ("carries no `hint:` line … `bug-115`'s (v0.4)") is reworded to state the
+  cases; `grep -n "v0.4" src/cli/program.ts` and `grep -n "'help'" src/cli/program.ts` → no output (exit 1) each.
+
+**red → green.** `npx jest test/cli/program.test.ts test/cli/operand-error-shape.integration.test.ts --maxWorkers=2` →
+red: `Tests: 13 failed, 76 passed, 89 total` (red notes); green: `Test Suites: 2 passed, 2 total`, `Tests: 89 passed,
+89 total`. `npx tsc --noEmit -p tsconfig.json` → exit 0.
+
+Code build, from a scratch directory (`node <worktree>/dist/cli.js <args>`, exit, stdout head / stderr tail):
+`help help`, `help help help`, `memory help help`, `--format json help help` → `0`, stdout `Usage: help [command]` /
+`display help for command`, stderr empty; `help memroy` → `2`, `error: unknown command 'memroy'` / `hint: did you mean
+"memory"?`; `--format json help memroy` → `{"error":"unknown command 'memroy'","hint":"did you mean \"memory\"?"}`;
+`memory help addd` → `2`, `… 'addd'` / `hint: did you mean "add"?`; `memory help memroy`, `help nosuchnoun` → `2`, the
+`error:` line, no `hint:`; unchanged: `help`, `help dna`, `memory help add` → `0` with their help on stdout; `dna` →
+`2`, `error: missing required argument: <command>` / `hint: usage: wingfoil dna <command>`.
+
+### refactor (developer, 2026-10-30)
+
+**Refactor commit `4e0070f4`** (`git show --stat --format= 4e0070f4` → `docs/cli-reference.md | 2 ++`,
+`src/cli/program.ts | 10 ++++++----`): the parse outcome is classified once in the exit callback; D4's sentence in
+`docs/cli-reference.md` `### Exit codes`, after the `hint:` paragraph ("New in 0.3.2: the same holds after the help
+command — `wingfoil help memroy` and `wingfoil memory help addd` get the `hint:` line — and `wingfoil help help`
+prints the help command's own help at exit `0`."), worded for D1 (b). No `version:` bump: `head -3 docs/cli-reference.md`
+→ no frontmatter. No BDD scenario added (D4).
+
+Base: `git rev-list --count HEAD..release/0.3` → `0` at the start and at the end of refactor, no merge.
+T4: `git log --first-parent --no-merges --format=%h c61e9ebbb..HEAD -- test/cli/operand-error-shape.integration.test.ts
+test/cli/program.test.ts` → no output.
+
+Gates, run with the pending amendments in the working tree (heavy ones after `waitslot.sh`, `--maxWorkers=2`, one jest
+at a time):
+- Targeted (the design's list): `npx jest --maxWorkers=2 test/cli/suggest.test.ts test/cli/program.test.ts
+  test/cli/operand-error-shape.integration.test.ts test/cli/missing-verb-exit-code.integration.test.ts
+  test/cli/commander-parse-exit-codes.integration.test.ts test/cli/parse-error-format.integration.test.ts
+  test/cli/help-describes-every-command.test.ts test/core/exit-code.test.ts test/docs/cli-reference.test.ts
+  test/docs/exit-codes-parity.test.ts test/docs/command-surface-specs.test.ts test/docs/name-resolvability.test.ts
+  test/lint` → first run `Tests: 1 failed, 409 passed, 410 total`: `name-resolvability` flagged two backticked typo
+  commands in my first wording of the spec-005 amendment (`spec-005…|command|wingfoil memory help addd`,
+  `…|command|wingfoil memroy`); the amendment was reworded, then `npx jest --maxWorkers=2 test/docs` → `Test Suites: 29
+  passed, 29 total`, `Tests: 309 passed, 309 total` (the document-parity suites, `cli-reference.test.ts` included).
+- `npm test -- --maxWorkers=2` → `Test Suites: 1 failed, 518 passed, 519 total`, `Tests: 2 failed, 9161 passed, 9163
+  total` (923 s). The two failures are `test/storage/git-root.test.ts` "returns null when no ancestor directory contains
+  .git" (received `"/tmp"`) and "throws E_NO_GIT_ROOT when not inside a git repository at all" (received
+  `E_NOT_AT_GIT_ROOT`): environmental, not this task's — `ls -la /tmp/.git` → an empty directory, owner robypomper,
+  modified 2026-10-29 17:09 (before this task's red), which makes `/tmp` a git root for `findGitRoot`; `git diff --stat
+  release/0.3...HEAD -- src/storage test/storage` → no output. Not removed (outside the task); reported.
+- `npm run test:coverage -- --maxWorkers=2` → `All files | 99.31 | 97.42 | 98.19 | 99.68` (statements, branches,
+  functions, lines; > 80 % on every column), the same two failures; `src/cli/program.ts | 100 | 94.28 | 100 | 100`.
+  Against the w0 batch's `99.37 | 97.51 | 98.18 | 99.73` the drop sits in the failing suite's file: `git-root.ts | 90 |
+  75 | 100 | 94.44` (line 39 uncovered while `/tmp/.git` exists); task-311 measured `99.32 | 97.44 | 98.18 | 99.69` on
+  this wave's base.
+- `npm run lint` → exit 0. `npm run docs:api` → exit 0, no output. `npm run typecheck` (both `tsc --noEmit` configs) → exit 0. `npx jest
+  test/storage/git-root.test.ts` alone → `Tests: 2 failed, 4 passed, 6 total`: the failure is the environment's, not load.
+
+### self-review (developer, 2026-10-30)
+
+Against `code-review`, on `git diff release/0.3...HEAD` plus the working tree:
+- **AC 1 — met.** `help memroy` → the direct path's two lines (`refusalLines` equal for `memroy`, `dnaa`, `nosuchnoun`
+  in the integration pins), `--format json` carries `hint`, nested `memory help addd` → `hint: did you mean "add"?`,
+  and the renamed `assist` built-in hints (`program.test.ts`): the 89 red tests pass (green run above). The TSDoc
+  deferring it to v0.4 is reworded (`grep -n "v0.4" src/cli/program.ts` → no output; its positive case, `grep -n
+  "bug-115" src/cli/program.ts` → line 493, the new bullet).
+- **AC 2 — met as ruled (D1 (b)).** `help help`, `help help help`, `memory help help`, `assist assist` → exit 0, the
+  help command's own help on stdout, stderr empty; no `'help'` literal decides it (`grep -n "'help'"
+  src/cli/program.ts` → no output; positive case: `grep -n "builtinCommands(level)" src/cli/program.ts` → lines 463 and 475).
+- **AC 3 — met, by command.** `` grep -c 'carries no `hint:` yet' docs/04_memory/design/specs/spec-005-cli-command-contract.md ``
+  → `0`; ``grep -n "typed at (`bug-115`)" …spec-005…`` → line 181, the new §3.1 sentence; `grep -n "Revision (2026-10-30" …spec-005…` → one paragraph, at the end of `## Revision
+  notes`. §1 and `spec-008` untouched (`git diff -- docs/04_memory/design/specs/spec-008-cli-grammar.md` → no output),
+  as D1 (b) rules.
+- Same class in the touched file: the only other walk over `program.args` (`commandsBeside`) now shares
+  `deepestCommand`; no other route reaches the incomplete-invocation path with a help request.
+- Determinism: no clock, randomness or unordered iteration added; the walk follows `program.args` order and
+  `visibleCommands` order.
+- Invisible characters: the `grep -nP` of the prompt on every changed file → no output (exit 1) before each commit.
+- `bug-115` Expected Behavior ("a near-match suggestion is a property of 'this command does not exist', not of the
+  route") — met in full on both routes and levels; `bug-116` Expected Behavior, first option ("prints the help
+  command's own help at exit 0") — met in full.
+
+### Pending amendments (approver)
+
+Uncommitted in the worktree (`git status --short` → the three files below), for the approver's `memory amend` at review:
+- `spec-005-cli-command-contract` (§3.1 carve-out removed, one Revision paragraph): `--reason "Remove the help-path
+  carve-out from section 3.1's unknown-command suggestion and record it in a Revision note, per bug-115 and bug-116
+  (task-315, design gate D1 (b))."`
+- `bug-115-the-closest-match-suggestion-never-fires-on-the-help-path` (`### Retrospective` added): `--reason "Add the
+  Retrospective subsection the bug carries when task-315 closes it (dl-115 Q2 (a))."`
+- `bug-116-help-help-reports-unknown-command-for-a-command-that-exists` (`### Retrospective` added): `--reason "Add the
+  Retrospective subsection the bug carries when task-315 closes it (dl-115 Q2 (a))."`
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -254,3 +362,10 @@ tsconfig.json` → exit `0`, no output. `npx jest test/lint --maxWorkers=2` → 
      printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
      Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
      here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+
+- An empty `/tmp/.git` directory (`ls -la /tmp/.git` → owner robypomper, 2026-10-29 17:09) fails
+  `test/storage/git-root.test.ts` twice in the full suite for every task on this host, and lowers the coverage columns;
+  the suite assumes `os.tmpdir()` is outside any repository. Proposal: create the no-git fixture under a directory the
+  test controls, or assert the assumption with a clear message.
+- The name-resolvability gate reads tech-spec prose too: a typo command quoted inline as `` `wingfoil …` `` in a spec
+  amendment fails it (refactor above). Write example typos inside a help route that resolves, or in prose.
