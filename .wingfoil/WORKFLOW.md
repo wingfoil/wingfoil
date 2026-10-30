@@ -457,8 +457,9 @@ readings taken at run time (G15, Q17, E01–E05) are never compared. Under any o
 (`publish.yml` `env.NODE_VERSION`) the toolchain metrics are not-measurable unless `--any-node` is passed; the
 bound steps pass `--any-node` and `--max-workers 2` (bug-344), so each toolchain entry records `node` and
 `node_pinned`. To measure under the pin, run the same command under it, e.g.
-`n -d exec 22.12.0 node scripts/release-health/measure.cjs --release <version>` (`-d` downloads that Node when
-it is not cached) or `npx -p node@22.12.0 node scripts/release-health/measure.cjs --release <version>`;
+`N_PREFIX=<writable-dir> n -d exec 22.12.0 node scripts/release-health/measure.cjs --release <version>` (`-d`
+downloads that Node when it is not cached, under `N_PREFIX`, which must name a directory you can write when `n`'s
+default `/usr/local` is root-owned) or `npx -p node@22.12.0 node scripts/release-health/measure.cjs --release <version>`;
 dl-089 §6 forbids them writing git configuration.
 
 ```mermaid
