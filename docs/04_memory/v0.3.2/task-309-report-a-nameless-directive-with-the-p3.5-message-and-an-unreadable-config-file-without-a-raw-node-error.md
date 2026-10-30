@@ -246,6 +246,15 @@ live in `test/mcp/config-missing-refusal.test.ts`, which task-314 does not list.
 overlap. task-317's invisible-character gate: the new messages hold only `'` and ASCII; red runs `npx jest test/lint
 --maxWorkers=2`. The two repository gates: CLI pins on `runCliEntry` only (no local spawn of `dist/cli.js`), no npm spawn.
 
+### design gate (approver, 2026-10-30)
+
+Design gate approved by the approver on 2026-10-30T10:38:05+01:00, in the orchestrator's chat:
+- D1 — (a): the issue's message is exactly the P3.5 string; the rendered line keeps `E_VALIDATION name (<file>): `.
+- D2 — (a): every required key (id, name, type, kind, title) when absent; `null` and wrong types keep Zod's text.
+- D3 — (a): the wording lives in `parseDirectiveFile` (`src/core/loaders.ts`).
+- D4 — approved as written: EACCES/EPERM `<rel> cannot be read: permission denied`; EISDIR `<rel> is a directory, not a file`; any other errno `<rel> cannot be read (<code>)`; CoreError `IO`, exit 1; a missing file stays `NOT_FOUND`.
+- D5 — (a): `loadWorkflowsYaml`'s working-tree reader is mapped in this task.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
