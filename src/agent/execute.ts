@@ -585,7 +585,8 @@ async function runPipeline<T>(
   const identity = requireGitIdentity(root);
   if (!identity.ok) return identity;
 
-  // Step 6 — the run log, declared and unmodified (`paths` is passthrough; `runs` is spec-016 §4.1's).
+  // Step 6 — the run log, declared and unmodified (`runs` is spec-016 §4.1's declared category; `paths`
+  // also admits a project's own categories through its typed catchall, task-312).
   const runs = (dna.paths as Record<string, readonly string[] | undefined> | undefined)?.['runs'];
   const logPath = runLogPreflight(root, runs, target.id);
   if (!logPath.ok) return logPath;
