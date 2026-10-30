@@ -148,6 +148,15 @@ changes, so no phase-list or step-count pin is affected.
 jest's list (the first is `test/cli/latency-report-pass.test.ts` lines 28–31): a jest upgrade adding one changes
 neither, as `bug-385` notes.
 
+### design gate (approver, 2026-10-30)
+
+Design gate approved by the approver on 2026-10-30T18:40:13+01:00, in the orchestrator's chat:
+- D1 — yes: `.wingfoil/WORKFLOW.md`'s `n -d exec` command gets `N_PREFIX` in this task too, and AC3 pins it.
+- D2 — no amend of dl-089: it records the rule, not the command an operator types.
+- D3 — yes: AC3 is red-first (the text it pins is absent today).
+- D4 — yes: the reason ends with ` (script <event>: <command>)`, or ` (script: <command>)` when npm prints no banner; no `npm error path`.
+- D5 — drop: the tool environment drops jest's eleven agent variables, the AC's form, rather than passing an explicit reporter.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
