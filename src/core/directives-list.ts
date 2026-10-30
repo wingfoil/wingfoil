@@ -18,7 +18,7 @@
  *   dl-037 was raised about, in the one command whose purpose is directive visibility.
  *
  * **Warnings** (`dl-042-directives-list-output-contract` A + D, task-055-auto-load-directives-by-role).
- * The payload is {@link DirectiveListing} — `entries` plus a `warnings` channel — so the two things a
+ * The payload is {@link DirectiveListing} — `entries` plus a `warnings` channel — so the three things a
  * reader cannot see in the inventory are said out loud: which of two same-id files is in force, which
  * bindings name a directive that has no file, and whether a role is bound at all. Without a role filter
  * the warnings are one per `roles.yaml` binding that names a directive no file defines (task-310,
