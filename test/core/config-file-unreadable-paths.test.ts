@@ -5,7 +5,7 @@
  * `roles.yaml`. Each names the file repository-relative and the cause, never the host path nor Node's raw
  * text (design gate, approver, 2026-10-30: D4 as written, D5 (a)).
  */
-import { mkdirSync, realpathSync, rmSync } from 'node:fs';
+import { mkdirSync, realpathSync, rmSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -33,7 +33,7 @@ jest.mock('../../src/storage', () => {
   };
 });
 
-const RAW_NODE_TEXT = ['operation not permitted', 'illegal operation on a directory', 'EISDIR', 'EPERM'];
+const RAW_NODE_TEXT = ['operation not permitted', 'illegal operation on a directory', 'too many symbolic links', 'EISDIR', 'EPERM'];
 
 function expectNamedRelative(repo: string, text: string): void {
   expect(text).not.toContain(repo);
@@ -118,5 +118,63 @@ describe('ConfigFileUnreadableError — the paths the red tests leave unpinned (
     expect(message).toContain('.wingfoil/roles.yaml is a directory, not a file');
     expectNamedRelative(repo, JSON.stringify({ message, data }));
     await client.close();
+  });
+});
+
+/**
+ * Review fix (task-309): the Workflow pillar's working-tree reader used an `existsSync` pre-check, false
+ * for a symbolic-link loop, so a looping manifest read as an empty registry and a looping include as
+ * `E_WORKFLOW_FILE_NOT_FOUND`. A loop is unreadable, not absent; a dangling link stays absent.
+ */
+describe('loadWorkflowsYaml — a looping workflows file is unreadable, not absent (task-309 review)', () => {
+  let repo: string;
+
+  beforeEach(() => {
+    repo = makeTempGitRepo();
+    const scaffolded = initWingfoilProject(repo, 'Scrum');
+    if (!scaffolded.ok) throw new Error(`fixture bug: wingfoil init failed — ${scaffolded.error.message}`);
+  });
+
+  afterEach(() => removeTempDir(repo));
+
+  it('the manifest workflows.yaml a symbolic link to itself: "<rel> cannot be read (ELOOP)", IO', () => {
+    rmSync(join(repo, '.wingfoil', 'workflows.yaml'));
+    symlinkSync('workflows.yaml', join(repo, '.wingfoil', 'workflows.yaml'));
+
+    const error = caught(() => loadWorkflowsYaml(repo));
+
+    expect(error.name).toBe('ConfigFileUnreadableError');
+    expect(error.relativePath).toBe('.wingfoil/workflows.yaml');
+    expect(error.code).toBe('ELOOP');
+    expect(error.message).toBe('.wingfoil/workflows.yaml cannot be read (ELOOP)');
+    expectNamedRelative(repo, error.message);
+    expect(coreErrorOf(error)).toEqual({ code: 'IO', message: error.message });
+  });
+
+  it('an included file (workflows/custom/bug-ingest.yaml) a symbolic link to itself: ELOOP, not E_WORKFLOW_FILE_NOT_FOUND', () => {
+    const included = join(repo, '.wingfoil', 'workflows', 'custom', 'bug-ingest.yaml');
+    rmSync(included);
+    symlinkSync('bug-ingest.yaml', included);
+
+    const error = caught(() => loadWorkflowsYaml(repo));
+
+    expect(error.name).toBe('ConfigFileUnreadableError');
+    expect(error.relativePath).toBe('.wingfoil/workflows/custom/bug-ingest.yaml');
+    expect(error.code).toBe('ELOOP');
+    expect(error.message).toBe('.wingfoil/workflows/custom/bug-ingest.yaml cannot be read (ELOOP)');
+    expectNamedRelative(repo, error.message);
+  });
+
+  it('an included file that is a dangling symbolic link stays absent: E_WORKFLOW_FILE_NOT_FOUND', () => {
+    const included = join(repo, '.wingfoil', 'workflows', 'custom', 'bug-ingest.yaml');
+    rmSync(included);
+    symlinkSync('no-such-file.yaml', included);
+
+    const error = caught(() => loadWorkflowsYaml(repo)) as unknown as { diagnostics: { code: string; message: string }[] };
+
+    expect(error.diagnostics.map(({ code }) => code)).toContain('E_WORKFLOW_FILE_NOT_FOUND');
+    expect(error.diagnostics.find(({ code }) => code === 'E_WORKFLOW_FILE_NOT_FOUND')?.message).toBe(
+      'included workflow file not found: workflows/custom/bug-ingest.yaml',
+    );
   });
 });

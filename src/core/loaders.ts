@@ -16,7 +16,7 @@ import { DirectiveFrontmatter, RolesYaml } from '../directives/schema';
 import { checkDirectiveVersion } from '../directives/version';
 import { DnaYaml } from '../dna/schema';
 import { MemoryYaml } from '../memory/schema';
-import { documentExists, extractFrontmatter, readDocument, readPathAtRev, readPathsAtRev } from '../storage';
+import { extractFrontmatter, readDocument, readPathAtRev, readPathsAtRev } from '../storage';
 import {
   Diagnostic,
   DiagnosticsError,
@@ -528,14 +528,16 @@ function parseYamlOrDiagnostic(
 export function loadWorkflowsYaml(root: string): WorkflowsLoadResult {
   const configDir = join(root, '.wingfoil');
   return loadWorkflowsFrom({
-    // Absent is `null` (an empty registry, or `E_WORKFLOW_FILE_NOT_FOUND`); a file that exists but
-    // cannot be read is refused as `readConfigFile` refuses it (task-309, `bug-251`, D5 (a)).
+    // Absent is `null` (an empty registry, or `E_WORKFLOW_FILE_NOT_FOUND`): `ENOENT` (a dangling link
+    // included), or `ENOTDIR` (a parent that is a file), as the former `existsSync` pre-check read them.
+    // Any other failure — a directory, a denied mode, a symbolic-link loop — is refused as
+    // `readConfigFile` refuses it (task-309, `bug-251`, D5 (a)), never mistaken for an absent file.
     read: (file) => {
-      const path = join(configDir, file);
-      if (!documentExists(path)) return null;
       try {
-        return readDocument(path);
+        return readDocument(join(configDir, file));
       } catch (error) {
+        const code = (error as NodeJS.ErrnoException | null)?.code;
+        if (code === 'ENOENT' || code === 'ENOTDIR') return null;
         throw configReadError(error, `.wingfoil/${file}`);
       }
     },
