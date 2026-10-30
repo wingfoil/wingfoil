@@ -38,3 +38,7 @@ An `incomplete` warning naming what is missing, or no role assertion when `roles
 
 Captured on 2026-10-02 by `bug-ingest-rel-v0.3-w1b3-review-findings-plan`, from the independent reviews of wave 1
 batch B3 (`dev-loop-rel-v0.3-plan`).
+
+### Retrospective
+
+None.
