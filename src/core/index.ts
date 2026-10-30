@@ -71,6 +71,7 @@ import {
 } from '../memory';
 
 import {
+  ConfigFileUnreadableError,
   type DirectiveInventory,
   DIRECTIVES_DIR_PATH,
   DNA_YAML_PATH,
@@ -138,6 +139,8 @@ export const MODULE_NAME = 'core' as const;
 export {
   // A missing working-tree configuration file, named repository-relative (task-179, `bug-245`).
   ConfigFileMissingError,
+  // One that exists but cannot be read, named the same way (task-309, `bug-251`).
+  ConfigFileUnreadableError,
   DIRECTIVES_DIR_PATH,
   DNA_YAML_PATH,
   MEMORY_YAML_PATH,
@@ -342,7 +345,8 @@ export interface RootParams {
 /**
  * Run a synchronous, throwing pillar loader (task-004's `load*` functions) and map its expected
  * failures onto a `CoreResult` (spec-006 §2): a `ValidationError` from the shared two-pass pipeline
- * becomes `VALIDATION`, a missing file (Node's `ENOENT`) becomes `NOT_FOUND`; anything else
+ * becomes `VALIDATION`, a missing file (Node's `ENOENT`) becomes `NOT_FOUND`, a configuration file that
+ * exists but cannot be read becomes `IO` (task-309, `bug-251`); anything else
  * propagates as a genuine thrown exception (a programmer bug, not a domain failure — spec-006 §2's
  * "no function throws for *expected* domain failures" implies unexpected ones still may). Every
  * read-only query (`dnaShowFn`, `pathsFn`, `workflowListFn`, …) maps its loader's failures through it,
@@ -369,7 +373,9 @@ function loadOrError<R>(loader: () => R): CoreResult<R> {
  * - a loader that collects spec-003 diagnostics (task-136): the first error is the reason, and the whole
  *   ordered array rides `details` under spec-003's own name for it, `diagnostics`;
  * - a `ValidationError` from the shared two-pass pipeline: `details.issues`;
- * - a missing file (`ENOENT`): `NOT_FOUND`, with the system message.
+ * - a missing file (`ENOENT`): `NOT_FOUND`, with the system message;
+ * - a configuration file that exists but cannot be read (`ConfigFileUnreadableError`, task-309,
+ *   `bug-251`): `IO`, with its repository-relative message.
  */
 export function coreErrorOf(error: unknown): CoreError | null {
   if (error instanceof DiagnosticsError) {
@@ -377,6 +383,9 @@ export function coreErrorOf(error: unknown): CoreError | null {
   }
   if (error instanceof ValidationError) {
     return { code: 'VALIDATION', message: error.message, details: { issues: error.issues } };
+  }
+  if (error instanceof ConfigFileUnreadableError) {
+    return { code: 'IO', message: error.message };
   }
   const errno = error as NodeJS.ErrnoException | null;
   if (errno && errno.code === 'ENOENT') {
@@ -403,7 +412,7 @@ export function loadDnaRoleSet(root: string): CoreResult<readonly string[]> {
  * refused first with the shared not-initialized message ({@link requireInitializedProject}, task-143),
  * which names no path; otherwise the loader runs and its failures map as `loadOrError` maps them — a
  * missing file as `ConfigFileMissingError`'s repository-relative message (task-179, `bug-198`,
- * `bug-245`).
+ * `bug-245`), an unreadable one as `ConfigFileUnreadableError`'s (task-309, `bug-251`).
  */
 function loadConfigOrError<R>(root: string, loader: () => R): CoreResult<R> {
   const initialized = requireInitializedProject(root);
