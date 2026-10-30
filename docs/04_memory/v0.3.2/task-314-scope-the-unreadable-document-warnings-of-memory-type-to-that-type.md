@@ -450,6 +450,21 @@ Against code-review, on `git diff release/0.3...HEAD` plus the working tree:
   file (W0-R6), beyond the four readers D1 (c) named: a `memory` transition checked against a limit now warns only about
   the unreadable files of the type it counts. Recommendation: accept; the alternative is to revert that hunk and file it.
 
+### red amendment (qa, 2026-10-30)
+
+Review finding 1 (the typed-search suite did not cite its BDD scenario, so the test report classed it `unit`), made by
+the task's qa agent under the standing approval for red amendments a review asks for. **Commit `ffbd019f`**
+(`git log --oneline -1` → `ffbd019f2 test(memory): task-314 — red amendment (review): the typed-search suite cites its
+P1.5 scenario`): only `test/core/memory-search-type-warnings.test.ts`, its leading comment, one line plus a blank line
+(`git diff --numstat` → `2 0`), no assertion changed. The added line is
+``BDD: `P1.5-memory-search.feature` "Edge - a typed search warns only about files of that type".``, the form of
+`test/core/memory-scan-tolerant.test.ts`'s header.
+
+**Checks.** The classifier, `node -e` calling `classifySuite` of `scripts/test-report.cjs` on the file → `unit` before
+the change, `BDD` after. `npx jest test/core/memory-search-type-warnings.test.ts test/lint --maxWorkers=2` →
+`Test Suites: 14 passed, 14 total`, `Tests: 159 passed, 159 total`. `npx tsc --noEmit -p tsconfig.json` → exit `0`. The
+invisible-character `grep -nP` over the file → no hit.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
