@@ -355,6 +355,33 @@ Uncommitted in the worktree (`git status --short` → the three files below), fo
 - `bug-116-help-help-reports-unknown-command-for-a-command-that-exists` (`### Retrospective` added): `--reason "Add the
   Retrospective subsection the bug carries when task-315 closes it (dl-115 Q2 (a))."`
 
+### independent review (2026-10-30) and fixes (developer)
+
+Independent review at `627313d5`: APPROVE, 0 blockers, 0 to fix in the task, 2 findings. Finding 1 is filed by the
+orchestrator as a v0.4 bug. Finding 2 — `spec-005` §1 (the rule under the exit-code table) and `spec-008` §5 still
+classed `wingfoil help <unknown>` as a "missing required argument", while the CLI emits `unknown command '<name>'` for
+it (before this task, and with the `hint:` line since) — is folded into the pending amendments, uncommitted, with no
+code change:
+- `spec-005`: §1's rule now names `wingfoil help <unknown>` the exit-`2` row's unknown command, refused as §3.1 states
+  (`grep -n "is the row's" …spec-005…` → line 54), and the task's Revision (2026-10-30) paragraph says so
+  (`grep -n "Revision (2026-10-30" …spec-005…` → line 427).
+- `spec-008`: §5's second case now names it an unknown command with §1's closest-command `hint:` line (`grep -n "row's \*\*unknown command" …spec-008…` → line 414), and
+  a new Revision (2026-10-30) paragraph ends `## Process Notes` (`grep -n "Revision (2026-10-30" …spec-008…` → line 1383).
+
+Run with the amendments in the tree: `npx jest test/docs --maxWorkers=2` → `Test Suites: 29 passed, 29 total`, `Tests:
+309 passed, 309 total` (name-resolvability and the spec parity suites included). Status stays `in-review`.
+
+Pending amendments, final list (replaces the list above for the approver's `memory amend`):
+- `spec-005-cli-command-contract`: `--reason "Remove the help-path carve-out from section 3.1's unknown-command
+  suggestion, correct section 1's rule to class help with an unknown command as an unknown-command refusal, and record
+  both in a Revision note, per bug-115 and bug-116 (task-315, design gate D1 (b), review)."`
+- `spec-008-cli-grammar`: `--reason "Correct section 5's exit-2 reading: help with an unknown command is an
+  unknown-command refusal with its closest-command hint, not a missing argument (task-315 review)."`
+- `bug-115-the-closest-match-suggestion-never-fires-on-the-help-path`: `--reason "Add the Retrospective subsection the
+  bug carries when task-315 closes it (dl-115 Q2 (a))."`
+- `bug-116-help-help-reports-unknown-command-for-a-command-that-exists`: `--reason "Add the Retrospective subsection the
+  bug carries when task-315 closes it (dl-115 Q2 (a))."`
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
