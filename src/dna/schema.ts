@@ -4,7 +4,8 @@
  * it has no dependency on `memory.yaml`'s or `workflows.yaml`'s schema, and its own validation never
  * inspects any other file.
  *
- * Every object node is `.passthrough()` per spec-009-validation-strategy §2. The TypeScript type is
+ * Every object node is `.passthrough()` per spec-009-validation-strategy §2, except `Paths`, whose typed
+ * catchall declares a project's extra categories (task-312). The TypeScript type is
  * derived exclusively via `z.infer` (spec-002: "no hand-written duplicate interface").
  */
 import { z } from 'zod';
@@ -280,7 +281,12 @@ export const Team = z
 export type Team = z.infer<typeof Team>;
 
 /**
- * Category names are fixed per P2.5, but `.passthrough()` tolerates a future extra category.
+ * The P2.5 categories are declared below; a project may add its own (spec-002 Categories). An extra
+ * category is declared by the typed catchall, so it is validated as an ordered `string[]` like the others
+ * and loads with no unknown-field warning (task-312, `bug-316`: the warning reads the catchall,
+ * `src/validation/warning.ts`); one that is not a list of strings is a validation error at
+ * `paths.<name>`. The write verbs still refuse it: `src/dna/path.ts` addresses only the declared `shape`
+ * (`dl-081`).
  *
  * `runs` is the sixth category (`spec-016-agent-execution` §4.1, task-138): the run log's directory.
  * Unlike the other five it holds **exactly one** entry, because `agent execute` writes each record to
@@ -306,7 +312,7 @@ export const Paths = z
       .length(1, { message: 'paths.health holds exactly one directory, the release-health catalogue and reports (dl-089 §1)' })
       .optional(),
   })
-  .passthrough();
+  .catchall(z.array(z.string()));
 export type Paths = z.infer<typeof Paths>;
 
 /**

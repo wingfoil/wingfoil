@@ -459,9 +459,10 @@ export interface PathsShowResult {
  * - category omitted -> `coreOk(<whole paths node>)` (see {@link PathsParams}'s doc comment on why;
  *   symmetric with `dna show` returning the whole DNA when no section is given).
  *
- * `dna.paths` is `.passthrough()` (spec-002), so an entry beyond the five named categories is still a
- * plain object property here, not necessarily an array — `Array.isArray` guards that case rather than
- * assuming the shape.
+ * `dna.paths` declares the seven named categories and, through its typed catchall
+ * (`.catchall(z.array(z.string()))`, spec-002, task-312), a project's own category as a `string[]`, so
+ * any category present here is an array. `Array.isArray` still guards the category that is absent —
+ * a declared one left out of `paths:`, or a name nothing maps — rather than assuming it.
  */
 const pathsFn: CoreFn<unknown, PathsShowResult | Paths> = async (params) => {
   const { root, positional: category } = params as PathsParams;
