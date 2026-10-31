@@ -206,10 +206,69 @@ Role qa. Red commit `73911351ba4d5a0ef15caa5d13fdfe85b082cdd7` (`test(core): tas
 - `npx jest test/lint --maxWorkers=2` (files in place) → `Test Suites: 13 passed, 13 total`, `Tests: 153 passed, 153 total`.
 - `npm run -s test:no-identity -- <the three files> --maxWorkers=2` → the same 7 failed / 10 passed: the three files are inside its set (it runs the whole suite) and the tests configure their own identity.
 
+### green (developer, 2026-10-31)
+
+Role developer. `git rev-list --count HEAD..release/0.3` printed `0` at the start (no merge). Pinned build: `command -v wingfoil`
+printed `/home/robypomper/Workspaces/.wf2-wt/devloop-kit/bin/task-324/wingfoil`, `wingfoil --version` printed
+`0.3.1 (fa3b567de29b3fff6ae13ba5994590faaf99cc05)`.
+
+Commit `77e6245ac` (`fix(core): task-324 — tell an unparseable git config apart from a missing git identity (bug-379)`):
+`src/core/git-identity.ts` and the comment of `src/core/init.ts:192-193`.
+- `readIdentityConfig` captures stderr (`stdio: ['ignore', 'pipe', 'pipe']`) and returns a third variant `{ ran: true; failed }`
+  for every outcome other than `0` and `1` (D2 (a)); exit `1` keeps the empty map (stderr ignored).
+- `describeConfigFailure` (private) builds git's message as D3 says: lines trimmed, empty ones dropped, a leading `fatal: `
+  removed, joined with `; `; with nothing on stderr `git config exited <status>` / `git config was terminated by <signal>`.
+- `requireGitIdentity` returns `coreErr({ code: 'IO', message: 'could not read git configuration: …' })` after the spawn-failure
+  refusal, before any identity resolves (D1). `readGitIdentity` unchanged in behaviour: `{ name: '', email: '' }` (D4).
+- Doc comments: four outcomes, four refusals.
+
+Red → green: `npx jest test/core/git-identity-config-failure.test.ts test/core/git-identity-spawn-failure.test.ts
+test/cli/git-config-unreadable-refusal.integration.test.ts test/core/git-identity.test.ts
+test/core/identity-preflight-committer.test.ts --maxWorkers=2` printed `Test Suites: 5 passed, 5 total`, `Tests: 47 passed,
+47 total` (red recorded `7 failed, 10 passed` for the first three files). `npx tsc --noEmit` printed nothing.
+
+Commit `97d0f6b7b` (`docs(cli): task-324 — document the unreadable git configuration refusal (bug-379)`): `docs/cli-reference.md`
+§ Git identity gains the sentence for a git that runs but cannot read its configuration, with the `agent execute` /
+`workflow list` form `E_GIT_READ_FAILED: git rev-parse HEAD failed in <root>: fatal: bad config line …`.
+
+### refactor (developer, 2026-10-31)
+
+`git rev-list --count HEAD..release/0.3` printed `0` at the end (no merge needed). The pending spec amendment was in the working tree
+for every gate below. No refactor beyond the green change was needed (one private helper, no duplication).
+- `npm test -- --maxWorkers=2` (run after the heavy-gate slot was free): `Test Suites: 537 passed, 537 total`, `Tests: 9438 passed, 9438 total`.
+  This includes `test/docs/cli-reference.test.ts`, the documentation-parity suites and `test/lint`.
+- `npm run test:coverage -- --maxWorkers=2`: exit 0, `Tests: 9438 passed`; `All files | 99.35 | 97.47 | 98.16 | 99.7`
+  (statements, branches, functions, lines). `git-identity.ts | 100 | 90.9 | 100 | 100 | 44,147`: the branches left are the
+  signal case of `describeConfigFailure` (line 44, `status === null`, a signal-killed git that no test can provoke
+  deterministically) and the pre-existing `?? 0` of line 147. Declared, not covered.
+- `npm run -s lint` exit 0; `npm run -s docs:api` exit 0; `npm run -s typecheck` (both tsc configs) exit 0.
+- Not run: `npm run test:no-identity` (not among the gates my instructions list for refactor; the red phase recorded the new files
+  under it, `7 failed, 10 passed`, i.e. the same as the plain run) and `npm run check:mcp` (`.wingfoil/` is not changed).
+- Slot: each heavy run started once the slot check returned; the elapsed time of the runs themselves was `Time: 777.062 s` (suite) and
+  `Time: 1055.51 s` (coverage), as the jest summaries printed.
+- T4: `git log --first-parent --no-merges --format=%h 73911351b..HEAD -- test/core/git-identity-config-failure.test.ts
+  test/cli/git-config-unreadable-refusal.integration.test.ts test/core/git-identity-spawn-failure.test.ts` printed nothing.
+
+### self-review (developer, 2026-10-31)
+
+- AC 1 (red-first): met. The seven red rows pass (`Tests: 47 passed` above): `.git/config` with `[user` → `IO`, `could not read git
+  configuration: bad config line <n> in file .git/config`, exit `1` through the CLI in both formats; broken global file; stand-in
+  git exiting `128` → `git config exited 128`; task-284's root-it-cannot-enter row → `cannot change to '<root>': …`. Exit `1` unchanged:
+  row (v), `GIT_CONFIG_GLOBAL` a directory, still `VALIDATION` and REQ-SEC-01's message (passes).
+- AC 2 (characterization): the `spec-008` §6 amendment is prepared and uncommitted: `grep -n "could not read git configuration"
+  docs/04_memory/design/specs/spec-008-cli-grammar.md` finds the new row and the revision note (see Pending amendments).
+- Same class in the files touched: `grep -n "128" src/core/git-identity.ts` and the doc comments no longer claim that exit `128`
+  reads as unconfigured; `src/core/init.ts` comment updated; `approval-authority.ts:82-84` and `builtin-asset.ts:129-132` left as the
+  design decided. `docs/cli-reference.md`'s `workflow finalize` errors line stays true.
+- No invisible character: the `grep -nP` over the changed files printed nothing before each commit.
+
+### Pending amendments (approver)
+
+- `docs/04_memory/design/specs/spec-008-cli-grammar.md` (`approved`, edited in the working tree, left uncommitted): §6 "Pinned refusal
+  strings" — the `could not run git` row's last sentence narrowed to exit `1`, a new row `could not read git configuration: <git's
+  message>` (code `IO`, exit `1`, `agent execute`'s `E_GIT_READ_FAILED` form as the exception), and a Revision note dated 2026-10-31.
+  `memory amend spec-008-cli-grammar --reason "Add the pinned refusal 'could not read git configuration: <git's message>' to §6 and narrow the 'could not run git' row to a git that exits 1, per bug-379 and task-324's design gate (D1 yes, D2 (a), D3 yes)."`
+
 ### Retrospective
 
-<!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
-     reconstructed afterwards. One line per item: what happened, the evidence (a command and what it
-     printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
-     Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
-     here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+- The two heavy gates ran longer than the tool's foreground limit and were moved to the background; I polled their output files. No friction in the code: the design was precise and the red files passed unchanged.
