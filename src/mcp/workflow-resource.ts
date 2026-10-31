@@ -3,8 +3,8 @@
  * since task-239, `wingfoil://workflows/-/next` and `-/status` Resources — task-011, REQ-INT-01,
  * spec-004-mcp-surface-contract §2.1. Distinct from `registerCoreModules`'s existing
  * `wingfoil://workflow/list` Resource (task-006-dual-interface-shared-core, the generic
- * `wingfoil://{module}/{verb}` transform of the `workflowList` `CoreOperation`) — both coexist; this
- * module adds the spec-004 §2.1-conformant plural `wingfoil://workflows` addressing plus
+ * `wingfoil://{module}/{verb}` transform of the `workflowList` `CoreOperation`), which the
+ * `wingfoil mcp` server does not serve; this module adds the spec-004 §2.1-conformant plural `wingfoil://workflows` addressing plus
  * per-workflow single-document addressing, neither of which `registerCoreModules`'s mechanical,
  * zero-argument URI derivation can produce (spec-006 §2's `CoreOperation` shape has no
  * sub-resource/parameter metadata — see `src/mcp/registrar.ts`'s own doc comment).

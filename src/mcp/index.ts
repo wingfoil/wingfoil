@@ -14,10 +14,10 @@
  * `registerWorkflowResources` (`wingfoil://workflows`, `wingfoil://workflows/{name}`; task-239 adds
  * `registerWorkflowStateResources`, `wingfoil://workflows/-/next` and `-/status`), and
  * `registerWriteRefusalHandler` (the structural `resources/write` refusal, spec-004 §2.3).
- * `registerReadOnlyResources` wires all five together — the one call a future production entry point
- * (`task-030-implement-mcp-resources`'s `StdioServerTransport`/`wingfoil mcp` command, out of this
- * task's scope) needs alongside `registerCoreModules`. See `./read-only.ts` for the shared
- * write-refusal/not-found conventions every one of these Resources follows.
+ * `registerReadOnlyResources` wires all five together — the one call `createMcpServer` (the
+ * `wingfoil mcp` server) makes for the Resources; it does not call
+ * `registerCoreModules`. See `./read-only.ts` for the shared write-refusal/not-found conventions every one of
+ * these Resources follows.
  */
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
