@@ -45,6 +45,186 @@ Resource URIs that are not listed.
        reject's `Reason:` (read with `wingfoil memory history <task-id>`), each with the command that
        shows it resolved and what that command printed; then what else changed on the next pass. -->
 
+### design (architect, 2026-10-31)
+
+**Inputs read.** `depends_on: []` (no dl-015 gate); no handover. Base: `release/0.3` `e6985f26` + the start commit
+`b2c4f968` and the two bug syncs (`git log --oneline -4` → head `e62583e3`). PATH guard: `command -v wingfoil` → the
+task's PATH shim, `wingfoil --version` → `0.3.1 (e6985f262d6383e62587c48406c5bab67bd3654d)`. Ruling:
+`release-planning-rel-v0.3.2-plan` R8 (`grep -n "bug-358" …` → line 131): `selectWorkflowInstance` is exported by the
+package's `main` (`dist/core/index.js`), so it is fixed, not removed. `spec-017` is `approved` (`grep -n "^status"` →
+`status: approved`); its §10 table (`sed -n 988,1030p`) is the contract and already says what this task needs, so **no
+spec amendment**: `spec-006` §2/§5 (`grep -n "{module}/{verb}"` → lines 152, 298, 337) speak of the URIs
+`registerCoreModules` *derives*, never of the served ones, and stay true; `spec-004` has no `{module}/{verb}` line
+(`grep -n` → no output). No AC contradicts an approved spec or a ready DL.
+
+**AC 1 — the answer `spec-017` §10 requires, per input class** (the commands' answer today, `unresolvedRef`,
+`src/core/workflow-next.ts:538-542`):
+
+| `<ref>` | Message (`NOT_FOUND`, `details: { ref }`) |
+|---|---|
+| absent | no error: the active instance, `null` when none is open (unchanged) |
+| a workflow name with an open instance / an open instance id | no error: that instance (unchanged) |
+| a loaded workflow with no open instance — `kind: sub` included (the registry loads it) | `workflow is not open: <ref>` |
+| an instance plan (`type: plan`, `parent` empty) at `HEAD` that is not open — any status, a plan of a sub workflow included | `workflow is not open: <ref>` |
+| anything else — a phase plan's id (`parent` set, §3.1, approver ruling D4 of 2026-10-12) included | `unknown workflow: <ref>` |
+
+The same classes answered by the code build of this base, on this repository (`WINGFOIL="node $(pwd)/dist/cli.js"`):
+`$WINGFOIL workflow next nope-xyz` → `error: unknown workflow: nope-xyz`, exit 1; `workflow next end-of-life` (loaded,
+none open) → `error: workflow is not open: end-of-life`, exit 1; `workflow next release-planning-rel-v0.3.2-plan` (a phase
+plan) → `error: unknown workflow: release-planning-rel-v0.3.2-plan`, exit 1; `workflow next
+bug-ingest-rel-v0.3-planning-findings-plan` (a `done` instance plan) → `error: workflow is not open: …`, exit 1, and
+`workflow status <same> --format json` → `{"error":"workflow is not open: bug-ingest-rel-v0.3-planning-findings-plan"}`,
+exit 1. `selectWorkflowInstance` answers `workflow is not open: <ref>` for every one of them
+(`src/core/workflow-deduction.ts:587-591`).
+
+**Why the signature has to change.** A `Deduction` carries the open instances only (`src/workflow/deduce.ts:429-442`):
+from it alone no function can tell a loaded workflow or a closed instance plan from a name that is nothing. Every command
+reads both from the snapshot: `unresolvedRef({ workflows: snapshot.workflows, plans: instancePlanIds(snapshot.documents)
+}, ref)` (`grep -rn "unresolvedRef(" src` → `workflow-finalize.ts:121`, `memory-add-link.ts:59`, `workflow-adopt.ts:127`
+and `:246`, `workflow-rekey.ts:132`, `workflow-start-end.ts:317`; `workflow-next.ts:566` and `workflow-status.ts:99`
+through their inputs). `KnownRefs`, `unresolvedRef` and `instancePlanIds` are not exported by `src/core/index.ts`
+(`grep -n "KnownRefs\|unresolvedRef\|instancePlanIds" src/core/index.ts` → no output); `DeductionSnapshot`,
+`readDeductionSnapshotAtHead` and `deduceWorkflowState` are (`sed -n 211,230p`). Decision D1 below.
+
+**Callers and pins** (W2-R4 (6)). `grep -rn selectWorkflowInstance src test` → defined at
+`src/core/workflow-deduction.ts:587`, re-exported at `src/core/index.ts:211`, called only by
+`test/core/workflow-deduction.test.ts:235-242`; no other caller, no doc (`grep -rln selectWorkflowInstance docs/*.md
+README.md CHANGELOG.md` → no output). The only test pinning its answer is that `it` ("<ref> resolves a workflow name …;
+otherwise `workflow is not open: <ref>`"), which expects `workflow is not open` for `nope`, `p-done`, `p-sub` and
+`helper`. The messages themselves are pinned by the commands' tests — `grep -rln "workflow is not open" test` → 11
+files (`test/core/{memory-add-workflow-link,workflow-ref-not-open,workflow-start-end,workflow-status,agent-execute-step,
+workflow-next,workflow-deduction,workflow-rekey,workflow-adopt}.test.ts`, `test/cli/{workflow-ref-not-open,
+agent-execute-step}.integration.test.ts`), `grep -rln "unknown workflow:" test` → 17 files — and none of them changes:
+`unresolvedRef` and the commands are untouched. No workflow, phase list or count changes (nothing under `.wingfoil/`).
+
+**AC 2 — what `src/mcp/registrar.ts` registers against what its module comment says.** The comment (lines 18-22) says
+the Resource URIs "today" are the zero-argument `wingfoil://{module}/{verb}` form and that `spec-004` §2.1's fuller
+scheme is "deferred to whichever feature task (018-030)" first needs it. `registerCoreModules` does derive that form —
+11 Resources and 22 Tools from `CORE_MODULES` (`node -e` over `dist/core` `enumerateOperations` + `deriveVerb` +
+`dist/mcp/registrar` `deriveMcpResourceUri`/`deriveMcpToolName` → `wingfoil://agent/list wingfoil://agent/show
+wingfoil://directives/list wingfoil://dna/show wingfoil://memory/history wingfoil://memory/search wingfoil://paths
+wingfoil://workflow/list wingfoil://workflow/next wingfoil://workflow/show wingfoil://workflow/status`, `tools 22`) — but
+no production code calls it (`grep -rn "registerCoreModules(" src test` → the definition and seven test call sites:
+`test/core/parity.test.ts:86,186`, `test/mcp/{registrar,resource-latency,error-details,success-warnings}.test.ts`,
+`test/mcp/helpers/channel-enumeration.ts:56`), and `createMcpServer` (`src/mcp/server.ts:95-98`) registers
+`registerReadOnlyResources`, `registerRolePrompts`, `registerSessionContextResource` and an empty Tools channel. What the
+server serves: `initialize` + `resources/list` + `resources/templates/list` + `tools/list` piped into
+`node dist/cli.js mcp` → resources `wingfoil://dna wingfoil://workflows wingfoil://workflows/-/next
+wingfoil://workflows/-/status`; templates `wingfoil://memory/{type} wingfoil://memory/{type}/{id} wingfoil://dna/{section}
+wingfoil://workflows/{name} wingfoil://session/{role}/{element}/{state}`; tools `0` — the same as `bug-396`'s capture.
+`npm run check:mcp` → `.mcp.json "wingfoil" runs the pinned wingfoil 0.3.1, advertising [prompts, resources, tools]
+(prompts: 8, resources: 4, tools: 0)` / `the build under development (dist/cli.js) serves … (prompts: 8, resources: 4,
+tools: 0); every listed Resource read and Prompt get answered`. `registerCoreModules` stays exported (`src/mcp/index.ts:27`
+and `src/mcp/registrar.ts:77`), as the AC says.
+
+The new module comment states: `registerCoreModules` is `spec-006` §4.1's registrar, deriving one Tool or Resource per
+`CORE_MODULES` operation (`wingfoil://{module}/{verb}`, `{module}.{verb}`); at this commit it backs the parity and
+channel-enumeration harness of REQ-SEC-05 (`test/core/parity.test.ts`, `test/mcp/helpers/channel-enumeration.ts`) and the
+Tool set `test/docs/mcp-surface-parity.test.ts` compares with `spec-004` §4.1; the `wingfoil mcp` server does not call
+it and serves none of its URIs; the served Resources are the four URIs and five templates above, registered by
+`registerMemoryResources`, `registerDnaResources`, `registerWorkflowResources`, `registerWorkflowStateResources` (through
+`registerReadOnlyResources`) and `registerSessionContextResource`. The "deferred to whichever feature task" sentence goes.
+The comment names the served Resources and no URI the server does not list as served. `deriveMcpResourceUri`'s TSDoc
+("applied mechanically (see module doc)") stays true.
+
+**Per-AC classification and what qa pins.**
+
+| AC | Class | Why |
+|---|---|---|
+| 1 | red-first (confirmed) | the §10 answer is new for this function: today every unresolved ref gets `workflow is not open` (the table above) |
+| 2 | characterization (confirmed) | what the server serves and that `registerCoreModules` is exported both hold today; the comment is prose, checked at review by command (D3) |
+
+- **AC 1** — in `test/core/workflow-deduction.test.ts`, rewrite the `it` at lines 232-244 (describe "task-198 AC 1",
+  whose `beforeAll` fixture already holds every class: `task-flow`/`plan-a` and `doc-flow`/`plan-b` open, `release-flow`
+  loaded with no instance, `helper` a loaded `kind: sub`, `p-done` a `done` instance plan, `p-helper` an `active`
+  instance plan of a sub workflow, `p-sub` a phase plan `parent: doc-flow.sub`). Read `const snapshot =
+  readDeductionSnapshotAtHead(repo); const deduction = deduceWorkflowState(snapshot);` (both from `src/core`). Under D1
+  (b): `selectWorkflowInstance(deduction, snapshot, ref?)`. Pin: `'task-flow'` → ok, `plan-a`; `'plan-b'` → ok,
+  `plan-b`; no ref → ok, `plan-b`; for `nope` and `p-sub` → `toEqual({ ok: false, error: { code: 'NOT_FOUND', message:
+  'unknown workflow: <ref>', details: { ref } } })`; for `p-done`, `p-helper`, `helper`, `release-flow` → the same shape
+  with `workflow is not open: <ref>`; and, for every one of those six refs, the answer `toEqual`s `unresolvedRef({
+  workflows: snapshot.workflows, plans: instancePlanIds(snapshot.documents) }, ref)` (import `unresolvedRef` from
+  `src/core/workflow-next`, `instancePlanIds` from `src/core/workflow-deduction`: the commands' one answer, so the two
+  cannot drift). Rename the `it` to say the §10 answer. Expected reds: jest — the old two-parameter function takes the
+  snapshot for `ref`, so `'task-flow'` gives `ok: false` and every message is `workflow is not open: [object Object]`
+  (fails on the assertion, the right reason); `npx tsc --noEmit` — TS2345 (`DeductionSnapshot` not assignable to
+  `string`) and TS2554 (3 arguments, 1-2 expected), stated in the red notes, not a red to hide. Under D1 (a) the call is
+  `selectWorkflowInstance(deduction, ref, snapshot)` and only TS2554 fires.
+- **AC 2** — in `test/mcp/registrar.test.ts`, a new `describe` (characterization, passes on first run): (i)
+  `registerCoreModules` imported from the barrel `src/mcp` is a function (`typeof … === 'function'`); (ii) a
+  `createMcpServer` (from `src/mcp`, built as `test/mcp/server.test.ts:87`
+  does it) connected over `InMemoryTransport` lists exactly the URIs `[wingfoil://dna, wingfoil://workflows,
+  wingfoil://workflows/-/next, wingfoil://workflows/-/status]` and templates `[wingfoil://dna/{section},
+  wingfoil://memory/{type}, wingfoil://memory/{type}/{id}, wingfoil://session/{role}/{element}/{state},
+  wingfoil://workflows/{name}]` (sorted; copied from the real `node dist/cli.js mcp` run above), and none of the
+  Resource URIs `registerCoreModules` derives from `CORE_MODULES` (`deriveMcpResourceUri` over `enumerateOperations`) is
+  among them — the fact the new comment states. No test on the comment's prose (D3).
+
+**Files expected to change.**
+- `src/core/workflow-next.ts` — `selectWorkflowInstance` moves here, beside `unresolvedRef`, with the D1 signature and a
+  TSDoc stating the §10 classes (D2).
+- `src/core/workflow-deduction.ts` — the function removed, with the imports only it used (`coreErr`, `coreOk`,
+  `CoreResult` at line 60 and `resolveInstanceRef` at line 42: `grep -n` shows no other use; lint confirms).
+- `src/core/index.ts` — line 211 stops re-exporting it from `./workflow-deduction`; line 179 re-exports it from
+  `./workflow-next` (the name in `main` unchanged).
+- `test/core/workflow-deduction.test.ts` (qa, red), `test/mcp/registrar.test.ts` (qa, red).
+- `src/mcp/registrar.ts` — module comment (lines 18-22), and the `registerCoreModules` TSDoc sentence "the shipped
+  `wingfoil mcp` server … does not call this function" kept.
+- Under D3 (a): the same-class sentences in `src/mcp/dna-resource.ts:4-8` ("both can and do coexist on the same
+  server"), `src/mcp/workflow-resource.ts:3-9` ("both coexist") and `src/mcp/index.ts:16-19` ("the one call a future
+  production entry point … needs alongside `registerCoreModules`").
+- Under D4 (a): `test/core/builtin-adapter-writers.test.ts:9` ("empty today", while line 35 holds `['agentExecute']`).
+- Not touched: `src/core/workflow-diagnostics.ts` (task-325's file) — none of the files above is it, and
+  `workflow-next.ts` does not import it (`grep -n workflow-diagnostics src/core/workflow-next.ts
+  src/core/workflow-deduction.ts` → no output). No `.wingfoil/` file, so no `version:` bump and no workflow phase list
+  or count; no CLI help text, so `docs/cli-reference.md` is unchanged.
+
+**Existing tests of the files to change, run on this base** (one jest process at a time, no slot):
+- `npx jest test/core/workflow-deduction.test.ts test/core/workflow-ref-not-open.test.ts test/core/workflow-next.test.ts
+  test/mcp/registrar.test.ts test/core/parity.test.ts --maxWorkers=2` → `Test Suites: 5 passed, 5 total`, `Tests: 72
+  passed, 72 total`.
+- `npx jest test/mcp/server.test.ts --maxWorkers=2` → `Tests: 8 passed`; `npx jest test/mcp/read-only-resources.test.ts
+  test/mcp/workflow-state-resources.test.ts --maxWorkers=2` → `Test Suites: 2 passed`, `Tests: 38 passed`;
+  `npx jest test/docs/mcp-surface-parity.test.ts test/lint/git-log-readers.test.ts test/mcp/server.test.ts
+  --maxWorkers=2` → `Test Suites: 3 passed`, `Tests: 14 passed` (`git-log-readers` lists `workflow-deduction.ts` as a
+  git-log reader; the move takes no git read with it).
+- `npx tsc --noEmit` → exit 0; `npm run -s docs:api` → exit 0 (the moved function keeps a TSDoc: `typedoc.json`
+  requires one on every exported Function).
+- `npm run check:mcp` → the two lines quoted under AC 2 (no `.wingfoil/` change, run for the Resource list).
+
+**Decisions for the approver.**
+- **D1 — the signature.** (a) `selectWorkflowInstance(deduction, ref?, snapshot?)`: every existing call compiles, but
+  without the snapshot the function still cannot tell the §10 classes apart, so the two-argument form keeps answering
+  one class wrong (either `workflow is not open` for a name that is nothing, as today, or `unknown workflow` for a loaded
+  workflow); (b) `selectWorkflowInstance(deduction, snapshot: Pick<DeductionSnapshot, 'workflows' | 'documents'>,
+  ref?)`: every answer is §10's by construction, from public types (`readDeductionSnapshotAtHead`,
+  `deduceWorkflowState`), at the cost of breaking a two-argument caller — none in the repository (the grep above), and
+  the package is `0.x`. **Recommendation: (b)**; R8 kept the export, and an export that answers wrongly is what
+  `bug-358` is about. The change needs a CHANGELOG line at `user-docs` (the signature of a `main` export changes in a
+  patch).
+- **D2 — where it lives.** (a) move it to `src/core/workflow-next.ts` beside `unresolvedRef`, `index.ts` re-exporting it
+  from there: no new import cycle (`workflow-next.ts` already imports `workflow-deduction.ts`, line 57; a scratch scan of
+  the relative non-type imports of `src/` finds one direct two-module cycle today, `src/mcp/index.ts ↔
+  src/mcp/server.ts`), the name in `main` unchanged; the deep path `dist/core/workflow-deduction.js` loses it
+  (`package.json` has no `exports` map, so the path is reachable, but `main` is the declared entry). (b) keep it in
+  `workflow-deduction.ts` and import `unresolvedRef` from `./workflow-next`: a new `workflow-deduction ↔ workflow-next`
+  cycle (harmless at run time, the import is used inside the function body). **Recommendation: (a).**
+- **D3 — scope of the comment fix.** (a) correct, in this task, the three same-class sentences in `dna-resource.ts`,
+  `workflow-resource.ts` and `src/mcp/index.ts` (comments only, claims that `registerCoreModules`' URIs coexist with the
+  served ones "on the same server" / that a production entry point calls it), and pin no prose; (b) `registrar.ts` only,
+  the three left as a candidate finding (W0-R6 (2)). **Recommendation: (a)**: same class as `bug-396`, no behaviour, no
+  test change, and a separate bug would cost a full cycle for three sentences.
+- **D4 — `bug-358`'s optional note.** (a) the developer corrects the stale "empty today" at
+  `test/core/builtin-adapter-writers.test.ts:9` (a test file red does not touch); (b) leave it. **Recommendation: (a)**,
+  as the bug invites.
+
+**Risks for the other open `w2` tasks.** `git diff --stat release/0.3...<branch>`: `task-322` (`docs/case-study.md`,
+`test/docs/…`), `task-327` (`scripts/e2e-smoke.cjs`, `.wingfoil/workflows/custom/e2e-smoke.yaml`, `test/cli/…`,
+`test/fixtures/workflow-reads/` — its `show-nope.stderr` is `workflow show`'s answer, from `workflow-list-show.ts`, which
+this task does not touch), `task-328` (`scripts/check-governance.cjs`, `git-conventions.md`, `test/cli/…`): no file in
+common. `task-325` (`src/core/workflow-diagnostics.ts`, `test/core/`): not touched here; `workflow-list-show.ts` imports
+it and is not touched either. Merge order free.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
