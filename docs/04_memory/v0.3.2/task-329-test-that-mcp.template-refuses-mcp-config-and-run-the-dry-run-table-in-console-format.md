@@ -171,6 +171,22 @@ Design gate approved by the approver on 2026-10-31T20:41:28+01:00, in the orches
 - D2 — yes: task-295's four cases stay in test/cli/workflow-console-dry-run.integration.test.ts.
 - D3 — yes: the two `--force` warning tests stay as they are.
 
+### red (qa, 2026-10-31)
+
+Both ACs are characterization (design table); both pass on first run, so there is no failing assertion to quote and no `src/` change. Red commit `7efa57661`. PATH guard: `command -v wingfoil` printed the task's PATH shim, `wingfoil --version` printed `0.3.1 (9d6527b63f3924c1db989365a0457f1627bad550)`. No merge of `release/0.3` was needed (`git rev-list --count HEAD..release/0.3` printed `0`).
+
+| AC | Class | Test | Result |
+|----|-------|------|--------|
+| 1 — `{mcp_config}` refused inside `mcp.template` | characterization | `test/agent/manifest.test.ts`, `describe('task-237 (g) …')`, `it.each` "refuses %s inside mcp.template under config-arg, with exactly one issue" (cases `{mcp_config}`, `{mcp_config_file}`) | passes on first run |
+| 2 — every row also in console format | characterization | `test/cli/dry-run.integration.test.ts`, the existing per-row `it.each(Object.entries(ROWS))` (22 rows): after the JSON dry run, `wingfoil(repo, [...row.args, '--dry-run'])` must exit 0 with empty stderr, print `JSON.stringify(plan, null, 2) + '\n'` exactly, and leave the repository unchanged (`assertPersistenceUnchanged(…, 'console dry run')`); the header comment now says four things | passes on first run |
+
+Fixture provenance (AC 1): the two expected issues were copied from a real run of the compiled `parseAdapterManifest` (`node <scratch>/p.js`, which loads `test/fixtures/agents/custom/fake.yaml`, applies the `configArg()` edits, adds `, cfg = "<placeholder>"` to `mcp.template`). It printed one issue each, code `E_ADAPTER_PLACEHOLDER`, path `mcp.template`, file `HEAD:.wingfoil/agents/custom/fake.yaml`, and the messages the test pins.
+
+Checks before the red commit (all in the worktree):
+- invisible-character grep on both files: no hit (exit 1).
+- `npx tsc --noEmit -p tsconfig.json`: no output.
+- `npx jest test/agent/manifest.test.ts test/cli/dry-run.integration.test.ts test/lint --maxWorkers=2` → `Test Suites: 15 passed, 15 total`, `Tests: 283 passed, 283 total`, `Time: 86.558 s`.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
