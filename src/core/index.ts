@@ -176,7 +176,7 @@ export type { CheckTokenView, ListEntry, ListResult, PhaseView, ShowInputs, Show
 // task-216: `workflow next` at `HEAD` (`spec-017` §6, §7.3, §8 `Step` / `NextResult`); the operation is
 // `CORE_MODULES`' `workflowNext`, and the step builder is what `agent execute --next` (task-235) and `status`
 // (task-225) reuse. `workflowNextAtHead` is also what the MCP Resource `wingfoil://workflows/-/next` serves (task-239).
-export { buildStep, nextWorkflow, renderNextConsole, workflowNextAtHead } from './workflow-next';
+export { buildStep, nextWorkflow, renderNextConsole, selectWorkflowInstance, workflowNextAtHead } from './workflow-next';
 // task-226: `workflow finalize` (`spec-017` §7.9, §8 `FinalizeResult`); the operation is `CORE_MODULES`'
 // `workflowFinalize`.
 export { NO_ACTIVE_WORKFLOW_TO_FINALIZE, phaseRecordTrailers, renderFinalizeConsole, workflowFinalizeAtHead } from './workflow-finalize';
@@ -208,7 +208,7 @@ export { W_WORKFLOW_CHECKS_NOT_RUN, workflowCoreDiagnostics } from './workflow-c
 export type { CheckedRegistry, WorkflowCoreInputs } from './workflow-core-checks';
 export { iterationStartState, machineStates, workflowExitStates } from './workflow-exit-state';
 export type { ExitStart, HeldGate, InstanceState, PhaseExitState, UndeterminedAction } from './workflow-exit-state';
-export { deduceWorkflowStateAtHead, readDeductionSnapshotAtHead, selectWorkflowInstance } from './workflow-deduction';
+export { deduceWorkflowStateAtHead, readDeductionSnapshotAtHead } from './workflow-deduction';
 export {
   deduceWorkflowState,
   NO_ITERATION_NOTE,
