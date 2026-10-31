@@ -54,6 +54,7 @@ Dead exported code whose answer and test contradict §10 for unknown refs.
   says `REVIEWED_AGENT_WRITERS` is "empty today", while it holds `agentExecute` since `task-218` (follow-up item 12,
   from `task-236`'s green phase).
 - Related: `bug-326` (the commands' `<ref>` refusals, fixed by `task-281`).
+- task-323 (patch-v0.3.2): the Expected Behavior is met for callers that pass the snapshot to `selectWorkflowInstance` (its third argument); the two-argument call still answers `workflow is not open: <ref>`, deferred to `bug-465` (v0.4) by the approver's ruling at task-323's design gate.
 
 ## Triage & Execution Notes
 
