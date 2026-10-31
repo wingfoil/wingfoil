@@ -194,8 +194,12 @@ it exits `1` with `git identity not usable: …`. If git itself cannot be run �
 not executable, or a sandbox forbids starting it — the command exits `1` with `could not run git: <cause>`
 (for example `could not run git: spawnSync git ENOENT`) instead. `agent execute`, whose first git call
 is that read of `HEAD`, reports the same cause as
-`E_GIT_READ_FAILED: git rev-parse HEAD failed in <root>: spawnSync git ENOENT`, also exit `1`. In every
-case nothing is written.
+`E_GIT_READ_FAILED: git rev-parse HEAD failed in <root>: spawnSync git ENOENT`, also exit `1`. If git runs
+but cannot read its configuration — a config file it cannot parse, for example — the command exits `1` with
+`could not read git configuration: <git's message>` (for example `could not read git configuration: bad
+config line 9 in file .git/config`) rather than reporting a missing identity; `agent execute` and a read
+such as `workflow list` report it as `E_GIT_READ_FAILED: git rev-parse HEAD failed in <root>: fatal: bad
+config line …`. In every case nothing is written.
 
 `memory approve`, `memory reject` and `memory amend` additionally require the author's email to
 belong to a `team.members` entry holding the `approver` role in the committed `dna.yaml` (see
