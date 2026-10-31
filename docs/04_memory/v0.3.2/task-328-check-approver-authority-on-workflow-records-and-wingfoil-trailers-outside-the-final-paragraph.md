@@ -174,6 +174,16 @@ scripts/e2e-smoke.cjs` prints nothing. After this merges, every later commit on 
 the orchestrator's records) is gated by both rules: a hand amend that adds the attribution as a separate paragraph
 fails CI there, as §8 already forbids.
 
+### design gate (approver, 2026-10-31)
+
+Design gate approved by the approver on 2026-10-31T12:06:49+01:00, in the orchestrator's chat:
+- D1 — yes: two new check names, `workflow-record-authority` and `trailer-paragraph`, under the existing `authority`/`body` rules.
+- D2 — (a): the trailer rule covers every non-merge commit and every `WingFoil-` key, case-insensitive.
+- D3 — yes: a record's `Reason:` block is not held to dl-067 in this task.
+- D4 — yes: red amends the provenance test and the `CHECKS` pin.
+- D5 — yes: AC3 is red-first.
+- D6 — yes: `.github/workflows/governance.yml`'s header comment changes in this task.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
