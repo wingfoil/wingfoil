@@ -7,12 +7,12 @@
  * candidates, never on their order.
  */
 
-import { SUGGESTION_MAX_DISTANCE, closestName, levenshtein } from '../core/closest-name';
+import { closestName, levenshtein } from '../core/closest-name';
 
-export { SUGGESTION_MAX_DISTANCE, levenshtein };
+export { levenshtein };
 
 /**
- * The command nearest to `token` within {@link SUGGESTION_MAX_DISTANCE}, or `undefined` when none is that
+ * The command nearest to `token` within the shared matcher's distance, or `undefined` when none is that
  * close (the shared matcher, `closestName`, which now lives in core).
  */
 export function closestCommand(token: string, candidates: readonly string[]): string | undefined {
