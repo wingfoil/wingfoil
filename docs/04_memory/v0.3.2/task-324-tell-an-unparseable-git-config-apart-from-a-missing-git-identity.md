@@ -208,8 +208,7 @@ Role qa. Red commit `73911351ba4d5a0ef15caa5d13fdfe85b082cdd7` (`test(core): tas
 
 ### green (developer, 2026-10-31)
 
-Role developer. `git rev-list --count HEAD..release/0.3` printed `0` at the start (no merge). Pinned build: `command -v wingfoil`
-printed `/home/robypomper/Workspaces/.wf2-wt/devloop-kit/bin/task-324/wingfoil`, `wingfoil --version` printed
+Role developer. `git rev-list --count HEAD..release/0.3` printed `0` at the start (no merge). Pinned build: `wingfoil --version` printed
 `0.3.1 (fa3b567de29b3fff6ae13ba5994590faaf99cc05)`.
 
 Commit `77e6245ac` (`fix(core): task-324 — tell an unparseable git config apart from a missing git identity (bug-379)`):
