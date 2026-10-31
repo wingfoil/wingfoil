@@ -450,3 +450,34 @@ describe('git-conventions §1 rule 6 — the merge-forward phase (task-306)', ()
     expect((date?.[1] ?? '') >= '2026-10-28').toBe(true);
   });
 });
+
+/**
+ * task-328 (`bug-444`, `bug-391`) — §9 names the two checks the governance script gains: an `Approver:` line on the
+ * three `workflow:` record subjects, and a `WingFoil-*` trailer outside the final paragraph. Red-first (the text is
+ * new, design D5): substrings of whitespace-flattened §9, and a version of 2.6 or later whose line names the task and
+ * both bugs (robust to a later re-bump).
+ */
+describe('git-conventions §9 — workflow records and trailer paragraph (task-328)', () => {
+  const flat = (s: string): string => s.replace(/\s+/g, ' ');
+  const f9 = flat(section('9. Checks on pushed commits'));
+  const header = TEXT.slice(0, TEXT.indexOf('\n---', 4));
+
+  it('AC 3: §9 names the Approver: check on a workflow: finalize, adopt or rekey record and cites bug-444', () => {
+    expect(f9).toContain('an `Approver:` line on a `workflow: finalize`, `workflow: adopt` or `workflow: rekey` record, when it has one');
+    expect(f9).toContain('`bug-444`');
+  });
+
+  it('AC 3: §9 names the WingFoil-* trailer outside the final paragraph and cites §8 and bug-391', () => {
+    expect(f9).toContain("a `WingFoil-*` trailer outside the commit's final paragraph (§8, `bug-391`)");
+  });
+
+  it('AC 3: the version is 2.6 or later, its line names task-328, bug-444 and bug-391, the Date is 2026-10-31 or later', () => {
+    const version = /^version: "(\d+)\.(\d+)"(.*)$/m.exec(header);
+    expect(version).not.toBeNull();
+    expect(Number(version![1]) * 1000 + Number(version![2])).toBeGreaterThanOrEqual(2006);
+    for (const id of ['task-328', 'bug-444', 'bug-391']) expect(version![3]).toContain(id);
+    const date = /\*\*Date:\*\* (\d{4}-\d\d-\d\d)/.exec(TEXT);
+    expect(date).not.toBeNull();
+    expect((date?.[1] ?? '') >= '2026-10-31').toBe(true);
+  });
+});
