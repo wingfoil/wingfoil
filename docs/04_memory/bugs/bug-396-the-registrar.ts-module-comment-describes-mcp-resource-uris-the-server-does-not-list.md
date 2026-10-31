@@ -66,9 +66,4 @@ follow-up registry, item 9: found in `task-289`'s design), checked on `main` at 
 
 ### Retrospective
 
-<!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
-     reconstructed afterwards. One line per item: what happened, the evidence (a command and what it
-     printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
-     An item met while fixing goes in the fix task's own subsection; this one holds what belongs to
-     the bug itself (its finding, its triage, why it took more than one task). The retrospective's
-     `explore` reads this subsection first. -->
+None.
