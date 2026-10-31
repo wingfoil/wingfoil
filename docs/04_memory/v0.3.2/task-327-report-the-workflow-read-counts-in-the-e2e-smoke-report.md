@@ -382,6 +382,28 @@ test/fixtures/workflow-reads` printed nothing.
 
 None. `bug-404` already carries its `### Retrospective` (`None.`), so it needs no edit beyond the status sync.
 
+### review fixes (developer, 2026-10-31)
+
+The reviewer approved with two follow-ups introduced by the fix, and one optional item; all in commit `00ea2ea65`
+(`fix(e2e-smoke): task-327 — review follow-ups …`), new test file `test/cli/e2e-smoke-workflow-reads-edges.test.ts` (the red's
+files untouched).
+- A list answering 0 workflows passed all three checks and left the show Result cell empty. `workflowReads` now fails the list
+  check with `exit 0, 0 workflows: a candidate repository always has workflows` (show and status are not run, so their rows read
+  `not run: …`); a show row that read nothing renders `no workflow was read`. Pinned by two tests of the new file.
+- An exit-0 answer that is valid JSON but no object (`[1]`, `null`) now fails with `stdout is not a JSON object`; text keeps
+  `stdout is not valid JSON` (`judgeRead` carries `notObject`). Pinned by one test. The report row of such a list still reads
+  `stdout is not valid JSON` (the counts are null either way, and the red pins that wording).
+- Optional item done: `readsRepository(parsed, candidate, root)` (exported, declared in `scripts/e2e-smoke.d.cts`) is used by the main
+  block; one test pins the flag winning, the `--candidate` default, and none.
+- The new test's fake answers come from a real `node -e` process (a fixed `stderr: ''` fails `no-fabricated-stderr`, which my first
+  version did: `npx jest test/lint` printed `1 failed, 180 passed`; after the change `Tests: 181 passed`).
+
+Commands: `npx jest test/cli/e2e-smoke-workflow-reads-edges.test.ts test/cli/e2e-smoke-workflow-reads.test.ts test/lint
+--maxWorkers=2` → `Tests: 181 passed, 181 total`; `npx jest test/cli/e2e-smoke --maxWorkers=2` → `Test Suites: 7 passed`, `Tests: 124 passed`;
+after `waitslot.sh`, `npm test -- --maxWorkers=2` → `Test Suites: 537 passed, 537 total`, `Tests: 9456 passed, 9456 total`;
+`npm run docs:api`, `npm run lint`, `npm run typecheck` each exit 0. Coverage was not re-run (skipped; the previous run was 99.35 | 97.51 |
+98.15 | 99.7 and this change adds code with tests). The task stays `in-review`; no new submit.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
