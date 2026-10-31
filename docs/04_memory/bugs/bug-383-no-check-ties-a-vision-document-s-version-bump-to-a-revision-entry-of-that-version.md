@@ -22,7 +22,9 @@ No check verifies that a vision document whose `version:` is bumped carries a ma
 
 On `main` at `327a7b01`:
 
-1. `grep -ln "^## Revision history" docs/01_vision/*.md` → `00_index.md` and `X_cli-cmds.md`.
+1. `grep -ln "^## Revision history" docs/01_vision/*.md` → `docs/01_vision/X_cli-cmds.md` only: `00_index.md` has no
+   such heading; its line 185 (`- Revision history — L389–486` at `327a7b01`) is a document-map entry that points at
+   `X_cli-cmds.md`'s history.
 2. `grep -n "the header is at version 1.7 or later" -A18 test/docs/x-cli-cmds.test.ts` → the one test that reads
    `X_cli-cmds.md`'s history pins the entries `task-245` named by hand (the header at 1.7 or later, entries 1.7 and
    1.5 present, in descending order); it does not tie the header's `version:` to an entry of that version, so a 1.8
