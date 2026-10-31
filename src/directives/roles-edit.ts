@@ -10,8 +10,8 @@
  *
  * `roles.yaml` is hand-annotated configuration, so a whole-file `js-yaml` `dump()` — which drops every
  * comment — is not an acceptable write path (bug-004 for `dna.yaml`, and bug-019 for the silent
- * fallback). Like `setDnaValueInText` (`src/dna/set.ts`, task-063) this module edits the raw text
- * line by line, touching only the lines of one role's list, and needs no YAML CST dependency
+ * fallback). Like the DNA editor (`applyDnaEditInText`, `src/dna/edit.ts`, task-093) this module edits
+ * the raw text line by line, touching only the lines of one role's list, and needs no YAML CST dependency
  * (dl-010). Anything it cannot edit provably yields `undefined`, leaving the fallback decision to the
  * caller.
  *

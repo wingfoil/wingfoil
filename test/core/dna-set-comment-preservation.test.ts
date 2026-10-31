@@ -143,7 +143,7 @@ describe('dna.dnaSet — bug-004: a comment-rich dna.yaml survives a set (task-0
     // task-093/bug-084: the inserted key must be one the SCHEMA declares — an undeclared key is now
     // refused at exit 1 rather than created. `stacks.technologies` carries a `version?` field that the
     // `Zod` entry does not fill, so this still exercises "absent key, inserted in place", and it does
-    // so inside a sequence entry, which is the shape `setDnaValueInText` alone could never reach.
+    // so inside a sequence entry, which is the shape task-063's mapping-only setter (removed by task-312) could never reach.
     const result = await dnaSetFn()({ root: repo, positionals: ['stacks.technologies.Zod.version'], options: { value: '4.4.3' } });
     expect(result.ok).toBe(true);
 

@@ -29,6 +29,16 @@ Feature: P2.5 (US-0A-22) - wingfoil paths [category]
     Then the output contains "docs/runs/"
     And the command exits with code 0
 
+  Scenario: a project-specific category is served with no warning
+    # spec-002 Categories: a project may add its own category, an ordered list of directories like the
+    # declared ones; it is validated as such and served with no unknown-field warning (bug-316, task-312).
+    # The write verbs still address only the declared categories (dl-081).
+    Given DNA maps the project-specific category "extras" to "notes/"
+    When I run "wingfoil paths extras"
+    Then the output contains "notes/"
+    And no warning is printed
+    And the command exits with code 0
+
   Scenario: Error - querying an undefined category
     When I run "wingfoil paths governance"
     And no "governance" category is mapped in DNA
