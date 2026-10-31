@@ -1,0 +1,16 @@
+Usage: wingfoil workflow list [options]
+
+list the workflows you can run now, as committed at HEAD
+
+Options:
+  --all       list every workflow, the includable ones no open workflow has
+              reached as well
+  -h, --help  display help for command
+
+Example:
+  $ wingfoil workflow list --all
+
+Exit codes:
+  0  success
+  1  the command line was valid, but the operation failed
+  2  the command line is wrong: unknown command or option, missing or invalid argument

@@ -388,7 +388,10 @@ and `agent list --past`, then, per template, Journey 4 (task-242): the self-chec
 `docs/examples/06-workflow-approval/run.sh` creates and starts a workflow, adds a task with `memory add
 --workflow`, routes its approval (the "human needed" line of `workflow status`), records a checkpoint with
 `workflow finalize` and ends the instance with `workflow end`, each checked for its exit code and its commit; and
-the repository's MCP registration checked. The
+the repository's MCP registration checked. Before the
+templates the gate also reads the repository's own workflows with the build under test (task-327, bug-404):
+`workflow list --all`, `workflow show` for every workflow it names and `workflow status`, each `--format json`;
+a non-zero exit, a stdout that is not JSON or an error diagnostic fails it, and the report states the counts. The
 gate hard-rejects, and its report is the phase's evidence (`produces:`, bug-134). The same smoke runs
 on every push in `ci.yml`'s `e2e-smoke` job, against the packed tarball.
 
