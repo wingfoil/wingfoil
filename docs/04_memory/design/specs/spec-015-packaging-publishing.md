@@ -249,8 +249,9 @@ stage 3 smoke (the same scenario of `scripts/e2e-smoke.cjs`, against the staged 
 registry, so it is a gate run once per candidate (`dl-099` §4 (a)); `publish.yml`'s `stage` job runs the same
 script again in CI on the tagged build. Without `--tarball` the script packs the checkout: it refuses a change
 under the pack inputs (`PACK_INPUTS`, `scripts/write-build-info.cjs`) and removes `dist/` first, so the pack
-rebuilds it from the commit alone. `--check-transcript` also fails a transcript with a line recording a failure
-(`FAIL`, `FAILED`), a `--version` line for another stamp, or two distinct commits. Before the tag,
+rebuilds it from the commit alone. `--check-transcript` also fails a transcript with a non-empty line that does not
+start with the `[publish:staging] ` prefix (`LOG_PREFIX`), a line recording a failure (`FAIL`, `FAILED`), a
+`--version` line for another stamp, or two distinct commits. Before the tag,
 `evidence-only-since-candidate` (`node scripts/publish-staging.cjs --check-evidence-only <transcript> --evidence
 <prefix/> …`) passes only when the candidate is an ancestor of the tip and every path `git diff --name-only
 <candidate>..<tip>` lists is an evidence path its binding declares; otherwise it names the paths, and the
@@ -860,4 +861,14 @@ with a non-empty `dist.tarball` and a `HEAD` request to that URL answers HTTP 20
 5's bounded poll") and `pages.yml`'s build inherit it. The command line, the exit codes, the jobs and the bound are
 unchanged. The pins are `test/cli/wait-npm-version.test.ts`, `test/cli/wait-npm-version-failures.test.ts` and
 `test/cli/wait-npm-version-tarball.test.ts`. Edited in place: no supersede, no state change, no `version:` bump
+(`dl-047`), as in the revisions above.
+
+**Revision (2026-10-31, `task-326`) — §3: `--check-transcript` judges every non-empty line (`bug-382`).** The check
+read only the closing line and the lines it matched by content, so a line without the `[publish:staging] ` prefix
+(`LOG_PREFIX`), such as a hand-added `--version` line, went unjudged. `checkTranscript` now refuses the first
+non-empty line that does not start with the prefix, after the closing-line check and before the failure scan, with
+the reason `line <n> does not start with "[publish:staging] ": "<line>"`; whitespace-only lines and CRLF line ends
+still pass, and `--check-evidence-only` inherits the refusal. A passing run writes no unprefixed line, and the two
+committed rehearsal transcripts hold none. The pins are `test/cli/staging-rehearsal.test.ts` and
+`test/cli/evidence-only-tag.test.ts`. Edited in place: no supersede, no state change, no `version:` bump
 (`dl-047`), as in the revisions above.
