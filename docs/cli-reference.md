@@ -226,7 +226,7 @@ directives in `directives/built-in/` plus four starter custom directives in `dir
 (`scrum-delivery` vs `kanban-delivery`) and in `project.methodology` / `stacks.methodologies`.
 
 - **Output:** `{ root, template, files: [...] }` — the files it created.
-- **Commit:** `chore(wingfoil): initialize .wingfoil/ with the <Template> template (P5.1.1)`
+- **Commit:** `chore(wingfoil): initialize .wingfoil/ with the <Template> template`
 - **Errors:** already initialized → exit `1` (`error: WingFoil already initialized (to change its
   configuration, edit the files under .wingfoil/ and commit them, or use the wingfoil dna and wingfoil
   directive commands)`); `--template` omitted without a terminal or with `--no-interactive` → exit `2`
