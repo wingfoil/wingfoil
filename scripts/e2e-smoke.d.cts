@@ -59,12 +59,54 @@ export interface SmokeCheck {
   readonly detail: string;
 }
 
+/** task-327 (`bug-404`): what one workflow read returned. `null` counts mean no JSON object was read from stdout. */
+export interface WorkflowReadResult {
+  /** The exit code; `null` on a spawn error. */
+  readonly exit: number | null;
+  /** The length of the answer's `diagnostics` (0 when the JSON answer has none); `null` when stdout is not a JSON object. */
+  readonly diagnostics: number | null;
+  /** How many of those diagnostics have severity `error`; `null` as `diagnostics`. */
+  readonly errors: number | null;
+  /** `true` when an exit-0 stdout was JSON but no object (the report says so); absent otherwise. */
+  readonly notObject?: boolean;
+}
+
+/** task-327: the `workflow list --all --format json` read. */
+export interface WorkflowListRead extends WorkflowReadResult {
+  /** The length of the answer's `workflows`; `null` when stdout is not a JSON object. */
+  readonly workflows: number | null;
+  /** The diagnostics grouped by code and severity, sorted by code, then severity; `[]` when `diagnostics` is `null`. */
+  readonly codes: ReadonlyArray<{ readonly code: string; readonly severity: string; readonly count: number }>;
+}
+
+/** task-327: one `workflow show <name> --format json` read. */
+export interface WorkflowShowRead extends WorkflowReadResult {
+  readonly name: string;
+}
+
+/** task-327: the `workflow status --format json` read; each count is the length of the answer's array of that name. */
+export interface WorkflowStatusRead extends WorkflowReadResult {
+  readonly open: number | null;
+  readonly pendingApprovals: number | null;
+  readonly ungated: number | null;
+  readonly ungatedRoutedTo: number | null;
+}
+
+/** task-327: the counts of the reads {@link workflowReads} ran; a read not run is absent. */
+export interface WorkflowReads {
+  readonly list?: WorkflowListRead;
+  readonly show?: readonly WorkflowShowRead[];
+  readonly status?: WorkflowStatusRead;
+}
+
 /** Result of {@link runSmoke}. */
 export interface SmokeReport {
   /** `true` when every recorded check passed. */
   readonly ok: boolean;
   /** Checks in execution order, up to and including the first failure. */
   readonly checks: readonly SmokeCheck[];
+  /** task-327 (`bug-404`): the workflow reads' counts; present only when {@link SmokeOptions.repository} was given. */
+  readonly workflowReads?: WorkflowReads;
 }
 
 /** Options for {@link runSmoke}. */
@@ -87,6 +129,12 @@ export interface SmokeOptions {
    * never `unknown` or `-dirty`. {@link runSmoke} throws otherwise.
    */
   readonly expectedCommit?: string;
+  /**
+   * task-327 (`bug-404`): the absolute path of a repository to read. When given, right after `--help` and
+   * `--version` and before the first template, {@link workflowReads} runs in it and its three checks are
+   * recorded (labels `[repository] …`); the result then carries {@link SmokeReport.workflowReads}.
+   */
+  readonly repository?: string;
   /** Progress sink, one line per check. */
   readonly log?: (line: string) => void;
 }
@@ -175,10 +223,29 @@ export function smokeJourney(
   timeoutMs?: number,
 ): SmokeCheck;
 
-/** The Markdown report `--report` writes (`bug-134`): no clock in it, so the same run gives the same bytes. */
+/**
+ * task-327 (`bug-404`): the workflow reads on the repository `root`, run with `invoke` (the shape
+ * {@link smokeTemplate} takes), each `--format json`: `workflow list --all`; if it passed, `workflow show <name>`
+ * for every name of its `workflows`, in its order (all run, judged as one check); if that passed, `workflow
+ * status`. One check each, labelled `[repository] wingfoil …`; a check passes iff the exit is 0, stdout is a JSON
+ * object and none of its diagnostics has severity `error`. A failing check ends the list; `reads` lacks the reads
+ * not run. Never throws (an `invoke` that throws counts as a spawn error).
+ */
+export function workflowReads(
+  invoke: (args: readonly string[], cwd: string) => { status: number | null; stdout: string; stderr: string },
+  root: string,
+): { checks: SmokeCheck[]; reads: WorkflowReads };
+
+/**
+ * The Markdown report `--report` writes (`bug-134`): no clock in it, so the same run gives the same bytes. With
+ * `report.workflowReads` it ends with the section "Repository checks on the candidate (workflow reads)".
+ */
 export function formatReport(report: SmokeReport, meta: SmokeReportMeta): string;
 
-/** Run the dl-023 smoke; stops at the first failing check. Throws on an invalid `expectedCommit`. */
+/**
+ * Run the dl-023 smoke; stops at the first failing check. Throws on an invalid `expectedCommit`. Without
+ * `options.repository` the result is exactly `{ ok, checks }`.
+ */
 export function runSmoke(options: SmokeOptions): SmokeReport;
 
 /**
@@ -210,11 +277,21 @@ export function probeFakeRead(run: string, role: string, git: SmokeGit, recordFi
 /** Throw unless `commit` is a full sha, 40 or 64 lowercase hex digits (no `-dirty`, not `unknown`). */
 export function assertCommitName(commit: string): void;
 
-/** Parse `[--expect-version X [--expect-commit SHA]] [--report PATH] [-- command args...]`; throws on a bad argument. */
+/**
+ * task-327: the repository the workflow reads run in: `parsed.repository` when given, else `root` when `candidate`
+ * is true, else `undefined`.
+ */
+export function readsRepository(parsed: { repository?: string }, candidate: boolean | undefined, root: string): string | undefined;
+
+/**
+ * Parse `[--expect-version X [--expect-commit SHA]] [--repository PATH] [--report PATH] [-- command args...]`;
+ * throws on a bad argument. `repository` (task-327) is `path.resolve`d and absent without the flag.
+ */
 export function parseSmokeArgs(argv: readonly string[]): {
   command: string;
   commandArgs: string[];
   expectedVersion?: string;
   expectedCommit?: string;
+  repository?: string;
   reportPath?: string;
 };
