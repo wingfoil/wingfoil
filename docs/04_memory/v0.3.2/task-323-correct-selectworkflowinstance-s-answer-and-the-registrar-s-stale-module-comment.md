@@ -238,6 +238,20 @@ request):
   in this task (comments only).
 - D4 — (a) yes: the stale "empty today" comment at test/core/builtin-adapter-writers.test.ts:9 is fixed.
 
+### red (qa, 2026-10-31)
+
+**Setup.** Branch was 53 commits behind `release/0.3` (`git rev-list --count HEAD..release/0.3` -> 53), so `git merge --no-edit release/0.3` ran first (head `c5521c1e4`). PATH guard: `command -v wingfoil` -> the task's PATH shim, `wingfoil --version` -> `0.3.1 (e62583e393927c20f6e0b88fea7c3a17f83d7bdd)`.
+
+**Files** (tests only; no `src/`, no `.d.cts` needed, the red imports nothing new from `src/core`): `test/core/workflow-deduction.test.ts`, `test/mcp/registrar.test.ts`. Red commit: `c46a6abe6`.
+
+**AC 1 (red-first), D1 (a) / D2 (a).** In describe "task-198 AC 1" the `it` on `<ref>` is rewritten and a second added:
+- `<ref> resolves a workflow name ...; with the snapshot every other ref gets spec-017 §10's answer ...`: calls `selectWorkflowInstance(deduction, ref, snapshot)` (`snapshot = readDeductionSnapshotAtHead(repo)`, `deduction = deduceWorkflowState(snapshot)`), imported from the `src/core` barrel. Pins `task-flow` -> `plan-a`, `plan-b` -> `plan-b`, no ref -> `plan-b`; `nope` and `p-sub` -> `unknown workflow: <ref>`; `p-done`, `p-helper`, `helper`, `release-flow` -> `workflow is not open: <ref>`; and each of the six `toEqual`s `unresolvedRef({ workflows: snapshot.workflows, plans: instancePlanIds(snapshot.documents) }, ref)`.
+- `a call without the snapshot still compiles and keeps its answer`: the two-argument form keeps `workflow is not open: <ref>` for `nope`, `p-done`, `p-sub`, `helper` (characterization; passes on first run; TSDoc text not pinned).
+- Run: `npx jest test/core/workflow-deduction.test.ts test/mcp/registrar.test.ts --maxWorkers=2` -> `Tests: 1 failed, 33 passed, 34 total`. First failing assertion (`workflow-deduction.test.ts:247`): `expect(selectWorkflowInstance(deduction, ref, snapshot)).toEqual(...)` with `- "message": "unknown workflow: nope"` / `+ "message": "workflow is not open: nope"` (the right reason: the assertion). Under ts-jest `isolatedModules` the extra argument is ignored at run time.
+- `npx tsc --noEmit -p tsconfig.json` -> six `TS2554: Expected 1-2 arguments, but got 3` (`workflow-deduction.test.ts` lines 238, 240, 242, 247, 251, 255), the stated expected red and the only errors; `npx jest test/lint --maxWorkers=2` -> `Tests: 1 failed, 152 passed`, the one failure `typecheck.clean` listing exactly those six TS2554 (it clears when the third parameter exists).
+
+**AC 2 (characterization), `test/mcp/registrar.test.ts`**, describe "task-323 AC 2": `registerCoreModules stays exported by the src/mcp barrel` (and is the registrar's function), and `createMcpServer lists the four Resource URIs and five templates ...` over `InMemoryTransport`, none of the Resource URIs derived from `CORE_MODULES` (`deriveMcpResourceUri` over `enumerateOperations`) among them. The lists were copied from a real run: `initialize`, `resources/list` and `resources/templates/list` piped into `node $(pwd)/dist/cli.js mcp` -> resources `wingfoil://dna wingfoil://workflows wingfoil://workflows/-/next wingfoil://workflows/-/status`; templates `wingfoil://dna/{section} wingfoil://memory/{type} wingfoil://memory/{type}/{id} wingfoil://session/{role}/{element}/{state} wingfoil://workflows/{name}`. Both pass on first run (same command as above: `registrar.test.ts` all green). No test on the comment's prose (D3).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
