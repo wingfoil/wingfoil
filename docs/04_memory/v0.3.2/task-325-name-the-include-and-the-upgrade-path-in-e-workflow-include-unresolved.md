@@ -254,6 +254,14 @@ Run in the worktree with the spec-003 pending amendment in the working tree. Hea
 
 - `docs/04_memory/design/specs/spec-003-workflows-yaml-schema.md` (tech-spec, approved), left uncommitted: the "Diagnostics" row `E_WORKFLOW_INCLUDE_UNRESOLVED` gains the message shape, and a Revision note (2026-10-31) names task-325 and `bug-394`. Proposed `--reason`: "Record the message shape of E_WORKFLOW_INCLUDE_UNRESOLVED that task-325 ships: the name to write and the upgrade section of the user guide (bug-394)."
 
+### review fixes (developer, 2026-10-31)
+
+Finding (reviewer, approve with fixes): `src/cli/suggest.ts` re-exported `SUGGESTION_MAX_DISTANCE`, which no caller imports (`grep -rn "SUGGESTION_MAX_DISTANCE" src test` listed only `src/cli/suggest.ts` and `src/core/closest-name.ts` plus `test/core/closest-name.test.ts`, which imports it from core); the dead re-export is the 75 % functions figure noted in the retrospective below.
+- Fix: the file imports `closestName` and `levenshtein` only, re-exports `levenshtein` only (`test/cli/suggest.test.ts` uses it), and the TSDoc of `closestCommand` no longer links the constant.
+- `npx jest test/cli/suggest.test.ts test/cli/program.test.ts test/core/closest-name.test.ts test/lint --maxWorkers=2` -> `Test Suites: 16 passed`, `Tests: 214 passed`. `npm run -s lint`, `npm run -s docs:api`, `npx tsc --noEmit` -> exit 0 each.
+- `npx jest test/cli/suggest.test.ts test/cli/program.test.ts --coverage --collectCoverageFrom=src/cli/suggest.ts --maxWorkers=2` -> `suggest.ts | 100 | 100 | 100 | 100`, `Tests: 57 passed`.
+- The full suite was not re-run: the change removes one unused re-export and edits a comment; the four targeted suites above import the file.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
