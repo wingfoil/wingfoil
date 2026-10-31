@@ -222,6 +222,38 @@ Design gate approved by the approver on 2026-10-31T20:24:56+01:00, in the orches
 
 **Red commit:** `9826ac22e9609d423f78594a6027387fe6b6f33f`.
 
+### green (developer, 2026-10-31)
+
+**Base.** `git rev-list --count HEAD..release/0.3` printed `0` at the start and at the end of refactor: no merge owed. The task's PATH shim was active for every command (`command -v wingfoil` printed the shim, `wingfoil --version` printed `0.3.1 (145948092a21499bc771d8c2e3fde5cd6d582c12)`).
+
+**Change** (commit `bac9d188b`): new `src/core/closest-name.ts` (`levenshtein`, `SUGGESTION_MAX_DISTANCE`, `closestName`, moved from `src/cli/suggest.ts`, D1 (a)); `src/cli/suggest.ts` re-exports the two and `closestCommand` delegates to `closestName`, so `test/cli/suggest.test.ts` and `src/cli/program.ts` are unchanged; `src/core/workflow-diagnostics.ts` gains `unresolvedIncludeMessage` (the basename of a path-shaped value without `.yaml`/`.yml`, an exact declared basename first, else `closestName` over every declared name, distance <= 2, ties by code-unit order; the upgrade pointer only for a path-shaped value, D3 (a), in the approver's wording, D4); `docs/user-guide.md` section 12 quotes the new line (D4); new developer-owned `test/core/closest-name.test.ts` (4 cases). `src/core/index.ts` and `src/core/workflow-next.ts` are untouched.
+
+**red -> green.** Red (qa): `npx jest test/core/workflow-diagnostics.test.ts test/docs/user-guide-scaffold.test.ts --maxWorkers=2` -> `Tests: 12 failed, 56 passed, 68 total`. After the source change and before the guide edit: `npx jest test/core/workflow-diagnostics.test.ts test/cli/suggest.test.ts test/docs/user-guide-scaffold.test.ts --maxWorkers=2` -> one failure, the guide-quote test (`Expected substring: "E_WORKFLOW_INCLUDE_UNRESOLVED phases[2].include ..."`), as the red's note predicted. After the guide edit, same command -> `Test Suites: 3 passed, 3 total`, `Tests: 79 passed, 79 total`. `npx tsc --noEmit -p tsconfig.json` -> exit 0 before the run.
+
+**Per AC** (one AC, red-first): met. Path to a declared delivery workflow (Scrum, Kanban), bare `.yaml` name, path with nothing near, a name within distance 2, the tie, the existing `loop` case and the guide-quote test pass; `ghost` (farther than 2) and the guide heading stay as characterized.
+
+### refactor (developer, 2026-10-31)
+
+Run in the worktree with the spec-003 pending amendment in the working tree. Heavy gates after `waitslot.sh`, `--maxWorkers=2`, foreground.
+- `npm run test:coverage -- --maxWorkers=2` -> `Test Suites: 542 passed, 542 total`, `Tests: 9558 passed, 9558 total`; `All files | 99.35 | 97.44 | 98.16 | 99.7` (statements, branches, functions, lines), above 80 % in each column; `closest-name.ts` 100/100/100/100, `workflow-diagnostics.ts` 100/99.49/100/100 (uncovered line 83, not touched by this task). The run includes the documentation-parity suites under `test/docs`, `test/cli/suggest.test.ts` and `test/lint`.
+- `npm test` was not run separately: `scripts/run-tests.cjs`, read in full header, runs the same parallel jest run when no argument is given (the latency pass only with `WINGFOIL_LATENCY=1`), which the coverage run already executed; the 18-minute run is the cost the slot allows once.
+- `npm run -s lint` -> exit 0. `npm run -s docs:api` -> exit 0 (no output). `npm run -s typecheck` -> exit 0 (both tsc configs).
+- `test/docs/cli-reference.test.ts`: no CLI command or help text changed; it ran inside the full suite (passed).
+- Invisible-character grep on the changed files (`src/core/closest-name.ts`, `src/cli/suggest.ts`, `src/core/workflow-diagnostics.ts`, `docs/user-guide.md`, `test/core/closest-name.test.ts`) -> no hit.
+- T4: `git log --first-parent --no-merges --format=%h 9826ac22e..HEAD -- test/core/workflow-diagnostics.test.ts test/docs/user-guide-scaffold.test.ts` -> empty.
+
+### self-review (developer, 2026-10-31)
+
+- AC: the diagnostic names the include (`include '<value>'`), the closest declared name (`write 'include: <name>'`) and the guide's upgrade section; shown by the red's `toEqual` on the whole diagnostic, passing in the run above.
+- D1-D5 as ruled: D1 (a) `closest-name.ts` and delegation (`test/cli/suggest.test.ts` unchanged and passing); D2 distance 2 on the basename, exact first, ties by code-unit order (tie case passes with both manifest orders); D3 (a) pointer only when path-shaped (the `scrum-deliver` case carries none); D4 the approver's wording in code and guide, tied by the guide-quote test; D5 the spec-003 amend is prepared, uncommitted.
+- Same class: the only other caller of the matcher is `closestCommand`; `grep -rn "levenshtein\|closestName\|closestCommand" src` shows `src/cli/program.ts` (via `suggest.ts`), `src/cli/suggest.ts`, `src/core/closest-name.ts`, `src/core/workflow-diagnostics.ts`. `E_WORKFLOW_NOT_INCLUDABLE` for a suggested non-includable name is its own diagnostic (design D2), not changed.
+- Absence claim with its positive case: no other test pins the old message (`grep -rn "not a file path" test` lists only the red's files and the guide-parity test, all passing).
+- Not done: the `CHANGELOG.md` entry belongs to the `user-docs` phase (design).
+
+### Pending amendments (approver)
+
+- `docs/04_memory/design/specs/spec-003-workflows-yaml-schema.md` (tech-spec, approved), left uncommitted: the "Diagnostics" row `E_WORKFLOW_INCLUDE_UNRESOLVED` gains the message shape, and a Revision note (2026-10-31) names task-325 and `bug-394`. Proposed `--reason`: "Record the message shape of E_WORKFLOW_INCLUDE_UNRESOLVED that task-325 ships: the name to write and the upgrade section of the user guide (bug-394)."
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -229,3 +261,7 @@ Design gate approved by the approver on 2026-10-31T20:24:56+01:00, in the orches
      printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
      Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
      here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+
+- The heavy-gate slot was held by another task's coverage run when this one asked; the wait for the slot plus the 18-minute coverage run took most of the phase. Evidence: `ps -eo pid,etime,args` at the wait showed the holder's `jest --coverage --maxWorkers=2` at elapsed `10:05`, and this task's own `real 17m56,981s`. No proposal.
+- `src/cli/suggest.ts` shows `100 | 100 | 75 | 100` in the coverage table (`grep suggest.ts` of the run); the cause of the 75 in the functions column was not investigated.
+
