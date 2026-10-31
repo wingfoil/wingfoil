@@ -183,6 +183,29 @@ Design gate approved by the approver on 2026-10-31T12:06:49+01:00, in the orches
 - D3 — yes, with row (vii): git's message normalised as proposed; the empty-stderr fallback is covered by a stand-in git that exits 128.
 - D4 — yes: `readGitIdentity` unchanged.
 
+### red (qa, 2026-10-31)
+
+Role qa. Red commit `73911351ba4d5a0ef15caa5d13fdfe85b082cdd7` (`test(core): task-324 — failing test: …`), on branch head `88c90ead6`; `git rev-list --count HEAD..release/0.3` printed `0`, so no merge was needed. Pinned build: `wingfoil --version` printed `0.3.1 (73f343c05e045a31f51cb561a9500dcfd7915db4)`. Tests and fixtures only; no `src/` or `scripts/` file touched, no new export, so no `.d.cts`.
+
+**Files.**
+- `test/core/git-identity-config-failure.test.ts` (new, in-process, carries the coverage): 7 tests.
+- `test/cli/git-config-unreadable-refusal.integration.test.ts` (new, compiled CLI): 3 tests.
+- `test/core/git-identity-spawn-failure.test.ts` (edited per the design, approver gate D2 (a)): task-284's row "a git that runs and exits 128 … keeps REQ-SEC-01's message" is rewritten and retitled to expect `{ code: 'IO', message: "could not read git configuration: cannot change to '<root>': No such file or directory" }` (`LC_ALL=C` pinned for that run, restored in `afterEach`); header comment updated; the now unused `IDENTITY_ERROR` constant removed.
+
+**Per AC.**
+- AC 1, core (red-first): rows (i) `.git/config` with a trailing `[user` line, (ii) the registered `memory.memoryAdd` with the same refusal and `assertPersistenceUnchanged` (snapshot taken before the append, config restored before the assertion because the snapshot's git calls need a readable config), (iii) a broken `GIT_CONFIG_GLOBAL` file naming that file, (vii) a stand-in `git` script (`#!/bin/sh` + `exit 128`, no output; a stand-in, not a copied fixture) giving `git config exited 128`. `<n>` is read in the test from a real run of `git -C <repo> config -z --get-regexp '^(author|committer|user)\.(name|email)$'` (stderr `fatal: bad config line 9 in file .git/config`, status 128), never hard-coded.
+- AC 1, task-284's row (red-first, edited): see above.
+- AC 1, CLI (red-first): `memory add --type note --title x` in console and `--format json` after appending `[user` to `.git/config`: exit 1, the error line / the one JSON object `{"error":"could not read git configuration: bad config line <n> in file .git/config"}`, nothing written. Positive row (config readable → exit 0, `wf(note): add note-…` commit) passes on first run.
+- Characterization (pass on first run): (iv) `readGitIdentity` with the broken config → `{ name: '', email: '' }` (D4); (v) no identity anywhere and `GIT_CONFIG_GLOBAL` a directory (exit 1, stderr warnings) → `VALIDATION`, `git identity not configured (user.name/user.email)`; (vi) control, same repo without the line passes.
+- AC 2 (characterization, document only): `npx jest test/core/git-identity.test.ts test/core/identity-preflight-committer.test.ts --maxWorkers=2` → `Test Suites: 2 passed, 2 total`, `Tests: 30 passed, 30 total` (both files unchanged).
+
+**Runs.**
+- `npx jest test/core/git-identity-config-failure.test.ts test/core/git-identity-spawn-failure.test.ts test/cli/git-config-unreadable-refusal.integration.test.ts --maxWorkers=2` → `Test Suites: 3 failed, 3 total`, `Tests: 7 failed, 10 passed, 17 total` (config-failure 4 failed / 3 passed; spawn-failure 1 failed / 6 passed; CLI 2 failed / 1 passed).
+- First failing assertion of each red test (all the right reason: today's code returns `{ code: 'VALIDATION', message: 'git identity not configured (user.name/user.email)' }` where the test expects the new IO refusal): (i) line 116, (ii) line 131, (iii) line 145, (vii) line 179 of `git-identity-config-failure.test.ts`, each `expect(result).toEqual(...)`; spawn-failure row `expect(result).toEqual(` at line 151; CLI console and json rows `expect(run.stderr.split('\n')).toContain(...)` at lines 101 and 115, received `["error: git identity not configured (user.name/user.email)", ""]` and the matching JSON line.
+- `npx tsc --noEmit -p tsconfig.json` → exit 0, no error.
+- `npx jest test/lint --maxWorkers=2` (files in place) → `Test Suites: 13 passed, 13 total`, `Tests: 153 passed, 153 total`.
+- `npm run -s test:no-identity -- <the three files> --maxWorkers=2` → the same 7 failed / 10 passed: the three files are inside its set (it runs the whole suite) and the tests configure their own identity.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
