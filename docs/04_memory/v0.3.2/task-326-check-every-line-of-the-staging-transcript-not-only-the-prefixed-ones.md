@@ -146,6 +146,14 @@ spec-015 Revision is already merged; this task's spec-015 amendment is the only 
 `test/docs/name-resolvability.test.ts` reads spec-015: the amendment should name only resolvable symbols and paths
 (`LOG_PREFIX`, `checkTranscript`, the test file).
 
+### design gate (approver, 2026-10-31)
+
+Design gate approved by the approver on 2026-10-31T20:24:56+01:00, in the orchestrator's chat:
+- D1 — (a): any non-empty line without the `[publish:staging] ` prefix fails the transcript check (whitespace-only lines and CRLF still pass).
+- D2 — yes: the check runs after the closing-line check and before the FAIL scan, with the reason
+  `line <n> does not start with "[publish:staging] ": "<line>"`.
+- D3 — yes: the inherited refusal of `--check-evidence-only` is pinned with one case in test/cli/evidence-only-tag.test.ts.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
