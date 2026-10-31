@@ -14,10 +14,10 @@
  * `registerWorkflowResources` (`wingfoil://workflows`, `wingfoil://workflows/{name}`; task-239 adds
  * `registerWorkflowStateResources`, `wingfoil://workflows/-/next` and `-/status`), and
  * `registerWriteRefusalHandler` (the structural `resources/write` refusal, spec-004 §2.3).
- * `registerReadOnlyResources` wires all five together — the one call a future production entry point
- * (`task-030-implement-mcp-resources`'s `StdioServerTransport`/`wingfoil mcp` command, out of this
- * task's scope) needs alongside `registerCoreModules`. See `./read-only.ts` for the shared
- * write-refusal/not-found conventions every one of these Resources follows.
+ * `registerReadOnlyResources` wires all five together — the one call `createMcpServer` (the
+ * `wingfoil mcp` server) makes for the Resources; it does not call
+ * `registerCoreModules`. See `./read-only.ts` for the shared write-refusal/not-found conventions every one of
+ * these Resources follows.
  */
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
@@ -84,8 +84,7 @@ export interface RegisterReadOnlyResourcesOptions {
  * Wire the full spec-004 §2 read-only Resources channel onto `server` in one call: the Memory, DNA,
  * and Workflow Resources — the two workflow-state Resources `wingfoil://workflows/-/next` and `-/status`
  * included (task-239, `spec-017` §9) — plus the structural `resources/write` refusal. Deliberately does not touch
- * `registerCoreModules`/`CORE_MODULES` — a caller building a real server still calls that separately
- * for the (today, zero) Tools/legacy-shaped Resources it derives from `src/core`.
+ * `registerCoreModules`/`CORE_MODULES`; `createMcpServer` does not call it either (see `./registrar.ts`).
  */
 export function registerReadOnlyResources(server: McpServer, options: RegisterReadOnlyResourcesOptions): void {
   registerWriteRefusalHandler(server);

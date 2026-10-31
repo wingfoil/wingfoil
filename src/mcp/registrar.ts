@@ -15,11 +15,18 @@
  * form (`memory_approve`) that this task deliberately does not follow — see task-006's Execution
  * Notes for the full reasoning on that spec-004/spec-006 naming discrepancy.
  *
- * Resource URIs today are the mechanical, zero-argument `wingfoil://{module}/{verb}` form — spec-004
- * §2.1's fuller scheme (`wingfoil://memory/{type}/{id}`, `wingfoil://dna/{section}`, ...) adds
- * sub-resource addressing that today's `CoreOperation` shape (spec-006 §2: just `{name, mutates,
- * fn}`, no parameter metadata) cannot mechanically derive; that richer addressing is deferred to
- * whichever feature task (018-030) first registers an operation that needs it.
+ * `registerCoreModules` derives the mechanical, zero-argument `wingfoil://{module}/{verb}` Resource
+ * URIs and `{module}.{verb}` Tool names from `CORE_MODULES`. At this commit it backs the parity and
+ * channel-enumeration harness of REQ-SEC-05 (`test/core/parity.test.ts`,
+ * `test/mcp/helpers/channel-enumeration.ts`) and the Tool set `test/docs/mcp-surface-parity.test.ts`
+ * compares with spec-004 §4.1; the `wingfoil mcp` server (`createMcpServer`) does not call it and serves
+ * none of its URIs. The Resources the server serves are `wingfoil://dna`, `wingfoil://workflows`,
+ * `wingfoil://workflows/-/next` and `wingfoil://workflows/-/status`, with the templates
+ * `wingfoil://memory/{type}`, `wingfoil://memory/{type}/{id}`, `wingfoil://dna/{section}`,
+ * `wingfoil://workflows/{name}` and `wingfoil://session/{role}/{element}/{state}`, registered by
+ * `registerMemoryResources`, `registerDnaResources`, `registerWorkflowResources`,
+ * `registerWorkflowStateResources` (through `registerReadOnlyResources`) and
+ * `registerSessionContextResource`.
  */
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 

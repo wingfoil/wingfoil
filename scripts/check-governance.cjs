@@ -10,7 +10,8 @@
  *   `wf(directive)`, `wf(workflow)`) are not Memory operations and are skipped. So are the records written
  *   outside the `wf()` grammar — `workflow: finalize …`, `workflow: adopt …`, `workflow: rekey …` and
  *   `agent: record …` (`spec-017` §4.8, §7.9, §7.11–§7.12; `spec-016` §4.4): they are "other commits", held
- *   only to the `status-outside-wf` check below (task-294).
+ *   to the `status-outside-wf` check below (task-294), and a record's `Approver:` line, when it has one, to
+ *   `workflow-record-authority` (task-328).
  * - **bracket** — none on `add`, `submit` and `assign`; on every other verb the canonical
  *   `[from → to]` (U+2192, single spaces, closing the subject). Only `sync` chains; `deprecate` ends in
  *   `deprecated`; `amend` is the self-loop `[s → s]`; `park` is one hop between two different states (the
@@ -66,6 +67,13 @@
  *   approver's decision and carries no `Co-Authored-By:` and no `AI-Model:` line (`git-conventions` §7);
  *   every other verb may. The approve/reject commits written before this check are history: they cannot
  *   be rewritten (`git-conventions` §2, §8).
+ * - `workflow-record-authority` (`bug-444`; rules `body`, `authority`): a `workflow: finalize`, `workflow: adopt`
+ *   or `workflow: rekey` record that has an `Approver:` line holds it to the grammar above and to the
+ *   `authority` rule (its author holds `approver` at the first parent, the line names the author). Whether a
+ *   record of an `approval:` phase must carry one is not judged.
+ * - `trailer-paragraph` (`bug-391`; rule `body`): on every non-merge commit, a `WingFoil-*` line (any key, any
+ *   letter case) sits in the body's final paragraph, the one the workflow deduction reads
+ *   (`git-conventions` §8).
 
  * **Starting mode** (`dl-103` §1). A finding on a commit that is not the introduction commit nor one
  * of its ancestors is gated, and fails the check (exit 1). A finding on history — the introduction
@@ -82,7 +90,8 @@
  * `Approver:`/`Reason:` readers and the reason grammar (`commit-message.ts`), the machine resolver and
  * edge test (`state-machine.ts`), and the consistency check (`audit.ts`). Nothing here re-implements
  * them. Deterministic (REQ-SYS-07): findings come out oldest commit first, then by rule, then by
- * message; no clock is read.
+ * message, except that a commit's `trailer-paragraph` findings follow its other findings of the rule, in
+ * the order the keys are written; no clock is read.
  *
  * Usage: node scripts/check-governance.cjs [--root <dir>] [--base <rev>] [--introduced-at <rev>] [--json]
  *   --root           the repository to check (default: the git top level of the working directory)
@@ -118,12 +127,19 @@ const CHECKS = Object.freeze({
   'supersedes-pair': 'governance-check:supersedes-pair',
   'config-version': 'governance-check:config-version',
   'approval-ai-trailer': 'governance-check:approval-ai-trailer',
+  'workflow-record-authority': 'governance-check:workflow-record-authority',
+  'trailer-paragraph': 'governance-check:trailer-paragraph',
 });
 
 /** The verbs that record the approver's decision and carry no AI co-author (`git-conventions` §7). */
 const DECISION_VERBS = new Set(['approve', 'reject']);
 /** A co-author or model trailer line (`git-conventions` §7, `bug-307`). */
 const AI_TRAILER_RE = /^(co-authored-by|ai-model):/i;
+
+/** The subject of a record written outside the `wf()` grammar by `workflow finalize|adopt|rekey` (`spec-017` §7.9, §7.11, §7.12). */
+const WORKFLOW_RECORD_RE = /^workflow: (?:finalize|adopt|rekey)(?: |$)/;
+/** A `WingFoil-*` trailer key at the start of a line (`git-conventions` §8). */
+const WINGFOIL_TRAILER_RE = /^(wingfoil-[a-z0-9-]+):/i;
 
 /** The four versioned config files whose `version:` the doc-versioning bump rule applies to (`bug-143`). */
 const VERSIONED_CONFIG_FILES = ['.wingfoil/dna.yaml', '.wingfoil/memory.yaml', '.wingfoil/workflows.yaml', '.wingfoil/roles.yaml'];
@@ -502,9 +518,7 @@ function checkBodyAndAuthority(commit, op, dna, dist) {
     add('body', "'assign' is not an approval: it carries no Approver: line");
   } else if (recordsApproval) {
     if (approverLines.length === 0) add('body', `'${op}' needs an Approver: line`);
-    else if (approval === null) add('body', 'the Approver: line must be the first body line, as `Approver: Name <email> (role)`');
-    else if (approval.approverRole !== dist.core.APPROVER_ROLE) add('body', `the Approver: role is '${approval.approverRole}', not 'approver'`);
-    if (approverLines.length > 1) add('body', `${approverLines.length} Approver: lines; an approval records one`);
+    else approverGrammarFindings(approverLines, approval, dist).forEach(({ rule, message }) => add(rule, message));
     if (APPROVAL_VERBS.has(op) && reasonLines.length === 0) add('body', `'${op}' needs a Reason: block`);
   }
 
@@ -517,19 +531,53 @@ function checkBodyAndAuthority(commit, op, dna, dist) {
     if (refusal !== null) add('body', `the Reason: block ${refusal.replace(/^invalid flag value: --reason /, '')} (dl-067)`);
   }
 
-  if (recordsApproval && op !== 'assign') {
-    if (dna === null) {
-      add('authority', `no ${DNA_YAML} is committed before this commit, so no approval authority can be established`);
-    } else if (!dna.ok) {
-      add('authority', `the ${DNA_YAML} committed before this commit does not validate (${dna.error})`);
-    } else if (!dist.core.hasApproverRole(dna.value, commit.authorEmail)) {
-      add('authority', `the author <${commit.authorEmail}> holds no approver role in team.members (dl-094)`);
-    }
-    if (approval !== null && approval.approverEmail.toLowerCase() !== commit.authorEmail.toLowerCase()) {
-      add('authority', `the Approver: line names <${approval.approverEmail}>, but <${commit.authorEmail}> authored the commit (dl-094)`);
-    }
+  if (recordsApproval && op !== 'assign') authorityFindings(commit, approval, dna, dist).forEach(({ rule, message }) => add(rule, message));
+  return findings;
+}
+
+/** The grammar of a commit's `Approver:` lines (at least one), shared by the `wf()` and record rules. */
+function approverGrammarFindings(approverLines, approval, dist) {
+  const findings = [];
+  const add = (message) => findings.push({ rule: 'body', message });
+  if (approval === null) add('the Approver: line must be the first body line, as `Approver: Name <email> (role)`');
+  else if (approval.approverRole !== dist.core.APPROVER_ROLE) add(`the Approver: role is '${approval.approverRole}', not 'approver'`);
+  if (approverLines.length > 1) add(`${approverLines.length} Approver: lines; an approval records one`);
+  return findings;
+}
+
+/** The authority of a commit that records an approval, against the `dna.yaml` of its first parent. */
+function authorityFindings(commit, approval, dna, dist) {
+  const findings = [];
+  const add = (message) => findings.push({ rule: 'authority', message });
+  if (dna === null) {
+    add(`no ${DNA_YAML} is committed before this commit, so no approval authority can be established`);
+  } else if (!dna.ok) {
+    add(`the ${DNA_YAML} committed before this commit does not validate (${dna.error})`);
+  } else if (!dist.core.hasApproverRole(dna.value, commit.authorEmail)) {
+    add(`the author <${commit.authorEmail}> holds no approver role in team.members (dl-094)`);
+  }
+  if (approval !== null && approval.approverEmail.toLowerCase() !== commit.authorEmail.toLowerCase()) {
+    add(`the Approver: line names <${approval.approverEmail}>, but <${commit.authorEmail}> authored the commit (dl-094)`);
   }
   return findings;
+}
+
+/**
+ * The `WingFoil-*` keys a commit's body writes outside its final paragraph, each once, as first written
+ * (`git-conventions` §8, `bug-391`): the final paragraph is the last blank-line-separated one.
+ */
+function trailerKeysOutsideFinalParagraph(body) {
+  const lines = body.split('\n');
+  let lastBlank = -1;
+  lines.forEach((line, index) => {
+    if (line.trim() === '') lastBlank = index;
+  });
+  const keys = new Map();
+  for (const line of lines.slice(0, lastBlank + 1)) {
+    const key = WINGFOIL_TRAILER_RE.exec(line)?.[1];
+    if (key !== undefined && !keys.has(key.toLowerCase())) keys.set(key.toLowerCase(), key);
+  }
+  return [...keys.values()];
 }
 
 /** A `TransitionFinding` of `verifyTransitionConsistency`, as one line. */
@@ -864,6 +912,35 @@ function checkGovernance(root, options = {}) {
     });
   }
 
+  // workflow-record-authority: an `Approver:` line on a `workflow:` record is held to the grammar and the
+  // authority of an approval, when the record has one (bug-444).
+  const records = allCommits.filter((commit) => !commit.merge && WORKFLOW_RECORD_RE.test(commit.subject));
+  const recordDnaBlobs = readBlobIds(root, records.map((commit) => `${commit.parent ?? commit.sha + '^'}:${DNA_YAML}`));
+  records.forEach((commit, index) => {
+    const approverLines = commit.body.split('\n').filter((line) => APPROVER_KEY_RE.test(line));
+    if (approverLines.length === 0) return;
+    const approval = dist.memory.parseApprovalMetadata(commit.body);
+    const dna = commit.parent === null ? null : readDnaYaml(recordDnaBlobs[index]);
+    const check = 'workflow-record-authority';
+    [...approverGrammarFindings(approverLines, approval, dist), ...authorityFindings(commit, approval, dna, dist)].forEach(({ rule, message }) =>
+      findings.push({ sha: commit.sha, subject: commit.subject, rule, message, gated: isGated(commit.sha, check), check }),
+    );
+  });
+
+  // trailer-paragraph: a `WingFoil-*` trailer outside the final paragraph is lost to the deduction (bug-391).
+  for (const commit of allCommits.filter((candidate) => !candidate.merge)) {
+    for (const key of trailerKeysOutsideFinalParagraph(commit.body)) {
+      findings.push({
+        sha: commit.sha,
+        subject: commit.subject,
+        rule: 'body',
+        message: `a ${key}: line sits outside the commit's final paragraph, where the workflow deduction does not read it (git-conventions §8, bug-391)`,
+        gated: isGated(commit.sha, 'trailer-paragraph'),
+        check: 'trailer-paragraph',
+      });
+    }
+  }
+
   // status-outside-wf: a commit that is no Memory operation changes no Memory status (dl-139 (a)).
   const changes = readFileChanges(root, range, otherCommits.map((commit) => commit.sha));
   const candidates = [];
@@ -933,11 +1010,16 @@ function checkGovernance(root, options = {}) {
 
   const unique = new Map();
   for (const finding of findings) unique.set(`${finding.sha}\0${finding.rule}\0${finding.message}`, finding);
+  // The trailer-paragraph findings of a commit follow the order the keys are written in, after its other
+  // findings of the rule; every other finding is ordered by message.
+  const written = new Map([...unique.values()].map((finding, index) => [finding, index]));
+  const isTrailer = (finding) => (finding.check === 'trailer-paragraph' ? 1 : 0);
   const sorted = [...unique.values()].sort(
     (a, b) =>
       order.get(a.sha) - order.get(b.sha) ||
       RULES.indexOf(a.rule) - RULES.indexOf(b.rule) ||
-      (a.message < b.message ? -1 : a.message > b.message ? 1 : 0),
+      isTrailer(a) - isTrailer(b) ||
+      (isTrailer(a) === 1 ? written.get(a) - written.get(b) : a.message < b.message ? -1 : a.message > b.message ? 1 : 0),
   );
 
   return {
