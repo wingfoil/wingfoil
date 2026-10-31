@@ -87,4 +87,5 @@ records fall into `otherCommits` (line 588), which only `status-outside-wf` read
 
 ### Retrospective
 
-- None yet.
+- Fixed by task-328 (`workflow-record-authority`): an `Approver:` line on a `workflow:` record is checked when present; whether an `approval:` phase must carry one stays with `bug-467` (v0.4, release-planning R8).
+- Scope of the fix: the Expected Behavior ("any commit carrying an Approver: line") is met for `wf()` commits and the three `workflow:` records only; every other commit carrying an `Approver:` line, and an `Approver:` line mandatory on an `approval:` phase, are left to `bug-467`. The release-health P01/P05 effect of the new findings is `bug-466`.
