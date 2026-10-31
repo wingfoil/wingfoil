@@ -252,10 +252,42 @@ request):
 
 **AC 2 (characterization), `test/mcp/registrar.test.ts`**, describe "task-323 AC 2": `registerCoreModules stays exported by the src/mcp barrel` (and is the registrar's function), and `createMcpServer lists the four Resource URIs and five templates ...` over `InMemoryTransport`, none of the Resource URIs derived from `CORE_MODULES` (`deriveMcpResourceUri` over `enumerateOperations`) among them. The lists were copied from a real run: `initialize`, `resources/list` and `resources/templates/list` piped into `node $(pwd)/dist/cli.js mcp` -> resources `wingfoil://dna wingfoil://workflows wingfoil://workflows/-/next wingfoil://workflows/-/status`; templates `wingfoil://dna/{section} wingfoil://memory/{type} wingfoil://memory/{type}/{id} wingfoil://session/{role}/{element}/{state} wingfoil://workflows/{name}`. Both pass on first run (same command as above: `registrar.test.ts` all green). No test on the comment's prose (D3).
 
+### green (developer, 2026-10-31)
+
+Base: `git rev-list --count HEAD..release/0.3` printed `0` at the start; the task's PATH shim answered `command -v wingfoil`, and `wingfoil --version` printed `0.3.1 (c5521c1e4e525a224dfc48e15fbbf0584d3909f4)`.
+
+Green commit `91faf13d0`, files: `src/core/workflow-next.ts` (`selectWorkflowInstance(deduction, ref?, snapshot?)` moved here beside `unresolvedRef`; with the snapshot it returns `unresolvedRef({ workflows: snapshot.workflows, plans: instancePlanIds(snapshot.documents) }, ref)`, without it the old `workflow is not open: <ref>`; TSDoc says the answer without the snapshot is not reliable and that the snapshot becomes mandatory in v0.4, `bug-465`), `src/core/workflow-deduction.ts` (function and its now-unused imports `coreErr`, `coreOk`, `CoreResult`, `resolveInstanceRef`, `InstanceDeduction` removed), `src/core/index.ts` (re-export from `./workflow-next`, same name), `src/mcp/registrar.ts`, `src/mcp/dna-resource.ts`, `src/mcp/workflow-resource.ts`, `src/mcp/index.ts` (comments only, D3), `test/core/builtin-adapter-writers.test.ts` (comment at line 9, D4).
+
+red -> green: `npx jest test/core/workflow-deduction.test.ts test/mcp/registrar.test.ts --maxWorkers=2` printed `Tests: 34 passed, 34 total` (red: `1 failed, 33 passed`); `npx tsc --noEmit` exit 0 (red: six TS2554).
+
+D1 consequence for the user-docs phase: the CHANGELOG line (signature gains an optional third argument; the two-argument answer is unreliable; mandatory in v0.4) is written at this patch's `user-docs`, not in this task.
+
+AC 1 (red-first): met, the `it` of "task-198 AC 1" passes. AC 2 (characterization): `grep -rn coexist src` printed no output after the edit; the registrar comment lists the four served URIs and five templates copied from the design's real `wingfoil mcp` run; `registerCoreModules` is still exported (the red's `registrar.test.ts` case passes).
+
+### refactor (developer, 2026-10-31)
+
+Gates, after `bash .../waitslot.sh` (exit 0), in this worktree with the pending amendment below in the tree:
+- `npm test -- --maxWorkers=2` -> `Test Suites: 540 passed, 540 total`, `Tests: 9499 passed, 9499 total` (includes the `docs.parity` suites and `test/lint`, `typecheck.clean`).
+- `npm run test:coverage -- --maxWorkers=2` -> `All files | 99.35 | 97.47 | 98.2 | 99.7` (statements, branches, functions, lines), same 9499 tests.
+- `npm run -s lint` exit 0; `npm run -s docs:api` exit 0; `npm run -s typecheck` exit 0.
+- No CLI help or `.wingfoil/` change: `docs/cli-reference.md` and every config `version:` are untouched.
+- `git status --short` after the gates printed nothing but the pending amendment below (committed files clean).
+
+### self-review (developer, 2026-10-31)
+
+- T4: `git log --first-parent --no-merges --format=%h c46a6abe6..HEAD -- test/core/workflow-deduction.test.ts test/mcp/registrar.test.ts` printed nothing.
+- Scope: `git diff --stat c46a6abe6..HEAD` lists only the files of the design plus this task file; `src/core/workflow-diagnostics.ts` is not among them.
+- Absence claim with its positive case: `grep -rn coexist src` -> no output (before the edit it matched `dna-resource.ts` and `workflow-resource.ts`); `selectWorkflowInstance` is still exported by the barrel (the red imports it from `src/core` and passes).
+- `bug-358` Expected Behavior: met for a caller that passes the snapshot; a two-argument caller still gets the old answer for every unresolved ref, by the approver's D1 (a) ruling, recorded in `bug-465` for v0.4. `bug-396`: met (comment true, function kept).
+- Same-class: `grep -rn coexist src` covers the siblings; D3 fixed three.
+
+### Pending amendments (approver)
+
+- `bug-396-the-registrar.ts-module-comment-describes-mcp-resource-uris-the-server-does-not-list`: replace the placeholder under `### Retrospective` with "None."; proposed `--reason`: "Record the bug's retrospective as None, as dl-115 Q2 (a) requires for a bug closed by task-323."
+- `bug-358-...`: no amendment, its retrospective already reads "None."
+
 ### Retrospective
 
-<!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
-     reconstructed afterwards. One line per item: what happened, the evidence (a command and what it
-     printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
-     Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
-     here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+- `selectWorkflowInstance` could not be fixed for two-argument callers without a breaking signature; the approver ruled D1 (a) for the patch, the mandatory snapshot goes to v0.4 (`bug-465`). Evidence: design gate above.
+- A shared-function relocation was cheap because `unresolvedRef` already existed: proposal, keep one refusal helper per message class.
+
