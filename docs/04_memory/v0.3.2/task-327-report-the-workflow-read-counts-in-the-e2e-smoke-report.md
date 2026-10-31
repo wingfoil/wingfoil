@@ -289,6 +289,99 @@ Design gate approved by the approver on 2026-10-31T12:06:49+01:00, in the orches
 
 **Real outputs that differ from the design's expectation.** In every real run an error-severity diagnostic makes the CLI refuse: `workflow list --all`, `show` and `status` exit 1 with `{"error":"E_..."}` on stderr and an empty stdout (`broken-config.stderr`), so no real exit-0 answer carries an `error` diagnostic. The tests pin that real refusal as the broken-configuration case; the exit-0-with-an-error-diagnostic answer (the `1 error` detail and the singular row) is built from that refusal's code, file, path and message with `severity: 'error'` inside the real list shape, and says so in the test. Two renderings the design leaves open are not pinned: the separator between several codes in the list row, and the Result text of a show row whose refused workflow has no parsed counts (only the Exit cell `1/2 exit 0` is). The `--candidate` default of `--repository` (the main block) is not testable offline and is not pinned.
 
+### green (developer, 2026-10-31)
+
+**Green commit `05e5caade`** (`feat(e2e-smoke): task-327 — run and report the workflow reads on the candidate repository
+(bug-404)`), then `dac4440e8` (`fix(e2e-smoke): task-327 — pass the workflow reads as whole argument lists
+(git-log-readers lint)`, below). Files, exactly the design's list: `scripts/e2e-smoke.cjs`, `scripts/e2e-smoke.d.cts`,
+`.wingfoil/workflows/custom/e2e-smoke.yaml`, `.wingfoil/WORKFLOW.md` (`git show --stat 05e5caade` lists those four).
+
+- `scripts/e2e-smoke.cjs`: new export `workflowReads(invoke, root)` (list, then `show` for every name in the list's
+  order, then status; each `--format json`; a read runs only when the one before it passed; an `invoke` that throws
+  counts as a spawn error). `runSmoke` runs it right after `--help` and `--version` and before the first template
+  when `options.repository` is given (D1 (b), D3 (a)), records its checks (stopping at the first failure) and returns
+  `{ ok, checks, workflowReads }`; without `repository` the result is `{ ok, checks }` with no `workflowReads` key.
+  `formatReport` appends the section `## Repository checks on the candidate (workflow reads)` through
+  `workflowReadsSection` only when `report.workflowReads` is present. `parseSmokeArgs` accepts `--repository <path>`
+  (`path.resolve`d; no key without the flag; no value gives `unknown or incomplete argument: --repository`). The main block
+  passes `repository: parsed.repository ?? (candidate ? dirname(__dirname) : undefined)` (D4). The header comment (Usage and
+  description) names the reads and the flag.
+- `scripts/e2e-smoke.d.cts`: `WorkflowReadResult`, `WorkflowListRead`, `WorkflowShowRead`, `WorkflowStatusRead`,
+  `WorkflowReads`, `workflowReads`, `SmokeOptions.repository`, optional `SmokeReport.workflowReads`, and `repository?` in
+  `parseSmokeArgs`' return. `npx tsc --noEmit -p tsconfig.json` and `npm run typecheck` exit 0, so
+  `scripts/publish-staging.d.cts` (imports `SmokeReport`) still compiles.
+- `.wingfoil/workflows/custom/e2e-smoke.yaml`: `version: 1.8` to `1.9` (`git show release/0.3:.wingfoil/workflows/custom/e2e-smoke.yaml
+  | grep -m1 "^version"` printed `version: 1.8`; first edit on this branch), a `1.9 task-327 (bug-404)` history entry, and a
+  gate description naming `workflow list --all`, `workflow show` and `workflow status`, keeping `--candidate` and `dist/`
+  and not using the word "warn" (D2). `.wingfoil/WORKFLOW.md`: one clause in the E2E Smoke prose.
+- **Robustness branch no real run reaches.** An exit-0 answer carrying an error-severity diagnostic fails the check
+  with `<E> errors: <code> <count>` (`failureOf`). The red pins it with a diagnostic it built; no real run gets there,
+  because any error diagnostic makes the CLI exit 1 (red notes, `broken-config.stderr`), which fails the same check
+  through the exit branch. It is implemented as the design says, for a build that answers 0 with an error diagnostic.
+- Renderings the red leaves open, my choice (listed under decisions in the report): codes of a list row are joined with
+  `, `; a show row appends `; stdout not valid JSON: <names>` for an exit-0 answer that did not parse and
+  `; refused: <names>` for a non-zero exit; a list or status row whose read was refused has Result
+  `refused: the command did not exit 0` (an exit-0 answer that is not JSON: `stdout is not valid JSON`).
+
+**Classification (T1).** AC 1: red-first, as the design says. **red to green**, `npx jest
+test/cli/e2e-smoke-workflow-reads.test.ts --maxWorkers=2`: red (qa) `Tests: 22 failed, 2 passed, 24 total`; first green
+run `Tests: 6 failed, 18 passed, 24 total` (the show row closed its backticks after `, each of the N`, and the YAML was
+not yet edited); after the row fix `Tests: 2 failed, 22 passed, 24 total` (the two D2 tests); after the YAML edit
+`Tests: 27 passed, 27 total` together with `test/lint/git-log-readers.test.ts` (below).
+**Real run on this worktree** (`node -e` calling `workflowReads` with `dist/cli.js` of this worktree, cwd = this worktree):
+the three checks were `true`, with details `exit 0, 27 workflows, 65 diagnostics, 0 errors`, `exit 0 (27/27), 0 errors`
+and `exit 0, open 3, pendingApprovals 1, ungated 33, 0 errors`; `formatReport` of that printed the three rows of the
+design's example byte for byte (list row: 27 workflows; 65 diagnostics, 0 errors, `W_WORKFLOW_UNBOUND_TOKEN` 65 (warning)).
+
+**A defect my change caused, fixed in the task.** The first full `npm test -- --maxWorkers=2` (after `05e5caade`) printed
+`Test Suites: 1 failed, 535 passed, 536 total`, `Tests: 1 failed, 9449 passed, 9450 total`: `test/lint/git-log-readers.test.ts`
+reported `scripts/e2e-smoke.cjs:870` `'show' of something other than a <rev>:<path> blob`, because `workflowReads` passed a
+bare `'show'` argument. `dac4440e8` passes each read as a whole argument list (`['workflow', 'show', name]`); then
+`npx jest test/lint/git-log-readers.test.ts test/cli/e2e-smoke-workflow-reads.test.ts --maxWorkers=2` printed `Tests: 27 passed, 27 total`.
+
+### refactor (developer, 2026-10-31)
+
+Base: at the end of refactor `git rev-list --count HEAD..release/0.3` printed `5`, so `git merge --no-edit release/0.3`
+(W0-R3): `Merge made by the 'ort' strategy`, one file added (`docs/04_memory/bugs/bug-462-...md`, `git diff --stat HEAD~1 HEAD`),
+no conflict; the merge commit carries the two trailers; `git rev-list --count HEAD..release/0.3` then printed `0`. The
+merge changes no code or test, so the gates below, run before it, were not repeated after it.
+
+Gates (heavy ones after `waitslot.sh`, `--maxWorkers=2`, foreground or tracked, one jest at a time):
+- `npm test`: **run once, before the lint fix** (result above, 1 failed of 9450). **Not re-run as `npm test` after
+  `dac4440e8`** (a skipped step); the post-fix full suite is the coverage run below (`jest --coverage`, the same 536 suites).
+- `npm run test:coverage -- --maxWorkers=2` (after `dac4440e8`): `Test Suites: 536 passed, 536 total`, `Tests: 9450 passed,
+  9450 total`, `All files | 99.35 | 97.51 | 98.15 | 99.7` (statements, branches, functions, lines; above 80 % on every
+  column; `src/` is untouched). Slot wait, from `ps -eo pid,etime,args`: the waiter shell `697681` showed `51:31` and the
+  same listing showed `1493629 00:09 ... jest --coverage --maxWorkers=2` (the granted run); an earlier listing had
+  `942687 14:02 ... task-322/node_modules/jest/bin/jest.js` as a holder. The wait before the first `npm test` was not measured.
+- `npm run lint`, `npm run docs:api`, `npm run typecheck` (both configs): each exit 0.
+- Document parity: the `test/docs/` suites ran in the two full runs (only the failure above was reported); no CLI or help
+  change, so `docs/cli-reference.md` is unchanged. The existing e2e-smoke suites (`e2e-smoke`, `-candidate`, `-adopt-probe`,
+  `-fake-read`, `-journey-shim`), `publish-staging`, `workflow-repository-conformance`, `workflow-md` and `version-bump`
+  are in the same runs and passed.
+- `npm run -s check:mcp` (after the `.wingfoil/` change) exit 0: `.mcp.json "wingfoil" runs the pinned wingfoil 0.3.1,
+  advertising [prompts, resources, tools] (prompts: 8, resources: 4, tools: 0)`; `the build under development (dist/cli.js)
+  serves [prompts, resources, tools] (prompts: 8, resources: 4, tools: 0); every listed Resource read and Prompt get answered`.
+- The invisible-character grep over the four changed files printed no hit.
+
+### self-review (developer, 2026-10-31)
+
+AC 1: `workflowReads` runs and `formatReport` writes the counts; the 24 red tests pass and the real run above shows the
+three rows. D1 (b): the three checks gate (pinned by the red; `runSmoke` returns `ok: false` at the first failing read,
+before any template). D2: yaml 1.9 with its history line, the WORKFLOW.md clause, `check:mcp` exit 0. D3 (a): checks 2 to 4 are the
+reads and check 5 the first template (red test (d)). D4: `--repository` is pinned; the `--candidate` default
+(`dirname(__dirname)` in the main block) is not exercised by any test, since it needs a real pack (the red says so), and is
+one expression. Absence claim with its positive case: no `[repository]` check without `repository` (the red's
+characterization passes) and the three checks appear with it. Same class: no other `invoke` call in the file passes a bare
+git-reader token. The en dash in `1–2 diagnostics` is the literal character; the grep above finds no invisible character.
+
+T4: `git log --first-parent --no-merges --format=%h 7eca816c9..HEAD -- test/cli/e2e-smoke-workflow-reads.test.ts
+test/fixtures/workflow-reads` printed nothing.
+
+### Pending amendments (approver)
+
+None. `bug-404` already carries its `### Retrospective` (`None.`), so it needs no edit beyond the status sync.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -296,3 +389,7 @@ Design gate approved by the approver on 2026-10-31T12:06:49+01:00, in the orches
      printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
      Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
      here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+
+- The first full `npm test` ran about 13 minutes before it showed the `test/lint/git-log-readers.test.ts` finding, which a
+  targeted `npx jest test/lint --maxWorkers=2` after the green edit would have shown in seconds. Proposal: the green phase of
+  a task that edits `scripts/` or `src/` runs `npx jest test/lint` before the full suite.
