@@ -189,6 +189,17 @@ not a conflict.
 user guide: any later task quoting `E_WORKFLOW_INCLUDE_UNRESOLVED` meets test (g). The release's `user-docs` phase
 names the message change in `CHANGELOG.md`.
 
+### design gate (approver, 2026-10-31)
+
+Design gate approved by the approver on 2026-10-31T20:24:56+01:00, in the orchestrator's chat:
+- D1 — (a): the closest-name helper moves to src/core/closest-name.ts and src/cli/suggest.ts delegates to it.
+- D2 — yes: Levenshtein distance ≤ 2 on the basename of a path-shaped value (without .yaml/.yml), an exact basename match first, every
+  declared workflow a candidate, ties by code-unit order.
+- D3 — (a): the upgrade pointer prints only for a path-shaped value.
+- D4 — yes, with the approver's wording: the section is named as `'Upgrading from 0.2.x' in the WingFoil user guide (docs/user-guide.md in
+  the repository)`, not a site URL; the guide's §12 quote is updated in this task.
+- D5 — yes: spec-003's "Diagnostics" row gains the message shape and a Revision note, as a pending amend recorded at review.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
