@@ -794,7 +794,7 @@ function refusal(run) {
  * severity (sorted by code, then severity). `json` is the parsed answer, `null` when there is none.
  */
 function judgeRead(run) {
-  const nothing = { exit: run.status, json: null, diagnostics: null, errors: null, codes: [] };
+  const nothing = { exit: run.status, json: null, notObject: false, diagnostics: null, errors: null, codes: [] };
   if (run.status !== 0) return nothing;
   let json;
   try {
@@ -802,7 +802,7 @@ function judgeRead(run) {
   } catch {
     return nothing;
   }
-  if (json === null || typeof json !== 'object' || Array.isArray(json)) return nothing;
+  if (json === null || typeof json !== 'object' || Array.isArray(json)) return { ...nothing, notObject: true };
   const diagnostics = Array.isArray(json.diagnostics) ? json.diagnostics : [];
   const groups = new Map();
   for (const d of diagnostics) {
@@ -824,6 +824,7 @@ function errorsDetail(judged) {
 /** The failing detail of a judged read (`null` when it passed): refusal, not JSON, or error diagnostics. */
 function failureOf(run, judged) {
   if (run.status !== 0) return refusal(run);
+  if (judged.notObject) return 'stdout is not a JSON object';
   if (judged.json === null) return 'stdout is not valid JSON';
   return judged.errors > 0 ? errorsDetail(judged) : null;
 }
@@ -864,6 +865,11 @@ function workflowReads(invoke, root) {
     detail: listFailure ?? `exit 0, ${plural(workflows.length, 'workflow')}, ${plural(list.diagnostics, 'diagnostic')}, ${plural(list.errors, 'error')}`,
   });
   if (listFailure !== null) return { checks, reads };
+  if (workflows.length === 0) {
+    // A candidate repository always declares workflows: an empty list would pass show and status vacuously.
+    checks[0] = { ...checks[0], ok: false, detail: 'exit 0, 0 workflows: a candidate repository always has workflows' };
+    return { checks, reads };
+  }
 
   const names = workflows.map((w) => String(w?.name));
   const shows = names.map((name) => {
@@ -1066,6 +1072,7 @@ function workflowReadsSection(reads) {
     }
     if (unparsedNames.length > 0) parts.push(`stdout not valid JSON: ${unparsedNames.join(', ')}`);
     if (refusedNames.length > 0) parts.push(`refused: ${refusedNames.join(', ')}`);
+    if (parts.length === 0) parts.push('no workflow was read');
     rows.push(row(showCommand, ran === total ? `0 (${total}/${total})` : `${ran}/${total} exit 0`, parts.join('; '), `, each of the ${total}`));
   }
 
@@ -1102,6 +1109,18 @@ function workflowReadsSection(reads) {
 function versionOfStamp(stamp) {
   const match = /^(\S+) \((?:[0-9a-f]{7,64}(?:-dirty)?|unknown)\)$/.exec(stamp);
   return match ? match[1] : null;
+}
+
+/**
+ * The repository the workflow reads run in (task-327): `--repository` when given, else the checkout `root` under
+ * `--candidate`, else `undefined` (no reads).
+ * @param {{ repository?: string }} parsed
+ * @param {boolean | undefined} candidate
+ * @param {string} root
+ * @returns {string | undefined}
+ */
+function readsRepository(parsed, candidate, root) {
+  return parsed.repository ?? (candidate ? root : undefined);
 }
 
 /** Parse `[--candidate | --expect-version X [--expect-commit SHA]] [--repository PATH] [--report PATH] [-- command args...]`. */
@@ -1251,7 +1270,7 @@ if (require.main === module) {
       const { cleanup, ...options } = prepared ?? { ...parsed, cleanup: () => undefined };
       try {
         // task-327 (`bug-404`): `--candidate` reads the checkout it packed, unless `--repository` names another.
-        const repository = parsed.repository ?? (candidate ? dirname(__dirname) : undefined);
+        const repository = readsRepository(parsed, candidate, dirname(__dirname));
         const report = runSmoke({ ...options, ...(repository === undefined ? {} : { repository }), log: (line) => process.stdout.write(`${line}\n`) });
         if (reportPath !== undefined) {
           // `--candidate`'s bin lives in a throwaway directory: the report names the candidate, not that path,
@@ -1285,6 +1304,7 @@ module.exports = {
   parseSmokeArgs,
   prepareCandidate,
   probeFakeRead,
+  readsRepository,
   removeBuildOutput,
   runSmoke,
   smokeAgentRun,

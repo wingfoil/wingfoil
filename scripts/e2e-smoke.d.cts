@@ -276,6 +276,12 @@ export function probeFakeRead(run: string, role: string, git: SmokeGit, recordFi
 export function assertCommitName(commit: string): void;
 
 /**
+ * task-327: the repository the workflow reads run in: `parsed.repository` when given, else `root` when `candidate`
+ * is true, else `undefined`.
+ */
+export function readsRepository(parsed: { repository?: string }, candidate: boolean | undefined, root: string): string | undefined;
+
+/**
  * Parse `[--expect-version X [--expect-commit SHA]] [--repository PATH] [--report PATH] [-- command args...]`;
  * throws on a bad argument. `repository` (task-327) is `path.resolve`d and absent without the flag.
  */
