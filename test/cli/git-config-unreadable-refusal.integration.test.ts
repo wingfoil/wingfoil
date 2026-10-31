@@ -50,13 +50,14 @@ status: draft
 
 const ARGS = ['memory', 'add', '--type', 'note', '--title', 'x'] as const;
 
-/** The child's environment: no global or system git configuration, so the repository's own is all it reads. */
+/** The child's environment: no global or system git configuration and the C locale, so the repository's own is all it reads. */
 function childEnv(): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {};
   for (const [key, value] of Object.entries(process.env)) {
-    if (!key.startsWith('GIT_')) env[key] = value;
+    if (!key.startsWith('GIT_') && key !== 'LANGUAGE') env[key] = value;
   }
-  return { ...env, GIT_CONFIG_GLOBAL: devNull, GIT_CONFIG_NOSYSTEM: '1' };
+  // git's messages are localised and the rows parse them: pin the C locale.
+  return { ...env, GIT_CONFIG_GLOBAL: devNull, GIT_CONFIG_NOSYSTEM: '1', LC_ALL: 'C' };
 }
 
 /** The `<n>` of git's `bad config line <n> in file .git/config`, from a real run of the check's command. */

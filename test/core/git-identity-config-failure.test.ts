@@ -44,6 +44,8 @@ const KEYS = [
   'GIT_AUTHOR_EMAIL',
   'GIT_COMMITTER_NAME',
   'GIT_COMMITTER_EMAIL',
+  'LC_ALL',
+  'LANGUAGE',
 ] as const;
 
 function memoryAdd(): (params: Record<string, unknown>) => Promise<CoreResult<unknown>> {
@@ -88,6 +90,9 @@ describe('task-324 — a git that cannot read its configuration is refused as "c
     delete process.env.GIT_AUTHOR_EMAIL;
     delete process.env.GIT_COMMITTER_NAME;
     delete process.env.GIT_COMMITTER_EMAIL;
+    // git's messages are localised and the rows parse them: pin the C locale for the check and the fixture runs.
+    process.env.LC_ALL = 'C';
+    delete process.env.LANGUAGE;
     // A configured identity: the only fault in the red rows is the configuration git cannot read.
     execFileSync('git', ['-C', repo, 'config', 'user.name', 'Test Dev'], { encoding: 'utf-8' });
     execFileSync('git', ['-C', repo, 'config', 'user.email', 'dev@example.com'], { encoding: 'utf-8' });
