@@ -45,6 +45,182 @@ the case study shows the v0.3.1 patch report too.
        reject's `Reason:` (read with `wingfoil memory history <task-id>`), each with the command that
        shows it resolved and what that command printed; then what else changed on the next pass. -->
 
+### design (architect, 2026-10-31)
+
+**Read.** AGENTS.md §1–§8; `dev-loop-rel-v0.3.2-plan` rulings W0-R1…W0-R10, W1-R1…W1-R8, W2-R1…W2-R5;
+`release-planning-rel-v0.3.2-plan` R8 (`bug-432`: the case study shows the v0.3.1 patch report too);
+`.wingfoil/workflows/custom/dev-loop.yaml`; `bug-383`, `bug-384`, `bug-432`; `dl-128` (`ready`), `dl-089` (`ready`),
+`dl-047` (`ready`); the `doc-versioning` directive; `test/docs/presentation.test.ts`, `test/docs/x-cli-cmds.test.ts`,
+`test/docs/support/vision-index.ts`; the four committed reports under `docs/08_health/`. `depends_on: []`: no
+upstream Execution Notes to read (dl-015). No tech-spec covers the case study or the vision documents' revision
+histories, so no spec amendment is owed; nothing in `.wingfoil/` changes, so no `npm run check:mcp` is owed and no
+workflow phase or step list is affected.
+
+**AC 1 — the rule, run now.** Proposed rule (a pure checker, below): a vision document is *judged* when it carries a
+`**Version:** X.Y` line and a `## Revision history` heading outside fenced code; a judged document must have an entry
+`**Version X.Y (YYYY-MM-DD)` for its header version, dated as its header `**Date:**` (trailing spaces trimmed), no
+entry newer than the header (numeric `major.minor`: 1.17 > 1.9), and entries strictly descending. Run against the
+tree with a throw-away script (`node <scratch>/rule.cjs` over `docs/01_vision/*.md`, outside the worktree):
+
+| File | `**Version:**` | `**Date:**` | Revision history | Rule (a): judged where a history is kept | Literal AC reading (b): every `**Version:**` |
+|---|---|---|---|---|---|
+| `01_product-brief.md` | 1.11 | 2026-10-18 | none | not judged | fails: no history |
+| `02_product-vision.md` | 1.3 | 2026-10-06 | none | not judged | fails |
+| `03_is-isnot.md` | 1.4 | 2026-10-06 | none | not judged | fails |
+| `04_personas.md` | 1.2 | 2026-10-07 | none | not judged | fails |
+| `05_journeys.md` | 1.6 | 2026-10-10 | none | not judged | fails |
+| `06_features.md` | 1.17 | 2026-10-18 | none | not judged | fails |
+| `07_sequencer.md` | 2.1 | 2026-10-18 | none (inline `(v1.4, …)` tags only) | not judged | fails |
+| `08_mvp-canvas.md` | 1.13 | 2026-10-18 | none | not judged | fails |
+| `X_cli-cmds.md` | 1.9 | 2026-10-25 | entries 1.9, 1.8, 1.7, 1.6, 1.5, 1.4, 1.3 | passes: 1.9 entry dated 2026-10-25, newest, descending | passes |
+
+`00_index.md` and `X_lean-inception-plan.md` carry no `**Version:**` (not judged either way).
+`grep -ln "^## Revision history" docs/01_vision/*.md` → `docs/01_vision/X_cli-cmds.md` only; `bug-383`'s step 1 also
+names `00_index.md`, whose only match is the section-map line `- Revision history — L393–499` (line 185), which points
+at `X_cli-cmds.md`'s history. Under rule (a) no vision file changes. Under the literal reading (b) the eight files above
+fail, and the fix is not mechanical: each needs a `## Revision history` section, which under `doc-versioning` is an
+edit that bumps it (1.11 → 1.12, 1.3 → 1.4, 1.4 → 1.5, 1.2 → 1.3, 1.6 → 1.7, 1.17 → 1.18, 2.1 → 2.2, 1.13 → 1.14) with
+a new date, and the new entry must say what that version is; `00_index.md`'s document map (Ver, Date, Lines, which
+`test/docs/vision-index.test.ts` pins) and the last section ranges of the eight files would follow. Decision D1.
+
+**AC 2 — what changes.** `REPORTS` grows from two to four reports; with them the Figures table goes from 23 rows to
+46 (every catalogue metric except `Q17`, `D01`, `P06` is measured in at least one report:
+`node -e` over the four reports' `metrics[].status`), "Not measurable yet" keeps three rows with four columns, the
+"How it was measured" table gains the v0.3 (`v0.3.0` at `cc31d7a8`, `published-tag`, previous v0.2) and v0.3.1
+(`v0.3.1` at `870bd440`, `published-tag`, previous v0.3) rows, "Reproduce" gains `--release v0.3` and
+`--release v0.3.1`, and "What the figures say" is rewritten over the four releases. Measured from the reports, the
+`P01` breakdowns the prose quotes are derivable from the `failing` list (classes matched on the messages
+`scripts/check-governance.cjs` writes): v0.1 61 = 34 undeclared verb (27 with an element id in the verb position) +
+26 `submit` with a bracket + 1 approval with an AI trailer; v0.2 297 = 165 non-canonical bracket + 92 AI trailer
+(21 of them also non-canonical) + 57 `submit` with a bracket + 4 with no class of those three; v0.3 104 = 94 AI
+trailer + 9 undeclared verb + 1 non-canonical; v0.3.1 0 (`node <scratch>/p01.cjs`). `docs/case-study.md` declares
+no version (`grep -c "^\*\*Version" docs/case-study.md` and `grep -c "^version:" docs/case-study.md` → `0`), so it is not given one (`doc-versioning`, dl-047).
+Same-class text the change makes false, fixed in the task: `README.md:224` ("the release-health figures of v0.1 and
+v0.2"), `docs/site.yaml:64` (the case study's `about`, same words) and `llms.txt:16`, rendered from it.
+
+**Determinism.** The tests read only the working tree: the reports with `JSON.parse(readFileSync(...))` in the
+explicit `REPORTS` order (no directory listing, D2), the catalogue with js-yaml `load`, the page and the vision files
+with `readFileSync`; the vision folder is listed with `readdirSync(...).sort()`. No clock, no network, no git.
+
+**Classification and what qa pins.**
+
+| AC | Class | Why |
+|---|---|---|
+| AC 1 | red-first | The refusing check does not exist (`grep -rln "Revision history" test/` → only `x-cli-cmds.test.ts`, which pins entries 1.7 and 1.5 by hand, and `vision-default-machine-text.test.ts`, which only cuts the history off). The checker is new code in a support module, as `test/docs/support/vision-index.ts` was for `bug-270`; red is the missing module. |
+| AC 2 | red-first | `REPORTS` with four entries fails F2, F3, F5, F6 on today's page; the new How-it-was-measured, Reproduce, coverage and same-class checks fail on today's text. The prose checker itself (bug-384) is test code: its synthetic cases pass at red (characterization of the checker), stated as such in the red notes. |
+
+*AC 1 — `test/docs/vision-revision-history.test.ts` (new), importing `test/docs/support/vision-revision-history.ts`
+(written in green).* Intended interface, pure, no I/O:
+`export interface RevisionHistoryFinding { readonly file: string; readonly what: string; readonly expected: string; readonly actual: string }`
+and `export function revisionHistoryFindings(file: string, text: string): RevisionHistoryFinding[]` (findings in
+document order). Expected reds: `npx tsc --noEmit` TS2307 (cannot find module `./support/vision-revision-history`),
+jest "Cannot find module" for the suite. Pin:
+1. The real folder: for every `docs/01_vision/*.md` (`readdirSync` sorted), `revisionHistoryFindings` → `[]`, and
+   the files judged are exactly `['X_cli-cmds.md']` (a positive case, so an empty pass cannot be vacuous) — export a
+   `isJudged(text): boolean` alongside, or have the test assert a judged count of 1 through it.
+2. Synthetic inputs, each built from `X_cli-cmds.md`'s real header lines (`**Version:** 1.9`, `**Date:** 2026-10-25  `
+   with its two trailing spaces) and real entry lines (`**Version 1.9 (2026-10-25) — …`, `**Version 1.8 (2026-10-25)
+   — …`), cut to a few lines: (i) consistent → `[]`; (ii) header bumped to 1.10 with no 1.10 entry → one finding
+   naming `1.10` (bug-383's reproduction); (iii) the 1.9 entry dated 2026-10-24 → one date finding; (iv) an entry 1.10
+   above a header 1.9 → a newer-than-header finding; (v) 1.8 listed before 1.9, or 1.9 twice → an order finding;
+   (vi) no `## Revision history` → `[]` (not judged); (vii) no `**Version:**` → `[]`; (viii) `## Revision history`
+   only inside a fenced block → not judged; (ix) 1.17 vs 1.9 compares numerically (a header 1.17 with entries 1.17,
+   1.9 → `[]`).
+The `what` texts are free, but each finding names the file and the version involved. `test/docs/x-cli-cmds.test.ts`
+stays unchanged.
+
+*AC 2 — `test/docs/presentation.test.ts` (the `task-246 — AC 2` block; the header comment gains a `task-322` line).*
+1. `REPORTS` = `['docs/08_health/release-health-v0.1.json', 'docs/08_health/release-health-v0.2.json',
+   'docs/08_health/release-health-v0.3.json', 'docs/08_health/release-health-v0.3.1.json']`, explicit (D2). F1–F8
+   unchanged; F2's header becomes `… 'v0.1 at 5b16ab61', 'v0.2 at v0.2.1 (9833e00a)', 'v0.3 at v0.3.0 (cc31d7a8)',
+   'v0.3.1 at v0.3.1 (870bd440)'` through the existing `pointColumn`.
+2. **How it was measured** (new): its first table has one row per report, in `REPORTS` order; cell 1 is
+   `` `${release.version} (${release.id})` `` (e.g. `v0.3.1 (patch-v0.3.1)`); cell 2 contains `commit.slice(0, 8)`
+   and, when `ref !== commit`, `ref`; cell 3 equals `measurement_point.basis`; cell 4 starts with `none` when
+   `previous` is null, otherwise contains `previous.release` and `basename(previous.report)`. Today's two rows pass.
+3. **What the figures say** (bug-384, new): a pure function in the test file, `proseFindings(text, reports,
+   catalogue): string[]`. Scope: each list item (`- ` at any indentation; continuation lines belong to it; its nested
+   items are its children, not its text); a non-list paragraph is bound to every metric and every report. An item's
+   *metrics* are the catalogue ids it names (`/\b[GQPDE]\d{2}\b/`) together with its parent's (accumulated: today's
+   v0.1 sub-item names `G10` beside its parent's `P01`), all when none is named; its *releases* are
+   the report versions it names (`/\bv\d+\.\d+(?:\.\d+)?(?![\d]|\.\d)/`, so `v0.3.1` is not read as `v0.3`), else its
+   parent's, else all. Before extracting numbers remove code spans, link targets `](…)`, ISO dates and the release and
+   id tokens; a number is `/(?<![\w.§\-\/#])\d+(?:\.\d+)?(?![\w]|\.\d)/`. Each number must be in the *allowed* set:
+   for every (metric, report) bound, `jsonNumbers(value)`, `jsonNumbers(raw)`, `jsonNumbers(items)`, the numbers of
+   the metric's catalogue `floor`, and, when the metric's entry has a `failing` list, for every non-empty subset S of
+   the declared reason classes: the count matching all of S, the count matching any of S, and the list length minus
+   the latter. The classes, declared once in the test as substrings or patterns of the messages
+   `scripts/check-governance.cjs` writes: `is not one of the declared verbs`; an element id in the verb position
+   (`/'[a-z]+-\d{3}[^']*' is not one of the declared verbs/`); `carries no bracket`; `carries no AI co-author trailer`;
+   `the bracket is not canonical`. Pins: (i) on the real page, `proseFindings(section(page, 'What the figures say'),
+   …)` → `[]`; (ii) the section names every `REPORTS` version at least once (red today: no `v0.3`, no `v0.3.1`);
+   (iii) a fixed fixture, today's P01 bullet copied verbatim from `docs/case-study.md` (lines 99–106 at `ab691d35`,
+   from `- **Process conformance (P).**` to the v0.2 sub-item's `have another defect.`) checked against the real v0.1
+   and v0.2 reports → `[]`; (iv) the same fixture with `61 failing` changed to `62 failing` → exactly one finding,
+   naming `62` and `v0.1` (bug-384's reproduction, `task-246` review F11). The fixture is a constant in the test, not
+   read from the page, so the rewrite of the page cannot break it.
+   A throw-away prototype of this rule (`NODE_PATH=$PWD/node_modules node <scratch>/prose.cjs`, outside the worktree)
+   printed `page: []`, `fixture: []` and, for the mutation, the single finding `62 @ v0.1 [P01,G10] :: at v0.1, 62
+   failing: …`; it is evidence that the rule is satisfiable, not code to copy.
+4. **Reproduce** (new): the `--release <v>` values of the `node scripts/release-health/measure.cjs` lines in the
+   section's fenced block equal the `REPORTS` versions, in order. Red today (v0.1, v0.2).
+5. **Coverage of the page** (new): the text before the first H2 links every `REPORTS` file (as
+   `08_health/release-health-<v>.json`); the page does not contain `does not show its figures yet` (bug-432 step 4);
+   the README *Documentation* row linking `docs/case-study.md` and `docs/site.yaml`'s `about` for `docs/case-study.md`
+   each name every `REPORTS` version (`v0.3` matched with `(?![\d]|\.\d)`). Red today. `llms.txt` stays covered by
+   `test/docs/llms-txt.test.ts`'s byte-for-byte render.
+
+**Files to touch.** qa (red): `test/docs/vision-revision-history.test.ts` (new), `test/docs/presentation.test.ts`.
+developer (green): `test/docs/support/vision-revision-history.ts` (new); `docs/case-study.md` (intro, How it was
+measured, Figures, What the figures say, Not measurable yet and its closing paragraph, Reproduce); `README.md` (the case
+study row); `docs/site.yaml` (the case study's `about`); `llms.txt` (regenerated with `node scripts/build-site.cjs
+llms`); this task file; the three bugs' status syncs. Under D1 (b) add the eight vision files and `00_index.md`.
+
+**Version bumps** (against `release/0.3`, once on this branch): `docs/site.yaml` 1.2 → 1.3, history comment
+`1.3 bug-432 (task-322): the case study's about names the four reports` (`git show release/0.3:docs/site.yaml | grep
+^version` → `version: 1.2`; S1 pins "at least 1.1", so no test changes). `docs/case-study.md`, `README.md`,
+`llms.txt`: no version. No `.wingfoil/` file. Under D1 (b): the eight bumps listed above.
+
+**Tests that pin what changes** (W2-R4 (6)). `grep -rln "release-health-v0\.\|REPORTS\b" test/docs` →
+`test/docs/presentation.test.ts`; `grep -rln "case-study" test/ scripts/ .wingfoil/` → `test/docs/presentation.test.ts`,
+`.wingfoil/WORKFLOW.md`, `.wingfoil/workflows/custom/user-docs.yaml` (the last two name the path only, not changed);
+`grep -rn "release-health figures" test/` → nothing; `grep -rn "first two measurements\|does not show its figures\|What
+the figures say\|Not measurable yet\|How it was measured"` outside Memory and plans → `docs/case-study.md` and
+`test/docs/presentation.test.ts` only; `grep -rln "Revision history" test/` → `test/cli/e2e-smoke-candidate.test.ts`,
+`test/cli/publish-pipeline.test.ts`, `test/directives/dev-loop-practice.test.ts`, `test/directives/git-conventions.test.ts`
+(other documents' histories, not touched), `test/docs/vision-default-machine-text.test.ts`, `test/docs/x-cli-cmds.test.ts`
+(unchanged under D1 (a)); `docs/site.yaml` and `llms.txt`: `test/docs/llms-txt.test.ts` (render equality) and
+presentation S1 (≥ 1.1). The tests reading the committed reports under `test/release-health/` are not affected (no
+report changes).
+
+**Existing tests run** (in this worktree, at `5835957f`, one jest process each):
+`npx jest test/docs/presentation.test.ts test/docs/vision-index.test.ts test/docs/x-cli-cmds.test.ts
+test/docs/llms-txt.test.ts test/docs/vision-default-machine-text.test.ts --maxWorkers=2` → 5 suites, 105 tests passed;
+`npx jest test/docs/presentation.test.ts --maxWorkers=2` → 49 passed; `node scripts/build-site.cjs llms --check` →
+`build-site: llms.txt is current`, exit 0; `npx jest test/lint --maxWorkers=2` → 13 suites, 153 tests passed.
+
+**Decisions for the approver.**
+- **D1 — scope of AC 1's rule.** (a) The rule judges a vision document only where it keeps a `## Revision history`
+  (`bug-383`'s Expected Behavior: "wherever the document keeps a revision history"); today that is `X_cli-cmds.md`,
+  which passes, and any document that starts a history is judged from then on. (b) The AC read literally: every
+  `**Version:**` document must have a history with its version's entry; the eight files above fail and each gets a
+  history section, a bump and an entry, with `00_index.md` following. **Recommendation: (a)** — (b) edits eight Approved
+  vision documents with entries that record only that a history starts, which is the record `git log` already holds.
+- **D2 — which reports the test reads.** (a) An explicit `REPORTS` list of the four. (b) Every
+  `docs/08_health/release-health-v*.json`, listed and sorted by version. Under (b) the next release-health commit
+  (v0.3.2's own, on this line, after `release-publishing`) turns `presentation.test` red until a later `user-docs`
+  adds the column, since `user-docs` runs before `release-health` in `release-cycle`. **Recommendation: (a)**, with the
+  hand-off gap reported as a candidate finding.
+- **D3 — the same-class text.** Correct `README.md`'s case study row, `docs/site.yaml`'s `about` (bump 1.3) and the
+  regenerated `llms.txt` in this task, with the coverage pin of AC 2 item 5. **Recommendation: yes** (the change makes
+  "figures of v0.1 and v0.2" false).
+
+**Risks for the other open w2 tasks.** No file in common with `task-324` (`src/core/git-identity.ts`, `test/core/`),
+`task-327` (`scripts/e2e-smoke.cjs` and its test) or `task-328` (`scripts/check-governance.cjs`, its tests,
+`git-conventions` §9). The prose classes match the committed reports' text, not the script, so a message `task-328`
+changes in `check-governance.cjs` does not move them. `task-328`'s new trailer-paragraph check reads commits: this
+branch's commits end with one trailer paragraph.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
