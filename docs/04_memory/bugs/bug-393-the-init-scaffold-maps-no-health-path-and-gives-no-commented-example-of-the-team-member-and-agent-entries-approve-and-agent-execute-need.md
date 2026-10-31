@@ -90,3 +90,8 @@ title), checked on `main` at `1c4a3a43`.
      An item met while fixing goes in the fix task's own subsection; this one holds what belongs to
      the bug itself (its finding, its triage, why it took more than one task). The retrospective's
      `explore` reads this subsection first. -->
+
+- Fixed in two tasks: `task-296` added the commented `team.agents` example, and `task-321` (commit `4d7489daa`) the
+  commented `team.members` approver example and the commented `paths.health` line, each with the `wingfoil dna add`
+  command that adds it (`npx jest test/storage/templates.test.ts` → the task-321 AC 1 tests pass). The `team.agents`
+  part shipped in v0.3.1 (`task-296`, AC "a commented `team.agents` example"), the rest in v0.3.2.
