@@ -154,6 +154,46 @@ Design gate approved by the approver on 2026-10-31T20:24:56+01:00, in the orches
   `line <n> does not start with "[publish:staging] ": "<line>"`.
 - D3 — yes: the inherited refusal of `--check-evidence-only` is pinned with one case in test/cli/evidence-only-tag.test.ts.
 
+### red (qa, 2026-10-31)
+
+Run in the task worktree on `task/task-326-…`, every Bash call under the task's PATH shim; `command -v wingfoil &&
+wingfoil --version` printed the shim's wingfoil and `0.3.1 (f98bf133216ce41e9a9ffdaaac8f9e67e5c2e1d4)`.
+`git rev-list --count HEAD..release/0.3` printed `62`, so `git merge --no-edit release/0.3` was run first (W0-R3).
+
+**Files (red commit `c5850198e4d04f0fe1a27c7fad503a7e6af42437`, tests only, no `src/`, no `scripts/`):**
+`test/cli/staging-rehearsal.test.ts` (a new `describe` "task-326 AC 1", 8 cases) and
+`test/cli/evidence-only-tag.test.ts` (one case, D3). No `.d.cts` is needed: no new export is imported.
+
+**Per AC.**
+- AC 1 (red-first), approver rulings D1 (a), D2, D3 of the design gate:
+  - (a) `(a) a version line without the prefix, beside a prefixed one, fails naming its line` and
+    `(a) the reason is exactly …`: first failing assertion `expect(staging.checkTranscript(text, pkg)).toEqual(…)`
+    (staging-rehearsal.test.ts l. 260 and l. 269), received `{ ok: true, commit: "aaaa…" }`.
+  - (b) `(b) an unprefixed line with no version in it fails the same way` (l. 274): received `{ ok: true, … }`.
+  - D2 order: `D2: an unprefixed FAIL line reports the prefix reason, not "records a failure"` (l. 283): received
+    `line 3 records a failure: "FAIL [Scrum] …"` instead of the prefix reason.
+  - (c) CLI `(c) an unprefixed line exits 1 with "error: line <n> does not start with"` (l. 323): stderr is `""`
+    (exit 0) instead of matching `/^error: line \d+ does not start with/`.
+  - D3 `task-326 D3: a transcript with an unprefixed line fails with checkTranscript's new reason` in
+    evidence-only-tag.test.ts (l. 132): received `{ ok: true, commit, tip, paths: [] }`.
+  - Characterization, passing on first run: `D2: the closing-line check runs first …`, `D1: whitespace-only lines
+    and CRLF line ends still pass`, and (d) `the two committed transcripts still pass, naming their commits`
+    (`cc31d7a8ca3940c6ec96dca4e0ef77f32f52dfb1` for 0.3.0, `870bd4406f3b9bba5ecde7a5f8198b80c2a98583` for 0.3.1).
+- AC 2 (characterization, a document amendment): nothing to test; the spec-015 §3 amendment is the developer's,
+  left uncommitted (dl-047).
+
+**Fixtures.** Lines copied from `docs/07_gates/rl-v1/rel-v0.3.1-staging-rehearsal.md` l. 1 (`Verdaccio up on
+http://localhost:4873/`) and l. 3 (the `--version` line, version and sha changed); the FAIL line is the one the existing
+task-282 cases use. Case (d) reads the two committed transcripts as they are (`rel-v0.3-staging-rehearsal.md`,
+`rel-v0.3.1-staging-rehearsal.md`). No command output is invented: no stderr or stdout stand-in is used.
+
+**Runs.**
+- `npx jest test/cli/staging-rehearsal.test.ts test/cli/evidence-only-tag.test.ts --maxWorkers=2` →
+  `Test Suites: 2 failed, 2 total`, `Tests: 6 failed, 44 passed, 50 total` (the six above).
+- `npx tsc --noEmit -p tsconfig.json` → no output, exit 0 (no missing export).
+- `npx jest test/lint --maxWorkers=2` with the files in place → `Test Suites: 13 passed`, `Tests: 153 passed`.
+- `grep -nP` for invisible characters on both files → no hit. `npx eslint` on both files → no output.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
