@@ -185,6 +185,20 @@ and loaded values, never the layout after `dna add`, so a `task-312` change of p
 Whichever of the two merges second runs the other's scaffold-based tests after `git merge --no-edit release/0.3`.
 Any later task that changes a shipped Memory template regenerates the shipped-templates golden again.
 
+### design gate (approver, 2026-10-31)
+
+Design gate approved by the approver on 2026-10-31T07:16:10+01:00, in the orchestrator's chat:
+- D1 — (a): `contributor`, `credit` and `reported_by` go on the adr, bug, decision-log and tech-spec templates only, as this repository's do.
+- D2 — yes: the scaffold's field comments drop the repository-only references (dl-020, dl-163, the service `feedback_inbox`, COLLABORATION.md,
+  commit-backlog / re-plan / `growth_threshold`) and keep the meaning.
+- D3 — (a): the seven WingFoil-internal ids in the scaffold's header comments (dna.yaml P2.4; memory.yaml P1.13, REQ-STATE-08, spec-001;
+  roles.yaml P3.2 / P3.7, REQ-SEC-08; workflows.yaml P4.1) are removed in this task (same class as bug-409, same file
+  `src/storage/templates.ts`); red pins that the scaffolded files' comments name none of them.
+- D4 — (a): the commented `health` example sits at the end of `paths:`.
+- D5 — yes: the scaffolded memory.yaml stays unchanged.
+- D6 — yes: user-guide §4 gains one sentence on the commented `health` and approver-member examples.
+- D7 — yes: qa updates the `SCAFFOLD_SUBJECT` constant in test/memory/history-scaffold-copy.test.ts in red.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
