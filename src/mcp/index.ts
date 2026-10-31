@@ -84,8 +84,7 @@ export interface RegisterReadOnlyResourcesOptions {
  * Wire the full spec-004 §2 read-only Resources channel onto `server` in one call: the Memory, DNA,
  * and Workflow Resources — the two workflow-state Resources `wingfoil://workflows/-/next` and `-/status`
  * included (task-239, `spec-017` §9) — plus the structural `resources/write` refusal. Deliberately does not touch
- * `registerCoreModules`/`CORE_MODULES` — a caller building a real server still calls that separately
- * for the (today, zero) Tools/legacy-shaped Resources it derives from `src/core`.
+ * `registerCoreModules`/`CORE_MODULES`; `createMcpServer` does not call it either (see `./registrar.ts`).
  */
 export function registerReadOnlyResources(server: McpServer, options: RegisterReadOnlyResourcesOptions): void {
   registerWriteRefusalHandler(server);
