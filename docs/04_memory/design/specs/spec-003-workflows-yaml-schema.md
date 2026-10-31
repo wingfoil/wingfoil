@@ -748,7 +748,7 @@ failures keep `spec-009`'s structural codes, except the named `kind` refusal.
 | `E_PHASE_NAME_INVALID` | error | loader | a phase `name` outside `[a-z][a-z0-9-]*` | § "Names"; `spec-016` run ids |
 | `E_PHASE_NAME_RESERVED` | error | loader | a phase named `adhoc` | § "Names"; `spec-016` |
 | `E_PHASE_DUPLICATE_NAME` | error | loader | a phase name repeats within one workflow | Layer 2 `name` |
-| `E_WORKFLOW_INCLUDE_UNRESOLVED` | error | loader | a phase `include` names no loaded workflow (including a value written as a file path) | `bug-145`, `bug-144` |
+| `E_WORKFLOW_INCLUDE_UNRESOLVED` | error | loader | a phase `include` names no loaded workflow (including a value written as a file path). The message reads `include '<value>' names no loaded workflow`, then ` (a phase include is a workflow name, not a file path)` for a path-shaped value, then `: write 'include: <name>'` when a declared workflow is the value's basename (without `.yaml`/`.yml`) or within Levenshtein distance 2 of it (an exact basename first, a tie to code-unit order), then `; see 'Upgrading from 0.2.x' in the WingFoil user guide (docs/user-guide.md in the repository)` for a path-shaped value | `bug-145`, `bug-144` |
 | `E_WORKFLOW_NOT_INCLUDABLE` | error | loader | a phase `include` names a workflow that is not includable | `dl-109` K3 |
 | `E_WORKFLOW_ELEMENT_MISMATCH` | error | loader | an included workflow declares `element: T` and the including phase neither iterates over `T` nor runs in a workflow bound to `T`; or it declares an element and is iterated over a `dna:` / `bindings:` collection; or it is iterated over an `element:` collection and `T` is not the including workflow's element (message `workflow '<w>' declares element '<T>', but collection '<ref>' is read from workflow '<including>''s element '<E>'`) | Layer 2 `element`; § "Collections" |
 | `E_WORKFLOW_INCLUDE_CYCLE` | error | loader | the include graph has a cycle; message `include cycle: <w1> -> … -> <w1>` | P4.16 |
@@ -1147,3 +1147,9 @@ element adopted into the step, and the provenance records join the commits that 
 (`spec-017` §4.8, §7.11–§7.12; P4.21, `cp-002`, REQ-STATE-11, `dl-187`). A `wingfoil init` scaffold that gains project bindings (`bug-400`)
 would revise § "Format"'s "it scaffolds no `workflows/bindings.yaml`" in its own task. Edited in place without a
 supersede or a state change (`dl-047`), pending the approver's `memory amend`.
+
+**Revision (2026-10-31, `task-325-name-the-include-and-the-upgrade-path-in-e-workflow-include-unresolved`, `bug-394`) —
+the message of `E_WORKFLOW_INCLUDE_UNRESOLVED`.** § "Diagnostics" records the shape of the message the loader prints for an
+unresolved phase `include`: the name to write when a declared workflow is near (the shared closest-name matcher, distance
+2 as in `spec-008` §1) and, for a value written as a file path, the user guide's upgrade section. The rule is unchanged.
+Edited in place without a supersede or a state change (`dl-047`), pending the approver's `memory amend`.
