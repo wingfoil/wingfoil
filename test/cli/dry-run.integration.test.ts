@@ -9,13 +9,15 @@
  * writes go through the commit primitive (`writeAndCommit`, `src/storage/commit.ts`), where the dry run
  * is implemented once.
  *
- * For each row, three things are asserted:
+ * For each row, four things are asserted:
  *
  * 1. **AC1 — writes nothing.** `--dry-run` exits `0` and the working tree, the index, `HEAD` and every
  *    ref are byte-for-byte what they were (`assertPersistenceUnchanged`: `git status --porcelain`,
  *    `git rev-parse HEAD`, the bytes of every path git reports).
  * 2. **AC3 — the JSON plan.** `--format json` prints one object listing `paths`, `subject` and `diff`.
- * 3. **The plan is the commit.** The same command without `--dry-run` then runs for real, and its
+ * 3. **The console plan (bug-431).** The same command with `--dry-run` and no `--format` exits `0`, writes nothing and
+ *    prints the JSON plan, indented, and a newline (`spec-008` §2).
+ * 4. **The plan is the commit.** The same command without `--dry-run` then runs for real, and its
  *    commit has the plan's subject, the plan's full message (the `WingFoil-Version:` trailer included),
  *    exactly the plan's paths, and the plan's hunks.
  *
@@ -288,6 +290,11 @@ describe('--dry-run on every mutating operation of the registry (task-210, dl-10
     assertPersistenceUnchanged(repo, before, 'dry run');
 
     const plan = JSON.parse(dry.stdout) as Plan;
+    // bug-431 — the console format: the same plan as indented JSON (spec-008 §2), exit 0, nothing written.
+    const consoleRun = wingfoil(repo, [...row.args, '--dry-run']);
+    expect({ status: consoleRun.status, stderr: consoleRun.stderr }).toEqual({ status: 0, stderr: '' });
+    expect(consoleRun.stdout).toBe(JSON.stringify(plan, null, 2) + '\n');
+    assertPersistenceUnchanged(repo, before, 'console dry run');
     expect(plan.dryRun).toBe(true);
     expect(typeof plan.subject).toBe('string');
     expect(Array.isArray(plan.paths)).toBe(true);
