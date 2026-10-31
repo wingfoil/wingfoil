@@ -184,6 +184,29 @@ Design gate approved by the approver on 2026-10-31T12:06:49+01:00, in the orches
 - D5 — yes: AC3 is red-first.
 - D6 — yes: `.github/workflows/governance.yml`'s header comment changes in this task.
 
+### red (qa, 2026-10-31)
+
+Red commit `47cdaee73` (test files and one declaration file only). Worktree already current with `release/0.3`
+(`git rev-list --count HEAD..release/0.3` -> `0`, no merge). PATH guard: `command -v wingfoil` -> the task-328 shim;
+`wingfoil --version` -> `0.3.1 (bfc921c3690a1c72a60954485d8e99926f728b11)`.
+
+**Files.**
+- new `test/cli/check-governance-workflow-records.test.ts` (33 tests: AC 1 and AC 2);
+- amended `test/cli/check-governance-provenance.test.ts` (D4: the check test pinned the hole `bug-444` closes);
+- amended `test/cli/check-governance-enforcement.test.ts` (D4: the `CHECKS` `toEqual` gains the two markers);
+- amended `test/directives/git-conventions.test.ts` (D5: new describe, AC 3);
+- `scripts/check-governance.d.cts`: `GovernanceCheck` gains `'workflow-record-authority' | 'trailer-paragraph'` (the declaration the red tests index `finding.check` with; the script itself is untouched, so at runtime `CHECKS` lacks the names and the tests fail on assertions).
+
+**Per AC.**
+- AC 1 (red-first): `describe.each` over the three subjects, cases (a)-(e) plus the exit code; (f) no `dna.yaml` at the parent; gating before/after the marker; the `bug-444` reproduction on the compiled CLI (`init --template Scrum`, the three `-m` paragraphs, `scripts/check-governance.cjs --root … --introduced-at …`, expects exit 1 and both authority messages). Cases (c) and (d) (conforming Approver line; no Approver line) pass on first run, as characterizations of what must stay accepted.
+- AC 2 (red-first): findings per distinct key for a `wf()` commit, a `workflow: finalize` record and a `docs:` commit; gating before/after the marker. The conforming shape (attribution joined with `git commit --amend --no-edit --trailer`) and the `agent: record` body pass on first run.
+- AC 3 (red-first, D5): three tests in the new `git-conventions §9` describe (Approver substring and `bug-444`; trailer substring with §8 and `bug-391`; version >= 2.6 naming task-328, bug-444, bug-391, Date >= 2026-10-31).
+- D4: provenance test now expects one `authority` finding (`check: 'workflow-record-authority'`) on each of `bulk` and `rekey`, none on `single`, `checked` 1, `otherCommits` 3, exit 1; the `CHECKS` pin lists the two markers.
+
+**Fixtures and their source.** Finalize body: `git show -s --format=%B c4072efe` on `release/0.3` (a real `workflow: finalize`; the `Approver:` line a finalize of an `approval:` phase writes is added per `src/core/workflow-finalize.ts` lines 13 and 143). Rekey tail: the real CLI output pinned as `MESSAGE_TAIL` in `test/cli/workflow-rekey.integration.test.ts`. Adopt tail: the one of the task-294 provenance test. `agent: record` body: `git log release/0.3 --no-merges --grep '^agent: record' -n1 --format=%B`. Conforming trailer shape: real `git commit --amend --no-edit --trailer` output (git 2.43.0).
+
+**Run.** `npx jest <file> --maxWorkers=2` per file: workflow-records `25 failed, 8 passed, 33`; provenance `2 failed, 6 passed, 8`; enforcement `1 failed, 26 passed, 27`; git-conventions `3 failed, 40 passed, 43`. First failing assertion of each red test: the finding lists (`expect(view(of(report, …, check))).toEqual([…])`) receive `Array []`; the gating cases `expect(gated.get(…)).toBe(false)` receive `undefined`; the CLI case `expect(run.status).toBe(1)` receives `0`; the provenance cases receive no finding; the `CHECKS` pin lacks the two keys; the three §9 tests fail on the missing text and on version 2.5. `npx tsc --noEmit -p tsconfig.json` -> exit 0, no output. `npx jest test/lint --maxWorkers=2` with the files in place -> `Test Suites: 13 passed`, `Tests: 153 passed`.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
