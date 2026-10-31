@@ -239,6 +239,94 @@ describe('task-282 AC 3 — checkTranscript is strict', () => {
 });
 
 /**
+ * task-326 AC 1 (`bug-382`; approver rulings D1 (a), D2 of the design gate): `checkTranscript` judges every
+ * non-empty line, not only the prefixed ones. A line that does not start with `LOG_PREFIX` fails the check,
+ * after the closing-line check and before the failure scan, with the reason
+ * `line <n> does not start with "[publish:staging] ": "<line>"`; whitespace-only lines and CRLF line ends
+ * still pass. The fixtures copy lines of the committed transcripts `docs/07_gates/rl-v1/rel-v0.3-staging-rehearsal.md`
+ * and `docs/07_gates/rl-v1/rel-v0.3.1-staging-rehearsal.md`.
+ */
+describe('task-326 AC 1 — checkTranscript judges the unprefixed lines (bug-382)', () => {
+  const pkg = { name: 'wingfoil', version: '0.3.0' };
+  const passed = staging.stagingPassedLine('wingfoil', '0.3.0');
+  // rel-v0.3.1-staging-rehearsal.md line 3, with the version and the sha changed.
+  const versionLine = (version: string, sha: string): string => `  ok   wingfoil --version = ${version} (${sha}) — match`;
+  // rel-v0.3.1-staging-rehearsal.md line 1, as the script logs it (no prefix here).
+  const verdaccio = 'Verdaccio up on http://localhost:4873/';
+  const prefixed = (...body: string[]): string => body.map((line) => `${staging.LOG_PREFIX}${line}`).join('\n');
+
+  it('(a) a version line without the prefix, beside a prefixed one, fails naming its line', () => {
+    const text = [prefixed(versionLine('0.3.0', 'a'.repeat(40))), versionLine('0.0.1', 'b'.repeat(40)), prefixed(passed)].join('\n').concat('\n');
+    expect(staging.checkTranscript(text, pkg)).toEqual({
+      ok: false,
+      reason: expect.stringContaining('line 2 does not start with "[publish:staging] "'),
+    });
+  });
+
+  it('(a) the reason is exactly `line <n> does not start with "[publish:staging] ": "<line>"`', () => {
+    const odd = versionLine('0.0.1', 'b'.repeat(40));
+    const text = [prefixed(versionLine('0.3.0', 'a'.repeat(40))), odd, prefixed(passed)].join('\n').concat('\n');
+    expect(staging.checkTranscript(text, pkg)).toEqual({ ok: false, reason: `line 2 does not start with "[publish:staging] ": "${odd}"` });
+  });
+
+  it('(b) an unprefixed line with no version in it fails the same way', () => {
+    const text = [verdaccio, prefixed(versionLine('0.3.0', SHA)), prefixed(passed)].join('\n').concat('\n');
+    expect(staging.checkTranscript(text, pkg)).toEqual({
+      ok: false,
+      reason: `line 1 does not start with "[publish:staging] ": "${verdaccio}"`,
+    });
+  });
+
+  it('D2: an unprefixed FAIL line reports the prefix reason, not `records a failure`', () => {
+    const fail = 'FAIL [Scrum] wingfoil init --template Scrum — exit 1';
+    const text = [prefixed(verdaccio, versionLine('0.3.0', SHA)), fail, prefixed(passed)].join('\n').concat('\n');
+    expect(staging.checkTranscript(text, pkg)).toEqual({
+      ok: false,
+      reason: `line 3 does not start with "[publish:staging] ": "${fail}"`,
+    });
+  });
+
+  it('D2: the closing-line check runs first, so an unprefixed line before a bad closing line reports the closing line', () => {
+    const text = [verdaccio, prefixed(versionLine('0.3.0', SHA)), prefixed('staging smoke FAILED — the build must not be promoted')].join('\n').concat('\n');
+    expect(staging.checkTranscript(text, pkg)).toEqual({ ok: false, reason: expect.stringContaining('closing line') });
+  });
+
+  it('D1: whitespace-only lines and CRLF line ends still pass (characterization)', () => {
+    const body = [prefixed(verdaccio, versionLine('0.3.0', SHA)), '   ', '', prefixed(passed)].join('\r\n').concat('\r\n');
+    expect(staging.checkTranscript(body, pkg)).toEqual({ ok: true, commit: SHA });
+  });
+
+  it('(d) the two committed transcripts still pass, naming their commits (characterization)', () => {
+    const v030 = readFileSync(join(REPO_ROOT, 'docs', '07_gates', 'rl-v1', 'rel-v0.3-staging-rehearsal.md'), 'utf-8');
+    const v031 = readFileSync(join(REPO_ROOT, 'docs', '07_gates', 'rl-v1', 'rel-v0.3.1-staging-rehearsal.md'), 'utf-8');
+    expect(staging.checkTranscript(v030, { name: 'wingfoil', version: '0.3.0' })).toEqual({
+      ok: true,
+      commit: 'cc31d7a8ca3940c6ec96dca4e0ef77f32f52dfb1',
+    });
+    expect(staging.checkTranscript(v031, { name: 'wingfoil', version: '0.3.1' })).toEqual({
+      ok: true,
+      commit: '870bd4406f3b9bba5ecde7a5f8198b80c2a98583',
+    });
+  });
+
+  describe('the CLI check', () => {
+    let dir: string;
+    beforeEach(() => {
+      dir = mkdtempSync(join(tmpdir(), 'wf-staging-unprefixed-'));
+    });
+    afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+    it('(c) an unprefixed line exits 1 with `error: line <n> does not start with`', () => {
+      const text = [verdaccio, prefixed(versionLine(PKG.version, SHA)), prefixed(staging.stagingPassedLine(PKG.name, PKG.version))].join('\n').concat('\n');
+      writeFileSync(join(dir, 't.md'), text);
+      const run = spawnSync(process.execPath, [SCRIPT, '--check-transcript', 't.md'], { cwd: dir, encoding: 'utf-8' });
+      expect(run.stderr).toMatch(/^error: line \d+ does not start with/);
+      expect(run.status).toBe(1);
+    });
+  });
+});
+
+/**
  * task-282 AC 2 (`bug-310`; red-first by the approver's ruling at design): the texts that said the rehearsal
  * is "not in CI" / "never in CI" say what CI does — the rehearsal is a gate run per candidate (dl-099 §4 (a)),
  * and `publish.yml`'s `stage` job stages the tagged build in CI — and the release-candidate paragraph of
