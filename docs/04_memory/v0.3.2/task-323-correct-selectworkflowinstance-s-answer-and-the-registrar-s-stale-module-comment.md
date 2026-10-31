@@ -285,6 +285,18 @@ Gates, after `bash .../waitslot.sh` (exit 0), in this worktree with the pending 
 
 - `bug-396-the-registrar.ts-module-comment-describes-mcp-resource-uris-the-server-does-not-list`: replace the placeholder under `### Retrospective` with "None."; proposed `--reason`: "Record the bug's retrospective as None, as dl-115 Q2 (a) requires for a bug closed by task-323."
 - `bug-358-...`: no amendment, its retrospective already reads "None."
+  (superseded by the review fix F3: an amendment is now owed)
+- `bug-358-selectworkflowinstance-has-no-production-caller-and-answers-workflow-is-not-open-for-a-ref-that-names-no-workflow`: add to `## Notes` a line stating that its Expected Behavior is met for callers that pass the snapshot (task-323) and that the two-argument call still answers `workflow is not open`, deferred to bug-465 (v0.4) by the approver's ruling at task-323's design gate. Proposed --reason: "Record that task-323 meets bug-358's Expected Behavior for callers that pass the snapshot, and that the two-argument answer is deferred to bug-465 by the approver's ruling at the design gate."
+
+### review fixes (developer, 2026-10-31)
+
+Reviewer verdict: approve with fixes (0/2/0).
+- F1 `src/mcp/dna-resource.ts` (module comment): "registers only this module's URIs" was false; it now says the `wingfoil mcp` server serves this module's `wingfoil://dna` URIs, not `registerCoreModules`' `wingfoil://dna/show`.
+- F2 `src/mcp/index.ts` (`registerReadOnlyResources` TSDoc): the "a caller building a real server still calls that separately for the (today, zero) Tools" sentence was false in both halves; it now says `createMcpServer` does not call `registerCoreModules` either.
+- Sweep: `grep -rn "registerCoreModules\|served\|serves\|registers" src/mcp src/core/registry.ts` (registrar.ts excluded, rewritten in green). Hits that make a claim about the served server: `server.ts:20-25` (says it does NOT call `registerCoreModules`: true), `memory-resource.ts:30` and `workflow-resource.ts:4-16` (say a resource is registered directly, not through `registerCoreModules`: true), `index.ts:5` (describes what `registerCoreModules` derives: true); the others (`served` of a read, `registers` of a handler or option in `read-only.ts`, `prompt.ts`, `session-resource.ts`, `registry.ts`) make no claim about the server's surface. No further instance found.
+- F3: amend of `bug-358` prepared uncommitted (below).
+
+Gates after the fixes: `npx jest test/mcp test/core/workflow-deduction.test.ts test/docs/mcp-surface-parity.test.ts test/lint --maxWorkers=2` -> `Test Suites: 33 passed, 33 total`, `Tests: 365 passed, 365 total`; `npm run -s docs:api` exit 0; `npx tsc --noEmit` exit 0.
 
 ### Retrospective
 
