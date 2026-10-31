@@ -48,6 +48,132 @@ when present; whether one is mandatory on an `approval:` phase stays v0.4.
        reject's `Reason:` (read with `wingfoil memory history <task-id>`), each with the command that
        shows it resolved and what that command printed; then what else changed on the next pass. -->
 
+### design (architect, 2026-10-31)
+
+Worktree at `3d20d29a`…`bfc921c3` (the `start` and the two bug syncs on top of `release/0.3` `ab691d35`); the code
+build prints `0.3.1 (bfc921c3…)`. Read: the task, `bug-444`, `bug-391`, `task-305`'s Execution Notes (`depends_on`,
+dl-015), the plan rulings, `dev-loop.yaml`, `git-conventions` §4, §7–§9, `scripts/check-governance.cjs` and its
+`.d.cts`, `src/core/workflow-finalize.ts`, `src/core/provenance-record.ts`.
+
+**Specs and DLs.** No approved spec defines the governance check: `grep -n "governance" docs/04_memory/design/specs/spec-017*.md
+spec-008*.md spec-016*.md` names only the `reconcile-governance` phase and the `paths` category, so no spec amend is
+owed (release-planning S6 lists none for this task). The decision-logs the rules rest on are `ready`: `dl-103`,
+`dl-094`, `dl-187` (`grep -n "^status:"` on each). `dl-187` "What changes elsewhere" says the check must learn the
+three record subjects; nothing in it or in `spec-017` §7.9/§7.11/§7.12 says a record's `Approver:` line goes
+unchecked, so the ACs contradict no ratified text. Release-planning R8 holds: the `Approver:` line is checked **when
+present**; whether an `approval:` phase's record must carry one is not designed here.
+
+**dl-015 (`task-305`).** Its notes fix only the bump rule for the shared file: one bump per branch against the version
+on the integration branch. `git show release/0.3:.wingfoil/directives/custom/git-conventions.md | grep '^version'`
+→ `"2.5"` (`task-306` merged after `task-305`'s 2.4): this branch writes **2.6**, keeping the whole nested history in
+the version comment (the suites pin `task-286`, `task-291`, `task-305` … in that line).
+
+**What exists today** (reproductions run on the code build in a scratch repository outside the worktree, `git init`,
+`init --template Scrum`, `--introduced-at` the init commit):
+- `bug-444` step 3–4: the forged `workflow: finalize plan-x demo.step` with `Approver: Mallory <mallory@example.com>
+  (approver)` → `governance check: 0 wf() commits in HEAD (…), and 2 other commits`, `gated: 0 findings on 0 commits`,
+  exit 0.
+- `bug-391`: a `workflow: finalize plan-x demo.other` whose `WingFoil-Phase:`/`WingFoil-Instance:` paragraph is followed
+  by a separate `WingFoil-Version: … / Co-Authored-By: …` paragraph → `gated: 0 findings`, exit 0, and
+  `git log -1 --format='%(trailers:only,unfold)'` prints only `WingFoil-Version: 0.3.1 (deadbeef)` and
+  `Co-Authored-By: Claude <noreply@anthropic.com>`: the phase record is lost to the deduction.
+- Where the hole is: `commits = allCommits.filter((commit) => commit.subject.startsWith('wf('))` (line 589) feeds
+  `checkBodyAndAuthority`; the records fall into `otherCommits` (line 595), read only by `status-outside-wf`.
+  `grep -c "governance-check:workflow-record-authority\|governance-check:trailer-paragraph" scripts/check-governance.cjs`
+  → `0`; `grep -c "bug-444\|bug-391\|workflow-record-authority\|trailer-paragraph"
+  .wingfoil/directives/custom/git-conventions.md` → `0`.
+
+**Would any commit already on the lines become a finding?** No, for either rule:
+- `git log release/0.3 --no-merges --format='%H%x09%s' | grep -cP '\tworkflow: (finalize|adopt|rekey) '` → `9`
+  records (all nine `workflow: finalize` of `vision-change-rel-v0.3.1-element-provenance-plan`); of them, carrying an
+  `Approver:` line → `0`. Same on `main` (9, 0) and on this branch's `HEAD` (9, 0).
+- A scratch scan (`scan.cjs`: every non-merge commit, body split on blank lines, a line matching
+  `/^wingfoil-[a-z-]+:/i` in any paragraph but the last) → `release/0.3: 8912 non-merge commits, 2221 WingFoil-* lines,
+  0 outside final paragraph`; `main: 8316 non-merge commits, 2055 WingFoil-* lines, 0 outside final paragraph`.
+- Both rules are gated anyway (below), so the history before the merge is reported at most, never failing.
+
+**How the introduction commit of the new checks is fixed.** It is not written anywhere by hand: `markerIntroduction`
+takes the oldest commit of `HEAD`'s first-parent line whose change to `scripts/check-governance.cjs` altered the count
+of the check's marker (`git log --first-parent -S <marker>`). On this task branch that is green's commit (the one
+adding the two `CHECKS` entries); after the `--no-ff` merge, on `release/0.3`'s first-parent line it is the **merge
+commit**, as for the five task-208 checks (`git log --first-parent --format='%h %s' -S governance-check:<m> HEAD --
+scripts/check-governance.cjs | tail -1` → `b9591e08c Merge branch 'task/task-208-…'` for each of the five; the
+branch commit `c501a7d4` is not it), and the merge forward is the introduction on `main`. Conditions green keeps: the
+two marker strings appear in the script exactly once (in `CHECKS`; the header names the checks without the
+`governance-check:` prefix), and only one commit brings them in. Tests and notes may quote the markers: `-S` is limited
+to the script's path.
+
+**Acceptance criteria — classification and what qa pins.**
+
+| AC | Class | What qa pins |
+|----|-------|--------------|
+| 1 — `Approver:` on the three `workflow:` record subjects | red-first (new behaviour: line 589 never sends a record to the body/authority rules) | New file `test/cli/check-governance-workflow-records.test.ts`. Interface: `checkGovernance(root, { introducedAt? })`, `exitCodeFor`, `CHECKS` from `scripts/check-governance.cjs` (existing exports). Fixture: copy `check-governance-provenance.test.ts`'s `DNA_YAML` (Ada approver, Dev developer), `MEMORY_YAML` and its `empty()` helper; record bodies in the shapes the writers produce (`src/core/workflow-finalize.ts` header; `src/core/provenance-record.ts` header; the rekey `MESSAGE_TAIL` of `test/cli/workflow-rekey.integration.test.ts`, which is real CLI output). Cases, each on `workflow: finalize …`, `workflow: adopt …` and `workflow: rekey …` (`it.each`): (a) `Approver:` line naming the author, author a non-approver → exactly one finding `{ rule: 'authority', message: 'the author <developer@example.invalid> holds no approver role in team.members (dl-094)', check: 'workflow-record-authority', gated: true }`; (b) author Ada, line names someone else → `authority` `the Approver: line names <x@example.invalid>, but <approver@example.invalid> authored the commit (dl-094)`; (c) author Ada, line names Ada → no finding; (d) no `Approver:` line (finalize of a non-approval phase: `Reason:` then the trailer paragraph, as release/0.3's `c4072efe`) → no finding; (e) grammar, `rule: 'body'`, same check: `Approver:` not the first body line → `the Approver: line must be the first body line, as \`Approver: Name <email> (role)\``; role `(developer)` → `the Approver: role is 'developer', not 'approver'`; two lines → `2 Approver: lines; an approval records one`. (f) No `dna.yaml` at the parent → `no .wingfoil/dna.yaml is committed before this commit, so no approval authority can be established`. These are the `wf()` rule's messages verbatim (`checkBodyAndAuthority`, lines 504–529): the record reuses them. Gating: the enforcement suite's pattern (`chore: add the rule` writing `// ${CHECKS['workflow-record-authority']}` into the placeholder script): a forged record before it → `gated: false`, after → `gated: true`. CLI: `bug-444`'s reproduction end to end (spawn `node <repo>/dist/cli.js init --template Scrum` in a temp repo, the three `-m` paragraphs of step 3, then `node scripts/check-governance.cjs --root <dir> --introduced-at <init sha>`) → exit `1`, stdout contains both `authority` messages of step 5 (`<mallory@example.com>` … `<t@e.x>`; `<t@e.x> holds no approver role`). |
+| 2 — `WingFoil-*` outside the final paragraph | red-first (`bug-391` step 1: no rule names these trailers) | Same new file, its own `describe`. A finding per distinct key per commit: `{ rule: 'body', check: 'trailer-paragraph', message: \`a ${key}: line sits outside the commit's final paragraph, where the workflow deduction does not read it (git-conventions §8, bug-391)\` }`, `${key}` as written in the line. Cases: (a) `wf(task): add t-2` whose body is `WingFoil-Instance: …\nWingFoil-Step: …\nWingFoil-Version: …` then a separate `Co-Authored-By:` paragraph (the shape §8 forbids, built with `git commit --amend -m "$(git log -1 --format=%B)" -m "Co-Authored-By: …"`) → three findings (`WingFoil-Instance`, `WingFoil-Step`, `WingFoil-Version`); (b) the scratch record above (`WingFoil-Phase`, `WingFoil-Instance` before a separate `WingFoil-Version`/`Co-Authored-By` paragraph) → two; (c) a plain `docs:` commit with the same shape → findings too (D2); (d) the conforming shape, the attribution joined with `git commit --amend --no-edit --trailer "Co-Authored-By: …"` (real git output) → none; (e) a body whose only paragraph holds the trailers (`agent: record` shape) → none. Gating with `CHECKS['trailer-paragraph']`, as AC 1. |
+| 3 — `git-conventions` §9 names the new checks | **red-first**, corrected from characterization: the text does not exist (`grep -c` above → `0`); never a fabricated red, this one fails on missing text | `test/directives/git-conventions.test.ts`, new `describe('git-conventions §9 — workflow records and trailer paragraph (task-328)')`, reusing `section('9. Checks on pushed commits')` and a local `flat`. Substrings: `` an `Approver:` line on a `workflow: finalize`, `workflow: adopt` or `workflow: rekey` record, when it has one `` ; `` `bug-444` ``; `` a `WingFoil-*` trailer outside the commit's final paragraph (§8, `bug-391`) ``. Version: `/^version: "(\d+)\.(\d+)"(.*)$/m` → `major*1000+minor ≥ 2006`, rest contains `task-328`, `bug-444`, `bug-391`; `**Date:**` ≥ `2026-10-31`. |
+| — existing pins | red amends (D4) | `test/cli/check-governance-enforcement.test.ts` line 328: the `CHECKS` `toEqual` gains `'workflow-record-authority': 'governance-check:workflow-record-authority'` and `'trailer-paragraph': 'governance-check:trailer-paragraph'` (fails at red). `test/cli/check-governance-provenance.test.ts`: it pins the hole itself (`bulk` and `rekey` carry `Approver: Dev Eloper … (approver)` by the developer, and the fixture has no script, so every commit is gated); its two `it`s become: `single` no finding; `bulk` and `rekey` exactly one `authority` finding each, `the author <developer@example.invalid> holds no approver role in team.members (dl-094)`, `check: 'workflow-record-authority'`; `checked` 1, `otherCommits` 3 unchanged; `exitCodeFor` 1; the header's "not this task's" sentence rewritten. |
+
+**Tests that pin what this task changes** (W2-R4 (6)), with the commands:
+- `grep -rln "approval-ai-trailer\|CHECKS" test/` → `test/cli/check-governance-enforcement.test.ts` (the `CHECKS` pin,
+  red amends it), and `test/core/workflow-evidence.test.ts`, `workflow-core-checks.test.ts`, `workflow-list-show.test.ts`,
+  which match only `W_WORKFLOW_CHECKS_NOT_RUN` (`grep -n CHECKS` on them): unaffected.
+- `grep -rln "checkGovernance\|check-governance.cjs" test/ | xargs grep -ln "workflow: finalize\|workflow: adopt\|workflow:
+  rekey\|'workflow', 'rekey'\|WingFoil-"` → `check-governance-provenance.test.ts` (breaks by design, red amends it),
+  `workflow-rekey.integration.test.ts` (its AC 4 runs the real `workflow rekey` as Morgan, the approver of its fixture,
+  so the record still passes: it stays as the positive case), `check-governance.test.ts` (its `WingFoil-Version:` lies
+  inside the final reason paragraph of `approval('Fine.\nWingFoil-Version: 9.9.9\nThat is all.')`, so no new finding;
+  it asserts `toContain('body')`).
+- `grep -rn "otherCommits\|other commits" test/` → `check-governance-provenance.test.ts:100` (`toBe(3)`, unchanged),
+  `check-governance-enforcement.test.ts:252` (`≥ 6`, unchanged), `scripts/release-health/measure.cjs:1011` (P02 counts
+  `checked + otherCommits` and groups `state` findings: the new findings are `body`/`authority`, not counted).
+- `grep -n "§9\|section('9" test/directives/git-conventions.test.ts` → the task-286 D3 and task-291 §9 pins, which
+  stay true (the edit only adds sentences); version pins `≥ 1002 … ≥ 2005` stay true at 2.6.
+- No workflow, phase list or step list changes: no workflow suite is affected.
+
+**Files green touches.** `scripts/check-governance.cjs` (the two `CHECKS` entries; the header's lines 10–13 and two
+"Later checks" bullets; a shared `approverFindings` extracted from `checkBodyAndAuthority`, messages unchanged; the
+records read with the parent's `dna.yaml` through `readBlobIds`/`readDnaYaml`; the trailer rule over every non-merge
+commit of the range; `RULES` unchanged); `scripts/check-governance.d.cts` (`GovernanceCheck` gains the two names, so
+`tsc` accepts `checkIntroductions['workflow-record-authority']`); `.wingfoil/directives/custom/git-conventions.md` §9
+(the sentences AC 3 pins, version 2.5 → 2.6, `**Date:**` 2026-10-31 or the green date); `.github/workflows/governance.yml`
+header comment, which lists the later checks (same class, D6; no test pins the comment: `grep -n "bug-307"
+test/cli/governance-workflow.test.ts` prints nothing). Red adds/edits the four test files above. No `.wingfoil/*.yaml`
+changes; the directive is under `.wingfoil/`, so green runs `npm run check:mcp`. A new `git log` reader, if any, passes
+`--no-show-signature` (`test/lint/git-log-readers.test.ts`); `readBlobIds` needs none.
+
+**Run at design.**
+- `npx jest test/cli/check-governance.test.ts test/cli/check-governance-enforcement.test.ts
+  test/cli/check-governance-provenance.test.ts test/cli/check-governance-parent-state.test.ts
+  test/cli/check-governance-show-signature.test.ts test/cli/workflow-rekey.integration.test.ts
+  test/directives/git-conventions.test.ts test/cli/governance-workflow.test.ts test/cli/git-hooks.test.ts
+  test/lint/git-log-readers.test.ts --maxWorkers=2` → `Test Suites: 10 passed, 10 total`, `Tests: 166 passed, 166 total`.
+- `npm run -s check:mcp` (pinned build, baseline before the directive edit) → exit 0, `.mcp.json "wingfoil" runs the pinned
+  wingfoil 0.3.1 …`, `the build under development (dist/cli.js) serves [prompts, resources, tools] … every listed
+  Resource read and Prompt get answered`.
+- `node scripts/check-governance.cjs --base origin/release/0.3` → `3 wf() commits in ab691d35…..HEAD`, `gated: 0
+  findings on 0 commits`, exit 0.
+
+**Decisions for the approver.**
+- D1 — two check names, `workflow-record-authority` and `trailer-paragraph` (markers `governance-check:<name>`), their
+  findings under the existing rules `body` and `authority`, so `RULES`/`GovernanceRule` do not change. Recommended: yes.
+- D2 — the trailer rule's reach: (a) every non-merge commit of the range and every `WingFoil-` key, case-insensitive
+  (`-Version`, `-Adopted`, `-Rekey-From`, `-Rekey-To` included), the final paragraph being the body's last
+  blank-line-separated paragraph; (b) only `wf()` commits and the three records, only the five keys `bug-391` lists.
+  Recommended (a): the AC says "A `WingFoil-*` trailer", and the scan above finds no such line on 8912 commits. A
+  `WingFoil-Version:` inside a non-final `Reason:` paragraph then gets both the existing reason finding and this one.
+- D3 — a record's `Reason:` block is not held to `dl-067` by this task (the ACs name the `Approver:` grammar and
+  authority only). Recommended: leave it to the v0.4 work that rules on the mandatory `Approver:` (R8).
+- D4 — red amends `check-governance-provenance.test.ts`, which pins the behaviour `bug-444` reverses, and the `CHECKS`
+  pin. Recommended: yes.
+- D5 — AC 3 is red-first, not characterization (the §9 text is new). Recommended: yes.
+- D6 — `.github/workflows/governance.yml`'s header comment gains the two checks in green. Recommended: yes.
+
+**Risks for the other open w2 tasks.** `git diff --name-only release/0.3...<branch>` on `task-322`, `task-324` and
+`task-327` lists only their task and bug files so far; their declared files (`test/docs/`, `docs/case-study.md`,
+`src/core/git-identity.ts`, `scripts/e2e-smoke.cjs`) do not overlap this task's, and `grep -n "governance"
+scripts/e2e-smoke.cjs` prints nothing. After this merges, every later commit on `release/0.3` (their `wf()` commits,
+the orchestrator's records) is gated by both rules: a hand amend that adds the attribution as a separate paragraph
+fails CI there, as §8 already forbids.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
