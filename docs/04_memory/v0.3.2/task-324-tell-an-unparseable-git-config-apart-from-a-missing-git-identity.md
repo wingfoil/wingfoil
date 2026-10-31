@@ -174,6 +174,15 @@ also prepares a `spec-008` amendment: this task's uncommitted §6 amendment must
 `memory amend` before `task-332`'s is prepared, or the two edits stack in one working tree. `task-322`, `task-327`,
 `task-328` share no file with this task (their **Files:** lines).
 
+### design gate (approver, 2026-10-31)
+
+Design gate approved by the approver on 2026-10-31T12:06:49+01:00, in the orchestrator's chat:
+- D1 — yes: `could not read git configuration: <git message>`, `CoreError.code` IO, exit 1.
+- D2 — (a): any `git config` outcome other than 0 or 1 (128, another status, a signal) gives the new refusal; task-284's row for a
+  root git cannot enter changes with it.
+- D3 — yes, with row (vii): git's message normalised as proposed; the empty-stderr fallback is covered by a stand-in git that exits 128.
+- D4 — yes: `readGitIdentity` unchanged.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
