@@ -231,6 +231,74 @@ Design gate approved by the approver on 2026-10-31T12:06:49+01:00, in the orches
   bug by the orchestrator, release v0.4; it is outside this task.
 - D5 — yes: bug-383's Steps to Reproduce step 1 is corrected by an amend prepared in the task and recorded at the approve.
 
+### red (qa, 2026-10-31)
+
+**Files** (red commit `76ff1d006`): `test/docs/vision-revision-history.test.ts` (new) and `test/docs/presentation.test.ts` (the
+`task-246 — AC 2` block). Nothing else: no `src/`, `scripts/` or support module is touched. The checker
+`test/docs/support/vision-revision-history.ts` is green's file; the suite imports `isJudged` and
+`revisionHistoryFindings` from it. No `.d.cts` is owed: the missing export is a TypeScript module, not a `.cjs` script.
+
+**PATH guard.** `command -v wingfoil` printed `/home/robypomper/Workspaces/.wf2-wt/devloop-kit/bin/task-322/wingfoil`;
+`wingfoil --version` printed `0.3.1 (5835957fd6b3654c38fcc1db31c42546e294fb43)`. `git rev-list --count HEAD..release/0.3`
+printed `0`: no merge was needed.
+
+**AC 1 — a vision document's `**Version:**` has its revision entry (red-first).** `vision-revision-history.test.ts`, tests
+V1–V10: V1 the real folder (every `docs/01_vision/*.md`, `readdirSync` sorted, findings `[]`, judged files exactly
+`['X_cli-cmds.md']`); V2 consistent; V3 header 1.10 with no 1.10 entry, one finding naming the file and `1.10` (bug-383's
+reproduction); V4 entry dated otherwise; V5 entry newer than the header; V6 entries not strictly descending (1.8 above
+1.9, and 1.9 twice); V7 no history, not judged (D1 (a)); V8 no `**Version:**`; V9 history heading only inside a fence;
+V10 numeric comparison (1.17 and 1.9). The synthetic documents are cut from the real header lines and entry lines of
+`docs/01_vision/X_cli-cmds.md` (`**Version:** 1.9`, `**Date:** 2026-10-25` with two trailing spaces,
+`**Version 1.9 (2026-10-25) — …`). Fails for the right reason: `npx jest test/docs/vision-revision-history.test.ts` prints
+`Test suite failed to run — Cannot find module './support/vision-revision-history' from
+'test/docs/vision-revision-history.test.ts'` (line 24); `npx tsc --noEmit -p tsconfig.json` prints exactly one diagnostic,
+`test/docs/vision-revision-history.test.ts(24,51): error TS2307: Cannot find module './support/vision-revision-history'`.
+The suite has no tests that run at red (the suite fails to load), so none passes there.
+
+**AC 2 — the case study's figures against the four reports (red-first).** `presentation.test.ts`: `REPORTS` is the explicit
+list of the four reports (D2 (a)); `ReportMetric` gains `failing`, `Report` gains `release.id`, `measurement_point.basis`
+and `previous`; the header comment gains a `task-322` paragraph. Run: `npx jest test/docs/presentation.test.ts
+test/docs/vision-revision-history.test.ts --maxWorkers=2` → 2 suites failed, `Tests: 9 failed, 49 passed, 58 total`
+(presentation.test.ts alone: 9 failed, 49 passed; it had 49 tests before). The nine reds and their first assertion:
+- F2 (existing, now four columns): `expect(figures?.header).toEqual([...])` at line 753, missing `"v0.3 at v0.3.0 (cc31d7a8)"` and
+  `"v0.3.1 at v0.3.1 (870bd440)"`.
+- F3 (existing): `expect(figures?.rows.map(...)).toEqual(measuredIds)`, 23 expected ids missing (G05, G07, G12, Q01, Q05–Q10,
+  Q12–Q16, Q18–Q20, E01–E05 are measured in v0.3 or v0.3.1).
+- F5 (existing): `wrong` holds 46 entries, `G01 @ v0.3:  (no figure)` first (no column for v0.3 and v0.3.1).
+- F6 (existing): `wrong` holds `G05 @ v0.3`, `G05 @ v0.3.1`, … (54 entries).
+- H1 (new, How it was measured): `expect(measured?.rows).toHaveLength(reports.length)`, expected 4, received 2.
+- P2 (new, prose names every release): `expect(...).toEqual([])` received `["v0.3", "v0.3.1"]`.
+- R2 (new, Reproduce): `measure.cjs --release` values expected `["v0.1","v0.2","v0.3","v0.3.1"]`, received the first two.
+- K1 (new, introduction links every report; no "does not show its figures yet"): received `["v0.3", "v0.3.1"]` unlinked.
+- K2 (new, README row and `docs/site.yaml` `about` name every release): received `README v0.3`, `README v0.3.1`, and the site
+  entries the same way (one combined array).
+Passing at red, as characterization of the checker itself (test code, per the design; the page is not asserted by them
+except P1): P1 (`proseFindings` over the page's "What the figures say" against the four reports gives `[]` — it holds
+today because the text speaks only of v0.1 and v0.2; it must keep holding after the rewrite), P3 (the committed P01 bullet
+against the v0.1 and v0.2 reports gives `[]`), P4 (the same bullet with `61 failing` changed to `62 failing` gives exactly
+one finding, which names `62` and `v0.1`: bug-384's reproduction) and P5 (a v0.2 item stating v0.1's 206 checked flow commits
+is named: the number is read against the release the item names). F1, F4, F7, F8 and the other existing tests still pass (45 of the 49 existing tests, plus P1, P3, P4, P5 = 49 passed).
+The P01 fixture `P01_BULLET` is copied verbatim from `docs/case-study.md` at `ab691d35`, lines 99–106 (from
+`- **Process conformance (P).**` to `have another defect.`; the copy is generated from the file, with `…` written as an
+escape); `git diff ab691d35 -- docs/case-study.md` was empty at the time.
+
+**Checker (`proseFindings`) as written.** List items with their nested items as children and continuation lines by indent;
+a non-list paragraph is bound to every metric and every report; an item's metrics are the catalogue ids it names plus its
+parents'; its releases are the report versions it names, else its parent's, else all (`v0.3` is not read inside `v0.3.1`);
+code spans, link targets, ISO dates, release tokens and metric ids are removed before numbers are extracted; the allowed set
+is the numbers of `value`, `raw`, `items`, the catalogue `floor`, and, for an entry with a `failing` list, the
+all-of / any-of / rest counts of every non-empty subset of the five classes of messages `scripts/check-governance.cjs`
+writes. The classes are patterns in the test (`is not one of the declared verbs`, the same with an element id in the verb
+position, `carries no bracket`, `carries no AI co-author trailer`, `the bracket is not canonical`).
+
+**Other gates.** `npx tsc --noEmit -p tsconfig.json`: the single intended TS2307 above. `npx jest test/lint --maxWorkers=2` with
+the files in place: 13 suites, 152 passed, 1 failed — `typecheck.clean › tsconfig.json typechecks with zero diagnostics`, whose
+only diagnostic is that same TS2307 (it clears when green adds the support module); every other lint gate, including
+`no-fabricated-stderr`, passes. The invisible-character grep over both files printed nothing.
+
+**Ambiguities.** None blocking. One observation for the developer: V6 pins exactly one finding for each of "1.8 above 1.9" and
+"1.9 twice", as the design states one strictly-descending rule.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
