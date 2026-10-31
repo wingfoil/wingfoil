@@ -340,6 +340,19 @@ Read as the reviewer against `code-review`, `documentation`, `claim-evidence` an
 
 - `docs/04_memory/bugs/bug-383-no-check-ties-a-vision-document-s-version-bump-to-a-revision-entry-of-that-version.md` (uncommitted in the worktree; `memory amend` by the approver): `--reason "Correct Steps to Reproduce step 1: only docs/01_vision/X_cli-cmds.md keeps a '## Revision history' heading; the match in 00_index.md is the document-map line that points at it (design gate of task-322, D5)."`
 
+### red amendment (qa, 2026-10-31)
+
+The review found that `statedNumbers` in `test/docs/presentation.test.ts` dropped a number written with a leading minus (its
+lookbehind refused `-`), so Q20's "-50 at v0.3" and "-9 at v0.3.1" in the case study were never checked
+(`statedNumbers("Q20 reports a net flow of -50 at v0.3")` gave `[]`; mutating them gave no finding). Fixed in commit `963ca3af7`:
+the number pattern now also accepts a minus that follows a space or the start of the text, and the value is compared as an
+absolute value (`jsonNumbers` stores `Math.abs`). New case P6: the sentence with `-50` and `-9` gives `[50, 9]` among the stated
+numbers and no finding; with `-50` changed to `-77` it gives exactly one finding naming `77`. Under the old pattern P6 fails on its
+first assertion (50 and 9 absent). Runs, in this worktree with the task's PATH shim: `npx jest test/docs/presentation.test.ts
+test/docs/vision-revision-history.test.ts --maxWorkers=2` printed `Test Suites: 2 passed, 2 total`, `Tests: 69 passed, 69 total`
+(P1, the real page, still gives no finding, so the page's negative figures match the reports); `npx jest test/lint --maxWorkers=2`
+printed `Test Suites: 13 passed, 13 total`, `Tests: 153 passed, 153 total`. The invisible-character grep printed nothing.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
