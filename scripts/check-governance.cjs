@@ -90,7 +90,8 @@
  * `Approver:`/`Reason:` readers and the reason grammar (`commit-message.ts`), the machine resolver and
  * edge test (`state-machine.ts`), and the consistency check (`audit.ts`). Nothing here re-implements
  * them. Deterministic (REQ-SYS-07): findings come out oldest commit first, then by rule, then by
- * message; no clock is read.
+ * message, except that a commit's `trailer-paragraph` findings follow its other findings of the rule, in
+ * the order the keys are written; no clock is read.
  *
  * Usage: node scripts/check-governance.cjs [--root <dir>] [--base <rev>] [--introduced-at <rev>] [--json]
  *   --root           the repository to check (default: the git top level of the working directory)
