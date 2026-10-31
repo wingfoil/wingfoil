@@ -30,9 +30,16 @@
  * the committed release-health reports and the metric catalogue — never typed into this test. The lower
  * bound for a source's read date is a constant, never the clock. T1: red-first throughout (neither page
  * exists at `e41ec99b`).
+ *
+ * `task-322` (`bug-384`, `bug-432`, approver design gate D2 (a)) widens the case-study checks: `REPORTS` is an
+ * explicit list of the four committed reports (v0.1, v0.2, v0.3, v0.3.1), never a directory listing; the "How it
+ * was measured" table and the "Reproduce" block are read back from the reports; and `proseFindings` reads the
+ * numbers of "What the figures say" against the reports of the releases each list item names. T1: red-first
+ * against the page as it stands (two reports); the checker itself is test code, and its synthetic cases pass at
+ * red.
  */
 import { existsSync, readFileSync } from 'node:fs';
-import { dirname, join, normalize, relative, sep } from 'node:path';
+import { basename, dirname, join, normalize, relative, sep } from 'node:path';
 
 import { load } from 'js-yaml';
 
@@ -274,7 +281,12 @@ describe('AC 3 — align-user-docs produces the tape and the GIF, and checks.pos
 
 const COMPARISON = 'docs/comparison.md';
 const CASE_STUDY = 'docs/case-study.md';
-const REPORTS = ['docs/08_health/release-health-v0.1.json', 'docs/08_health/release-health-v0.2.json'];
+const REPORTS = [
+  'docs/08_health/release-health-v0.1.json',
+  'docs/08_health/release-health-v0.2.json',
+  'docs/08_health/release-health-v0.3.json',
+  'docs/08_health/release-health-v0.3.1.json',
+];
 const CATALOGUE = 'docs/08_health/metrics.yaml';
 /** The earliest date a source may have been read: the day task-246's sources are read (a constant, not the clock). */
 const READ_DATE_FLOOR = '2026-10-15';
@@ -503,11 +515,13 @@ interface ReportMetric {
   value?: unknown;
   raw?: unknown;
   items?: unknown;
+  failing?: string[];
 }
 
 interface Report {
-  release: { version: string };
-  measurement_point: { ref: string; commit: string };
+  release: { id: string; version: string };
+  measurement_point: { ref: string; commit: string; basis: string };
+  previous: { release: string; report: string } | null;
   metrics: ReportMetric[];
 }
 
@@ -530,6 +544,183 @@ function cellNumbers(cell: string): number[] {
 }
 
 const stripTicks = (cell: string): string => cell.replace(/`/g, '').trim();
+
+// ── task-322 (bug-384): the prose of "What the figures say" read back against the reports ───────────────────
+
+const METRIC_ID = /\b[GQPDE]\d{2}\b/g;
+const RELEASE_TOKEN = /\bv\d+\.\d+(?:\.\d+)?(?![\d]|\.\d)/g;
+
+/**
+ * The reason classes of a failing flow commit, as substrings or patterns of the messages
+ * `scripts/check-governance.cjs` writes (the reports' `failing` entries are those messages). The prose counts
+ * commits by these classes and by their combinations, so an allowed count is derived from the list, never typed.
+ */
+const FAILING_CLASSES: RegExp[] = [
+  /is not one of the declared verbs/,
+  /'[a-z]+-\d{3}[^']*' is not one of the declared verbs/,
+  /carries no bracket/,
+  /carries no AI co-author trailer/,
+  /the bracket is not canonical/,
+];
+
+/** For every non-empty subset S of the classes: the count matching all of S, the count matching any of S, and the rest. */
+function failingCounts(failing: string[], into: Set<number>): void {
+  const hits = failing.map((line) => FAILING_CLASSES.map((pattern) => pattern.test(line)));
+  for (let mask = 1; mask < 1 << FAILING_CLASSES.length; mask++) {
+    const members = FAILING_CLASSES.map((_, index) => index).filter((index) => (mask & (1 << index)) !== 0);
+    const any = hits.filter((hit) => members.some((index) => hit[index])).length;
+    into.add(hits.filter((hit) => members.every((index) => hit[index])).length);
+    into.add(any);
+    into.add(failing.length - any);
+  }
+}
+
+/** The numbers a piece of prose states: code spans, link targets, dates, release tokens and metric ids set aside. */
+function statedNumbers(text: string): number[] {
+  const cleaned = text
+    .replace(/`[^`]*`/g, ' ')
+    .replace(/\]\([^)]*\)/g, ']')
+    .replace(/\b\d{4}-\d{2}-\d{2}\b/g, ' ')
+    .replace(RELEASE_TOKEN, ' ')
+    .replace(METRIC_ID, ' ');
+  // A figure may carry a minus sign when it follows a space or the start of the text (Q20's "-50"); compared by absolute value, as `jsonNumbers` stores it.
+  return [...cleaned.matchAll(/(?:(?<![\w.§\-/#])|(?<=(?:^|\s)-))\d+(?:\.\d+)?(?![\w]|\.\d)/g)].map((match) => Number(match[0]));
+}
+
+interface ProseItem {
+  indent: number;
+  text: string;
+  parent: ProseItem | null;
+}
+
+/** The list items of a section (nested ones are children, not part of their parent's text) and its other paragraphs. */
+function proseUnits(text: string): { items: ProseItem[]; paragraphs: string[] } {
+  const items: ProseItem[] = [];
+  const paragraphs: string[] = [];
+  const stack: ProseItem[] = [];
+  let paragraph: string[] = [];
+  const flush = (): void => {
+    if (paragraph.length > 0) paragraphs.push(paragraph.join(' '));
+    paragraph = [];
+  };
+  for (const line of text.split('\n')) {
+    if (line.trim() === '') {
+      flush();
+      continue;
+    }
+    const marker = /^(\s*)[-*+]\s+(.*)$/.exec(line);
+    if (marker) {
+      flush();
+      const indent = marker[1]!.length;
+      while (stack.length > 0 && stack[stack.length - 1]!.indent >= indent) stack.pop();
+      const item: ProseItem = { indent, text: marker[2]!, parent: stack[stack.length - 1] ?? null };
+      stack.push(item);
+      items.push(item);
+      continue;
+    }
+    const indent = /^\s*/.exec(line)![0].length;
+    let owner = stack.length - 1;
+    while (owner >= 0 && stack[owner]!.indent + 2 > indent) owner--;
+    if (owner >= 0) {
+      stack.length = owner + 1;
+      stack[owner]!.text += ` ${line.trim()}`;
+    } else {
+      stack.length = 0;
+      paragraph.push(line.trim());
+    }
+  }
+  flush();
+  return { items, paragraphs };
+}
+
+/**
+ * The numbers `text` states that are not in the reports it speaks of. A list item speaks of the metrics it names
+ * (and its parent's) and of the releases it names (else its parent's); with none named, of every metric and every
+ * report. A number is allowed when it is a number of one of those metrics' entries (value, raw, items), a number of
+ * the catalogue floor, or a count over the entry's `failing` list by the classes above.
+ */
+function proseFindings(text: string, reports: Report[], catalogue: Metric[]): string[] {
+  const ids = catalogue.map(({ id }) => id);
+  const versions = reports.map(({ release }) => release.version);
+  const allowedCache = new Map<string, Set<number>>();
+  const allowedFor = (id: string, report: Report): Set<number> => {
+    const key = `${id}@${report.release.version}`;
+    const cached = allowedCache.get(key);
+    if (cached) return cached;
+    const allowed = new Set<number>();
+    const entry = report.metrics.find((metric) => metric.id === id);
+    if (entry?.status === 'measured') {
+      jsonNumbers(entry.value, allowed);
+      jsonNumbers(entry.raw, allowed);
+      jsonNumbers(entry.items, allowed);
+      if (Array.isArray(entry.failing)) failingCounts(entry.failing, allowed);
+    }
+    const floor = catalogue.find((metric) => metric.id === id)?.floor;
+    if (floor !== undefined) for (const match of String(floor).matchAll(/\d+(?:\.\d+)?/g)) allowed.add(Number(match[0]));
+    allowedCache.set(key, allowed);
+    return allowed;
+  };
+  const namedMetrics = (own: string): string[] => [...own.matchAll(METRIC_ID)].map((match) => match[0]).filter((id) => ids.includes(id));
+  const namedVersions = (own: string): string[] => [...own.matchAll(RELEASE_TOKEN)].map((match) => match[0]).filter((version) => versions.includes(version));
+  const accumulatedMetrics = (item: ProseItem | null): string[] => (item === null ? [] : [...accumulatedMetrics(item.parent), ...namedMetrics(item.text)]);
+  const resolvedVersions = (item: ProseItem | null): string[] => {
+    if (item === null) return [];
+    const own = namedVersions(item.text);
+    return own.length > 0 ? own : resolvedVersions(item.parent);
+  };
+  const { items, paragraphs } = proseUnits(text);
+  const units = [
+    ...items.map((item) => ({ text: item.text, metrics: accumulatedMetrics(item), versions: resolvedVersions(item) })),
+    ...paragraphs.map((paragraph) => ({ text: paragraph, metrics: [] as string[], versions: namedVersions(paragraph) })),
+  ];
+  const findings: string[] = [];
+  for (const unit of units) {
+    const boundMetrics = unit.metrics.length > 0 ? [...new Set(unit.metrics)] : ids;
+    const boundVersions = unit.versions.length > 0 ? [...new Set(unit.versions)] : versions;
+    const boundReports = reports.filter((report) => boundVersions.includes(report.release.version));
+    const allowed = new Set<number>();
+    for (const id of boundMetrics) for (const report of boundReports) allowedFor(id, report).forEach((number) => allowed.add(number));
+    for (const number of new Set(statedNumbers(unit.text))) {
+      if (allowed.has(number)) continue;
+      const where = unit.versions.length > 0 ? boundVersions.join(',') : 'all';
+      const what = unit.metrics.length > 0 ? boundMetrics.join(',') : 'all';
+      findings.push(`${number} @ ${where} [${what}] :: ${unit.text.slice(0, 60)}`);
+    }
+  }
+  return findings;
+}
+
+/** Whether `text` names the release `version` (`v0.3` is not read inside `v0.3.1`). */
+function namesVersion(text: string, version: string): boolean {
+  return new RegExp(`(?<![\\w.])${version.replace(/\./g, '\\.')}(?![\\d]|\\.\\d)`).test(text);
+}
+
+/** The `about` of the site.yaml entry whose `path` is `path`, '' when there is none. */
+function siteAbout(node: unknown, path: string): string {
+  if (Array.isArray(node)) return node.map((item) => siteAbout(item, path)).find((about) => about !== '') ?? '';
+  if (node !== null && typeof node === 'object') {
+    const record = node as Record<string, unknown>;
+    if (record.path === path && typeof record.about === 'string') return record.about;
+    return Object.values(record).map((item) => siteAbout(item, path)).find((about) => about !== '') ?? '';
+  }
+  return '';
+}
+
+/**
+ * Today's P01 bullet of "What the figures say", copied verbatim from `docs/case-study.md` at `ab691d35` (lines 99–106,
+ * from `- **Process conformance (P).**` to the v0.2 sub-item's `have another defect.`). A constant, not read from the
+ * page, so rewriting the page cannot break the checker's own cases.
+ */
+const P01_BULLET = [
+  "- **Process conformance (P).** P01 counts malformed flow commits, and its causes differ by release (each commit's",
+  "  reasons are in the report's `failing` list):",
+  "  - at v0.1, 61 failing: 34 use a verb the grammar does not declare (in 27 of them an element id sits where the verb",
+  "    should be, as in `wf(task): task-024 design \u2026`), 26 are `submit` subjects carrying a transition bracket, which `submit` must not have, and 1 approval carries an AI",
+  "    co-author trailer; none uses the ASCII arrow, which G10's full share at v0.1 agrees with;",
+  "  - at v0.2, 297 failing: 165 write the bracket with the ASCII `->`, 92 are approvals or rejections carrying an AI",
+  "    co-author trailer (21 of them also with the ASCII bracket), 57 are `submit` subjects carrying a bracket, and 4",
+  "    have another defect.",
+].join('\n');
 
 describe('task-246 — AC 2: docs/case-study.md, figures read from the committed release-health reports (dl-128 item 4)', () => {
   const page = readIfExists(CASE_STUDY);
@@ -642,6 +833,90 @@ describe('task-246 — AC 2: docs/case-study.md, figures read from the committed
     expect(page).not.toBe('');
     expect(linkOnlyListItems(page)).toEqual([]);
     expect(unresolvedLinks(CASE_STUDY, page)).toEqual([]);
+  });
+
+  it('H1: How it was measured has one row per report, in order, each stating the report\'s point, basis and previous run (task-322)', () => {
+    const measured = tables(section(page, 'How it was measured'))[0];
+    expect(measured).toBeDefined();
+    expect(measured?.rows).toHaveLength(reports.length);
+    const wrong: string[] = [];
+    reports.forEach((report, index) => {
+      const row = measured?.rows[index] ?? [];
+      const { release, measurement_point: point, previous } = report;
+      if (stripTicks(row[0] ?? '') !== `${release.version} (${release.id})`) wrong.push(`${release.version}: Release "${row[0]}"`);
+      if (!stripTicks(row[1] ?? '').includes(point.commit.slice(0, 8))) wrong.push(`${release.version}: point lacks ${point.commit.slice(0, 8)}`);
+      if (point.ref !== point.commit && !stripTicks(row[1] ?? '').includes(point.ref)) wrong.push(`${release.version}: point lacks ${point.ref}`);
+      if (stripTicks(row[2] ?? '') !== point.basis) wrong.push(`${release.version}: Basis "${row[2]}"`);
+      const cell = stripTicks(row[3] ?? '');
+      if (previous === null ? !cell.startsWith('none') : !(cell.includes(previous.release) && cell.includes(basename(previous.report)))) {
+        wrong.push(`${release.version}: Previous run "${row[3]}"`);
+      }
+    });
+    expect(wrong).toEqual([]);
+  });
+
+  it('P1: "What the figures say" states only numbers of the reports of the releases each item names (bug-384)', () => {
+    expect(proseFindings(section(page, 'What the figures say'), reports, catalogue)).toEqual([]);
+  });
+
+  it('P2: "What the figures say" names every report\'s release', () => {
+    const prose = section(page, 'What the figures say');
+    expect(prose).not.toBe('');
+    expect(reports.filter(({ release }) => !namesVersion(prose, release.version)).map(({ release }) => release.version)).toEqual([]);
+  });
+
+  it('P3: the checker finds nothing in the committed P01 bullet against the v0.1 and v0.2 reports (characterization of the checker)', () => {
+    expect(proseFindings(P01_BULLET, reports.slice(0, 2), catalogue)).toEqual([]);
+  });
+
+  it('P4: the checker names a figure that is not the report\'s: "61 failing" changed to "62 failing" at v0.1 (bug-384\'s reproduction)', () => {
+    const mutated = P01_BULLET.replace('61 failing', '62 failing');
+    expect(mutated).not.toBe(P01_BULLET);
+    const found = proseFindings(mutated, reports.slice(0, 2), catalogue);
+    expect(found).toHaveLength(1);
+    expect(found[0]).toContain('62');
+    expect(found[0]).toContain('v0.1');
+  });
+
+  it('P5: the checker reads a number against the release the item names: a v0.2 item stating v0.1\'s 206 checked flow commits is named', () => {
+    const wrongRelease = '- **Process conformance (P).** P01 at v0.2: 206 checked.';
+    const found = proseFindings(wrongRelease, reports.slice(0, 2), catalogue);
+    expect(found).toHaveLength(1);
+    expect(found[0]).toContain('206');
+    expect(found[0]).toContain('v0.2');
+  });
+
+  it('P6: the checker reads a negative figure: Q20\'s "-50 at v0.3" changed to "-77" is named, and the unchanged sentence is not', () => {
+    const sentence = '- **Bug flow.** Q20 reports a net flow of -50 at v0.3 and -9 at v0.3.1 against a floor of 0.';
+    expect(statedNumbers(sentence)).toEqual(expect.arrayContaining([50, 9]));
+    expect(proseFindings(sentence, reports, catalogue)).toEqual([]);
+    const found = proseFindings(sentence.replace('-50', '-77'), reports, catalogue);
+    expect(found).toHaveLength(1);
+    expect(found[0]).toContain('77');
+  });
+
+  it('R2: Reproduce runs measure.cjs once per report, in order, with --release equal to the report\'s version (task-322)', () => {
+    const block = /```bash\n([\s\S]*?)```/.exec(section(page, 'Reproduce'))?.[1] ?? '';
+    const releases = [...block.matchAll(/node scripts\/release-health\/measure\.cjs --release (\S+)/g)].map((match) => match[1]);
+    expect(releases).toEqual(reports.map(({ release }) => release.version));
+  });
+
+  it('K1: the page links every report in its introduction and no longer says the latest "does not show its figures yet" (bug-432)', () => {
+    const intro = page.split(/^## /m)[0] ?? '';
+    expect(reports.filter(({ release }) => !intro.includes(`08_health/release-health-${release.version}.json`)).map(({ release }) => release.version)).toEqual([]);
+    expect(page).not.toContain('does not show its figures yet');
+  });
+
+  it('K2: the README row and the site page entry that describe the case study name every report\'s release (D3)', () => {
+    const row = read('README.md').split('\n').find((line) => line.includes('](docs/case-study.md)')) ?? '';
+    const about = siteAbout(load(read('docs/site.yaml')), CASE_STUDY);
+    expect(row).not.toBe('');
+    expect(about).not.toBe('');
+    const missing = [
+      ...reports.filter(({ release }) => !namesVersion(row, release.version)).map(({ release }) => `README ${release.version}`),
+      ...reports.filter(({ release }) => !namesVersion(about, release.version)).map(({ release }) => `site ${release.version}`),
+    ];
+    expect(missing).toEqual([]);
   });
 });
 
