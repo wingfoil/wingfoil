@@ -583,7 +583,8 @@ function statedNumbers(text: string): number[] {
     .replace(/\b\d{4}-\d{2}-\d{2}\b/g, ' ')
     .replace(RELEASE_TOKEN, ' ')
     .replace(METRIC_ID, ' ');
-  return [...cleaned.matchAll(/(?<![\w.§\-/#])\d+(?:\.\d+)?(?![\w]|\.\d)/g)].map((match) => Number(match[0]));
+  // A figure may carry a minus sign when it follows a space or the start of the text (Q20's "-50"); compared by absolute value, as `jsonNumbers` stores it.
+  return [...cleaned.matchAll(/(?:(?<![\w.§\-/#])|(?<=(?:^|\s)-))\d+(?:\.\d+)?(?![\w]|\.\d)/g)].map((match) => Number(match[0]));
 }
 
 interface ProseItem {
@@ -883,6 +884,15 @@ describe('task-246 — AC 2: docs/case-study.md, figures read from the committed
     expect(found).toHaveLength(1);
     expect(found[0]).toContain('206');
     expect(found[0]).toContain('v0.2');
+  });
+
+  it('P6: the checker reads a negative figure: Q20\'s "-50 at v0.3" changed to "-77" is named, and the unchanged sentence is not', () => {
+    const sentence = '- **Bug flow.** Q20 reports a net flow of -50 at v0.3 and -9 at v0.3.1 against a floor of 0.';
+    expect(statedNumbers(sentence)).toEqual(expect.arrayContaining([50, 9]));
+    expect(proseFindings(sentence, reports, catalogue)).toEqual([]);
+    const found = proseFindings(sentence.replace('-50', '-77'), reports, catalogue);
+    expect(found).toHaveLength(1);
+    expect(found[0]).toContain('77');
   });
 
   it('R2: Reproduce runs measure.cjs once per report, in order, with --release equal to the report\'s version (task-322)', () => {
