@@ -164,6 +164,13 @@ average of about 4. The full suite gains the same 10 s on one worker.
 file with this task; the only coupling is that a mutating operation added by any task must get a row here, which the
 completeness test already enforces.
 
+### design gate (approver, 2026-10-31)
+
+Design gate approved by the approver on 2026-10-31T20:41:28+01:00, in the orchestrator's chat:
+- D1 — yes: the console dry-run stdout of every row is pinned as exactly the indented JSON plan (`JSON.stringify(plan, null, 2)` and a newline).
+- D2 — yes: task-295's four cases stay in test/cli/workflow-console-dry-run.integration.test.ts.
+- D3 — yes: the two `--force` warning tests stay as they are.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
