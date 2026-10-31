@@ -9,6 +9,9 @@ import { join } from 'path';
 
 import { load as loadYaml } from 'js-yaml';
 
+import { loadWorkflowsYaml } from '../../src/core/loaders';
+import { formatDiagnostic, ValidationError, type Diagnostic } from '../../src/validation';
+import { makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
 import {
   TEMPLATES,
   initProjectCommitMessage,
@@ -91,5 +94,44 @@ describe('task-321 AC 2 — the docs quote the init commit subject without an in
       const quoted = text.split('\n').filter((line) => line.includes('initialize .wingfoil/') && line.includes('(P5.1.1)'));
       expect([name, quoted]).toEqual([name, []]);
     }
+  });
+});
+
+/**
+ * task-325 AC (`bug-394`) — the user guide's §12 quotes the line the program prints for the 0.2.x include path.
+ * The quoted line is built from the code (the real Scrum scaffold with its include rewritten to the 0.2.x path),
+ * so the guide and the diagnostic cannot drift.
+ */
+describe('task-325 — user-guide §12 quotes the E_WORKFLOW_INCLUDE_UNRESOLVED line the code produces (bug-394)', () => {
+  function producedLine(): string {
+    const repo = makeTempGitRepo();
+    try {
+      for (const file of templateScaffold(resolveTemplate('Scrum') as TemplateDefinition)) {
+        const content = file.path.endsWith('workflows/custom/sw-life-cycle.yaml')
+          ? file.content.replace('include: scrum-delivery\n', 'include: workflows/custom/scrum-delivery.yaml\n')
+          : file.content;
+        writeFixtureFile(repo, file.path, content);
+      }
+      try {
+        loadWorkflowsYaml(repo);
+      } catch (err) {
+        expect(err).toBeInstanceOf(ValidationError);
+        const diagnostics = (err as unknown as { diagnostics: Diagnostic[] }).diagnostics;
+        return formatDiagnostic(diagnostics[0] as Diagnostic);
+      }
+      throw new Error('expected loadWorkflowsYaml to throw');
+    } finally {
+      removeTempDir(repo);
+    }
+  }
+
+  it('characterization — the guide has its numbered "Upgrading from 0.2.x" heading, the section the message names', () => {
+    expect(GUIDE).toMatch(/^## \d+\. Upgrading from 0\.2\.x$/m);
+  });
+
+  it('AC — the guide quotes the diagnostic line exactly as formatDiagnostic renders it', () => {
+    const line = producedLine();
+    expect(line).toContain("write 'include: scrum-delivery'");
+    expect(GUIDE.replace(/\s+/g, ' ')).toContain(line);
   });
 });

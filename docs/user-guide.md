@@ -704,7 +704,7 @@ initialising a project with 0.2.2 and running both versions on it.
 
 - **A phase `include:` is a workflow name.** 0.2.x scaffolded `include: workflows/custom/scrum-delivery.yaml`
   in `sw-life-cycle.yaml`; 0.3 refuses a path, so every workflow command fails with exit `1`:
-  `error: E_WORKFLOW_INCLUDE_UNRESOLVED phases[2].include (workflows/custom/sw-life-cycle.yaml): include 'workflows/custom/scrum-delivery.yaml' names no loaded workflow (a phase include is a workflow name, not a file path)`.
+  `error: E_WORKFLOW_INCLUDE_UNRESOLVED phases[2].include (workflows/custom/sw-life-cycle.yaml): include 'workflows/custom/scrum-delivery.yaml' names no loaded workflow (a phase include is a workflow name, not a file path): write 'include: scrum-delivery'; see 'Upgrading from 0.2.x' in the WingFoil user guide (docs/user-guide.md in the repository)`.
   Write `include: scrum-delivery` (or `kanban-delivery`) and commit.
 - **`wingfoil workflow list` has a new output.** It prints `{baseline, workflows: [{name, startable,
   includable, description, executableNow}], diagnostics: [...]}` for the workflows you can run now (`--all` for every one)
