@@ -200,6 +200,28 @@ Design gate approved by the approver on 2026-10-31T20:24:56+01:00, in the orches
   the repository)`, not a site URL; the guide's §12 quote is updated in this task.
 - D5 — yes: spec-003's "Diagnostics" row gains the message shape and a Revision note, as a pending amend recorded at review.
 
+### red (qa, 2026-10-31)
+
+**Base.** `git rev-list --count HEAD..release/0.3` printed `62` at the start, so `git merge --no-edit release/0.3` was run first (W0-R3); the merge head was `145948092`. The task's PATH shim was active for every command (`command -v wingfoil` and `wingfoil --version` quoted in the report).
+
+**Files (tests only, no `src/`, no production file).** `test/core/workflow-diagnostics.test.ts` (the expected message of the existing path-shaped case updated; new `describe.each` over Scrum and Kanban built from `templateScaffold(resolveTemplate(...))` with the `include:` line of `sw-life-cycle.yaml` rewritten; a tie block); `test/docs/user-guide-scaffold.test.ts` (one new describe). No new export is imported, so no `.d.cts` and no TS2305 red: the reds are assertion failures. Approver rulings in force: D1 (a), D2 yes, D3 (a), D4 with the approver's wording (`see 'Upgrading from 0.2.x' in the WingFoil user guide (docs/user-guide.md in the repository)` in every pinned message), D5 yes (the developer's).
+
+**Per AC** (one AC, red-first: the diagnostic names the unresolved include, the closest declared name when near, and the user guide's upgrade section):
+- path to a declared delivery workflow, Scrum and Kanban (`AC — a 0.2.x path to the declared <x>-delivery.yaml names ...`): red; first failing line `- "message": "include 'workflows/custom/scrum-delivery.yaml' names no loaded workflow (a phase include is a workflow name, not a file path): write 'include: scrum-delivery'; see 'Upgrading from 0.2.x' in the WingFoil user guide (docs/user-guide.md in the repository)"` against the received message without the tail.
+- bare `<x>-delivery.yaml` (`AC — a bare file name with the .yaml suffix ...`), both templates: red, same shape.
+- path-shaped, nothing near (`workflows/custom/ghost.yaml`), both templates: red; pointer, no name.
+- within distance 2 (`scrum-deliver`, `kanban-deliver`): red; `include 'scrum-deliver' names no loaded workflow: write 'include: scrum-delivery'`, no pointer (D3).
+- tie `aab`/`aac` for `aaa`, manifest order both ways: red; `... names no loaded workflow: write 'include: aab'`.
+- existing `a path-shaped phase include (bug-144, bug-145)` (`loop`): expected message updated, red.
+- characterization, pass on first run: `ghost` farther than 2 on both scaffolds (`include 'ghost' names no loaded workflow` unchanged); the user guide has a heading matching `/^## \d+\. Upgrading from 0\.2\.x$/m`.
+- the guide quotes the line the code renders (`AC — the guide quotes the diagnostic line exactly as formatDiagnostic renders it`): red; the line is built from the Scrum scaffold fixture with `formatDiagnostic`; today it fails on its first assertion (`Expected substring: "write 'include: scrum-delivery'"`, received the old message), and once the code is green it fails until section 12 of the guide quotes the new line (D4). The guide comparison collapses whitespace so a wrapped quote still counts.
+
+**Fixtures.** The scaffold files come from `templateScaffold` (this repository's code); the received messages above were printed by the code build of the worktree through the tests themselves (`npx jest test/core/workflow-diagnostics.test.ts test/docs/user-guide-scaffold.test.ts --maxWorkers=2`). No command output is stood in by an empty value.
+
+**Run.** `npx jest test/core/workflow-diagnostics.test.ts test/docs/user-guide-scaffold.test.ts --maxWorkers=2` → `Test Suites: 2 failed, 2 total`, `Tests: 12 failed, 56 passed, 68 total`. `npx tsc --noEmit -p tsconfig.json` → exit `0`. `npx jest test/lint --maxWorkers=2` → `Test Suites: 13 passed`, `Tests: 153 passed`. The invisible-character grep on both files → no hit.
+
+**Red commit:** `9826ac22e9609d423f78594a6027387fe6b6f33f`.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
