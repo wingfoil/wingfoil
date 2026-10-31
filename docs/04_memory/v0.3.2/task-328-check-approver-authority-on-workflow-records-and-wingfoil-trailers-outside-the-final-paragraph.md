@@ -207,6 +207,47 @@ Red commit `47cdaee73` (test files and one declaration file only). Worktree alre
 
 **Run.** `npx jest <file> --maxWorkers=2` per file: workflow-records `25 failed, 8 passed, 33`; provenance `2 failed, 6 passed, 8`; enforcement `1 failed, 26 passed, 27`; git-conventions `3 failed, 40 passed, 43`. First failing assertion of each red test: the finding lists (`expect(view(of(report, …, check))).toEqual([…])`) receive `Array []`; the gating cases `expect(gated.get(…)).toBe(false)` receive `undefined`; the CLI case `expect(run.status).toBe(1)` receives `0`; the provenance cases receive no finding; the `CHECKS` pin lacks the two keys; the three §9 tests fail on the missing text and on version 2.5. `npx tsc --noEmit -p tsconfig.json` -> exit 0, no output. `npx jest test/lint --maxWorkers=2` with the files in place -> `Test Suites: 13 passed`, `Tests: 153 passed`.
 
+### green (developer, 2026-10-31)
+
+PATH guard: `command -v wingfoil` -> `/home/robypomper/Workspaces/.wf2-wt/devloop-kit/bin/task-328/wingfoil`; `wingfoil --version` -> `0.3.1 (edb70f0f5c26839e93b206db8b73a37119eb1fe4)`. Start: `git rev-list --count HEAD..release/0.3` -> `0`.
+
+Commit `726435aad` (`scripts/check-governance.cjs` only):
+- `CHECKS` gains `workflow-record-authority` and `trailer-paragraph` (markers `governance-check:<name>`), both in this one commit; `grep -c governance-check:workflow-record-authority scripts/check-governance.cjs` -> `1`, same for `governance-check:trailer-paragraph` -> `1`; `git log --first-parent -S governance-check:<name> --format=%h -- scripts/check-governance.cjs` -> `726435aad` for each.
+- The approval half of `checkBodyAndAuthority` is extracted into `approverGrammarFindings` and `authorityFindings`, messages unchanged (the `wf()` suites stay green: see refactor). The records (`workflow: finalize|adopt|rekey`, non-merge) are read with the `dna.yaml` of their first parent through `readBlobIds`/`readDnaYaml`; a record with no `Approver:` line yields nothing (design D3: no `Reason:` rule on records).
+- `trailerKeysOutsideFinalParagraph(body)`: every `WingFoil-` key (case-insensitive) on a line before the body's last blank line, once per distinct key, on every non-merge commit (design D2 (a)).
+- Sort: the red expects the findings of one commit in the order the keys are written (`WingFoil-Phase` before `WingFoil-Instance`, case (b)), while the final sort orders by message. The comparator now places a commit's `trailer-paragraph` findings after its other findings of the rule, in written order; all other findings keep the message order. No red file touched.
+
+red -> green: `npx jest test/cli/check-governance test/cli/workflow-rekey test/cli/governance-workflow test/lint --maxWorkers=2` -> `Test Suites: 21 passed, 21 total`, `Tests: 294 passed, 294 total` (before the sort change one workflow-records case, 270, failed on the order `Instance, Phase`).
+
+Commit `605bd1f57` (`.wingfoil/directives/custom/git-conventions.md` 2.5 -> 2.6, `**Date:**` 2026-10-31, history in the version comment; `.github/workflows/governance.yml` header, D6). `npm run -s check:mcp` -> exit 0 (`the build under development (dist/cli.js) serves [prompts, resources, tools] ... every listed Resource read and Prompt get answered`). `npx jest test/directives test/cli/check-governance test/cli/governance-workflow test/cli/git-hooks test/lint --maxWorkers=2` -> `Test Suites: 33 passed`, `Tests: 503 passed`.
+
+AC classification as designed: AC 1 and AC 2 red-first, AC 3 red-first (D5); all three now pass.
+
+### refactor (developer, 2026-10-31)
+
+Heavy gates ran after `waitslot.sh` (the waits were long: other tasks held the slot; `ps -eo pid,etime,args` showed task-324's `jest --coverage` at `10:52` and task-322's at `11:12` while mine queued).
+- `npm run test:coverage -- --maxWorkers=2` (the full suite, so I did not run a separate `npm test`; the same jest run covers it) -> `Test Suites: 536 passed, 536 total`, `Tests: 9463 passed, 9463 total`; `All files | 99.35 | 97.51 | 98.15 | 99.7` (Stmts, Branch, Funcs, Lines).
+- `npm run -s lint` -> exit 0; `npm run -s docs:api` -> exit 0; `npm run -s typecheck` -> exit 0 (one run, in that order, after the slot).
+- Document parity (`docs.parity`): the `test/docs` suites are part of the full jest run above; no CLI, help or docs change, so `test/docs/cli-reference.test.ts` is covered there and no cli-reference edit was needed.
+- `node scripts/check-governance.cjs --base origin/release/0.3` (after the two commits) -> `gated: 0 findings on 0 commits`, `history: 0 findings on 0 commits`; `later checks introduced at: ... workflow-record-authority 726435aad..., trailer-paragraph 726435aad...`.
+- `git rev-list --count HEAD..release/0.3` at the end of refactor -> `1`: merged with `git merge --no-edit release/0.3` (W0-R3) -> merge commit `3285d2310`, which brings only the file `docs/04_memory/bugs/bug-462-...md`; no conflict, no code changed, so the gates above were not re-run.
+- No refactor beyond the extraction in green: the same-class instance of the approval grammar is now one function used by both rules.
+
+### self-review (developer, 2026-10-31)
+
+- AC 1: `npx jest test/cli/check-governance-workflow-records.test.ts` is part of the 21-suite run above; the `bug-444` reproduction case (`init --template Scrum`, forged `workflow: finalize`, `--introduced-at`) passes with exit 1 and both authority messages. Positive cases: conforming Approver line and no Approver line pass (characterizations); the existing `workflow-rekey.integration` real `workflow rekey` as the approver still passes.
+- AC 2: the five shapes of the design (wf commit, record, docs commit, conforming `--trailer` shape, single-paragraph body) pass; absence case: `node scripts/check-governance.cjs --base origin/release/0.3` on this branch reports no `trailer-paragraph` finding on its own commits.
+- AC 3: the three `git-conventions §9` tests pass (503-test run above).
+- Marker discipline: each marker once in the script (`grep -c` -> `1` / `1`), both added in `726435aad`.
+- T4: `git log --first-parent --no-merges --format=%h 47cdaee73..HEAD -- test/cli/check-governance-workflow-records.test.ts test/cli/check-governance-provenance.test.ts test/cli/check-governance-enforcement.test.ts test/directives/git-conventions.test.ts scripts/check-governance.d.cts` -> empty.
+- Invisible characters: the `grep -nP` of the brief over `scripts/check-governance.cjs`, the directive and `governance.yml` -> no hit (exit 1).
+- Scope: only the files of the design (script, directive, workflow header) and the task notes.
+
+### Pending amendments (approver)
+
+- `docs/04_memory/bugs/bug-391-check-governance-does-not-report-wingfoil-instance-wingfoil-step-or-wingfoil-phase-lines-outside-a-commit-s-final-trailer-paragraph.md` (uncommitted, its `### Retrospective` filled): `memory amend` with `--reason "Records in the Retrospective that task-328 closes the bug with the trailer-paragraph check, which covers every non-merge commit and every WingFoil- key, a wider reach than the five keys the Expected Behavior lists."`
+- `docs/04_memory/bugs/bug-444-the-governance-check-does-not-verify-the-authority-of-an-approver-line-on-a-workflow-record-so-a-forged-finalize-adopt-or-rekey-passes.md` (uncommitted, its `### Retrospective` replaced): `memory amend` with `--reason "Records in the Retrospective that task-328 closes the bug with the workflow-record-authority check, which judges an Approver: line when a record has one and leaves a mandatory line on an approval: phase to v0.4."`
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -214,3 +255,6 @@ Red commit `47cdaee73` (test files and one declaration file only). Worktree alre
      printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
      Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
      here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+
+- Friction: the red's expected order of two trailer findings (written order) conflicted with the script's message-order sort; handled in the sort without touching the red (see green). Proposal: a note in the qa brief to state the order a finding list is pinned in.
+- Heavy-gate slot waits were long (tens of minutes per gate with several tasks queued); lint, docs:api and typecheck had to wait a second time behind the coverage run.
