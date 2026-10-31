@@ -268,6 +268,10 @@ for every gate below. No refactor beyond the green change was needed (one privat
   message>` (code `IO`, exit `1`, `agent execute`'s `E_GIT_READ_FAILED` form as the exception), and a Revision note dated 2026-10-31.
   `memory amend spec-008-cli-grammar --reason "Add the pinned refusal 'could not read git configuration: <git's message>' to §6 and narrow the 'could not run git' row to a git that exits 1, per bug-379 and task-324's design gate (D1 yes, D2 (a), D3 yes)."`
 
+### red amendment (qa, 2026-10-31)
+
+The review (low) found that `badConfigLine` in `test/core/git-identity-config-failure.test.ts` and in `test/cli/git-config-unreadable-refusal.integration.test.ts` parses git's English `bad config line <n>` without pinning the locale. Amendment commit `a81731915fe88c9e67abc9e82a608b3d7d77aded` (test files only): the core file sets `LC_ALL=C` and unsets `LANGUAGE` in its `beforeEach` (both added to the saved/restored variables), so the check's git and every fixture git run read the C locale; the CLI file's `childEnv()` sets `LC_ALL=C` and drops `LANGUAGE`, used by the child spawns and by `badConfigLine`. No assertion changed. Run: `npx jest test/core/git-identity-config-failure.test.ts test/core/git-identity-spawn-failure.test.ts test/cli/git-config-unreadable-refusal.integration.test.ts test/core/git-identity.test.ts test/lint --maxWorkers=2` printed `Test Suites: 17 passed, 17 total`, `Tests: 195 passed, 195 total`. The invisible-character grep over the two files printed nothing.
+
 ### Retrospective
 
 - The two heavy gates ran longer than the tool's foreground limit and were moved to the background; I polled their output files. No friction in the code: the design was precise and the red files passed unchanged.
