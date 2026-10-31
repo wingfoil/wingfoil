@@ -44,6 +44,209 @@ report hand-wrote them.
        reject's `Reason:` (read with `wingfoil memory history <task-id>`), each with the command that
        shows it resolved and what that command printed; then what else changed on the next pass. -->
 
+### design (architect, 2026-10-31)
+
+**Inputs read.** `depends_on: []` (no dl-015 gate); no handover. Base: `release/0.3` `ab691d35` + the start commit
+`a54549e8` and the `bug-404` sync `0f1ab379` (`git log --oneline -3` → those three). `bug-404` Expected Behavior: "the
+script (or the gate) records the `workflow list/show/status` counts itself in the report it generates". The figures it
+replaces are `task-242` AC 2's ("`workflow list --all` and `workflow show` on every workflow report zero errors;
+`workflow status` output is recorded"), hand-written in `docs/07_gates/rl-v1/rel-v0.3-e2e-smoke.md` (section
+"Repository checks on the candidate (task-242 AC 2)") and `rel-v0.3.1-e2e-smoke.md` (section "Repository checks on the
+candidate (workflow reads)", lines 100–112); the `w1` report `rel-v0.3.2-w1-e2e-smoke.md` has no such section
+(`grep -n "Repository checks" docs/07_gates/rl-v1/rel-v0.3.2-w1-e2e-smoke.md` → no output). Ratified elements touched:
+`dl-023` and `dl-099` are `ready`, `spec-015` `approved` (`grep -n "^status:"` on each). `spec-015` §3 stage 3 is the
+staging smoke (`scripts/publish-staging.cjs` → `runSmoke`), which this design leaves unchanged (reads are opt-in, below),
+so no spec amendment; `dl-099` §3 (the smoke drives a fresh project) is extended, not contradicted: the reads run
+beside the scenario, on the candidate's repository. No BDD scenario covers the smoke script
+(`grep -rln "e2e-smoke" docs/02_requirements/02_bdd/features` → no output).
+
+**Absence, with its positive case.** `grep -n "'--all'\|Repository checks" scripts/e2e-smoke.cjs` → no output;
+`grep -c "'workflow', 'list'" scripts/e2e-smoke.cjs` → `1` (the fresh project's `workflow list --format json`, step 28
+of each template); no `workflow show` and no `workflow status` step (`grep -n "'show'\|'status'"` → only `dna show`,
+`agent show` and `git status`). `formatReport` writes the header, the verdict and the checks table only (`sed -n 839,871p`).
+
+**The reads on this repository, today** (code build `node dist/cli.js --version` → `0.3.1 (ab691d35…)`, worktree
+head `0f1ab379`, clean tree; outputs kept in the design scratch, not committed):
+- `node dist/cli.js workflow list --all --format json` → exit 0, 0.8 s; keys `baseline, workflows, diagnostics`;
+  27 workflows, 65 diagnostics, all `W_WORKFLOW_UNBOUND_TOKEN` / `warning`, 0 errors.
+- `node dist/cli.js workflow show <name> --format json` for each of the 27 → exit 0 each, 20.6 s in all; keys
+  `baseline, workflow, diagnostics`; 65 diagnostics, 0 errors each.
+- `node dist/cli.js workflow status --format json` → exit 0, 0.7 s; keys `baseline, active, open, pendingApprovals,
+  ungated, ungatedRoutedTo, diagnostics`; lengths 3, 1, 33, 1, 65 (the `rel-v0.3.1` hand figures, same values).
+- In a fresh `wingfoil init --template Scrum` project (scratch): `workflow list --all` → 5 workflows (`adr-ingest
+  bug-ingest decision-log-ingest scrum-delivery sw-life-cycle`), 0 diagnostics; `workflow show sw-life-cycle` → 0
+  diagnostics; `workflow status --format json` → every list empty, plus `message: "no open workflows"`;
+  `workflow show nope --format json` → exit 1, stderr `{"error":"unknown workflow: nope"}`.
+- Diagnostic severities are `error | warning` (`src/validation/diagnostic.ts` line 13, `DiagnosticSeverity`).
+
+**Design.**
+- *Opt-in, through a new option* (`scripts/e2e-smoke.cjs`, typed in `scripts/e2e-smoke.d.cts`). `SmokeOptions` gains
+  `repository?: string` (absolute path of the repository to read). `runSmoke(options)` keeps its signature and, without
+  `repository`, its behaviour and its result's exact shape `{ ok, checks }` (the staging smoke, `ci.yml`'s job and
+  every existing caller are unchanged). With it, right after the `--help` check and the `--version` check (when one is
+  expected) and before the first template, `runSmoke` runs the reads with the build under test (`invoke`, cwd =
+  `repository`, the smoke's `env`), records their checks (stopping at the first failure, as everywhere), and returns
+  `{ ok, checks, workflowReads }`.
+- *New export* `workflowReads(invoke, root)` → `{ checks: SmokeCheck[], reads: WorkflowReads }`, `invoke` with the
+  `(args, cwd)` shape `smokeTemplate` takes. Order: `workflow list --all --format json`; if its check passed,
+  `workflow show <name> --format json` for every name of the list's `workflows`, in the list's order (all run, judged
+  as one check); if that passed, `workflow status --format json`. Never throws.
+- *Types* (`e2e-smoke.d.cts`, all fields readonly):
+  `WorkflowReadResult { exit: number | null; diagnostics: number | null; errors: number | null }` (`exit` null on a
+  spawn error; counts null when stdout is not valid JSON; a JSON answer without a `diagnostics` array counts 0;
+  `errors` = diagnostics whose `severity` is `'error'`);
+  `WorkflowListRead extends WorkflowReadResult { workflows: number | null; codes: ReadonlyArray<{ code: string;
+  severity: string; count: number }> }` (diagnostics grouped by code and severity, sorted by code, then severity, plain
+  `<` comparison; `[]` when null);
+  `WorkflowShowRead extends WorkflowReadResult { name: string }`;
+  `WorkflowStatusRead extends WorkflowReadResult { open, pendingApprovals, ungated, ungatedRoutedTo: number | null }`
+  (array lengths);
+  `WorkflowReads { list?: WorkflowListRead; show?: readonly WorkflowShowRead[]; status?: WorkflowStatusRead }` — a read
+  not run is absent. `SmokeReport` gains `workflowReads?: WorkflowReads` (optional: `scripts/publish-staging.d.cts`'s
+  `smoke(...): SmokeReport` and its test fakes returning `{ ok, checks }` still type-check). `SmokeReportMeta` is
+  unchanged.
+- *Checks* (`n` with the plural rule: `1 workflow`, `2 workflows`; same for `diagnostic`, `error`):
+  - `[repository] wingfoil workflow list --all --format json` — ok iff exit 0, JSON stdout, 0 errors; detail
+    `exit 0, <w> workflows, <d> diagnostics, <e> errors`.
+  - `[repository] wingfoil workflow show <name> --format json, each of the <N>` (`<name>` literal, `N` = the list's
+    workflow count) — ok iff each exit 0, JSON, 0 errors; detail `exit 0 (<N>/<N>), 0 errors`.
+  - `[repository] wingfoil workflow status --format json` — ok iff exit 0, JSON, 0 errors; detail
+    `exit 0, open <o>, pendingApprovals <p>, ungated <u>, <e> errors`.
+  - Failing details: `expected exit 0, got exit <n | spawn-error>: <first stderr line>` (the `stepCheck` form);
+    `stdout is not valid JSON`; `<E> errors: <code> <count>, …` (the error-severity codes, sorted as `codes`). For
+    `show` each is prefixed `<name>: `, for the first failing workflow in the list's order.
+- *Report section* (`formatReport`): when `report.workflowReads` is absent the output is byte-identical to today's
+  (every existing `formatReport` pin holds). When present, after the checks table, before the final newline:
+  ```
+  ## Repository checks on the candidate (workflow reads)
+
+  Written by `scripts/e2e-smoke.cjs` (`bug-404`): the build under test runs each read in the repository the smoke was given (`--repository`; the checkout under `--candidate`).
+
+  | Command | Exit | Result |
+  |---|---|---|
+  | `wingfoil workflow list --all --format json` | 0 | 27 workflows; 65 diagnostics, **0 errors**: `W_WORKFLOW_UNBOUND_TOKEN` 65 (warning) |
+  | `wingfoil workflow show <name> --format json`, each of the 27 | 0 (27/27) | **0 errors** each; 65 diagnostics each |
+  | `wingfoil workflow status --format json` | 0 | `open` 3, `pendingApprovals` 1, `ungated` 33, `ungatedRoutedTo` 1, `diagnostics` 65, **0 errors** |
+  ```
+  Rules: the Exit cell is the exit code (`spawn-error` when null); list with 0 diagnostics → `<w> workflows; 0
+  diagnostics, **0 errors**` (no colon); a null count → Result `stdout is not valid JSON`; show Exit `0 (<N>/<N>)` when
+  every exit is 0, else `<k>/<N> exit 0`; show Result `**0 errors** each`, or `**<E> errors**: <name> <e>, …` (the
+  workflows with errors, list order), then `; <d> diagnostics each` when every parsed one has the same count, else
+  `; <min>–<max> diagnostics` (en dash), then `; stdout not valid JSON: <names>` when some did not parse; a read not
+  run → `| <command> | — | not run: the smoke stopped at an earlier check |`. Plural rule as in the checks. Every cell
+  through `cell()`. No path, no clock, no `baseline` commit in the section: the same run gives the same bytes.
+- *CLI.* `parseSmokeArgs` accepts `--repository <path>` (stored as `repository`, `path.resolve`d; `--repository`
+  without a value throws `unknown or incomplete argument: --repository`); without the flag the parsed object has no
+  `repository` key (the existing `toEqual` pins hold). The `require.main` block passes `repository: parsed.repository
+  ?? (candidate ? dirname(__dirname) : undefined)` to `runSmoke`: the gate binding (`--candidate`, unchanged in
+  `bindings.yaml`) reads the checkout it packed, with the packed candidate. The header comment's Usage and description
+  name the reads and the flag.
+- *Cost.* About 22 s per gate run on this repository (the three timings above); none on staging or in `ci.yml`.
+
+**Per-AC classification and what qa must pin.**
+
+| AC | Class | Evidence |
+|---|---|---|
+| 1 — the script runs the workflow reads on the candidate repository and `formatReport` writes their counts; a test pins the section | red-first | the absence above: no `--all`, no `workflow show`/`status` read, no section |
+
+qa pins, in a new file `test/cli/e2e-smoke-workflow-reads.test.ts` (so `test/cli/e2e-smoke.test.ts`'s full-smoke runs
+are not repeated):
+- (a) `workflowReads(invoke, root)` on the compiled CLI (`process.execPath` + `CLI_ENTRY`, `test/cli/helpers/spawn-cli`)
+  in a fresh `wingfoil init --template Scrum` project (a temp git repo with an identity, as `smokeTemplate` does; or
+  `makeTempGitRepo` of `test/storage/helpers/git-fixture`, as `e2e-smoke-candidate.test.ts` does): three ok checks with the exact labels and details above, `reads.list`
+  `{ exit: 0, workflows: 5, diagnostics: 0, errors: 0, codes: [] }`, five `show` entries named as the list, `status`
+  all zero. The workflow count is the real scaffold's: read it from the CLI in the test (`workflow list --all --format
+  json`) rather than hard-coding 5, or hard-code it with the command named.
+- (b) `formatReport` with a `workflowReads` value built from this repository's real figures (the three reads above,
+  commands named in the test's comment): the section's exact lines (heading, intro, header, the three rows as shown);
+  the same input twice gives the same bytes; a report without `workflowReads` is unchanged (equal to the string
+  `formatReport` gives today for the same `checks`).
+- (c) the failure and edge renderings, through `workflowReads` with a fake `invoke` (no spawn) whose answers are real
+  outputs trimmed: list stdout copied from `workflow list --all --format json` (two of its workflows, two of its
+  diagnostics, verbatim); an error-severity diagnostic copied from a real run in a scratch `init` project with one
+  workflow made invalid (name the command and the edit in the comment, W1 rule: never an invented answer); a show
+  refusal copied from `workflow show nope --format json` (exit 1, stderr `{"error":"unknown workflow: nope"}`); a
+  non-JSON stdout. Pin: the failing check's detail, that the later reads are absent from `reads`, the `not run` row,
+  the `<k>/<N> exit 0` cell, the `<min>–<max>` cell, the singular `1 error`.
+- (d) `runSmoke({ command: process.execPath, commandArgs: [<stub>], repository: <dir> })` with a stub `wingfoil`
+  (`-e` script or a scratch file, the `STAMP_STUB` pattern of `e2e-smoke.test.ts`): `--help` → `Usage: wingfoil`, the
+  three reads → the trimmed real JSON, anything else → exit 1 `error: stub`. Pin the order: checks 2–4 are the three
+  `[repository]` labels, check 5 is `[Scrum] wingfoil init --template Scrum` failing; `report.workflowReads` present;
+  and the same call without `repository` → no `[repository]` check and no `workflowReads` key.
+- (e) `parseSmokeArgs(['--repository', '/x/repo'])` → `{ command: 'wingfoil', commandArgs: [], repository: '/x/repo' }`;
+  `['--repository']` throws `--repository`; `['--candidate', '--repository', '/x']` parses (`candidate: true,
+  repository: '/x'`).
+- (f) the script end to end: `node scripts/e2e-smoke.cjs --repository <fresh init project> --report <tmp>/r.md --
+  <stub>` (stub as in (d)) exits 1 and `r.md` holds the section heading and the list row.
+- (g) `.wingfoil/workflows/custom/e2e-smoke.yaml` `version` ≥ 1.9 with a history entry matching `/1\.9 [^;]*task-327/`,
+  and the gate description names `workflow show` and `workflow status` (bug-314 form; only if D2 is ruled yes).
+Expected reds: tsc `TS2305` (`workflowReads` not exported by `e2e-smoke.d.cts`) and `TS2353` (`repository` not in
+`SmokeOptions`); jest, under `isolatedModules`, `TypeError: workflowReads is not a function` for (a)/(c), assertion
+failures for (b) (no section), (d) (no `[repository]` checks), (e) (`unknown or incomplete argument: --repository`),
+(f), (g). `npx jest test/lint --maxWorkers=2` with the red file in place before the red commit.
+
+**Files to touch** (developer): `scripts/e2e-smoke.cjs` (`workflowReads`, `runSmoke`, `formatReport`,
+`parseSmokeArgs`, the main block, the header); `scripts/e2e-smoke.d.cts` (the types and export above);
+`.wingfoil/workflows/custom/e2e-smoke.yaml` gate description + `version: 1.8 → 1.9` (D2; `git show
+release/0.3:.wingfoil/workflows/custom/e2e-smoke.yaml | grep -m1 "^version"` → `1.8`, first edit on this branch);
+`.wingfoil/WORKFLOW.md` E2E Smoke prose, one clause (no `version:` field: `head -8` shows none). qa: the new test
+file. No other `version:` bump; `bindings.yaml`, `ci.yml`, `publish-staging.cjs` unchanged. A `.wingfoil/` change is
+proven with `npm run check:mcp` (baseline run here, below).
+
+**Existing tests of the files this task changes**, run on this base (one jest process at a time, no slot):
+- `npx jest test/cli/e2e-smoke.test.ts test/cli/e2e-smoke-candidate.test.ts test/cli/e2e-smoke-adopt-probe.test.ts
+  test/cli/e2e-smoke-fake-read.test.ts test/cli/e2e-smoke-journey-shim.test.ts --maxWorkers=2` → `Test Suites: 5
+  passed`, `Tests: 96 passed` (2 m 17 s).
+- `npx jest test/cli/publish-staging.test.ts test/cli/staging-rehearsal.test.ts
+  test/core/workflow-repository-conformance.test.ts test/docs/workflow-md.test.ts test/core/workflow-status.test.ts
+  test/lint/version-bump.test.ts --maxWorkers=2` → `Test Suites: 6 passed`, `Tests: 148 passed`.
+- `npm run -s check:mcp` → exit 0 (pinned `0.3.1`: prompts 8, resources 4, tools 0; the build under development: the
+  same, every Resource read and Prompt get answered).
+
+**Tests that pin what this task changes (W2-R4 (6)).**
+- `grep -rln "formatReport\|SmokeReport" test/` → `test/cli/e2e-smoke.test.ts` (the real pins: "formats a
+  deterministic report" and the two "the report names …" tests, lines 353–369, 608–611, 910–913), plus
+  `test/global-teardown.cjs` and `test/release-health/measure*.test.ts` (their own `formatReport`/`formatReportJson`,
+  unrelated). All hold: the section is added only with `workflowReads`.
+- `grep -rln "runSmoke" test/ scripts/` → `test/cli/e2e-smoke.test.ts`, `test/cli/e2e-smoke-fake-read.test.ts`,
+  `scripts/publish-staging.cjs` (line 612, no `repository`), `scripts/e2e-smoke.d.cts`; `scripts/publish-staging.d.cts`
+  imports `SmokeReport` (line 3, `smoke(...)` line 66) — unchanged behaviour, optional field.
+- Step and check counts: `test/cli/e2e-smoke.test.ts` "passes against the compiled CLI" counts the `[<template>] `
+  labels against `smokeSteps(template).length` and orders the `/agent` and `/journey` blocks; with no `repository` no
+  check is added. `grep -rln "82/82" test/` → no output; `grep -rln "checks ok" test/` → `test/cli/e2e-smoke.test.ts`
+  (the `(1/1 checks ok)` pin, unchanged).
+- `parseSmokeArgs` `toEqual` pins: `test/cli/e2e-smoke.test.ts` line 344, `test/cli/e2e-smoke-candidate.test.ts` line
+  80 — no `repository` key without the flag.
+- `e2e-smoke.yaml` (D2): `test/cli/e2e-smoke.test.ts` (version > 1.3, ≥ 1.6, ≥ 1.8 with history; gate `produces` and
+  `checks.post` exact; `not.toMatch(/\bwarn\b/i)` on the workflow and gate descriptions — the new text must not use
+  the word "warn"), `test/cli/e2e-smoke-candidate.test.ts` (≥ 1.7, gate description contains `--candidate` and
+  `dist/`), `test/core/workflow-repository-conformance.test.ts` (prose checks of phases 0–2, gate check unchanged),
+  `test/core/workflow-status.test.ts` line 749 (`e2e-smoke.gate`, phase unchanged), `test/docs/workflow-md.test.ts`
+  (phase names). No phase or step list changes.
+
+**Decisions for the approver.**
+- D1 — do the reads gate? (a) counts only, the verdict unchanged; (b) three checks too: a non-zero exit, a non-JSON
+  answer or an error diagnostic fails the smoke, and so the hard-reject gate. Recommendation **(b)**: `task-242` AC 2's
+  criterion is "zero errors", and a check that only reports lets a broken configuration through a gate meant to stop
+  it. A gate report goes from 82 to 85 checks.
+- D2 — amend `e2e-smoke.yaml`'s gate description (and `WORKFLOW.md`'s E2E Smoke prose) to name the reads, `version:`
+  1.8 → 1.9? Recommendation **yes**: since 1.7 the gate description states what its check runs (task-282).
+- D3 — where the reads run: (a) right after `--help`/`--version`, before the templates; (b) at the end. Recommendation
+  **(a)**: a broken configuration stops the gate before ~5 minutes of scenario, it matches the hand-run order ("clean
+  tree, before the gate"), and a stub can pin it without a full smoke. The check numbers of the per-template rows shift
+  by three against earlier reports.
+- D4 — `--repository <path>` beside `--candidate`'s default. Recommendation **yes**: the reads can then run on the code
+  build too (`-- node "$PWD/dist/cli.js"`), and the script path is testable end to end with a stub; without it the
+  reads exist only under `--candidate`, whose real pack no test runs.
+
+**Risks for the other open w2 tasks.** `task-326` changes `scripts/publish-staging.cjs` and requires `runSmoke`:
+`runSmoke`'s signature and its `{ ok, checks }` result without `repository` are unchanged, and `SmokeReport` gains only
+an optional field, so neither its code nor `publish-staging.d.cts` needs a change; a merge of both touches different
+files. If `task-326` lands first, nothing here changes. `task-322` (`test/docs/`, `docs/case-study.md`), `task-324`
+(`src/core/git-identity.ts`) and `task-328` (`scripts/check-governance.cjs`, `git-conventions.md`) share no file with
+this task. The wave-checks smoke of `w2` (`--candidate`) gains the section and three checks once this task is merged,
+and fails if the repository's configuration carries an error diagnostic at that point (D1 (b)).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
