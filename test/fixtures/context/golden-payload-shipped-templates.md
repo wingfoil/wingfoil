@@ -77,8 +77,11 @@ Write the test first.
 ### adr:adr-001-golden-adr
 
 ```yaml
+contributor: ''
+credit: ''
 format: 1
 id: adr-001-golden-adr
+reported_by: []
 status: pending
 title: Golden adr
 type: adr
@@ -104,8 +107,11 @@ type: adr
 ### bug:bug-001-golden-bug
 
 ```yaml
+contributor: ''
+credit: ''
 format: 1
 id: bug-001-golden-bug
+reported_by: []
 status: pending
 title: Golden bug
 type: bug
@@ -122,8 +128,11 @@ type: bug
 ### decision-log:dl-001-golden-decision-log
 
 ```yaml
+contributor: ''
+credit: ''
 format: 1
 id: dl-001-golden-decision-log
+reported_by: []
 status: pending
 title: Golden decision-log
 type: decision-log
@@ -162,11 +171,13 @@ workflow: sw-life-cycle
 ### release:release-001
 
 ```yaml
+backlog_committed: null
 format: 1
 id: release-001
 status: pending
 title: Golden release
 type: release
+waves: []
 ```
 
 <!-- begin:release:release-001 -->
@@ -175,6 +186,14 @@ type: release
      these placeholder comments yourself; `wingfoil memory submit` then checks the required fields,
      moves `status` forward and commits the document as you left it, naming in the commit body the
      content it carries. -->
+
+## Scope changes
+
+<!-- One row per task added after the backlog was committed: the task, the element it came from (a bug,
+     a decision-log, a review finding), when it was admitted, and the count against `backlog_committed`. -->
+
+| Task | From | Admitted at | Count vs backlog_committed |
+|---|---|---|---|
 <!-- end:release:release-001 -->
 
 ### release-line:rl-001
@@ -198,8 +217,11 @@ type: release-line
 ### tech-spec:spec-001-golden-tech-spec
 
 ```yaml
+contributor: ''
+credit: ''
 format: 1
 id: spec-001-golden-tech-spec
+reported_by: []
 status: pending
 title: Golden tech-spec
 type: tech-spec

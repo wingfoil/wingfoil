@@ -39,7 +39,7 @@ import {
 import { resolveTemplate, templateScaffold } from '../../src/storage';
 import { commitAll, git, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
 
-const SCAFFOLD_SUBJECT = 'chore(wingfoil): initialize .wingfoil/ with the Scrum template (P5.1.1)';
+const SCAFFOLD_SUBJECT = 'chore(wingfoil): initialize .wingfoil/ with the Scrum template';
 const ADR_TEMPLATE_PATH = '.wingfoil/memory/templates/adr.md';
 const ADR_PATH = 'docs/memory/adr/adr-001-copied-from-template.md';
 

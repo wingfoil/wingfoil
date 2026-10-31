@@ -9,9 +9,16 @@ import { join } from 'path';
 
 import { load as loadYaml } from 'js-yaml';
 
-import { TEMPLATES, templateScaffold, type TemplateDefinition } from '../../src/storage/templates';
+import {
+  TEMPLATES,
+  initProjectCommitMessage,
+  resolveTemplate,
+  templateScaffold,
+  type TemplateDefinition,
+} from '../../src/storage/templates';
 
 const GUIDE = readFileSync(join(__dirname, '..', '..', 'docs', 'user-guide.md'), 'utf-8');
+const CLI_REFERENCE = readFileSync(join(__dirname, '..', '..', 'docs', 'cli-reference.md'), 'utf-8');
 
 /** The rows of the first table under `## 7. Workflows`: first cell (backticked names) → last cell. */
 function workflowTableRows(): Array<{ names: string[]; phases: string }> {
@@ -61,4 +68,28 @@ describe('task-296 AC 4 — user-guide §7 names the phases the scaffold declare
       });
     }
   }
+});
+
+/**
+ * task-321 AC 2 (`bug-409`) — the user guide and the CLI reference quote the `init` commit subject as
+ * `initProjectCommitMessage` writes it, with no internal feature id.
+ */
+describe('task-321 AC 2 — the docs quote the init commit subject without an internal feature id (bug-409)', () => {
+  const SUBJECT = 'chore(wingfoil): initialize .wingfoil/ with the Scrum template';
+
+  it('the user guide quotes the Scrum subject init writes', () => {
+    expect(initProjectCommitMessage(resolveTemplate('Scrum') as TemplateDefinition)).toBe(SUBJECT);
+    expect(GUIDE).toContain(`The commit is \`${SUBJECT}\``);
+  });
+
+  it('the CLI reference quotes the subject with its <Template> placeholder', () => {
+    expect(CLI_REFERENCE).toContain('**Commit:** `chore(wingfoil): initialize .wingfoil/ with the <Template> template`');
+  });
+
+  it('neither document puts (P5.1.1) next to initialize .wingfoil/', () => {
+    for (const [name, text] of [['docs/user-guide.md', GUIDE], ['docs/cli-reference.md', CLI_REFERENCE]] as const) {
+      const quoted = text.split('\n').filter((line) => line.includes('initialize .wingfoil/') && line.includes('(P5.1.1)'));
+      expect([name, quoted]).toEqual([name, []]);
+    }
+  });
 });

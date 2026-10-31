@@ -116,7 +116,7 @@ commits:
 └── workflows/custom/         sw-life-cycle, bug-ingest, decision-log-ingest, adr-ingest, scrum-delivery (or kanban-delivery)
 ```
 
-The commit is `chore(wingfoil): initialize .wingfoil/ with the Scrum template (P5.1.1)`. Running `init`
+The commit is `chore(wingfoil): initialize .wingfoil/ with the Scrum template`. Running `init`
 again fails with exit `1`: the project is already initialized. From then on, change the configuration
 by editing the files under `.wingfoil/` and committing them, or with the `dna` and `directive`
 commands, which commit for you (sections 4 and 6).
@@ -215,7 +215,9 @@ optional. The `dna.yaml` that `init` writes shows the shape as a commented examp
 and `wingfoil paths <category>` answers "where is X?" for people and agents alike. `runs` is the
 directory of the agent run log (§9.4); `init` declares it as `docs/runs/`. `health` is the directory of
 the release-health catalogue and reports; `init` does not declare it, so `wingfoil paths health` fails
-with `error: no paths mapped for category 'health'` (exit `1`) until you add it.
+with `error: no paths mapped for category 'health'` (exit `1`) until you add it. The `dna.yaml` that
+`init` writes shows `health` and a `team.members` approver as commented examples, next to where
+each key goes.
 
 The fields each collection accepts are listed in the
 [CLI reference](cli-reference.md#wingfoil-dna-add). You can also edit `dna.yaml` by hand — then commit it.
