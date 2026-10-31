@@ -199,6 +199,103 @@ Design gate approved by the approver on 2026-10-31T07:16:10+01:00, in the orches
 - D6 — yes: user-guide §4 gains one sentence on the commented `health` and approver-member examples.
 - D7 — yes: qa updates the `SCAFFOLD_SUBJECT` constant in test/memory/history-scaffold-copy.test.ts in red.
 
+### red (qa, 2026-10-31)
+
+**Base.** `git rev-list --count HEAD..release/0.3` → `40`, so `git merge --no-edit release/0.3` first → merge commit
+`6e3634ee4` (task-312 and the L3 ingest), no conflict.
+
+**Red commit `157d2050c`** (`git log --oneline -1` → `157d2050c test(storage): task-321 — failing test: …`), test files
+only: `test/storage/templates.test.ts` (four new `describe` blocks and two module helpers, `scaffoldTextOf` and
+`loadDnaText`), `test/core/init-project.test.ts` (one `it`), `test/docs/user-guide-scaffold.test.ts` (one `describe`),
+`test/memory/history-scaffold-copy.test.ts` (`SCAFFOLD_SUBJECT` set to the new subject, D7) and the golden
+`test/fixtures/context/golden-payload-shipped-templates.md`. No new export is imported, so no `.d.cts` and no TS2305.
+
+**The golden.** Rewritten from the received payload (task-318 gate D4 (a)), with no write path in the repository: the
+design's prototype (`initProjectCommitMessage`, the `dnaYaml` blocks, `PROVENANCE_TEMPLATE_FIELDS`,
+`RELEASE_TEMPLATE_FIELDS`, `RELEASE_SCOPE_CHANGES`) plus the D3 removal of the seven header ids was applied to a copy of
+this branch outside the worktree (`git archive HEAD | tar -x`), and there `npx jest
+test/core/context-shipped-templates.test.ts --maxWorkers=2` was run with a temporary line writing `lines.join('\n')` to a
+file; that file is the golden. `diff <old golden> <received>` → only additions: `contributor: ''`, `credit: ''` and
+`reported_by: []` in the adr, bug, decision-log and tech-spec blocks, `backlog_committed: null` and `waves: []` in the
+release block, and the release body's `## Scope changes` section (a blank line, the heading, the comment, the table
+header and its separator). The suite file `test/core/context-shipped-templates.test.ts` is unchanged. The golden pins
+the release body byte for byte, so `memoryTemplateMd`'s release section must render exactly this text:
+
+```
+## Scope changes
+
+<!-- One row per task added after the backlog was committed: the task, the element it came from (a bug,
+     a decision-log, a review finding), when it was admitted, and the count against `backlog_committed`. -->
+
+| Task | From | Admitted at | Count vs backlog_committed |
+|---|---|---|---|
+```
+
+appended after the body's placeholder comment (and after `supersedesNote`), preceded by one blank line. The frontmatter
+comments are dropped by the payload (keys re-serialized), so their wording is pinned only by the id-free test below.
+
+**Run.** `npx jest test/storage/templates.test.ts test/core/init-project.test.ts test/docs/user-guide-scaffold.test.ts
+test/memory/history-scaffold-copy.test.ts test/core/context-shipped-templates.test.ts --maxWorkers=2` → `Test Suites: 4
+failed, 1 passed, 5 total`, `Tests: 34 failed, 97 passed, 131 total` (templates 29 failed, init-project 1,
+user-guide-scaffold 3, context-shipped-templates 1, history-scaffold-copy 0). The same five files, copied with the golden
+into the prototype copy above (and its two docs lines edited to the new subject) → `Test Suites: 5 passed, 5 total`,
+`Tests: 131 passed, 131 total`: a correct implementation passes them. `npx tsc --noEmit -p tsconfig.json` → exit `0`.
+`npx jest test/lint --maxWorkers=2` with the files in place → `Test Suites: 13 passed, 13 total`, `Tests: 153 passed,
+153 total`. The invisible-character `grep -nP` over the five files → no hit.
+
+**Per AC** (first failing assertion of each test; each runs for Scrum and Kanban, the Scrum line quoted):
+- **AC 1 (red-first)**, `templates.test.ts` › "task-321 AC 1 — scaffolded dna.yaml shows commented team.members and
+  paths.health examples (bug-393)":
+  - "the commented members example, uncommented in place of `members: []`, loads an approver member" (the `  # members:`
+    block, uncommented, must load `[{ name: 'Ada Lovelace', email: 'ada@example.com', roles: ['approver', 'developer'] }]`)
+    → `expect(received).toBeGreaterThanOrEqual(expected)`, `Expected: >= 0`, `Received: -1`: no `  # members:` line.
+  - "a comment names the `wingfoil dna add team.members` command that adds an approver" (a line `# or run: wingfoil dna
+    add team.members … --entry-roles approver…`) → `Expected: true`, `Received: false`.
+  - "a commented `health: [docs/health/]` sits at the end of paths:, and uncommented loads paths.health" (the line after
+    `  runs: [docs/runs/]`, D4 (a)) → `toBeGreaterThan`, `Expected: > 63`, `Received: -1`.
+  - pass on first run: "as written, the scaffold loads with no member and no health path, and passes DnaYaml" (the
+    zero-errors half of the AC, and `spec-002`'s "init does not map health": `paths.health` stays `undefined`).
+- **AC 2 (red-first)**:
+  - `templates.test.ts` › "task-321 AC 2 — the init commit subject carries no internal feature id (bug-409)": "Scrum:
+    the subject is the plain sentence naming the template" → `Expected: "chore(wingfoil): initialize .wingfoil/ with the
+    Scrum template"`, `Received: "… Scrum template (P5.1.1)"`; "the subject names no parenthesised feature id" →
+    `Expected pattern: not /\(P\d+(\.\d+)*\)/`.
+  - `init-project.test.ts` › "task-321 AC 2 (bug-409): the init commit subject is the plain sentence, with no internal
+    feature id" (`git log --format=%s -1` of a real `initWingfoilProject` commit, against both the function and the
+    literal) → `Received: "chore(wingfoil): initialize .wingfoil/ with the Scrum template (P5.1.1)"`.
+  - `user-guide-scaffold.test.ts` › "task-321 AC 2 — the docs quote the init commit subject without an internal feature
+    id (bug-409)": "the user guide quotes the Scrum subject init writes" → the function's `Received: "… (P5.1.1)"`;
+    "the CLI reference quotes the subject with its <Template> placeholder" → `Expected substring: "**Commit:**
+    \`chore(wingfoil): initialize .wingfoil/ with the <Template> template\`"`; "neither document puts (P5.1.1) next to
+    initialize .wingfoil/" → `- Expected - 1`, `+ Received + 3` (the user-guide.md:119 and cli-reference.md:229 lines).
+  - `history-scaffold-copy.test.ts`: `SCAFFOLD_SUBJECT` updated (D7); the suite passes, as the design said.
+- **Design gate D3 (a) (red-first)**, `templates.test.ts` › "task-321 D3 — the scaffolded configuration files name no
+  internal id in their comments": one test per scaffolded `.yaml` file outside `/built-in/` (the four configuration
+  files and the five `workflows/custom/` files), checking the text from each `#` on against
+  `/\b(P\d+\.\d+(\.\d+)*|REQ-[A-Z]+-\d+|spec-\d+|dl-\d+)\b/`. Fail: `dna.yaml` (`- Expected - 1`, `+ Received + 6`: line
+  1, P2.4), `memory.yaml` (`+ 14`: lines 1, 4 and 37), `roles.yaml` (`+ 10`: lines 1 and 27), `workflows.yaml` (`+ 6`:
+  line 1). Pass on first run: the five `workflows/custom/` files, and "the scaffold has the four top-level configuration
+  files among its YAML files" (a guard that the loop is not vacuous).
+- **AC 3 (red-first)**, `templates.test.ts` › "task-321 AC 3 — the built-in Memory scaffolds carry the provenance and
+  planning fields (bug-338, bug-350)":
+  - "the adr / bug / decision-log / tech-spec scaffold carries contributor: \"\", credit: \"\" and reported_by: []" (four
+    tests) → `toEqual`, `- Expected - 3`, `+ Received + 3` (the three keys `undefined`).
+  - "the release scaffold carries backlog_committed (empty) and waves: []" (the key present with a `null` value) →
+    `Expected: true`, `Received: false`.
+  - "the release scaffold body has a ## Scope changes section with its table header" → `Expected: >= 0`,
+    `Received: -1`.
+  - `context-shipped-templates.test.ts` › "builds the golden payload from one document per shipped template, byte for
+    byte" → `expect(received).toBe(expected)`, `- Expected - 23`, `+ Received + 1`.
+  - pass on first run (guards of D1 (a) and D2, which hold today and must keep holding): "the other scaffolded types gain
+    none of the provenance or planning keys (additive)" (plan, release-line, task carry none; release carries no
+    provenance key), "no Memory scaffold's frontmatter comment names an internal id" (frontmatter only: the tech-spec
+    body's example id `spec-2-memory-yaml-schema` is outside it).
+
+**For the developer.** The D3 test scans every comment of the scaffolded configuration files, so all seven ids go,
+including the `(spec-001)` of `BUG_STATES_EXAMPLE` and the `(REQ-SEC-08)` of `rolesYaml`. The members example must sit
+as `  # members:` followed by `  #   ` lines (the `technologies` device), the health example as the exact line
+`  # health: [docs/health/]` after `  runs: [docs/runs/]`.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
