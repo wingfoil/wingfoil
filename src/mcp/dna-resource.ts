@@ -4,8 +4,8 @@
  * `registerCoreModules`'s existing, mechanically-derived `wingfoil://dna/show` Resource
  * (task-006-dual-interface-shared-core): that URI is `registerCoreModules`'s generic
  * `wingfoil://{module}/{verb}` transform of the `dnaShow` `CoreOperation` and is left untouched here —
- * this module adds the spec-004 §2.1-conformant addressing alongside it (both can and do coexist on
- * the same server; they are different URIs, never registered twice for one address).
+ * this module adds the spec-004 §2.1-conformant addressing. The `wingfoil mcp` server serves this
+ * module's `wingfoil://dna` URIs, not `registerCoreModules`' `wingfoil://dna/show` (see `src/mcp/registrar.ts`).
  *
  * `{section}` is any top-level key of the parsed `dna.yaml` document (`version`, `project`, `modules`,
  * `stacks`, `team`, `paths`) — spec-002-dna-yaml-schema's own top-level shape, not a hand-maintained

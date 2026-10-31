@@ -331,6 +331,8 @@ describe('per-check introduction (dl-103 §1 starting mode, per check)', () => {
       'supersedes-pair': 'governance-check:supersedes-pair',
       'config-version': 'governance-check:config-version',
       'approval-ai-trailer': 'governance-check:approval-ai-trailer',
+      'workflow-record-authority': 'governance-check:workflow-record-authority',
+      'trailer-paragraph': 'governance-check:trailer-paragraph',
     });
   });
 
