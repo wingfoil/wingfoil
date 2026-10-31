@@ -45,6 +45,125 @@ runs every mutating operation with `--format json` only, so no console renderer 
        reject's `Reason:` (read with `wingfoil memory history <task-id>`), each with the command that
        shows it resolved and what that command printed; then what else changed on the next pass. -->
 
+### design (architect, 2026-10-31)
+
+Branch cut from `release/0.3` at `927c61e33`; `git log --oneline release/0.3..HEAD` → the `wf(task): start` and the
+two `wf(bug): sync … [planned → in-progress]` commits only. PATH guard: `command -v wingfoil` → the task's PATH shim,
+`wingfoil --version` → `0.3.1 (927c61e33824f89ee6d47838058e6a1f3cf8c622)`. `depends_on: []`: no Execution Notes to read
+(dl-015). Cited elements: `spec-016` `approved`, `spec-008` `approved`, `dl-106` `ready`
+(`grep -n "^status:"` on each). Test-only task: no file under `src/` changes, so neither `src/cli/suggest.ts` nor
+`src/core/closest-name.ts` (`task-325`) is touched, and `docs/cli-reference.md` is not touched (no output changes).
+
+**AC classification (T1).** Both ACs stay **characterization**: the behaviour exists and was observed today (below).
+No red-first case was found, so nothing is fabricated and no renderer is fixed.
+
+| AC | Class | Evidence the behaviour exists |
+|----|-------|-------------------------------|
+| 1 — `{mcp_config}` refused inside `mcp.template` | characterization | the run of `parseAdapterManifest` below refuses it with one `E_ADAPTER_PLACEHOLDER` issue |
+| 2 — every table row also in console format | characterization | all 22 rows, console `--dry-run`: exit 0, empty stderr, the plan, nothing written (table below) |
+
+**AC 1 — where it is validated.** `grep -rn "mcp_config\|mcp.template" src test`: `src/agent/placeholders.ts`
+`placeholderIssues` checks `mcp.template` with `fieldIssues(…, template, false, true)`, where the legal set is
+`{mcp_command, mcp_args}` and `LEGAL_IN.mcp_config` is `launch.*.args, when mcp.via is config-arg`. The real refusal,
+from a script in the design's scratch directory that loads `test/fixtures/agents/custom/fake.yaml`, moves it to
+`mcp.via: config-arg` exactly as `configArg()` of `test/agent/manifest.test.ts` does (template
+`mcp_servers.wingfoil={command = "{mcp_command}", args = {mcp_args}}`, both launches `-c, {mcp_config}`), adds
+`, cfg = "{mcp_config}"` to the template and calls the compiled `parseAdapterManifest` (`dist/agent`, built by the
+orchestrator at the branch head) with `{ name: 'fake', kind: 'custom', file: 'HEAD:.wingfoil/agents/custom/fake.yaml' }`:
+the `ValidationError`'s `issues` were exactly one,
+`{"code": "E_ADAPTER_PLACEHOLDER", "path": "mcp.template", "file": "HEAD:.wingfoil/agents/custom/fake.yaml",
+"message": "placeholder {mcp_config} is not legal here: it is legal in launch.*.args, when mcp.via is config-arg (spec-016 §2.3)"}`.
+The template `{mcp_config}` alone gave the same single issue; a template carrying `{mcp_config_file}` gave
+`placeholder {mcp_config_file} is not legal here: it is legal in launch.*.args, when mcp.via is config-file (spec-016 §2.3)`.
+No CLI command surfaces the refusal for a scratch project (`agent list` in a `init --template Scrum`-ed scratch repository
+with the bad adapter committed → exit 0, `no past runs` / `no waiting steps`; `agent show fake` → exit 2, `invalid run id`),
+so the test stays at the module level, where every placeholder case of the file already is.
+
+**What qa pins for AC 1** — file `test/agent/manifest.test.ts`, in `describe('task-237 (g) — {mcp_config}: …')`,
+with the file's own helpers `configArg()`, `issuesOf()`:
+- `{mcp_config}` inside `mcp.template` under `mcp.via: config-arg`: start from `configArg()`, set
+  `manifest.mcp.template = 'mcp_servers.wingfoil={command = "{mcp_command}", args = {mcp_args}, cfg = "{mcp_config}"}'`,
+  and expect `issuesOf(manifest)` toEqual the one issue above (code `E_ADAPTER_PLACEHOLDER`, path `mcp.template`, file
+  `HEAD:.wingfoil/agents/custom/fake.yaml`, the message verbatim). The exact list, not `expectIssue`: `configArg()`
+  alone has no issue (the existing test `a manifest with mcp.via: config-arg … parses`), so a second issue would be a
+  change.
+- The same for `{mcp_config_file}` in the template (the bug names it too), with its message above; an `it.each` over the
+  two is fine.
+
+**AC 2 — every row run in console format, before designing.** A script in the design's scratch directory rebuilds
+`buildFixture()` of `test/cli/dry-run.integration.test.ts` step by step (same `init --template Kanban`, same edits, same
+fixture commands, same identity `WingFoil Test <wf-test@example.invalid>`) with the code build `dist/cli.js` at the
+branch head, and for each of the 22 `ROWS`, in declaration order (the `memoryAmend` preparation included): ran
+`<args> --dry-run` (no `--format`), then `<args> --dry-run --format console`, compared `git status --porcelain
+--untracked-files=all --ignored`, `git rev-parse HEAD` and `git for-each-ref` before and after, ran `<args> --dry-run
+--format json`, then the real run as the table does. Result, every row: exit `0`, stderr empty, nothing changed, the
+explicit `--format console` output identical to the default one, and the console stdout identical to
+`JSON.stringify(JSON.parse(<json dry-run stdout>), null, 2) + '\n'`; every real run exited `0`.
+
+| Row | console exit | first stdout line | stdout lines |
+|-----|--------------|-------------------|--------------|
+| agentExecute | 0 | `{` | 20 (launch plan: `run`, `bootstrap`) |
+| dnaSet, dnaAdd, dnaUpdate, dnaRemove | 0 | `{` | 10 each |
+| memoryAdd, memorySubmit, memoryApprove, memoryReject, memoryDeprecate, memoryPark | 0 | `{` | 10 each |
+| directiveCreate, directiveAssign, directiveRemove | 0 | `{` | 10 each |
+| workflowStart, workflowEnd | 0 | `{` | 10 each |
+| workflowFinalize, workflowAdopt, workflowRekey | 0 | `{` | 8 each (`paths: []`, `diff: ""`) |
+| workflowCreate, workflowRemove | 0 | `{` | 11 each |
+| memoryAmend | 0 | `{` | 10 |
+
+No console renderer crashes, so there is no red-first case and no renderer fix (the routing is `src/cli/registrar.ts`:
+a dry-run plan goes to `renderSuccess`'s indented JSON, `spec-008` §2 "console prints indented JSON for now").
+
+**What qa pins for AC 2** — file `test/cli/dry-run.integration.test.ts`, inside the existing per-row
+`it.each(Object.entries(ROWS))`, **after** the JSON dry run and its `assertPersistenceUnchanged`, **before** any real
+run (a separate `it.each` would run after the real runs have consumed each row's document, so it cannot be one):
+`const consoleRun = wingfoil(repo, [...row.args, '--dry-run']);` then
+`expect({ status: consoleRun.status, stderr: consoleRun.stderr }).toEqual({ status: 0, stderr: '' })`,
+`expect(consoleRun.stdout).toBe(JSON.stringify(plan, null, 2) + '\n')` (the shape
+`test/cli/workflow-console-dry-run.integration.test.ts` pins for `start`, `rekey`, `adopt`, `finalize`, and which held for
+all 22 rows above), and `assertPersistenceUnchanged(repo, before, 'console dry run')`. No new fixture: the rows,
+`buildFixture()`, `wingfoil()`, `snapshotPersistence` / `assertPersistenceUnchanged` as they are. The header comment's
+"For each row, three things are asserted" gains the console point; the test title may say "in both formats". The
+registry-completeness test is not changed: a row added later gets the console check by construction.
+
+**Files to touch:** `test/agent/manifest.test.ts`, `test/cli/dry-run.integration.test.ts` (qa, red); this task file
+(notes). Nothing under `src/`, `.wingfoil/`, `docs/` outside this file. **`version:` bumps:** none (no file touched
+carries one). **`.wingfoil/`:** unchanged, so no `npm run check:mcp` is owed. **Spec amendments:** none.
+
+**Tests that pin the behaviour this task touches (W2-R4 (6)).** No behaviour changes. `grep -rln
+"dry-run.integration\|workflow-console-dry-run" test scripts src docs/cli-reference.md .wingfoil` →
+`test/core/workflow-console-dry-run-render.test.ts`, `test/storage/write-and-commit.test.ts`,
+`test/cli/registrar-dry-run.test.ts`, `src/core/dry-run.ts`, each only citing the file in a comment (`grep -n` on each);
+`grep -rln "manifest.test" test scripts .wingfoil` → nothing; `grep -rn "is not legal here: it is legal in" test` outside
+`test/agent/manifest.test.ts` → nothing. No workflow is changed, so no phase or step list is pinned anywhere.
+
+**Existing tests of the files changed**, run at the branch head (targeted, no slot):
+`npx jest test/agent/manifest.test.ts test/cli/dry-run.integration.test.ts test/cli/workflow-console-dry-run.integration.test.ts --maxWorkers=2`
+→ `Test Suites: 3 passed, 3 total`, `Tests: 132 passed, 132 total`, `Time: 42.054 s`;
+`npx jest test/cli/dry-run.integration.test.ts --maxWorkers=2` alone → `Tests: 35 passed, 35 total`, `Time: 44.974 s`
+(the global-setup build included). `git status --porcelain` empty after each.
+
+**Runtime cost.** The rows run serially in one test (one worker whatever `--maxWorkers`), so the console dry run adds
+its spawns to the file's wall time: measured in the scratch reproduction, the 22 console dry runs took 10,113 ms in all
+(`agent execute` about 1.0–1.3 s, the others 0.2–0.6 s), about +10 s on a file that takes about 45 s today, under a load
+average of about 4. The full suite gains the same 10 s on one worker.
+
+**Decisions for the approver.**
+- D1 — AC 2 pins the console stdout as exactly the indented JSON plan (as `workflow-console-dry-run` does), not only
+  "a non-empty plan" (the bug's wording). Recommendation: exact, since all 22 rows print it today and `spec-008` §2 says
+  so; a later console renderer for plans would then update this one assertion.
+- D2 — the four console cases of `test/cli/workflow-console-dry-run.integration.test.ts` (`task-295`) stay where they
+  are (the bug lets either be). Recommendation: keep them: they run on a different fixture (`rekey-fixture`, a second
+  instance) and are the plan-shape reference `test/core/workflow-console-dry-run-render.test.ts` cites.
+- D3 — the two `--force` warning tests of the same file assert the console exit and stderr but not the plan on stdout.
+  Recommendation: leave them: `dnaAdd` and `directiveAssign` now get the console plan checked through their rows, and
+  the warning tests' subject is the warning.
+
+**Candidate findings:** none. **Risks for the other open `w2` tasks:** `task-325` (`src/core/workflow-diagnostics.ts`,
+`src/cli/suggest.ts`, `src/core/closest-name.ts`) and `task-326` (`scripts/publish-staging.cjs` and its test) share no
+file with this task; the only coupling is that a mutating operation added by any task must get a row here, which the
+completeness test already enforces.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
