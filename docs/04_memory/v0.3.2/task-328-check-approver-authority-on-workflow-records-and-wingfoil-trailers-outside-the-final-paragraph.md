@@ -248,6 +248,14 @@ Heavy gates ran after `waitslot.sh` (the waits were long: other tasks held the s
 - `docs/04_memory/bugs/bug-391-check-governance-does-not-report-wingfoil-instance-wingfoil-step-or-wingfoil-phase-lines-outside-a-commit-s-final-trailer-paragraph.md` (uncommitted, its `### Retrospective` filled): `memory amend` with `--reason "Records in the Retrospective that task-328 closes the bug with the trailer-paragraph check, which covers every non-merge commit and every WingFoil- key, a wider reach than the five keys the Expected Behavior lists."`
 - `docs/04_memory/bugs/bug-444-the-governance-check-does-not-verify-the-authority-of-an-approver-line-on-a-workflow-record-so-a-forged-finalize-adopt-or-rekey-passes.md` (uncommitted, its `### Retrospective` replaced): `memory amend` with `--reason "Records in the Retrospective that task-328 closes the bug with the workflow-record-authority check, which judges an Approver: line when a record has one and leaves a mandatory line on an approval: phase to v0.4."`
 
+### review fixes (developer, 2026-10-31)
+
+PATH guard: `command -v wingfoil` -> `/home/robypomper/Workspaces/.wf2-wt/devloop-kit/bin/task-328/wingfoil`; `wingfoil --version` -> `0.3.1 (f741cd92318bf81fe7960b031a20839c50104641)`.
+- F2: the header of `scripts/check-governance.cjs` now states that a commit's `trailer-paragraph` findings follow its other findings of the rule, in the order the keys are written (the comparator of `checkGovernance`). `sed -n 92,94p scripts/check-governance.cjs` shows the clause.
+- bug-444 pending amend extended: its Retrospective now says the Expected Behavior is met for `wf()` commits and the three `workflow:` records only, the rest being `bug-467`, and the release-health P01/P05 effect being `bug-466`. `scripts/release-health/` is not touched. The `--reason` of the bug-444 amend under `### Pending amendments (approver)` is replaced by: `Records in the Retrospective that task-328 closes the bug for wf() commits and the three workflow records with the workflow-record-authority check, and points to bug-467 for every other commit carrying an Approver: line and for a mandatory line on an approval: phase.`
+- T4: `git log --first-parent --no-merges --format=%h 47cdaee73..HEAD -- <the five red files>` -> empty.
+- Gates: `npx jest test/cli/check-governance test/directives/git-conventions.test.ts test/lint --maxWorkers=2` -> `Test Suites: 20 passed, 20 total`, `Tests: 313 passed, 313 total`; `npm run -s lint` -> exit 0; `node scripts/check-governance.cjs --base origin/release/0.3` -> `gated: 0 findings on 0 commits`, `history: 0 findings on 0 commits`. The full suite was not re-run (a comment and notes changed).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
