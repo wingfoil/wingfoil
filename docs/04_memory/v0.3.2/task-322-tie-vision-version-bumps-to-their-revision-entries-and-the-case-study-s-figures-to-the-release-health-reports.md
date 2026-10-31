@@ -221,6 +221,16 @@ test/docs/llms-txt.test.ts test/docs/vision-default-machine-text.test.ts --maxWo
 changes in `check-governance.cjs` does not move them. `task-328`'s new trailer-paragraph check reads commits: this
 branch's commits end with one trailer paragraph.
 
+### design gate (approver, 2026-10-31)
+
+Design gate approved by the approver on 2026-10-31T12:06:49+01:00, in the orchestrator's chat:
+- D1 — (a): AC 1's rule judges only the vision documents that keep a `## Revision history`; no vision file changes.
+- D2 — (a): the test reads an explicit list of the four reports (v0.1, v0.2, v0.3, v0.3.1).
+- D3 — yes: README.md, docs/site.yaml (`about`, 1.2 → 1.3) and llms.txt are corrected in this task.
+- D4 — yes: the design's candidate finding (no hand-off makes the case study take a newly committed release-health report) is filed as a
+  bug by the orchestrator, release v0.4; it is outside this task.
+- D5 — yes: bug-383's Steps to Reproduce step 1 is corrected by an amend prepared in the task and recorded at the approve.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
