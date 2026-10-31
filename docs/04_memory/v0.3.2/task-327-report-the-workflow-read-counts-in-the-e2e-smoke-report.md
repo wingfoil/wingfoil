@@ -404,6 +404,21 @@ after `waitslot.sh`, `npm test -- --maxWorkers=2` → `Test Suites: 537 passed, 
 `npm run docs:api`, `npm run lint`, `npm run typecheck` each exit 0. Coverage was not re-run (skipped; the previous run was 99.35 | 97.51 |
 98.15 | 99.7 and this change adds code with tests). The task stays `in-review`; no new submit.
 
+### re-review fixes (developer, 2026-10-31)
+
+One follow-up of the re-review, commit `afce1eb1e` (`fix(e2e-smoke): task-327 — the report section words a non-object answer and an
+empty list as the checks do (re-review)`); the red's files untouched.
+- The report section still said `stdout is not valid JSON` for an exit-0 answer that is JSON but no object, while the check detail
+  says `stdout is not a JSON object`. A read result now carries an optional `notObject: true` (only when true, so the red's `toEqual`
+  pins hold; typed in `scripts/e2e-smoke.d.cts`); the list and status rows say `stdout is not a JSON object`, and a show row appends
+  `; stdout not a JSON object: <names>`. A text answer keeps `stdout is not valid JSON` (the red's case).
+- The list row of the 0-workflows case now reads `0 workflows: a candidate repository always has workflows`, as the failed check does.
+- Both pinned in `test/cli/e2e-smoke-workflow-reads-edges.test.ts` (two new tests).
+
+Commands: `npx jest test/cli/e2e-smoke test/lint --maxWorkers=2` printed `Test Suites: 20 passed, 20 total`, `Tests: 279 passed, 279 total`;
+after `waitslot.sh`, `npm test -- --maxWorkers=2` printed `Test Suites: 537 passed, 537 total`, `Tests: 9458 passed, 9458 total`;
+`npm run docs:api`, `npm run lint`, `npm run typecheck` each exit 0. Coverage and `check:mcp` were not re-run (skipped; no `.wingfoil/` file changed).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
