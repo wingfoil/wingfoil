@@ -247,6 +247,14 @@ files. If `task-326` lands first, nothing here changes. `task-322` (`test/docs/`
 this task. The wave-checks smoke of `w2` (`--candidate`) gains the section and three checks once this task is merged,
 and fails if the repository's configuration carries an error diagnostic at that point (D1 (b)).
 
+### design gate (approver, 2026-10-31)
+
+Design gate approved by the approver on 2026-10-31T12:06:49+01:00, in the orchestrator's chat:
+- D1 — (b): the three `[repository]` reads gate the smoke (a non-zero exit, a stdout that is not JSON or an error diagnostic fails it).
+- D2 — yes: e2e-smoke.yaml's gate description (1.8 → 1.9) and the E2E Smoke prose of .wingfoil/WORKFLOW.md name the reads.
+- D3 — (a): the reads run after `--help`/`--version` and before the templates.
+- D4 — yes: a `--repository <path>` flag, which `--candidate` defaults to the checkout.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
