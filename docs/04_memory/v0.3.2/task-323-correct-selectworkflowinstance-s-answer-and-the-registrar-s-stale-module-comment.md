@@ -225,6 +225,19 @@ this task does not touch), `task-328` (`scripts/check-governance.cjs`, `git-conv
 common. `task-325` (`src/core/workflow-diagnostics.ts`, `test/core/`): not touched here; `workflow-list-show.ts` imports
 it and is not touched either. Merge order free.
 
+### design gate (approver, 2026-10-31)
+
+Design gate approved by the approver on 2026-10-31T17:44:51+01:00, in the orchestrator's chat (D1 clarified by the approver on
+request):
+- D1 — (a) with a notice: the signature stays `selectWorkflowInstance(deduction, ref?, snapshot?)`, the snapshot an optional third
+  argument, so existing calls keep compiling; with the snapshot the answer is spec-017 §10's. The TSDoc says that without the snapshot
+  the answer is not reliable and that the snapshot will be mandatory (option (b)) in v0.4; the CHANGELOG says the same at this patch's
+  user-docs. The breaking signature goes to the minor, not to the patch.
+- D2 — (a): the function moves to src/core/workflow-next.ts beside `unresolvedRef`; the name exported by the package's `main` is unchanged.
+- D3 — (a): the same false claim as bug-396 in the comments of src/mcp/dna-resource.ts, workflow-resource.ts and mcp/index.ts is fixed
+  in this task (comments only).
+- D4 — (a) yes: the stale "empty today" comment at test/core/builtin-adapter-writers.test.ts:9 is fixed.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
