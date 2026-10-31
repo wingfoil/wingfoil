@@ -194,6 +194,59 @@ task-282 cases use. Case (d) reads the two committed transcripts as they are (`r
 - `npx jest test/lint --maxWorkers=2` with the files in place → `Test Suites: 13 passed`, `Tests: 153 passed`.
 - `grep -nP` for invisible characters on both files → no hit. `npx eslint` on both files → no output.
 
+### green (developer, 2026-10-31)
+
+Run in the task worktree, every Bash call under the task's PATH shim; `command -v wingfoil && wingfoil --version`
+printed the shim's wingfoil and `0.3.1 (bb38692731fbb99843c443f491b3bdb7fb695d87)`. `git rev-list --count
+HEAD..release/0.3` printed `0` at the start and at the end of refactor: no merge needed.
+
+`checkTranscript` (`scripts/publish-staging.cjs`) now refuses the first non-empty line (after `trimEnd`) that does
+not start with `LOG_PREFIX`, after the closing-line check and before the failure scan, with the reason
+`line <n> does not start with "[publish:staging] ": "<line>"` (rulings D1 (a), D2). Its docstring and the header
+paragraph of the script say so. `scripts/publish-staging.d.cts` is untouched (its comment lists no refusal);
+`scripts/e2e-smoke.cjs` is untouched.
+
+red to green: `npx jest test/cli/staging-rehearsal.test.ts test/cli/evidence-only-tag.test.ts --maxWorkers=2` printed
+`Tests: 6 failed, 44 passed, 50 total` at the red commit (red notes) and `Test Suites: 2 passed, 2 total`,
+`Tests: 50 passed, 50 total` after the change. Green commit: `fix(scripts): task-326 — checkTranscript judges every
+non-empty line, not only the prefixed ones (bug-382)`.
+
+| AC | Status |
+|----|--------|
+| AC 1 (red-first) | met: the six red cases pass; the two committed transcripts still pass (case (d)) |
+| AC 2 (characterization) | spec-015 §3 amendment prepared, uncommitted (below) |
+
+### refactor (developer, 2026-10-31)
+
+Nothing to restructure: the change is one `find` and one `return` in a function of that shape. Gates, with the
+spec-015 amendment in the working tree, the heavy ones after `waitslot.sh`, `--maxWorkers=2`, foreground or tracked:
+- `npm run test:coverage -- --maxWorkers=2` printed `Test Suites: 541 passed, 541 total`, `Tests: 9547 passed, 9547
+  total` (this includes the `test/docs/` parity suites and `test/docs/name-resolvability.test.ts`, which reads
+  spec-015) and `All files | 99.35 | 97.47 | 98.2 | 99.7` (statements, branches, functions, lines), exit 0.
+- `npm run -s lint`, `npm run -s docs:api`, `npm run -s typecheck` each printed nothing, exit 0.
+- `test/docs/cli-reference.test.ts` is covered by the full suite above; no CLI, help or cli-reference change.
+- T4: `git log --first-parent --no-merges --format=%h c5850198e..HEAD -- test/cli/staging-rehearsal.test.ts
+  test/cli/evidence-only-tag.test.ts` printed nothing.
+
+### self-review (developer, 2026-10-31)
+
+- AC 1: the reason string in the code is the one the red pins exactly (green run above); `checkEvidenceOnly` returns
+  `checkTranscript`'s reason, pinned by the D3 case. Absence of a side effect: whitespace-only and CRLF lines still
+  pass (red characterization case `D1: whitespace-only lines and CRLF line ends still pass`, passing).
+- The design's claim that neither committed transcript holds an unprefixed line is pinned by case (d), which passed
+  in the full run.
+- Same class in files touched: `grep -n "VERSION_LINE_RE\|VERSION_CHECK_RE" scripts/publish-staging.cjs` shows both
+  regexes anchor on `[publish:staging]` themselves; no other check reads a line without the prefix.
+- AC 2: the amendment names only `LOG_PREFIX` and the two test paths; the
+  name-resolvability suite passed with it in the tree.
+
+### Pending amendments (approver)
+
+- `docs/04_memory/design/specs/spec-015-packaging-publishing.md` (uncommitted): the §3 strictness sentence now also
+  lists a non-empty line without the prefix, and a new `**Revision (2026-10-31, task-326)**` note follows the task-282
+  one. Proposed `--reason`: "Record that --check-transcript judges every non-empty transcript line, not only the
+  prefixed ones (task-326, bug-382), by a §3 sentence and a dated Revision note edited in place."
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -201,3 +254,6 @@ task-282 cases use. Case (d) reads the two committed transcripts as they are (`r
      printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
      Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
      here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+
+- None. No friction: the design's prototype matched the implementation.
+
