@@ -44,6 +44,151 @@ pointer to the upgrade section of the user guide.
        reject's `Reason:` (read with `wingfoil memory history <task-id>`), each with the command that
        shows it resolved and what that command printed; then what else changed on the next pass. -->
 
+### design (architect, 2026-10-31)
+
+**Base and reads.** Branch at `f5e3b9dcd` (the start and bug-sync commits on top of `8683200f7`). PATH guard: `command
+-v wingfoil` → the task's PATH shim, `wingfoil --version` → `0.3.1 (8683200f78877518cbec3133061d21a919dc4301)`. Read:
+`bug-394`, `task-321`'s Execution Notes (dl-015: it edited `docs/user-guide.md` §1–§4 and the init subject only, not
+§12; its design gate is recorded in that file), `spec-003` (status `approved`; § "Diagnostics" table row
+`E_WORKFLOW_INCLUDE_UNRESOLVED`, line 751, states the rule only, no message: `grep -n E_WORKFLOW_INCLUDE_UNRESOLVED
+docs/04_memory/design/specs/spec-003-workflows-yaml-schema.md` → lines 719 and 751), `spec-008` §1 (Levenshtein ≤ 2,
+line 57; names `src/cli/suggest.ts`, line 61) and `spec-005` §3.1 (the command `hint:` wording). The P4.16 BDD feature
+has no scenario on an unresolved include (`grep -n "Scenario" docs/02_requirements/02_bdd/features/p4-workflow/
+P4.16-include-composition.feature` → lines 9, 14, 19: iterate, plain include, zero matches): no BDD change owed.
+
+**Where the change lives.** One branch of `workflowFileDiagnostics`, `src/core/workflow-diagnostics.ts:289–294`: today
+`include '<v>' names no loaded workflow`, plus ` (a phase include is a workflow name, not a file path)` when
+`looksLikePath` (line 67: a `/` or a `.yaml`/`.yml` suffix). The candidates are the declared names already indexed in
+`index.byName` (`indexWorkflowFiles`, line 82); the check runs only when `index.namesComplete`, which does not change.
+
+**The closest-name helper exists and is reused, not rewritten.** `grep -rn "closest\|levenshtein" src` → only
+`src/cli/suggest.ts` (`levenshtein`, `SUGGESTION_MAX_DISTANCE = 2`, `closestCommand`: sorted unique candidates, the
+token itself skipped, nearest within distance 2, a tie to code-unit order), used by `src/cli/program.ts:394, 511`.
+`src/core` imports nothing from `src/cli` (`grep -rn "from '../cli" src/core src/workflow src/validation` → nothing),
+and core is the behaviour both CLI and MCP share (REQ-SYS-05, `dna.yaml` module `core`). So the helper moves down
+(D1): `levenshtein`, `SUGGESTION_MAX_DISTANCE` and the matcher (as `closestName`) into a new `src/core/closest-name.ts`;
+`src/cli/suggest.ts` keeps its three exports, `closestCommand` delegating to `closestName` and `levenshtein` /
+`SUGGESTION_MAX_DISTANCE` re-exported, so `test/cli/suggest.test.ts` and `program.ts` are unchanged. Not exported from
+`src/core/index.ts` (imported by path, as `src/cli` already does for `../core/registry`).
+
+**Rule (D2).** With `v` the unresolved include value:
+- the probe is `v` itself, or, when `looksLikePath(v)`, its last `/`-segment without a `.yaml`/`.yml` suffix;
+- the suggested name is the probe when a loaded file declares it (exact basename match), otherwise
+  `closestName(probe, [...index.byName.keys()])` — Levenshtein distance ≤ 2 (`spec-008` §1's threshold), every
+  declared name a candidate (includable or not: a non-includable suggestion then meets its own
+  `E_WORKFLOW_NOT_INCLUDABLE`);
+- the message is `include '<v>' names no loaded workflow`, then ` (a phase include is a workflow name, not a file
+  path)` when path-shaped (kept as today), then `: write 'include: <name>'` when a name is suggested, then
+  `; see 'Upgrading from 0.2.x' in docs/user-guide.md` when path-shaped (the 0.2.x shape is the only one the
+  upgrade section covers, D3).
+
+**Prototype** (applied to the worktree, built with `npm run -s build`, measured, then reverted with `git checkout --
+src/core/workflow-diagnostics.ts` and the new file removed; `git status --short` → clean; the diff kept outside the
+repository). In scratch repositories outside the worktree (`git init`, local identity), code build `node
+<worktree>/dist/cli.js` (`$W`): `$W init --template Scrum --no-interactive` → exit `0`, `sw-life-cycle.yaml` line 14
+`include: scrum-delivery`; the line rewritten and committed, `$W workflow list` printed on stderr, exit `1` each:
+- `workflows/custom/scrum-delivery.yaml` → `error: E_WORKFLOW_INCLUDE_UNRESOLVED phases[2].include
+  (workflows/custom/sw-life-cycle.yaml): include 'workflows/custom/scrum-delivery.yaml' names no loaded workflow (a
+  phase include is a workflow name, not a file path): write 'include: scrum-delivery'; see 'Upgrading from 0.2.x' in
+  docs/user-guide.md`;
+- `scrum-delivery.yaml` → the same tail, `include 'scrum-delivery.yaml' …: write 'include: scrum-delivery'; see …`;
+- `scrum-deliver` → `include 'scrum-deliver' names no loaded workflow: write 'include: scrum-delivery'`;
+- `workflows/custom/ghost.yaml` → `include 'workflows/custom/ghost.yaml' names no loaded workflow (a phase include is a
+  workflow name, not a file path); see 'Upgrading from 0.2.x' in docs/user-guide.md`;
+- `ghost` → `include 'ghost' names no loaded workflow` (unchanged);
+- restored to `include: scrum-delivery` → exit `0`.
+The Kanban scaffold gave the same five shapes with `kanban-delivery`. On the Scrum path case `workflow status`,
+`workflow show sw-life-cycle` and `workflow next` printed the same first line, exit `1` each; `workflow list --format
+json` → `{"error":"E_WORKFLOW_INCLUDE_UNRESOLVED … in docs/user-guide.md"}`, exit `1`. With the prototype in place,
+`npx jest test/core/workflow-diagnostics.test.ts test/cli/suggest.test.ts test/core/loaders.test.ts
+test/core/builtin-workflow-loader-rules.test.ts test/core/workflow-executor-cadence.test.ts --maxWorkers=2` →
+`Tests: 1 failed, 138 passed, 139 total`: the one failure is `workflow-diagnostics.test.ts` › "E_WORKFLOW_INCLUDE_
+UNRESOLVED — a path-shaped phase include (bug-144, bug-145)", whose expected message lacks the new tail.
+
+**Tests and documents that pin the changed message** (W2-R4 (6)): `grep -rn "E_WORKFLOW_INCLUDE_UNRESOLVED\|names no
+loaded workflow\|not a file path" test docs src scripts .wingfoil README.md CHANGELOG.md`, Memory and plans aside →
+`test/core/workflow-diagnostics.test.ts:191–218` (two cases: the path-shaped one changes, `ghost` stays),
+`docs/user-guide.md:707` (§12 quotes today's full message: must change, D4), `CHANGELOG.md:206, 304` (name the code,
+not the message: unchanged; the changelog is the `user-docs` phase's), `src/core/workflow-core-checks.ts:277` and
+`src/core/workflow-list-show.ts:318` (comments naming the code: unchanged). No e2e-smoke script, example or golden
+quotes it (`scripts`, `docs/examples` in the grep above → nothing). `grep -rln "suggest\b\|closestCommand\|levenshtein"
+test` → `test/cli/suggest.test.ts`, which must keep passing unchanged through the re-exports. In Memory, `spec-003`
+(row, no message) and the v0.3 task/bug notes quote it as history only. No workflow is changed, so no test pinning a
+phase list, step list or count is affected.
+
+**AC classification and what qa must pin.** One AC, red-first: today the message carries neither a name to write nor
+the section (`grep -n "a phase include is a workflow name" src/core/workflow-diagnostics.ts` → line 291, the only hint).
+All pins call `loadWorkflowsYaml(repo)` through the existing `diagnosticsOf` / `writeWorkflows` helpers of
+`test/core/workflow-diagnostics.test.ts` and assert the whole diagnostic object (`code`, `severity: 'error'`, `file`,
+`path`, `message`) with `toEqual`; no new export is imported by the red, so no TS2305/TS2307 red is expected — the
+reds are assertion failures.
+
+| # | Case | Fixture | Pinned `message` |
+|---|------|---------|------------------|
+| (a) | path-shaped, basename declared — the bug's shape | real scaffold: every file of `templateScaffold(resolveTemplate('Scrum')!)` written with `writeFixtureFile`, then `sw-life-cycle.yaml`'s `include: scrum-delivery` replaced by `include: workflows/custom/scrum-delivery.yaml`; `file` `workflows/custom/sw-life-cycle.yaml`, `path` `phases[2].include` | `include 'workflows/custom/scrum-delivery.yaml' names no loaded workflow (a phase include is a workflow name, not a file path): write 'include: scrum-delivery'; see 'Upgrading from 0.2.x' in docs/user-guide.md` — and the same with Kanban / `kanban-delivery` (an `it.each`) |
+| (b) | existing test line 191 (`workflows/custom/loop.yaml`, `loop` declared) | unchanged fixture; qa updates its expected message in red | `… not a file path): write 'include: loop'; see 'Upgrading from 0.2.x' in docs/user-guide.md` |
+| (c) | path-shaped, nothing near | as (a) with `workflows/custom/ghost.yaml` | `include 'workflows/custom/ghost.yaml' names no loaded workflow (a phase include is a workflow name, not a file path); see 'Upgrading from 0.2.x' in docs/user-guide.md` |
+| (d) | a name within distance 2 | as (a) with `scrum-deliver` | `include 'scrum-deliver' names no loaded workflow: write 'include: scrum-delivery'` |
+| (e) | a name farther than 2 | existing test line 208 (`ghost`) | unchanged `include 'ghost' names no loaded workflow` (characterization: already passes) |
+| (f) | tie, deterministic | minimal fixture in the file's style: workflows `aab`, `aac` (`kind: sub`) and `main` including `aaa` | `include 'aaa' names no loaded workflow: write 'include: aab'` (code-unit order), the same with the manifest listing `aac` before `aab` |
+| (g) | the user guide states what the code says | in `test/docs/user-guide-scaffold.test.ts` (the docs/code parity suite of the guide): read `docs/user-guide.md`; it contains a heading matching `/^## \d+\. Upgrading from 0\.2\.x$/m` (characterization, passes today), and it contains the `formatDiagnostic` line of case (a) produced by the code (red today: §12 quotes the old message) — import `formatDiagnostic` from `src/validation` and build the diagnostic from case (a)'s fixture rather than copying the string, so the guide and the code cannot drift | — |
+
+Cases (a), (b), (c), (d), (f) and the second half of (g) fail before green; (e) and (g)'s heading are characterization.
+`npx jest test/lint --maxWorkers=2` before the red commit (W1-R4 (6)).
+
+**Files expected to change.** New `src/core/closest-name.ts`; `src/cli/suggest.ts` (delegation and re-exports, module
+comment); `src/core/workflow-diagnostics.ts` (the branch above and, if useful, a small `includeProbe` helper next to
+`looksLikePath`); `docs/user-guide.md` §12 (the quoted message, line 707, D4); tests `test/core/workflow-diagnostics.
+test.ts`, `test/docs/user-guide-scaffold.test.ts` (red), and optionally a developer-owned `test/core/closest-name.
+test.ts`. Not touched: `src/core/index.ts`, `src/core/workflow-next.ts` (task-323's area), `.wingfoil/`, `CHANGELOG.md`.
+
+**Version bumps.** None: `docs/user-guide.md` has no `version:` header (`grep -n "version" docs/user-guide.md | head`
+→ only body text, lines 59, 75, 138, 203); no configuration file changes, so no `npm run check:mcp` proof is owed.
+
+**Existing tests run** (in the worktree, clean tree, `--maxWorkers=2`, no slot): `npx jest test/core/workflow-
+diagnostics.test.ts test/cli/suggest.test.ts test/cli/program.test.ts test/core/loaders.test.ts test/core/builtin-
+workflow-loader-rules.test.ts` → `Test Suites: 5 passed`, `Tests: 137 passed, 137 total`; the suites naming
+`docs/user-guide.md` plus the API-docs gate, `npx jest $(grep -rln "user-guide.md" test) test/docs/api-docs.test.ts
+--maxWorkers=2` (llms-txt, release-health measure, e2e-smoke, user-guide-scaffold, pages-render, api-docs) → `Test
+Suites: 6 passed, 6 total`, `Tests: 185 passed, 185 total`.
+
+**Spec amendments.** `spec-003` § "Diagnostics", the `E_WORKFLOW_INCLUDE_UNRESOLVED` row (line 751): the rule is
+unchanged, but several rows of the same table declare their message (`E_INVALID_FORMAT`, `E_WORKFLOW_INVALID_KIND`),
+and this task gives this one a contract a user acts on. Proposed (D5): the developer prepares, uncommitted, the row's
+Rule extended with the message shape of D2 and a Revision note naming this task and `bug-394`. No contradiction with
+an approved spec or a ready DL found: `spec-008` §1's distance applies to commands; reusing it here is a choice (D2),
+not a conflict.
+
+**Decisions for the approver** (design gate):
+
+- **D1 — where the closest-name helper lives.** (a) Move `levenshtein` and the matcher into `src/core/closest-name.ts`,
+  `src/cli/suggest.ts` delegating (one implementation, core does not depend on the CLI); (b) import
+  `src/cli/suggest.ts` from `src/core` (inverts the core → CLI direction the MCP surface relies on); (c) a second copy
+  in `src/core`. **Recommendation: (a).**
+- **D2 — distance and candidates.** Levenshtein ≤ 2 (`spec-008` §1's threshold, the one helper), computed on the
+  path's basename without `.yaml`/`.yml` for a path-shaped value, an exact basename match first, every declared name a
+  candidate, a tie to code-unit order. **Recommendation: yes.** Alternative: only includable names as candidates
+  (hides a name the user may well have meant).
+- **D3 — when the upgrade pointer is printed.** (a) Only for a path-shaped value (the 0.2.x shape §12 covers);
+  (b) on every unresolved include. **Recommendation: (a)**: a typo is not an upgrade problem.
+- **D4 — how the section is named, and the guide's quote.** The message names the heading text without its number
+  and the repository path: `see 'Upgrading from 0.2.x' in docs/user-guide.md` (a renumbering of the guide does not
+  stale it; the npm package ships only `dist` and `README.md`, `node -e "console.log(require('./package.json').files)"`
+  → `[ 'dist', 'README.md' ]`, so a site URL with an anchor would tie the message to the site's slug rules and to a
+  version). §12's quoted error line is updated in this task to the new output (a quote of the program's output must be
+  true); test (g) ties the two. Alternative: the site URL `https://wingfoil.github.io/wingfoil/…#12-upgrading-from-02x`.
+  **Recommendation: the heading text and path, and the guide updated here.**
+- **D5 — `spec-003` amend.** Prepare the row's message shape and a Revision note as a pending amendment.
+  **Recommendation: yes** (proposed `--reason`: "Record the message shape of E_WORKFLOW_INCLUDE_UNRESOLVED that task-325
+  ships: the name to write and the upgrade section of the user guide (bug-394).").
+
+**Risks for the other open w2 tasks.** No file overlap (`git -C <worktree> diff --stat release/0.3...HEAD` per task):
+`task-323` touches `src/core/workflow-deduction.ts`, `src/mcp/registrar.ts` and their tests, not
+`workflow-diagnostics.ts`, `workflow-next.ts` or `src/core/index.ts` from this task's side; `task-326`
+(`scripts/publish-staging.cjs`) and `task-328` (`scripts/check-governance.cjs`, git-conventions) are disjoint. The
+user guide: any later task quoting `E_WORKFLOW_INCLUDE_UNRESOLVED` meets test (g). The release's `user-docs` phase
+names the message change in `CHANGELOG.md`.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
