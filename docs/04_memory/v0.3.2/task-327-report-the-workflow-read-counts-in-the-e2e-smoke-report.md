@@ -255,6 +255,40 @@ Design gate approved by the approver on 2026-10-31T12:06:49+01:00, in the orches
 - D3 — (a): the reads run after `--help`/`--version` and before the templates.
 - D4 — yes: a `--repository <path>` flag, which `--candidate` defaults to the checkout.
 
+### red (qa, 2026-10-31)
+
+**Red commit:** `7eca816c94cac25431e4597f37fa5f2d0fc000b1` (branch head before it: `381f21888`; `git rev-list --count HEAD..release/0.3` -> `0`, no merge needed). The developer and reviewer measure T4 from it.
+
+**Files** (tests and fixtures only; no `src/`, no `scripts/`, no `.d.cts`):
+- `test/cli/e2e-smoke-workflow-reads.test.ts` (24 tests).
+- `test/fixtures/workflow-reads/` — copies of real output, each with its producing command (code build `node dist/cli.js`, stamp `0.3.1 (0f1ab379...)`):
+  - `repo-list.json`: `workflow list --all --format json` in this worktree, cut to 2 of 27 workflows (`adr-ingest`, `agent-docs`) and the first 2 of 65 diagnostics, verbatim.
+  - `repo-show-adr-ingest.json`, `repo-show-agent-docs.json`: `workflow show <name> --format json` in this worktree; `workflow.phases` emptied, diagnostics cut to the same 2.
+  - `scrum-status.json`: `workflow status --format json` in a scratch `git init` + `wingfoil init --template Scrum` project, verbatim (every list empty, `message: "no open workflows"`).
+  - `show-nope.stderr`: stderr of `workflow show nope --format json` (exit 1, stdout 0 bytes), verbatim.
+  - `broken-config.stderr`: stderr of `workflow list --all --format json` (exit 1, stdout 0 bytes) in that Scrum project after a commit adding `distinct_from: [nope]` to a phase of `.wingfoil/workflows/custom/scrum-delivery.yaml`.
+  - `list-help.stdout.txt`: stdout of `workflow list --help` (exit 0), a real answer that is not JSON.
+- The new exports are declared locally in the test (`require` + a typed shape, as `e2e-smoke-candidate.test.ts` does) because `scripts/e2e-smoke.d.cts` is a production file: the reds are run-time failures, `npx tsc --noEmit -p tsconfig.json` reports no error. The developer still writes `workflowReads`, `WorkflowReads` and the other types, `SmokeOptions.repository`, `SmokeReport.workflowReads` and the `parseSmokeArgs` return field in the `.d.cts`.
+
+**Per-AC mapping** (AC 1, red-first; design cases (a)-(g)):
+- (a) `workflowReads` on the compiled CLI in a fresh Scrum project: `workflowReads(invoke, root) > on the compiled CLI ... records three ok checks ...`. Fails: `TypeError: smoke.workflowReads is not a function`.
+- (c) fake invoke with the fixtures (list order, cwd, stop after a failing read, broken config detail, non-JSON, the `1 error` detail, refused show prefixed by the name, failing status): 6 tests in `through a fake invoke answering with real output`. Each fails with the same TypeError.
+- (b) `formatReport` section: `writes the section after the checks table, with the exact heading, intro, header and three rows` fails `expect(received).toContain(expected)` (Expected substring starts at `## Repository checks on the candidate (workflow reads)`); `gives the same bytes for the same input` fails the same way; the five `through workflowReads on real answers` tests fail with the TypeError, except `renders a list with no diagnostics without a colon ...` which fails `Expected: "| `wingfoil workflow list --all --format json` | 0 | 5 workflows; 0 diagnostics, **0 errors** |" Received: undefined`.
+  Characterization (passes on first run): `is unchanged without workflowReads: no section, and it still ends with the checks table`.
+- (d) `runSmoke` with `repository` and a stub: `runs the three reads right after --help and before the first template` and `stops at a failing read, before any template` fail `expect(received).toEqual(expected)` (the `[repository] ...` labels are missing from the received list). Characterization (passes on first run): `adds no [repository] check and no workflowReads key without repository`.
+- (e) `parseSmokeArgs`: three tests fail with `unknown or incomplete argument: --repository`.
+- (f) the script end to end: fails `Expected: 1 Received: 2` (exit 2, the flag is unknown).
+- (g) `e2e-smoke.yaml`: `is at least 1.9, with a history entry for task-327` fails `Expected: >= 1.9 Received: 1.8`; the gate description test fails `Expected substring: "workflow show"`.
+- D1 (b) is pinned by (c) (`ok: false` on a non-zero exit, non-JSON and an error diagnostic) and (d) (the smoke stops, `report.ok` false); D3 (a) by (d) (checks 2-4 are the reads, check 5 is `[Scrum] wingfoil init --template Scrum`).
+
+**Run commands and counts.**
+- `npx jest test/cli/e2e-smoke-workflow-reads.test.ts --maxWorkers=2` -> `Tests: 22 failed, 2 passed, 24 total` (the two passes are the characterizations above).
+- `npx tsc --noEmit -p tsconfig.json` -> no output, exit 0.
+- `npx jest test/lint --maxWorkers=2` with the files in place -> `Test Suites: 13 passed, 13 total`, `Tests: 153 passed`.
+- Invisible-character grep on the test and the fixtures -> no hit.
+
+**Real outputs that differ from the design's expectation.** In every real run an error-severity diagnostic makes the CLI refuse: `workflow list --all`, `show` and `status` exit 1 with `{"error":"E_..."}` on stderr and an empty stdout (`broken-config.stderr`), so no real exit-0 answer carries an `error` diagnostic. The tests pin that real refusal as the broken-configuration case; the exit-0-with-an-error-diagnostic answer (the `1 error` detail and the singular row) is built from that refusal's code, file, path and message with `severity: 'error'` inside the real list shape, and says so in the test. Two renderings the design leaves open are not pinned: the separator between several codes in the list row, and the Result text of a show row whose refused workflow has no parsed counts (only the Exit cell `1/2 exit 0` is). The `--candidate` default of `--repository` (the main block) is not testable offline and is not pinned.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
