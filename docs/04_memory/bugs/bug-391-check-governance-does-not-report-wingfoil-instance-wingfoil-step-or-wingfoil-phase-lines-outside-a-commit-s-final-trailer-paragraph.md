@@ -64,3 +64,5 @@ independent review (the v0.3 `user-docs` phase), checked on `main` at `39d4a6f6`
      An item met while fixing goes in the fix task's own subsection; this one holds what belongs to
      the bug itself (its finding, its triage, why it took more than one task). The retrospective's
      `explore` reads this subsection first. -->
+
+- Fixed by task-328 (`trailer-paragraph`): it reports every `WingFoil-` key outside the final paragraph on every non-merge commit, not only the five keys listed in Expected Behavior; `grep -c governance-check:trailer-paragraph scripts/check-governance.cjs` -> `1`.
