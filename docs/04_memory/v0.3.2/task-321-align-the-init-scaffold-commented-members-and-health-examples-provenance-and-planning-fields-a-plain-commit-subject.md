@@ -296,6 +296,98 @@ including the `(spec-001)` of `BUG_STATES_EXAMPLE` and the `(REQ-SEC-08)` of `ro
 as `  # members:` followed by `  #   ` lines (the `technologies` device), the health example as the exact line
 `  # health: [docs/health/]` after `  runs: [docs/runs/]`.
 
+### green (developer, 2026-10-31)
+
+**Base.** `git rev-list --count HEAD..release/0.3` → `0` at the start (head `4f473f929`), so no merge.
+
+**Change** (commit `4d7489daa`, `fix(storage): task-321 — …`), in the files the design lists only:
+- `src/storage/templates.ts`: `initProjectCommitMessage` drops ` (P5.1.1)`; `dnaYaml` gains, above `members: []`, the
+  commented `members:` example (Ada Lovelace, `roles: [ approver, developer ]`) with the sentence that `memory approve`
+  / `memory reject` need a member holding `approver` whose `email` is the git `user.email`, and the `# or run: wingfoil
+  dna add team.members …` line; after `runs: [docs/runs/]`, the commented `health: [docs/health/]` line with its
+  explanation and the `# or run: wingfoil dna add paths.health --value docs/health/` line (D4 (a)). The seven header
+  ids go (D3 (a)): `dna.yaml` P2.4, `memory.yaml` P1.13 / REQ-STATE-08 / the `(spec-001)` of the `bug` example,
+  `roles.yaml` P3.2/P3.7 / REQ-SEC-08, `workflows.yaml` P4.1. New constants `PROVENANCE_TEMPLATE_FIELDS` (adr, bug,
+  decision-log, tech-spec, D1 (a)), `RELEASE_TEMPLATE_FIELDS` (`backlog_committed:` empty, `waves: []`) and
+  `RELEASE_SCOPE_CHANGES` (the body text red's notes quote, byte for byte), chosen by a new `memoryTemplateFields(type)`
+  between `status` and `format`; the field comments name no internal id or repository-only concept (D2). The
+  scaffolded `memory.yaml` structure is unchanged (D5).
+- `docs/user-guide.md` line 119 and `docs/cli-reference.md` line 229 quote the new subject; user-guide §4 gains one
+  sentence that the `dna.yaml` `init` writes shows `health` and a `team.members` approver as commented examples (D6).
+- `src/storage/layout.ts`'s `INIT_COMMIT_MESSAGE` (`(P1.1)`, the minimal init path) is NOT touched: it awaits an
+  approver ruling.
+
+**red → green.** `npx jest test/storage/templates.test.ts test/core/init-project.test.ts
+test/docs/user-guide-scaffold.test.ts test/memory/history-scaffold-copy.test.ts test/core/context-shipped-templates.test.ts
+--maxWorkers=2`: red → `Tests: 34 failed, 97 passed, 131 total` (red's notes); green → `Test Suites: 5 passed, 5 total`,
+`Tests: 131 passed, 131 total`. The design's other related suites (`test/cli/init-command.test.ts`,
+`test/docs/cli-reference.test.ts`, `test/memory/template-wording.test.ts`, `test/core/builtin-directive-templates.test.ts`,
+`test/cli/journey-0a.integration.test.ts`, `test/core/format-init-scaffold.test.ts`) → `Test Suites: 6 passed`,
+`Tests: 140 passed, 140 total`.
+
+**Real run** (code build after `npm run -s build` → exit `0`; scratch repository outside the worktree, `git init`,
+local identity; `W="node $(pwd)/dist/cli.js"` with the worktree's absolute path):
+- `$W init --template Scrum --no-interactive` → exit `0`; `git log --format=%s -1` → `chore(wingfoil): initialize
+  .wingfoil/ with the Scrum template`.
+- `$W paths health` → `error: no paths mapped for category 'health'`, exit `1` (spec-002 kept); `$W dna show team` →
+  exit `0`; `$W directives list` → exit `0`.
+- `$W dna add paths.health --value docs/health/` → exit `0`; `$W paths health` and `$W paths health --format console`
+  → both print `{"category": "health", "paths": ["docs/health/"]}` (the key lands after `runs:`, above the comment, as
+  D4 (a) accepted).
+- `$W dna add team.members --value "Scratch User" --entry-email scratch@example.com --entry-roles approver,developer`
+  → exit `0`; the block list replaces `members: []` below the commented example.
+- `$W memory add --type release --title "First release"` → exit `0`; the document carries `backlog_committed:`,
+  `waves: []` and the `## Scope changes` section; `$W memory submit release-001` → exit `0`, `"from": "draft", "to":
+  "pending"`.
+
+### refactor (developer, 2026-10-31)
+
+No structural change beyond green: the three constants and `memoryTemplateFields` already keep `memoryTemplateMd` to one
+template literal. Gates, in the worktree, each heavy one after the slot script, `--maxWorkers=2`, foreground:
+- `npm test -- --maxWorkers=2` → exit `0`, `Test Suites: 535 passed, 535 total`, `Tests: 9424 passed, 9424 total`.
+- `npm run test:coverage -- --maxWorkers=2` → exit `0`, same counts; `All files | 99.35 | 97.51 | 98.15 | 99.7`
+  (statements, branches, functions, lines; > 80 % on every column; the latest w1 baseline in `task-312`'s notes is
+  `99.35 | 97.51 | 98.15 | 99.69`); `templates.ts | 100 | 97.67 | 100 | 100 | 811` (line 811 is the pre-existing
+  `files.sort` comparator's equal-paths branch, not code of this task).
+- `npm run lint` → exit `0`, no output; `npm run docs:api` → exit `0`; `npm run typecheck` (both tsc configs) → exit `0`.
+- `docs.parity`: `npx jest test/docs --maxWorkers=2` → `Test Suites: 29 passed, 29 total`, `Tests: 312 passed, 312
+  total` (it includes `test/docs/cli-reference.test.ts`).
+- `git rev-list --count HEAD..release/0.3` at the end of refactor → `0`, so no merge.
+- Invisible characters: the `grep -nP` of the prompt over `src/storage/templates.ts docs/user-guide.md
+  docs/cli-reference.md` → no hit (exit `1`).
+- Versions: no bump owed — `docs/user-guide.md` and `docs/cli-reference.md` carry no `version:` header (the design's
+  `git show release/0.3:<file> | head -12`), and no configuration file changed.
+
+### self-review (developer, 2026-10-31)
+
+- **AC 1** met: the task-321 AC 1 tests of `test/storage/templates.test.ts` pass for Scrum and Kanban (the run above),
+  and the real run shows `paths health` exit `1` before and the mapped path after `dna add`.
+- **AC 2** met: the subject test, the real-commit test of `test/core/init-project.test.ts` and the docs tests of
+  `test/docs/user-guide-scaffold.test.ts` pass; the real `init` commit subject above. Positive case of the absence:
+  `grep -rn "initialize .wingfoil/" docs/user-guide.md docs/cli-reference.md src/storage/templates.ts` → the three new
+  lines (119, 229, 84), none with `(P5.1.1)`. The one other `(P…)` subject left is `src/storage/layout.ts:20`
+  `INIT_COMMIT_MESSAGE … storage (P1.1)`, outside scope pending the approver's ruling.
+- **AC 3** met: the four provenance tests, the two release tests and the two guard tests pass; the shipped-templates
+  golden passes unchanged since red.
+- **D3** met: the per-file D3 tests pass for the four configuration files and the five `workflows/custom/` files. A
+  wider scratch scan of every non-`/built-in/` scaffold file with `bug-`, `task-`, `adr-` added to the id pattern printed
+  only the example ids `adr-2-git-backed-storage` / `spec-2-memory-yaml-schema` of the `supersedes:` note (lines 21 of
+  the adr and tech-spec templates): sample ids for the user, not references, so kept.
+- **T4:** `git log --first-parent --no-merges --format=%h 157d2050c..HEAD -- test/core/init-project.test.ts
+  test/docs/user-guide-scaffold.test.ts test/fixtures/context/golden-payload-shipped-templates.md
+  test/memory/history-scaffold-copy.test.ts test/storage/templates.test.ts` → empty.
+- **Bugs' Expected Behavior:** bug-409, bug-338 met in full; bug-350 met for the fields and section (the scaffold's own
+  workflows read none of them, as the design measured); bug-393 met together with `task-296` (the `team.agents` part,
+  v0.3.1).
+- `git diff` of this file adds lines only (each subsection inserted before the last `### Retrospective`).
+
+### Pending amendments (approver)
+
+- `bug-393` — its `### Retrospective` gains the item on the two fixing tasks (working tree, uncommitted). `--reason`:
+  "Record in the Retrospective that the fix landed in two tasks: task-296 for the team.agents example, task-321 for the
+  team.members approver example and the paths.health line."
+- `bug-409`, `bug-338`, `bug-350`: their `### Retrospective` already reads `None.`; no amendment owed.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -303,3 +395,8 @@ as `  # members:` followed by `  #   ` lines (the `technologies` device), the he
      printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
      Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
      here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+
+- The design gate's D3 (a) widened the task from the commit subject to the scaffold's header comments: seven comment
+  lines in the same file, no new file (`git diff release/0.3...HEAD --stat -- src/` → `src/storage/templates.ts` only).
+  The sibling `INIT_COMMIT_MESSAGE` of `src/storage/layout.ts` (`(P1.1)`, the minimal init path) stays for a ruling:
+  a same-class instance in a file the design did not list.
