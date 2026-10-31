@@ -178,6 +178,37 @@ the engine.
   the push uses `--no-verify` and its governance run is red on `9cdea2e3` / `8d6c005f` only, as accepted (the same at
   `v0.3.2`'s merge forward, `bug-448`).
 
+- **W1-R1 revised (approver, 2026-10-29 08:57).** `w1` started at once, not after the weekly usage reset; the stop on
+  new starts above 85 % of the weekly limit (ruling of the `w1` batches) took its place, and `w1` paused overnight at
+  94 % with no task open, restarting at the reset by a timer of the supervision.
+- **Rulings during `w1` (approver).** (1) Short element references (`dl-001`, a unique prefix of the full id) enter
+  `v0.3.2` as `task-332`, `kind: feature`, in a last wave `w4`: **a deviation from semver accepted** (a small
+  backwards-compatible feature in a patch, against the bug-fix-only ruling of 2026-10-26), requested by a user on 0.3.1.
+  (2) Phase agents run on more than one model from `w2` on; `w0` and `w1` stay single-model — every phase agent and
+  every orchestrator `claude-opus-5-5` (each orchestrator's `subagents/*.jsonl` transcripts hold no other model).
+  (3) `help help` exits `0` and prints the help command's own usage (`task-315`'s design gate), revising release-planning
+  ruling R8 for `bug-116`; spec-005 §1 and spec-008 §5 stay as written, spec-005 §3.1 is amended.
+
+## Rulings W2 (approver, 2026-10-31)
+
+- **W2-R1 — models per phase.** design (architect) and review (reviewer) on Opus; red (qa) and green + refactor
+  (developer) on Sonnet; a resumed agent keeps its model; the orchestrator session on Opus. The orchestrator passes
+  the Agent tool's `model` explicitly on every launch and the event log records it per launch, so `w2`'s measures
+  compare with `w0`–`w1` phase by phase.
+- **W2-R2 — a fresh orchestrator session for `w2`**, from the `w1` orchestrator prompt and handoff with the lessons of
+  W2-R4; the `w1` L3 session ends.
+- **W2-R3 — batches.** As `w1`: rolling, at most four tasks open, no start above 85 % of the weekly limit; the
+  orchestrator proposes the order from the files each design declares and the approver rules. `task-325` follows
+  `task-321` and `task-328` follows `task-305`, both merged.
+- **W2-R4 — lessons of `w1`, in the instructions.** (1) Every queued command is dry-run before it is queued (a queue
+  entry asked for an `approve` of a verb-less bug edge). (2) Hand `wf()` subjects name the full id (the green template
+  wrote `<bug-id>`: six syncs of `task-312` and `task-321` carry short ids, accepted at their approves; `bug-458`).
+  (3) A task branch's commits are never reset, even unpushed ones; a correction is a new commit. (4) The state of a
+  queue entry is read from `git log`, never from its `Status:` line. (5) The reviewer runs the full suite on the
+  task's head even when the slot is contended: it waits for the slot rather than skipping the run. (6) The design lists
+  every test that pins the behaviour it changes.
+- **W2-R5 — stop the line, bugs, queue:** W0-R5 … W0-R7 and W1-R5 unchanged.
+
 ## Phases / Steps
 
 ### W0 — wave `w0`
@@ -255,6 +286,22 @@ As W0.3.
 #### W1.4 — `re-plan` · tech-lead · approver checkpoint
 
 As W0.4, appending `w2`.
+
+### W2 — wave `w2`
+
+#### W2.1 — `tasks` → `dev-loop` per task (8 tasks, W2-R3)
+
+`task-322` (`bug-383`, `bug-384`, `bug-432`), `task-323` (`bug-358`, `bug-396`), `task-324` (`bug-379`), `task-325`
+(`bug-394`), `task-326` (`bug-382`), `task-327` (`bug-404`), `task-328` (`bug-391`, `bug-444`), `task-329`
+(`bug-373`, `bug-431`). Steps as W0.1, with W1-R4, W2-R1 and W2-R4.
+
+#### W2.2 — `wave-checks` · qa (supervision)
+
+As W0.2, report `docs/07_gates/rl-v1/rel-v0.3.2-w2-e2e-smoke.md`, the full suite included.
+
+#### W2.3 — `re-sweep` · W2.4 — `re-plan`
+
+As W0.3, W0.4, appending `w3`.
 
 ### Close-out (per wave)
 
@@ -356,6 +403,42 @@ From the orchestrator's event log, verified by the supervision against `git log`
   orchestrator session input 814, cache read 104.8 M, cache write 1.56 M; the supervision session (to the close of
   `w0`) input 584, cache read 58.1 M, cache write 1.24 M.
 
+- 2026-10-29 … 2026-10-31: `w1`, in three batches (rolling, ruling of 2026-10-29) run by two orchestrator sessions, the
+  second taking over from a handoff when the first reached 82 % of its context (W1-R2's reason). L1 `task-311`,
+  `task-316`, `task-317`, `task-318`; L2 `task-309`, `task-314`, `task-315`, `task-319`; L3 `task-310`, `task-312`,
+  `task-313`, `task-320`, `task-321`. Pushed by the approver after each batch (`13c01950`, `f52abb6e`). 31 bugs closed;
+  13 filed during the wave — `bug-455` fixed in `w1` by `task-310`, `bug-457` closed as a duplicate of `bug-260`, the
+  other eleven (`bug-449` … `bug-461`) triaged `v0.4`; `task-332` admitted for `w4`. Amends by the approver with the
+  approves: spec-001, spec-002, spec-004, spec-005, spec-006, spec-007, spec-008 (three times), spec-009, spec-012 and the
+  closed bugs' Retrospectives.
+- 2026-10-29 … 2026-10-30, stops and corrections: `task-311`'s fix reached two tests outside its design (accepted in the
+  task); a red asserted an unchanged `dna.yaml` that every write re-versions (`task-312`, red amended); three stale
+  comments outside `task-312`'s design (fixed in the task); a queue entry asked for an `approve` of a verb-less edge
+  (withdrawn, no effect); a queue entry reported open for four hours after its approves (read from the file, not git);
+  an unexplained empty `/tmp/.git` broke `test/storage/git-root.test.ts` (removed on the approver's ruling, `bug-453`).
+- 2026-10-31 (W1.2, supervision): wave-checks at `2b90adf4` (`release/0.3`'s head with the thirteen tasks):
+  `node scripts/e2e-smoke.cjs --candidate --report docs/07_gates/rl-v1/rel-v0.3.2-w1-e2e-smoke.md` → PASS 82/82
+  (`66ad3f57`); `docs.parity` → 10/10 suites, 65/65 tests; the full suite `npm test -- --maxWorkers=2` → 535/535 suites,
+  9424/9424 tests; the six `docs/examples/*/run.sh` → exit 0, each ending in OK, `wingfoil` on `PATH` the wave's build.
+  The secret sweep's 11 blocking findings are in eight files unchanged since `origin/release/0.3` (`git diff --name-only
+  origin/release/0.3 HEAD -- <file>` → empty for each), the known false positives of `bug-402`.
+- 2026-10-31 (W1.3): re-sweep — no bug with an empty `release`; the decision-logs as at W0.3. (W1.4): re-plan —
+  `task-332` recorded in `## Scope changes` (28 vs 26, +7.7 %); `w2` appended to `waves:`; rulings W2-R1 … W2-R5.
+
+#### W1 measures
+
+- **Time.** 2026-10-29 09:00 → 2026-10-31 09:15, an overnight pause at the weekly limit included.
+- **Approver.** 41 queue entries (one withdrawn); rejects of a task: none. Most waits over 15 minutes were the queue and
+  the heavy-gate slot, the slot held for 41 – 67 min by other projects' test runs that do not take it.
+- **Review findings:** 0 blocker over 13 tasks; most findings were introduced by the task's own change and fixed in it.
+- **Supervision interventions:** a relay of approver rulings, a timer restart at the weekly reset, three corrections
+  (the queue entry read from its file, the withdrawn approve of a verb-less edge, a missing wait in the log), plus one
+  build of its own outside the slot.
+- **Tokens** (`tokens.cjs`, deduplicated per message; output not measured): L1–L2 phase agents input 3,492, cache read
+  217.1 M, cache write 26.0 M; their orchestrator session input 1,684, cache read 283.9 M, cache write 2.8 M; L3 phase
+  agents input 2,216, cache read 140.1 M, cache write 12.6 M; the L3 orchestrator input 600, cache read 75.0 M, cache
+  write 0.8 M; the supervision session over `w0`–`w1` input 1,250, cache read 177.0 M, cache write 6.2 M.
+
 ### Retrospective
 
 - The approval queue is the dev-loop's longest wait (W0 measures); answering several entries at once (15:09) cut
@@ -382,3 +465,13 @@ From the orchestrator's event log, verified by the supervision against `git log`
 - The `agent execute` channel stayed unused (W0-R1): a desktop session's Bash has no terminal, and a `claude -p` custom
   adapter would pass `--dry-run` but needs a configuration change and an unattended permission mode. Input for
   `dl-188` and `dl-203`.
+- (`w1`) Two orchestrator sessions per wave of 13 tasks: the first reached 82 % of its context after eight; a written
+  handoff carried the state, its templates moved out of the session's scratch space. Proposal for `dl-203`'s
+  coordinator: a handoff file as a first-class artefact of the role.
+- (`w1`) The heavy-gate slot (`dl-170`) is shared with other projects whose runs do not take it, and reviewers skipped the
+  full suite while it was held. Proposal: every project on the machine takes the same slot, and a review never skips the
+  full suite (W2-R4 (5)).
+- (`w1`) The orchestrator's prompt templates carried defects into every task (a short id in sync subjects, a build
+  outside the slot): a template is reviewed like code before a wave starts.
+- (`w1`) A queue command was never dry-run and asked for an impossible transition; dry-running every command before it is
+  queued is the rule from `w1`'s L3 on.
