@@ -133,8 +133,14 @@ must always hold, a **trend** is compared with the previous run in its direction
 - **Secrets in diffs.** G14 finds 29 blocking findings at v0.2, 8 at v0.3 and 12 at v0.3.1. They are not leaked
   secrets: the scanner reads diffs, and at v0.2 most are the fake keys in its own test file,
   `test/validation/secret-scan.test.ts`; the rest are in a bug report about that fixture, another test and a phase
-  plan. At v0.3 and v0.3.1 they are lines the generic patterns of the scanner flag in ordinary code, in tests and in
-  the plans and bug reports that describe them (`bug-402`). The report lists each with its commit and pattern.
+  plan. The report's `failing` list gives the v0.3 findings by path and pattern: two `private-key-pem` findings in
+  `test/core/builtin-template-secret-scan.test.ts`, a test of the scanner; four `generic-api-key-assignment` findings, in
+  `src/core/builtin-integrity.ts`, `src/workflow/deduce.ts`, `test/core/stop-the-line-open.test.ts` and a task document;
+  and two `dotenv-style-secret-line` findings, in `src/agent/launch.ts` and `.github/workflows/scorecard.yml`. At v0.3.1
+  all twelve are `generic-api-key-assignment` findings, in two phase plans, in bug reports (`bug-402`'s own file) and in
+  the v0.3 comparison. `bug-402` records that these two generic patterns flag ordinary code; the report does not classify
+  the `private-key-pem` fixture or the workflow finding, so this page does not either. The report lists each finding
+  with its commit and pattern.
 - **Process conformance (P).** P01 counts malformed flow commits, and its causes differ by release (each commit's
   reasons are in the report's `failing` list):
   - at v0.1, 61 failing: 34 use a verb the grammar does not declare (in 27 of them an element id sits where the verb
