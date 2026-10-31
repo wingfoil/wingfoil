@@ -187,6 +187,46 @@ Checks before the red commit (all in the worktree):
 - `npx tsc --noEmit -p tsconfig.json`: no output.
 - `npx jest test/agent/manifest.test.ts test/cli/dry-run.integration.test.ts test/lint --maxWorkers=2` → `Test Suites: 15 passed, 15 total`, `Tests: 283 passed, 283 total`, `Time: 86.558 s`.
 
+### green (developer, 2026-10-31)
+
+No production code to write: both ACs are characterization and the red commit `7efa57661` already holds the tests, which
+pass on first run (design table, red table). No `src/` file changes and none is invented. Red to green: nothing to turn;
+`npx jest test/agent/manifest.test.ts test/cli/dry-run.integration.test.ts` is covered by the full run recorded in refactor
+(`Test Suites: 541 passed, 541 total`). PATH guard: `command -v wingfoil` printed the task's PATH shim, `wingfoil --version`
+printed `0.3.1 (53e1b42bd2392d4c734aa91a15885f34156fe459)`. `git rev-list --count HEAD..release/0.3` printed `0` at the
+start and at the end of refactor, so no merge was needed.
+
+### refactor (developer, 2026-10-31)
+
+Gates on the head (the worktree, the working tree clean apart from this file), heavy ones after the heavy-gate wait,
+`--maxWorkers=2`, foreground:
+- `npx jest --maxWorkers=2` (the whole suite, `docs.parity` suites under `test/docs` and the `test/lint` gates included) ->
+  `Test Suites: 541 passed, 541 total`, `Tests: 9540 passed, 9540 total`, `Time: 890.625 s`.
+- `npm run test:coverage -- --maxWorkers=2` -> `All files | 99.35 | 97.47 | 98.2 | 99.7` (statements, branches, functions,
+  lines; every column > 80 %), `Tests: 9540 passed, 9540 total`, `Time: 861.985 s`.
+- `npm run -s lint` -> exit 0, no output. `npm run -s docs:api` -> exit 0, no output. `npm run -s typecheck` (both tsc
+  configs) -> exit 0, no output.
+- `docs/cli-reference.md` and `test/docs/cli-reference.test.ts`: no CLI, help or output change (test-only task), the
+  document-parity suites ran inside the full suite above and passed.
+- Runtime cost of the doubled dry-run table: the design measured about +10 s for the 22 console dry runs (22 more spawns on
+  one serial test). Not re-measured in isolation here: the full-suite wall time under a loaded slot (890 s) cannot show it.
+- Invisible-character grep on the changed file: no hit.
+
+### self-review (developer, 2026-10-31)
+
+AC 1: `test/agent/manifest.test.ts` carries the `it.each` "refuses %s inside mcp.template under config-arg, with exactly one
+issue" for `{mcp_config}` and `{mcp_config_file}`; it passed in the full run. AC 2: `test/cli/dry-run.integration.test.ts`
+runs the console dry run for each of the 22 rows after the JSON dry run and before the real run, pinning exit 0, empty
+stderr, the indented JSON plan and an unchanged repository; it passed in the full run. Approver rulings D1-D3 (yes) are
+respected: nothing else of `workflow-console-dry-run.integration.test.ts` changed. Both bugs' Expected Behavior is covered by
+those two tests. T4: `git log --first-parent --no-merges --format=%h 7efa57661..HEAD -- test/agent/manifest.test.ts
+test/cli/dry-run.integration.test.ts` printed nothing. Each source bug already carries a `### Retrospective` ("None."), so no
+bug amendment is pending.
+
+### Pending amendments (approver)
+
+None.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -194,3 +234,5 @@ Checks before the red commit (all in the worktree):
      printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
      Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
      here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+
+None.
