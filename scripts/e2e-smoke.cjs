@@ -845,7 +845,7 @@ const lengthOf = (json, key) => (Array.isArray(json?.[key]) ? json[key].length :
 function workflowReads(invoke, root) {
   const run = (args) => {
     try {
-      return invoke(['workflow', ...args, '--format', 'json'], root);
+      return invoke([...args, '--format', 'json'], root);
     } catch (error) {
       return { status: null, stdout: '', stderr: String(error?.message ?? error) };
     }
@@ -853,7 +853,7 @@ function workflowReads(invoke, root) {
   const checks = [];
   const reads = {};
 
-  const listRun = run(['list', '--all']);
+  const listRun = run(['workflow', 'list', '--all']);
   const list = judgeRead(listRun);
   const workflows = list.json === null ? null : (Array.isArray(list.json.workflows) ? list.json.workflows : []);
   reads.list = { exit: list.exit, workflows: workflows === null ? null : workflows.length, diagnostics: list.diagnostics, errors: list.errors, codes: list.codes };
@@ -867,7 +867,7 @@ function workflowReads(invoke, root) {
 
   const names = workflows.map((w) => String(w?.name));
   const shows = names.map((name) => {
-    const showRun = run(['show', name]);
+    const showRun = run(['workflow', 'show', name]);
     return { name, run: showRun, judged: judgeRead(showRun) };
   });
   reads.show = shows.map((s) => ({ name: s.name, exit: s.judged.exit, diagnostics: s.judged.diagnostics, errors: s.judged.errors }));
@@ -880,7 +880,7 @@ function workflowReads(invoke, root) {
   );
   if (firstBad !== undefined) return { checks, reads };
 
-  const statusRun = run(['status']);
+  const statusRun = run(['workflow', 'status']);
   const status = judgeRead(statusRun);
   const count = (key) => (status.json === null ? null : lengthOf(status.json, key));
   reads.status = {
