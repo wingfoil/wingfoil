@@ -67,6 +67,8 @@ export interface WorkflowReadResult {
   readonly diagnostics: number | null;
   /** How many of those diagnostics have severity `error`; `null` as `diagnostics`. */
   readonly errors: number | null;
+  /** `true` when an exit-0 stdout was JSON but no object (the report says so); absent otherwise. */
+  readonly notObject?: boolean;
 }
 
 /** task-327: the `workflow list --all --format json` read. */

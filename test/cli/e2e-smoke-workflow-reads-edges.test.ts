@@ -57,4 +57,28 @@ describe('task-327 review follow-ups', () => {
     expect(smoke.readsRepository({}, undefined, '/checkout')).toBeUndefined();
     expect(smoke.readsRepository({ repository: '/x' }, undefined, '/checkout')).toBe('/x');
   });
+
+  const rowsOf = (reads: Record<string, unknown>): string[] =>
+    smoke
+      .formatReport({ ok: false, checks: [], workflowReads: reads }, { command: ['wingfoil'] })
+      .split('\n')
+      .filter((l) => l.startsWith('| `wingfoil workflow'));
+
+  it('the report words a non-object list answer as the check does, and an empty list as failed', () => {
+    const [list] = rowsOf(smoke.workflowReads(answer('[1]'), '/r').reads);
+    expect(list).toBe('| `wingfoil workflow list --all --format json` | 0 | stdout is not a JSON object |');
+    const [empty] = rowsOf(smoke.workflowReads(answer('{"workflows":[],"diagnostics":[]}'), '/r').reads);
+    expect(empty).toBe('| `wingfoil workflow list --all --format json` | 0 | 0 workflows: a candidate repository always has workflows |');
+    const [text] = rowsOf(smoke.workflowReads(answer('Usage: x'), '/r').reads);
+    expect(text).toContain('stdout is not valid JSON');
+  });
+
+  it('the report words a non-object show and status answer as the check does', () => {
+    const list = '{"workflows":[{"name":"a"},{"name":"b"}],"diagnostics":[]}';
+    const invoke = (args: readonly string[]) => answer(args[1] === 'list' ? list : args[2] === 'a' ? '{"diagnostics":[]}' : '[1]')();
+    const { reads } = smoke.workflowReads(invoke, '/r');
+    expect(rowsOf(reads)[1]).toContain('stdout not a JSON object: b');
+    const status = rowsOf({ list: { exit: 0, workflows: 1, diagnostics: 0, errors: 0, codes: [] }, show: [{ name: 'a', exit: 0, diagnostics: 0, errors: 0 }], status: { exit: 0, diagnostics: null, errors: null, open: null, pendingApprovals: null, ungated: null, ungatedRoutedTo: null, notObject: true } })[2];
+    expect(status).toBe('| `wingfoil workflow status --format json` | 0 | stdout is not a JSON object |');
+  });
 });

@@ -815,6 +815,9 @@ function judgeRead(run) {
   return { exit: 0, json, diagnostics: diagnostics.length, errors: diagnostics.filter((d) => d?.severity === 'error').length, codes };
 }
 
+/** `{ notObject: true }` for an exit-0 answer that is JSON but no object, else nothing (the report words it). */
+const notObjectOf = (judged) => (judged.notObject ? { notObject: true } : {});
+
 /** The `<E> errors: <code> <count>, …` detail of a read that parsed but carries error diagnostics. */
 function errorsDetail(judged) {
   const errorCodes = judged.codes.filter((c) => c.severity === 'error').map((c) => `${c.code} ${c.count}`);
@@ -857,7 +860,7 @@ function workflowReads(invoke, root) {
   const listRun = run(['workflow', 'list', '--all']);
   const list = judgeRead(listRun);
   const workflows = list.json === null ? null : (Array.isArray(list.json.workflows) ? list.json.workflows : []);
-  reads.list = { exit: list.exit, workflows: workflows === null ? null : workflows.length, diagnostics: list.diagnostics, errors: list.errors, codes: list.codes };
+  reads.list = { exit: list.exit, workflows: workflows === null ? null : workflows.length, diagnostics: list.diagnostics, errors: list.errors, codes: list.codes, ...notObjectOf(list) };
   const listFailure = failureOf(listRun, list);
   checks.push({
     label: '[repository] wingfoil workflow list --all --format json',
@@ -876,7 +879,7 @@ function workflowReads(invoke, root) {
     const showRun = run(['workflow', 'show', name]);
     return { name, run: showRun, judged: judgeRead(showRun) };
   });
-  reads.show = shows.map((s) => ({ name: s.name, exit: s.judged.exit, diagnostics: s.judged.diagnostics, errors: s.judged.errors }));
+  reads.show = shows.map((s) => ({ name: s.name, exit: s.judged.exit, diagnostics: s.judged.diagnostics, errors: s.judged.errors, ...notObjectOf(s.judged) }));
   const showLabel = `[repository] wingfoil workflow show <name> --format json, each of the ${names.length}`;
   const firstBad = shows.map((s) => ({ s, failure: failureOf(s.run, s.judged) })).find((x) => x.failure !== null);
   checks.push(
@@ -897,6 +900,7 @@ function workflowReads(invoke, root) {
     pendingApprovals: count('pendingApprovals'),
     ungated: count('ungated'),
     ungatedRoutedTo: count('ungatedRoutedTo'),
+    ...notObjectOf(status),
   };
   const statusFailure = failureOf(statusRun, status);
   checks.push({
@@ -1033,7 +1037,7 @@ function workflowReadsSection(reads) {
   const exitCell = (exit) => (exit === null ? 'spawn-error' : String(exit));
   const row = (command, exit, result, suffix = '') => `| \`${command}\`${suffix} | ${cell(exit)} | ${cell(result)} |`;
   const notRun = (command) => row(command, ...NOT_RUN);
-  const refused = (read) => (read.exit !== 0 ? 'refused: the command did not exit 0' : 'stdout is not valid JSON');
+  const refused = (read) => (read.exit !== 0 ? 'refused: the command did not exit 0' : read.notObject ? 'stdout is not a JSON object' : 'stdout is not valid JSON');
 
   const listCommand = 'wingfoil workflow list --all --format json';
   const showCommand = 'wingfoil workflow show <name> --format json';
@@ -1045,7 +1049,8 @@ function workflowReadsSection(reads) {
   else if (list.workflows === null) rows.push(row(listCommand, exitCell(list.exit), refused(list)));
   else {
     const head = `${plural(list.workflows, 'workflow')}; ${plural(list.diagnostics, 'diagnostic')}, **${plural(list.errors, 'error')}**`;
-    rows.push(row(listCommand, exitCell(list.exit), list.diagnostics === 0 ? head : `${head}: ${codesText(list.codes)}`));
+    const empty = `${plural(list.workflows, 'workflow')}: a candidate repository always has workflows`;
+    rows.push(row(listCommand, exitCell(list.exit), list.workflows === 0 ? empty : list.diagnostics === 0 ? head : `${head}: ${codesText(list.codes)}`));
   }
 
   const shows = reads.show;
@@ -1055,7 +1060,8 @@ function workflowReadsSection(reads) {
     const ran = shows.filter((s) => s.exit === 0).length;
     const parsed = shows.filter((s) => s.diagnostics !== null);
     const refusedNames = shows.filter((s) => s.exit !== 0).map((s) => s.name);
-    const unparsedNames = shows.filter((s) => s.exit === 0 && s.diagnostics === null).map((s) => s.name);
+    const unparsedNames = shows.filter((s) => s.exit === 0 && s.diagnostics === null && !s.notObject).map((s) => s.name);
+    const notObjectNames = shows.filter((s) => s.notObject).map((s) => s.name);
     const parts = [];
     if (parsed.length > 0) {
       const withErrors = parsed.filter((s) => s.errors > 0);
@@ -1071,6 +1077,7 @@ function workflowReadsSection(reads) {
       parts.push(min === max ? `${plural(min, 'diagnostic')} each` : `${min}–${max} diagnostics`);
     }
     if (unparsedNames.length > 0) parts.push(`stdout not valid JSON: ${unparsedNames.join(', ')}`);
+    if (notObjectNames.length > 0) parts.push(`stdout not a JSON object: ${notObjectNames.join(', ')}`);
     if (refusedNames.length > 0) parts.push(`refused: ${refusedNames.join(', ')}`);
     if (parts.length === 0) parts.push('no workflow was read');
     rows.push(row(showCommand, ran === total ? `0 (${total}/${total})` : `${ran}/${total} exit 0`, parts.join('; '), `, each of the ${total}`));
