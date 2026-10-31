@@ -43,6 +43,109 @@ tmpl_version: 261012   # Original template version
        reject's `Reason:` (read with `wingfoil memory history <task-id>`), each with the command that
        shows it resolved and what that command printed; then what else changed on the next pass. -->
 
+### design (architect, 2026-10-31)
+
+Run in the task worktree on `task/task-326-…` at `f98bf1332` (cut from `release/0.3` `8683200f7`), every Bash call
+under the task's PATH shim; `command -v wingfoil && wingfoil --version` printed the shim's path and
+`0.3.1 (8683200f78877518cbec3133061d21a919dc4301)`.
+
+**Inputs read.** `bug-382` (Expected Behavior: any non-empty transcript line that does not start with
+`LOG_PREFIX` is refused); `scripts/publish-staging.cjs` (`LOG_PREFIX` l. 227, `VERSION_CHECK_RE` l. 240,
+`VERSION_LINE_RE` l. 243, `FAILURE_RE` l. 246, `checkTranscript` l. 260–286, `main`'s `log` l. 660–664); spec-015
+§3 (`status: approved`; the rehearsal paragraph l. 236–257, the strictness sentence l. 252–253) and its task-282
+Revision (l. 785–801); `dl-047` and `dl-099` (`grep -h "^status:"` → `ready`, `ready`). `depends_on: []`: no
+dl-015 gate. No tech-spec is missing: the change is inside the contract spec-015 §3 owns.
+
+**Today's behaviour, reproduced.** `node <scratch>/proto.cjs` (a scratch script that `require`s the module) on
+the bug's shape — a prefixed `ok   wingfoil --version = 0.2.2 (<40×a>) — match`, an unprefixed
+`  ok   wingfoil --version = 0.0.1 (<40×b>) — match`, the prefixed closing line, `pkg` `wingfoil@0.2.2` — printed
+`{"ok":true,"commit":"aaaa…"}`; a plain unprefixed `npm notice something` between the same lines also passes. The
+only checks that read an unprefixed line today are the closing-line comparison (the last line must equal the
+prefixed success line) and the `FAILURE_RE` scan (an unprefixed `FAIL x` fails, `line 2 records a failure`).
+
+**The real transcripts, line by line.** `git log --all --format='%h %s' --name-only -- 'docs/07_gates/**staging*'`
+lists two rehearsal transcripts ever committed: `docs/07_gates/rl-v1/rel-v0.3-staging-rehearsal.md` (`56e62b498`,
+the published 0.3.0) and `docs/07_gates/rl-v1/rel-v0.3.1-staging-rehearsal.md` (`0a73b5804`, the published
+0.3.1). For each, `grep -cv '^\[publish:staging\] '` → `0` (76 and 84 lines, `wc -l`), `grep -c '^$'` → `0`,
+`grep -c $'\r'` → `0`: **neither holds an unprefixed line**, so the new rule judges no line of them differently.
+Every line is one of the shapes `main`'s `log` writes: `Verdaccio up on …`, the smoke's indented `ok   <label> —
+<detail>` lines (one `--version` line each), the closing `staged wingfoil@<v> and smoke passed`. A passing run
+cannot write an unprefixed line either: `grep -n "log(" scripts/publish-staging.cjs` lists the run's messages
+(l. 380–483, 593, 612), every one single-line; the smoke logs through one call
+(`grep -n "log(" scripts/e2e-smoke.cjs` → l. 939), and the only details that can hold a newline (`run.stderr.trim()`
+l. 407 and 477) belong to `FAIL` checks, after which the transcript closes on a failure line. An unprefixed line
+therefore comes only from an edited or foreign transcript, which is what the bug asks to refuse.
+
+**Prototype on the real transcripts** (`proto.cjs`: the closing-line check, then "the first non-empty line not
+starting with `LOG_PREFIX` fails", then today's `checkTranscript`): rel-v0.3 for `0.3.0` → current
+`{"ok":true,"commit":"cc31d7a8ca3940c6ec96dca4e0ef77f32f52dfb1"}`, prototype the same; rel-v0.3.1 for `0.3.1` →
+current and prototype `{"ok":true,"commit":"870bd4406f3b9bba5ecde7a5f8198b80c2a98583"}`; the bug's shape →
+prototype `{"ok":false,"reason":"line 2 does not start with \"[publish:staging] \": \"  ok   wingfoil --version =
+0.0.1 (bbbb…) — match\""}`; a whitespace-only line and CRLF line ends → still `ok` (the existing `trimEnd` + empty
+filter). `node scripts/publish-staging.cjs --check-transcript docs/07_gates/rl-v1/rel-v0.3.1-staging-rehearsal.md`
+(package.json `0.3.1`) → `staging rehearsal passed for wingfoil@0.3.1 on candidate 870bd440…`, exit 0, before the
+change.
+
+**Design.** In `checkTranscript`, after the closing-line check and before the `FAILURE_RE` scan, refuse the first
+non-empty line (after the existing `trimEnd`) that does not start with `LOG_PREFIX`:
+`{ ok: false, reason: 'line <n> does not start with "[publish:staging] ": "<line>"' }` (`<n>` 1-based, as the
+other reasons). Everything else is unchanged, so `checkEvidenceOnly` (which returns `checkTranscript`'s reason,
+l. 313) and the CLI (`error: <reason>`, exit 1) inherit it. `scripts/e2e-smoke.cjs` is **not** touched: task-327
+changed `runSmoke` only behind `repository`, and `grep -n "repository" scripts/publish-staging.cjs` prints nothing
+(the staging smoke passes none).
+
+**AC classification and what qa pins** (test file `test/cli/staging-rehearsal.test.ts`, a new `describe` for
+task-326 / `bug-382`; interface `checkTranscript(text, pkg)` from `scripts/publish-staging.cjs`, the CLI
+`node scripts/publish-staging.cjs --check-transcript <path>` as the existing CLI blocks spawn it; reuse the file's
+`lines(...)`-style helper that prefixes each line, and add the unprefixed line by hand):
+
+| AC | Class | What qa pins |
+|----|-------|--------------|
+| AC 1 — unprefixed lines judged | **red-first** (new behaviour; today the bug's shape returns `ok: true`) | (a) the bug's shape — prefixed `  ok   wingfoil --version = 0.3.0 (<40×a>) — match`, unprefixed `  ok   wingfoil --version = 0.0.1 (<40×b>) — match`, prefixed success line, `pkg` `wingfoil@0.3.0` → `{ ok: false, reason: stringContaining('line 2 does not start with "[publish:staging] "') }`; (b) an unprefixed line with no version (`Verdaccio up on http://localhost:4873/` without the prefix) → the same reason shape for its line; (c) CLI: such a transcript with package.json's version → exit 1, stderr matching `/^error: line \d+ does not start with/`; (d) **characterization** in the same block: the two committed transcripts still pass — `readFileSync` of `docs/07_gates/rl-v1/rel-v0.3-staging-rehearsal.md` with `{ name: 'wingfoil', version: '0.3.0' }` → `{ ok: true, commit: 'cc31d7a8ca3940c6ec96dca4e0ef77f32f52dfb1' }`, and `rel-v0.3.1-…` with `0.3.1` → `{ ok: true, commit: '870bd4406f3b9bba5ecde7a5f8198b80c2a98583' }`; (e) per D3, in `test/cli/evidence-only-tag.test.ts`: `checkEvidenceOnly` on a transcript with one unprefixed line returns `checkTranscript`'s new reason. The version-line fixture is the real line of `rel-v0.3.1-staging-rehearsal.md` l. 3 with the version and sha changed. Expected reds: (a)(b)(e) `toEqual` mismatch (received `{ ok: true, … }`), (c) exit 0 instead of 1; (d) passes before and after. |
+| AC 2 — spec-015 §3 amended | **characterization** (a document amendment; no test asserts spec text, none is fabricated) | Nothing for qa. The developer prepares, **uncommitted** (`dl-047`), in spec-015 §3 the strictness sentence (l. 252–253: add "a non-empty line without the `[publish:staging] ` prefix") and a new `**Revision (<date>, task-326) — §3: …(bug-382).**` note after the task-306 one, "Edited in place: no supersede, no state change, no `version:` bump (`dl-047`)", naming the pin `test/cli/staging-rehearsal.test.ts`; the approver records it with `memory amend` at review. |
+
+**Files to touch.** `scripts/publish-staging.cjs` (`checkTranscript`, its docstring l. 248–259 and the header
+paragraph l. 34–39 that lists what the check refuses); `scripts/publish-staging.d.cts` (its `checkTranscript`
+comment l. 167 enumerates no refusal, so likely untouched); `test/cli/staging-rehearsal.test.ts` and (D3)
+`test/cli/evidence-only-tag.test.ts` (qa, red); `docs/04_memory/design/specs/spec-015-packaging-publishing.md`
+(uncommitted amendment); this task file. **No `version:` bump**: none of these files carries one (spec-015 is
+edited in place by `dl-047`). No `.wingfoil/` file changes, so `npm run check:mcp` is not required;
+`.wingfoil/workflows/custom/release-publishing.yaml` l. 47 and `.wingfoil/WORKFLOW.md` l. 433 describe the check
+as the closing line plus the stamp's commit and stay true. CHANGELOG is the `user-docs` phase's.
+
+**Tests that pin the changed behaviour** (W2-R4 (6)). `grep -rln "checkTranscript\|check-transcript" test` →
+`test/cli/staging-rehearsal.test.ts`, `test/cli/evidence-only-tag.test.ts`. `grep -rln "publish-staging" test` →
+those two plus `test/cli/e2e-smoke-journey-shim.test.ts`, `test/cli/publish-pipeline.test.ts`,
+`test/cli/publish-staging.test.ts`. `grep -rln "records a failure\|closing line\|checks another stamp\|distinct
+commits\|staging rehearsal passed\|does not start with" test` → the two above plus three unrelated hits
+(`test/core/memory-add.test.ts` l. 159, `test/core/registry.test.ts` l. 51, `test/docs/presentation.test.ts`
+l. 185: none reads the script). Every existing transcript fixture prefixes every line (`staging-rehearsal.test.ts`
+`transcript()` and `lines()`, `evidence-only-tag.test.ts` `transcript()` and the one-line failed transcript
+l. 130), so none changes verdict. No workflow phase list or count changes.
+
+**Existing tests run.** `npx jest test/cli/staging-rehearsal.test.ts test/cli/evidence-only-tag.test.ts
+test/cli/publish-staging.test.ts test/cli/publish-pipeline.test.ts test/cli/e2e-smoke-journey-shim.test.ts
+--maxWorkers=2` → `Test Suites: 5 passed, 5 total`, `Tests: 169 passed, 169 total`.
+
+**Decisions for the approver.**
+- **D1 — which unprefixed lines fail.** (a) any non-empty line (after `trimEnd`; whitespace-only lines stay
+  ignored, as today); (b) only an unprefixed `--version` line; (c) only an unprefixed line with a failure word.
+  Recommendation **(a)**: `bug-382`'s Expected Behavior states it, a passing run writes no unprefixed line (above),
+  and (b)/(c) would keep accepting a hand-edited transcript.
+- **D2 — order and wording.** The new check runs after the closing-line check and before the failure scan, with
+  the reason `line <n> does not start with "[publish:staging] ": "<line>"`; an unprefixed `FAIL` line then reports
+  the prefix reason instead of `records a failure` (exit 1 either way). Recommendation: as stated.
+- **D3 — pin the inherited refusal in `--check-evidence-only` too** (one case in
+  `test/cli/evidence-only-tag.test.ts`). Recommendation: yes; it is the `tag` pre-check that reads the same
+  transcript.
+
+**Risks for the other open `w2` tasks.** `git diff --name-only <merge-base>` and `git status --short` in the
+worktrees of task-323, task-325 and task-328, filtered on
+`spec-015|publish-staging|staging-rehearsal|evidence-only|07_gates` → `none` for each: no shared file. task-306's
+spec-015 Revision is already merged; this task's spec-015 amendment is the only one pending on that file in `w2`.
+`test/docs/name-resolvability.test.ts` reads spec-015: the amendment should name only resolvable symbols and paths
+(`LOG_PREFIX`, `checkTranscript`, the test file).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
