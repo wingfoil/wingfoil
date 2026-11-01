@@ -288,6 +288,43 @@ Design gate approved by the approver on 2026-11-01T08:50:05+01:00, in the orches
 
 **Runs.** `npx jest test/agent/run-log-symlink.test.ts test/cli/agent-run-log-symlink.integration.test.ts test/cli/agent-execute-diagnostics.integration.test.ts test/core/agent-execute-diagnostics.test.ts test/core/step-refusal-frontier.test.ts test/core/agent-execute-step.test.ts --maxWorkers=2` → `Test Suites: 6 failed, 6 total`, `Tests: 15 failed, 25 passed, 40 total` (the 25 passing include the 19 untouched tests of `agent-execute-step.test.ts`). `npx tsc --noEmit -p tsconfig.json` → exactly two errors, both the intended ones: `test/agent/run-log-symlink.test.ts(13,97): error TS2305: Module '"../../src/agent"' has no exported member 'W_RUN_LOG_SYMLINK'` and `(66,59): error TS2554: Expected 3 arguments, but got 4` (the `onDiagnostic` parameter). `npx jest test/lint --maxWorkers=2` → `Tests: 1 failed, 152 passed, 153 total`; the one failure is `typecheck.clean`, which runs the same `tsc` and fails on those two errors until the exports exist; no other gate (`no-fabricated-stderr`, `cli-spawn-helper`, …) fails.
 
+### green (developer, 2026-11-01)
+
+**PATH guard.** `command -v wingfoil` printed the task's PATH shim; `wingfoil --version` printed `0.3.1 (57ddedb33b1f127223f540a87eaa04f60c5882c2)`. `git rev-list --count HEAD..release/0.3` printed `0` at the start and at the end: no merge. Red read: commit `71adb0029`, six test files.
+
+**red -> green.** `npx jest test/agent/run-log-symlink.test.ts test/cli/agent-run-log-symlink.integration.test.ts test/cli/agent-execute-diagnostics.integration.test.ts test/core/agent-execute-diagnostics.test.ts test/core/step-refusal-frontier.test.ts test/core/agent-execute-step.test.ts --maxWorkers=2` printed `Test Suites: 6 passed, 6 total`, `Tests: 40 passed, 40 total` (red: 15 failed, 25 passed). `npx tsc --noEmit -p tsconfig.json` printed nothing (red: the two intended errors TS2305 and TS2554).
+
+**Implementation** (commit `3f991f925`, `fix(agent): task-330 ...`):
+- `src/agent/run-log.ts`: exported `W_RUN_LOG_SYMLINK`; `readRunLogsAt` and `readRunLogAt` list through `listBlobEntriesAtCommit`, skip a link and report it to a new `onDiagnostic` parameter (default: the warning sink, `formatDiagnostic`); `src/agent/index.ts` exports the constant.
+- `src/core/agent-list.ts`: passes `(diagnostic) => diagnostics.push(diagnostic)`, so the link reaches the payload's `diagnostics` and the existing `warning:` lines. `src/core/agent-show.ts` is unchanged (the warning precedes `run not found`, pinned by the red).
+- `src/agent/execute.ts`: right after `onHead(sha)`, each diagnostic of the deduction is reported with `diagnosticWarning` (D1 (a)), before the config load and any refusal.
+- `src/agent/step.ts`, `src/core/memory-add-link.ts`: `details` keeps its keys and gains `frontier` (frontier order); messages unchanged. `src/core/workflow-finalize.ts` is not touched (it carries the key since task-226; the red pins it as characterization).
+
+**Per AC.** AC1 (red-first): the three CLI pins and the in-process pin pass. AC2 (red-first): unit and CLI pins pass. AC3 (red-first for `memory add --step` and `agent execute --step`, characterization for `workflow finalize`): `step-refusal-frontier.test.ts` and `agent-execute-step.test.ts` pass. AC4: the amends are prepared uncommitted (below). AC5: `grep -n "dl-176" <this file>` lists only AC5, the design's statement that it is not a contract, the design table row and the red's line; none cites it as a contract.
+
+### refactor (developer, 2026-11-01)
+
+No code restructuring was needed beyond green: the two run-log readers share `runLogSymlinkDiagnostic` and `reportRunLog`, and the doc comments of the changed functions state the new behaviour. `docs/cli-reference.md` (commit `d463bb389`): `agent execute` (the diagnostics as `warning:` lines, before any refusal; the `--element` form prints none), `agent list` and `agent show` (`W_RUN_LOG_SYMLINK`). Gates, in the task's worktree, after `waitslot.sh` and with `--maxWorkers=2`, the three amendments in the working tree:
+- `npm test -- --maxWorkers=2` printed `Test Suites: 547 passed, 547 total`, `Tests: 9598 passed, 9598 total` (the document-parity and `test/lint` suites are among them, `typecheck.clean` now green).
+- `npm run -s test:coverage -- --maxWorkers=2` printed `All files | 99.35 | 97.45 | 98.16 | 99.7` (statements, branches, functions, lines) and the same 547 suites, 9598 tests.
+- `npm run -s lint`, `npm run -s docs:api`, `npm run -s typecheck` each exited `0` with no output.
+- `grep -nP` for invisible characters on the changed files printed nothing.
+
+### self-review (developer, 2026-11-01)
+
+- AC1 to AC3 are met, each by the pins named under green, which pass. Absence claim with its positive case: the `--element`-only form prints no `W_UNCOMMITTED_INPUTS` (red test, characterization) while the step forms print it on the same dirty tree.
+- T4: `git log --first-parent --no-merges --format=%h 71adb0029..HEAD -- <the six test files of the red>` printed nothing.
+- Scope: only the files of the design were touched (`git diff --stat release/0.3...HEAD`: the six source files, `docs/cli-reference.md`, this task file); `src/core/workflow-finalize.ts` and `src/core/agent-show.ts` unchanged.
+- Same-class instances: `grep -rn "readPathAtRev" src/agent src/core/agent-show.ts` shows the other run-log reads are gated by `requireWritableRunLog` or follow `readRunLogAt` (design, "Readers and rejection sites"); `workflow adopt` and `workflow finalize` already carry `details.frontier`.
+- Limits recorded: `details.frontier` reaches the CLI and MCP surfaces only with `bug-303` (v0.4); the unscoped-key half of `bug-340` is `bug-468` (v0.4).
+
+### Pending amendments (approver)
+
+Left uncommitted in the worktree; the gates above ran with them.
+- `docs/04_memory/design/specs/spec-016-agent-execution.md` (approved): Amend section 3.3 step 2 and step 8, section 3.7 and section 4.5 with the behaviour of task-330. `--reason`: Records that agent execute prints the deduction's diagnostics as warning lines before any refusal, that a --step refusal carries details.frontier, and that a run log committed as a symbolic link is skipped with a W_RUN_LOG_SYMLINK warning, as task-330 implements.
+- `docs/04_memory/design/specs/spec-017-workflow-commands-and-state-deduction.md` (approved): Amend section 10, the "step not on the frontier" row. `--reason`: Adds agent execute --step to the commands of the row and states that details.frontier holds the frontier keys in frontier order, as task-330 implements.
+- `docs/04_memory/bugs/bug-340-an-off-frontier-step-refusal-names-no-frontier-key.md` (in-review after its status sync): Amend the Retrospective. `--reason`: Records that task-330 met the refusal on the core API, and points the CLI and MCP rendering of details to bug-303 and the unscoped-key half to bug-468, both v0.4, as the approver ruled at release planning.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -295,3 +332,5 @@ Design gate approved by the approver on 2026-11-01T08:50:05+01:00, in the orches
      printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
      Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
      here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+
+- None for the code. The full `npm test` took 729 s (`Time: 729.327 s` in its output) and exceeded the shell tool's 600 s foreground limit; it was run as a tracked background command and awaited.
