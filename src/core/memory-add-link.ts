@@ -44,7 +44,8 @@ function addsType(step: DeducedStep, type: string): boolean {
  *   instance plan's id, else `unknown workflow: <ref>` (`NOT_FOUND`) — `unresolvedRef`, the one answer `workflow
  *   next`, `status`, `finalize` and `end` give for the same `<ref>` (task-281, `bug-326`);
  * - `--step <key>` is not on the instance's frontier: `step '<key>' is not on the frontier of <instance>`
- *   (`CONFLICT`), as `workflow finalize` refuses it;
+ *   (`CONFLICT`), as `workflow finalize` refuses it; `details.frontier` lists the frontier's keys in frontier order
+ *   (task-330, `bug-340`);
  * - no frontier step (or the `--step` one) adds a `type`: `no step of <instance> adds a <type>` (`CONFLICT`);
  * - several do and no `--step` picks one: the same refusal, listing their keys in frontier order and asking
  *   for `--step` (`CONFLICT`, the keys also in `details.steps`).
@@ -60,7 +61,11 @@ export function resolveAddLink(root: string, ref: string, stepKey: string | unde
   }
   const instance = selected.instance.id;
   if (stepKey !== undefined && !selected.frontier.some((step) => step.key === stepKey)) {
-    return coreErr({ code: 'CONFLICT', message: `step '${stepKey}' is not on the frontier of ${instance}`, details: { instance, step: stepKey } });
+    return coreErr({
+      code: 'CONFLICT',
+      message: `step '${stepKey}' is not on the frontier of ${instance}`,
+      details: { instance, step: stepKey, frontier: selected.frontier.map((step) => step.key) },
+    });
   }
   const candidates = selected.frontier.filter((step) => (stepKey === undefined || step.key === stepKey) && addsType(step, type));
   const none = `no step of ${instance} adds a ${type}`;

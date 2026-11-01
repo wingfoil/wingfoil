@@ -7,7 +7,9 @@
  * The pipeline ({@link agentExecutePipeline}) is §3.3's, in its order, and the first failure stops it:
  *
  * 2. With a step form, `workflow next`'s deduction at `HEAD` first (task-235): its commit is the `HEAD`
- *    every later read takes, and a `spec-003` error in the registry refuses here. Then `dna.yaml` and
+ *    every later read takes, and a `spec-003` error in the registry refuses here. The deduction's
+ *    diagnostics are printed as `warning:` lines, as `agent list` prints them, before any later refusal
+ *    (task-330, `bug-339`). Then `dna.yaml` and
  *    `memory.yaml` at that `HEAD` (the stepless form resolves `HEAD` itself and reads no workflow file);
  *    the adapter tree listed, every entry that is not an adapter printed as a warning (`bug-290`).
  * 3. Resolution (§3.2 steps 1–5): the step ({@link selectFrontierStep}), its workflow and phase; the
@@ -58,6 +60,7 @@ import { findMemoryDocumentByTypeAndIdAtRev } from '../memory/query';
 import { isRoleDefined } from '../dna/roles';
 import type { AgentEntry, DnaYaml } from '../dna/schema';
 import type { MemoryYaml } from '../memory/schema';
+import { diagnosticWarning } from '../core/agent-list';
 import { APPROVER_ROLE } from '../core/approval-authority';
 import { assembleExecutionContext, type ExecutionContextElement } from '../core/context';
 import { requireGitIdentity } from '../core/git-identity';
@@ -528,6 +531,8 @@ async function runPipeline<T>(
     throw error;
   }
   onHead(sha);
+  // The deduction's diagnostics, as `workflow next` lists them, one `warning:` line each (§3.3 step 2, bug-339).
+  if (deduced?.ok === true) for (const diagnostic of deduced.value.diagnostics) reportWarning(diagnosticWarning(diagnostic));
   const config = loadCommittedConfig(root, sha);
   if (!config.ok) return config;
   const { dna, memoryYaml } = config.value;

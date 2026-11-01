@@ -1785,6 +1785,11 @@ bound to the role with no file, a Memory document that could not be read) and an
 `[a-z0-9-.]`) are printed as `warning:` lines first, each once. Temporary files go to the system's
 temporary directory and are removed whatever happens, an interruption before the launch included.
 
+With a step form (`--next`, `--workflow`, `--step`), the diagnostics of the workflow state it reads (the ones
+`wingfoil workflow next` lists, for example `W_UNCOMMITTED_INPUTS` for a deduction input you changed and did not
+commit) are printed first, one `warning: <code> (<file>): <message>` line per distinct diagnostic, before any refusal of the step. The
+form with `--element` alone reads no workflow state and prints none.
+
 Then it launches the agent: it prints
 `run <run-id>: launching <agent> (<adapter>) as <role> on <type>:<id>`, starts the adapter's command with the arguments its manifest declares (no shell), and
 hands it the terminal. The agent's first prompt names the run, the role, the element and the commit,
@@ -1851,7 +1856,8 @@ It reads the run log, `dna.yaml` and the workflow state **as committed at `HEAD`
 (see [Git side effects](#git-side-effects)), so it agrees with `agent show` and with the run ids `agent
 execute` counts. A run log you changed and did not commit is not read: a `warning:` line names it
 (`W_UNCOMMITTED_INPUTS`), one per file. Only the run logs themselves count: another file in that
-directory is neither read nor reported.
+directory is neither read nor reported. A run log committed as a symbolic link is not read either: a
+`warning:` line names it (`W_RUN_LOG_SYMLINK`), and `diagnostics` carries it.
 
 ```console
 $ wingfoil agent list
@@ -1937,3 +1943,5 @@ agent did not report is the string `not-reported`, never `0` or `null`.
   not committed, a `hint:` line says so, and the command still exits `1`: commit the run log, then run
   it again. A run log at `HEAD` that is not valid JSON Lines exits `1`, naming the file and the line;
   a `dna.yaml` with no `paths.runs` exits `1` with `error: dna.yaml declares no run log (paths.runs)`.
+  A run log committed as a symbolic link is not read: `warning: W_RUN_LOG_SYMLINK (<file>): …` is printed, and
+  its runs are not found.

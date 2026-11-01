@@ -1002,7 +1002,7 @@ with P5.2.3 (v0.4); the production server serves no Tool today.
 | `<ref>` names a loaded workflow with no open instance, or an instance plan (`plan`, `parent` empty) at `HEAD` that is not open — `next`, `status`, `finalize`, `end` and `memory add --workflow <ref>` alike | `workflow is not open: <ref>` | `NOT_FOUND` | 1 |
 | plan in `draft` at `end` | `workflow '<name>' was not submitted: run wingfoil memory submit <id>` | `INVALID_TRANSITION` | 1 |
 | incomplete at `end` | `workflow '<name>' is not complete: current step <key>` — with an empty frontier, `…: it is abandoned: its element <type>:<id> is <status>` or `…: workflow '<name>' is not loaded`; the hint `wingfoil memory deprecate <id> abandons it` | `CONFLICT` | 1 |
-| step not on the frontier (`finalize`, `memory add --step`, `adopt --step`) | `step '<key>' is not on the frontier of <instance>` | `CONFLICT` | 1 |
+| step not on the frontier (`finalize`, `memory add --step`, `adopt --step`, `agent execute --step`) | `step '<key>' is not on the frontier of <instance>`; `details.frontier` holds the frontier's keys in frontier order (`task-330`, `bug-340`) | `CONFLICT` | 1 |
 | no frontier step adds the type (`memory add --workflow`, §7.10; `adopt` without `--step`, §7.11) | `no step of <instance> adds a <type>` | `CONFLICT` | 1 |
 | several frontier steps add the type, no `--step` (`memory add --workflow`, `adopt`) | `no step of <instance> adds a <type> alone: give --step, one of: <key>, <key>` (the keys in frontier order, also in `details.steps`) | `CONFLICT` | 1 |
 | step has deducible evidence (`finalize`) | `phase '<workflow>.<phase>' completes from its evidence: <kinds>` | `CONFLICT` | 1 |
