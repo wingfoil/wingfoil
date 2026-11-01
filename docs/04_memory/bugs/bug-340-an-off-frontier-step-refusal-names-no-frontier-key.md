@@ -50,4 +50,8 @@ Captured on 2026-10-11 by `bug-ingest-rel-v0.3-w3b5-review-findings-plan` (item 
 
 ### Retrospective
 
-None.
+Resolved in part by `task-330`, on the core API: the refusals of `memory add --step` and `agent execute --step` now carry `details.frontier`, the frontier's keys in frontier order, as `workflow finalize` and `workflow adopt` already did. Three parts of the Expected Behavior are not met here, each by a ruling:
+
+- the keys are in `details.frontier` and the message is unchanged, where the Expected Behavior asks for them in the message and in `details.steps`: release-planning ruling R8;
+- the CLI and MCP surfaces do not print `details.frontier` until `bug-303` (v0.4) renders every `details` key: ruled D4 at the design gate of `task-330` (2026-11-01);
+- the acceptance of an unscoped key (`bug-ingest.capture`) when exactly one frontier step has it is the follow-up `bug-468` (v0.4): R8 and D6.
