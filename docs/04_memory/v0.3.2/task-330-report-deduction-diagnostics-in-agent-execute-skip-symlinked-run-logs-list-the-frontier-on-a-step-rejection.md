@@ -325,6 +325,20 @@ Left uncommitted in the worktree; the gates above ran with them.
 - `docs/04_memory/design/specs/spec-017-workflow-commands-and-state-deduction.md` (approved): Amend section 10, the "step not on the frontier" row. `--reason`: Adds agent execute --step to the commands of the row and states that details.frontier holds the frontier keys in frontier order, as task-330 implements.
 - `docs/04_memory/bugs/bug-340-an-off-frontier-step-refusal-names-no-frontier-key.md` (in-review after its status sync): Amend the Retrospective. `--reason`: Records that task-330 met the refusal on the core API, and points the CLI and MCP rendering of details to bug-303 and the unscoped-key half to bug-468, both v0.4, as the approver ruled at release planning.
 
+### review fixes (developer, 2026-11-01)
+
+Independent review: APPROVE WITH FIXES (0 blocking, 2 findings, 1 note). The task stays `in-review`.
+- F1 (`docs/cli-reference.md`): the warnings paragraph I added had split the sentence "While the agent runs, Ctrl-C and Ctrl-\ reach the agent ..." in two. Fixed in commit `bb236ba0d`: the paragraph now sits before "Then it launches the agent", where the refusals are described, and the sentence is whole again. `git diff HEAD~1 -- docs/cli-reference.md` shows the paragraph moved and no other line changed.
+- F2 (pending amend, `bug-340` Retrospective): now names three departures from the Expected Behavior, each with its ruling: the message unchanged and `details.frontier` instead of "in the message and in details.steps" (release-planning R8); the CLI and MCP rendering of `details` by `bug-303` (design gate D4, 2026-11-01); the unscoped keys by `bug-468` (R8, D6).
+- F3 (pending amend, `spec-016`): section 3.3 step 2 says "one `warning:` line per distinct diagnostic" (the warning sink collapses duplicates, `agent list` does not); section 4.5 says "every reader reads the blob's kind" (`readRunLogAt` reads one path, so "lists the directory's blobs" was wrong for it).
+
+Superseding `--reason` of the pending amendments (they replace the ones under "Pending amendments (approver)"):
+- `spec-016-agent-execution.md`: Amend section 3.3 step 2 and step 8, section 3.7 and section 4.5 with the behaviour of task-330: agent execute prints one warning line per distinct deduction diagnostic before any refusal, a --step refusal carries details.frontier, and every reader reads the blob kind so a run log committed as a symbolic link is skipped with a W_RUN_LOG_SYMLINK warning.
+- `bug-340-...md`: Records that task-330 met the refusal on the core API, and the parts left out with their rulings: the message and details.frontier by release-planning R8, the CLI and MCP rendering by bug-303 (design gate D4), the unscoped keys by bug-468 (R8, D6).
+- `spec-017-...md`: unchanged (reason as above).
+
+`npx jest test/docs test/lint --maxWorkers=2` (with the amendments in the working tree, `test/docs/cli-reference.test.ts` included) printed `Test Suites: 43 passed, 43 total`, `Tests: 487 passed, 487 total`. `npm run -s check:governance -- --base origin/release/0.3` is run after this commit; its two summary lines are in the report.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
