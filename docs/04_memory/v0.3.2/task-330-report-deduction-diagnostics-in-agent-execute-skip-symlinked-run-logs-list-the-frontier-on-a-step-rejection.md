@@ -259,6 +259,17 @@ AC1. No workflow definition changes, so no phase or step list is pinned anew.
 **Risks.** None for other open tasks: `w3` holds only this task, and `task-332` (`w4`) starts after its merge (W3-R4).
 The orchestrator runs on the Agent tool, not on `agent execute` (W0-R1), so nothing here affects the run itself.
 
+### design gate (approver, 2026-11-01)
+
+Design gate approved by the approver on 2026-11-01T08:50:05+01:00, in the orchestrator's chat, every decision as the design recommended:
+- D1 — (a): `agent execute` prints one `warning:` line per deduction diagnostic, as `agent list` does, at pipeline step 2, before any step refusal.
+- D2 — a new code `W_RUN_LOG_SYMLINK` for a skipped symbolic-link run log.
+- D3 — the step refusals keep their `{step, instance}` / `{instance, step}` keys and add `frontier`.
+- D4 — accepted: bug-340 is met on the core API; the CLI and MCP carry `details` from bug-303 (v0.4) on; at done bug-340 is amended to point
+  to bug-303 and to the unscoped-key follow-up.
+- D5 — spec-016 §3.3 is amended at step 2 (what and where) and step 8 (one sentence on the order).
+- D6 — the unscoped-key follow-up is filed as a bug (low, v0.4) by the orchestrator; it is outside this task.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
