@@ -1785,6 +1785,11 @@ bound to the role with no file, a Memory document that could not be read) and an
 `[a-z0-9-.]`) are printed as `warning:` lines first, each once. Temporary files go to the system's
 temporary directory and are removed whatever happens, an interruption before the launch included.
 
+With a step form (`--next`, `--workflow`, `--step`), the diagnostics of the workflow state it reads (the ones
+`wingfoil workflow next` lists, for example `W_UNCOMMITTED_INPUTS` for a deduction input you changed and did not
+commit) are printed first, one `warning: <code> (<file>): <message>` line each, before any refusal of the step. The
+form with `--element` alone reads no workflow state and prints none.
+
 Then it launches the agent: it prints
 `run <run-id>: launching <agent> (<adapter>) as <role> on <type>:<id>`, starts the adapter's command with the arguments its manifest declares (no shell), and
 hands it the terminal. The agent's first prompt names the run, the role, the element and the commit,
@@ -1792,11 +1797,6 @@ tells it where to load its context (the Resource `wingfoil://session/<role>/<typ
 `wingfoil` MCP server registered for it), and tells it to end every commit it writes, except an approve or reject commit, with
 `Co-Authored-By: <agent name> <<agent email>>` and `AI-Model: <its model>` — added to a commit `wingfoil`
 writes with `git commit --amend --no-edit --trailer`, never as a paragraph of their own. While the agent runs,
-With a step form (`--next`, `--workflow`, `--step`), the diagnostics of the workflow state it reads (the ones
-`wingfoil workflow next` lists, for example `W_UNCOMMITTED_INPUTS` for a deduction input you changed and did not
-commit) are printed first, one `warning: <code> (<file>): <message>` line each, before any refusal of the step. The
-form with `--element` alone reads no workflow state and prints none.
-
 Ctrl-C and Ctrl-\ reach the agent and do not stop `agent execute`; `SIGTERM` and `SIGHUP` sent to
 `agent execute` are passed on to the agent. When the agent exits, it asks the adapter's declared
 commands for the agent's version, session, model and token counts (each within 10 seconds; one that
