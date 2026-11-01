@@ -1787,7 +1787,7 @@ temporary directory and are removed whatever happens, an interruption before the
 
 With a step form (`--next`, `--workflow`, `--step`), the diagnostics of the workflow state it reads (the ones
 `wingfoil workflow next` lists, for example `W_UNCOMMITTED_INPUTS` for a deduction input you changed and did not
-commit) are printed first, one `warning: <code> (<file>): <message>` line each, before any refusal of the step. The
+commit) are printed first, one `warning: <code> (<file>): <message>` line per distinct diagnostic, before any refusal of the step. The
 form with `--element` alone reads no workflow state and prints none.
 
 Then it launches the agent: it prints
