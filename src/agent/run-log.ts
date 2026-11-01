@@ -23,9 +23,24 @@ import { basename, posix, relative, resolve, sep } from 'node:path';
 import { CommitFailure, isDryRunActive, pathPorcelainStatus, readPathAtRev, writeAndCommit } from '../storage';
 import { isIdPiece } from '../validation/id';
 import { requireConfinedTarget, requireConfinedWriteTarget } from '../core/confinement';
-import { listPathsAtCommit, resolveRevision, RevisionError } from '../core/revision';
+import { listBlobEntriesAtCommit, resolveRevision, RevisionError } from '../core/revision';
 import { coreErr, coreOk, type CoreError, type CoreResult } from '../core/types';
 import { requireInspectableTarget, type WriteTargetContract } from '../core/write-guard';
+import { formatDiagnostic, type Diagnostic } from '../validation';
+import { reportWarning } from '../validation/warning';
+
+/** The code of the warning for a run log committed as a symbolic link, which no reader reads (§4.5, task-330, `bug-354`). */
+export const W_RUN_LOG_SYMLINK = 'W_RUN_LOG_SYMLINK' as const;
+
+/** The warning for the run log `path` committed as a symbolic link. */
+function runLogSymlinkDiagnostic(path: string): Diagnostic {
+  return { code: W_RUN_LOG_SYMLINK, severity: 'warning', file: path, path: '', message: `run log ${path} is a symbolic link: not read` };
+}
+
+/** The default sink of a skipped run log: the warning sink, in the console's `warning:` form. */
+function reportRunLog(diagnostic: Diagnostic): void {
+  reportWarning(formatDiagnostic(diagnostic));
+}
 
 /** The literal of a value the agent did not report (§2.6): never `0`, `null` or an absent key. */
 export const NOT_REPORTED = 'not-reported' as const;
@@ -321,15 +336,29 @@ export function parseRunLog(text: string, path: string): CoreResult<RunRecord[]>
  * The run log `path` as commit `rev` holds it, read strictly ({@link parseRunLog}); a log the commit
  * does not hold is no records.
  *
+ * A log committed as a symbolic link is not read (§4.5): no records, and a {@link W_RUN_LOG_SYMLINK}
+ * diagnostic to `onDiagnostic` (default: the warning sink).
+ *
  * @returns `VALIDATION`/`NOT_FOUND` from a `rev` that is malformed or names no commit.
  */
-export function readRunLogAt(root: string, rev: string, path: string): CoreResult<RunRecord[]> {
+export function readRunLogAt(
+  root: string,
+  rev: string,
+  path: string,
+  onDiagnostic: (diagnostic: Diagnostic) => void = reportRunLog,
+): CoreResult<RunRecord[]> {
   let sha: string;
   try {
     sha = resolveRevision(root, rev);
   } catch (error) {
     if (error instanceof RevisionError) return coreErr(error.toCoreError());
     throw error;
+  }
+  const entry = listBlobEntriesAtCommit(root, sha, path).find((candidate) => candidate.path === path);
+  if (entry === undefined) return coreOk([]);
+  if (entry.symlink) {
+    onDiagnostic(runLogSymlinkDiagnostic(path));
+    return coreOk([]);
   }
   const text = readPathAtRev(root, sha, path);
   return text === null ? coreOk([]) : parseRunLog(text, path);
@@ -362,11 +391,20 @@ export function isRunLogPath(prefix: string, path: string): boolean {
  *
  * `dir` is confined to the project root first (`REQ-SEC-06`), unless it is the root itself, the boundary.
  *
+ * A log committed as a symbolic link is skipped and reported to `onDiagnostic` (default: the warning
+ * sink) as {@link W_RUN_LOG_SYMLINK} (§4.5, task-330).
+ *
  * @param dir - `dna.yaml` `paths.runs`' one directory, non-blank.
+ * @param onDiagnostic - Receives the diagnostic of each skipped link.
  * @returns The records, or the first §4.5 violation (`VALIDATION`), or a confinement refusal.
  * @throws `StorageError` when git cannot list the commit.
  */
-export function readRunLogsAt(root: string, sha: string, dir: string): CoreResult<RunRecord[]> {
+export function readRunLogsAt(
+  root: string,
+  sha: string,
+  dir: string,
+  onDiagnostic: (diagnostic: Diagnostic) => void = reportRunLog,
+): CoreResult<RunRecord[]> {
   const prefix = runLogDirPrefix(root, dir);
   // The root itself (`./`) is the one directory the confinement check names as outside: it is the boundary.
   if (prefix !== '') {
@@ -374,11 +412,15 @@ export function readRunLogsAt(root: string, sha: string, dir: string): CoreResul
     if (!confined.ok) return confined;
   }
   const elementOf = (path: string): string => basename(path, '.jsonl');
-  const paths = listPathsAtCommit(root, sha, prefix)
-    .filter((path) => isRunLogPath(prefix, path))
-    .sort((a, b) => Number(elementOf(a) > elementOf(b)) - Number(elementOf(a) < elementOf(b)));
+  const entries = listBlobEntriesAtCommit(root, sha, prefix)
+    .filter((entry) => isRunLogPath(prefix, entry.path))
+    .sort((a, b) => Number(elementOf(a.path) > elementOf(b.path)) - Number(elementOf(a.path) < elementOf(b.path)));
   const records: RunRecord[] = [];
-  for (const path of paths) {
+  for (const { path, symlink } of entries) {
+    if (symlink) {
+      onDiagnostic(runLogSymlinkDiagnostic(path));
+      continue;
+    }
     const parsed = parseRunLog(readPathAtRev(root, sha, path) ?? '', path);
     if (!parsed.ok) return parsed;
     records.push(...parsed.value);
