@@ -205,7 +205,7 @@ criterion).
 
 - **Declared.** A workflow that declares `element: T` is started with `--element T:<id>`
   (`spec-008` §7). When the argument is absent, the bound element of the active instance is inherited
-  if its type is `T`; otherwise `start` refuses. The element must exist at `HEAD`.
+  if its type is `T`; otherwise `start` refuses. The element must exist at `HEAD`; the `<id>` may be a short reference (`spec-008` §7), resolved among the documents of `T` at `HEAD`, and the instance binds the element's full id.
 - **Self-creating.** A startable workflow that declares no `element` and whose own phases contain a
   `memory.add(type: T)` — the four ingest mains (`bug-ingest.yaml:9-11`: "No fixed `element:`"),
   `vision-change` (`capture`, a `change-proposal`, `dl-132`) and `sw-life-cycle`
@@ -792,7 +792,7 @@ element counts as created by, without changing the element or rewriting history.
   `memory add --workflow` chooses, §7.10). The step's phase must add a type (`memory.add(type: T)` or a
   `{ type: T, path }` produces entry, `dl-187` rule 2) and its `created` evidence must be missing: the step created no
   element of `T` (§4.3 never reports `created` missing for a step that created nothing, so it is read off what the
-  step created, `task-294` design D1). The element: `--element <type>:<id>`, which must exist at `HEAD` (rule 1) and
+  step created, `task-294` design D1). The element: `--element <type>:<id>`, which must exist at `HEAD` (rule 1; the `<id>` may be a short reference, `spec-008` §7, and the record names the full id) and
   be of type `T`; without `--element`, the one **candidate** the declared rules find (below), else refused, naming the
   candidates. An element already owned (§4.8, rule 3) is refused. `--reason` is required, non-blank and shaped as
   `dl-067`'s `Reason:` block; any role may run it (rule 7, `dl-187` D3).
@@ -996,6 +996,7 @@ with P5.2.3 (v0.4); the production server serves no Tool today.
 | element required and absent, or `--element` of another type | `workflow '<name>' needs a <type> element: give --element <type>:<id>` | `VALIDATION` | 1 |
 | `--element` on a workflow that declares no element (`start`) | `workflow '<name>' declares no element: --element is not accepted` | `VALIDATION` | 1 |
 | element not found at `HEAD` | `element not found: <type>:<id>` | `NOT_FOUND` | 1 |
+| `--element` short reference matching several elements (`start`, `adopt`) | `ambiguous reference: <id> matches <N> elements` (`spec-008` §6; every full id in `details`, id order) | `CONFLICT` | 1 |
 | `--set phase=` collides (`start`) | `plan id already exists: <id>` | `CONFLICT` | 1 |
 | second `start` commit failed | `plan <id> was added but not submitted: run wingfoil memory submit <id>` | as the failure | 1 |
 | no open instance (`end`) | `no active workflow to end` | `NOT_FOUND` | 1 |
@@ -1665,3 +1666,8 @@ the approver's `memory amend`.
 when no program can decide its condition. §12 records 65 warnings over 44 check names (86 before), 17 prose checks
 bound manual (21 occurrences), 17 checkpoints unchanged. Edited in place without a supersede or a state change
 (`dl-047`), pending the approver's `memory amend`.
+
+**Revision (2026-11-01, `task-332-resolve-a-short-element-reference-prefix-and-number-or-a-unique-prefix-of-the-full-id-in-the-memory-verbs`) — §3.4, §7.11 and §10.** `--element` of `workflow start` and `workflow adopt` takes a short
+reference (`spec-008` §7); the plan binds, and the adoption record names, the element's full id, and an ambiguous
+reference is a `CONFLICT` row (approver design gate 2026-11-01, D1 (b)). Edited in place without a supersede or a
+state change (`dl-047`), pending the approver's `memory amend`.

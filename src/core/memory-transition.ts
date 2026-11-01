@@ -30,10 +30,13 @@ import {
   E_INVALID_TRANSITION,
   findMemoryDocumentById,
   findMemoryDocumentByIdAtRev,
+  loadMemoryDocumentsAtRev,
   loadMemoryDocumentSummary,
   loadMemoryDocumentSummaryAtRev,
   loadTypeDocumentCopiesAtRevs,
+  ambiguousReferenceError,
   refBaselineCommits,
+  resolveElementReference,
   resolveStateMachine,
   resolveSupersedeTarget,
   resolveTypeTransition,
@@ -41,7 +44,7 @@ import {
   validateFrontmatterState,
   verifyDocumentEdit,
 } from '../memory';
-import type { DocumentScope, MemoryYaml, StateMachine, TransitionOp } from '../memory';
+import type { DocumentScope, MemoryDocumentSummary, MemoryYaml, StateMachine, TransitionOp } from '../memory';
 import { mergeBasesWith, pathPorcelainStatus, readDocument, readPathAtRev, writeAndCommit } from '../storage';
 import { type Diagnostic, formatDiagnostic, isNewerFormatError, ValidationError } from '../validation';
 
@@ -206,6 +209,39 @@ function recordedIdAt(root: string, sha: string, path: string): string | undefin
 }
 
 /**
+ * How a lookup treats the id it is given. By default the id must equal a document's frontmatter `id`
+ * (every internal caller: the `supersedes:` trigger, a plan's finalize, step keys). With
+ * `resolveReference` a miss is retried as a short reference (task-332, `spec-008` §7): `<type prefix>-<n>`
+ * or a unique prefix of the full id, over the documents of the same commit. The command-line verbs ask for it.
+ */
+export interface ReferenceLookupOptions {
+  readonly resolveReference?: boolean;
+}
+
+/**
+ * Resolve `reference` among every document commit `sha` holds ({@link resolveElementReference}): the document
+ * a unique match names, `undefined` for none (the caller keeps its `document not found` refusal), a `CONFLICT`
+ * listing every candidate for several. Nothing is written. Documents the scan could not read join `unreadable`.
+ */
+function resolveReferenceAtSha(
+  root: string,
+  sha: string,
+  memoryYaml: MemoryYaml,
+  reference: string,
+  unreadable: Diagnostic[],
+): CoreResult<MemoryDocumentSummary> | undefined {
+  const scanned: Diagnostic[] = [];
+  const documents = loadMemoryDocumentsAtRev(root, sha, memoryYaml, { onDiagnostic: (diagnostic) => scanned.push(diagnostic) });
+  for (const diagnostic of scanned) {
+    if (!unreadable.some((known) => known.file === diagnostic.file)) unreadable.push(diagnostic);
+  }
+  const resolution = resolveElementReference(documents, memoryYaml, reference);
+  if (resolution.kind === 'missing') return undefined;
+  if (resolution.kind === 'ambiguous') return coreErr(ambiguousReferenceError(reference, resolution.candidates));
+  return coreOk(resolution.document);
+}
+
+/**
  * Locate document `id` and resolve verb `op` on it, **at `HEAD`**: the `memory.yaml`, the document
  * the id names and its current `status` are all read from the one commit `HEAD` resolves to, once
  * (`resolveRevision`, then `loadMemoryYamlAtRev` and `findMemoryDocumentByIdAtRev` at that sha).
@@ -252,6 +288,10 @@ function recordedIdAt(root: string, sha: string, path: string): string | undefin
  *   moves the element — except `reject` and `park`, which send it back along a reject or `returns`
  *   edge and are exempt (`dl-156` Q2 (i)).
  *
+ * With `options.resolveReference` (the command-line verbs, task-332) an id no document carries exactly is retried as a
+ * short reference at the same sha (`resolveElementReference`): one match proceeds under the element's full id, several
+ * are `CONFLICT`, none keeps the `document not found` refusal.
+ *
  * The unknown-type, invalid-state and illegal-transition refusals keep their pinned messages
  * verbatim as the first sentence; {@link uncommittedMachineNote} may append a second one.
  */
@@ -259,6 +299,7 @@ export function prepareMemoryTransition(
   root: string,
   id: string,
   op: TransitionOp | 'amend' | 'finalize',
+  options: ReferenceLookupOptions = {},
 ): CoreResult<PreparedMemoryTransition> {
   // Resolved ONCE: every read below is at this sha, so the machine and the document cannot come from
   // two commits even if `HEAD` moves while the verb runs (task-137). No commit at all is the same
@@ -286,7 +327,7 @@ export function prepareMemoryTransition(
         `the machine the repository records, not by a working tree (dl-080); commit '${MEMORY_YAML_PATH}' first, then retry.`,
     });
   }
-  return prepareMemoryTransitionAtRev(root, sha, memoryYaml, id, op);
+  return prepareMemoryTransitionAtRev(root, sha, memoryYaml, id, op, undefined, options);
 }
 
 /**
@@ -305,10 +346,14 @@ export function prepareMemoryTransitionAtRev(
   root: string,
   sha: string,
   memoryYaml: MemoryYaml,
-  id: string,
+  reference: string,
   op: TransitionResolution,
   expectedType?: string,
+  options: ReferenceLookupOptions = {},
 ): CoreResult<PreparedMemoryTransition> {
+  // The id every message and output below names. It is `reference` unless the caller asked for a short
+  // reference and one element answers to it (task-332): the full id then replaces the reference everywhere.
+  let id = reference;
   // Tolerant (task-171, `bug-031`): a committed document the scan cannot read no longer refuses the
   // transition of another element. It is skipped and reported; the verb's success carries it as a
   // warning, and a miss names it, since the id may be in it.
@@ -319,6 +364,14 @@ export function prepareMemoryTransitionAtRev(
   } catch (error) {
     // The lookup throws only the `dl-149` refusal of the element it names (task-257, `bug-241`).
     return newerFormatRefusal(op, id, 'HEAD', error);
+  }
+  if (!found && options.resolveReference === true) {
+    const resolved = resolveReferenceAtSha(root, sha, memoryYaml, reference, unreadable);
+    if (resolved !== undefined && !resolved.ok) return resolved;
+    if (resolved !== undefined) {
+      found = resolved.value;
+      id = String(found.frontmatter.id);
+    }
   }
   if (!found) {
     const onDisk = uncommittedDocumentPath(root, memoryYaml, id);
@@ -637,10 +690,11 @@ export function beginMemoryTransition(
   root: string,
   id: string,
   op: TransitionOp | 'amend' | 'finalize',
+  options: ReferenceLookupOptions = {},
 ): CoreResult<BegunMemoryTransition> {
   const identity = requireGitIdentity(root);
   if (!identity.ok) return identity;
-  const prepared = prepareMemoryTransition(root, id, op);
+  const prepared = prepareMemoryTransition(root, id, op, options);
   if (!prepared.ok) return prepared;
   return coreOk({ ...prepared.value, identity: identity.value });
 }
