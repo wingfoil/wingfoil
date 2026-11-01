@@ -567,6 +567,31 @@ describe('task-237 (g) — {mcp_config}: required under config-arg, legal only t
     );
   });
 
+  // bug-373: the placeholders that belong to launch args are refused inside `mcp.template` too. The issue is
+  // copied from a real `parseAdapterManifest` run on the built `dist/agent` (`mcp.via: config-arg`, the placeholder
+  // added to the template of `configArg()`); the exact list, because `configArg()` alone has no issue.
+  it.each([
+    [
+      '{mcp_config}',
+      'placeholder {mcp_config} is not legal here: it is legal in launch.*.args, when mcp.via is config-arg (spec-016 §2.3)',
+    ],
+    [
+      '{mcp_config_file}',
+      'placeholder {mcp_config_file} is not legal here: it is legal in launch.*.args, when mcp.via is config-file (spec-016 §2.3)',
+    ],
+  ])('refuses %s inside mcp.template under config-arg, with exactly one issue', (placeholder, message) => {
+    const manifest = configArg();
+    manifest.mcp.template = `mcp_servers.wingfoil={command = "{mcp_command}", args = {mcp_args}, cfg = "${placeholder}"}`;
+    expect(issuesOf(manifest)).toEqual([
+      {
+        code: 'E_ADAPTER_PLACEHOLDER',
+        path: 'mcp.template',
+        file: 'HEAD:.wingfoil/agents/custom/fake.yaml',
+        message,
+      },
+    ]);
+  });
+
   it.each([['x{mcp_config}'], ['mcp_servers.wingfoil={mcp_config}'], ['{mcp_config} ']])(
     'refuses {mcp_config} inside an argv element under config-arg: %p',
     (element) => {
