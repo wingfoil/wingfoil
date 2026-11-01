@@ -25,13 +25,13 @@ Layer (CLI + MCP)**.
 
 > **Project status: implementation under way.** The release line `rl-v1` is `active`; `minor-v0.1`,
 > `minor-v0.2`, the patches `patch-v0.2.2` and `patch-v0.3.1` and `minor-v0.3` are `released` (`wingfoil@0.3.1`
-> on npm, the pinned build), and **the bug-fix patch `patch-v0.3.2` is in `release-planning`** on the maintenance
-> line `release/0.3`, before `v0.4` (approver ruling of 2026-10-26, recorded in `dl-186`), while `main` carries
-> `v0.4` (`docs/04_memory/planning/`). The repository carries a real implementation under
-> `src/` — ten modules: `core, validation, storage, memory, dna, directives, workflow, cli, mcp, agent` — a
-> packaged `wingfoil` CLI (`package.json` `bin` → `dist/cli.js`) and an MCP server (`wingfoil mcp`), all
-> covered by a full Jest suite (`npm test`). Read, run, test and reason about `src/` as you would in any
-> other codebase.
+> on npm, the pinned build), and **the bug-fix patch `patch-v0.3.2` is `in-development`** on the maintenance
+> line `release/0.3` — its implementation closed, its release phases under way — before `v0.4` (approver ruling
+> of 2026-10-26, recorded in `dl-186`), while `main` carries `v0.4` (`docs/04_memory/planning/`). The repository
+> carries a real implementation under `src/` — ten modules: `core, validation, storage, memory, dna,
+> directives, workflow, cli, mcp, agent` — a packaged `wingfoil` CLI (`package.json` `bin` → `dist/cli.js`) and
+> an MCP server (`wingfoil mcp`), all covered by a full Jest suite (`npm test`). Read, run, test and reason about
+> `src/` as you would in any other codebase.
 >
 > **The command surface** is derived mechanically from `CORE_MODULES` (`src/core/index.ts`) — 35 commands,
 > each with an entry in `docs/cli-reference.md`:
@@ -457,7 +457,8 @@ non-blank (`--reason` itself stays optional, `dl-027`).
             - `e2e-smoke` *(dl-023: `fresh-init` → `drive-cli` → `mcp-registration` → `gate`)* →
               `release-submit` (`pre-release-checks` → `enter-releasing` → `approve-release`) →
               `release-publishing` (`release-commit` → `staging-rehearsal` → `tag` on the integration branch →
-              `publish` → `mark-released` → `merge-forward`, optional: a patch's `release/X.Y` merged forward into `main`, a minor recording it with `workflow finalize`, `git-conventions` §1 rule 6) →
+              `publish` → `mark-released` → `merge-forward`, optional: a patch's `release/X.Y` merged forward
+              into `main`, a minor recording it with `workflow finalize`, `git-conventions` §1 rule 6) →
               `release-health` *(dl-089: `measure` → `compare` → `propose`
               against `docs/08_health/metrics.yaml`; not a gate)* → `retrospective` (`explore` →
               `collect-feedback` → `additional-points` → `capture` → `approve`, → decision-logs).

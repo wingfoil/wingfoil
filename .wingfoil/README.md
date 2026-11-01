@@ -112,7 +112,8 @@ sw-life-cycle (main)
 │                              │     │               → align-agent-docs → agent-docs — dl-013, dl-025)
 │                              │     ├── e2e-smoke  (fresh-init + CLI end-to-end smoke gate + mcp-registration — dl-023)
 │                              │     ├── release-submit
-│                              │     ├── release-publishing
+│                              │     ├── release-publishing  (… → tag → publish → mark-released → merge-forward,
+│                              │     │                        optional: a patch's release/X.Y into main — task-306)
 │                              │     ├── release-health  (measure → compare → propose — dl-089; docs/08_health/)
 │                              │     └── retrospective  (→ decision-log)
 │                              ├── align-agent-docs    → agent-docs  (dl-025: the same phase at release-line close)
