@@ -44,8 +44,10 @@ import { E_PATH_ESCAPES_ROOT, E_PATH_OUTSIDE_TYPE_FOLDER, E_TARGET_IS_SYMLINK } 
 import {
   expandFieldTokens,
   findMemoryDocumentById,
+  ambiguousReferenceError,
   firstLineOf,
   formatMemoryCommitMessage,
+  loadMemoryDocuments,
   memoryUnreadableDiagnostic,
   hasNumericToken,
   isArchivedStatus,
@@ -55,6 +57,7 @@ import {
   readAuthorDate,
   reconstructMemoryTransitions,
   renderAddDocument,
+  resolveElementReference,
   REJECTION_REASON_FIELD,
   renderRejectDocument,
   describeSubmitContent,
@@ -1287,10 +1290,11 @@ export interface MemoryHistoryResult {
  * `IO` (exit `1`) carrying git's message, never an empty trail (task-142, `bug-072`).
  */
 const memoryHistoryFn: CoreFn<unknown, MemoryHistoryResult> = async (params) => {
-  const { root, positional: id } = params as MemoryHistoryParams;
-  if (id === undefined || id.trim().length === 0) {
+  const { root, positional: reference } = params as MemoryHistoryParams;
+  if (reference === undefined || reference.trim().length === 0) {
     throw new UsageError(missingOperandReason('id'));
   }
+  let id = reference;
 
   const loaded: CoreResult<MemoryYaml> = loadConfigOrError(root, () => loadMemoryYaml(root));
   if (!loaded.ok) return loaded;
@@ -1299,6 +1303,21 @@ const memoryHistoryFn: CoreFn<unknown, MemoryHistoryResult> = async (params) => 
   let found: ReturnType<typeof findMemoryDocumentById>;
   try {
     found = findMemoryDocumentById(root, loaded.value, id, { onDiagnostic: (diagnostic) => diagnostics.push(diagnostic) });
+    if (!found) {
+      // Not a full id: a short reference (task-332, `spec-008` §7), over the same working-tree documents. From here
+      // the answer carries the element's full id, never the reference.
+      const scanned: Diagnostic[] = [];
+      const documents = loadMemoryDocuments(root, loaded.value, { onDiagnostic: (diagnostic) => scanned.push(diagnostic) });
+      for (const diagnostic of scanned) {
+        if (!diagnostics.some((known) => known.file === diagnostic.file)) diagnostics.push(diagnostic);
+      }
+      const resolution = resolveElementReference(documents, loaded.value, reference);
+      if (resolution.kind === 'ambiguous') return coreErr(ambiguousReferenceError(reference, resolution.candidates));
+      if (resolution.kind === 'found') {
+        found = resolution.document;
+        id = String(found.frontmatter.id);
+      }
+    }
   } catch (error) {
     // The `dl-149` refusal of the element the lookup names (task-257, `bug-241`): a document written in
     // a newer format is not read by today's rules. Any other failure (an unreadable directory) is not
@@ -1311,7 +1330,7 @@ const memoryHistoryFn: CoreFn<unknown, MemoryHistoryResult> = async (params) => 
     });
   }
   if (!found) {
-    return coreErr({ code: 'NOT_FOUND', message: `document not found: ${id}` });
+    return coreErr({ code: 'NOT_FOUND', message: `document not found: ${reference}` });
   }
 
   let transitions: ReturnType<typeof reconstructMemoryTransitions>;
@@ -1397,14 +1416,15 @@ export interface MemorySubmitResult {
  *    requires it only on the approval gates (`dl-027`).
  */
 const memorySubmitFn: CoreFn<unknown, MemorySubmitResult> = async (params) => {
-  const { root, positional: id } = params as MemorySubmitParams;
+  const { root, positional: reference } = params as MemorySubmitParams;
 
-  if (id === undefined || id.trim().length === 0) {
+  if (reference === undefined || reference.trim().length === 0) {
     throw new UsageError(missingOperandReason('id'));
   }
 
-  const prepared = beginMemoryTransition(root, id, 'submit');
+  const prepared = beginMemoryTransition(root, reference, 'submit', { resolveReference: true });
   if (!prepared.ok) return prepared;
+  const { id } = prepared.value; // the element's full id, whatever reference the verb was given (task-332)
   const { type, path, frontmatter, content, from, to } = prepared.value;
 
   const fieldsFilled = requireRequiredFields(prepared.value.memoryYaml, type, frontmatter, 'submit');
@@ -1522,15 +1542,16 @@ export interface MemoryApproveResult {
  *    `commit` is the approve's.
  */
 const memoryApproveFn: CoreFn<unknown, MemoryApproveResult> = async (params) => {
-  const { root, positional: id, options } = params as MemoryApproveParams;
+  const { root, positional: reference, options } = params as MemoryApproveParams;
 
-  if (id === undefined || id.trim().length === 0) {
+  if (reference === undefined || reference.trim().length === 0) {
     throw new UsageError(missingOperandReason('id'));
   }
   const reason = requireReason(options);
 
-  const prepared = beginMemoryTransition(root, id, 'approve');
+  const prepared = beginMemoryTransition(root, reference, 'approve', { resolveReference: true });
   if (!prepared.ok) return prepared;
+  const { id } = prepared.value; // the element's full id, whatever reference the verb was given (task-332)
   const { type, path, content, from, to } = prepared.value;
 
   const authorized = requireApprovalAuthority(root, type, prepared.value.identity);
@@ -1682,15 +1703,16 @@ export interface MemoryRejectResult {
  * attribution (adr-001/adr-006) — under the `APPROVER_ROLE` the authority was exercised as.
  */
 const memoryRejectFn: CoreFn<unknown, MemoryRejectResult> = async (params) => {
-  const { root, positional: id, options } = params as MemoryRejectParams;
+  const { root, positional: reference, options } = params as MemoryRejectParams;
 
-  if (id === undefined || id.trim().length === 0) {
+  if (reference === undefined || reference.trim().length === 0) {
     throw new UsageError(missingOperandReason('id'));
   }
   const reason = requireReason(options);
 
-  const prepared = beginMemoryTransition(root, id, 'reject');
+  const prepared = beginMemoryTransition(root, reference, 'reject', { resolveReference: true });
   if (!prepared.ok) return prepared;
+  const { id } = prepared.value; // the element's full id, whatever reference the verb was given (task-332)
   const { type, path, from, to, content } = prepared.value;
 
   const authorized = requireApprovalAuthority(root, type, prepared.value.identity);
@@ -1781,9 +1803,9 @@ export interface MemoryDeprecateResult {
  * that shape back — it parses `Reason:` independently of `Approver:` for exactly this verb.
  */
 const memoryDeprecateFn: CoreFn<unknown, MemoryDeprecateResult> = async (params) => {
-  const { root, positional: id, options } = params as MemoryDeprecateParams;
+  const { root, positional: reference, options } = params as MemoryDeprecateParams;
 
-  if (id === undefined || id.trim().length === 0) {
+  if (reference === undefined || reference.trim().length === 0) {
     throw new UsageError(missingOperandReason('id'));
   }
   // `--reason` is optional here (`dl-027`), but a reason that IS given must be recordable in the
@@ -1792,8 +1814,9 @@ const memoryDeprecateFn: CoreFn<unknown, MemoryDeprecateResult> = async (params)
   // `bug-042` F2/F3, whose amendment makes THIS verb the exploitable one).
   const reason = optionalReason(options);
 
-  const prepared = beginMemoryTransition(root, id, 'deprecate');
+  const prepared = beginMemoryTransition(root, reference, 'deprecate', { resolveReference: true });
   if (!prepared.ok) return prepared;
+  const { id } = prepared.value; // the element's full id, whatever reference the verb was given (task-332)
   const { type, path, from, to, content } = prepared.value;
   if (from === to) {
     return coreErr({ code: 'VALIDATION', message: `document already deprecated: ${id}` });
@@ -1853,15 +1876,16 @@ export interface MemoryParkResult {
  * not by this verb.
  */
 const memoryParkFn: CoreFn<unknown, MemoryParkResult> = async (params) => {
-  const { root, positional: id, options } = params as MemoryParkParams;
+  const { root, positional: reference, options } = params as MemoryParkParams;
 
-  if (id === undefined || id.trim().length === 0) {
+  if (reference === undefined || reference.trim().length === 0) {
     throw new UsageError(missingOperandReason('id'));
   }
   const reason = requireReason(options);
 
-  const prepared = beginMemoryTransition(root, id, 'park');
+  const prepared = beginMemoryTransition(root, reference, 'park', { resolveReference: true });
   if (!prepared.ok) return prepared;
+  const { id } = prepared.value; // the element's full id, whatever reference the verb was given (task-332)
   const { type, path, from, to, content } = prepared.value;
 
   const message = formatMemoryCommitMessage({ type, op: 'park', ids: [id], transition: { from, to }, reason });
@@ -1934,15 +1958,16 @@ export interface MemoryAmendResult {
  *    `wf(<type>): amend <id> [<s> → <s>]` with the `Approver:` / `Reason:` body (`spec-008` §2).
  */
 const memoryAmendFn: CoreFn<unknown, MemoryAmendResult> = async (params) => {
-  const { root, positional: id, options } = params as MemoryAmendParams;
+  const { root, positional: reference, options } = params as MemoryAmendParams;
 
-  if (id === undefined || id.trim().length === 0) {
+  if (reference === undefined || reference.trim().length === 0) {
     throw new UsageError(missingOperandReason('id'));
   }
   const reason = requireReason(options);
 
-  const prepared = beginMemoryTransition(root, id, 'amend');
+  const prepared = beginMemoryTransition(root, reference, 'amend', { resolveReference: true });
   if (!prepared.ok) return prepared;
+  const { id } = prepared.value; // the element's full id, whatever reference the verb was given (task-332)
   const { memoryYaml, type, path, content, frontmatter, from, to } = prepared.value;
 
   // Before any question about the edit: is this file the project's to write at all (REQ-SEC-06,

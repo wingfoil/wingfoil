@@ -87,6 +87,8 @@ export type {
   MemorySearchOptions,
   MemoryTypeScanOptions,
 } from './query';
+export { ambiguousReferenceError, resolveElementReference } from './reference';
+export type { ElementReferenceOptions, ElementReferenceResolution } from './reference';
 export { getMemoryHistory } from './history';
 export type { MemoryHistoryEntry, WalkedHistoryEntry } from './history';
 export { writeMemoryEntry } from './entry';
