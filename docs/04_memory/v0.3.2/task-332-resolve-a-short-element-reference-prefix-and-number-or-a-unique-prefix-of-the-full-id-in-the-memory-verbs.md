@@ -362,6 +362,14 @@ Design gate approved by the approver on 2026-11-01, every decision as the design
 
 **Observation for green.** In `element-short-reference.test.ts` the import of `src/core` has to precede `src/core/agent-execute`: with the order reversed, `CORE_MODULES.agent.agentList.fn` was `undefined` in that file (`TypeError: operation.fn is not a function`, observed at red); the file imports it first.
 
+### red correction (qa, 2026-11-01)
+
+Two of the red tests in `test/core/element-short-reference.test.ts` could not pass for any correct implementation. The developer found them at green (T4); the approver approved the correction on 2026-11-01.
+- `workflow start --element` case: `expect(value.instance.element).toEqual({ type: 'release', id: 'release-003' })` failed identically with the full id, because `instance.element` is a deduction `ElementRef` that always carries `status`. It is now `toMatchObject` (as `test/core/workflow-start-end.test.ts` does). 2 tests.
+- `agent execute` ambiguity case: the candidates were listed `[TASK_ID, 'task-202-explicit-other']`, but D7 orders them by id and `task-202-explicit-other` sorts before `task-202-explicit-override`. The two are swapped. 1 test.
+
+Correction commit: `56cef12873fcc96624e9a2948162f921804dd000` (only that test file, 2 lines changed). With the developer's green in place: `npx jest test/memory/reference.test.ts test/core/memory-short-reference.test.ts test/core/element-short-reference.test.ts test/cli/memory-short-reference.integration.test.ts test/core/memory-history.test.ts --maxWorkers=2` printed `Test Suites: 5 passed, 5 total`, `Tests: 109 passed, 109 total`; `npx tsc --noEmit -p tsconfig.json` printed nothing; `npx jest test/lint --maxWorkers=2` printed `Tests: 153 passed, 153 total`.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
