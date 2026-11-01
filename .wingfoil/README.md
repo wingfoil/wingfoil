@@ -28,7 +28,9 @@ repository; which build runs which is the `wingfoil-cli` directive's rule (§1):
   `package.json` pins as `wingfoil-released` (`dl-095`): `npm run -s wingfoil -- <command>`. The workflow
   reads came back to it when the pin reached a build that reads the `{ type, path }` form of a `produces`
   entry (`dl-104` D3). They left it while the pin was 0.3.0, which refuses the `manual: true` check binding
-  (`dl-172` (a), `bug-414`), and are back on it since the pin reached 0.3.1.
+  (`dl-172` (a), `bug-414`), and are back on it on a line whose pin is 0.3.1 or later. The pin is per line:
+  `release/X.Y` pins a published `X.Y.z`, `main` the newest published version, and a merge forward keeps
+  `main`'s pin (`git-conventions` §1 rule 5); read the pin of the branch you are on.
 
 The workflow commands track a workflow — they deduce its state, open and close a run as a `plan` element
 (`dl-019`), print the next step, record what nothing else completes, adopt an element created outside the run and
