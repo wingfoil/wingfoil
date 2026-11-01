@@ -470,6 +470,25 @@ From the orchestrator's event log, verified by the supervision against `git log`
   `task-327`); `docs.parity` → 10/10, 65/65; the full suite → 542/542 suites, 9569/9569 tests; the six
   `docs/examples/*/run.sh` → exit 0, each ending in OK. (W2.3) re-sweep: no bug with an empty `release`. (W2.4)
   re-plan: `w3` appended to `waves:`; `## Scope changes` unchanged (28 vs 26); rulings W3-R1 … W3-R4.
+- 2026-11-01: `w3`, one task, `task-330` (start 07:41, done and merged 11:48, `a9a62b5c9`), in the `w2` orchestrator
+  session (W3-R2), models as W3-R1 (every agent's model checked on its transcript). Design gate with six rulings (D1:
+  one `warning:` line per distinct deduction diagnostic, as `agent list`, rather than a count; D4: `bug-340` met on the
+  core API only, its CLI/MCP rendering left to `bug-303`); review APPROVE WITH FIXES (no blocker, two major, one minor,
+  all in prose) → re-review APPROVE; one phrase of `docs/cli-reference.md` aligned with spec-016 before the approve
+  (same-class drift, approver ruling). Amends with the approve: spec-016 (`073bfdb5`), spec-017 (`2792b7a4`), `bug-340`
+  (`323c1971`). Bugs closed: `bug-339`, `bug-340`, `bug-354`. Filed: `bug-468` (`bug-340`'s deferred unscoped-key half,
+  `v0.4`) and `bug-469` (this repository's 65 unbound prose `checks:`/`actions:` tokens, which `agent execute` now
+  prints on every run; release left to `v0.4`'s release-planning). The approver ruled out splitting `agent execute`'s
+  warnings into run and configuration classes: the noise is this repository's configuration debt (a fresh `init
+  --template Scrum` project carries no diagnostic), to be bound in `.wingfoil/workflows/bindings.yaml` in view of the
+  checks runner (P4.10/P4.12, v1.0). W3-R1 held: every report named its post-amend sha. No stall.
+- 2026-11-01 (W3.2, supervision): wave-checks at `a9a62b5c9` (this branch after merging `release/0.3`): `node
+  scripts/e2e-smoke.cjs --candidate --report docs/07_gates/rl-v1/rel-v0.3.2-w3-e2e-smoke.md` → PASS 85/85
+  (`36f41705`); `docs.parity` → 10/10 suites, 65/65 tests; the full suite → 547/547 suites, 9598/9598 tests; the six
+  `docs/examples/*/run.sh` → exit 0, each ending in OK, with `wingfoil` on `PATH` the wave's build `0.3.1 (a9a62b5c)`.
+  (W3.3) re-sweep: one bug with an empty `release`, `bug-469`, left empty by the approver's ruling; 21 decision-logs
+  carry none (17 `ready`, 4 `in-discussion`), none changed in `w3`; no ADR `pending`. (W3.4) re-plan: `w4` appended to
+  `waves:`; `## Scope changes` unchanged (28 vs 26, `task-332` recorded at `w1`); `w4` runs under W3-R1 … W3-R4.
 
 #### W2 measures
 
@@ -483,6 +502,18 @@ From the orchestrator's event log, verified by the supervision against `git log`
   `w0`–`w1`. Review findings: no blocker in `w2`, as in `w0`–`w1`; the Opus reviewers found every defect above that
   reached a commit. Templates were corrected twice during the wave (governance in red without a build; a skipped step
   stated with its command; a merge amended with its trailers).
+
+
+#### W3 measures
+
+- **Tokens** (`tokens.cjs`, 4 phase agents, two of them resumed once; output not measured): Opus (design, review +
+  re-review) cache read 16.5 M, cache write 0.7 M; Sonnet (red, green + refactor + review fixes) cache read 6.8 M, cache
+  write 0.7 M; phase agents per task 23.2 M cache read (`w2` 18.8 M, `w1` 27.5 M, one task only in `w3`). The
+  orchestrator session over `w3` cache read 28.7 M, cache write 0.8 M.
+- **Process defects by agent model:** none by a phase agent in `w3` (the Sonnet agents' `w2` defects did not recur:
+  post-amend shas, §7 trailers on every commit, every report delivered). The orchestrator ran its first template edit
+  in the shared checkout by mistake and reverted it within a minute, nothing committed. Approver wait: the approve gate
+  queued at 09:55 was run at 11:48.
 
 ### Retrospective
 
