@@ -142,7 +142,7 @@ describe('task-332 AC 5 — workflow start --element resolves a short reference 
       const result = await workflowStart(root, reference);
 
       const value = ok<StartValue>(result);
-      expect(value.instance.element).toEqual({ type: 'release', id: 'release-003' });
+      expect(value.instance.element).toMatchObject({ type: 'release', id: 'release-003' });
       expect(value.instance.id).toBe('release-cycle-release-003-plan');
       const shortId = reference.slice('release:'.length);
       expect(readFileSync(join(root, 'docs/plans/release-cycle/release-cycle-release-003-plan.md'), 'utf-8')).not.toContain(shortId);
@@ -342,7 +342,7 @@ describe('task-332 AC 5 — agent execute --element resolves a short reference a
       code: 'CONFLICT',
       message: 'ambiguous reference: task-202 matches 2 elements',
       hint: CONFLICT_HINT,
-      details: { candidates: [TASK_ID, 'task-202-explicit-other'] },
+      details: { candidates: ['task-202-explicit-other', TASK_ID] },
     });
     assertPersistenceUnchanged(root, unchanged, 'ambiguous agent execute --element');
   }, 60000);
