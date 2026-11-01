@@ -408,6 +408,8 @@ Commands run on this worktree, each after `bash` the slot wait; results as print
 - `docs/04_memory/design/specs/spec-008-cli-grammar.md` (approved tech-spec, amendable): `--reason "Add the short element references to the CLI grammar: section 7 resolution rules, the ambiguous reference refusal in section 6 and the three section 12 rows, with a Revision note, per task-332."`
 - `docs/04_memory/design/specs/spec-016-agent-execution.md`: `--reason "Let agent execute --element take a short reference: section 3.2 step 2, the ambiguity row of the error table and the Process note on P5.3.1 scenario 2, with a Revision note, per task-332."`
 - `docs/04_memory/design/specs/spec-017-workflow-commands-and-state-deduction.md`: `--reason "Let workflow start and workflow adopt take a short reference in --element: sections 3.4, 7.1, 7.11 and the error table, with a Revision note, per task-332."`
+- spec-017, corrected after the review (replaces the line above): `--reason "Let workflow start and workflow adopt take a short reference in --element: sections 3.4, 7.11 and the error table, with a Revision note, per task-332."`
+- The spec-008 and spec-016 lines above stand; their text changed after the review (the section 12 sentences, the id_pattern wording, the unreadable-element sentence, the scenario 2 note).
 
 ### review fixes (developer, 2026-11-01)
 
@@ -419,6 +421,7 @@ Reviewer verdict: approve with fixes, 0 blockers. One line per finding:
 5. P5.3.1 fixture note and the spec-016 Process note: `task:202` needs a fixture with that full id, or may be written `task:task-202`.
 6. "committed `id_pattern`" became "the `id_pattern` of the `memory.yaml` the command reads" in the spec-008 section 7 amend and in `src/memory/reference.ts` (`grep -n committed src/memory/reference.ts` prints nothing).
 7. The unreadable-element sentence now reads "a short reference never resolves to an element the tool cannot read" in the user guide, the CLI reference and spec-008 section 7 (which adds that a readable sibling matching the same reference is the one that resolves, if it is the only one).
+8. The two lines at the end of the design section (the corrected spec-017 reason and the spec-008/spec-016 line) were placed there by mistake in a0d282330 and are superseded by the Pending amendments lines; left in place because the notes change only by addition.
 
 ### Retrospective
 
