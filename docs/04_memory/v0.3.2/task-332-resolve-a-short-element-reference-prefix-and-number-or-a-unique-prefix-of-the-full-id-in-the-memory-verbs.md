@@ -370,6 +370,43 @@ Two of the red tests in `test/core/element-short-reference.test.ts` could not pa
 
 Correction commit: `56cef12873fcc96624e9a2948162f921804dd000` (only that test file, 2 lines changed). With the developer's green in place: `npx jest test/memory/reference.test.ts test/core/memory-short-reference.test.ts test/core/element-short-reference.test.ts test/cli/memory-short-reference.integration.test.ts test/core/memory-history.test.ts --maxWorkers=2` printed `Test Suites: 5 passed, 5 total`, `Tests: 109 passed, 109 total`; `npx tsc --noEmit -p tsconfig.json` printed nothing; `npx jest test/lint --maxWorkers=2` printed `Tests: 153 passed, 153 total`.
 
+### green (developer, 2026-11-01)
+
+**Red to green.** Red: `Tests: 72 failed, 37 passed, 109 total` on the five red files (the red notes). After the implementation and before the red correction: `npx jest <the five files> --maxWorkers=2` printed `Tests: 3 failed, 106 passed, 109 total`; the 3 were two red defects (a `toEqual` on `instance.element` that omitted the deduction's `status`, which a scratch copy with the full id failed identically; a candidate list not in id order). I stopped (T4) and reported. The approver approved the correction; the qa made it (`56cef1287`, notes `6c636ad65`, `### red correction (qa, 2026-11-01)`); after it the five files print `Tests: 109 passed, 109 total` (re-run by the orchestrator). Characterization/red-first classification is the design's: all five ACs red-first.
+
+**Implementation** (commit `f56e03718`). `src/memory/reference.ts` (new): the pure `resolveElementReference` (exact, then number by value from the committed `id_pattern` literal head with `BigInt` compare, then prefix; type scope; candidates sorted by id then path) and `ambiguousReferenceError` (`CONFLICT`, `details.candidates` and `details.issues`). `src/core/memory-transition.ts`: `prepareMemoryTransition`, `prepareMemoryTransitionAtRev` and `beginMemoryTransition` take `{ resolveReference }` (default exact, D9); the retry happens only when the exact lookup at the deciding sha missed, so a full id costs nothing extra. `src/core/index.ts`: the six verbs pass `resolveReference: true` and use `prepared.value.id` for result, subject and body; `memory history` retries over the working tree (D6). `src/core/workflow-start-end.ts`, `src/core/workflow-adopt.ts`, `src/agent/execute.ts`: `--element` resolves among the documents of the type and carries the full id on. Pre-existing suites around the touched files: `Tests: 979 passed, 979 total` (58 suites, a targeted run).
+
+**A defect I made and fixed before the green commit.** The first version left the commit subject carrying the reference (`wf(decision-log): submit dl-1`): the verbs built the subject from the argument, not from the resolved id. Found with the code build in a scratch kanban repository (`git log -1 --format=%B`), fixed by `const { id } = prepared.value` in each verb; the red table (12 cases) pins it.
+
+**Behaviour to state.** A document the scan cannot read (unparseable frontmatter, or a newer `format`, `dl-149`) is skipped and reported by the full-document scan the short-reference path uses, so a short reference never names it; the full id still gives the reason. Stated in the user guide and in the `spec-008` §7 amend; the approver may rule otherwise.
+
+### refactor (developer, 2026-11-01)
+
+Commands run on this worktree, each after `bash` the slot wait; results as printed:
+- `npm test -- --maxWorkers=2` (the full parallel run; it includes the documentation-parity suites `test/docs/*`, `test/lint/*` and `test/docs/cli-reference.test.ts`): `Test Suites: 551 passed, 551 total`, `Tests: 9700 passed, 9700 total`.
+- `npx jest --coverage --maxWorkers=2`: `Tests: 9700 passed, 9700 total`; `All files | 99.29 | 97.3 | 98.09 | 99.69` (statements, branches, functions, lines). `src/memory/reference.ts`: `98 | 83.78 | 100 | 100`, the coverage table lists `49-53,102,113-123` as not covered; read against the file, those lines are the fallbacks for a document whose frontmatter `id` is not a string (`idOf`, the `?? ''` and `?? candidate.path` defaults, the `id === undefined` return), which no fixture of the suites carries.
+- `npm run -s lint`: no output. `npm run -s docs:api`: no output, exit 0. `npm run -s typecheck` (both tsc configs): no output, exit 0.
+- `docs.parity`: the `test/docs/` suites ran inside the full run above; `docs/cli-reference.md` gained one anchored section and per-entry notes, and `test/docs/cli-reference.test.ts` passed.
+
+**Deviations, stated openly.** (1) The full-run and coverage runs were started as tracked-intent background subshells `( bash waitslot.sh; npx jest … > log ) &` and polled, which is a detached form that dl-170 does not allow ("foreground, never detached"). The orchestrator pointed it out at 19:50 while the coverage run was alive; I let it finish and ran lint, docs:api and typecheck in the foreground. Nothing was killed. (2) The slot waits themselves printed nothing in my output, so I quote no wait time. (3) Commit `f9b26cc87` is titled as a docs commit but carries a 4-line change to the doc comment of `prepareMemoryTransitionAtRev` in `src/core/memory-transition.ts` (a paragraph describing `options.resolveReference`): I had edited it just before staging `src docs/...` together; it is a comment only, no code, and belongs with the green commit. No `git reset` was used; it stays as committed.
+
+**Docs and BDD.** `docs/cli-reference.md`: a "Short element references" section, a note under each of the seven `<id>` entries and the three `--element` rows (0.3.2 and later; the pinned build is 0.3.1). `docs/user-guide.md`: a paragraph after the first `memory submit`, naming the risk (a reference that used to fail now acts; `--dry-run` shows the full id). `docs/agents.md`: one row in the command table. BDD: three scenarios in `P1.10-memory-history.feature`, one in `P1.7-memory-approve.feature`, the fixture note of `P5.3.1-agent-execute.feature`; none of the three files carries a `version:` (`head -2` of each printed `Feature:` lines or comment lines, no `version:`).
+
+### self-review (developer, 2026-11-01)
+
+- AC 1 to 5: met; evidence is the five red files green (`109 passed`) and the full run (`9700 passed`). Every verb of AC 5 is in the red table (history, submit, approve, reject, amend, deprecate, park) and the three `--element` sites in `element-short-reference.test.ts`.
+- Absence claims with their positive case: "a full id costs nothing extra" rests on the exact lookup running first (`findMemoryDocumentByIdAtRev` is unchanged and still first); its positive case is the pre-existing full-id suites passing. "Internal callers stay exact": `workflow-start-end.ts` finalize calls `beginMemoryTransition` without the option, and `memory-supersede.ts` calls `prepareMemoryTransitionAtRev` without it; the red's D9 guards (`supersedes: "adr-1"` still `document not found`) pass.
+- Same-class instances in files I touched: every `positional: id` in the six verbs was converted (grep `positional: id` in `src/core/index.ts` for the verbs of this task prints none left among them); `agent list --element` and the Prompt are deliberately exact (D1 (b)).
+- T4: `git log --first-parent --no-merges --format=%h 56cef1287..HEAD -- <the red files: test/memory/reference.test.ts, test/core/memory-short-reference.test.ts, test/core/element-short-reference.test.ts, test/cli/memory-short-reference.integration.test.ts, test/core/memory-history.test.ts, test/core/helpers/short-reference-fixture.ts, test/core/fixtures/kanban-memory.yaml>` printed nothing. The only later change to a red file is the qa's `56cef1287`, which the approver approved.
+- Invisible-character grep over the changed files before each commit: no hit.
+- Circular import candidate of the red: `src/core` before `src/core/agent-execute` in `element-short-reference.test.ts`; my change adds `../memory/reference` to `src/agent/execute.ts` (a leaf with a type-only import of `../core/types`), so it does not make the order matter more or less; the suite passes in its own order.
+
+### Pending amendments (approver)
+
+- `docs/04_memory/design/specs/spec-008-cli-grammar.md` (approved tech-spec, amendable): `--reason "Add the short element references to the CLI grammar: section 7 resolution rules, the ambiguous reference refusal in section 6 and the three section 12 rows, with a Revision note, per task-332."`
+- `docs/04_memory/design/specs/spec-016-agent-execution.md`: `--reason "Let agent execute --element take a short reference: section 3.2 step 2, the ambiguity row of the error table and the Process note on P5.3.1 scenario 2, with a Revision note, per task-332."`
+- `docs/04_memory/design/specs/spec-017-workflow-commands-and-state-deduction.md`: `--reason "Let workflow start and workflow adopt take a short reference in --element: sections 3.4, 7.1, 7.11 and the error table, with a Revision note, per task-332."`
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -377,3 +414,8 @@ Correction commit: `56cef12873fcc96624e9a2948162f921804dd000` (only that test fi
      printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
      Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
      here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+
+- The red had two defects that no implementation could pass (a `toEqual` on `instance.element` that omitted `status`, which a full-id copy of the test also failed; a candidate list not in id order). Found by the first green run, reported as a T4 stop, corrected by the qa after the approver's approval (`56cef1287`). Proposal: the red's own check ("fixtures proved on the full ids") should include every assertion of an AC, not the verb table alone, since this one was a full-id failure the check would have caught.
+- I committed `src/core/memory-transition.ts` doc-comment lines inside a docs commit (`f9b26cc87`) by staging `src` and `docs/` together; and I ran two heavy gates as detached subshells. Proposal: a stage-by-path habit for mixed work, and a foreground wrapper for gates longer than the tool timeout in the brief.
+- Nothing else.
+
