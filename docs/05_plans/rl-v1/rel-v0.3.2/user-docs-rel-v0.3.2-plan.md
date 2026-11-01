@@ -174,6 +174,78 @@ process defect of v0.3.2's dev-loop came from a Sonnet agent, none from Opus. Ru
 re-read in this patch (sources dated 2026-10-26), only `presentation.test.ts` checked; `demo.rendered` is confirmed
 without re-recording if S7's normalised diff is empty.
 
+**S1 — `check-implementation-complete`** (2026-11-02, code build at `08408181d`, before the plan's add): P1
+`status: in-development`; P2 `28 done`; P3 57 `closed` (the status lines differ only by their trailing comment); P4
+`0.3.1 (870bd4406…)`; P5 `0.3.1 (08408181d…)`; P6 tree clean, on `docs/user-docs-v0.3.2`,
+`git rev-list --left-right --count origin/release/0.3...release/0.3` → `0 0`. **PASS.** The plan: add `9b62cc1d1`,
+submit `632f521a4` (`draft → active`).
+
+**S2 — survey.**
+- **Command surface.** The `--help` of every group and subcommand, dumped for the pinned `0.3.1` and the code build and
+  diffed: the same 41 entries (6 groups + 35 commands; `CORE_MODULES` holds 33 operations, plus `init` and `mcp`); the
+  only differences are the help texts of `task-332`'s short references (the seven Memory verbs' `<id>`, `--element` of
+  `workflow adopt`, `workflow start`, `agent execute`).
+- **Inventory** (a read-only Opus agent): the 28 tasks and 57 bugs, each bug in exactly one task's `bug:` list; 13
+  tasks change what a user sees, 15 only the repository. Not documented before this phase: extra `paths` categories
+  (`task-312`, `bug-316`) and the scaffold's new optional template fields (`task-321`, `bug-338`, `bug-350`).
+- **Verdicts on `produces:`.** Stale: CHANGELOG (no `[0.3.2]`), README (no 0.3.2 row), user guide (the two items
+  above), cli-reference (`wingfoil paths`, the `init` subject's marker — found at S8), AGENTS.md §1 ("in
+  `release-planning`"), `.wingfoil/README.md` (the tree without `merge-forward`). Aligned: the `task-332` texts of
+  cli-reference, user guide and `docs/agents.md`, COLLABORATION, CONTRIBUTING, CODE_OF_CONDUCT, SECURITY (`0.3.x`
+  supported), `.github/` templates, `docs/site.yaml`, `llms.txt`, `docs/case-study.md` (v0.3.1 figures, `task-322`).
+  `docs/comparison.md` not re-read (ruling above); its line 9 is stale (F2 in the phase register).
+
+**S3 — examples.** `WINGFOIL="node $PWD/dist/cli.js" bash docs/examples/0*/run.sh` → `01`–`06` exit `0`.
+
+**S4–S6.** `94c4cf7dd` CHANGELOG `[0.3.2] - Unreleased` (Added: short references, the semver deviation said in the
+intro; Changed: the `init` subject; Fixed; Upgrading from 0.3.1; For contributors), every one of the 28 tasks and 57
+bugs cited (`grep` of each id in the section: none missing); `218aeb0de` README 0.3.2 row, user guide §4.3 (extra
+`paths` categories, run on both builds in a throwaway project: code build `paths extras` → the list, `extras: notes/`
+→ `E_VALIDATION paths.extras …`, `dna add paths.extras` → `unknown DNA field`) and §5 (the scaffold's optional
+fields); `b98c4fe55` `docs/agents.md` version line `(0.3.2)` (approver to confirm). Claims re-run on the code build:
+`memory submit bug` → `error: ambiguous reference: bug matches 2 elements` + hint + both ids, exit `1`, tree clean;
+`help memroy` → `hint: did you mean "memory"?`, exit `2`; `help help` → exit `0`; `init` subject without
+` (P5.1.1)`.
+
+**S7 — `demo.rendered`.** Example 01 on the pinned `0.3.1` and on the code build, transcripts normalised for shas,
+dates and temporary paths: **one line differs**, the `git log` the GIF ends on —
+`chore(wingfoil): initialize .wingfoil/ with the Scrum template (P5.1.1)` → without the suffix (`task-321`,
+`bug-409`). The GIF of `1fb2c457` shows the old subject. Decision to the approver (F3 in the phase register).
+
+**S8 — independent review** (an Opus reviewer with no authoring context). Pass 1 on align-user-docs: APPROVE WITH
+FIXES, no blocker; about 25 claims re-run on both builds, all held. Fixed in `8291aad6a`: the *Upgrading* list scoped
+to the commands that read `memory.yaml` and extended with the `directives list` and `agent list` exit codes; a clause
+for each cited contributor bug; extra `paths` categories in cli-reference; the `init` subject's marker; README
+`🔄 Being released`; the scaffold-comment wording. To the phase register: `paths --help` (F1), `comparison.md:9` (F2).
+Pass 2 on the fixes (all held, the re-wrap changing no meaning) and on align-agent-docs: APPROVE WITH FIXES; fixed in
+`1a62f54dd`: the pin per line in AGENTS.md §3 and `.wingfoil/README.md` (`main` pins `0.3.0`, and the merge forward
+keeps it, so "back on it since the pin reached 0.3.1" would be false on `main`), `release-planning` 2.4 in
+`.wingfoil/WORKFLOW.md` (pin per line, `npm ci`, the AGENTS.md §1 sentence, `dl-206`'s eligibility test), the
+governance check's two rules of `git-conventions` 2.6 §9 in AGENTS.md §5.1 and §7, `record-adrs` marked optional in
+§6. The same sentence in `wingfoil-cli` 1.4 is outside `produces:` (F4).
+
+**S9 — gate** on `089b48189` (2026-11-02 00:34–00:53, `gate-userdocs-v0.3.2.sh`, one heavy step at a time behind
+the FIFO slot): build, `check-governance --root "$PWD" --base origin/release/0.3` (and `--json`: 0 findings),
+`lint-claims --base origin/release/0.3`, typecheck, lint, `docs:api` → exit `0`; `npx jest --coverage --maxWorkers=2`
+→ 551 suites, 9700 tests passed, All files **99.29 / 97.29 / 98.09 / 99.69** (the w4 reference 99.29 / 97.3 / 98.09 /
+99.69 at two decimals; `git diff --quiet 08408181d HEAD -- src/` → the phase changed no source);
+`npx jest test/docs test/core/workflow-repository-conformance.test.ts` → 31 suites, 350 tests;
+`node scripts/build-site.cjs llms && git diff --exit-code llms.txt` → 0; examples 01–06 → 0; `npm run check:mcp` →
+0, no failure (pinned 0.3.1 and the code build: 8 prompts, 4 resources, every read answered); `workflow list --all
+--format json` on both builds → exit `0`, 65 `W_WORKFLOW_UNBOUND_TOKEN` warnings, no error; `npm pack --dry-run` → 573
+`npm notice` lines; tree clean. The e2e smoke was not run: the phase touched no file the smoke reads (Markdown only).
+After `1a62f54dd` (Markdown only): `npx jest test/docs` → 30 suites, 334 tests; `test/docs/workflow-md.test.ts` → 6;
+`check-governance --base origin/release/0.3` → 0 findings; `lint-claims --base origin/release/0.3` → 0 warnings.
+
+**S11 — `align-agent-docs`** (`089b48189`, fixes `1a62f54dd`). The six checks, as commands: (1) §1 — `CORE_MODULES`
+33 operations + `init` + `mcp` = 35, the `--help` dump the same; the status sentence now `in-development`; (2) §5 —
+the ten type names of the table = `memory.yaml`'s `types:` (`diff` empty); `git diff --quiet v0.3.1 HEAD --
+.wingfoil/memory.yaml .wingfoil/workflows.yaml .wingfoil/roles.yaml` → unchanged since v0.3.1; (3) §6 — the startable
+mains of `workflow list --all` on the pinned build: `adr-ingest bug-ingest decision-log-ingest service-ingest
+sw-life-cycle vision-change`, as listed; `merge-forward` and `record-adrs` (optional) named; (4) §7 — `roles.yaml`
+unchanged, the `git-conventions` summary extended; (5) `workflow-md.test.ts` → 6 passed; (6) `CLAUDE.md` is
+`@AGENTS.md` plus one sentence.
+
 ### Retrospective
 
 <!-- Notes for v0.4's retrospective (a patch runs none), one line per item with its evidence. -->
