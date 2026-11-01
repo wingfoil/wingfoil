@@ -302,6 +302,28 @@ are not touched. (4) Under D1 (b), three approved specs take amendments instead 
 (5) The pinned build stays 0.3.1 until `v0.4`'s `advance-pinned-build`; `memory history` with a short reference works only
 on the code build until then, which `docs/cli-reference.md` must not hide ("since 0.3.2").
 
+### design gate (approver, 2026-11-01)
+
+Design gate approved by the approver on 2026-11-01, every decision as the design recommended:
+
+- **D1 (b)** — a short reference is resolved by the seven Memory verbs (`history`, `submit`, `approve`, `reject`, `amend`,
+  `deprecate`, `park`) and by `--element` of `workflow start`, `workflow adopt` and `agent execute`; `agent list
+  --element`, the session Prompt and Resources, the workflow `<ref>`, run ids, `--set` and `--step` stay exact. The
+  amendments of `spec-008`, `spec-016` and `spec-017` the design lists are prepared uncommitted.
+- **D2 (a)** — a reference of a type's number shape is decided by the number rule alone, with no fall-through to the
+  prefix rule.
+- **D3 (a)** — the number rule reads each type's committed `id_pattern`; `test/core/memory-history.test.ts` l.203–209
+  is rewritten by the red.
+- **D4 (a)** — numbers compare by value (`task-12` resolves `task-012-…`).
+- **D5 (a)** — archived (deprecated) elements are candidates.
+- **D6 (a)** — each command resolves over the documents its exact lookup reads today.
+- **D7 (a)** — an ambiguous reference is refused with `CONFLICT`, exit 1, `ambiguous reference: <ref> matches <N>
+  elements`, the hint and every candidate in id order; nothing is written.
+- **D8 (a)** — the not-found messages are unchanged.
+- **D9 (a)** — internal callers (`supersedes:`, plan finalize, step keys, frontmatter ids) stay exact.
+- **D10 (a)** — no echo or warning of the short reference; outputs carry only the full id.
+- **D11 (a)** — three scenarios in `P1.10-memory-history.feature`, one in `P1.7-memory-approve.feature`.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
