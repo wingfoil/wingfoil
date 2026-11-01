@@ -200,11 +200,19 @@ describe('CORE_MODULES memory.memoryHistory — P1.10 Scenario "Error - history 
     expect(exitCodeForResult(result)).toBe(1);
   });
 
-  it('matches on the document\'s frontmatter id EXACTLY — a partial id is not found', async () => {
+  it('task-332 D3 (a): a partial id that is the unique prefix of one document\'s frontmatter id resolves to it (it was "not found" before)', async () => {
     const result = await memoryHistoryFn()({ root: repo, positional: 'decision-1' });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.id).toBe('decision-12');
+    expect(result.value.path).toBe(DECISION_12);
+  });
+
+  it('a partial id that is the prefix of no document\'s frontmatter id is still not found', async () => {
+    const result = await memoryHistoryFn()({ root: repo, positional: 'decision-2' });
     expect(result).toEqual({
       ok: false,
-      error: { code: 'NOT_FOUND', message: 'document not found: decision-1' },
+      error: { code: 'NOT_FOUND', message: 'document not found: decision-2' },
     });
   });
 
