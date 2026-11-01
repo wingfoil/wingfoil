@@ -1792,6 +1792,11 @@ tells it where to load its context (the Resource `wingfoil://session/<role>/<typ
 `wingfoil` MCP server registered for it), and tells it to end every commit it writes, except an approve or reject commit, with
 `Co-Authored-By: <agent name> <<agent email>>` and `AI-Model: <its model>` — added to a commit `wingfoil`
 writes with `git commit --amend --no-edit --trailer`, never as a paragraph of their own. While the agent runs,
+With a step form (`--next`, `--workflow`, `--step`), the diagnostics of the workflow state it reads (the ones
+`wingfoil workflow next` lists, for example `W_UNCOMMITTED_INPUTS` for a deduction input you changed and did not
+commit) are printed first, one `warning: <code> (<file>): <message>` line each, before any refusal of the step. The
+form with `--element` alone reads no workflow state and prints none.
+
 Ctrl-C and Ctrl-\ reach the agent and do not stop `agent execute`; `SIGTERM` and `SIGHUP` sent to
 `agent execute` are passed on to the agent. When the agent exits, it asks the adapter's declared
 commands for the agent's version, session, model and token counts (each within 10 seconds; one that
@@ -1851,7 +1856,8 @@ It reads the run log, `dna.yaml` and the workflow state **as committed at `HEAD`
 (see [Git side effects](#git-side-effects)), so it agrees with `agent show` and with the run ids `agent
 execute` counts. A run log you changed and did not commit is not read: a `warning:` line names it
 (`W_UNCOMMITTED_INPUTS`), one per file. Only the run logs themselves count: another file in that
-directory is neither read nor reported.
+directory is neither read nor reported. A run log committed as a symbolic link is not read either: a
+`warning:` line names it (`W_RUN_LOG_SYMLINK`), and `diagnostics` carries it.
 
 ```console
 $ wingfoil agent list
@@ -1937,3 +1943,5 @@ agent did not report is the string `not-reported`, never `0` or `null`.
   not committed, a `hint:` line says so, and the command still exits `1`: commit the run log, then run
   it again. A run log at `HEAD` that is not valid JSON Lines exits `1`, naming the file and the line;
   a `dna.yaml` with no `paths.runs` exits `1` with `error: dna.yaml declares no run log (paths.runs)`.
+  A run log committed as a symbolic link is not read: `warning: W_RUN_LOG_SYMLINK (<file>): …` is printed, and
+  its runs are not found.
