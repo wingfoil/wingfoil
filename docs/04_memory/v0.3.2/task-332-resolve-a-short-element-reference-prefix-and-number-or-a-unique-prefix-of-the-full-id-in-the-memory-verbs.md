@@ -65,6 +65,243 @@ stop-the-line share.
        reject's `Reason:` (read with `wingfoil memory history <task-id>`), each with the command that
        shows it resolved and what that command printed; then what else changed on the next pass. -->
 
+### design (architect, 2026-11-01)
+
+**Inputs read.** `depends_on: []`, `bug: []` (no dl-015 gate, no bug sync). Base: `release/0.3` `6ba2169eb` + the start
+commit `57888015e`. PATH guard: `command -v wingfoil` printed the task's PATH shim; `wingfoil --version` printed
+`0.3.1 (6ba2169ebf7802f893842edd6edf9bafd046b12b)`. Read: AGENTS.md §1–§8, the dev-loop plan's rulings W0–W3 (W3-R4: this
+task starts after `task-330`, no fix task open), `.wingfoil/workflows/custom/dev-loop.yaml`, `spec-008-cli-grammar`
+(`approved`) §5–§7, §10–§12, `spec-016-agent-execution` (`approved`) §3.2 and its Process note on P5.3.1, `spec-017`
+(`approved`) §3.4/§7.1/§7.11 error tables, `dl-189` (`in-discussion`, `release: v0.4`).
+
+**The defect, reproduced on a fresh project** (code build of this worktree, `WINGFOIL="node $(pwd)/dist/cli.js"`, in a
+scratch repository made with `wingfoil init --template kanban`, then `memory add --type decision-log --title "Pick a
+storage layout for exports"`, `… "Pick a storage engine"`, `memory add --type task --title "Do it"`):
+`memory history dl-001` → `error: document not found: dl-001`, exit 1; `memory history dl-001-pick` → `error: document
+not found: dl-001-pick`, exit 1; `memory submit dl-1` → `error: document not found: dl-1`, exit 1; `memory history dl-001
+--format json` → stderr `{"error":"document not found: dl-001"}`, exit 1; `agent execute --element task:1 --dry-run` →
+`error: element not found: task:1`. A full id works: `memory submit dl-001-pick-a-storage-layout-for-exports` printed
+`{"id": "dl-001-pick-a-storage-layout-for-exports", "path": "docs/memory/decision-log/dl-001-pick-a-storage-layout-for-exports.md",
+"from": "draft", "to": "pending"}` (console), exit 0, commit subject `wf(decision-log): submit
+dl-001-pick-a-storage-layout-for-exports`; its `--dry-run` printed `"subject": "wf(decision-log): submit
+dl-001-pick-a-storage-layout-for-exports"`. The kanban `memory.yaml` declares `dl-{n}-{slug}`, `task-{n}-{slug}`,
+`release-{n}`, `rl-{n}`, `adr-{n}-{slug}`, `bug-{n}-{slug}`, `spec-{n}-{slug}`, `{workflow}-{phase}-plan`
+(`grep -n id_pattern .wingfoil/memory.yaml` there).
+
+**Where an element id is looked up today** (`grep -rn "NOT_FOUND\|document not found" src`, then each caller read):
+
+| Lookup | Function | Baseline | Message on a miss |
+|---|---|---|---|
+| `memory submit/approve/reject/deprecate/park/amend` | `beginMemoryTransition` → `prepareMemoryTransition` → `prepareMemoryTransitionAtRev` → `findMemoryDocumentByIdAtRev` (`src/core/memory-transition.ts`) | `HEAD`, one sha | `document not found: <id>` (+ unreadable / uncommitted notes) |
+| `memory history` | `memoryHistoryFn` → `findMemoryDocumentById` (`src/core/index.ts`) | working tree (`spec-008` §11) | `document not found: <id>` |
+| the `supersedes:` trigger of `approve` | `prepareMemoryTransitionAtRev` (`src/core/memory-supersede.ts`) | the approve's sha | `document not found: <id>` inside the supersede refusal |
+| `workflow start --element` | `resolveElement` `exists(type, id)` (`src/core/workflow-start-end.ts` ~l.164) | `HEAD` | `element not found: <type>:<id>` |
+| `workflow adopt --element` | `elementAt(snapshot.documents, …)` (`src/core/workflow-adopt.ts` ~l.157) | `HEAD` | `element not found: <type>:<id>` |
+| `agent execute --element` | `requireElement` → `findMemoryDocumentByTypeAndIdAtRev`, `includeArchived` (`src/agent/execute.ts` ~l.455) | `HEAD` | `element not found: <type>:<id>` |
+| `agent list --element` | an equality filter over steps and run records (`src/core/agent-list.ts` l.114, l.164) | `HEAD` | none: an empty list |
+| `{role}-session` Prompt `element`, `wingfoil://session/…`, `wingfoil://memory/{type}/{id}` | `assembleExecutionContext` / `findMemoryDocumentByTypeAndId` | the given commit / working tree | `element '<type>:<id>' not found at <sha>` / a Resource not-found |
+
+Every one matches the frontmatter `id` exactly. Not element-id arguments: `agent show <run-id>` (a run id), `memory add
+--set <name>=<value>` (an `id_pattern` token value written into frontmatter, e.g. `release=v0.3.2`), `--step <key>` (a
+step key `workflow next` prints), `workflow rekey --from/--to` (phase keys), `memory search <keyword>` (a search). The
+workflow `<ref>` of `workflow next/status/finalize/end/adopt/rekey/show/remove` and `memory add --workflow <ref>` names a
+workflow or an instance plan id; it already has a short form (the workflow name stands for its open instance), and a
+prefix rule there would collide with it (`dev-loop` is a workflow name and a prefix of `dev-loop-rel-v0.3.2-plan`). MCP
+Tools: the production server registers an empty Tools channel (`src/mcp/server.ts` header, `registerEmptyToolsChannel`;
+Tools are P5.2.3, v0.4), so no Tool takes an id.
+
+**The resolution rule (recommended; each choice with an alternative is a decision below).** One pure function, used by
+every in-scope lookup, over the same document set that lookup reads today:
+
+1. **Exact.** A document whose frontmatter `id` equals the reference — the first in the scan's sorted path order, as
+   today. A full id therefore never changes meaning, and the exact path makes no extra read.
+2. **Number** (D2, D3, D4). When the reference is `<literal><digits>` and `<literal>` is the literal head of a type's
+   committed `id_pattern` that begins `<literal>{n}` (a `{n}`-family token: `task-{n}-{slug}` → `task-`; `release-{n}` →
+   `release-`), the candidates are the documents of that type (those types, when several share the literal) whose id
+   matches the type's pattern (`patternToSource(pattern, { captureNumeric: true })`, `src/validation/id.ts`) with a
+   captured number numerically equal to `<digits>`: `task-12`, `task-012` and `task-0012` all name `task-012-…`. A
+   reference of this shape is decided by this rule alone; it never falls through to rule 3.
+3. **Prefix.** Otherwise, the documents whose `id` starts with the reference.
+4. Exactly one candidate → that element; more than one → the ambiguity refusal (D7); none → the not-found refusal,
+   unchanged (D8). Case-sensitive (ids are `[a-z0-9-.]`, `spec-009` §1). Archived elements are candidates (D5).
+5. `--element <type>:<ref>` resolves `<ref>` among the documents of `<type>` only; the bare `<id>` of the Memory verbs
+   across all types (no verb has `--type`).
+
+Determinism (REQ-SYS-07): candidates are sorted by id, then by path (`compareText`), so neither the refusal nor the
+choice depends on directory order; the number rule compares values, not scan positions.
+
+Proved on the fresh kanban project and on this repository with a throwaway prototype of rules 1–4 over
+`loadMemoryDocumentsAtRev(root, 'HEAD', …)` (scratch file outside the worktree, not repository code). Kanban: `dl-001` →
+number → `dl-001-pick-a-storage-layout-for-exports`; `dl-1` → the same; `dl-001-pick` → prefix → the same; `task-1` →
+`task-001-do-it`; `task-001-do` → prefix → `task-001-do-it`; `dl-3`, `dl-00`, `release-1` → not found (number rule, no
+such number). This repository: `task-12` → `task-012-cli-exit-code-contract`; `task-33` → `task-033-manual-e2e-journey-validation`
+(not `task-330`…`task-332`: rule 2 alone decides); `spec-8` → `spec-008-cli-grammar`; `svc-14`, `cp-2`, `dl-189` resolve;
+`patch-v0.3` → prefix → ambiguous, `patch-v0.3.1, patch-v0.3.2`; `patch-v0.3.2`, `minor-v0.3`, `rl-v1` → exact;
+`dev-loop-rel-v0.3.2` → prefix → `dev-loop-rel-v0.3.2-plan`; deprecated `dl-53`, `svc-7`, `task-105` resolve. A duplicate
+number check on this repository (`git grep -h "^id: " HEAD -- docs/04_memory docs/05_plans` folded to `<prefix>-<n>`,
+`uniq -d`) printed nothing: 1159 ids, no two share a type number. The prototype's process, scanning every document at
+`HEAD`, took `real 0m0,610s`; `memory history <full id>` took `real 0m0,693s` (`time`, same machine).
+
+**Outputs (AC 4).** The resolved full id replaces the reference everywhere after resolution: the verb's result `id`
+(console and `--format json`), the `wf()` subject (`formatMemoryCommitMessage({ ids: [<full id>] })`), the commit body
+(the supersede `finalize` `Reason:` names the superseding element by its full id), the `--dry-run` plan, every refusal
+decided after resolution (`refusing to <op> <full id>: …`, `document already deprecated: <full id>`), the WIP holder
+check's `exceptId`, `memory history`'s `id`, and for `--element`: the plan's `phase` token and `element` field
+(`workflow start`), the `workflow: adopt … <type>:<full id>` record and its `WingFoil-Adopted:` trailer, the run record's
+`element`, the run-log file `<full id>.jsonl` and the launch line (`agent execute`). The short reference is not echoed
+(no warning line, no `reference` field): D10. Subjects keep the full id, so nothing here pre-empts `dl-189`, which stays
+in v0.4; if v0.4 rules its option (b), this resolver is what would read a short subject back.
+
+**Refusals.**
+- Ambiguous (D7): `CONFLICT`, exit 1, nothing written (the refusal is returned by the locate step, before any
+  write; `beginMemoryTransition` keeps its order: identity, then locate). Message `ambiguous
+  reference: <ref> matches <N> elements`; `hint: give the full id, or a longer prefix of it`; `details.candidates` the
+  full ids and `details.issues` one `{ detail: <full id> }` per candidate, sorted, all listed. Console: `error: …`,
+  `hint: …`, then one indented line per full id; `--format json`: `{"error":…,"hint":…,"details":[{"detail":"<id>"},…]}`
+  (`src/cli/error.ts` `emitError`).
+- Missing (D8): unchanged — `document not found: <ref>` (P1.6 sc.3, P1.10, with the existing unreadable/uncommitted
+  notes) and `element not found: <type>:<ref>`. The explain-only working-tree scan of a transition miss
+  (`uncommittedDocumentPath`) stays exact (D6).
+- Exit codes: unchanged otherwise (blank `<id>` is still a usage error, exit 2, before resolution).
+
+**Internal callers stay exact (D9).** The `supersedes:` trigger, `workflow end`'s plan finalize, step-key elements and any
+id read from frontmatter or a commit pass a full id and must not gain a prefix rule (a `supersedes: adr-1` naming no
+element must still be refused, never resolved to `adr-001-…`). So the resolution runs at the command-line entry:
+`prepareMemoryTransition` (the verbs' path) gains it, `prepareMemoryTransitionAtRev` keeps exact matching unless its
+caller asks (an options parameter, default exact), and the three `--element` sites call the resolver on their own
+snapshot.
+
+**Intended interface** (new module `src/memory/reference.ts`, exported from `src/memory/index.ts`):
+
+```ts
+export type ElementReferenceResolution =
+  | { readonly kind: 'found'; readonly rule: 'exact' | 'number' | 'prefix'; readonly document: MemoryDocumentSummary }
+  | { readonly kind: 'ambiguous'; readonly rule: 'number' | 'prefix'; readonly candidates: readonly MemoryDocumentSummary[] }
+  | { readonly kind: 'missing' };
+export function resolveElementReference(
+  documents: Iterable<MemoryDocumentSummary>,
+  memoryYaml: MemoryYaml,
+  reference: string,
+  options?: { readonly type?: string },
+): ElementReferenceResolution;
+```
+
+Candidates sorted by id then path. A test importing it before green is red twice: `tsc` TS2305 (no exported member) and
+jest a runtime `TypeError` (`isolatedModules`).
+
+**AC classification and what qa pins.** All five ACs are new behaviour: red-first. Red runs `npx tsc --noEmit` and
+`npx jest test/lint --maxWorkers=2` before its commit. Fixtures: `memory.yaml` types copied from the kanban template's
+`.wingfoil/memory.yaml` (a scratch `wingfoil init --template kanban` with the code build), and for the `{kind}-{version}`
+ambiguity the `release` type from this repository's `.wingfoil/memory.yaml`; documents added with the core `memoryAdd`
+operation or committed fixture files carrying real frontmatter; approver identity and authority from the helpers
+`test/core/memory-approve.test.ts` already uses; nothing-written pins with `head(repo)` and
+`snapshotPersistence`/`assertPersistenceUnchanged` (`test/core/memory-transition-head-baseline.test.ts`). Every CLI pin in
+console and `--format json`.
+
+| AC | Class | What qa pins | Interface | Test file |
+|---|---|---|---|---|
+| 1 `<prefix>-<n>` | red-first | `dl-001` and `dl-1` resolve to `dl-001-pick-a-storage-layout-for-exports` (`memory history`: `ok`, `value.id` the full id, `value.path`); `task-12` resolves `task-012-…` (padding by value); `dl-3` (no such number) → `NOT_FOUND` `document not found: dl-3`, exit 1; a number-shaped reference never falls to prefix (`task-33` with `task-033-x` absent and `task-330-y` present → not found) | `CORE_MODULES` `memoryHistory`/`memorySubmit` fns; `resolveElementReference` | `test/memory/reference.test.ts` (new, pure: rules, order, type scope, shuffled input → same answer); `test/core/memory-short-reference.test.ts` (new) |
+| 2 unique prefix | red-first | `dl-001-pick` resolves; an exact id that is also a prefix of another (`patch-v0.3.1` vs a fixture `patch-v0.3.1-x`, or `minor-v0.3` vs `minor-v0.3.1`) resolves exact | same | same two files |
+| 3 ambiguous | red-first | `patch-v0.3` with `patch-v0.3.1` and `patch-v0.3.2` → `CONFLICT` (per D7), exit 1, message `ambiguous reference: patch-v0.3 matches 2 elements`, details in id order; a duplicate number (`dl-001-a`, `dl-001-b`) via `dl-1` → ambiguous by number; for a mutating verb `HEAD` unchanged and persistence unchanged; CLI console: `error:` line, `hint:` line, one indented line per id; JSON: the `{"error","hint","details"}` object | core fns; CLI spawn helper of `test/cli/program.integration.test.ts` | `test/core/memory-short-reference.test.ts`; `test/cli/memory-short-reference.integration.test.ts` (new) |
+| 4 full id out | red-first | for `submit`/`approve` with `dl-1`: result `id` = full id; `git log -1 --format=%s` = `wf(decision-log): submit dl-001-pick-a-storage-layout-for-exports` (approve: `… approve <full id> [in-discussion → ready]` on a kanban-shaped machine, or the fixture's gate); no whitespace-separated token of `git log -1 --format=%B` equals the reference; `--dry-run` `subject` carries the full id; `memory history dl-1` `value.id` = full id | core fns, CLI | same files |
+| 5 every verb | red-first | table over `history, submit, approve, reject, amend, deprecate, park`: each with a short reference succeeds on its fixture and names the full id in result and subject; per D1 (b), `workflow start --element <type>:<short>` binds the full id (plan `element`, `phase` token), `workflow adopt --element` writes the full id in its record, `agent execute --element task:<short> --dry-run` names the full id; `agent list --element` and the Prompt stay exact (one pin each that a short reference is not resolved there, if D1 (b)) | core fns; `test/core/agent-execute.test.ts` / `workflow-start-end.test.ts` fixtures | `test/core/memory-short-reference.test.ts`; `test/core/element-short-reference.test.ts` (new) |
+
+Characterization guards (pass on first run, never a fabricated red): a `supersedes:` value that is a short form of an
+existing adr is still refused `document not found: <value>` (D9; `test/core/memory-supersede.test.ts` fixtures); every
+existing `document not found: <id>` pin listed below stays green.
+
+**Tests that pin the behaviour this task changes (W2-R4 (6)).** `grep -rln "document not found" test/` → 15 files;
+`grep -rn "document not found\|element not found" test/` → each line read:
+- **Flips, red rewrites it:** `test/core/memory-history.test.ts` l.203–209, "matches on the document's frontmatter id
+  EXACTLY — a partial id is not found": `decision-1` against `decision-12`/`decision-30`/`decision-99` in a `memory.yaml`
+  with no `id_pattern`, so under D3 (a) rule 3 resolves it to `decision-12`. Under D3 (b) it would stay green.
+- **Stay green (missing ids with no candidate):** `memory-submit.test.ts` l.201–208, `memory-approve.test.ts` l.257–264,
+  `memory-reject.test.ts` l.279–286, `memory-deprecate.test.ts` l.269–275, `memory-amend.test.ts` l.450–455,
+  `memory-transition-head-baseline.test.ts` l.303–316 (`bug-000`), l.392–399 and l.418–423 (`bug-404`),
+  `memory-scan-tolerant.test.ts` l.206, `memory-supersede.test.ts` l.238 and l.278 (exact path, D9),
+  `test/cli/program.integration.test.ts` l.594–597 and l.659–662, `test/cli/piped-output-drain.integration.test.ts`
+  l.124; `element not found`: `workflow-start-end.test.ts` l.329 and l.335, `workflow-adopt-bdd.test.ts` l.77 and l.260,
+  `agent-execute.test.ts` l.103, `agent-execute-step.test.ts` l.190, `test/cli/agent-execute.integration.test.ts` l.84.
+  `test/cli/error-details.test.ts`, `test/mcp/error-details.test.ts`, `test/mcp/registrar.test.ts` build a synthetic
+  `coreErr`, unaffected.
+- **Help and reference parity:** `grep -rn "the document id" test` → no hit (the positional descriptions are not pinned);
+  `test/docs/cli-reference.test.ts` l.83–97 pins positional names and flags only. `test/core/memory-transition-preamble.test.ts`
+  pins one identity read per verb: the resolution stays inside `beginMemoryTransition` after it. No workflow, phase or
+  step list changes, so no phase-list pin applies. `test/core/query-latency.test.ts` uses full ids (the exact path,
+  unchanged).
+
+**Existing tests of the files this task changes**, run before any pin (one jest process under the heavy-gate slot,
+`--maxWorkers=2`): `npx jest --maxWorkers=2 test/core/memory- test/core/workflow-start-end test/core/workflow-adopt
+test/core/agent-execute test/agent/execute test/agent/agent-execute-latency test/memory/query test/core/query-latency
+test/core/memory-scan-tolerant test/cli/program.integration.test.ts test/cli/agent-execute.integration.test.ts
+test/docs/cli-reference.test.ts test/cli/error-details.test.ts` → `Test Suites: 60 passed, 60 total`, `Tests: 946
+passed, 946 total`, `Time: 119.076 s`. `.wingfoil/` is not modified, so `npm run check:mcp` has nothing to prove.
+
+**Files to touch.** `src/memory/reference.ts` (new), `src/memory/index.ts`, `src/core/memory-transition.ts`,
+`src/core/index.ts` (history, the seven verbs' use of the resolved id, the positional and `--element` help
+descriptions), `src/core/workflow-start-end.ts`, `src/core/workflow-adopt.ts`, `src/agent/execute.ts`; tests above;
+`docs/cli-reference.md` (the seven `<id>` entries and the three `--element` rows), `docs/user-guide.md` (where it
+introduces `memory submit <id>`), `docs/agents.md` (the command table: `<id>` accepts a short reference),
+`docs/02_requirements/02_bdd/features/p1-memory/P1.10-memory-history.feature` (three scenarios: number, prefix,
+ambiguous) and `P1.7-memory-approve.feature` (one: the subject names the full id) per D11,
+`docs/02_requirements/02_bdd/features/p5-interaction/P5.3.1-agent-execute.feature` (its fixture note, under D1 (b)).
+`docs/examples/` use full ids and stay as they are. **`version:` bumps: none** — no `.wingfoil/*.yaml` changes; the user
+docs and BDD files carry no `version:` field (`head` of each); specs carry none (`dl-047`).
+
+**Spec amendments (prepared by the developer, left uncommitted, `### Pending amendments (approver)`).**
+`spec-008-cli-grammar` §7: a "Short element references" paragraph (rules 1–5, the ambiguity and missing refusals, which
+arguments take it), the bare-`<id>` paragraph pointing to it; §12 rows of `workflow start`, `workflow adopt`, `agent
+execute` naming it; §6's table gains the ambiguity row; a Revision note. Under D1 (b) also `spec-016-agent-execution`
+§3.2 step 2 and its error table (the ambiguity row), and the Process note "Element ids are full ids … `task:202` resolves
+only if such an id exists", which this task makes false; `spec-017` §3.4/§7.1 (`--element`), §7.11 (adopt) and its error
+table (l.998). `spec-008` §11 is unchanged (each command keeps its baseline, D6). No ready DL is contradicted; `spec-016`'s
+Process note is the one approved sentence the change falsifies, and only under D1 (b).
+
+**Decisions for the approver** (my recommendation first).
+- **D1 — which commands take a short reference.** (a) the seven Memory verbs only (narrower than AC 5's "any other
+  command"); **(b, recommended)** the seven verbs plus the three lookups of an element through `--element`: `workflow
+  start`, `workflow adopt`, `agent execute` — `spec-008` §7 already shows `--element task:202`; `agent list --element`
+  (a filter that answers an empty list, not a lookup), the `{role}-session` Prompt and the session/Memory Resources (machine
+  interfaces; `agent execute` passes them the full id) and the workflow `<ref>` (already short, collides with workflow
+  names) stay exact, to a v0.4 follow-up if wanted; (c) also `agent list --element` and the Prompt `element`.
+- **D2 — fall-through.** **(a, recommended)** a reference of a type's number shape is decided by the number rule alone
+  (`task-33` never means `task-330`); (b) on no number match, try the prefix rule (`dl-00` would then be ambiguous among
+  `dl-001`…`dl-009`, and `bug-4` in a project with no `bug-004` would silently name the one `bug-4xx`).
+- **D3 — the number rule's source.** **(a, recommended)** each type's committed `id_pattern` (`<literal>{n}…`), as the AC
+  says; a type without one gets exact and prefix only; `memory-history.test.ts` l.203–209 flips. (b) pattern-free: any
+  `<head>-<digits>` matches ids `<head>-0*<n>` followed by `-` or the end; the test stays.
+- **D4 — padding.** **(a, recommended)** compare numbers by value: `task-12` = `task-012` = `task-0012`. (b) text: only
+  `task-012`.
+- **D5 — archived elements.** **(a, recommended)** candidates, as the exact lookups find them today (a short reference to
+  a deprecated element answers what the full id answers); (b) excluded, which could make `<prefix>-<n>` silently skip to
+  a live sibling of the same number.
+- **D6 — baseline.** **(a, recommended)** each command resolves over the documents its exact lookup reads today
+  (transitions at `HEAD`, the decided sha; `memory history` the working tree; `--element` at `HEAD`), and the explain-only
+  working-tree scan of a transition miss stays exact; (b) resolve `memory history` at `HEAD` too (a `spec-008` §11 change).
+- **D7 — the ambiguity refusal.** **(a, recommended)** `CONFLICT`, exit 1, the message, hint and details above, every
+  candidate listed; (b) `VALIDATION`; (c) list at most N candidates and say how many more.
+- **D8 — a missing reference.** **(a, recommended)** the existing messages unchanged (`document not found: <ref>`,
+  `element not found: <type>:<ref>`); (b) a new wording naming the rules tried.
+- **D9 — internal callers.** **(a, recommended)** exact only (supersedes:, plan finalize, step keys, frontmatter ids);
+  (b) every lookup resolves.
+- **D10 — echo.** **(a, recommended)** none: outputs carry only the full id (AC 4); (b) a `W_…` warning naming
+  `<ref> → <full id>` on stderr.
+- **D11 — BDD location.** **(a, recommended)** three scenarios in `P1.10-memory-history.feature` (the shared rule, the
+  user's first reported command) and one in `P1.7-memory-approve.feature` (the subject carries the full id); (b) one
+  scenario outline in `P1.6-memory-submit.feature`.
+
+**Candidate findings.** None.
+
+**Risks.** No other task is open in `w4`. (1) A reference that used to fail now acts: `memory deprecate task-33` meant for
+`task-330` deprecates `task-033` (D2 (a) makes the rule predictable; the subject and output name the full id, and
+`--dry-run` shows it first; the user guide should say so). (2) Flips beyond the one listed can only be found by green's
+full suite: any existing test that gives a non-existent id which is a unique prefix of, or the number of, a fixture id.
+(3) A miss on a short reference parses every document at the baseline (about 0.6 s on this repository's 1159 ids,
+measured above); the full-id path is unchanged, so the latency budgets (P1.10's one second, `query-latency.test.ts`)
+are not touched. (4) Under D1 (b), three approved specs take amendments instead of one, and the P5.3.1 note changes.
+(5) The pinned build stays 0.3.1 until `v0.4`'s `advance-pinned-build`; `memory history` with a short reference works only
+on the code build until then, which `docs/cli-reference.md` must not hide ("since 0.3.2").
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
