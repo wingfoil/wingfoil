@@ -42,3 +42,11 @@ Feature: P1.7 (US-2-10) - wingfoil memory approve
     When I run "wingfoil memory approve adr-2 --reason 'ok'"
     Then the state of every document is unchanged
     And the command exits with code 1
+
+  Scenario: A short reference is accepted and the commit names the full id
+    Given a Memory document "dl-002-pick-a-storage-engine" exists with "status: in-discussion"
+    And the current user holds the "approver" role
+    When I run "wingfoil memory approve dl-2 --reason 'agreed'"
+    Then the commit subject is "wf(decision-log): approve dl-002-pick-a-storage-engine [in-discussion → ready]"
+    And no word of the commit message equals "dl-2"
+    And the command exits with code 0

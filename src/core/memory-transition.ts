@@ -288,6 +288,10 @@ function resolveReferenceAtSha(
  *   moves the element — except `reject` and `park`, which send it back along a reject or `returns`
  *   edge and are exempt (`dl-156` Q2 (i)).
  *
+ * With `options.resolveReference` (the command-line verbs, task-332) an id no document carries exactly is retried as a
+ * short reference at the same sha (`resolveElementReference`): one match proceeds under the element's full id, several
+ * are `CONFLICT`, none keeps the `document not found` refusal.
+ *
  * The unknown-type, invalid-state and illegal-transition refusals keep their pinned messages
  * verbatim as the first sentence; {@link uncommittedMachineNote} may append a second one.
  */

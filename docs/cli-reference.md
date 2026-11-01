@@ -583,6 +583,10 @@ Without `--workflow`, `memory add` links nothing and its commit is unchanged.
     (`no step of <instance> adds a <type>`); several, and no `--step`
     (`no step of <instance> adds a <type> alone: give --step, one of: <key>, <key>`). Nothing is written.
 
+### Short element references
+
+New in 0.3.2. Where a command takes an element id (`memory history`, `submit`, `approve`, `reject`, `amend`, `deprecate`, `park`, and `--element` of `workflow start`, `workflow adopt`, `agent execute`), the id may be written short. Resolution, in order: an exact id; a reference `<literal><digits>` where `<literal>` starts a type's `id_pattern` `<literal>{n}…` (`dl-1`, `task-12`), which names the element of that type with that number, compared by value (`task-12` = `task-012`) and never falls back to a prefix (`task-33` is not `task-330`); otherwise a prefix of the full id. Deprecated elements count. Exactly one element must match: several is `error: ambiguous reference: <ref> matches <N> elements`, a `hint:` and one full id per line, exit `1`, nothing written. A short reference never names an element the tool cannot read; give the full id to see why. `agent list --element`, the session Prompt and Resources, the workflow `<ref>`, run ids, `--set` and `--step` take exact values only. The pinned build 0.3.1 takes full ids only.
+
 ### `wingfoil memory submit`
 
 Move a document one step forward along its type's sequence — for the default machine, `draft → pending`.
@@ -590,6 +594,8 @@ Move a document one step forward along its type's sequence — for the default m
 ```
 wingfoil memory submit <id>
 ```
+
+**Short reference (new in 0.3.2; the pinned build is 0.3.1, which takes full ids only).** `<id>` may also be `<type prefix>-<n>` (`dl-1` and `dl-001` both name `dl-001-pick-a-storage-layout-for-exports`) or a unique prefix of the full id. A reference matching several elements is refused (`CONFLICT`, exit `1`, every candidate listed, nothing written); one matching none is `document not found: <id>`. The output, the commit subject and the commit body always carry the full id. See [Short element references](#short-element-references).
 
 Before running it, fill the document's body and every frontmatter field its type lists in
 `template.frontmatter.required` — you do not need to commit those edits first: the submit commit
@@ -651,6 +657,8 @@ Pass a gate: move a document forward from a gated state (default machine: `pendi
 ```
 wingfoil memory approve <id> --reason <text>
 ```
+
+**Short reference (new in 0.3.2; the pinned build is 0.3.1, which takes full ids only).** `<id>` may also be `<type prefix>-<n>` (`dl-1` and `dl-001` both name `dl-001-pick-a-storage-layout-for-exports`) or a unique prefix of the full id. A reference matching several elements is refused (`CONFLICT`, exit `1`, every candidate listed, nothing written); one matching none is `document not found: <id>`. The output, the commit subject and the commit body always carry the full id. See [Short element references](#short-element-references).
 
 Requires the **approver role**: your git email must match a `team.members` entry whose `roles` include
 `approver`, in the committed `dna.yaml`:
@@ -743,6 +751,8 @@ Send a gated document back to its gate's reject target (default machine: `pendin
 wingfoil memory reject <id> --reason <text>
 ```
 
+**Short reference (new in 0.3.2; the pinned build is 0.3.1, which takes full ids only).** `<id>` may also be `<type prefix>-<n>` (`dl-1` and `dl-001` both name `dl-001-pick-a-storage-layout-for-exports`) or a unique prefix of the full id. A reference matching several elements is refused (`CONFLICT`, exit `1`, every candidate listed, nothing written); one matching none is `document not found: <id>`. The output, the commit subject and the commit body always carry the full id. See [Short element references](#short-element-references).
+
 Same approver requirement as `approve`. The reason is recorded in the commit **and** copied to the
 document's `rejection_reason` frontmatter field.
 
@@ -768,6 +778,8 @@ Retire a document, from any state, to `deprecated`.
 wingfoil memory deprecate <id> [--reason <text>]
 ```
 
+**Short reference (new in 0.3.2; the pinned build is 0.3.1, which takes full ids only).** `<id>` may also be `<type prefix>-<n>` (`dl-1` and `dl-001` both name `dl-001-pick-a-storage-layout-for-exports`) or a unique prefix of the full id. A reference matching several elements is refused (`CONFLICT`, exit `1`, every candidate listed, nothing written); one matching none is `document not found: <id>`. The output, the commit subject and the commit body always carry the full id. See [Short element references](#short-element-references).
+
 No approver role is required. `--reason` is optional, but when given it must not be blank.
 
 ```console
@@ -792,6 +804,8 @@ Return a started document to an earlier state along its type's declared `returns
 ```
 wingfoil memory park <id> --reason <text>
 ```
+
+**Short reference (new in 0.3.2; the pinned build is 0.3.1, which takes full ids only).** `<id>` may also be `<type prefix>-<n>` (`dl-1` and `dl-001` both name `dl-001-pick-a-storage-layout-for-exports`) or a unique prefix of the full id. A reference matching several elements is refused (`CONFLICT`, exit `1`, every candidate listed, nothing written); one matching none is `document not found: <id>`. The output, the commit subject and the commit body always carry the full id. See [Short element references](#short-element-references).
 
 A type's state machine in `memory.yaml` may declare return edges next to `gates` and `waiting`:
 `returns: { in-progress: backlog }`. Each target must be an earlier state of the `sequence`. `park`
@@ -835,6 +849,8 @@ Record an uncommitted correction to a document as an amendment, leaving its stat
 ```
 wingfoil memory amend <id> --reason <text>
 ```
+
+**Short reference (new in 0.3.2; the pinned build is 0.3.1, which takes full ids only).** `<id>` may also be `<type prefix>-<n>` (`dl-1` and `dl-001` both name `dl-001-pick-a-storage-layout-for-exports`) or a unique prefix of the full id. A reference matching several elements is refused (`CONFLICT`, exit `1`, every candidate listed, nothing written); one matching none is `document not found: <id>`. The output, the commit subject and the commit body always carry the full id. See [Short element references](#short-element-references).
 
 Edit the document first (its body, or any frontmatter field except `status`, `id`, `type`, `release`,
 `rejection_reason` and `supersedes`), then
@@ -904,6 +920,8 @@ Print a document's audit trail, reconstructed from git.
 ```
 wingfoil memory history <id>
 ```
+
+**Short reference (new in 0.3.2; the pinned build is 0.3.1, which takes full ids only).** `<id>` may also be `<type prefix>-<n>` (`dl-1` and `dl-001` both name `dl-001-pick-a-storage-layout-for-exports`) or a unique prefix of the full id. A reference matching several elements is refused (`CONFLICT`, exit `1`, every candidate listed, nothing written); one matching none is `document not found: <id>`. The output, the commit subject and the commit body always carry the full id. See [Short element references](#short-element-references).
 
 Each entry carries `sha`, `author`, `timestamp` (ISO-8601), `operation`, `from`, `to`, `approver`,
 `reason` and the commit `subject`. New in 0.3: every entry also carries `wingfoil`, the build
@@ -1452,7 +1470,7 @@ wingfoil workflow start <name> [--element <type>:<id>] [--title <title>] [--set 
 
 | Option | Description |
 |---|---|
-| `--element <type>:<id>` | The element the workflow runs on, when the workflow declares one (`element:`). Without it, the active workflow's element is used if it has that type. |
+| `--element <type>:<id>` | The element the workflow runs on, when the workflow declares one (`element:`); `<id>` may be a short reference (new in 0.3.2, see [Short element references](#short-element-references)) and the plan binds the full id. Without it, the active workflow's element is used if it has that type. |
 | `--title <title>` | The plan's title. Default: `<workflow> — <phase>`. |
 | `--set phase=<v>` | The plan's `phase` token. Default: the element's id, else `1`. |
 | `--set scope=<v>` | The plan's `scope` token, the folder its file goes in. Default: the workflow name. |
@@ -1581,7 +1599,7 @@ instance, as for `workflow next`.
 | Option | Description |
 |---|---|
 | `--step <key>` | The frontier step the element counts as created by, by the key `workflow next` prints. Default: the one frontier step that adds the element's type. |
-| `--element <type:id>` | The existing element to adopt, e.g. `release-line:rl-v1`. Default: the step's one candidate. |
+| `--element <type:id>` | The existing element to adopt, e.g. `release-line:rl-v1`; `<id>` may be a short reference (new in 0.3.2, see [Short element references](#short-element-references)), the record names the full id. Default: the step's one candidate. |
 | `--plan` | Propose the adoptions and write nothing. Takes no `--step` or `--element`. |
 | `--apply` | With `--plan`: write the proposed adoptions, one commit per step. Needs the `approver` role. |
 | `--reason <text>` | Why. Required on the single form and on `--plan --apply`; with `--plan` alone it is checked and not recorded. Same shape rules as every `--reason`. |
@@ -1750,7 +1768,7 @@ At least one of `--next`, `--workflow`, `--step` and `--element` is required.
 | `--next` | Take the workflow, phase, element and role from the next step of the active workflow (the open workflow started most recently): the step [`wingfoil workflow next`](#wingfoil-workflow-next) prints first. |
 | `--workflow <ref>` | Take the step from this workflow instead: a workflow name (its most recently started open instance) or an open instance id. Implies `--next`. |
 | `--step <key>` | Take this step, which must be on the frontier of the selected workflow (`--workflow`, else the active one), e.g. `dev-loop.red@task:task-042-login-form`: when several steps are ready at once, it is how each one's agent launches on its own step. Implies `--next`. `wingfoil workflow next` prints each `agent` step as `wingfoil agent execute --workflow <instance> --step <key>`, which runs as written. |
-| `--element <type:id>` | The element the agent works on, as `<type>:<id>` with the element's full id, e.g. `task:task-042-login-form`. With a step, it replaces the step's element and keeps its phase and role. |
+| `--element <type:id>` | The element the agent works on, as `<type>:<id>`, e.g. `task:task-042-login-form`; `<id>` may be a short reference (new in 0.3.2, see [Short element references](#short-element-references)) and the run records the full id. With a step, it replaces the step's element and keeps its phase and role. |
 | `--role <role>` | The role the agent runs as: a `team.roles` name in `dna.yaml`. Without it the role is the step's; with no step, it is `developer`, and a `warning:` line says so. `approver` is refused: an agent never runs as the role that approves. |
 | `--agent <name>` | The `team.agents` entry to launch. Without it, the first entry, in `dna.yaml` order, that declares an `adapter` and lists the role in `executes_as`. |
 

@@ -33,3 +33,19 @@ Feature: P1.10 (US-5-08) - wingfoil memory history
     Then the command exits with code 0 and lists every entry
     And that revision's entry has no state and names why it could not be read
     And a warning "W_MEMORY_UNREADABLE" names the document and the commit
+
+  Scenario: Short reference - a type prefix and a number names the element
+    Given a Memory document "dl-001-pick-a-storage-layout-for-exports" of a type whose id_pattern is "dl-{n}-{slug}"
+    When I run "wingfoil memory history dl-1"
+    Then the command exits with code 0 and the history's id is "dl-001-pick-a-storage-layout-for-exports"
+
+  Scenario: Short reference - a unique prefix of the full id names the element
+    Given a Memory document "dl-001-pick-a-storage-layout-for-exports"
+    When I run "wingfoil memory history dl-001-pick"
+    Then the command exits with code 0 and the history's id is "dl-001-pick-a-storage-layout-for-exports"
+
+  Scenario: Error - a short reference matching several elements is ambiguous
+    Given Memory documents "patch-v0.3.1" and "patch-v0.3.2"
+    When I run "wingfoil memory history patch-v0.3"
+    Then the command exits with code 1 and message "ambiguous reference: patch-v0.3 matches 2 elements"
+    And both full ids are listed in id order and nothing is written
