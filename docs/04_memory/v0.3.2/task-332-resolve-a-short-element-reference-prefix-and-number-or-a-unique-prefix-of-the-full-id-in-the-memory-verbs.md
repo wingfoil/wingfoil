@@ -324,6 +324,44 @@ Design gate approved by the approver on 2026-11-01, every decision as the design
 - **D10 (a)** — no echo or warning of the short reference; outputs carry only the full id.
 - **D11 (a)** — three scenarios in `P1.10-memory-history.feature`, one in `P1.7-memory-approve.feature`.
 
+### red (qa, 2026-11-01)
+
+**Red commit:** `c64ed13c0a2dbe3527269e10677334bf24eee934` (base `8aac89741`; `git rev-list --count HEAD..release/0.3` printed `0`, no merge needed). PATH guard: `command -v wingfoil` printed the task's PATH shim; `wingfoil --version` printed `0.3.1 (57888015eb914d62763b5f4765f15a420471a4a7)`. Tests, fixtures and helpers only: `git show --stat c64ed13c0` lists no `src/`, `scripts/` or production file. No `.d.cts` is written: the new export `resolveElementReference` is TypeScript (`src/memory/reference.ts`), and the repository's `.d.cts` files declare `scripts/*.cjs` only.
+
+**Files.**
+- `test/memory/reference.test.ts` (new, 19 tests) — the pure resolver: exact, number (by value, D2 no fall-through, D3 `id_pattern` only), prefix, ambiguous (id then path order), `options.type`, archived (D5), order independence (REQ-SYS-07), any iterable.
+- `test/core/memory-short-reference.test.ts` (new, 41 tests) — `history`, `submit`, `approve`, `reject`, `amend`, `deprecate`, `park` through the registered `CORE_MODULES` operations; ambiguity refusal (D7) with `HEAD` and the working tree unchanged; full id in result, subject and body (AC 4, D10); D5, D6, D8, D9.
+- `test/core/element-short-reference.test.ts` (new, 16 tests) — `--element` of `workflow start`, `workflow adopt`, `agent execute`; `agent list --element` and the `assembleExecutionContext` Prompt stay exact.
+- `test/cli/memory-short-reference.integration.test.ts` (new, 15 tests) — the compiled `dist/cli.js` in a real `wingfoil init --template kanban` project.
+- `test/core/memory-history.test.ts` (changed) — the pin "matches on the document's frontmatter id EXACTLY" is rewritten (D3): `decision-1` now resolves `decision-12`, and `decision-2` (a prefix of no id) stays `document not found`.
+- `test/core/helpers/short-reference-fixture.ts` and `test/core/fixtures/kanban-memory.yaml` (new) — fixtures.
+
+**Fixture provenance.** `kanban-memory.yaml` is the `memory.yaml` that `wingfoil init --template kanban` (the code build of this worktree, `node dist/cli.js`) wrote in a scratch repository, copied unchanged; the helper uncomments the scaffolded `bug` machine exactly as `test/cli/dry-run.integration.test.ts` does, so `memory park` has a `returns` edge. The `{kind}-{version}` family is this repository's `release` type (`grep -n id_pattern .wingfoil/memory.yaml`), with a flat path. The two not-found lines of the CLI suite were copied from a real run in a kanban project holding dl-001 and dl-002: `memory history dl-3` printed `error: document not found: dl-3` (stdout empty, exit 1) and `memory history dl-3 --format json` printed `{"error":"document not found: dl-3"}` (exit 1). The shape of a full-id `memory history`, `memory submit` and `memory submit --dry-run --format json` was read from the same scratch project; the CLI suite compares a short reference with the full id's own output byte for byte instead of a typed copy.
+
+**Per-AC mapping (all red-first, as the design classified).**
+- AC 1 (`<prefix>-<n>`): `reference.test.ts` "AC 1" block; `memory-short-reference.test.ts` "memory history resolves a short reference" (`dl-001`, `dl-1`, `dl-0001`, `task-12`); `element-short-reference.test.ts` (`release:release-3`, `adr:adr-3`, `task:task-202`, `task:task-0202`); CLI "memory history answers a short reference as it answers the full id".
+- AC 2 (unique prefix): `reference.test.ts` "AC 2" block (exact beats prefix: `patch-v0.3.1` beside `patch-v0.3.1-hotfix`, `minor-v0.3` beside `minor-v0.3.1`); `dl-001-pick` in the core and CLI suites; `release-line:rl-v`, `task:task-202-explicit`.
+- AC 3 (ambiguous): `reference.test.ts` "AC 3" block; core "an ambiguous reference is refused, every candidate listed" (`dl-50` for the six mutating verbs and `history`, `patch-v0.3`, `dl-050-same`); the three element suites; CLI "an ambiguous reference is refused with every candidate and writes nothing" (console lines and the `--format json` object).
+- AC 4 (full id out): core "every verb takes a short reference and writes the full id" (12 cases: result `id`, `path`, one commit, subject, no whitespace token of `%B` equal to the reference), the approve body, `--dry-run` plan equal to the full-id plan (CLI), `workflow start` plan file and commits, `workflow adopt` subject and `WingFoil-Adopted:` trailer, `agent execute` plan subject, path and run id.
+- AC 5 (every verb): the six mutating verbs and `history` in the core table, the three `--element` sites, `memory submit`/`history` in the CLI.
+- Guards that pass at red, never a fabricated red: D8 (`document not found: dl-9` for each verb, `element not found: <type>:<ref>` for the three sites, the two CLI lines), D2 (`task-33` is not `task-330`; `release:release-00`), D6 (`submit dl-7` with the element only in the working tree), D9 (`supersedes: "adr-1"` and `"adr-1-ol"` still refused `document not found`), D1 (b) (`agent list --element task:task-202` lists nothing while the full id lists the recorded run; the Prompt answers `element 'task:task-202' not found at <sha>`), the existing full-id history test in the table. Some of these sit under a `describe` titled "(red-first)" because their sibling cases are red; they are listed here by name.
+
+**Run.** `npx jest test/memory/reference.test.ts test/core/memory-short-reference.test.ts test/core/element-short-reference.test.ts test/cli/memory-short-reference.integration.test.ts test/core/memory-history.test.ts --maxWorkers=2` → `Tests: 72 failed, 37 passed, 109 total`, `Test Suites: 5 failed, 5 total`. Per file (failed/passed): `reference.test.ts` 19/0; `memory-short-reference.test.ts` 29/12; `element-short-reference.test.ts` 10/6; `memory-short-reference.integration.test.ts` 13/2; `memory-history.test.ts` 1/17.
+
+**First failing assertion of each red group.**
+- `reference.test.ts` (all 19): `TypeError: (0 , memory_1.resolveElementReference) is not a function` (runtime), and `npx tsc --noEmit -p tsconfig.json` prints exactly one diagnostic, `test/memory/reference.test.ts(16,10): error TS2305: Module '"../../src/memory"' has no exported member 'resolveElementReference'.` — the intended missing export.
+- core history: `Expected: "task-012-cli-exit-code-contract"  Received: "document not found: task-12"`.
+- core table (12 cases): `Error: refused: NOT_FOUND: document not found: dl-1`; the ambiguous cases: `expect(received).toEqual(expected)` with `-   "code": "CONFLICT"` against the received `NOT_FOUND` `document not found: dl-50`; D5 deprecate: `document not found: dl-99` received where `document already deprecated: dl-099-retired` is expected.
+- `memory-history.test.ts`: the rewritten test, `expect(result.ok).toBe(true)` received `false` (`document not found: decision-1`).
+- element suite: `refused: NOT_FOUND: element not found: release:release-3`, `... release-line:rl-v`, `... adr:adr-3`, `NOT_FOUND: element not found: task:task-202`; ambiguous cases expect `CONFLICT`, receive `NOT_FOUND`.
+- CLI: `memory history dl-001` stdout/stderr differ from the full id's (`expected` the history JSON, received `error: document not found: dl-001`, status 1); the ambiguous console case expects the four stderr lines, receives `error: document not found: dl-1`.
+
+**Fixtures proved on the full ids.** The 12 verb cases pass when run with the full id in place of the short reference (a temporary copy of the file, deleted before the commit: `Tests: 2 failed, 26 skipped, 13 passed`, the 2 being the two cases that still used a short reference), and the `workflow adopt`/`agent list` cases of the element suite pass with full ids, so a red failure is the missing resolution, not a fixture defect.
+
+**Gates before the red commit.** `npx tsc --noEmit -p tsconfig.json`: the one TS2305 above and nothing else. `npx jest test/lint --maxWorkers=2`: `Tests: 1 failed, 152 passed, 153 total`; the one failure is `typecheck.clean` (`test/lint/typecheck-clean.test.ts`), whose only diagnostic is that same TS2305, the intended red; no other lint gate fails. The invisible-character grep over the changed files printed nothing.
+
+**Observation for green.** In `element-short-reference.test.ts` the import of `src/core` has to precede `src/core/agent-execute`: with the order reversed, `CORE_MODULES.agent.agentList.fn` was `undefined` in that file (`TypeError: operation.fn is not a function`, observed at red); the file imports it first.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
