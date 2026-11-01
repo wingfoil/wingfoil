@@ -26,9 +26,9 @@ attached to the release as
 - Short element references. `memory history`, `submit`, `approve`, `reject`, `amend`, `deprecate` and `park`, and
   `--element` of `workflow start`, `workflow adopt` and `agent execute`, accept `<type prefix>-<n>` (`task-1` names
   `task-001-my-first-task`; the number is compared by value and never read as a prefix, so `task-33` is not
-  `task-330`) or a unique prefix of the full id. A reference matching several elements is refused with
-  `error: ambiguous reference: <ref> matches <N> elements` and every full id, exit `1`, nothing written. Outputs and
-  commits carry the full id. (task-332)
+  `task-330`) or a unique prefix of the full id. A reference matching several elements is refused with `error:
+  ambiguous reference: <ref> matches <N> elements` and every full id, exit `1`, nothing written. Outputs and commits
+  carry the full id. (task-332)
 
 ### Changed
 
@@ -37,11 +37,11 @@ attached to the release as
 
 ### Fixed
 
-- A configuration file that exists but cannot be read is named relative to the project root, with its cause
-  (`cannot be read: permission denied`, `is a directory, not a file`), on the CLI and the MCP server; 0.3.1 printed
-  Node's raw error with the absolute path. (task-309, bug-251)
-- A directive file missing a required header field is refused with
-  `invalid directive: missing required field '<field>'`. (task-309, bug-025)
+- A configuration file that exists but cannot be read is named relative to the project root, with its cause (`cannot
+  be read: permission denied`, `is a directory, not a file`), on the CLI and the MCP server; 0.3.1 printed Node's raw
+  error with the absolute path. (task-309, bug-251)
+- A directive file missing a required header field is refused with `invalid directive: missing required field
+  '<field>'`. (task-309, bug-025)
 - `wingfoil directives list`: without a `roles.yaml`, `--role` no longer warns that the role has no directives
   assigned; a binding that names a missing directive is warned about without `--role` too; a `roles.yaml` that exists
   but cannot be read is refused (exit `1`) instead of listing nothing. (task-310, bug-199, bug-411, bug-455)
@@ -52,24 +52,25 @@ attached to the release as
   without an unknown-field warning. (task-312, bug-255, bug-316)
 - A committed `memory.yaml` whose type `path` is absolute or holds a `.` or `..` segment, or whose `id_pattern` is
   malformed, is refused by every command that reads it, before anything is written. `memory history` reports a past
-  revision written in a newer element format as unreadable instead of reading its status. (task-313, bug-216,
-  bug-360, bug-262)
+  revision written in a newer element format as unreadable instead of reading its status. (task-313, bug-216, bug-360,
+  bug-262)
 - `memory search --type <type>` and the MCP Resource `wingfoil://memory/{type}` warn only about the unreadable files
   that type could hold; 0.3.1 warned about every type's. (task-314, bug-283)
-- `wingfoil help memroy` gets the same `hint: did you mean "memory"?` as `wingfoil memroy`, exit `2`;
-  `wingfoil help help` prints the help command's help, exit `0`. (task-315, bug-115, bug-116)
+- `wingfoil help memroy` gets the same `hint: did you mean "memory"?` as `wingfoil memroy`, exit `2`; `wingfoil help
+  help` prints the help command's help, exit `0`. (task-315, bug-115, bug-116)
 - A `.git/config` git cannot parse is reported as `could not read git configuration: <git's message>`, not as a
   missing git identity. (task-324, bug-379)
 - `E_WORKFLOW_INCLUDE_UNRESOLVED` names the include, the workflow name to write instead, and, for a file path, the
   upgrade section of the user guide. (task-325, bug-394)
 - `wingfoil agent execute` with a step (`--next`, `--workflow`, `--step`) prints the workflow deduction's diagnostics
   as `warning:` lines, one per distinct diagnostic, before any refusal; 0.3.1 dropped them. A run log committed as a
-  symbolic link is skipped with `W_RUN_LOG_SYMLINK` by `agent list`, `agent show`, `agent execute` and the MCP
-  server, instead of being refused as not JSON. (task-330, bug-339, bug-354)
+  symbolic link is skipped with `W_RUN_LOG_SYMLINK` by `agent list`, `agent show`, `agent execute` and the MCP server,
+  instead of being refused as not JSON. (task-330, bug-339, bug-354)
 - `wingfoil init`'s `dna.yaml` shows commented `team.members` and `paths.health` examples with the command that adds
-  each, and its scaffold comments no longer name WingFoil's internal requirement ids. The Memory templates of `adr`,
-  `bug`, `decision-log` and `tech-spec` carry `contributor`, `credit` and `reported_by`, and the `release` template
-  carries `backlog_committed`, `waves` and a `## Scope changes` table. (task-321, bug-393, bug-338, bug-350)
+  each, and the comments of its configuration files no longer name WingFoil's internal requirement and feature ids.
+  The Memory templates of `adr`, `bug`, `decision-log` and `tech-spec` carry `contributor`, `credit` and
+  `reported_by`, and the `release` template carries `backlog_committed`, `waves` and a `## Scope changes` table.
+  (task-321, bug-393, bug-338, bug-350)
 - The case study shows the release-health figures of v0.1, v0.2, v0.3 and v0.3.1. (task-322, bug-432)
 
 ### Upgrading from 0.3.1
@@ -77,15 +78,19 @@ attached to the release as
 Nothing needs migrating. Inputs 0.3.2 handles differently:
 
 - A `memory.yaml` type `path` that is absolute or holds `.` or `..`, or a malformed `id_pattern`, is now an
-  `E_VALIDATION` error for every command; fix the pattern and commit. (task-313)
+  `E_VALIDATION` error for every command that reads `memory.yaml` (the Memory, workflow and agent commands); fix the
+  pattern and commit. (task-313)
 - An extra `paths` category in `dna.yaml` must be a list of strings; 0.3.1 accepted any value with a warning.
   (task-312)
 - `directive remove` acts only on a committed directive: commit a new directive before removing it. (task-311)
 - A short reference that 0.3.1 refused as `document not found` now acts on the element it names: run the command with
   `--dry-run` first to see the full id. (task-332)
-- `wingfoil help help` exits `0` (0.3.1: `2`), and `init`'s commit subject has no ` (P5.1.1)`: only scripts that
-  match either change. Existing projects are not rewritten; the new scaffold examples and template fields can be
-  copied from a project `wingfoil init` creates in an empty repository. (task-315, task-321)
+- Exit codes and output a script may match: `wingfoil help help` exits `0` (0.3.1: `2`); `directives list` exits `1`
+  on a `roles.yaml` it cannot read (0.3.1: `0`, nothing listed); `agent list` skips a run log committed as a symbolic
+  link with a warning (0.3.1: exit `1`); `init`'s commit subject has no ` (P5.1.1)`. (task-315, task-310, task-330,
+  task-321)
+- Existing projects are not rewritten: the new scaffold examples and template fields can be copied from a project
+  `wingfoil init` creates in an empty repository. (task-321)
 
 ### For contributors
 
@@ -96,18 +101,20 @@ These change how WingFoil itself is developed, not how it behaves in your projec
   the post-publish wait reads the npm tarball, and `publish` names the test run it checks. (task-305, bug-429,
   task-306, bug-428, bug-433, bug-405)
 - `release-health` settles a patch's proposals as pending; its measure names the failing npm script and follows
-  renames. (task-307, bug-443, task-320, bug-357, bug-385, bug-407)
+  renames, runs its tools without jest's agent variables, and documents `n -d exec` with a writable `N_PREFIX`.
+  (task-307, bug-443, task-320, bug-357, bug-385, bug-407)
 - The governance check verifies the `Approver:` authority of `workflow:` records and flags a `WingFoil-*` trailer
-  outside the final paragraph; the control-character gate covers bidirectional and C1 controls; `lint-claims` says
-  what it read; the staging transcript check reads every line; the e2e smoke reports the workflow read counts;
-  `integration-branch --check-head` exits `2` when git cannot read `HEAD`. (task-328, bug-391, bug-444, task-317,
-  bug-246, bug-247, bug-330, task-326, bug-382, task-327, bug-404, task-319, bug-386, bug-387)
+  outside the final paragraph; the control-character gate covers bidirectional and C1 controls, and spec-007's
+  secret-pattern table is pinned to the code; `lint-claims` says what it read; the staging transcript check reads
+  every line; the e2e smoke reports the workflow read counts; `integration-branch --check-head` exits `2` when git
+  cannot read `HEAD`, and a minor's version must be `vX.Y`. (task-328, bug-391, bug-444, task-317, bug-246, bug-247,
+  bug-330, task-326, bug-382, task-327, bug-404, task-319, bug-386, bug-387)
 - The test suite builds `dist/` atomically, isolates its git fixture and npm, sweeps fixtures of killed runs, and pins
   more contracts (the context golden payload, `mcp.template`, the vision version entries, the case study's figures,
   the release kind rule). `selectWorkflowInstance` answers `unknown workflow` for a reference that names none; the
-  unused internal `setDnaValueInText` is removed. (task-308, bug-066, bug-278, bug-208, bug-336, task-316, bug-207,
-  bug-209, bug-271, task-318, bug-266, task-329, bug-373, bug-431, task-322, bug-383, bug-384, task-331, bug-445,
-  task-323, bug-358, bug-396, task-312, bug-254)
+  unused internal `setDnaValueInText` is removed; the MCP registrar's module comment names the Resources it lists.
+  (task-308, bug-066, bug-278, bug-208, bug-336, task-316, bug-207, bug-209, bug-271, task-318, bug-266, task-329,
+  bug-373, bug-431, task-322, bug-383, bug-384, task-331, bug-445, task-323, bug-358, bug-396, task-312, bug-254)
 - The off-frontier `--step` refusal carries the frontier in its result's `details` (the library API; the CLI does not
   print `details` yet). (task-330, bug-340)
 

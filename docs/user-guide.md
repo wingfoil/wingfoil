@@ -223,7 +223,8 @@ You may also declare a category of your own by editing `dna.yaml` by hand and co
 0.3.2): `extras: [notes/]` under `paths:` loads without a warning, and `wingfoil paths extras` prints
 it. Its value must be a list of paths — `extras: notes/` is refused with
 `error: E_VALIDATION paths.extras (.wingfoil/dna.yaml): Invalid input: expected array, received string`.
-`dna add` and `dna update` write only the seven categories above (`error: unknown DNA field 'paths.extras'`).
+`dna set`, `dna add` and `dna update` write only the seven categories above
+(`error: unknown DNA field 'paths.extras': 'extras' is not declared under 'paths'`).
 
 The fields each collection accepts are listed in the
 [CLI reference](cli-reference.md#wingfoil-dna-add). You can also edit `dna.yaml` by hand — then commit it.

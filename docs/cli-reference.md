@@ -230,7 +230,8 @@ directives in `directives/built-in/` plus four starter custom directives in `dir
 (`scrum-delivery` vs `kanban-delivery`) and in `project.methodology` / `stacks.methodologies`.
 
 - **Output:** `{ root, template, files: [...] }` — the files it created.
-- **Commit:** `chore(wingfoil): initialize .wingfoil/ with the <Template> template`
+- **Commit:** `chore(wingfoil): initialize .wingfoil/ with the <Template> template` (new in 0.3.2; 0.3.1 ended it
+  with ` (P5.1.1)`)
 - **Errors:** already initialized → exit `1` (`error: WingFoil already initialized (to change its
   configuration, edit the files under .wingfoil/ and commit them, or use the wingfoil dna and wingfoil
   directive commands)`); `--template` omitted without a terminal or with `--no-interactive` → exit `2`
@@ -445,7 +446,9 @@ wingfoil paths [<category>] [--list]
 ```
 
 `<category>` is `sources`, `tests`, `docs`, `config`, `governance`, `runs` or `health`. Without it the whole
-map is printed. `--list` is accepted for a planned drill-down view, but in this release it does not
+map is printed. New in 0.3.2: a category of your own, declared by hand in `dna.yaml` `paths:` as a list of paths
+and committed, is answered too (`wingfoil paths extras`); a value that is not a list is refused
+(`E_VALIDATION paths.extras`). `--list` is accepted for a planned drill-down view, but in this release it does not
 change the output.
 
 `runs` is the directory of the agent run log, and it holds exactly one entry: a `dna.yaml` that
