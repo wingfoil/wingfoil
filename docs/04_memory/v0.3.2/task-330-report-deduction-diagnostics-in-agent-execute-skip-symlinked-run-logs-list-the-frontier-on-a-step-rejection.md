@@ -50,6 +50,215 @@ adopt` has; the message unchanged (spec-017 §10); unscoped-key matching deferre
        reject's `Reason:` (read with `wingfoil memory history <task-id>`), each with the command that
        shows it resolved and what that command printed; then what else changed on the next pass. -->
 
+### design (architect, 2026-11-01)
+
+**Inputs read.** `depends_on: []` (no dl-015 gate); no handover. Base: `release/0.3` `676f9d5a` + the start commit
+`e166f9f0` and the three bug syncs (`git log --oneline -5` → head `d7a38fc0`). PATH guard: `command -v wingfoil` →
+the task's PATH shim, `wingfoil --version` → `0.3.1 (676f9d5a5c348208d94e972f7afdb0f3e61d26f7)`. Rulings:
+`release-planning-rel-v0.3.2-plan` R8 (`sed -n 114,121p`): `bug-340` "`details.frontier` as `adopt` has, the message
+unchanged"; S6 (`sed -n 240,245p`): the amends spec-016 §3.3, §3.7, §4.5 and spec-017 §10 are this task's, recorded
+at review (`dl-047`). Plan rulings W0-R1 … W3-R4 read (`dev-loop-rel-v0.3.2-plan.md` lines 64–223). spec-016 and
+spec-017 are `approved` (`sed -n 5p` on both). `dl-176` is `in-discussion` and is not a contract of this task: the
+presentation below is decided here and stated by the amended spec-016 §3.3. No `.wingfoil/` file changes, so
+`npm run check:mcp` is not required.
+
+**The defects, reproduced on this base** (code build of this worktree, `node dist/cli.js`):
+- `bug-339`: in the step fixture (`test/agent/helpers/agent-execute-step-fixture.ts`: `seedStep()` + `startInstance(repo,
+  'delivery-1', 'delivery', RELEASE_ID)`) with `docs/04_memory/v0.1/task-203-sibling.md` edited and not committed,
+  `workflow next --format json` → `diagnostics: [{"code":"W_UNCOMMITTED_INPUTS","severity":"warning","file":
+  "docs/04_memory/v0.1/task-203-sibling.md","path":"","message":"uncommitted change to a deduction input, not read
+  (the answer is computed from HEAD): docs/04_memory/v0.1/task-203-sibling.md"}]`; `agent list --waiting` → exit 0,
+  stderr `warning: W_UNCOMMITTED_INPUTS (docs/04_memory/v0.1/task-203-sibling.md): uncommitted change to a deduction
+  input, not read (the answer is computed from HEAD): docs/04_memory/v0.1/task-203-sibling.md`; `agent execute --next
+  --dry-run` → exit 0, stderr empty (a throwaway jest probe, deleted; `git status --short` empty after). On this
+  repository: `node dist/cli.js workflow next` → `65 diagnostic(s): --format json lists them` (65 ×
+  `W_WORKFLOW_UNBOUND_TOKEN`), `node dist/cli.js agent list --waiting 2>&1 | grep -c "^warning:"` → `65`, `node
+  dist/cli.js agent execute --next --dry-run` → only `error: role 'approver' is never executed by an agent`.
+- `bug-354`: a scratch repository outside the worktree, `wingfoil init --template Scrum` (`paths.runs` = `docs/runs/`),
+  `docs/runs/task-1.jsonl` committed as a link to `../target.txt` (`git ls-tree -r HEAD docs/runs` → `120000 blob …
+  docs/runs/task-1.jsonl`): `agent list --past` → exit 1, `error: run log docs/runs/task-1.jsonl: line 1 is not a
+  valid run record: not terminated by a newline` (`--format json`: `{"error":"run log docs/runs/task-1.jsonl: line 1 is
+  not a valid run record: not terminated by a newline"}`); `agent show task-1/adhoc/1` → exit 1, the same line.
+- `bug-340`: on this repository (`--dry-run`), `memory add --type service --title x --workflow
+  service-ingest-rel-v0.3-listings-plan --step service-ingest.bogus`, `workflow finalize … --step
+  service-ingest.bogus` and `agent execute --workflow … --step service-ingest.bogus` → exit 1, `error: step
+  'service-ingest.bogus' is not on the frontier of service-ingest-rel-v0.3-listings-plan`; with `--format json` all
+  three print `{"error":"…"}` and no details.
+
+**Readers and rejection sites found.**
+- Run-log readers (`grep -rn "readRunLogsAt\|readRunLogAt\|parseRunLog(" src`): `readRunLogsAt` (`src/agent/run-log.ts:369`,
+  lists with `listPathsAtCommit`, reads with `readPathAtRev`; its one caller `agentListAtHead`,
+  `src/core/agent-list.ts:161`) and `readRunLogAt` (`src/agent/run-log.ts:326`, `readPathAtRev`; callers `agentShowFn`,
+  `src/core/agent-show.ts:168`, and `nextRunId`, `src/agent/run-log.ts:488`). The other two `readPathAtRev` reads of a
+  log are gated before they run: `recordRun`'s `HEAD` read (`:665`) follows `requireWritableRunLog` (`:441`), whose
+  `requireConfinedWriteTarget` refuses a symlinked leaf (`src/core/confinement.ts:81-110`) and whose porcelain check
+  refuses a working tree that differs from `HEAD`; `agent-show`'s `addingCommit` runs only after `readRunLogAt` accepted
+  the log. `agent execute` reaches `nextRunId` (step 9) only after the same `requireWritableRunLog` (step 6), so a
+  symlinked log is refused there today and stays refused; `nextRunId` changes only through `readRunLogAt`. How a link is
+  known at a commit: `listBlobEntriesAtCommit` (`src/core/revision.ts:101-114`, mode `120000`), as the Memory scan uses
+  it (`src/memory/query.ts:89`, `:926`).
+- Rejection sites (`grep -rn "is not on the frontier" src`): `selectFrontierStep` (`src/agent/step.ts:66`, details
+  `{ step, instance }`), `resolveAddLink` (`src/core/memory-add-link.ts:59`, details `{ instance, step }`),
+  `workflowFinalize` (`src/core/workflow-finalize.ts:127-132`) and `workflow adopt` (`src/core/workflow-adopt.ts:133`):
+  **finalize already carries `details: { frontier: frontier.map((candidate) => candidate.key) }`**, since `task-226`
+  (`git log -L126,132:src/core/workflow-finalize.ts` → `35144856f`), as adopt does. So `workflow-finalize.ts` is not
+  changed, and AC3's finalize part is characterization.
+- Neither surface shows `details.frontier`: `errorDetails` renders only `details.issues` and `details.diagnostics`
+  (`src/core/error-details.ts:33-52`; `bug-303`, `triaged`, `release: "v0.4"`), which is why the finalize refusal above
+  prints `{"error":"…"}` with the key already set. The observable of AC3 is the `CoreResult` of the core functions.
+- `workflow next`'s presentation (`src/core/workflow-next.ts:704`): the diagnostics in the payload and a count line on
+  stdout; `agent list` (same deduction): one `warning:` line per diagnostic, `diagnosticWarning`
+  (`src/core/agent-list.ts:80`), `<code> (<file>): <message>`. `agent execute` hands its stdio to the agent, so a line
+  on stdout is not an option; it already prints `W_ADAPTER_IGNORED` per diagnostic through `reportWarning`
+  (`src/agent/execute.ts:534`).
+
+**W2 merges.** `git log --oneline --no-merges v0.3.1..HEAD -- src/agent/execute.ts src/agent/run-log.ts src/agent/step.ts
+src/core/memory-add-link.ts src/core/workflow-finalize.ts src/core/agent-list.ts src/core/agent-show.ts
+src/core/workflow-next.ts src/agent/index.ts` → `91faf13d` (`task-323`, `selectWorkflowInstance` in
+`workflow-next.ts`, a file this task does not edit) and `d4a5a57e` (`task-312`, comments). `task-328` changed only the
+governance checks (no file above). Neither touches the code paths of this task.
+
+**AC classification and what qa pins.** Red runs `npx tsc --noEmit` and `npx jest test/lint --maxWorkers=2` before its
+commit. A new export (`W_RUN_LOG_SYMLINK`) gives two expected reds: `tsc` TS2305, and at jest run time (`isolatedModules`)
+an `undefined` constant, so the assertions on the code fail, not the import.
+
+| AC | Class | Why |
+|---|---|---|
+| 1 deduction diagnostics | red-first | `agent execute --next --dry-run` prints nothing for a diagnostic `workflow next` lists (above) |
+| 2 symlinked run log | red-first | `agent list --past` / `agent show` refuse it as not a run record (above) |
+| 3 `details.frontier` | red-first for `memory add --step` and `agent execute --step`; characterization for `workflow finalize` | finalize already carries it (`35144856f`); no test pins it (`grep -rn "frontier: \[" test` → only `workflow-next-review-fixes` and `workflow-status-render`, both payloads) |
+| 4 spec amends | characterization | prepared uncommitted at green/refactor, recorded by the approver's `memory amend` at review; the reviewer reads them, no test |
+| 5 no `dl-176` contract | characterization | `grep -n "dl-176" <this file>` → the AC5 line and this note's statement that it is not a contract |
+
+- **AC1** — new file `test/cli/agent-execute-diagnostics.integration.test.ts`, the step fixture above
+  (`seedStep`, `startInstance(repo, 'delivery-1', 'delivery', RELEASE_ID)`, then append a line to
+  `docs/04_memory/v0.1/${SIBLING_ID}.md` without committing). Pin, through the CLI (`spawnCapture` + `CLI_ENTRY`):
+  (a) `agent execute --next --dry-run` (console) → exit 0, and the stderr lines starting `warning: W_` equal, in order,
+  `workflow next --format json`'s `diagnostics` of the same tree mapped to `warning: <code> (<file>): <message>` — here
+  exactly the one `W_UNCOMMITTED_INPUTS` line quoted above; (b) the same with `--format json` → stdout still parses as
+  the dry-run payload, stderr holds `{"warning":"W_UNCOMMITTED_INPUTS (docs/04_memory/v0.1/task-203-sibling.md): …"}`;
+  (c) a refusal after the deduction, `--workflow delivery-1 --step loop.review@task:${TASK_ID}` → exit 1, stderr line 0
+  the warning, line 1 `error: step 'loop.review@task:${TASK_ID}' is not on the frontier of delivery-1`, nothing spawned,
+  `HEAD` unchanged; (d) positive case of the absence: the stepless form `--element task:${TASK_ID} --role developer
+  --dry-run` on the same dirty tree prints no `W_UNCOMMITTED_INPUTS` line (characterization: it reads no deduction,
+  spec-016 §3.3 step 2). Core level, in the same new file or a new `test/core/agent-execute-diagnostics.test.ts`: the
+  `plan()` pattern of `test/core/agent-execute-step.test.ts:136-145` (`withWarningSink`) on that tree → `warnings` holds
+  `W_UNCOMMITTED_INPUTS (docs/04_memory/v0.1/task-203-sibling.md): uncommitted change to a deduction input, not read
+  (the answer is computed from HEAD): docs/04_memory/v0.1/task-203-sibling.md` before any other warning. Existing pins
+  that stay green because the fixture deduces no diagnostic (probe above: `[]` on the clean step fixture):
+  `test/cli/agent-execute-step.integration.test.ts:141` (no `warning:` line), `:163`, `:174`, `:202`, `:225` (stderr line
+  0 is the `error:`), `test/core/agent-execute-step.test.ts:162` (`warnings` `[]`); `test/cli/journey-0a.integration.test.ts:140`
+  uses `toContain`.
+- **AC2** — new files `test/agent/run-log-symlink.test.ts` (unit) and `test/cli/agent-run-log-symlink.integration.test.ts`.
+  Fixture: `makeTempGitRepo` (`test/storage/helpers/git-fixture.ts`), `docs/runs/task-1.jsonl` a symbolic link to
+  `../target.txt` (`not a run log`, no newline), committed, and `docs/runs/task-2.jsonl` a regular log of one valid
+  record (`record()` of `test/agent/run-log.test.ts:48`, serialized with `serializeRunRecord`). Unit pins:
+  `readRunLogsAt(repo, sha, 'docs/runs/', onDiagnostic)` → `{ ok: true, value: [task-2's record] }`, `onDiagnostic`
+  called once with `{ code: 'W_RUN_LOG_SYMLINK', severity: 'warning', file: 'docs/runs/task-1.jsonl', path: '', message:
+  'run log docs/runs/task-1.jsonl is a symbolic link: not read' }`; `readRunLogAt(repo, 'HEAD', 'docs/runs/task-1.jsonl')`
+  inside `withWarningSink` → `{ ok: true, value: [] }` and the one warning `W_RUN_LOG_SYMLINK (docs/runs/task-1.jsonl):
+  run log docs/runs/task-1.jsonl is a symbolic link: not read`; `nextRunId` on that path → `task-1/adhoc/1` with the same
+  warning; the constant `W_RUN_LOG_SYMLINK === 'W_RUN_LOG_SYMLINK'`, exported from `src/agent/run-log.ts` and
+  `src/agent/index.ts`. CLI pins, in a `wingfoil init --template Scrum` project as reproduced above: `agent list --past`
+  → exit 0, stdout `no past runs` (plus task-2's run when the regular log is added), stderr `warning: W_RUN_LOG_SYMLINK
+  (docs/runs/task-1.jsonl): run log docs/runs/task-1.jsonl is a symbolic link: not read`; `--format json` → the payload's
+  `diagnostics` holds that diagnostic object; `agent show task-1/adhoc/1` → exit 1, stderr `warning: W_RUN_LOG_SYMLINK
+  (…): …` then `error: run not found: task-1/adhoc/1`, no `hint:`. The "before" output for the notes is the one quoted
+  above.
+- **AC3** — `test/core/agent-execute-step.test.ts:77-84` pins `details: { step, instance }` with `toEqual`: qa updates it to
+  `details: { step: 'loop.review@task:task-1', instance: 'delivery-1', frontier: [<keys>] }`, the keys
+  `[result.next, ...result.more].map((step) => step.key)` of each fixture (`[FIRST.key]` for `result(FIRST)`, `[]` for
+  `result(null)`). New `test/core/step-refusal-frontier.test.ts`, in one fixture with two parallel frontier steps (the
+  step fixture's `delivery-1`, two `loop.implement` steps, `test/agent/helpers/agent-execute-step-fixture.ts:111-115`):
+  `resolveAddLink(root, ref, stepKey, type)` (`src/core/memory-add-link.ts:55`) with `--step` off the frontier → `error` `toEqual` `{ code: 'CONFLICT', message: "step
+  '<key>' is not on the frontier of <instance>", details: { instance, step, frontier: [<keys in frontier order>] } }`;
+  `workflowFinalizeAtHead(root, request)` (`src/core/workflow-finalize.ts:112`) → `details: { frontier: [<keys>] }` (characterization, passes at red); the keys
+  read from `workflow next --format json` (`next.key`, `more[].key`) on the same tree, copied with the command named.
+  The message stays exact in all three (`toBe`). The CLI JSON is not pinned (it drops `details`, `bug-303`).
+- **AC4/AC5** — no test; the reviewer checks the uncommitted amends and the grep.
+
+**Design.**
+- *`src/agent/execute.ts` (AC1).* Right after `onHead(sha)` in `runPipeline` (step 2, before `loadCommittedConfig`, the
+  adapter-tree warnings and every resolution refusal), when `deduced?.ok`: `for (const diagnostic of
+  deduced.value.diagnostics) reportWarning(diagnosticWarning(diagnostic))`, `diagnosticWarning` imported from
+  `../core/agent-list` (no cycle: `agent-list` imports `run-log`, not `execute`). They are the diagnostics `workflow
+  next` lists (`NextResult.diagnostics`, the deduction's plus `approvalDiagnostics`), in its order;
+  `withDistinctWarnings` prints each distinct line once. The stepless form reads no deduction and prints none.
+  Module doc's step list gains the line.
+- *`src/agent/run-log.ts` (AC2).* `export const W_RUN_LOG_SYMLINK = 'W_RUN_LOG_SYMLINK'` and a
+  `runLogSymlinkDiagnostic(path)` → the object pinned above. `readRunLogsAt(root, sha, dir, onDiagnostic = reportRunLog)`
+  lists with `listBlobEntriesAtCommit`, keeps `isRunLogPath` entries in the same element-id order, reports each link and
+  reads the rest. `readRunLogAt(root, rev, path, onDiagnostic = reportRunLog)` looks the one path up with
+  `listBlobEntriesAtCommit(root, sha, path).find((entry) => entry.path === path)`: absent → `[]`, a link → report, `[]`,
+  else read and parse as today. `reportRunLog` = `(d) => reportWarning(formatDiagnostic(d))` (with `path: ''` the text
+  equals `diagnosticWarning`'s). Return types unchanged, so `test/agent/run-log.test.ts`'s `toEqual({ ok: true, value })`
+  pins hold. `src/agent/index.ts` exports the constant.
+- *`src/core/agent-list.ts` (AC2).* `readRunLogsAt(root, commit, dir, (d) => diagnostics.push(d))`: the link lands in the
+  payload's `diagnostics` and, through the existing `diagnostics.map(diagnosticWarning)`, as a `warning:` line.
+  `src/core/agent-show.ts` keeps the default (the warning precedes `run not found`); not edited.
+- *`src/agent/step.ts`, `src/core/memory-add-link.ts` (AC3).* `details` gains `frontier`: `[...(next.next === null ? [] :
+  [next.next]), ...next.more].map((step) => step.key)` and `selected.frontier.map((step) => step.key)`; existing keys
+  kept, `frontier` last. Messages unchanged.
+- *Docs.* `docs/cli-reference.md`: `agent execute` (the deduction's diagnostics as `warning:` lines, before any step
+  refusal), `agent list` / `agent show` (a run log committed as a symbolic link is not read: a `W_RUN_LOG_SYMLINK`
+  warning). No BDD change: no scenario names the deduction's diagnostics in `agent execute` or a link (`grep -rn
+  "symbolic\|diagnostic" docs/02_requirements/02_bdd/features/p5-interaction/P5.3.*.feature` → only
+  `P5.3.4-agent-list.feature:41`, the JSON keys, `diagnostics` among them, unchanged); the P5.3.1 sc. "Error - --step
+  names no step of the frontier" message is unchanged.
+- *Pending amendments, prepared uncommitted by the developer (`dl-047`).* spec-016 §3.3 step 2 (the step forms print the
+  deduction's diagnostics, one `warning:` line each, `<code> (<file>): <message>`, before any resolution refusal) and
+  step 8 (one sentence: step 2's warnings precede these); §3.7, the `--step` row (`details.frontier`, the frontier's
+  keys in frontier order); §4.5 (every reader lists the directory's blobs with their kind; a symbolic link is not read,
+  a `W_RUN_LOG_SYMLINK` warning names it, and `agent list` carries it in `diagnostics`); spec-017 §10, the "step not on
+  the frontier" row (`agent execute --step` added to its commands; the keys in frontier order in `details.frontier`).
+
+**Files to touch.** `src/agent/execute.ts`, `src/agent/run-log.ts`, `src/agent/index.ts`, `src/agent/step.ts`,
+`src/core/memory-add-link.ts`, `src/core/agent-list.ts`, `docs/cli-reference.md`; tests by qa (above). Not touched:
+`src/core/workflow-finalize.ts` (already carries the key), `src/core/agent-show.ts`, `.wingfoil/`. Uncommitted:
+spec-016, spec-017. **No `version:` bump**: none of the four configuration files changes, and the specs and
+`docs/cli-reference.md` declare no `version:` (`sed -n 1,14p` on both specs; `grep -n "^version" docs/cli-reference.md`
+→ no output).
+
+**Existing tests of the files this task changes**, run before any pin (one jest process, `--maxWorkers=2`, no slot):
+`npx jest test/agent/run-log.test.ts test/agent/execute.test.ts test/core/agent-execute-step.test.ts
+test/core/agent-execute.test.ts test/core/agent-list.test.ts test/core/agent-list-edges.test.ts
+test/core/agent-list-gate.test.ts test/core/agent-show.test.ts test/core/memory-add-workflow-link.test.ts
+test/core/workflow-finalize.test.ts test/core/workflow-finalize-bdd.test.ts test/core/workflow-adopt.test.ts
+test/cli/agent-execute-step.integration.test.ts test/cli/agent-list.integration.test.ts
+test/cli/agent-list-edges.integration.test.ts test/cli/agent-show.integration.test.ts
+test/cli/workflow-finalize.integration.test.ts --maxWorkers=2` → `Test Suites: 17 passed, 17 total`, `Tests: 337
+passed, 337 total`.
+
+**Tests that pin the changed behaviour (W2-R4 (6)).** `grep -rln "is not on the frontier" test docs/02_requirements` →
+`P4.13-state-deduction.feature`, `P5.3.1-agent-execute.feature`, `test/cli/agent-execute-step.integration.test.ts`,
+`test/cli/workflow-finalize.integration.test.ts`, `test/core/agent-execute-step.test.ts`,
+`test/core/memory-add-workflow-link.test.ts`, `test/core/workflow-adopt-review.test.ts`, `test/core/workflow-adopt.test.ts`,
+`test/core/workflow-finalize-bdd.test.ts`, `test/core/workflow-finalize.test.ts`: the message is unchanged, and only
+`test/core/agent-execute-step.test.ts:82` pins `details` exactly (`toEqual`); the others use `toMatchObject` or the
+message alone. `grep -rln "readRunLogsAt\|readRunLogAt\|agentListAtHead\|agentShowFn\|nextRunId" test` →
+`test/agent/run-log.test.ts` (return shape unchanged). The warning pins of `agent execute`'s step forms are listed under
+AC1. No workflow definition changes, so no phase or step list is pinned anew.
+
+**Decisions for the approver.**
+- **D1 — presentation of the deduction's diagnostics in `agent execute`.** (a) one `warning:` line per diagnostic, the
+  form `agent list` prints for the same deduction, at step 2 before any step refusal; (b) one `warning:` line with the
+  count and a pointer (`<n> diagnostic(s): workflow next --format json lists them`). On this repository (a) prints 65
+  lines before the launch. Recommendation **(a)**: it names `W_UNCOMMITTED_INPUTS`, the case `bug-339` is about, and
+  matches `agent list`.
+- **D2 — the code of the skipped link.** (a) a new `W_RUN_LOG_SYMLINK` (`src/agent/run-log.ts`); (b) `W_MEMORY_UNREADABLE`.
+  Recommendation **(a)**: a run log is not Memory (`spec-016` §4).
+- **D3 — `details` shape.** (a) keep `{ step, instance }` / `{ instance, step }` and add `frontier`; (b) `{ frontier }`
+  alone, as finalize and adopt. Recommendation **(a)**: removes nothing a caller reads.
+- **D4 — `bug-340` is met on the core API only.** `details.frontier` reaches neither the CLI nor the MCP surface until
+  `bug-303` (v0.4); the unscoped-key half of its Expected Behavior is deferred by R8. Recommendation: accept; at done,
+  `bug-340` is amended to point to `bug-303` and to a follow-up bug for unscoped keys, which does not exist yet
+  (`grep -rln "unscoped" docs/04_memory/bugs/` → `bug-340` and `bug-400`, the latter unrelated).
+- **D5 — where spec-016 §3.3 states it.** The AC names step 8; the warnings are printed at step 2, so that a step refusal
+  an uncommitted change explains is preceded by it. Recommendation: amend step 2 (what and where) and step 8 (the order).
+
+**Risks.** None for other open tasks: `w3` holds only this task, and `task-332` (`w4`) starts after its merge (W3-R4).
+The orchestrator runs on the Agent tool, not on `agent execute` (W0-R1), so nothing here affects the run itself.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
