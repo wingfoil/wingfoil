@@ -53,7 +53,7 @@ function byIdThenPath(a: MemoryDocumentSummary, b: MemoryDocumentSummary): numbe
   return compareText(idOf(a) ?? '', idOf(b) ?? '') || compareText(a.path, b.path);
 }
 
-/** The types of `memoryYaml` whose committed `id_pattern` is `<literal>{n}…` with a non-empty literal, in type-name order. */
+/** The types of `memoryYaml` whose `id_pattern` (in the `memory.yaml` the command reads) is `<literal>{n}…` with a non-empty literal, in type-name order. */
 function numberedFamilies(memoryYaml: MemoryYaml): NumberedFamily[] {
   const families: NumberedFamily[] = [];
   for (const type of Object.keys(memoryYaml.types).sort(compareText)) {
@@ -73,7 +73,7 @@ function outcome(rule: 'number' | 'prefix', candidates: MemoryDocumentSummary[])
 }
 
 /**
- * Resolve `reference` among `documents`, using `memoryYaml`'s committed `id_pattern`s for the number rule.
+ * Resolve `reference` among `documents`, using the `id_pattern`s of `memoryYaml` (the one the command reads: `HEAD`'s, or the working tree's for `memory history`) for the number rule.
  * Pure: it reads nothing, writes nothing and throws nothing.
  */
 export function resolveElementReference(

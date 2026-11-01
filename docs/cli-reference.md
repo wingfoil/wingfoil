@@ -585,7 +585,7 @@ Without `--workflow`, `memory add` links nothing and its commit is unchanged.
 
 ### Short element references
 
-New in 0.3.2. Where a command takes an element id (`memory history`, `submit`, `approve`, `reject`, `amend`, `deprecate`, `park`, and `--element` of `workflow start`, `workflow adopt`, `agent execute`), the id may be written short. Resolution, in order: an exact id; a reference `<literal><digits>` where `<literal>` starts a type's `id_pattern` `<literal>{n}…` (`dl-1`, `task-12`), which names the element of that type with that number, compared by value (`task-12` = `task-012`) and never falls back to a prefix (`task-33` is not `task-330`); otherwise a prefix of the full id. Deprecated elements count. Exactly one element must match: several is `error: ambiguous reference: <ref> matches <N> elements`, a `hint:` and one full id per line, exit `1`, nothing written. A short reference never names an element the tool cannot read; give the full id to see why. `agent list --element`, the session Prompt and Resources, the workflow `<ref>`, run ids, `--set` and `--step` take exact values only. The pinned build 0.3.1 takes full ids only.
+New in 0.3.2. Where a command takes an element id (`memory history`, `submit`, `approve`, `reject`, `amend`, `deprecate`, `park`, and `--element` of `workflow start`, `workflow adopt`, `agent execute`), the id may be written short. Resolution, in order: an exact id; a reference `<literal><digits>` where `<literal>` starts a type's `id_pattern` `<literal>{n}…` (`dl-1`, `task-12`), which names the element of that type with that number, compared by value (`task-12` = `task-012`) and never falls back to a prefix (`task-33` is not `task-330`); otherwise a prefix of the full id. Deprecated elements count. Exactly one element must match: several is `error: ambiguous reference: <ref> matches <N> elements`, a `hint:` and one full id per line, exit `1`, nothing written. A short reference never resolves to an element the tool cannot read (one whose frontmatter does not parse, or in a newer format); give its full id to see why. `agent list --element`, the session Prompt and Resources, the workflow `<ref>`, run ids, `--set` and `--step` take exact values only.
 
 ### `wingfoil memory submit`
 
@@ -595,7 +595,7 @@ Move a document one step forward along its type's sequence — for the default m
 wingfoil memory submit <id>
 ```
 
-**Short reference (new in 0.3.2; the pinned build is 0.3.1, which takes full ids only).** `<id>` may also be `<type prefix>-<n>` (`dl-1` and `dl-001` both name `dl-001-pick-a-storage-layout-for-exports`) or a unique prefix of the full id. A reference matching several elements is refused (`CONFLICT`, exit `1`, every candidate listed, nothing written); one matching none is `document not found: <id>`. The output, the commit subject and the commit body always carry the full id. See [Short element references](#short-element-references).
+**Short reference (new in 0.3.2; earlier versions take full ids only).** `<id>` may also be `<type prefix>-<n>` (`dl-1` and `dl-001` both name `dl-001-pick-a-storage-layout-for-exports`) or a unique prefix of the full id. A reference matching several elements is refused (`CONFLICT`, exit `1`, every candidate listed, nothing written); one matching none is `document not found: <id>`. The output, the commit subject and the commit body always carry the full id. See [Short element references](#short-element-references).
 
 Before running it, fill the document's body and every frontmatter field its type lists in
 `template.frontmatter.required` — you do not need to commit those edits first: the submit commit
@@ -658,7 +658,7 @@ Pass a gate: move a document forward from a gated state (default machine: `pendi
 wingfoil memory approve <id> --reason <text>
 ```
 
-**Short reference (new in 0.3.2; the pinned build is 0.3.1, which takes full ids only).** `<id>` may also be `<type prefix>-<n>` (`dl-1` and `dl-001` both name `dl-001-pick-a-storage-layout-for-exports`) or a unique prefix of the full id. A reference matching several elements is refused (`CONFLICT`, exit `1`, every candidate listed, nothing written); one matching none is `document not found: <id>`. The output, the commit subject and the commit body always carry the full id. See [Short element references](#short-element-references).
+**Short reference (new in 0.3.2; earlier versions take full ids only).** `<id>` may also be `<type prefix>-<n>` (`dl-1` and `dl-001` both name `dl-001-pick-a-storage-layout-for-exports`) or a unique prefix of the full id. A reference matching several elements is refused (`CONFLICT`, exit `1`, every candidate listed, nothing written); one matching none is `document not found: <id>`. The output, the commit subject and the commit body always carry the full id. See [Short element references](#short-element-references).
 
 Requires the **approver role**: your git email must match a `team.members` entry whose `roles` include
 `approver`, in the committed `dna.yaml`:
@@ -751,7 +751,7 @@ Send a gated document back to its gate's reject target (default machine: `pendin
 wingfoil memory reject <id> --reason <text>
 ```
 
-**Short reference (new in 0.3.2; the pinned build is 0.3.1, which takes full ids only).** `<id>` may also be `<type prefix>-<n>` (`dl-1` and `dl-001` both name `dl-001-pick-a-storage-layout-for-exports`) or a unique prefix of the full id. A reference matching several elements is refused (`CONFLICT`, exit `1`, every candidate listed, nothing written); one matching none is `document not found: <id>`. The output, the commit subject and the commit body always carry the full id. See [Short element references](#short-element-references).
+**Short reference (new in 0.3.2; earlier versions take full ids only).** `<id>` may also be `<type prefix>-<n>` (`dl-1` and `dl-001` both name `dl-001-pick-a-storage-layout-for-exports`) or a unique prefix of the full id. A reference matching several elements is refused (`CONFLICT`, exit `1`, every candidate listed, nothing written); one matching none is `document not found: <id>`. The output, the commit subject and the commit body always carry the full id. See [Short element references](#short-element-references).
 
 Same approver requirement as `approve`. The reason is recorded in the commit **and** copied to the
 document's `rejection_reason` frontmatter field.
@@ -778,7 +778,7 @@ Retire a document, from any state, to `deprecated`.
 wingfoil memory deprecate <id> [--reason <text>]
 ```
 
-**Short reference (new in 0.3.2; the pinned build is 0.3.1, which takes full ids only).** `<id>` may also be `<type prefix>-<n>` (`dl-1` and `dl-001` both name `dl-001-pick-a-storage-layout-for-exports`) or a unique prefix of the full id. A reference matching several elements is refused (`CONFLICT`, exit `1`, every candidate listed, nothing written); one matching none is `document not found: <id>`. The output, the commit subject and the commit body always carry the full id. See [Short element references](#short-element-references).
+**Short reference (new in 0.3.2; earlier versions take full ids only).** `<id>` may also be `<type prefix>-<n>` (`dl-1` and `dl-001` both name `dl-001-pick-a-storage-layout-for-exports`) or a unique prefix of the full id. A reference matching several elements is refused (`CONFLICT`, exit `1`, every candidate listed, nothing written); one matching none is `document not found: <id>`. The output, the commit subject and the commit body always carry the full id. See [Short element references](#short-element-references).
 
 No approver role is required. `--reason` is optional, but when given it must not be blank.
 
@@ -805,7 +805,7 @@ Return a started document to an earlier state along its type's declared `returns
 wingfoil memory park <id> --reason <text>
 ```
 
-**Short reference (new in 0.3.2; the pinned build is 0.3.1, which takes full ids only).** `<id>` may also be `<type prefix>-<n>` (`dl-1` and `dl-001` both name `dl-001-pick-a-storage-layout-for-exports`) or a unique prefix of the full id. A reference matching several elements is refused (`CONFLICT`, exit `1`, every candidate listed, nothing written); one matching none is `document not found: <id>`. The output, the commit subject and the commit body always carry the full id. See [Short element references](#short-element-references).
+**Short reference (new in 0.3.2; earlier versions take full ids only).** `<id>` may also be `<type prefix>-<n>` (`dl-1` and `dl-001` both name `dl-001-pick-a-storage-layout-for-exports`) or a unique prefix of the full id. A reference matching several elements is refused (`CONFLICT`, exit `1`, every candidate listed, nothing written); one matching none is `document not found: <id>`. The output, the commit subject and the commit body always carry the full id. See [Short element references](#short-element-references).
 
 A type's state machine in `memory.yaml` may declare return edges next to `gates` and `waiting`:
 `returns: { in-progress: backlog }`. Each target must be an earlier state of the `sequence`. `park`
@@ -850,7 +850,7 @@ Record an uncommitted correction to a document as an amendment, leaving its stat
 wingfoil memory amend <id> --reason <text>
 ```
 
-**Short reference (new in 0.3.2; the pinned build is 0.3.1, which takes full ids only).** `<id>` may also be `<type prefix>-<n>` (`dl-1` and `dl-001` both name `dl-001-pick-a-storage-layout-for-exports`) or a unique prefix of the full id. A reference matching several elements is refused (`CONFLICT`, exit `1`, every candidate listed, nothing written); one matching none is `document not found: <id>`. The output, the commit subject and the commit body always carry the full id. See [Short element references](#short-element-references).
+**Short reference (new in 0.3.2; earlier versions take full ids only).** `<id>` may also be `<type prefix>-<n>` (`dl-1` and `dl-001` both name `dl-001-pick-a-storage-layout-for-exports`) or a unique prefix of the full id. A reference matching several elements is refused (`CONFLICT`, exit `1`, every candidate listed, nothing written); one matching none is `document not found: <id>`. The output, the commit subject and the commit body always carry the full id. See [Short element references](#short-element-references).
 
 Edit the document first (its body, or any frontmatter field except `status`, `id`, `type`, `release`,
 `rejection_reason` and `supersedes`), then
@@ -921,7 +921,7 @@ Print a document's audit trail, reconstructed from git.
 wingfoil memory history <id>
 ```
 
-**Short reference (new in 0.3.2; the pinned build is 0.3.1, which takes full ids only).** `<id>` may also be `<type prefix>-<n>` (`dl-1` and `dl-001` both name `dl-001-pick-a-storage-layout-for-exports`) or a unique prefix of the full id. A reference matching several elements is refused (`CONFLICT`, exit `1`, every candidate listed, nothing written); one matching none is `document not found: <id>`. The output, the commit subject and the commit body always carry the full id. See [Short element references](#short-element-references).
+**Short reference (new in 0.3.2; earlier versions take full ids only).** `<id>` may also be `<type prefix>-<n>` (`dl-1` and `dl-001` both name `dl-001-pick-a-storage-layout-for-exports`) or a unique prefix of the full id. A reference matching several elements is refused (`CONFLICT`, exit `1`, every candidate listed, nothing written); one matching none is `document not found: <id>`. The output, the commit subject and the commit body always carry the full id. See [Short element references](#short-element-references).
 
 Each entry carries `sha`, `author`, `timestamp` (ISO-8601), `operation`, `from`, `to`, `approver`,
 `reason` and the commit `subject`. New in 0.3: every entry also carries `wingfoil`, the build

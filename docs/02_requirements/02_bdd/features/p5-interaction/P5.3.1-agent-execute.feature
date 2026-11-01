@@ -20,8 +20,9 @@ Feature: P5.3.1 (US-1-03) - wingfoil agent execute [--next]
     And DNA, Memory, and directives for that role are pre-loaded
     And the agent is ready within 30 seconds of launch
 
-  # Fixture note: "task:202" stands for an element of type task in the fixture; its id may be written as a short
-  # reference (0.3.2, spec-008 §7: "task:task-202" resolves a "task-202-..." element) and the run records the full id.
+  # Fixture note: "task:202" needs a fixture holding an element of type task with that full id; the scenario may also
+  # be written "task:task-202", a short reference (0.3.2, spec-008 §7) that resolves a "task-202-..." element. The run
+  # records the full id.
   Scenario: Explicit element override
     When I run "wingfoil agent execute --element task:202"
     Then the agent starts targeting element "task:202" regardless of the next step

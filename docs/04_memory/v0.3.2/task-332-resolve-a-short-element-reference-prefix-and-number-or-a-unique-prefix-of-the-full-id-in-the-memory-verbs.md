@@ -301,6 +301,8 @@ measured above); the full-id path is unchanged, so the latency budgets (P1.10's 
 are not touched. (4) Under D1 (b), three approved specs take amendments instead of one, and the P5.3.1 note changes.
 (5) The pinned build stays 0.3.1 until `v0.4`'s `advance-pinned-build`; `memory history` with a short reference works only
 on the code build until then, which `docs/cli-reference.md` must not hide ("since 0.3.2").
+- Corrected after the review (supersedes the spec-017 line above, which named section 7.1 and no section 7.1 text changed): `docs/04_memory/design/specs/spec-017-workflow-commands-and-state-deduction.md`: `--reason "Let workflow start and workflow adopt take a short reference in --element: sections 3.4, 7.11 and the error table, with a Revision note, per task-332."`
+- The spec-008 and spec-016 lines above stand; their text also changed after the review (the section 12 sentences, the id_pattern wording, the unreadable-element sentence, the scenario 2 note).
 
 ### design gate (approver, 2026-11-01)
 
@@ -406,6 +408,17 @@ Commands run on this worktree, each after `bash` the slot wait; results as print
 - `docs/04_memory/design/specs/spec-008-cli-grammar.md` (approved tech-spec, amendable): `--reason "Add the short element references to the CLI grammar: section 7 resolution rules, the ambiguous reference refusal in section 6 and the three section 12 rows, with a Revision note, per task-332."`
 - `docs/04_memory/design/specs/spec-016-agent-execution.md`: `--reason "Let agent execute --element take a short reference: section 3.2 step 2, the ambiguity row of the error table and the Process note on P5.3.1 scenario 2, with a Revision note, per task-332."`
 - `docs/04_memory/design/specs/spec-017-workflow-commands-and-state-deduction.md`: `--reason "Let workflow start and workflow adopt take a short reference in --element: sections 3.4, 7.1, 7.11 and the error table, with a Revision note, per task-332."`
+
+### review fixes (developer, 2026-11-01)
+
+Reviewer verdict: approve with fixes, 0 blockers. One line per finding:
+1. spec-017 amend named section 7.1: removed from the `--reason` and the Revision note; `grep -n "task-332" docs/04_memory/design/specs/spec-017-workflow-commands-and-state-deduction.md | cut -c1-50` and the Revision heading now read "§3.4, §7.11 and §10".
+2. spec-008 section 12 rows: the `.;` joins are now ". The ..." sentences; checked by reading lines 755, 762 and 766 of the spec (each ends "... may be a short reference (§7); ... full id. |").
+3. "the pinned build is 0.3.1" is gone from `docs/cli-reference.md` and `docs/agents.md` (`grep -n "pinned build" docs/cli-reference.md docs/agents.md docs/user-guide.md | grep -i "short\|0.3.1, which"` printed nothing); the notes now say "new in 0.3.2; earlier versions take full ids only"; the agents.md row names workflow start, workflow adopt and agent execute and says `agent list --element` stays exact.
+4. Help text: the seven `<id>` positional descriptions and the `--element` options of workflow start, workflow adopt and agent execute mention the short reference; `node dist/cli.js memory submit --help` printed "or a short reference (e.g. dl-1, or a unique prefix of the id)"; `workflow adopt --help` printed "the id may be a short reference". The full `npm test -- --maxWorkers=2` (tracked, under the slot) printed `Test Suites: 551 passed, 551 total`, `Tests: 9700 passed, 9700 total` (it includes `test/docs/cli-reference.test.ts`); `npm run -s typecheck` and `npm run -s lint` printed nothing.
+5. P5.3.1 fixture note and the spec-016 Process note: `task:202` needs a fixture with that full id, or may be written `task:task-202`.
+6. "committed `id_pattern`" became "the `id_pattern` of the `memory.yaml` the command reads" in the spec-008 section 7 amend and in `src/memory/reference.ts` (`grep -n committed src/memory/reference.ts` prints nothing).
+7. The unreadable-element sentence now reads "a short reference never resolves to an element the tool cannot read" in the user guide, the CLI reference and spec-008 section 7 (which adds that a readable sibling matching the same reference is the one that resolves, if it is the only one).
 
 ### Retrospective
 
