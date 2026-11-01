@@ -209,6 +209,19 @@ the engine.
   every test that pins the behaviour it changes.
 - **W2-R5 — stop the line, bugs, queue:** W0-R5 … W0-R7 and W1-R5 unchanged.
 
+## Rulings W3 (approver, 2026-11-01)
+
+- **W3-R1 — models as `w2`** (W2-R1: design and review on Opus, red and green + refactor on Sonnet), so that `w3`–`w4`
+  add to the mixed-model sample; the templates carry the `w2` corrections and one more: after any `git commit --amend`
+  a report names the commit by `git rev-parse HEAD` (four reports of `w2` named the pre-amend sha).
+- **W3-R2 — the `w2` orchestrator session continues** for `w3` (`task-330`) and `w4` (`task-332`): one task each, its
+  context at 66 % at the close of `w2`; it hands off if it passes 85 %.
+- **W3-R3 — stall check.** The orchestrator re-reads every open task's `git log` at each of its steps; an agent with no
+  commit and no report for more than 60 minutes outside a known wait is a stall, recorded in the event log and raised
+  to the supervision (`task-328` stalled 4 h 29 unseen in `w2`).
+- **W3-R4 — `task-332` (`w4`)** starts after `task-330` is merged, when no fix task is open
+  (`memory.yaml` `task.stop_the_line`), as ruled on 2026-10-29.
+
 ## Phases / Steps
 
 ### W0 — wave `w0`
@@ -302,6 +315,13 @@ As W0.2, report `docs/07_gates/rl-v1/rel-v0.3.2-w2-e2e-smoke.md`, the full suite
 #### W2.3 — `re-sweep` · W2.4 — `re-plan`
 
 As W0.3, W0.4, appending `w3`.
+
+### W3 — wave `w3`, then `w4`
+
+#### W3.1 — `task-330` (`bug-339`, `bug-354`, `bug-340`) → `dev-loop`; then W4.1 — `task-332` (feature)
+
+Steps as W0.1, with W1-R4, W2-R1, W2-R4 and W3-R1 … W3-R4. Each wave closes with its wave-checks (W2.2's form, the
+full suite included), re-sweep and re-plan; `w4` is appended to `waves:` at `w3`'s re-plan.
 
 ### Close-out (per wave)
 
@@ -439,6 +459,31 @@ From the orchestrator's event log, verified by the supervision against `git log`
   agents input 2,216, cache read 140.1 M, cache write 12.6 M; the L3 orchestrator input 600, cache read 75.0 M, cache
   write 0.8 M; the supervision session over `w0`–`w1` input 1,250, cache read 177.0 M, cache write 6.2 M.
 
+- 2026-10-31 … 2026-11-01: `w2`, eight tasks in two batches (rolling, ruled by the approver) in one orchestrator session,
+  phase agents on two models for the first time (W2-R1; every agent's model checked on its transcript). Done and merged:
+  `task-324`, `task-322`, `task-327`, `task-323`, `task-328`, `task-326`, `task-325`, `task-329`; 13 bugs closed; six
+  filed (`bug-462` … `bug-467`, all `v0.4`), among them the approver's request for a check against local absolute paths
+  in repository documents (`bug-464`: 59 files under `docs/` name a path outside the repository, a drift no check saw
+  since `v0.3`). `task-328` introduced two governance checks; the merge `927c61e3` is their introduction.
+- 2026-11-01 (W2.2, supervision): wave-checks at `ec425e56`: `node scripts/e2e-smoke.cjs --candidate --report
+  docs/07_gates/rl-v1/rel-v0.3.2-w2-e2e-smoke.md` → PASS 85/85 (`ce5bc729`; the three workflow-read checks of
+  `task-327`); `docs.parity` → 10/10, 65/65; the full suite → 542/542 suites, 9569/9569 tests; the six
+  `docs/examples/*/run.sh` → exit 0, each ending in OK. (W2.3) re-sweep: no bug with an empty `release`. (W2.4)
+  re-plan: `w3` appended to `waves:`; `## Scope changes` unchanged (28 vs 26); rulings W3-R1 … W3-R4.
+
+#### W2 measures
+
+- **Tokens** (`tokens.cjs`, 32 phase agents; output not measured): Opus (16 agents: design, review) cache read 83.3 M,
+  cache write 5.8 M; Sonnet (16 agents: red, green + refactor) cache read 67.1 M, cache write 10.7 M; the orchestrator
+  session cache read 134.0 M, cache write 1.4 M. Phase agents per task: 18.8 M cache read in `w2`, 27.5 M in `w1`
+  (all Opus).
+- **Process defects by agent model:** Sonnet agents — two slot waits stated without evidence (`ps` showed the holder
+  under two minutes old), four reports naming the pre-amend sha, three `release/0.3` merges without the §7 trailers,
+  one report never delivered (`task-328`, a 4 h 29 stall seen only from `git log`); Opus agents — none, as in
+  `w0`–`w1`. Review findings: no blocker in `w2`, as in `w0`–`w1`; the Opus reviewers found every defect above that
+  reached a commit. Templates were corrected twice during the wave (governance in red without a build; a skipped step
+  stated with its command; a merge amended with its trailers).
+
 ### Retrospective
 
 - The approval queue is the dev-loop's longest wait (W0 measures); answering several entries at once (15:09) cut
@@ -475,3 +520,11 @@ From the orchestrator's event log, verified by the supervision against `git log`
   outside the slot): a template is reviewed like code before a wave starts.
 - (`w1`) A queue command was never dry-run and asked for an impossible transition; dry-running every command before it is
   queued is the rule from `w1`'s L3 on.
+- (`w2`) Two models: the cheaper model on red and green cut the phase agents' cache reads per task by about a third,
+  and brought a class of process defects (unsupported claims, pre-amend shas, missing trailers, an undelivered report)
+  that no Opus agent showed in 26 tasks; none reached `release/0.3` past an Opus review. Input for `dl-203`'s
+  coordinator: which phases a cheaper model may run, and what its prompts must enforce mechanically.
+- (`w2`) An agent that goes silent sends no message, so a supervision that reacts to messages cannot see it (`task-328`,
+  4 h 29). W3-R3 adds a stall check on `git log`.
+- (`w2`) The rule "never cite the kit in repository files" had no check, and 59 files broke it over two months; a rule
+  without a check is a wish (`bug-464`).
