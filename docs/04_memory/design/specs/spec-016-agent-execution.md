@@ -449,7 +449,10 @@ repository.
 2. Load `dna.yaml` and `memory.yaml` and, when a step is resolved (`--next`, `--workflow`, `--step`),
    the workflow registry at `HEAD`; list the adapter directories (a name present in both is refused
    here, before any resolution; every entry that is not an adapter is printed as a `W_ADAPTER_IGNORED`
-   warning, §2.1). The stepless form resolves no step and reads no workflow file. `roles.yaml` and the
+   warning, §2.1). When a step is resolved, the deduction's diagnostics (the ones `workflow next` lists,
+   for example `W_UNCOMMITTED_INPUTS`) are printed first, on stderr, one `warning:` line per distinct diagnostic in the form
+   `<code> (<file>): <message>` that `agent list` prints for the same deduction (`task-330`, `bug-339`),
+   before any resolution refusal. The stepless form resolves no step, reads no workflow file and prints none. `roles.yaml` and the
    directives are read by the context builder at step 7, so a missing `roles.yaml` is step 7's
    `INVALID_CONTEXT`.
 3. Resolve (§3.2).
@@ -464,6 +467,7 @@ repository.
    documents the builder could not read (`W_MEMORY_UNREADABLE`, `spec-012` §3). The builder's notes
    (the DNA note, P5.3.3 sc. 3's `no relevant Memory found for task`) are not warnings: they reach the
    agent inside the `{role}-session` Prompt's `warnings` (`spec-004` §3.2), not stderr.
+   The deduction's diagnostics of step 2 are printed before these, and before any refusal.
 9. Compute the run id (§4.3).
 10. Render `{bootstrap}` / `{bootstrap_file}` and `{mcp_config_file}`.
 11. **MCP pre-flight**: spawn `{mcp_command} {mcp_args}`, complete MCP `initialize`, get the
@@ -571,7 +575,7 @@ P4.12:
 | any `spec-003` load error in the workflow registry (step 2) | `VALIDATION` | `1` | as `spec-017` §10's first row: the first error in `spec-003`'s order, every diagnostic in `details` |
 | `--workflow` names no workflow | `NOT_FOUND` | `1` | `unknown workflow: <name>` (`spec-017` §10) |
 | `--workflow` names no open instance | `NOT_FOUND` | `1` | `workflow is not open: <ref>` (`spec-017` §10) |
-| `--step` names no step on the instance's frontier | `CONFLICT` | `1` | `step '<key>' is not on the frontier of <instance>` (`spec-017` §10) |
+| `--step` names no step on the instance's frontier | `CONFLICT` | `1` | `step '<key>' is not on the frontier of <instance>` (`spec-017` §10); `details` holds `step`, `instance` and `frontier`, the frontier's keys in frontier order (`task-330`, `bug-340`) |
 | `NO_NEXT_STEP` | `NOT_FOUND` | `1` | `no next step to execute` (P5.3.1 sc. 3, verbatim) |
 | `NO_STEP_ELEMENT` | `VALIDATION` | `1` | `step '<key>' has no element: give --element <type>:<id>` |
 | element absent at `HEAD` | `NOT_FOUND` | `1` | `element not found: <type>:<id>` |
@@ -731,7 +735,10 @@ segment equals the file's basename, and be byte for byte the §4.2 serialization
 to — a CR before the newline, whitespace outside a string, or another spelling of a value (`1.0` for
 `1`, an escaped character the writer writes as is) is refused (`bug-288`), with the detail `not in the
 serialized form of spec-016 §4.2 (a CR, whitespace outside a string, or another spelling of a value)`.
-Within the files read, ids must be unique. A violation is
+Every reader reads the blob's kind: a run log committed as a symbolic link is not
+read. It yields no records and a `W_RUN_LOG_SYMLINK` warning (`run log <path> is a symbolic link: not
+read`) names it; `agent list` also carries it in `diagnostics` (`task-330`, `bug-354`). Within the files
+read, ids must be unique. A violation is
 `VALIDATION`, exit `1`, `run log <path>: line <k> is not a valid run record: <detail>`, or `run log
 <path>: run id <id> recorded twice`.
 
