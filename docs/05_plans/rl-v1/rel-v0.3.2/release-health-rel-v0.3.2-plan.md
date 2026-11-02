@@ -151,6 +151,33 @@ worktrees removed. Push only on instruction.
 carried over from v0.3 / v0.3.1, D4 (the working-model reading of the process metrics) added at the approver's reminder
 that this release was developed with an agent orchestrator.
 
+**P** — verified 2026-11-02 (the table above). **S0** — add `e247791e5`, submit `a95314a0a`. **S1** — point worktree
+`../.wf2-wt/release-health-v0.3.2-point` detached at `6de2e13c0`: `npm ci` 0, build 0, `0.3.2 (6de2e13c0…)`, clean.
+
+**S2 — `measure`** (2026-11-02 21:35:50–22:22:12, behind the slot, under Node 22.12.0 via `n -d exec` with a writable
+`N_PREFIX`; a first launch failed at once with exit 127, the agent having written a wrong path to `n`, and was rerun):
+exit 0; `docs/08_health/release-health-v0.3.2.json`, 49 metrics: 44 `measured`; `not-measurable` Q10 (the patch's
+`requirements:` is a decision-log, as at v0.3.1), Q17 (the user guide states no install version, as at v0.3.1) and
+**Q12** (the latency suite judged the run loaded: other projects on the machine); `not-comparable` D01, P06 (patch).
+
+**S3 — `compare`**: `node scripts/release-health/compare.cjs --release v0.3.2 --any-node --max-workers 2` → exit 0,
+`docs/08_health/release-health-v0.3.2.md`: improved 7, stable 18, regressed 8, not-comparable 3; floors held 17,
+breached 5; **10 findings, 0 immediate**. **`bug-443`'s fix holds** (`task-307`): the previous run's RH-v0.3.1-01..03
+are settled `pending` ("disposed of by the next minor's retrospective"), not "not adopted". Improvements: G05 97.96 →
+100, **G14 12 → 0**, Q13 closure ratio 40 → 176.47, Q20 −9 → 26, P03 3 → 0, P04 8 → 2.
+
+**S4 — `propose`** (the report's `## Proposals`, with D4's working-model reading): trackers read by command (status
+from frontmatter): G02, G04 → `dl-189`; Q07 → `bug-345`; Q09, Q15 → `dl-173` (items 7, 6); P01 → `dl-190` (the two
+orchestrator `assign` subjects of `w0`, accepted by the approver); P04 → `bug-403` — all `in-discussion`/`triaged`, v0.4.
+Proposals: **RH-v0.3.2-01** G03 (commit size, a shape of the orchestrated flow), **RH-v0.3.2-02** Q14 (a patch rules no
+decision-log), **RH-v0.3.2-03** G08 — the 9 non-conforming commits are **this coordinating session's own** release-submit
+and release-publishing commits, which carry `Co-Authored-By: Claude Opus 5.5 <…>` (an attribution string the agent's
+runtime injected mid-session) instead of `team.agents`' `Claude <noreply@anthropic.com>`; the governance check does not
+verify the value. Commits after the measurement point (the release-publishing close, the merge forward) carry it too;
+the agent returned to the `team.agents` value from this commit on. `npx jest test/release-health` → 256 passed.
+
+**S5** — no breach of G07 (0), G10 (100), G14 (0), Q01 (true) or Q02 (9700, 0 failing): no bug-ingest.
+
 ### Retrospective
 
 <!-- Notes for v0.4's retrospective (a patch runs none), one line per item with its evidence. -->
