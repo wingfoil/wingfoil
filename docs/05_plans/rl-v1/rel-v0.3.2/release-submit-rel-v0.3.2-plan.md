@@ -192,6 +192,33 @@ an empty `release`, left to v0.4 planning by an earlier ruling); C7 `dl-206` `re
 release-cycle.submit`, the phase's name in `release-cycle.yaml` (the v0.3 and v0.3.1 plans' `release-cycle.release-submit`
 names no phase: F7 in the phase register).
 
+**P — preconditions** (2026-11-02): P0 `0.3.1 (870bd4406…)`; P1 `in-development`; P2 `0 0`, the branch cut from
+`954138f7c`, `git diff --name-only c79a7612f 954138f7c` → the e2e-smoke plan and its report only; P3 `npm ci` 0, build
+0, `0.3.1 (954138f7c…)`; P4 user-docs plan `done`; P5 e2e-smoke plan `done` (`23ddb204d`), report PASS 85/85 on
+`c79a7612f`; P6 this plan `active` after submit `d3ba14c3f`. **PASS.** S0: candidate worktree
+`../.wf2-wt/release-submit-v0.3.2-candidate` detached at `c79a7612f`, `npm ci` 0, build 0, `dist/build-info.json` →
+`{"version":"0.3.1","commit":"c79a7612f925dddcf5c8c2d3b810831fa9d9b6fb"}`, tree clean.
+
+**S1 — `pre-release-checks`** (2026-11-02 14:08–15:13, `devloop-kit/gate-releasesubmit-v0.3.2.sh` on the candidate,
+one heavy step at a time behind the slot, load 7.4; log `devloop-kit/gate-rs032.log`):
+- **C1** 28 `done` (`task-305` … `task-332`), none other. **C2** 57 bugs with `release: v0.3.2`, all `closed`.
+- **C3 + C4** `npm run -s test:report -- --maxWorkers=2` → exit `0`, 551 suites, 9700 tests passed, All files
+  **99.29 / 97.29 / 98.09 / 99.69** (equal to the e2e-smoke gate); the summary
+  (`scripts/test-report.cjs … --commit c79a7612f…`) → result `passed`, commit and build `0.3.1 (c79a7612f…)`, unit 7831,
+  integration 589, BDD 1208, smoke 70, API-docs 1, lint.clean 1.
+- **C5** `npm run -s typecheck` → exit `0`. **C6** `npm run -s test:no-identity -- --maxWorkers=2` → exit `0`, 551
+  suites, 9700 tests passed.
+- **Standing set:** lint, `docs:api`, `check:lockfile` → `0`; `check:mcp` → `0`, the pinned `0.3.1` and the code build
+  each answer every Resource and Prompt (8 prompts, 4 resources); `check:audit` → `found 0 vulnerabilities`;
+  `check-governance --base origin/release/0.3` on this branch → `0`, 0 findings. Candidate tree clean afterwards,
+  `build-info` unchanged.
+- **C2′** 114 bugs not closed, all `triaged`: 113 `release: v0.4`, `bug-469` with an empty `release` — for the
+  approver's waiver at S4. **C7** `dl-206` `ready`. **Carry-over** `package.json` `0.3.1`; `server.json` `version` lines
+  10 and 15 `0.3.1`; CHANGELOG line 11 `## [0.3.2] - Unreleased` — all `release-publishing`'s `release-commit`.
+- **All green.**
+
+**S2** — the summary committed `e60e2808a` at `docs/07_gates/rl-v1/rel-v0.3.2-test-results-candidate.md`.
+
 ### Retrospective
 
 <!-- Notes for v0.4's retrospective (a patch runs none), one line per item with its evidence. -->
