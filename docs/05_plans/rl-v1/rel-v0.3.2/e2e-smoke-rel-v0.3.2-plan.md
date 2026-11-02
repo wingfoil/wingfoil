@@ -186,6 +186,24 @@ behind the FIFO slot, load 4.2; log `devloop-kit/gate-e2e032.log`):
   vulnerabilities`; `node scripts/build-site.cjs llms && git diff --exit-code llms.txt` → `0`; `npm pack --dry-run` →
   `total files: 560`; tree clean afterwards. **All green.**
 
+**S6** — notes of P–S5 committed `c79a7612f` before the gate; tree clean. **Candidate = `c79a7612f`.**
+
+**S7 — `gate`** (2026-11-02, after the S1–S5 script exited, in the foreground behind the slot):
+`node scripts/e2e-smoke.cjs --candidate --report docs/07_gates/rl-v1/rel-v0.3.2-e2e-smoke.md` → exit `0`, **PASS
+(85/85 checks ok)**: the packed candidate installed into a throwaway prefix, `wingfoil --version` = `0.3.1
+(c79a7612f925dddcf5c8c2d3b810831fa9d9b6fb)` (match); the three `[repository]` reads (27 workflows, 65 diagnostics, 0
+errors; `workflow show` 27/27; `workflow status` open 3, pendingApprovals 1, ungated 33, 0 errors); both templates
+(`Scrum`, `Kanban`) through the use scenario, the agent run through the fake adapter and Journey 4. Log
+`devloop-kit/gate-e2e032-candidate.log`. `npm run build` restored `dist/` afterwards (exit `0`).
+
+**S8** — the report with a hand-written section (the pinned build's workflow reads and the console `workflow status`,
+marked as not written by the script) committed `8be724e90`; `git diff --name-only c79a7612f 8be724e90` → only the
+report (an evidence path).
+
+**S9 — findings** (phase register): **F5** the gate drives no short element reference (`task-332`): every step names a
+full id; **F6** the agent run is adhoc only, so `task-330`'s step-form warnings are not held. Neither widened here.
+Nothing else: every other v0.3.2 surface the smoke drives held.
+
 ### Retrospective
 
 <!-- Notes for v0.4's retrospective (a patch runs none), one line per item with its evidence. -->
