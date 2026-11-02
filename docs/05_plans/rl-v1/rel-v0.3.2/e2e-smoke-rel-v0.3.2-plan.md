@@ -60,7 +60,7 @@ Conventions: worktree `../.wf2-wt/e2e-smoke-v0.3.2` on `qa/e2e-smoke-v0.3.2`, cu
 `3fe936607`. Memory operations and the workflow commands that commit on the code build (`npm run build && node
 dist/cli.js …`, built on a clean tree); the reads on the pinned `0.3.1` (`npm run -s wingfoil -- …`). One heavy step at
 a time under the `dl-170` FIFO slot, `--maxWorkers=2`, foreground or a tracked background command, never `&`/`nohup`,
-never `pkill -f`; the smoke and jest never in parallel in this worktree; logs under `devloop-kit/gate-e2e032-*.log`;
+never `pkill -f`; the smoke and jest never in parallel in this worktree; logs kept by the maintainer;
 load from other projects reported to the approver, never touched. Each step records in Execution Notes the command,
 its exit and the numbers it printed. Commits carry the §7 trailers (none on approve/reject). `main` is not touched.
 
@@ -105,7 +105,7 @@ hand-written section appended under the generated report (S8).
 
 ### S5 — repository checks on the candidate · qa
 
-Under the slot, one at a time (`devloop-kit/gate-e2esmoke-v0.3.2.sh`, adapted from the v0.3.1 script): typecheck, lint,
+Under the slot, one at a time (a gate script adapted from v0.3.1's): typecheck, lint,
 `docs:api`, `npx jest --coverage --maxWorkers=2` (re-measured; the user-docs gate on `089b48189`: 551 suites / 9700
 tests, 99.29 / 97.29 / 98.09 / 99.69), `npx jest test/docs test/core/workflow-repository-conformance.test.ts`
 (reference 31 / 350), `check-governance --root "$PWD" --base origin/release/0.3` (and `--json`), `lint-claims --base
@@ -120,7 +120,7 @@ for `--candidate` and the candidate holds the plan.
 
 ### S7 — `gate`: the smoke on the packed candidate · qa
 
-`bash devloop-kit/waitslot.sh`, then in the foreground
+the heavy-gate slot (`dl-170`), then in the foreground
 `node scripts/e2e-smoke.cjs --candidate --report docs/07_gates/rl-v1/rel-v0.3.2-e2e-smoke.md`, after the S1–S5 script
 has exited. **Check:** exit 0 (`e2e-smoke-passed`); the report names the candidate `HEAD` and the stamp
 `0.3.1 (<HEAD>)`. Then `npm run build` restores `dist/`. **On a failure:** HARD-REJECT — the report kept as written,
@@ -165,8 +165,8 @@ changed since: `git diff --name-only 32c0790a9 3fe936607 -- docs/04_memory/` emp
 `3fe936607`; P5 `npm ci` 0, build 0, `node dist/cli.js --version` → `0.3.1 (3fe936607…)`. **PASS.** S0: add
 `746d5a1b8`, submit `05822e869` (`draft → active`); `git diff --name-only 3fe936607 HEAD` → only this plan.
 
-**S1–S5** (2026-11-02 09:04–09:36, `devloop-kit/gate-e2esmoke-v0.3.2.sh` on `05822e869`, one heavy step at a time
-behind the FIFO slot, load 4.2; log `devloop-kit/gate-e2e032.log`):
+**S1–S5** (2026-11-02 09:04–09:36, the gate script on `05822e869`, one heavy step at a time
+behind the FIFO slot, load 4.2):
 - **S1–S2** `node scripts/e2e-smoke.cjs --expect-version 0.3.1 -- node "$PWD/dist/cli.js"` → exit `0`, **82 ok / 0 not
   ok** (49 s). The w4 gate's 85 adds the three `[repository]` workflow reads, which run only with `--repository` or
   `--candidate` (`scripts/e2e-smoke.cjs:1130`).
@@ -193,8 +193,7 @@ behind the FIFO slot, load 4.2; log `devloop-kit/gate-e2e032.log`):
 (85/85 checks ok)**: the packed candidate installed into a throwaway prefix, `wingfoil --version` = `0.3.1
 (c79a7612f925dddcf5c8c2d3b810831fa9d9b6fb)` (match); the three `[repository]` reads (27 workflows, 65 diagnostics, 0
 errors; `workflow show` 27/27; `workflow status` open 3, pendingApprovals 1, ungated 33, 0 errors); both templates
-(`Scrum`, `Kanban`) through the use scenario, the agent run through the fake adapter and Journey 4. Log
-`devloop-kit/gate-e2e032-candidate.log`. `npm run build` restored `dist/` afterwards (exit `0`).
+(`Scrum`, `Kanban`) through the use scenario, the agent run through the fake adapter and Journey 4. `npm run build` restored `dist/` afterwards (exit `0`).
 
 **S8** — the report with a hand-written section (the pinned build's workflow reads and the console `workflow status`,
 marked as not written by the script) committed `8be724e90`; `git diff --name-only c79a7612f 8be724e90` → only the
