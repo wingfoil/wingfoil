@@ -130,7 +130,7 @@ runbook (`docs/assets/README.md` § "Regenerating the demo GIF").
 **S8 — Independent review** · reviewer (a fresh Opus agent with no authoring context): the diff of S4–S7 against the
 code build, every added claim re-run (`claim-evidence`), same-class drift. Findings fixed in the phase before S10.
 
-**S9 — Gate** · developer, on the phase branch, one heavy step at a time (`gate-userdocs-v0.3.2.sh` in the kit): build,
+**S9 — Gate** · developer, on the phase branch, one heavy step at a time (a gate script, the maintainer's): build,
 `node scripts/check-governance.cjs --root "$PWD" --base origin/release/0.3` (and `--json`),
 `node scripts/lint-claims.cjs --base origin/release/0.3`, `npm run typecheck`, `npm run lint`, `npm run docs:api`,
 `npx jest --coverage --maxWorkers=2` (re-measured; the w4 reference is 99.29 / 97.3 / 98.09 / 99.69, 551 suites /
