@@ -246,6 +246,14 @@ sw-life-cycle vision-change`, as listed; `merge-forward` and `record-adrs` (opti
 unchanged, the `git-conventions` summary extended; (5) `workflow-md.test.ts` → 6 passed; (6) `CLAUDE.md` is
 `@AGENTS.md` plus one sentence.
 
+**S7 ruling and S10/S12 approvals** (2026-11-02, the approver, Roberto Pompermaier, `approver`, in chat):
+`demo.rendered` — the approver re-rendered the GIF from `docs/examples/01-first-project/demo.tape` (`npm run build &&
+vhs …`); committed `4c5969286`; its last frame ends on `chore(wingfoil): initialize .wingfoil/ with the Scrum template`
+(frame extracted with `ffmpeg -sseof -0.5`), `npx jest test/docs/presentation.test.ts` → 59 passed. `docs/agents.md`
+(`b98c4fe55`) confirmed. **`align-user-docs` approved** and **`align-agent-docs` approved**. The plan is closed by a
+hand `wf(plan): finalize … [active → done]`, as at v0.3.1 (`workflow end` answers `unknown workflow` for a phase
+plan with a `parent`).
+
 ### Retrospective
 
 <!-- Notes for v0.4's retrospective (a patch runs none), one line per item with its evidence. -->
