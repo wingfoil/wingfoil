@@ -229,6 +229,33 @@ recorded, the approver asked.
 (a), D6 as proposed; the corrections of three earlier v0.3.2 phase plans that cite the maintainer's local kit (F8 in the
 phase register) are prepared at S9 for the approver's `memory amend`.
 
+**P** — measured 2026-11-02 before the plan's add, all met (the table above). **S0** — add `a6b53c9af`, submit
+`3e1da9e9f` (`draft → active`). **S1** — secret sweep: 11 blocking findings, the known set (`bug-402`), none new.
+
+**S2 — `release-commit`** (2026-11-02). WFCoord told first that `release/0.3` is frozen until the tag. By hand on the
+phase branch: `package.json` and `package-lock.json` (`version`, `packages[""].version`) and `server.json` (both
+`version`s) → `0.3.2`; CHANGELOG `## [0.3.2] - 2026-11-02` (its test-results link to
+`…/releases/download/v0.3.2/test-results.md` was written at user-docs); README row 0.3.2 `✓ Released` (D3); SECURITY.md
+untouched (D4); the pin unchanged (`npm:wingfoil@0.3.1`). `npm ci` 0, tree clean; `check:lockfile` 0; `node
+scripts/check-release-tag.cjs v0.3.2` → "tag v0.3.2 matches package.json version 0.3.2, and so do server.json and its
+packages"; `npx jest test/docs/community-health.test.ts test/cli/publish-metadata.test.ts test/lint/version-bump.test.ts
+test/docs/llms-txt.test.ts test/docs/presentation.test.ts` → 5 suites, 247 tests; `check-governance --base
+origin/release/0.3` → 0 findings. Commit `3ee5dd828` `chore(release): release v0.3.2 — bump version to 0.3.2 (spec-015
+§4)`, five files.
+
+**S3 — the candidate.** Merged `--no-ff` into `release/0.3` in `../.wf2-wt/release-0.3` → **M = `6de2e13c0`**
+(`6de2e13c004bbf419acfa7dc4d98d5a7468cd693`), not pushed. In the worktree detached at M (2026-11-02 17:08–17:42, one
+heavy step at a time behind the slot): `npm ci` 0; build 0, `dist/build-info.json` →
+`{"version":"0.3.2","commit":"6de2e13c0…"}`; typecheck 0; lint 0; `check-release-tag v0.3.2` 0;
+**`npm run -s test:no-identity -- --maxWorkers=2` (`tests.passing`, D1) → exit 0, 551 suites, 9700 tests** (1804 s).
+
+**S4 — `staging-rehearsal`.** Clean tree; `npm run publish:staging -- --expect-commit 6de2e13c0… --transcript
+docs/07_gates/rl-v1/rel-v0.3.2-staging-rehearsal.md` → exit 0 (145 s), closing line `staged wingfoil@0.3.2 and smoke
+passed`, 82 `ok` (the e2e-smoke gate's 85 less its three `[repository]` reads, which the staging run does
+not make), 0 `not ok`; `node scripts/publish-staging.cjs --check-transcript <transcript>` → "staging rehearsal
+passed for wingfoil@0.3.2 on candidate 6de2e13c004bbf419acfa7dc4d98d5a7468cd693". The transcript copied to the phase
+branch.
+
 ### Retrospective
 
 <!-- Notes for v0.4's retrospective (a patch runs none), one line per item with its evidence. Owed after the tag (not
