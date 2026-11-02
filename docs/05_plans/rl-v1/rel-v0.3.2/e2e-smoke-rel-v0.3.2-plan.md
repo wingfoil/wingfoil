@@ -159,6 +159,33 @@ instruction (admin bypass); the coordination session notified; the release-submi
 **Plan approved** by the approver (Roberto Pompermaier, `approver`) in chat on 2026-11-02, "as recommended": S1–S5 in
 one script under the slot, both builds for S4, the smoke's coverage gaps recorded as findings, not widened.
 
+**P — preconditions** (2026-11-02, before the plan's add): P0 `npm run -s wingfoil -- --version` → `0.3.1
+(870bd4406…)`; P1 `status: done`; P2 `in-development`; P3 `28 done`, 57 `closed` (counted at user-docs S1, no element
+changed since: `git diff --name-only 32c0790a9 3fe936607 -- docs/04_memory/` empty); P4 `0 0`, the branch cut from
+`3fe936607`; P5 `npm ci` 0, build 0, `node dist/cli.js --version` → `0.3.1 (3fe936607…)`. **PASS.** S0: add
+`746d5a1b8`, submit `05822e869` (`draft → active`); `git diff --name-only 3fe936607 HEAD` → only this plan.
+
+**S1–S5** (2026-11-02 09:04–09:36, `devloop-kit/gate-e2esmoke-v0.3.2.sh` on `05822e869`, one heavy step at a time
+behind the FIFO slot, load 4.2; log `devloop-kit/gate-e2e032.log`):
+- **S1–S2** `node scripts/e2e-smoke.cjs --expect-version 0.3.1 -- node "$PWD/dist/cli.js"` → exit `0`, **82 ok / 0 not
+  ok** (49 s). The w4 gate's 85 adds the three `[repository]` workflow reads, which run only with `--repository` or
+  `--candidate` (`scripts/e2e-smoke.cjs:1130`).
+- **S2b** examples 01–06 with the absolute code-build path → each exit `0` with its `OK:` line.
+- **S3** `npm run -s check:mcp` → exit `0`: `.mcp.json` runs the pinned `0.3.1` (8 prompts, 4 resources, 0 tools); the
+  code build the same, every listed Resource read and Prompt got; no known failure declared or needed.
+- **S4** code build: `workflow list --all --format json` → exit `0`, 27 workflows, 65 diagnostics, all
+  `warning W_WORKFLOW_UNBOUND_TOKEN`, 0 errors; `workflow show` × 27 → 27 exit `0`, 0 errors. Pinned `0.3.1`: the
+  same (27 / 65 `W_WORKFLOW_UNBOUND_TOKEN` / 27 × exit `0`, 0 errors). `workflow status` (console, both builds, and
+  JSON): **3 open workflows** (`decision-log-ingest-rel-v0.3-run-token-counts-plan`, `…-market-decisions-plan`,
+  `service-ingest-rel-v0.3-listings-plan`, the ingest instances left open on purpose), **1 pending approval**
+  (`dl-188`, routed to the approver), **33 ungated elements**.
+- **S5** typecheck, lint, `docs:api` → `0`; `npx jest --coverage --maxWorkers=2` → **551 suites, 9700 tests** passed,
+  All files **99.29 / 97.29 / 98.09 / 99.69** (equal to the user-docs gate); `npx jest test/docs
+  test/core/workflow-repository-conformance.test.ts` → 31 suites, 350 tests; `check-governance --base
+  origin/release/0.3` (and `--json`) → `0`, 0 findings; `lint-claims` → `0`; `npm run -s check:audit` → `found 0
+  vulnerabilities`; `node scripts/build-site.cjs llms && git diff --exit-code llms.txt` → `0`; `npm pack --dry-run` →
+  `total files: 560`; tree clean afterwards. **All green.**
+
 ### Retrospective
 
 <!-- Notes for v0.4's retrospective (a patch runs none), one line per item with its evidence. -->
