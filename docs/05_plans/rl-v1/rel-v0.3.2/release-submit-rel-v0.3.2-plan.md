@@ -54,8 +54,8 @@ touching one line. Everything else is verification recorded in Execution Notes.
 Conventions: the phase branch `qa/release-submit-v0.3.2` (`git-conventions` §1: `qa/` for a quality gate; worktree
 `../.wf2-wt/release-submit-v0.3.2`, cut from `release/0.3` `954138f7c`); the candidate worktree detached at `c79a7612f`;
 Memory operations with the code build (`npm run build && node dist/cli.js …`), reads on the pinned 0.3.1; one heavy step at a time
-under the dl-170 slot (`devloop-kit/waitslot.sh`, FIFO), `--maxWorkers=2`, no detached run, no `pkill -f`; logs under
-`devloop-kit/gate-rs031-*.log`; a load from other projects is reported, never touched; `git branch --show-current`
+under the dl-170 slot (FIFO), `--maxWorkers=2`, no detached run, no `pkill -f`; logs kept by the
+maintainer; a load from other projects is reported, never touched; `git branch --show-current`
 before each commit; §7 trailers on every agent commit except approve/reject; `check-governance` always with
 `--base origin/release/0.3` (ruling D4).
 
@@ -109,7 +109,7 @@ phase's commits — `node scripts/check-governance.cjs --base origin/release/0.3
 - **publishing carry-over** — `package.json` `version`, the `version` fields of `server.json`, the CHANGELOG `[0.3.2]`
   heading.
 
-The steps run from a script, `devloop-kit/gate-releasesubmit-v0.3.2.sh`, adapted from v0.3.1's `gate-releasesubmit-v0.3.1.sh`.
+The steps run from a gate script adapted from v0.3.1's.
 
 **On a red check:** no `enter-releasing`. The failure is recorded here and in the report, findings go to the kit
 register of the release phases (from F7) and the approver decides how to proceed.
@@ -150,10 +150,10 @@ again, against a release already at `releasing`.
 
 On the approver's instruction, merge `qa/release-submit-v0.3.2` into `release/0.3` with `--no-ff` from the worktree
 `../.wf2-wt/release-0.3` (candidate → merge diff = evidence only). Before the push: the secret sweep
-(`devloop-kit/secret-sweep.cjs`, 11 known false positives, none in this phase's files), `scanProjectSurface` (0
+(`scanText` over every tracked file, 11 known false positives, none in this phase's files), `scanProjectSurface` (0
 blocking) and `check-governance --base origin/release/0.3 --json`. Push only on the approver's instruction (admin
 bypass of the required "governance" check). Then: remove both worktrees and the branch on the approver's word, notify
-WFCoord, update the auto-memory, write the next phase's prompt in the kit.
+the coordination session, update the agent's memory, write the next phase's prompt.
 
 ### Hazards
 
@@ -199,8 +199,8 @@ names no phase: F7 in the phase register).
 `../.wf2-wt/release-submit-v0.3.2-candidate` detached at `c79a7612f`, `npm ci` 0, build 0, `dist/build-info.json` →
 `{"version":"0.3.1","commit":"c79a7612f925dddcf5c8c2d3b810831fa9d9b6fb"}`, tree clean.
 
-**S1 — `pre-release-checks`** (2026-11-02 14:08–15:13, `devloop-kit/gate-releasesubmit-v0.3.2.sh` on the candidate,
-one heavy step at a time behind the slot, load 7.4; log `devloop-kit/gate-rs032.log`):
+**S1 — `pre-release-checks`** (2026-11-02 14:08–15:13, the gate script on the candidate,
+one heavy step at a time behind the slot, load 7.4):
 - **C1** 28 `done` (`task-305` … `task-332`), none other. **C2** 57 bugs with `release: v0.3.2`, all `closed`.
 - **C3 + C4** `npm run -s test:report -- --maxWorkers=2` → exit `0`, 551 suites, 9700 tests passed, All files
   **99.29 / 97.29 / 98.09 / 99.69** (equal to the e2e-smoke gate); the summary
