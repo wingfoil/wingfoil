@@ -8,7 +8,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Every entry ends with the WingFoil Memory element(s) it comes from: a `done` task (`task-NNN`) or a
 `closed` bug (`bug-NNN`).
 
-## [0.3.2] - Unreleased
+## [0.3.2] - 2026-11-02
 
 A patch of the 0.3 line, mostly fixes: clearer errors for configuration files that cannot be read or are malformed,
 `directives list` and `directive remove` that tell the truth about what is bound and committed, warnings
