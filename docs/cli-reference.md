@@ -24,7 +24,9 @@ with `error: WingFoil not initialized (no .wingfoil/ directory at the project ro
 first`. When `.wingfoil/` exists but lacks the file the command needs, the error names that file from
 the project root — `error: .wingfoil/dna.yaml is missing: restore it from git, or re-create it (…)` —
 and a file that does not validate is named the same way (`(.wingfoil/dna.yaml)`), never by its path on
-your machine.
+your machine. New in 0.3.2: a file that exists but cannot be read is named the same way, with the cause —
+`error: .wingfoil/dna.yaml cannot be read: permission denied`, `error: .wingfoil/dna.yaml is a directory,
+not a file` (exit `1`).
 
 ### Argument grammar
 
@@ -86,6 +88,8 @@ A suggestion follows on a `hint:` line (the object's `hint` field). New in 0.3: 
 within two edits of a known one is answered in that form —
 `error: unknown command 'memroy'` then `hint: did you mean "memory"?` — where it used to print
 `(Did you mean memory?)`.
+New in 0.3.2: the same holds after the help command — `wingfoil help memroy` and `wingfoil memory help
+addd` get the `hint:` line — and `wingfoil help help` prints the help command's own help at exit `0`.
 When the refusal names a file or explains itself, indented lines follow the `error:` line, one per
 finding (`<file>: <detail>`); under `--format json`/`yaml` they are a `details` array of
 `{"file", "detail"}` entries beside `error`.
@@ -166,8 +170,9 @@ The Memory transition verbs (`submit`, `approve`, `reject`, `deprecate`, `park`,
 their `<id>` names, and read its current status, as committed at `HEAD`; what `submit` and `amend`
 commit is the file in your working tree. A document you created by hand and never committed is
 refused (exit `1`) with a message naming `memory add`, and editing `status` by hand does not change
-which transition runs. One known defect breaks this rule today: `directive remove` looks up the
-directive to delete in the working tree (`bug-108`).
+which transition runs. `directive remove` likewise looks up the directive to delete as committed at
+`HEAD`: a directive file you never committed is unknown to it, and one you deleted without committing is
+still found, and refused because your working tree differs.
 
 ### Git identity
 
@@ -189,8 +194,12 @@ it exits `1` with `git identity not usable: …`. If git itself cannot be run �
 not executable, or a sandbox forbids starting it — the command exits `1` with `could not run git: <cause>`
 (for example `could not run git: spawnSync git ENOENT`) instead. `agent execute`, whose first git call
 is that read of `HEAD`, reports the same cause as
-`E_GIT_READ_FAILED: git rev-parse HEAD failed in <root>: spawnSync git ENOENT`, also exit `1`. In every
-case nothing is written.
+`E_GIT_READ_FAILED: git rev-parse HEAD failed in <root>: spawnSync git ENOENT`, also exit `1`. If git runs
+but cannot read its configuration — a config file it cannot parse, for example — the command exits `1` with
+`could not read git configuration: <git's message>` (for example `could not read git configuration: bad
+config line 9 in file .git/config`) rather than reporting a missing identity; `agent execute` and a read
+such as `workflow list` report it as `E_GIT_READ_FAILED: git rev-parse HEAD failed in <root>: fatal: bad
+config line …`. In every case nothing is written.
 
 `memory approve`, `memory reject` and `memory amend` additionally require the author's email to
 belong to a `team.members` entry holding the `approver` role in the committed `dna.yaml` (see
@@ -221,7 +230,8 @@ directives in `directives/built-in/` plus four starter custom directives in `dir
 (`scrum-delivery` vs `kanban-delivery`) and in `project.methodology` / `stacks.methodologies`.
 
 - **Output:** `{ root, template, files: [...] }` — the files it created.
-- **Commit:** `chore(wingfoil): initialize .wingfoil/ with the <Template> template (P5.1.1)`
+- **Commit:** `chore(wingfoil): initialize .wingfoil/ with the <Template> template` (new in 0.3.2; 0.3.1 ended it
+  with ` (P5.1.1)`)
 - **Errors:** already initialized → exit `1` (`error: WingFoil already initialized (to change its
   configuration, edit the files under .wingfoil/ and commit them, or use the wingfoil dna and wingfoil
   directive commands)`); `--template` omitted without a terminal or with `--no-interactive` → exit `2`
@@ -436,7 +446,9 @@ wingfoil paths [<category>] [--list]
 ```
 
 `<category>` is `sources`, `tests`, `docs`, `config`, `governance`, `runs` or `health`. Without it the whole
-map is printed. `--list` is accepted for a planned drill-down view, but in this release it does not
+map is printed. New in 0.3.2: a category of your own, declared by hand in `dna.yaml` `paths:` as a list of paths
+and committed, is answered too (`wingfoil paths extras`); a value that is not a list is refused
+(`E_VALIDATION paths.extras`). `--list` is accepted for a planned drill-down view, but in this release it does not
 change the output.
 
 `runs` is the directory of the agent run log, and it holds exactly one entry: a `dna.yaml` that
@@ -562,11 +574,21 @@ Without `--workflow`, `memory add` links nothing and its commit is unchanged.
     Also a document the committed `path` would put outside the project root (`E_PATH_ESCAPES_ROOT: …`) or
     outside the type's folder, the part of `path` before its first `{token}`
     (`E_PATH_OUTSIDE_TYPE_FOLDER: Memory entries must reside in their type's folder: …`). Nothing is written.
+    New in 0.3.2: a committed `memory.yaml` whose type `path` is absolute or holds a `.` or `..` segment, or
+    whose type `id_pattern` is malformed, is refused before anything is computed or written
+    (`cannot resolve the memory type registry: … E_VALIDATION types.bug.path (HEAD:.wingfoil/memory.yaml): path
+    "docs/memory/bug/../../outside/{id}.md" holds a '.' or '..' segment …`, or
+    `… id_pattern "bug-{n:0}-{slug}": malformed token {n:0} …`); every other command that reads `memory.yaml`
+    refuses it with the same `E_VALIDATION` issue.
   - Exit `1`, with `--workflow`: a `<ref>` that names no open instance (`workflow is not open: <ref>`, or
     `unknown workflow: <ref>`, as `workflow next` answers it); a `--step` that is not a ready step of the instance
     (`step '<key>' is not on the frontier of <instance>`); no ready step that adds this type
     (`no step of <instance> adds a <type>`); several, and no `--step`
     (`no step of <instance> adds a <type> alone: give --step, one of: <key>, <key>`). Nothing is written.
+
+### Short element references
+
+New in 0.3.2. Where a command takes an element id (`memory history`, `submit`, `approve`, `reject`, `amend`, `deprecate`, `park`, and `--element` of `workflow start`, `workflow adopt`, `agent execute`), the id may be written short. Resolution, in order: an exact id; a reference `<literal><digits>` where `<literal>` starts a type's `id_pattern` `<literal>{n}…` (`dl-1`, `task-12`), which names the element of that type with that number, compared by value (`task-12` = `task-012`) and never falls back to a prefix (`task-33` is not `task-330`); otherwise a prefix of the full id. Deprecated elements count. Exactly one element must match: several is `error: ambiguous reference: <ref> matches <N> elements`, a `hint:` and one full id per line, exit `1`, nothing written. A short reference never resolves to an element the tool cannot read (one whose frontmatter does not parse, or in a newer format); give its full id to see why. `agent list --element`, the session Prompt and Resources, the workflow `<ref>`, run ids, `--set` and `--step` take exact values only.
 
 ### `wingfoil memory submit`
 
@@ -575,6 +597,8 @@ Move a document one step forward along its type's sequence — for the default m
 ```
 wingfoil memory submit <id>
 ```
+
+**Short reference (new in 0.3.2; earlier versions take full ids only).** `<id>` may also be `<type prefix>-<n>` (`dl-1` and `dl-001` both name `dl-001-pick-a-storage-layout-for-exports`) or a unique prefix of the full id. A reference matching several elements is refused (`CONFLICT`, exit `1`, every candidate listed, nothing written); one matching none is `document not found: <id>`. The output, the commit subject and the commit body always carry the full id. See [Short element references](#short-element-references).
 
 Before running it, fill the document's body and every frontmatter field its type lists in
 `template.frontmatter.required` — you do not need to commit those edits first: the submit commit
@@ -636,6 +660,8 @@ Pass a gate: move a document forward from a gated state (default machine: `pendi
 ```
 wingfoil memory approve <id> --reason <text>
 ```
+
+**Short reference (new in 0.3.2; earlier versions take full ids only).** `<id>` may also be `<type prefix>-<n>` (`dl-1` and `dl-001` both name `dl-001-pick-a-storage-layout-for-exports`) or a unique prefix of the full id. A reference matching several elements is refused (`CONFLICT`, exit `1`, every candidate listed, nothing written); one matching none is `document not found: <id>`. The output, the commit subject and the commit body always carry the full id. See [Short element references](#short-element-references).
 
 Requires the **approver role**: your git email must match a `team.members` entry whose `roles` include
 `approver`, in the committed `dna.yaml`:
@@ -728,6 +754,8 @@ Send a gated document back to its gate's reject target (default machine: `pendin
 wingfoil memory reject <id> --reason <text>
 ```
 
+**Short reference (new in 0.3.2; earlier versions take full ids only).** `<id>` may also be `<type prefix>-<n>` (`dl-1` and `dl-001` both name `dl-001-pick-a-storage-layout-for-exports`) or a unique prefix of the full id. A reference matching several elements is refused (`CONFLICT`, exit `1`, every candidate listed, nothing written); one matching none is `document not found: <id>`. The output, the commit subject and the commit body always carry the full id. See [Short element references](#short-element-references).
+
 Same approver requirement as `approve`. The reason is recorded in the commit **and** copied to the
 document's `rejection_reason` frontmatter field.
 
@@ -753,6 +781,8 @@ Retire a document, from any state, to `deprecated`.
 wingfoil memory deprecate <id> [--reason <text>]
 ```
 
+**Short reference (new in 0.3.2; earlier versions take full ids only).** `<id>` may also be `<type prefix>-<n>` (`dl-1` and `dl-001` both name `dl-001-pick-a-storage-layout-for-exports`) or a unique prefix of the full id. A reference matching several elements is refused (`CONFLICT`, exit `1`, every candidate listed, nothing written); one matching none is `document not found: <id>`. The output, the commit subject and the commit body always carry the full id. See [Short element references](#short-element-references).
+
 No approver role is required. `--reason` is optional, but when given it must not be blank.
 
 ```console
@@ -777,6 +807,8 @@ Return a started document to an earlier state along its type's declared `returns
 ```
 wingfoil memory park <id> --reason <text>
 ```
+
+**Short reference (new in 0.3.2; earlier versions take full ids only).** `<id>` may also be `<type prefix>-<n>` (`dl-1` and `dl-001` both name `dl-001-pick-a-storage-layout-for-exports`) or a unique prefix of the full id. A reference matching several elements is refused (`CONFLICT`, exit `1`, every candidate listed, nothing written); one matching none is `document not found: <id>`. The output, the commit subject and the commit body always carry the full id. See [Short element references](#short-element-references).
 
 A type's state machine in `memory.yaml` may declare return edges next to `gates` and `waiting`:
 `returns: { in-progress: backlog }`. Each target must be an earlier state of the `sequence`. `park`
@@ -820,6 +852,8 @@ Record an uncommitted correction to a document as an amendment, leaving its stat
 ```
 wingfoil memory amend <id> --reason <text>
 ```
+
+**Short reference (new in 0.3.2; earlier versions take full ids only).** `<id>` may also be `<type prefix>-<n>` (`dl-1` and `dl-001` both name `dl-001-pick-a-storage-layout-for-exports`) or a unique prefix of the full id. A reference matching several elements is refused (`CONFLICT`, exit `1`, every candidate listed, nothing written); one matching none is `document not found: <id>`. The output, the commit subject and the commit body always carry the full id. See [Short element references](#short-element-references).
 
 Edit the document first (its body, or any frontmatter field except `status`, `id`, `type`, `release`,
 `rejection_reason` and `supersedes`), then
@@ -890,6 +924,8 @@ Print a document's audit trail, reconstructed from git.
 wingfoil memory history <id>
 ```
 
+**Short reference (new in 0.3.2; earlier versions take full ids only).** `<id>` may also be `<type prefix>-<n>` (`dl-1` and `dl-001` both name `dl-001-pick-a-storage-layout-for-exports`) or a unique prefix of the full id. A reference matching several elements is refused (`CONFLICT`, exit `1`, every candidate listed, nothing written); one matching none is `document not found: <id>`. The output, the commit subject and the commit body always carry the full id. See [Short element references](#short-element-references).
+
 Each entry carries `sha`, `author`, `timestamp` (ISO-8601), `operation`, `from`, `to`, `approver`,
 `reason` and the commit `subject`. New in 0.3: every entry also carries `wingfoil`, the build
 that wrote the commit, from its `WingFoil-Version:` line (see [Git side effects](#git-side-effects)):
@@ -942,6 +978,9 @@ New in 0.3: a revision of the document whose frontmatter is not valid YAML no lo
 command. Its entry has `"to": null`, an extra `"unreadable"` key giving the parse error, and the next
 entry's `from` is `null`. A `W_MEMORY_UNREADABLE` warning on stderr names the file and the commit. A
 different Memory document whose frontmatter does not parse is skipped with the same warning.
+New in 0.3.2: a revision written in a newer element `format` than this WingFoil reads is reported the same
+way, its status not read: `"to": null`, `"unreadable": "E_INVALID_FORMAT: this file is written in format 2;
+this WingFoil reads up to format 1: upgrade WingFoil"`, and the warning naming the commit.
 
 - **Commit:** none.
 - **Errors:** missing id → exit `2`; unknown id → exit `1`.
@@ -985,7 +1024,10 @@ No match is still a success (exit `0`), with `"matches": []` and
 New in 0.3: every match is a Memory element, with an `id` and a `type`. A Markdown file under a
 Memory directory with neither, such as an old plan with no frontmatter, is left out. A file whose
 frontmatter is not valid YAML, or a symbolic link, is left out too, and a `W_MEMORY_UNREADABLE` warning
-on stderr names it. One bad file no longer fails the search.
+on stderr names it. One bad file no longer fails the search. With `--type`, the warnings name only the
+files that type could hold: a file on a path the type's `path` pattern can produce, or a document in a
+newer `format:` whose `type:` is that type; a `--type` that `memory.yaml` does not declare prints no
+warnings.
 
 - **Commit:** none.
 
@@ -1012,15 +1054,23 @@ The payload also carries `warnings`, which lists what the entries cannot show:
 - an entry under `.wingfoil/directives/` that cannot be read (a symbolic link whose target does not
   exist, a file or directory without permission, a directory link back to one of its own parents),
   which is skipped and named there while the other directives are listed;
-- without `--role`, every id defined by two files (and the one in force), and every directive whose
-  declared `scope` contradicts `roles.yaml`'s `global:` list (`roles.yaml` decides) or is a value
-  other than `global`. A directive that declares no `scope` is not reported;
+- without `--role`, every binding in `roles.yaml` that names a directive with no file (one warning per
+  role, and one for a `global:` entry; new in 0.3.2), every id defined by two files (and the one in
+  force), and every directive whose declared `scope` contradicts `roles.yaml`'s `global:` list
+  (`roles.yaml` decides) or is a value other than `global`. A directive that declares no `scope` is not
+  reported;
 - with `--role`, a role with no assignments of its own, a binding with no directive file, and
-  shadowed ids.
+  shadowed ids. The no-assignments warning needs a `roles.yaml`: with none, nothing is bound and no
+  role warning is printed (new in 0.3.2).
 
 - **Commit:** none.
 - **Errors:** no `.wingfoil/` at the project root → exit `1`, `WingFoil not initialized (no .wingfoil/ directory at the project root): run 'wingfoil init' first`;
-  `.wingfoil/directives/` itself unreadable, or an invalid directive file or `roles.yaml` → exit `1`.
+  `.wingfoil/directives/` itself unreadable, or an invalid directive file or `roles.yaml` → exit `1`. A
+  directive file missing a required header field (`id`, `name`, `type`, `kind`, `title`) is refused with
+  `invalid directive: missing required field '<field>'`, after the file's name (new in 0.3.2).
+  A `roles.yaml` that exists but cannot be read (a symbolic-link loop included) → exit `1`,
+  `.wingfoil/roles.yaml cannot be read (…)`; an absent one, or a symbolic link whose target does not
+  exist, means nothing is bound (new in 0.3.2).
 
 ### `wingfoil directive create`
 
@@ -1094,8 +1144,16 @@ A directive still assigned to a role is refused
 in 0.3: delete the name from `roles.yaml`, **commit** that change, then run `directive remove`.
 Built-in directives are refused (`error: built-in directives cannot be removed`).
 
+The directive is looked up as committed at `HEAD`. A directive file no commit records is unknown, and
+the message says what your working tree holds
+(`error: unknown directive: api-style — the working tree's '.wingfoil/directives/custom/api-style.md'
+defines it [git status '??'], but no commit of this repository records it, …; commit '…' first, then
+retry`). A committed directive you deleted or edited without committing is refused naming its
+`git status` code.
+
 - **Commit:** `wf(directive): remove <name>`
-- **Errors:** still assigned, built-in, or unknown → exit `1`.
+- **Errors:** still assigned, built-in, unknown (including a directive no commit records), or a
+  directive file with uncommitted changes → exit `1`.
 
 ---
 
@@ -1415,7 +1473,7 @@ wingfoil workflow start <name> [--element <type>:<id>] [--title <title>] [--set 
 
 | Option | Description |
 |---|---|
-| `--element <type>:<id>` | The element the workflow runs on, when the workflow declares one (`element:`). Without it, the active workflow's element is used if it has that type. |
+| `--element <type>:<id>` | The element the workflow runs on, when the workflow declares one (`element:`); `<id>` may be a short reference (new in 0.3.2, see [Short element references](#short-element-references)) and the plan binds the full id. Without it, the active workflow's element is used if it has that type. |
 | `--title <title>` | The plan's title. Default: `<workflow> — <phase>`. |
 | `--set phase=<v>` | The plan's `phase` token. Default: the element's id, else `1`. |
 | `--set scope=<v>` | The plan's `scope` token, the folder its file goes in. Default: the workflow name. |
@@ -1544,7 +1602,7 @@ instance, as for `workflow next`.
 | Option | Description |
 |---|---|
 | `--step <key>` | The frontier step the element counts as created by, by the key `workflow next` prints. Default: the one frontier step that adds the element's type. |
-| `--element <type:id>` | The existing element to adopt, e.g. `release-line:rl-v1`. Default: the step's one candidate. |
+| `--element <type:id>` | The existing element to adopt, e.g. `release-line:rl-v1`; `<id>` may be a short reference (new in 0.3.2, see [Short element references](#short-element-references)), the record names the full id. Default: the step's one candidate. |
 | `--plan` | Propose the adoptions and write nothing. Takes no `--step` or `--element`. |
 | `--apply` | With `--plan`: write the proposed adoptions, one commit per step. Needs the `approver` role. |
 | `--reason <text>` | Why. Required on the single form and on `--plan --apply`; with `--plan` alone it is checked and not recorded. Same shape rules as every `--reason`. |
@@ -1713,7 +1771,7 @@ At least one of `--next`, `--workflow`, `--step` and `--element` is required.
 | `--next` | Take the workflow, phase, element and role from the next step of the active workflow (the open workflow started most recently): the step [`wingfoil workflow next`](#wingfoil-workflow-next) prints first. |
 | `--workflow <ref>` | Take the step from this workflow instead: a workflow name (its most recently started open instance) or an open instance id. Implies `--next`. |
 | `--step <key>` | Take this step, which must be on the frontier of the selected workflow (`--workflow`, else the active one), e.g. `dev-loop.red@task:task-042-login-form`: when several steps are ready at once, it is how each one's agent launches on its own step. Implies `--next`. `wingfoil workflow next` prints each `agent` step as `wingfoil agent execute --workflow <instance> --step <key>`, which runs as written. |
-| `--element <type:id>` | The element the agent works on, as `<type>:<id>` with the element's full id, e.g. `task:task-042-login-form`. With a step, it replaces the step's element and keeps its phase and role. |
+| `--element <type:id>` | The element the agent works on, as `<type>:<id>`, e.g. `task:task-042-login-form`; `<id>` may be a short reference (new in 0.3.2, see [Short element references](#short-element-references)) and the run records the full id. With a step, it replaces the step's element and keeps its phase and role. |
 | `--role <role>` | The role the agent runs as: a `team.roles` name in `dna.yaml`. Without it the role is the step's; with no step, it is `developer`, and a `warning:` line says so. `approver` is refused: an agent never runs as the role that approves. |
 | `--agent <name>` | The `team.agents` entry to launch. Without it, the first entry, in `dna.yaml` order, that declares an `adapter` and lists the role in `executes_as`. |
 
@@ -1747,6 +1805,11 @@ bound to the role with no file, a Memory document that could not be read) and an
 `.wingfoil/agents/` that is not an adapter (another extension, a nested file, a name outside
 `[a-z0-9-.]`) are printed as `warning:` lines first, each once. Temporary files go to the system's
 temporary directory and are removed whatever happens, an interruption before the launch included.
+
+With a step form (`--next`, `--workflow`, `--step`), the diagnostics of the workflow state it reads (the ones
+`wingfoil workflow next` lists, for example `W_UNCOMMITTED_INPUTS` for a deduction input you changed and did not
+commit) are printed first, one `warning: <code> (<file>): <message>` line per distinct diagnostic, before any refusal of the step. The
+form with `--element` alone reads no workflow state and prints none.
 
 Then it launches the agent: it prints
 `run <run-id>: launching <agent> (<adapter>) as <role> on <type>:<id>`, starts the adapter's command with the arguments its manifest declares (no shell), and
@@ -1814,7 +1877,8 @@ It reads the run log, `dna.yaml` and the workflow state **as committed at `HEAD`
 (see [Git side effects](#git-side-effects)), so it agrees with `agent show` and with the run ids `agent
 execute` counts. A run log you changed and did not commit is not read: a `warning:` line names it
 (`W_UNCOMMITTED_INPUTS`), one per file. Only the run logs themselves count: another file in that
-directory is neither read nor reported.
+directory is neither read nor reported. A run log committed as a symbolic link is not read either: a
+`warning:` line names it (`W_RUN_LOG_SYMLINK`), and `diagnostics` carries it.
 
 ```console
 $ wingfoil agent list
@@ -1900,3 +1964,5 @@ agent did not report is the string `not-reported`, never `0` or `null`.
   not committed, a `hint:` line says so, and the command still exits `1`: commit the run log, then run
   it again. A run log at `HEAD` that is not valid JSON Lines exits `1`, naming the file and the line;
   a `dna.yaml` with no `paths.runs` exits `1` with `error: dna.yaml declares no run log (paths.runs)`.
+  A run log committed as a symbolic link is not read: `warning: W_RUN_LOG_SYMLINK (<file>): …` is printed, and
+  its runs are not found.

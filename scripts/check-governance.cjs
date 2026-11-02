@@ -10,7 +10,8 @@
  *   `wf(directive)`, `wf(workflow)`) are not Memory operations and are skipped. So are the records written
  *   outside the `wf()` grammar — `workflow: finalize …`, `workflow: adopt …`, `workflow: rekey …` and
  *   `agent: record …` (`spec-017` §4.8, §7.9, §7.11–§7.12; `spec-016` §4.4): they are "other commits", held
- *   only to the `status-outside-wf` check below (task-294).
+ *   to the `status-outside-wf` check below (task-294), and a record's `Approver:` line, when it has one, to
+ *   `workflow-record-authority` (task-328).
  * - **bracket** — none on `add`, `submit` and `assign`; on every other verb the canonical
  *   `[from → to]` (U+2192, single spaces, closing the subject). Only `sync` chains; `deprecate` ends in
  *   `deprecated`; `amend` is the self-loop `[s → s]`; `park` is one hop between two different states (the
@@ -66,6 +67,13 @@
  *   approver's decision and carries no `Co-Authored-By:` and no `AI-Model:` line (`git-conventions` §7);
  *   every other verb may. The approve/reject commits written before this check are history: they cannot
  *   be rewritten (`git-conventions` §2, §8).
+ * - `workflow-record-authority` (`bug-444`; rules `body`, `authority`): a `workflow: finalize`, `workflow: adopt`
+ *   or `workflow: rekey` record that has an `Approver:` line holds it to the grammar above and to the
+ *   `authority` rule (its author holds `approver` at the first parent, the line names the author). Whether a
+ *   record of an `approval:` phase must carry one is not judged.
+ * - `trailer-paragraph` (`bug-391`; rule `body`): on every non-merge commit, a `WingFoil-*` line (any key, any
+ *   letter case) sits in the body's final paragraph, the one the workflow deduction reads
+ *   (`git-conventions` §8).
 
  * **Starting mode** (`dl-103` §1). A finding on a commit that is not the introduction commit nor one
  * of its ancestors is gated, and fails the check (exit 1). A finding on history — the introduction
@@ -82,7 +90,8 @@
  * `Approver:`/`Reason:` readers and the reason grammar (`commit-message.ts`), the machine resolver and
  * edge test (`state-machine.ts`), and the consistency check (`audit.ts`). Nothing here re-implements
  * them. Deterministic (REQ-SYS-07): findings come out oldest commit first, then by rule, then by
- * message; no clock is read.
+ * message, except that a commit's `trailer-paragraph` findings follow its other findings of the rule, in
+ * the order the keys are written; no clock is read.
  *
  * Usage: node scripts/check-governance.cjs [--root <dir>] [--base <rev>] [--introduced-at <rev>] [--json]
  *   --root           the repository to check (default: the git top level of the working directory)
@@ -118,12 +127,19 @@ const CHECKS = Object.freeze({
   'supersedes-pair': 'governance-check:supersedes-pair',
   'config-version': 'governance-check:config-version',
   'approval-ai-trailer': 'governance-check:approval-ai-trailer',
+  'workflow-record-authority': 'governance-check:workflow-record-authority',
+  'trailer-paragraph': 'governance-check:trailer-paragraph',
 });
 
 /** The verbs that record the approver's decision and carry no AI co-author (`git-conventions` §7). */
 const DECISION_VERBS = new Set(['approve', 'reject']);
 /** A co-author or model trailer line (`git-conventions` §7, `bug-307`). */
 const AI_TRAILER_RE = /^(co-authored-by|ai-model):/i;
+
+/** The subject of a record written outside the `wf()` grammar by `workflow finalize|adopt|rekey` (`spec-017` §7.9, §7.11, §7.12). */
+const WORKFLOW_RECORD_RE = /^workflow: (?:finalize|adopt|rekey)(?: |$)/;
+/** A `WingFoil-*` trailer key at the start of a line (`git-conventions` §8). */
+const WINGFOIL_TRAILER_RE = /^(wingfoil-[a-z0-9-]+):/i;
 
 /** The four versioned config files whose `version:` the doc-versioning bump rule applies to (`bug-143`). */
 const VERSIONED_CONFIG_FILES = ['.wingfoil/dna.yaml', '.wingfoil/memory.yaml', '.wingfoil/workflows.yaml', '.wingfoil/roles.yaml'];
@@ -186,6 +202,8 @@ function git(root, args, input) {
     input,
     maxBuffer: 1024 * 1024 * 1024,
     stdio: ['pipe', 'pipe', 'pipe'],
+    // Explicit, so the environment a caller (a test) set on `process.env` is the one git sees (bug-278).
+    env: process.env,
   });
 }
 
@@ -292,6 +310,7 @@ function readBlobTexts(root, requests) {
     input: requests.join('\n') + '\n',
     maxBuffer: 1024 * 1024 * 1024,
     stdio: ['pipe', 'pipe', 'pipe'],
+    env: process.env,
   });
   const texts = [];
   let offset = 0;
@@ -312,7 +331,9 @@ function readBlobTexts(root, requests) {
 
 /**
  * A Markdown text's frontmatter `status` and `type`: `null` when there is no text, `{ unreadable }` when
- * the frontmatter does not parse, else the two fields (`null` where absent or not a string).
+ * the frontmatter does not parse, `{ unreadable, newer: true }` when it is written in a newer element
+ * `format` (task-313, `bug-262`: its fields are not read, as `reconstructMemoryTransitions` does not read
+ * them), else the two fields (`null` where absent or not a string).
  */
 function readFrontmatterFields(dist, text, label) {
   if (text === null) return null;
@@ -324,6 +345,8 @@ function readFrontmatterFields(dist, text, label) {
   } catch (error) {
     return { unreadable: error instanceof Error ? error.message.split('\n')[0] : String(error) };
   }
+  const newer = dist.validation.newerFormatIssue(parsed, dist.validation.MEMORY_TEMPLATE_FORMAT, label);
+  if (newer !== null) return { unreadable: `${newer.code}: ${newer.message}`, newer: true };
   const field = (name) => (parsed !== null && typeof parsed === 'object' && typeof parsed[name] === 'string' ? parsed[name] : null);
   return { status: field('status'), type: field('type'), supersedes: field('supersedes'), id: field('id') };
 }
@@ -495,9 +518,7 @@ function checkBodyAndAuthority(commit, op, dna, dist) {
     add('body', "'assign' is not an approval: it carries no Approver: line");
   } else if (recordsApproval) {
     if (approverLines.length === 0) add('body', `'${op}' needs an Approver: line`);
-    else if (approval === null) add('body', 'the Approver: line must be the first body line, as `Approver: Name <email> (role)`');
-    else if (approval.approverRole !== dist.core.APPROVER_ROLE) add('body', `the Approver: role is '${approval.approverRole}', not 'approver'`);
-    if (approverLines.length > 1) add('body', `${approverLines.length} Approver: lines; an approval records one`);
+    else approverGrammarFindings(approverLines, approval, dist).forEach(({ rule, message }) => add(rule, message));
     if (APPROVAL_VERBS.has(op) && reasonLines.length === 0) add('body', `'${op}' needs a Reason: block`);
   }
 
@@ -510,19 +531,53 @@ function checkBodyAndAuthority(commit, op, dna, dist) {
     if (refusal !== null) add('body', `the Reason: block ${refusal.replace(/^invalid flag value: --reason /, '')} (dl-067)`);
   }
 
-  if (recordsApproval && op !== 'assign') {
-    if (dna === null) {
-      add('authority', `no ${DNA_YAML} is committed before this commit, so no approval authority can be established`);
-    } else if (!dna.ok) {
-      add('authority', `the ${DNA_YAML} committed before this commit does not validate (${dna.error})`);
-    } else if (!dist.core.hasApproverRole(dna.value, commit.authorEmail)) {
-      add('authority', `the author <${commit.authorEmail}> holds no approver role in team.members (dl-094)`);
-    }
-    if (approval !== null && approval.approverEmail.toLowerCase() !== commit.authorEmail.toLowerCase()) {
-      add('authority', `the Approver: line names <${approval.approverEmail}>, but <${commit.authorEmail}> authored the commit (dl-094)`);
-    }
+  if (recordsApproval && op !== 'assign') authorityFindings(commit, approval, dna, dist).forEach(({ rule, message }) => add(rule, message));
+  return findings;
+}
+
+/** The grammar of a commit's `Approver:` lines (at least one), shared by the `wf()` and record rules. */
+function approverGrammarFindings(approverLines, approval, dist) {
+  const findings = [];
+  const add = (message) => findings.push({ rule: 'body', message });
+  if (approval === null) add('the Approver: line must be the first body line, as `Approver: Name <email> (role)`');
+  else if (approval.approverRole !== dist.core.APPROVER_ROLE) add(`the Approver: role is '${approval.approverRole}', not 'approver'`);
+  if (approverLines.length > 1) add(`${approverLines.length} Approver: lines; an approval records one`);
+  return findings;
+}
+
+/** The authority of a commit that records an approval, against the `dna.yaml` of its first parent. */
+function authorityFindings(commit, approval, dna, dist) {
+  const findings = [];
+  const add = (message) => findings.push({ rule: 'authority', message });
+  if (dna === null) {
+    add(`no ${DNA_YAML} is committed before this commit, so no approval authority can be established`);
+  } else if (!dna.ok) {
+    add(`the ${DNA_YAML} committed before this commit does not validate (${dna.error})`);
+  } else if (!dist.core.hasApproverRole(dna.value, commit.authorEmail)) {
+    add(`the author <${commit.authorEmail}> holds no approver role in team.members (dl-094)`);
+  }
+  if (approval !== null && approval.approverEmail.toLowerCase() !== commit.authorEmail.toLowerCase()) {
+    add(`the Approver: line names <${approval.approverEmail}>, but <${commit.authorEmail}> authored the commit (dl-094)`);
   }
   return findings;
+}
+
+/**
+ * The `WingFoil-*` keys a commit's body writes outside its final paragraph, each once, as first written
+ * (`git-conventions` §8, `bug-391`): the final paragraph is the last blank-line-separated one.
+ */
+function trailerKeysOutsideFinalParagraph(body) {
+  const lines = body.split('\n');
+  let lastBlank = -1;
+  lines.forEach((line, index) => {
+    if (line.trim() === '') lastBlank = index;
+  });
+  const keys = new Map();
+  for (const line of lines.slice(0, lastBlank + 1)) {
+    const key = WINGFOIL_TRAILER_RE.exec(line)?.[1];
+    if (key !== undefined && !keys.has(key.toLowerCase())) keys.set(key.toLowerCase(), key);
+  }
+  return [...keys.values()];
 }
 
 /** A `TransitionFinding` of `verifyTransitionConsistency`, as one line. */
@@ -720,19 +775,24 @@ function checkGovernance(root, options = {}) {
   });
 
   const byOrder = (a, b) => order.get(a) - order.get(b);
-  /** Run `read`; on a revision whose frontmatter does not parse, report `shas` as not checked instead. */
+  /**
+   * Run `read`; on a revision whose frontmatter does not parse, or that is written in a newer element
+   * format (task-313), report `shas` as not checked instead.
+   */
   const readOrReport = (path, shas, read) => {
     try {
       return read();
     } catch (error) {
       // Both reads are strict: they read every revision's `status` and throw on a revision whose
-      // frontmatter does not parse (`reconstructMemoryTransitions` is tolerant only for `memory
-      // history`, task-171). The document's commits are reported as not checked, naming the error,
-      // rather than stopping the whole check or passing them as checked.
+      // frontmatter does not parse, or that is written in a newer element format (task-313)
+      // (`reconstructMemoryTransitions` is tolerant only for `memory history`, task-171). The
+      // document's commits are reported as not checked, naming the error, rather than stopping the
+      // whole check or passing them as checked.
       if (!(error instanceof dist.validation.ValidationError)) throw error;
       const first = error.message.split('\n')[0];
+      const why = dist.validation.isNewerFormatError(error) ? 'a revision is written in a newer format' : "a revision's frontmatter does not parse";
       for (const sha of [...shas].sort(byOrder)) {
-        stateUnchecked.push({ sha, subject: subjects.get(sha), reason: `${path}: a revision's frontmatter does not parse (${first})` });
+        stateUnchecked.push({ sha, subject: subjects.get(sha), reason: `${path}: ${why} (${first})` });
       }
       return null;
     }
@@ -789,7 +849,9 @@ function checkGovernance(root, options = {}) {
       const before = readFrontmatterFields(dist, texts[index * 2], `${entry.path}@${entry.parent}`);
       const after = readFrontmatterFields(dist, texts[index * 2 + 1], `${entry.path}@${entry.sha}`);
       if ((before && before.unreadable) || (after && after.unreadable)) {
-        stateUnchecked.push({ sha: entry.sha, subject: subjects.get(entry.sha), reason: `${entry.path}: a revision's frontmatter does not parse` });
+        const newer = [before, after].find((fields) => fields && fields.newer);
+        const reason = newer ? `a revision is written in a newer format (${newer.unreadable})` : "a revision's frontmatter does not parse";
+        stateUnchecked.push({ sha: entry.sha, subject: subjects.get(entry.sha), reason: `${entry.path}: ${reason}` });
         return;
       }
       const derivedFrom = before?.status ?? null;
@@ -848,6 +910,35 @@ function checkGovernance(root, options = {}) {
         'supersedes-pair',
       );
     });
+  }
+
+  // workflow-record-authority: an `Approver:` line on a `workflow:` record is held to the grammar and the
+  // authority of an approval, when the record has one (bug-444).
+  const records = allCommits.filter((commit) => !commit.merge && WORKFLOW_RECORD_RE.test(commit.subject));
+  const recordDnaBlobs = readBlobIds(root, records.map((commit) => `${commit.parent ?? commit.sha + '^'}:${DNA_YAML}`));
+  records.forEach((commit, index) => {
+    const approverLines = commit.body.split('\n').filter((line) => APPROVER_KEY_RE.test(line));
+    if (approverLines.length === 0) return;
+    const approval = dist.memory.parseApprovalMetadata(commit.body);
+    const dna = commit.parent === null ? null : readDnaYaml(recordDnaBlobs[index]);
+    const check = 'workflow-record-authority';
+    [...approverGrammarFindings(approverLines, approval, dist), ...authorityFindings(commit, approval, dna, dist)].forEach(({ rule, message }) =>
+      findings.push({ sha: commit.sha, subject: commit.subject, rule, message, gated: isGated(commit.sha, check), check }),
+    );
+  });
+
+  // trailer-paragraph: a `WingFoil-*` trailer outside the final paragraph is lost to the deduction (bug-391).
+  for (const commit of allCommits.filter((candidate) => !candidate.merge)) {
+    for (const key of trailerKeysOutsideFinalParagraph(commit.body)) {
+      findings.push({
+        sha: commit.sha,
+        subject: commit.subject,
+        rule: 'body',
+        message: `a ${key}: line sits outside the commit's final paragraph, where the workflow deduction does not read it (git-conventions §8, bug-391)`,
+        gated: isGated(commit.sha, 'trailer-paragraph'),
+        check: 'trailer-paragraph',
+      });
+    }
   }
 
   // status-outside-wf: a commit that is no Memory operation changes no Memory status (dl-139 (a)).
@@ -919,11 +1010,16 @@ function checkGovernance(root, options = {}) {
 
   const unique = new Map();
   for (const finding of findings) unique.set(`${finding.sha}\0${finding.rule}\0${finding.message}`, finding);
+  // The trailer-paragraph findings of a commit follow the order the keys are written in, after its other
+  // findings of the rule; every other finding is ordered by message.
+  const written = new Map([...unique.values()].map((finding, index) => [finding, index]));
+  const isTrailer = (finding) => (finding.check === 'trailer-paragraph' ? 1 : 0);
   const sorted = [...unique.values()].sort(
     (a, b) =>
       order.get(a.sha) - order.get(b.sha) ||
       RULES.indexOf(a.rule) - RULES.indexOf(b.rule) ||
-      (a.message < b.message ? -1 : a.message > b.message ? 1 : 0),
+      isTrailer(a) - isTrailer(b) ||
+      (isTrailer(a) === 1 ? written.get(a) - written.get(b) : a.message < b.message ? -1 : a.message > b.message ? 1 : 0),
   );
 
   return {
@@ -972,7 +1068,7 @@ function formatReport(report) {
     `gated: ${gated.length} findings on ${commitsWith(gated)} commits${gated.length ? ` (${countByRule(gated)})` : ''}`,
     `history: ${history.length} findings on ${commitsWith(history)} commits${history.length ? ` (${countByRule(history)})` : ''}`,
     `state not checked: ${report.stateUnchecked.length} entries on ${commitsWith(report.stateUnchecked)} commits ` +
-      '(history with no machine, no named document, a document gone at HEAD, or a revision that does not parse)',
+      '(history with no machine, no named document, a document gone at HEAD, or a revision that does not parse or is in a newer format)',
   );
   return lines.join('\n');
 }

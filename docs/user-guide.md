@@ -116,7 +116,7 @@ commits:
 └── workflows/custom/         sw-life-cycle, bug-ingest, decision-log-ingest, adr-ingest, scrum-delivery (or kanban-delivery)
 ```
 
-The commit is `chore(wingfoil): initialize .wingfoil/ with the Scrum template (P5.1.1)`. Running `init`
+The commit is `chore(wingfoil): initialize .wingfoil/ with the Scrum template`. Running `init`
 again fails with exit `1`: the project is already initialized. From then on, change the configuration
 by editing the files under `.wingfoil/` and committing them, or with the `dna` and `directive`
 commands, which commit for you (sections 4 and 6).
@@ -215,7 +215,16 @@ optional. The `dna.yaml` that `init` writes shows the shape as a commented examp
 and `wingfoil paths <category>` answers "where is X?" for people and agents alike. `runs` is the
 directory of the agent run log (§9.4); `init` declares it as `docs/runs/`. `health` is the directory of
 the release-health catalogue and reports; `init` does not declare it, so `wingfoil paths health` fails
-with `error: no paths mapped for category 'health'` (exit `1`) until you add it.
+with `error: no paths mapped for category 'health'` (exit `1`) until you add it. The `dna.yaml` that
+`init` writes shows `health` and a `team.members` approver as commented examples, next to where
+each key goes.
+
+You may also declare a category of your own by editing `dna.yaml` by hand and committing it (new in
+0.3.2): `extras: [notes/]` under `paths:` loads without a warning, and `wingfoil paths extras` prints
+it. Its value must be a list of paths — `extras: notes/` is refused with
+`error: E_VALIDATION paths.extras (.wingfoil/dna.yaml): Invalid input: expected array, received string`.
+`dna set`, `dna add` and `dna update` write only the seven categories above
+(`error: unknown DNA field 'paths.extras': 'extras' is not declared under 'paths'`).
 
 The fields each collection accepts are listed in the
 [CLI reference](cli-reference.md#wingfoil-dna-add). You can also edit `dna.yaml` by hand — then commit it.
@@ -231,6 +240,11 @@ The fields each collection accepts are listed in the
 | `template.file` | The scaffold `memory add` copies, under `.wingfoil/` |
 | `template.frontmatter.required` | Fields that must be filled |
 | `states` | Optional: the type's own state machine. Without it, the type uses `defaults.states` |
+
+The templates `init` writes (0.3.2 and later) carry a few optional fields WingFoil's own records use: `adr`,
+`bug`, `decision-log` and `tech-spec` have `contributor`, `credit` and `reported_by` (who an element comes from,
+when not the git author), and `release` has `backlog_committed`, `waves` and a `## Scope changes` table (how a
+release's backlog grew after it was committed). Leave them empty if you do not need them.
 
 ### 5.1 State machines
 
@@ -481,6 +495,8 @@ stops the submit: `error: missing required field on submit: title`). Then:
 wingfoil memory submit task-001-my-first-task      # draft → pending
 ```
 
+**Short references (0.3.2 and later).** You need not type a full id: `wingfoil memory submit task-1` or `task-001-my-f` name `task-001-my-first-task` (also in `approve`, `reject`, `amend`, `deprecate`, `park`, `history`, and in `--element` of `workflow start`, `workflow adopt` and `agent execute`). A number is compared by value and never falls back to a prefix; a reference matching several elements is refused with every full id listed and nothing is written; a short reference never resolves to an element the tool cannot read, so give its full id to see why. Every output and commit carries the full id. The risk: a reference that used to fail now acts, so `memory deprecate task-33` meant for `task-330` deprecates `task-033`; run `--dry-run` first to see the full id. See the [CLI reference](cli-reference.md#short-element-references).
+
 The submit commit records your content **and** the state change. You do not need to commit the edits
 first. The commit body names what it carries besides the state change, e.g.
 `Carries content: frontmatter field 'title', the body`. The template's placeholder comments are yours
@@ -702,7 +718,7 @@ initialising a project with 0.2.2 and running both versions on it.
 
 - **A phase `include:` is a workflow name.** 0.2.x scaffolded `include: workflows/custom/scrum-delivery.yaml`
   in `sw-life-cycle.yaml`; 0.3 refuses a path, so every workflow command fails with exit `1`:
-  `error: E_WORKFLOW_INCLUDE_UNRESOLVED phases[2].include (workflows/custom/sw-life-cycle.yaml): include 'workflows/custom/scrum-delivery.yaml' names no loaded workflow (a phase include is a workflow name, not a file path)`.
+  `error: E_WORKFLOW_INCLUDE_UNRESOLVED phases[2].include (workflows/custom/sw-life-cycle.yaml): include 'workflows/custom/scrum-delivery.yaml' names no loaded workflow (a phase include is a workflow name, not a file path): write 'include: scrum-delivery'; see 'Upgrading from 0.2.x' in the WingFoil user guide (docs/user-guide.md in the repository)`.
   Write `include: scrum-delivery` (or `kanban-delivery`) and commit.
 - **`wingfoil workflow list` has a new output.** It prints `{baseline, workflows: [{name, startable,
   includable, description, executableNow}], diagnostics: [...]}` for the workflows you can run now (`--all` for every one)

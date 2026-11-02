@@ -13,8 +13,9 @@ export type IntegrationBranch =
 
 /**
  * `dl-159` point 4, `git-conventions` §1/§3: the integration branch of a release — `release/X.Y` for a
- * `patch` of `vX.Y.Z` (Z ≥ 1), `main` for a `minor` or a release with no `kind`. Any other kind, or a patch
- * whose version is not `vX.Y.Z` with Z ≥ 1, is refused with a message naming the value. Pure.
+ * `patch` of `vX.Y.Z` (Z ≥ 1), `main` for a `minor` or a release with no `kind` of `vX.Y`. Any other kind, a
+ * minor whose version is not `vX.Y`, or a patch whose version is not `vX.Y.Z` with Z ≥ 1, is refused with a
+ * message naming the value (task-319, bug-387). Pure.
  */
 export function integrationBranch(release: ReleaseFields): IntegrationBranch;
 

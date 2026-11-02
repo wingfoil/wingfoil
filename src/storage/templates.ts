@@ -76,9 +76,12 @@ export function resolveTemplate(name: string): TemplateDefinition | null {
   return TEMPLATES.find((t) => t.name.toLowerCase() === wanted) ?? null;
 }
 
-/** The single git subject `wingfoil init` commits (names the chosen template; deterministic). */
+/**
+ * The single git subject `wingfoil init` commits (names the chosen template; deterministic). It names no
+ * internal feature id (task-321, `bug-409`): the subject stays in the user's history.
+ */
 export function initProjectCommitMessage(def: TemplateDefinition): string {
-  return `chore(wingfoil): initialize .wingfoil/ with the ${def.name} template (P5.1.1)`;
+  return `chore(wingfoil): initialize .wingfoil/ with the ${def.name} template`;
 }
 
 // --- Built-in template asset registry (task-044-builtin-template-integrity, REQ-SEC-10) -----------
@@ -277,7 +280,7 @@ function dnaYaml(def: TemplateDefinition): string {
   // example above it, because `category` is required and a bare `- name: X` fails validation
   // (bug-139-dna-scaffold-hides-required-category, task-118).
   const methodologies = def.methodologies.map((m) => `    - name: ${m}`).join('\n');
-  return `# Project DNA (P2.4) — scaffolded by \`wingfoil init\` (${def.name} template).
+  return `# Project DNA — scaffolded by \`wingfoil init\` (${def.name} template).
 # Structural map of the project: modules, stacks, team + roles, resource paths. Customize freely.
 # \`version\` is this file's content revision; \`format\` the file format it is written in (bumped by
 # WingFoil only on a backward-incompatible change).
@@ -307,6 +310,14 @@ ${methodologies}
 
 # Team & roles — AI agents execute as developer/reviewer/qa/architect and never hold approval authority.
 team:
+  # Members: the people of the project, each a {name, email, roles} entry. \`memory approve\` and
+  # \`memory reject\` need a member holding \`approver\` whose \`email\` is your git \`user.email\`. To
+  # declare one, replace \`members: []\` with a list like this example, uncommented:
+  # members:
+  #   - name: Ada Lovelace
+  #     email: ada@example.com
+  #     roles: [ approver, developer ]
+  # or run: wingfoil dna add team.members --value "Ada Lovelace" --entry-email ada@example.com --entry-roles approver,developer
   members: []
   # AI agents: the roles each one executes as (never approver: agents hold no approval authority), its
   # commit identity (\`email\`, written in the Co-Authored-By trailer of the commits it co-authors) and
@@ -339,6 +350,10 @@ paths:
   config: [.wingfoil]
   governance: []
   runs: [docs/runs/]
+  # \`health\` holds exactly one directory: the release-health metric catalogue and its reports. \`init\`
+  # does not map it, so \`wingfoil paths health\` fails until it is added. To declare it, uncomment:
+  # health: [docs/health/]
+  # or run: wingfoil dna add paths.health --value docs/health/
 `;
 }
 
@@ -351,7 +366,7 @@ paths:
  * which is where the Kanban template's cadence points.
  */
 const BUG_STATES_EXAMPLE = `
-    # Example — uncomment to give \`bug\` its own state machine instead of \`defaults\` (spec-001):
+    # Example — uncomment to give \`bug\` its own state machine instead of \`defaults\`:
     # states:
     #   sequence: [ draft, open, in-progress, resolved, closed ]
     #   gates:
@@ -408,10 +423,10 @@ function memoryYaml(): string {
       frontmatter:
         required: [id, type, title, status]${type === 'bug' ? BUG_STATES_EXAMPLE : ''}`,
   ).join('\n');
-  return `# Memory element schema (P1.13) — scaffolded by \`wingfoil init\`.
+  return `# Memory element schema — scaffolded by \`wingfoil init\`.
 # One entry per element type: its path pattern, its id pattern and its scaffold template. Every type
 # below shares the \`defaults\` state machine; give a type its own \`states:\` block to override it for
-# that type only (REQ-STATE-08) — \`bug\` carries a commented example. \`amendable\` says whether
+# that type only — \`bug\` carries a commented example. \`amendable\` says whether
 # \`memory amend\` may record a correction to the type's documents without a state change; absent
 # means false. \`version\` is this file's content revision; \`format\` the file format it is written in.
 version: 1
@@ -433,7 +448,7 @@ ${types}
 }
 
 function rolesYaml(): string {
-  return `# Directive role assignments (P3.2/P3.7) — scaffolded by \`wingfoil init\`.
+  return `# Directive role assignments — scaffolded by \`wingfoil init\`.
 # Binds directives to roles by directive ID, independent of the built-in/custom subfolder holding the file.
 # \`version\` is this file's content revision; \`format\` the file format it is written in.
 version: 1
@@ -459,7 +474,7 @@ assignments:
     - architecture
     - code-review
 
-# Global directives apply to every role. \`security\` is the built-in Security directive (REQ-SEC-08):
+# Global directives apply to every role. \`security\` is the built-in Security directive:
 # bound here so every role loads it; \`security-secrets\` is this project's secret-hygiene rule.
 global:
   - doc-versioning
@@ -484,7 +499,7 @@ function workflowsYaml(def: TemplateDefinition): string {
   const includes = customWorkflowFiles(def)
     .map((f) => `  - workflows/custom/${f}`)
     .join('\n');
-  return `# Project Workflow main configuration (P4.1) — scaffolded by \`wingfoil init\`.
+  return `# Project Workflow main configuration — scaffolded by \`wingfoil init\`.
 # This MAIN config file does not inline workflows; it include()s the custom (and, once populated,
 # built-in) workflow files. Startable mains + the ${def.name} delivery sub-workflow are composed below.
 # \`version\` is this file's content revision; \`format\` the file format it is written in.
@@ -570,6 +585,45 @@ parent: ""
 `;
 
 /**
+ * The provenance fields of the scaffolded `adr`, `bug`, `decision-log` and `tech-spec` templates (task-321,
+ * `bug-338`; design gate D1 (a): the types that take a contribution, as this repository's templates do).
+ * Additive and optional: nothing in `src/` reads them. Their comments name no internal id (D2).
+ */
+const PROVENANCE_TEMPLATE_FIELDS = `contributor: ""        # optional — who originated this contribution, if not the git author; credited for AI-generated work derived from it
+credit: ""             # optional — free-text credit note
+reported_by: []        # optional — LIST of the feedback notes this element answers, as provenance only; restate each note in this element, never copy it
+`;
+
+/** The scaffolded types that carry {@link PROVENANCE_TEMPLATE_FIELDS}. */
+const PROVENANCE_TYPES: readonly string[] = ['adr', 'bug', 'decision-log', 'tech-spec'];
+
+/**
+ * The planning fields of the scaffolded `release` template (task-321, `bug-350`): the task count when the
+ * backlog was committed, and the release's waves. Additive and optional; their comments name no internal id.
+ */
+const RELEASE_TEMPLATE_FIELDS = `backlog_committed:     # optional — the count of the release's tasks when its backlog was committed; the baseline later additions are counted against
+waves: []              # optional — the release's wave keys, e.g. [w0]; a later wave is appended when the previous one is re-planned
+`;
+
+/** The `## Scope changes` section of the scaffolded `release` body (task-321, `bug-350`). */
+const RELEASE_SCOPE_CHANGES = `
+## Scope changes
+
+<!-- One row per task added after the backlog was committed: the task, the element it came from (a bug,
+     a decision-log, a review finding), when it was admitted, and the count against \`backlog_committed\`. -->
+
+| Task | From | Admitted at | Count vs backlog_committed |
+|---|---|---|---|
+`;
+
+/** The type-specific frontmatter lines of one scaffolded Memory template, between `status` and `format`. */
+function memoryTemplateFields(type: string): string {
+  if (type === 'plan') return PLAN_TEMPLATE_FIELDS;
+  if (type === 'release') return RELEASE_TEMPLATE_FIELDS;
+  return PROVENANCE_TYPES.includes(type) ? PROVENANCE_TEMPLATE_FIELDS : '';
+}
+
+/**
  * One scaffolded Memory template. Its body comment states what the two verbs that touch it actually
  * do (task-209, `bug-146`): `memory add` sets `id`, `title`, `status` and any `--tags` / `--set` value
  * (`renderAddDocument`, `src/memory/add.ts`), and `memory submit` checks the required fields, moves
@@ -582,7 +636,7 @@ id: ""
 type: ${type}
 title: ""
 status: draft
-${type === 'plan' ? PLAN_TEMPLATE_FIELDS : ''}format: ${MEMORY_TEMPLATE_FORMAT}
+${memoryTemplateFields(type)}format: ${MEMORY_TEMPLATE_FORMAT}
 ---
 
 <!-- ${type} body. \`wingfoil memory add\` copies this scaffold, setting only \`id\`, \`title\` and
@@ -590,7 +644,7 @@ ${type === 'plan' ? PLAN_TEMPLATE_FIELDS : ''}format: ${MEMORY_TEMPLATE_FORMAT}
      these placeholder comments yourself; \`wingfoil memory submit\` then checks the required fields,
      moves \`status\` forward and commits the document as you left it, naming in the commit body the
      content it carries. -->
-${supersedesNote(type)}`;
+${supersedesNote(type)}${type === 'release' ? RELEASE_SCOPE_CHANGES : ''}`;
 }
 
 function mainWorkflowYaml(name: string, description: string, phasesYaml: string): string {

@@ -353,7 +353,8 @@ describe('a commit git resolved but cannot list is a failed read, not an empty o
   afterEach(() => removeTempDir(repo));
 
   it('loadDirectivesAtRev throws E_GIT_READ_FAILED instead of answering []', () => {
-    const spy = jest.spyOn(storage, 'listPathsAtRev').mockReturnValue(null);
+    // task-311 (D6 (a)): the directive read at a commit lists through `listBlobEntriesAtRev`, to skip symlinks.
+    const spy = jest.spyOn(storage, 'listBlobEntriesAtRev').mockReturnValue(null);
     try {
       expect(() => loadDirectivesAtRev(repo, 'HEAD')).toThrow(storage.StorageError);
       expect(() => loadDirectivesAtRev(repo, 'HEAD')).toThrow(/E_GIT_READ_FAILED/);

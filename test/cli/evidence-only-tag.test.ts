@@ -126,6 +126,15 @@ describe('task-282 AC 4 — checkEvidenceOnly against a temp repository', () => 
     expect(check(transcript(FIXTURE_PKG, sibling))).toEqual({ ok: false, reason: expect.stringContaining('not an ancestor') });
   });
 
+  it("task-326 D3: a transcript with an unprefixed line fails with checkTranscript's new reason (bug-382)", () => {
+    const [first, ...rest] = transcript(FIXTURE_PKG, candidate).split('\n');
+    const unprefixed = '  ok   wingfoil --help — exit 0';
+    expect(check([first, unprefixed, ...rest].join('\n'))).toEqual({
+      ok: false,
+      reason: `line 2 does not start with "${LOG_PREFIX}": "${unprefixed}"`,
+    });
+  });
+
   it("a failing transcript fails with checkTranscript's reason", () => {
     const failed = [`${LOG_PREFIX}staging smoke FAILED — the build must not be promoted`].join('\n');
     expect(check(failed)).toEqual({ ok: false, reason: expect.stringContaining('closing line') });

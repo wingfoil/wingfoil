@@ -28,7 +28,6 @@
  *    table is checked for completeness against the registry, so a field added to `spec-002` cannot
  *    slip in undriven.
  */
-import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -39,13 +38,13 @@ import { CORE_MODULES, dnaEntryOptionName } from '../../src/core';
 import { dnaEntryOptionNames } from '../../src/dna/path';
 import { makeTempGitRepo, removeTempDir } from '../storage/helpers/git-fixture';
 import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
+import { runCliEntry, type SpawnedRun } from './helpers/spawn-cli';
 
 /** Commander's `Command`, taken from `buildProgram`'s own return type — the package is ESM-only, so a
  * direct `import type { Command } from 'commander'` needs a resolution-mode attribute that this test
  * does not otherwise need (see `src/cli/program.ts`'s module doc). */
 type BuiltProgram = Awaited<ReturnType<typeof buildProgram>>;
 
-const CLI = join(__dirname, '..', '..', 'dist', 'cli.js');
 const DNA = '.wingfoil/dna.yaml';
 
 /** Every option the DNA mutation verbs declare, as the registry declares it. */
@@ -101,9 +100,8 @@ describe('the invariant: a derived option never shadows a global flag (spec-008 
 describe('the drive: every declared entry-field option lands, through the real compiled CLI', () => {
   let repo: string;
 
-  function runCli(args: readonly string[]): { status: number | null; stdout: string; stderr: string } {
-    const result = spawnSync(process.execPath, [CLI, ...args], { cwd: repo, encoding: 'utf-8' });
-    return { status: result.status, stdout: result.stdout ?? '', stderr: result.stderr ?? '' };
+  function runCli(args: readonly string[]): SpawnedRun {
+    return runCliEntry(repo, args);
   }
 
   function dna(): Record<string, never> {

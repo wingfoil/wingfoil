@@ -1,0 +1,96 @@
+# Memory element schema — scaffolded by `wingfoil init`.
+# One entry per element type: its path pattern, its id pattern and its scaffold template. Every type
+# below shares the `defaults` state machine; give a type its own `states:` block to override it for
+# that type only — `bug` carries a commented example. `amendable` says whether
+# `memory amend` may record a correction to the type's documents without a state change; absent
+# means false. `version` is this file's content revision; `format` the file format it is written in.
+version: 1
+format: 1
+
+# Default state machine — applies to every type that declares no `states:` block of its own.
+# `sequence` is the ordered forward chain (`submit` walks it); a `gates` state's forward edge needs
+# `approve` instead, and its `reject` target is where a rejection lands. `deprecated` is implicit:
+# `memory deprecate` reaches it from any state, so it is never listed here.
+defaults:
+  states:
+    sequence: [ draft, pending, approved ]
+    gates:
+      pending: { reject: draft }
+
+types:
+  adr:
+    path: docs/memory/adr/{id}.md
+    id_pattern: "adr-{n}-{slug}"
+    amendable: true
+    template:
+      file: memory/templates/adr.md
+      frontmatter:
+        required: [id, type, title, status]
+  bug:
+    path: docs/memory/bug/{id}.md
+    id_pattern: "bug-{n}-{slug}"
+    amendable: true
+    template:
+      file: memory/templates/bug.md
+      frontmatter:
+        required: [id, type, title, status]
+    # Example — uncomment to give `bug` its own state machine instead of `defaults`:
+    # states:
+    #   sequence: [ draft, open, in-progress, resolved, closed ]
+    #   gates:
+    #     open: { reject: closed }
+    #     resolved: { reject: in-progress }
+    #   returns: { in-progress: open }    # memory park: back to open, with a reason
+    #   limits: { in-progress: 3 }        # at most 3 bugs in progress at once
+  decision-log:
+    path: docs/memory/decision-log/{id}.md
+    id_pattern: "dl-{n}-{slug}"
+    amendable: true
+    template:
+      file: memory/templates/decision-log.md
+      frontmatter:
+        required: [id, type, title, status]
+  plan:
+    path: docs/memory/plan/{scope}/{id}.md
+    id_pattern: "{workflow}-{phase}-plan"
+    amendable: true
+    template:
+      file: memory/templates/plan.md
+      frontmatter:
+        required: [id, type, title, status, workflow, phase]
+    # A started workflow: `wingfoil workflow start` adds and submits it, `wingfoil workflow end` closes it.
+    states:
+      sequence: [ draft, active, done ]
+      waiting: [ active ]
+  release:
+    path: docs/memory/release/{id}.md
+    id_pattern: "release-{n}"
+    amendable: true
+    template:
+      file: memory/templates/release.md
+      frontmatter:
+        required: [id, type, title, status]
+  release-line:
+    path: docs/memory/release-line/{id}.md
+    id_pattern: "rl-{n}"
+    amendable: false
+    template:
+      file: memory/templates/release-line.md
+      frontmatter:
+        required: [id, type, title, status]
+  task:
+    path: docs/memory/task/{id}.md
+    id_pattern: "task-{n}-{slug}"
+    amendable: true
+    template:
+      file: memory/templates/task.md
+      frontmatter:
+        required: [id, type, title, status]
+  tech-spec:
+    path: docs/memory/tech-spec/{id}.md
+    id_pattern: "spec-{n}-{slug}"
+    amendable: true
+    template:
+      file: memory/templates/tech-spec.md
+      frontmatter:
+        required: [id, type, title, status]

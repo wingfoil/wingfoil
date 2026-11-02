@@ -27,10 +27,10 @@ repository; which build runs which is the `wingfoil-cli` directive's rule (§1):
   list`, `show`, `next`, `status`) and the MCP server run on the **pinned build**, the published version
   `package.json` pins as `wingfoil-released` (`dl-095`): `npm run -s wingfoil -- <command>`. The workflow
   reads came back to it when the pin reached a build that reads the `{ type, path }` form of a `produces`
-  entry (`dl-104` D3), and leave it again while the pin is 0.3.0: that build refuses the `manual: true` check
-  binding (`dl-172` (a)), so `workflow list`, `show`, `next` and `status` run on the code build until the pin
-  reaches 0.3.1 (`bug-414`), and `npm run check:mcp` declares the three `wingfoil://workflows` Resources known
-  failures of 0.3.0.
+  entry (`dl-104` D3). They left it while the pin was 0.3.0, which refuses the `manual: true` check binding
+  (`dl-172` (a), `bug-414`), and are back on it on a line whose pin is 0.3.1 or later. The pin is per line:
+  `release/X.Y` pins a published `X.Y.z`, `main` the newest published version, and a merge forward keeps
+  `main`'s pin (`git-conventions` §1 rule 5); read the pin of the branch you are on.
 
 The workflow commands track a workflow — they deduce its state, open and close a run as a `plan` element
 (`dl-019`), print the next step, record what nothing else completes, adopt an element created outside the run and
@@ -114,7 +114,8 @@ sw-life-cycle (main)
 │                              │     │               → align-agent-docs → agent-docs — dl-013, dl-025)
 │                              │     ├── e2e-smoke  (fresh-init + CLI end-to-end smoke gate + mcp-registration — dl-023)
 │                              │     ├── release-submit
-│                              │     ├── release-publishing
+│                              │     ├── release-publishing  (… → tag → publish → mark-released → merge-forward,
+│                              │     │                        optional: a patch's release/X.Y into main — task-306)
 │                              │     ├── release-health  (measure → compare → propose — dl-089; docs/08_health/)
 │                              │     └── retrospective  (→ decision-log)
 │                              ├── align-agent-docs    → agent-docs  (dl-025: the same phase at release-line close)

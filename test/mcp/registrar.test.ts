@@ -11,6 +11,9 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
 import type { CoreModule } from '../../src/core/registry';
 import { coreErr, coreOk } from '../../src/core/types';
+import { CORE_MODULES } from '../../src/core';
+import { enumerateOperations, deriveVerb } from '../../src/core/registry';
+import { createMcpServer, deriveMcpResourceUri, registerCoreModules as registerCoreModulesFromBarrel } from '../../src/mcp';
 import { registerCoreModules } from '../../src/mcp/registrar';
 
 const FIXTURE_MODULES: CoreModule[] = [
@@ -111,5 +114,35 @@ describe('registerCoreModules — Resource dispatch', () => {
     await expect(client.readResource({ uri: 'wingfoil://memory/search' })).rejects.toThrow(
       /element not found: task\/task-999/,
     );
+  });
+});
+
+describe('task-323 AC 2 (characterization, bug-396) — what the shipped server lists against what registerCoreModules derives', () => {
+  it('registerCoreModules stays exported by the src/mcp barrel', () => {
+    expect(typeof registerCoreModulesFromBarrel).toBe('function');
+    expect(registerCoreModulesFromBarrel).toBe(registerCoreModules);
+  });
+
+  // Copied from `node dist/cli.js mcp` fed `initialize`, `resources/list` and `resources/templates/list` over stdio.
+  it('createMcpServer lists the four Resource URIs and five templates `wingfoil mcp` serves, and none of the URIs registerCoreModules derives', async () => {
+    const server = createMcpServer({ resolveRoot: () => '/fixture-root', roles: ['developer'], name: 'wingfoil', version: '0.0.0-test' });
+    const [serverTransport, clientTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: 'wingfoil-test-client', version: '0.0.0' });
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    const listed = (await client.listResources()).resources.map((resource) => resource.uri).sort();
+    expect(listed).toEqual(['wingfoil://dna', 'wingfoil://workflows', 'wingfoil://workflows/-/next', 'wingfoil://workflows/-/status']);
+    const templates = (await client.listResourceTemplates()).resourceTemplates.map((template) => template.uriTemplate).sort();
+    expect(templates).toEqual([
+      'wingfoil://dna/{section}',
+      'wingfoil://memory/{type}',
+      'wingfoil://memory/{type}/{id}',
+      'wingfoil://session/{role}/{element}/{state}',
+      'wingfoil://workflows/{name}',
+    ]);
+    const derived = enumerateOperations(CORE_MODULES)
+      .filter(({ operation }) => !operation.mutates)
+      .map(({ module, operation }) => deriveMcpResourceUri(module.name, deriveVerb(module.name, operation.name)));
+    expect(derived.length).toBeGreaterThan(0);
+    for (const uri of derived) expect([...listed, ...templates]).not.toContain(uri);
   });
 });

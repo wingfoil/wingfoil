@@ -1,17 +1,19 @@
 /**
- * The comment-preserving **structural** edit behind `dna add | remove | update` (task-093) — the
- * sequence-aware sibling of `setDnaValueInText` (`task-063`, `bug-004-dna-set-strips-yaml-comments`).
+ * The comment-preserving **structural** edit behind every DNA write — `dna set` and `dna add | remove |
+ * update` (task-093) — and the successor of task-063's mapping-only text setter
+ * (`bug-004-dna-set-strips-yaml-comments`), which `dna set` stopped calling and task-312 removed
+ * (`bug-254`).
  *
- * `setDnaValueInText` rewrites or inserts exactly one **mapping** line and skips every sequence branch
- * by design, so it can express none of the four shapes `dl-081-dna-mutation-surface-shape`'s verbs
+ * That setter rewrote or inserted exactly one **mapping** line and skipped every sequence branch by
+ * design, so it could express none of the four shapes `dl-081-dna-mutation-surface-shape`'s verbs
  * write: a list of strings, an entry of a collection, a field inside an entry, or a list of strings
- * inside an entry. Its fallback for a shape it cannot edit is a whole-file `js-yaml` `dump()` — correct,
- * but it discards every comment token, including the inline `[SPEC]`/`[AUTHORING]` field-provenance
- * annotations whose loss is exactly what `bug-004` filed. That fallback is rare for `dna set`; without
- * this module it would be the **norm** for `dna add`, and the first structured write on a freshly
+ * inside an entry. Its fallback for a shape it could not edit was a whole-file `js-yaml` `dump()` —
+ * correct, but it discards every comment token, including the inline `[SPEC]`/`[AUTHORING]`
+ * field-provenance annotations whose loss is exactly what `bug-004` filed. Without this module that
+ * fallback would be the **norm** for `dna add`, and the first structured write on a freshly
  * `wingfoil init`-ed project would delete the scaffold's own guidance comments.
  *
- * The safety contract is `setDnaValueInText`'s, unchanged and strengthened: every candidate edit is
+ * The safety contract is that setter's, unchanged and strengthened: every candidate edit is
  * verified by re-parsing it and comparing the **whole document** against the intended object before it
  * is returned, and anything that cannot be done provably-minimally returns `undefined` rather than
  * writing something subtly wrong. A mis-located edit therefore cannot corrupt a file. Since task-193
@@ -194,11 +196,20 @@ function renderInline(value: unknown): string {
   return dump(value, { lineWidth: -1, flowLevel: 0 }).replace(/\n$/, '');
 }
 
-/** Rebuild a key line with a new value, keeping its indentation, its `- ` prefix and its inline comment. */
+/**
+ * Rebuild a key line with a new value, keeping its indentation, its `- ` prefix and its inline comment.
+ *
+ * The gap before the comment follows one rule (task-312, `bug-255`): a gap holding a **tab** is kept as
+ * written, whatever the width of the new value — a tab is never turned into spaces, and no tab width is
+ * assumed; a gap of spaces only keeps the comment in the column it occupied while the new value leaves
+ * room for it, and shrinks to one space otherwise, so a hand-aligned annotation block stays aligned.
+ */
 function rewriteKeyLine(line: string, key: KeyLine, scalar: string): string {
   const head = `${' '.repeat(key.lead)}${key.dash ? '- ' : ''}${key.key}: ${scalar}`;
   const commentIndex = inlineCommentIndex(key.rest);
   if (commentIndex < 0) return head;
+  const written = /[ \t]*$/.exec(key.rest.slice(0, commentIndex))![0];
+  if (written.includes('\t')) return head + written + key.rest.slice(commentIndex);
   const column = key.indent + key.key.length + 1 + commentIndex;
   const gap = column > head.length ? ' '.repeat(column - head.length) : ' ';
   return head + gap + key.rest.slice(commentIndex);

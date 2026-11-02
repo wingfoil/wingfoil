@@ -10,7 +10,7 @@
 # test/docs/llms-txt.test.ts fails when a listed path does not exist, when llms.txt differs from its render, or when
 # an llms entry is not part of the site (dl-116). Owned by user-docs' align-user-docs phase (its `produces:`): after
 # editing this file, regenerate llms.txt with `node scripts/build-site.cjs llms`.
-version: 1.2                     # 1.1 dl-128 items 3–4 (task-246): + docs/comparison.md and docs/case-study.md, as pages and in the Optional llms section; 1.2 dl-112 Q3 (i), dl-131 (task-289): the summary states determinism as the goal the Determinism Index measures
+version: 1.3                     # 1.1 dl-128 items 3–4 (task-246): + docs/comparison.md and docs/case-study.md, as pages and in the Optional llms section; 1.2 dl-112 Q3 (i), dl-131 (task-289): the summary states determinism as the goal the Determinism Index measures; 1.3 bug-432 (task-322): the case study's about names the four reports
 title: WingFoil
 summary: "A structured harness for AI-assisted software development, built to make it deterministic, a goal it measures: it keeps a project's memory, DNA, directives and workflows in git, and serves them to humans and AI agents through a CLI and an MCP server."
 
@@ -61,7 +61,7 @@ llms:
         about: "WingFoil beside agent-rule files, spec-driven development tools, coding agents and IDEs, each fact about another tool with its source and the date it was read."
       - title: "Case study: WingFoil develops WingFoil"
         path: docs/case-study.md
-        about: "How this repository governs itself with WingFoil, and the release-health figures measured at v0.1 and v0.2, with what is not measurable yet."
+        about: "How this repository governs itself with WingFoil, and the release-health figures measured at v0.1, v0.2, v0.3 and v0.3.1, with what is not measurable yet."
       - title: Changelog
         path: CHANGELOG.md
         about: "Release notes, one section per published version."

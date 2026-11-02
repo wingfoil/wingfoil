@@ -54,16 +54,22 @@ export function readNextAtHead(root: string, ref: string | undefined): CoreResul
 /**
  * §3.2 step 1: the frontier step `key` names — `NextResult.next` or one of the further ready steps — else,
  * without `key`, `NextResult.next`. No open instance, or an empty frontier without `key`, is `NO_NEXT_STEP`;
- * a `key` that is not on the selected instance's frontier is `spec-017` §10's `CONFLICT`.
+ * a `key` that is not on the selected instance's frontier is `spec-017` §10's `CONFLICT`, its `details.frontier`
+ * the frontier's keys in frontier order (task-330, `bug-340`).
  */
 export function selectFrontierStep(next: NextResult, key: string | undefined): CoreResult<Step> {
   const noNextStep = coreErr({ code: 'NOT_FOUND', message: NO_NEXT_STEP_MESSAGE });
   if (next.instance === null) return noNextStep;
   if (key === undefined) return next.next === null ? noNextStep : coreOk(next.next);
-  const found = [...(next.next === null ? [] : [next.next]), ...next.more].find((step) => step.key === key);
+  const frontier = [...(next.next === null ? [] : [next.next]), ...next.more];
+  const found = frontier.find((step) => step.key === key);
   if (found !== undefined) return coreOk(found);
   const instance = next.instance.id;
-  return coreErr({ code: 'CONFLICT', message: `step '${key}' is not on the frontier of ${instance}`, details: { step: key, instance } });
+  return coreErr({
+    code: 'CONFLICT',
+    message: `step '${key}' is not on the frontier of ${instance}`,
+    details: { step: key, instance, frontier: frontier.map((step) => step.key) },
+  });
 }
 
 /**

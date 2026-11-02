@@ -88,3 +88,20 @@ Feature: P1.13 (US-0A-04) - Memory Element Schema (memory.yaml)
     Then the command exits 1
     And the error message is "WIP limit reached for 'in-progress' on type 'card' (limit 1): held by card-003. Move one of them out of 'in-progress', then retry. The holders are counted at HEAD and on every local and remote-tracking branch that changed them since it forked from HEAD, so the count depends on which refs were last fetched; a holder another branch records is moved out on that branch."
     And nothing is written
+
+  # bug-360 (REQ-SEC-06), added by task-313 (approver design gate 2026-10-30, D6 (b)): a type's `path` is one
+  # relative path, refused at load when it holds a `..` segment or is absolute, so no `memory add` can be
+  # pointed out of the folder the pattern names.
+
+  Scenario: Error - a type path that holds a '..' segment or is absolute is refused at load
+    Given ".wingfoil/memory.yaml" defines type "bug" with path "docs/memory/bug/../../outside/{id}.md"
+    When the schema is validated
+    Then validation fails, at "types.bug.path"
+    And the error message is:
+      """
+      path "docs/memory/bug/../../outside/{id}.md" holds a '.' or '..' segment
+      """
+    And with path "/tmp/abs/{id}.md" instead, validation fails at "types.bug.path" with the error message:
+      """
+      path "/tmp/abs/{id}.md" must be a relative path
+      """

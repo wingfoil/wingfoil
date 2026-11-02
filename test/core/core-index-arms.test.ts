@@ -4,12 +4,13 @@
  * `directive create`, `directive remove` and `memory add` live with their siblings in
  * `write-guard-committed-paths.test.ts`; the arms here are the rest:
  *
- * - `loadOrError` re-throws a loader failure that is neither a `ValidationError` nor `ENOENT`
- *   (spec-006 §2: only expected domain failures become a `CoreResult`);
+ * - `loadOrError` maps an unreadable configuration file to the `IO` refusal (task-309, `bug-251`); its
+ *   re-throw of a failure that is no expected domain failure is `load-or-error-throw-arm.test.ts`;
  * - `dna remove` called with no options object at all (the MCP Tool's arguments are optional);
  * - `memory add`'s `singleOption` keeps the LAST of a repeated option;
  * - `memory add` re-throws a failure that is neither a `StorageError` nor a `ValidationError`;
- * - `directive remove` returns the inventory loader's refusal for an invalid directive file.
+ * - `directive remove` returns the HEAD inventory loader's refusal for a committed invalid directive file
+ *   (task-311: an uncommitted one no longer decides).
  *
  * Every write lands in a throwaway temp git repo. Deterministic (REQ-SYS-07): fixed fixtures, fixed
  * git identity from the fixture helper, no clock.
@@ -18,7 +19,7 @@ import { execFileSync } from 'node:child_process';
 import { chmodSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { CORE_MODULES, initWingfoilProject, loadDnaYaml } from '../../src/core';
+import { CORE_MODULES, initWingfoilProject, loadDnaYaml, type CoreResult } from '../../src/core';
 import { exitCodeForResult } from '../../src/core/exit-code';
 import type { CoreFn } from '../../src/core/registry';
 import { captureDryRun } from '../../src/storage';
@@ -44,16 +45,19 @@ describe('src/core/index.ts arms with no other test (task-189, bug-161)', () => 
   });
   afterEach(() => removeTempDir(repo));
 
-  it('loadOrError: a loader failure that is not an expected domain failure propagates as a throw', async () => {
-    // A directory where `dna.yaml` should be: the read fails with EISDIR, which is neither a
-    // `ValidationError` nor ENOENT, so no `CoreResult` describes it.
-    // Pins CURRENT behaviour pending bug-251 (`readConfigFile` maps only ENOENT; the CLI then prints a
-    // bare `EISDIR` naming no file). bug-251's fix must move this test's trigger to another non-domain
-    // error: the arm itself (`refusal === null` -> throw) stays correct for programmer errors.
+  // task-309 (bug-251) moved this pin on purpose: an unreadable `dna.yaml` is now an expected domain
+  // failure (`ConfigFileUnreadableError` → `IO`, exit 1, design gate 2026-10-30, D4), so the EISDIR
+  // trigger reaches the `CoreResult` arm. The throw arm itself (`refusal === null` -> throw), which stays
+  // correct for programmer errors, is pinned by `load-or-error-throw-arm.test.ts`.
+  it('loadOrError: a dna.yaml that is a directory is the IO refusal naming the file, exit 1 (bug-251)', async () => {
     rmSync(join(repo, '.wingfoil', 'dna.yaml'));
     mkdirSync(join(repo, '.wingfoil', 'dna.yaml'));
 
-    await expect(op('dna', 'dnaShow')({ root: repo })).rejects.toMatchObject({ code: 'EISDIR' });
+    const result = (await op('dna', 'dnaShow')({ root: repo })) as CoreResult<unknown>;
+
+    expect(result.ok).toBe(false);
+    expect(result.ok === false && result.error).toEqual({ code: 'IO', message: '.wingfoil/dna.yaml is a directory, not a file' });
+    expect(exitCodeForResult(result)).toBe(1);
   });
 
   it('dna remove with no options object removes an optional leaf (the MCP Tool may send no options)', async () => {
@@ -110,10 +114,15 @@ describe('src/core/index.ts arms with no other test (task-189, bug-161)', () => 
     expect(execFileSync('git', ['-C', repo, 'status', '--porcelain'], { encoding: 'utf-8' })).toBe('');
   });
 
-  it('directive remove: an invalid directive file is the inventory loader\'s VALIDATION refusal', async () => {
+  // task-311 (bug-108, dl-080 (B)) rewrote this pin on purpose: `directive remove` now resolves the
+  // directive at HEAD, so the file that decides the refusal is the COMMITTED one, named at its revision,
+  // and an uncommitted invalid file no longer refuses anything (the working tree only words a refusal).
+  it('directive remove: a COMMITTED invalid directive file is the HEAD inventory loader\'s VALIDATION refusal', async () => {
     // A file the loader cannot skip: it reads fine but carries no frontmatter, so the whole pillar is
     // refused (loaders.ts `parseDirectiveFile`) before the name is looked up.
     writeFileSync(join(repo, '.wingfoil', 'directives', 'custom', 'broken.md'), 'no frontmatter here\n', 'utf-8');
+    execFileSync('git', ['-C', repo, 'add', '--', '.wingfoil/directives/custom/broken.md']);
+    execFileSync('git', ['-C', repo, 'commit', '--quiet', '-m', 'fixture: commit a directive with no frontmatter']);
 
     const result = await op('directive', 'directiveRemove')({ root: repo, positional: 'anything' });
 
@@ -121,5 +130,17 @@ describe('src/core/index.ts arms with no other test (task-189, bug-161)', () => 
     expect(exitCodeForResult(result)).toBe(1);
     expect(result.ok === false && result.error.code).toBe('VALIDATION');
     expect(result.ok === false && result.error.message).toContain('E_MISSING_FRONTMATTER');
+    expect(result.ok === false && result.error.message).toContain('HEAD:.wingfoil/directives/custom/broken.md');
+  });
+
+  it('directive remove: an UNCOMMITTED invalid directive file no longer decides — the name is unknown at HEAD', async () => {
+    writeFileSync(join(repo, '.wingfoil', 'directives', 'custom', 'broken.md'), 'no frontmatter here\n', 'utf-8');
+
+    const result = await op('directive', 'directiveRemove')({ root: repo, positional: 'anything' });
+
+    expect(result.ok).toBe(false);
+    expect(exitCodeForResult(result)).toBe(1);
+    expect(result.ok === false && result.error.code).toBe('NOT_FOUND');
+    expect(result.ok === false && result.error.message).toBe('unknown directive: anything');
   });
 });

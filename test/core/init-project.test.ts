@@ -17,6 +17,7 @@ import {
   WINGFOIL_ALREADY_INITIALIZED,
   initWingfoilProject,
 } from '../../src/core/init';
+import { initProjectCommitMessage, resolveTemplate, type TemplateDefinition } from '../../src/storage/templates';
 import { makeTempGitRepo, removeTempDir } from '../storage/helpers/git-fixture';
 import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
 
@@ -57,6 +58,14 @@ describe('initWingfoilProject — success (P5.1.1 AC (a))', () => {
       encoding: 'utf-8',
     }).trim();
     expect(count).toBe('1');
+  });
+
+  it('task-321 AC 2 (bug-409): the init commit subject is the plain sentence, with no internal feature id', () => {
+    repo = makeTempGitRepo();
+    initWingfoilProject(repo, 'Scrum');
+    const subject = execFileSync('git', ['-C', repo, 'log', '--format=%s', '-1'], { encoding: 'utf-8' }).trim();
+    expect(subject).toBe(initProjectCommitMessage(resolveTemplate('Scrum') as TemplateDefinition));
+    expect(subject).toBe('chore(wingfoil): initialize .wingfoil/ with the Scrum template');
   });
 });
 

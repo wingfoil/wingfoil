@@ -3,12 +3,8 @@
  * error's code and file (and path), as the pre-task `ValidationError` reason did. Runs the compiled
  * `dist/cli.js` (built once by jest's globalSetup, bug-003) in a fixture repository.
  */
-import { spawnSync } from 'child_process';
-import { join } from 'path';
-
 import { commitAll, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
-
-const CLI = join(__dirname, '..', '..', 'dist', 'cli.js');
+import { runCliEntry } from './helpers/spawn-cli';
 
 describe('`wingfoil workflow list` — a spec-003 error names its code and file', () => {
   let repo: string;
@@ -23,7 +19,7 @@ describe('`wingfoil workflow list` — a spec-003 error names its code and file'
   afterEach(() => removeTempDir(repo));
 
   it('console: exit 1, stderr carries the code, the path and the file', () => {
-    const result = spawnSync(process.execPath, [CLI, 'workflow', 'list'], { cwd: repo, encoding: 'utf8' });
+    const result = runCliEntry(repo, ['workflow', 'list']);
     expect(result.status).toBe(1);
     expect(result.stderr).toContain('E_VALIDATION');
     expect(result.stderr).toContain('phases[0].name');
@@ -31,7 +27,7 @@ describe('`wingfoil workflow list` — a spec-003 error names its code and file'
   });
 
   it('json: the `error` reason carries the same', () => {
-    const result = spawnSync(process.execPath, [CLI, 'workflow', 'list', '--format', 'json'], { cwd: repo, encoding: 'utf8' });
+    const result = runCliEntry(repo, ['workflow', 'list', '--format', 'json']);
     expect(result.status).toBe(1);
     const { error } = JSON.parse(result.stderr) as { error: string };
     expect(error).toMatch(/^E_VALIDATION phases\[0\]\.name \(workflows\/custom\/bad\.yaml\): /);
@@ -41,7 +37,7 @@ describe('`wingfoil workflow list` — a spec-003 error names its code and file'
     // A second error after bad.yaml's: an include of a file that does not exist.
     writeFixtureFile(repo, '.wingfoil/workflows.yaml', 'version: 1.0\ninclude:\n  - workflows/custom/main.yaml\n  - workflows/custom/bad.yaml\n  - workflows/custom/missing.yaml\n');
     commitAll(repo, 'include a missing file');
-    const result = spawnSync(process.execPath, [CLI, 'workflow', 'list', '--format', 'json'], { cwd: repo, encoding: 'utf8' });
+    const result = runCliEntry(repo, ['workflow', 'list', '--format', 'json']);
     expect(result.status).toBe(1);
     const { error, details } = JSON.parse(result.stderr) as { error: string; details?: { detail?: string; file?: string }[] };
     // spec-003 order puts the manifest's missing include first: it is the reason …
@@ -55,7 +51,7 @@ describe('`wingfoil workflow list` — a spec-003 error names its code and file'
   it('console: the further diagnostic is an indented detail line after the reason', () => {
     writeFixtureFile(repo, '.wingfoil/workflows.yaml', 'version: 1.0\ninclude:\n  - workflows/custom/main.yaml\n  - workflows/custom/bad.yaml\n  - workflows/custom/missing.yaml\n');
     commitAll(repo, 'include a missing file');
-    const result = spawnSync(process.execPath, [CLI, 'workflow', 'list'], { cwd: repo, encoding: 'utf8' });
+    const result = runCliEntry(repo, ['workflow', 'list']);
     expect(result.status).toBe(1);
     const lines = result.stderr.split('\n').filter(Boolean);
     expect(lines[0]).toMatch(/^error: E_WORKFLOW_FILE_NOT_FOUND /);

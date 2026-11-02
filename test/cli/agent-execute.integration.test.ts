@@ -18,7 +18,6 @@
  * - the MCP pre-flight passes against the running build while the project's own `.mcp.json` registers a
  *   `wingfoil` server that cannot start, and the file is left byte for byte as it was (§2.5).
  */
-import { spawnSync } from 'node:child_process';
 import { mkdtempSync, readdirSync, readFileSync, rmSync, unlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -26,11 +25,11 @@ import { join } from 'node:path';
 import { git, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
 import { BUG_ID, DNA_YAML, manifest, ROLES_YAML, seed, TASK_ID, TASK_REF } from '../agent/helpers/agent-execute-fixture';
 import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
-import { CLI_ENTRY } from './helpers/spawn-cli';
+import { CLI_ENTRY, spawnCapture } from './helpers/spawn-cli';
 
 
 interface Run {
-  readonly status: number | null;
+  readonly status: number;
   readonly stdout: string;
   readonly stderr: string;
   /** What the run left in its own temporary directory. */
@@ -56,12 +55,10 @@ function execute(repo: string, args: readonly string[], env: Record<string, stri
   scratch.push(tmp);
   // The identity variables are the test's to give: an ambient GIT_AUTHOR_* would hide a missing identity.
   const inherited = Object.fromEntries(Object.entries(process.env).filter(([name]) => !/^GIT_(AUTHOR|COMMITTER)_/.test(name)));
-  const run = spawnSync(process.execPath, [CLI_ENTRY, 'agent', 'execute', ...args], {
+  const run = spawnCapture(process.execPath, [CLI_ENTRY, 'agent', 'execute', ...args], {
     cwd: repo,
-    encoding: 'utf-8',
     env: { ...inherited, TMPDIR: tmp, TMP: tmp, TEMP: tmp, ...env },
   });
-  if (run.error) throw run.error;
   return { status: run.status, stdout: run.stdout, stderr: run.stderr, leftInTmp: readdirSync(tmp) };
 }
 

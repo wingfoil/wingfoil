@@ -46,6 +46,9 @@ function diagnosticsOf(root: string): { error: ValidationError; diagnostics: Dia
 
 const MAIN = 'name: main\nkind: main\nphases:\n  - name: go\n';
 
+/** task-325 (bug-394): the pointer a path-shaped include carries, in the approver's wording (design gate D4). */
+const UPGRADE_POINTER = "see 'Upgrading from 0.2.x' in the WingFoil user guide (docs/user-guide.md in the repository)";
+
 describe('spec-003 § Diagnostics — each loader row owned by task-136 fires on a minimal fixture', () => {
   let repo: string;
   beforeEach(() => {
@@ -200,7 +203,7 @@ describe('spec-003 § Diagnostics — each loader row owned by task-136 fires on
         severity: 'error',
         file: 'workflows/custom/main.yaml',
         path: 'phases[0].include',
-        message: "include 'workflows/custom/loop.yaml' names no loaded workflow (a phase include is a workflow name, not a file path)",
+        message: `include 'workflows/custom/loop.yaml' names no loaded workflow (a phase include is a workflow name, not a file path): write 'include: loop'; ${UPGRADE_POINTER}`,
       },
     ]);
   });
@@ -217,6 +220,99 @@ describe('spec-003 § Diagnostics — each loader row owned by task-136 fires on
         message: "include 'ghost' names no loaded workflow",
       },
     ]);
+  });
+
+  /**
+   * task-325 (bug-394), red-first: a 0.2.x project's include names a file path. The fixture is the real
+   * scaffold of the template, with the `include:` line of `sw-life-cycle.yaml` rewritten to the 0.2.x path.
+   */
+  describe.each([
+    ['Scrum', 'scrum-delivery'],
+    ['Kanban', 'kanban-delivery'],
+  ])('task-325 — the %s scaffold, include rewritten', (templateName, delivery) => {
+    const LIFE_CYCLE = '.wingfoil/workflows/custom/sw-life-cycle.yaml';
+
+    function scaffoldWithInclude(value: string): void {
+      for (const file of templateScaffold(resolveTemplate(templateName)!)) {
+        const content =
+          file.path === LIFE_CYCLE
+            ? file.content.replace(`include: ${delivery}\n`, `include: ${value}\n`)
+            : file.content;
+        if (file.path === LIFE_CYCLE) expect(content).toContain(`include: ${value}\n`);
+        writeFixtureFile(repo, file.path, content);
+      }
+    }
+    function diagnostic(message: string): Diag {
+      return {
+        code: 'E_WORKFLOW_INCLUDE_UNRESOLVED',
+        severity: 'error',
+        file: 'workflows/custom/sw-life-cycle.yaml',
+        path: 'phases[2].include',
+        message,
+      };
+    }
+
+    it(`AC — a 0.2.x path to the declared ${delivery}.yaml names the include, the name to write and the upgrade section`, () => {
+      scaffoldWithInclude(`workflows/custom/${delivery}.yaml`);
+      expect(diagnosticsOf(repo).diagnostics).toEqual([
+        diagnostic(
+          `include 'workflows/custom/${delivery}.yaml' names no loaded workflow (a phase include is a workflow name, not a file path): write 'include: ${delivery}'; ${UPGRADE_POINTER}`,
+        ),
+      ]);
+    });
+
+    it('AC — a bare file name with the .yaml suffix is path-shaped: the same name and pointer', () => {
+      scaffoldWithInclude(`${delivery}.yaml`);
+      expect(diagnosticsOf(repo).diagnostics).toEqual([
+        diagnostic(
+          `include '${delivery}.yaml' names no loaded workflow (a phase include is a workflow name, not a file path): write 'include: ${delivery}'; ${UPGRADE_POINTER}`,
+        ),
+      ]);
+    });
+
+    it('AC — a path-shaped value with no declared workflow near gets the pointer and no name', () => {
+      scaffoldWithInclude('workflows/custom/ghost.yaml');
+      expect(diagnosticsOf(repo).diagnostics).toEqual([
+        diagnostic(
+          `include 'workflows/custom/ghost.yaml' names no loaded workflow (a phase include is a workflow name, not a file path); ${UPGRADE_POINTER}`,
+        ),
+      ]);
+    });
+
+    it('AC — a name within distance 2 of a declared one names it and carries no upgrade pointer (D3)', () => {
+      scaffoldWithInclude(delivery.slice(0, -1));
+      expect(diagnosticsOf(repo).diagnostics).toEqual([
+        diagnostic(`include '${delivery.slice(0, -1)}' names no loaded workflow: write 'include: ${delivery}'`),
+      ]);
+    });
+
+    it('characterization — a name farther than 2 from every declared workflow stays as it is', () => {
+      scaffoldWithInclude('ghost');
+      expect(diagnosticsOf(repo).diagnostics).toEqual([diagnostic("include 'ghost' names no loaded workflow")]);
+    });
+  });
+
+  describe('task-325 — a tie between two candidates is broken by code-unit order, whatever the manifest order', () => {
+    const SUB = (name: string): string => `name: ${name}\nkind: sub\nphases:\n  - name: p\n`;
+    const INCLUDER = 'name: main\nkind: main\nphases:\n  - name: delivery\n    include: aaa\n';
+    it.each([
+      ['aab before aac', ['aab', 'aac']],
+      ['aac before aab', ['aac', 'aab']],
+    ])('AC — %s in the manifest: the suggestion is aab', (_label, order) => {
+      writeWorkflows(repo, [
+        ['main', INCLUDER],
+        ...order.map((n): [string, string] => [n!, SUB(n!)]),
+      ]);
+      expect(diagnosticsOf(repo).diagnostics).toEqual([
+        {
+          code: 'E_WORKFLOW_INCLUDE_UNRESOLVED',
+          severity: 'error',
+          file: 'workflows/custom/main.yaml',
+          path: 'phases[0].include',
+          message: "include 'aaa' names no loaded workflow: write 'include: aab'",
+        },
+      ]);
+    });
   });
 
   it('E_WORKFLOW_NOT_INCLUDABLE — include of a startable-only workflow (dl-109 K3)', () => {

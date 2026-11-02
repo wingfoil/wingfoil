@@ -452,3 +452,51 @@ describe('loadMemoryYamlAtHead — the Memory config as the repository committed
     expect(() => loadMemoryYamlAtHead(repo)).toThrow(ValidationError);
   });
 });
+
+/**
+ * task-313 AC 1 (`bug-360`; approver design gate 2026-10-30, D1 (a), D3 (a)) — a type `path` holding a `..`
+ * segment is refused by every `memory.yaml` reader, working tree and commit alike, as `E_VALIDATION` naming the
+ * type (`types.bug.path`), the file and the pattern.
+ */
+describe('loadMemoryYaml / loadMemoryYamlAtHead — a type `path` holding a `..` segment (task-313 AC 1, bug-360)', () => {
+  const BAD = `version: 1
+types:
+  bug:
+    path: "docs/memory/bug/../../outside/{id}.md"
+`;
+  let repo: string;
+
+  beforeEach(() => {
+    repo = makeTempGitRepo();
+    writeFixtureFile(repo, '.wingfoil/memory.yaml', BAD);
+  });
+
+  afterEach(() => removeTempDir(repo));
+
+  /** The error `read` throws (the test fails when it returns). */
+  const thrownBy = (read: () => unknown): unknown => {
+    try {
+      read();
+    } catch (error) {
+      return error;
+    }
+    throw new Error('expected the read to throw, it returned');
+  };
+
+  it('red-first: the working-tree read throws E_VALIDATION types.bug.path (.wingfoil/memory.yaml)', () => {
+    const error = thrownBy(() => loadMemoryYaml(repo));
+    expect(error).toBeInstanceOf(ValidationError);
+    expect((error as ValidationError).message).toBe(
+      `E_VALIDATION types.bug.path (.wingfoil/memory.yaml): path "docs/memory/bug/../../outside/{id}.md" holds a '.' or '..' segment`,
+    );
+  });
+
+  it('red-first: the committed read throws the same, labelled HEAD:.wingfoil/memory.yaml', () => {
+    commitAll(repo, 'seed a memory.yaml whose bug path leaves its folder');
+    const error = thrownBy(() => loadMemoryYamlAtHead(repo));
+    expect(error).toBeInstanceOf(ValidationError);
+    expect((error as ValidationError).message).toBe(
+      `E_VALIDATION types.bug.path (HEAD:.wingfoil/memory.yaml): path "docs/memory/bug/../../outside/{id}.md" holds a '.' or '..' segment`,
+    );
+  });
+});

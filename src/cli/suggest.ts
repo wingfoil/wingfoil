@@ -7,35 +7,16 @@
  * candidates, never on their order.
  */
 
-/** The largest edit distance at which a command is still suggested (`spec-008` §1). */
-export const SUGGESTION_MAX_DISTANCE = 2;
+import { closestName, levenshtein } from '../core/closest-name';
 
-/** Levenshtein distance between `a` and `b`: insertions, deletions and substitutions, each costing 1. */
-export function levenshtein(a: string, b: string): number {
-  let previous = Array.from({ length: b.length + 1 }, (_, index) => index);
-  for (let i = 1; i <= a.length; i += 1) {
-    const current = [i];
-    for (let j = 1; j <= b.length; j += 1) {
-      const substitution = previous[j - 1]! + (a[i - 1] === b[j - 1] ? 0 : 1);
-      current.push(Math.min(previous[j]! + 1, current[j - 1]! + 1, substitution));
-    }
-    previous = current;
-  }
-  return previous[b.length]!;
-}
+export { levenshtein };
 
 /**
- * The candidate nearest to `token` within {@link SUGGESTION_MAX_DISTANCE}, or `undefined` when none is
- * that close. A tie goes to the candidate first in code-unit order; the token itself is never suggested.
+ * The command nearest to `token` within the shared matcher's distance, or `undefined` when none is that
+ * close (the shared matcher, `closestName`, which now lives in core).
  */
 export function closestCommand(token: string, candidates: readonly string[]): string | undefined {
-  let best: { name: string; distance: number } | undefined;
-  for (const name of [...new Set(candidates)].sort()) {
-    if (name === token) continue;
-    const distance = levenshtein(token, name);
-    if (distance <= SUGGESTION_MAX_DISTANCE && (best === undefined || distance < best.distance)) best = { name, distance };
-  }
-  return best?.name;
+  return closestName(token, candidates);
 }
 
 /** The `hint:` text for a suggested command, in `spec-005` §3.1's words: `did you mean "<name>"?`. */

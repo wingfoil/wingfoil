@@ -14,10 +14,10 @@
  * exited `0` — the scenario `P5.1.4-cli-ux.feature` states as "an operand beyond the one a command
  * declares is refused".
  *
- * `spawnSync`, not `execFileSync` + `catch` (see `./dirty-target-refusal.integration.test.ts`): stderr
- * is read back even when the exit code is `0`. `dist/` is built once by `test/global-setup.cjs`.
+ * `runCliEntry` (a `spawnSync` underneath), not `execFileSync` + `catch` (see
+ * `./dirty-target-refusal.integration.test.ts`): stderr is read back even when the exit code is `0`.
+ * `dist/` is built once by `test/global-setup.cjs`.
  */
-import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -25,13 +25,7 @@ import { CORE_MODULES } from '../../src/core';
 import { deriveVerb, enumerateOperations } from '../../src/core/registry';
 import { git, makeTempGitRepo, removeTempDir } from '../storage/helpers/git-fixture';
 import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
-
-const CLI = join(__dirname, '..', '..', 'dist', 'cli.js');
-
-function runCli(repo: string, args: readonly string[]): { status: number | null; stdout: string; stderr: string } {
-  const result = spawnSync(process.execPath, [CLI, ...args], { cwd: repo, encoding: 'utf-8' });
-  return { status: result.status, stdout: result.stdout ?? '', stderr: result.stderr ?? '' };
-}
+import { CLI_ENTRY, runCliEntry } from './helpers/spawn-cli';
 
 function statusOf(repo: string, relativePath: string): string {
   return /^status:\s*"?([A-Za-z0-9-]+)"?\s*$/m.exec(readFileSync(join(repo, relativePath), 'utf-8'))?.[1] ?? '';
@@ -54,9 +48,9 @@ describe('an operand beyond the one a command declares is refused at exit 2, bef
   const tasks: { id: string; path: string }[] = [];
 
   beforeAll(() => {
-    expect(existsSync(CLI)).toBe(true);
+    expect(existsSync(CLI_ENTRY)).toBe(true);
     repo = makeTempGitRepo();
-    const init = runCli(repo, ['init', '--template', 'scrum']);
+    const init = runCliEntry(repo, ['init', '--template', 'scrum']);
     if (init.status !== 0) throw new Error(`fixture bug: wingfoil init failed — ${init.stderr}`);
     // The approver role for the fixture identity, as `./fresh-init-transitions.test.ts` grants it.
     const dnaPath = join(repo, '.wingfoil', 'dna.yaml');
@@ -64,10 +58,10 @@ describe('an operand beyond the one a command declares is refused at exit 2, bef
     writeFileSync(dnaPath, readFileSync(dnaPath, 'utf-8').replace('  members: []', member), 'utf-8');
     git(repo, ['commit', '--quiet', '-am', 'configure approver']);
     for (const title of ['First task', 'Second task']) {
-      const added = runCli(repo, ['memory', 'add', '--type', 'task', '--title', title, '--format', 'json']);
+      const added = runCliEntry(repo, ['memory', 'add', '--type', 'task', '--title', title, '--format', 'json']);
       if (added.status !== 0) throw new Error(`fixture bug: memory add failed — ${added.stderr}`);
       const task = JSON.parse(added.stdout) as { id: string; path: string };
-      const submitted = runCli(repo, ['memory', 'submit', task.id]);
+      const submitted = runCliEntry(repo, ['memory', 'submit', task.id]);
       if (submitted.status !== 0) throw new Error(`fixture bug: memory submit failed — ${submitted.stderr}`);
       tasks.push(task);
     }
@@ -81,7 +75,7 @@ describe('an operand beyond the one a command declares is refused at exit 2, bef
     const before = snapshot(repo);
     const unchanged = snapshotPersistence(repo);
 
-    const result = runCli(repo, ['memory', 'approve', first!.id, second!.id, '--reason', 'x']);
+    const result = runCliEntry(repo, ['memory', 'approve', first!.id, second!.id, '--reason', 'x']);
 
     expect(result.status).toBe(2);
     expect(result.stderr).toBe('error: wingfoil memory approve takes one positional <id> (got 2 positionals)\n');
@@ -93,9 +87,9 @@ describe('an operand beyond the one a command declares is refused at exit 2, bef
   });
 
   it('`workflow list x` and `directives list developer` exit 2 (bug-131)', () => {
-    const workflow = runCli(repo, ['workflow', 'list', 'sw-life-cycle']);
+    const workflow = runCliEntry(repo, ['workflow', 'list', 'sw-life-cycle']);
     expect([workflow.status, workflow.stderr]).toEqual([2, 'error: wingfoil workflow list takes no positional (got 1 positional)\n']);
-    const directives = runCli(repo, ['directives', 'list', 'developer']);
+    const directives = runCliEntry(repo, ['directives', 'list', 'developer']);
     expect([directives.status, directives.stderr]).toEqual([2, 'error: wingfoil directives list takes no positional (got 1 positional)\n']);
   });
 
@@ -109,7 +103,7 @@ describe('an operand beyond the one a command declares is refused at exit 2, bef
       const before = snapshot(repo);
       const unchanged = snapshotPersistence(repo);
 
-      const result = runCli(repo, args);
+      const result = runCliEntry(repo, args);
 
       expect(result.status).toBe(2);
       expect(result.stderr).toContain(`wingfoil ${name} takes `);
@@ -127,7 +121,7 @@ describe('an operand beyond the one a command declares is refused at exit 2, bef
     const before = snapshot(repo);
     const unchanged = snapshotPersistence(repo);
 
-    const result = runCli(repo, [name, 'extra']);
+    const result = runCliEntry(repo, [name, 'extra']);
 
     expect(result.status).toBe(2);
     expect(result.stderr).toBe(`error: wingfoil ${name} takes no positional (got 1 positional)\n`);
@@ -136,7 +130,7 @@ describe('an operand beyond the one a command declares is refused at exit 2, bef
   });
 
   it('`dna set`\'s migration message is unchanged (characterization)', () => {
-    const result = runCli(repo, ['dna', 'set', 'project.name', 'bogus', '--value', 'y']);
+    const result = runCliEntry(repo, ['dna', 'set', 'project.name', 'bogus', '--value', 'y']);
     expect([result.status, result.stderr]).toEqual([
       2,
       'error: wingfoil dna set takes one positional <path>; the value travels in --value (got 2 positionals)\n',
@@ -147,7 +141,7 @@ describe('an operand beyond the one a command declares is refused at exit 2, bef
     // Until task-179 the DNA path verbs refused the surplus themselves, after their path check, so this
     // reported `invalid key path`; `P2.1-dna-set.feature` now writes the malformed-path case with
     // `--value` (`test/cli/operand-error-shape.integration.test.ts`).
-    const result = runCli(repo, ['dna', 'set', '..language', 'python']);
+    const result = runCliEntry(repo, ['dna', 'set', '..language', 'python']);
     expect([result.status, result.stderr]).toEqual([
       2,
       'error: wingfoil dna set takes one positional <path>; the value travels in --value (got 2 positionals)\n',

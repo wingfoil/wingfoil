@@ -6,7 +6,8 @@
 #       commit of the range against the subject, bracket, body, authority and state rules, plus the
 #       later checks — verb ↔ edge pairing (bug-192), status changes outside a wf() operation (dl-139),
 #       a supersedes: pair left half-done (bug-218), config versions over the range (bug-249) and AI
-#       co-author trailers on approve/reject (bug-307). Exit 1 on a finding after a rule's introduction
+#       co-author trailers on approve/reject (bug-307), an Approver: line on a workflow: finalize, adopt
+#       or rekey record (bug-444) and a WingFoil-* trailer outside the final paragraph (bug-391). Exit 1 on a finding after a rule's introduction
 #       fails the run; history before it is reported only (dl-103 §1 starting mode, per check).
 #     - `node scripts/lint-claims.cjs --base "$BASE" --format github` (dl-097 §2 (b)): the claim-shape
 #       lint over the Memory documents the range changed, as `::warning` annotations. Warn-only by its own

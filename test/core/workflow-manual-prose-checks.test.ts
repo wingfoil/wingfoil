@@ -90,7 +90,7 @@ const UNBOUND_NAMES = [
   'advertised channel set == EXPECTED_CHANNELS, every advertised list answers, every listed Resource reads and Prompt gets except a declared KNOWN_READ_FAILURES entry, on the pinned build and the build under development',
   'all bugs where tags=[{release.version}] are status',
   'phase-branch-merged-to-integration-branch',
-  'staged version approved on npm, live on the npm registry, its GitHub Release created with the test reports attached and its MCP Registry listing published',
+  'staged version approved on npm, installable from the npm registry once its tarball answers HTTP 200, its GitHub Release created with the test reports attached and its MCP Registry listing published',
   'every catalogue metric has a value or an explicit not-measurable reason',
   'every regressed metric and every breached floor has a finding',
   "every finding is tracked by an element or carries an RH proposal in the report's Proposals section",

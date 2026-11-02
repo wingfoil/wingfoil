@@ -39,6 +39,7 @@ export {
   runLogDirPrefix,
   runLogPreflight,
   serializeRunRecord,
+  W_RUN_LOG_SYMLINK,
 } from './run-log';
 export type {
   DeriveNotesFieldInput,

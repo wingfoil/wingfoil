@@ -49,6 +49,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 import { checkReleaseTag } from '../../scripts/check-release-tag.cjs';
+import { withoutCallerNpmConfig } from './helpers/npm-env';
 
 const REPO_ROOT = join(__dirname, '..', '..');
 const PKG_PATH = join(REPO_ROOT, 'package.json');
@@ -111,6 +112,7 @@ function packedPaths(): readonly string[] {
     const raw = execFileSync('npm', ['pack', '--dry-run', '--json', '--ignore-scripts'], {
       cwd: REPO_ROOT,
       encoding: 'utf-8',
+      env: withoutCallerNpmConfig(process.env),
     });
     const [result] = JSON.parse(raw) as PackResult[];
     cachedPackedPaths = (result?.files ?? []).map((f) => f.path);

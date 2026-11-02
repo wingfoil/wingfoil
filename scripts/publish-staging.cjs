@@ -35,7 +35,8 @@
  * line is the success line for `package.json`'s `name@version` and its smoke checked the stamp's commit
  * (`--expect-commit`), printing that commit — the candidate; exit 1 otherwise, the reason on stderr. It is
  * strict (task-282, `bug-311`): a line recording a failure (`FAIL`, `FAILED`), a `--version` line for another
- * stamp, or two distinct commits fail it.
+ * stamp, or two distinct commits fail it, and so (task-326, `bug-382`) does any non-empty line without the
+ * `[publish:staging] ` prefix.
  *
  * `--check-evidence-only <path> --evidence <prefix/> […]` (task-282, `bug-312`) is `release-publishing.tag`'s
  * `evidence-only-since-candidate` pre-check: the transcript must pass as above, the commit it names must be
@@ -248,7 +249,9 @@ const FAILURE_RE = /\bFAIL(?:ED)?\b/;
 /**
  * `--check-transcript` (task-219, `dl-099` §1–§2; strict since task-282, `bug-311`): whether a rehearsal
  * transcript proves the candidate. It passes only when its closing line is {@link stagingPassedLine} for
- * `name@version`, no line records a failure (`FAIL`, `FAILED`), every `--version` check line names this
+ * `name@version`, every non-empty line starts with {@link LOG_PREFIX} (task-326, `bug-382`: a run writes
+ * none else, so an unprefixed line comes from an edited or foreign transcript; whitespace-only lines and CRLF
+ * line ends still pass), no line records a failure (`FAIL`, `FAILED`), every `--version` check line names this
  * version and a full sha, and all of them name the same sha — the run had `--expect-commit`, and smoked one
  * commit. That commit is the candidate the rehearsal proved, and the one `tag` tags. A line number in a
  * reason is the 1-based line of the transcript.
@@ -266,6 +269,10 @@ function checkTranscript(text, pkg) {
   const closing = lines[lines.length - 1]?.line ?? '';
   if (closing !== expected) {
     return { ok: false, reason: `the closing line is not "${expected}": got "${closing}"` };
+  }
+  const unprefixed = lines.find(({ line }) => !line.startsWith(LOG_PREFIX));
+  if (unprefixed !== undefined) {
+    return { ok: false, reason: `line ${unprefixed.number} does not start with "${LOG_PREFIX}": "${unprefixed.line}"` };
   }
   const failure = lines.find(({ line }) => FAILURE_RE.test(line));
   if (failure !== undefined) return { ok: false, reason: `line ${failure.number} records a failure: "${failure.line}"` };

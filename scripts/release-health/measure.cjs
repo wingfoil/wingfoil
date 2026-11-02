@@ -38,14 +38,20 @@
  * pipeline's pinned Node (`.github/workflows/publish.yml` `env.NODE_VERSION` at the point); with another, its seven
  * metrics are `not-measurable` naming both versions, unless `--any-node`, which measures and records `node` and
  * `node_pinned` in each entry's `raw`. To run under the pinned Node, start the script with it, e.g.
- * `n -d exec 22.12.0 node scripts/release-health/measure.cjs --release <vX.Y[.Z]>` (that Node and its npm first on
- * `PATH`; `-d` downloads the version when it is not cached, and without it `n` refuses an uncached one) or
- * `npx -p node@22.12.0 node scripts/release-health/measure.cjs --release <vX.Y[.Z]>` (npx installs the `node` package
- * when it is missing). A tool that cannot run, is killed, or leaves an output the reader cannot parse makes its
- * metric `not-measurable` with the reason, never a zero; so does an exit of a Q01 script that means its tool itself
- * failed (a shell's 126/127, eslint's 2). A check that runs and fails is a measured failure. A failure's reason is
- * npm's `npm error code …` line when there is one, never npm's pointer to its dated debug log, and it names paths
- * relative to the worktree, never the worktree's random temporary path.
+ * `N_PREFIX=<writable-dir> n -d exec 22.12.0 node scripts/release-health/measure.cjs --release <vX.Y[.Z]>` (that Node
+ * and its npm first on `PATH`; `-d` downloads the version when it is not cached, and without it `n` refuses an uncached
+ * one; `n` caches under `N_PREFIX`, default `/usr/local`, so where that is root-owned `N_PREFIX` names a directory you
+ * can write, bug-407) or `npx -p node@22.12.0 node scripts/release-health/measure.cjs --release <vX.Y[.Z]>` (npx
+ * installs the `node` package when it is missing). Every tool runs without the latency opt-ins, git's repository
+ * overrides and jest's agent variables (bug-385), so its output does not depend on who launches the run. A tool that
+ * cannot run, is killed, or leaves an output the reader cannot parse makes its metric `not-measurable` with the
+ * reason, never a zero; so does an exit of a Q01 script that means its tool itself failed (a shell's 126/127, eslint's
+ * 2). A check that runs and fails is a measured failure. A failure's reason is npm's `npm error code …` line when
+ * there is one, never npm's pointer to its dated debug log, followed, when npm names the lifecycle script that failed,
+ * by ` (script <event>: <command>)`, or ` (script: <command>)` when npm prints no banner for it (a dependency's
+ * script; bug-357) — a script only when npm's output carries its `npm error command failed` line, so a failing git
+ * dependency's `npm error command git …` adds nothing; it names paths relative to the worktree, never the worktree's
+ * random temporary path.
  * - Q01 `npm run build`, `npm run typecheck`, `npm run lint`, all three run: `true` when each exits 0;
  * - Q02 `npm test -- --json --outputFile=…`: jest's counts; disabled = skipped + todo; failing = failed tests plus
  *   suites that failed to run, each named;
@@ -93,7 +99,7 @@
  * - Q13, Q20 compare each bug at the point with the document of the same name at the previous point: added = absent
  *   then; closed = `closed` now and not then; terminal = `closed` or `deprecated` now and not then; open = neither;
  * - Q14 the age runs from the oldest `wf(decision-log): add` naming the id (else the oldest commit adding the file at
- *   its path) to the point, in days of commit time;
+ *   its path, following its renames with `--follow`, bug-357) to the point, in days of commit time;
  * - Q15 a bug added in the window is judged on the non-merge, non-`wf()` commits citing both its id and the id of a
  *   task whose `bug:` names it (a bug absorbed by a feature task is judged on its own commits, not the feature's);
  *   with no such commit it is unclassified; a changed line under `paths.sources` that is blank or starts a comment
@@ -1126,8 +1132,16 @@ const LATENCY_BUDGET_MS = 1000;
 /** Q01's commands, in the order they run. */
 const Q01_SCRIPTS = Object.freeze(['build', 'typecheck', 'lint']);
 const COVERAGE_KINDS = Object.freeze(['statements', 'branches', 'functions', 'lines']);
-/** Variables a tool must not inherit: the latency opt-ins (set per command) and git's repository overrides. */
-const TOOL_ENV_DROPPED = Object.freeze(['WINGFOIL_LATENCY', 'WINGFOIL_LATENCY_REPORT', 'GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_COMMON_DIR']);
+/**
+ * Variables a tool must not inherit: the latency opt-ins (set per command), git's repository overrides, and jest's
+ * `AGENT_ENV_VARS` (`@jest/core`; bug-385, approver ruling D5), with one of which jest 30 swaps its reporter for its
+ * agent reporter, so a run's tools would answer differently depending on who launches it.
+ */
+const TOOL_ENV_DROPPED = Object.freeze([
+  'WINGFOIL_LATENCY', 'WINGFOIL_LATENCY_REPORT', 'GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_COMMON_DIR',
+  'AI_AGENT', 'AUGMENT_AGENT', 'CLAUDE_CODE', 'CLAUDECODE', 'CODEX_SANDBOX', 'CODEX_THREAD_ID', 'CURSOR_AGENT', 'GEMINI_CLI',
+  'GOOSE_PROVIDER', 'OPENCODE', 'REPL_ID',
+]);
 const USER_DOCS = Object.freeze(['docs/user-guide.md', 'README.md']);
 const PUBLISH_WORKFLOW = '.github/workflows/publish.yml';
 
@@ -1232,12 +1246,39 @@ function toolError(label, result, name = '*') {
   return codes.includes(result.status) ? `${label} exited ${result.status}, which means the tool itself could not run` : null;
 }
 
-/** Why a command failed: did not run, or exited non-zero (with its last error line). */
+/** npm's line naming the command that failed (`npm error command sh -c <command>`); `command failed` is not one. */
+const NPM_COMMAND_RE = /^npm (?:error|ERR!) command (?!failed$)(?:sh -c )?(.+)$/;
+/** npm's marker of a failed lifecycle script: without it, a `command` line is another program's (a git dependency's). */
+const NPM_COMMAND_FAILED_RE = /^npm (?:error|ERR!) command failed$/;
+
+/**
+ * The lifecycle script an npm failure names (bug-357 (a), approver ruling D4): ` (script <event>: <command>)`, the event
+ * read from the last banner of stdout (`> <name>@<version> <event>` then `> <command>`) whose command is the failing
+ * one, else ` (script: <command>)` (a dependency's script prints no banner); `''` when npm names no script. A command
+ * counts as a script only when the output carries npm's `npm error command failed` line, which npm prints for a failed
+ * lifecycle script alone: a failing git dependency's `npm error command git …` names git, not a script.
+ */
+function npmScript(result) {
+  const lines = (text) => String(text).split('\n').map((line) => line.trim());
+  const all = [...lines(result.stderr), ...lines(result.stdout)];
+  if (!all.some((line) => NPM_COMMAND_FAILED_RE.test(line))) return '';
+  const command = all.map((line) => NPM_COMMAND_RE.exec(line)).find((match) => match !== null)?.[1];
+  if (command === undefined) return '';
+  const out = lines(result.stdout);
+  let event = null;
+  for (let i = 0; i + 1 < out.length; i++) {
+    const banner = /^> \S+@\S+ (\S+)$/.exec(out[i]);
+    if (banner !== null && out[i + 1] === `> ${command}`) event = banner[1];
+  }
+  return event === null ? ` (script: ${command})` : ` (script ${event}: ${command})`;
+}
+
+/** Why a command failed: did not run, or exited non-zero (with its last error line and, from npm, the failing script). */
 function failure(label, result) {
   const reason = didNotRun(label, result);
   if (reason !== null) return reason;
   const line = reasonLine(result.stderr) || reasonLine(result.stdout);
-  return `${label} failed (exit ${result.status})${line === '' ? '' : `: ${line}`}`;
+  return `${label} failed (exit ${result.status})${line === '' ? '' : `: ${line}`}${npmScript(result)}`;
 }
 
 const readText = (path) => {
@@ -1953,11 +1994,12 @@ function q14(root, point, docs) {
   const log = git(root, ['log', '--no-show-signature', '--format=%H%x00%ct%x00%s', point]).split('\n').filter((line) => line !== '').map((line) => line.split('\0'));
   const pointTime = commitTime(root, point);
   const ages = open.map((d) => {
-    // The oldest `wf(decision-log): add` naming it (moves keep it), else the oldest commit adding the file at its path.
+    // The oldest `wf(decision-log): add` naming it (moves keep it), else the oldest commit adding the file, following
+    // its renames (`--follow`, bug-357 (b)): a file moved with `git mv` is aged from its add, not from the move.
     const adds = log.filter(([, , subject]) => subject.startsWith('wf(decision-log): add ') && subjectIds(subject).includes(d.id));
     let time = adds.length > 0 ? Number(adds[adds.length - 1][1]) : null;
     if (time === null) {
-      const created = git(root, ['log', '--no-show-signature', '--diff-filter=A', '--format=%ct', point, '--', d.path]).split('\n').filter((line) => line !== '');
+      const created = git(root, ['log', '--no-show-signature', '--follow', '--diff-filter=A', '--format=%ct', point, '--', d.path]).split('\n').filter((line) => line !== '');
       time = created.length > 0 ? Number(created[created.length - 1]) : pointTime;
     }
     return round2((pointTime - time) / DAY_SECONDS);

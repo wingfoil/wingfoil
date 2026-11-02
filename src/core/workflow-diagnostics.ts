@@ -10,6 +10,7 @@
  * diagnostics and the order of files are the loader's ({@link workflowFileDiagnostics} is called once
  * per file, in `include` order).
  */
+import { closestName } from './closest-name';
 import type { Diagnostic } from '../validation';
 import {
   BINDINGS_FILE,
@@ -66,6 +67,26 @@ const ELEMENT_COLLECTION = 'element:';
 /** A value that reads as a file path rather than a workflow name — the `bug-144` shape. */
 function looksLikePath(value: string): boolean {
   return value.includes('/') || /\.ya?ml$/.test(value);
+}
+
+/** Where a project written for 0.2.x finds the include rule, named in the message of an unresolved path (`bug-394`). */
+const UPGRADE_POINTER = "see 'Upgrading from 0.2.x' in the WingFoil user guide (docs/user-guide.md in the repository)";
+
+/**
+ * `E_WORKFLOW_INCLUDE_UNRESOLVED`'s message (spec-003 § "Diagnostics", `bug-394`): the include, the declared name to
+ * write when one is exact (the basename of a path) or within distance 2, and, for a path-shaped value, the
+ * upgrade section of the user guide.
+ */
+function unresolvedIncludeMessage(value: string, declared: Iterable<string>): string {
+  const pathShaped = looksLikePath(value);
+  const names = [...declared];
+  const probe = pathShaped ? (value.split('/').pop() ?? value).replace(/\.ya?ml$/, '') : value;
+  const suggestion = names.includes(probe) ? probe : closestName(probe, names);
+  let message = `include '${value}' names no loaded workflow`;
+  if (pathShaped) message += ' (a phase include is a workflow name, not a file path)';
+  if (suggestion !== undefined) message += `: write 'include: ${suggestion}'`;
+  if (pathShaped) message += `; ${UPGRADE_POINTER}`;
+  return message;
 }
 
 function error(file: string, path: string, code: string, message: string): Diagnostic {
@@ -288,9 +309,8 @@ export function workflowFileDiagnostics(
       const target = index.byName.get(phase.include);
       if (target === undefined) {
         if (index.namesComplete) {
-          const hint = looksLikePath(phase.include) ? ' (a phase include is a workflow name, not a file path)' : '';
           out.push(
-            error(file, at('include'), 'E_WORKFLOW_INCLUDE_UNRESOLVED', `include '${phase.include}' names no loaded workflow${hint}`),
+            error(file, at('include'), 'E_WORKFLOW_INCLUDE_UNRESOLVED', unresolvedIncludeMessage(phase.include, index.byName.keys())),
           );
         }
       } else {

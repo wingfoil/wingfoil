@@ -7,7 +7,9 @@
  * The pipeline ({@link agentExecutePipeline}) is §3.3's, in its order, and the first failure stops it:
  *
  * 2. With a step form, `workflow next`'s deduction at `HEAD` first (task-235): its commit is the `HEAD`
- *    every later read takes, and a `spec-003` error in the registry refuses here. Then `dna.yaml` and
+ *    every later read takes, and a `spec-003` error in the registry refuses here. The deduction's
+ *    diagnostics are printed as `warning:` lines, as `agent list` prints them, before any later refusal
+ *    (task-330, `bug-339`). Then `dna.yaml` and
  *    `memory.yaml` at that `HEAD` (the stepless form resolves `HEAD` itself and reads no workflow file);
  *    the adapter tree listed, every entry that is not an adapter printed as a warning (`bug-290`).
  * 3. Resolution (§3.2 steps 1–5): the step ({@link selectFrontierStep}), its workflow and phase; the
@@ -54,10 +56,12 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { readPathAtRev } from '../storage';
 import { formatDiagnostic, ValidationError, type Diagnostic } from '../validation';
 import { reportWarning, withDistinctWarnings } from '../validation/warning';
-import { findMemoryDocumentByTypeAndIdAtRev } from '../memory/query';
+import { ambiguousReferenceError, resolveElementReference } from '../memory/reference';
+import { findMemoryDocumentByTypeAndIdAtRev, loadMemoryDocumentsAtRev } from '../memory/query';
 import { isRoleDefined } from '../dna/roles';
 import type { AgentEntry, DnaYaml } from '../dna/schema';
 import type { MemoryYaml } from '../memory/schema';
+import { diagnosticWarning } from '../core/agent-list';
 import { APPROVER_ROLE } from '../core/approval-authority';
 import { assembleExecutionContext, type ExecutionContextElement } from '../core/context';
 import { requireGitIdentity } from '../core/git-identity';
@@ -448,14 +452,26 @@ function loadCommittedConfig(root: string, sha: string): CoreResult<{ dna: DnaYa
  * §3.2 step 2: the element must exist at `HEAD` → else `NOT_FOUND` `element not found: <type>:<id>`, the
  * documents the scan could not read as `details.unreadable` (task-171) so the refusal does not read as
  * a bare absence. An archived element is found here and refused by the context builder.
+ *
+ * `--element <type>:<ref>` takes a short reference (task-332, `spec-008` §7): a miss of the exact id is retried
+ * as `<type prefix>-<n>` or a unique prefix, among the documents of that type at `HEAD`, archived ones included.
+ * The answer is the element with its FULL id, which the rest of the run (context, run id, log file, record) uses;
+ * several matches are `CONFLICT` with every candidate listed.
  */
-function requireElement(root: string, sha: string, memoryYaml: MemoryYaml, element: ExecutionContextElement): CoreResult<string> {
+function requireElement(root: string, sha: string, memoryYaml: MemoryYaml, element: ExecutionContextElement): CoreResult<{ element: ExecutionContextElement; path: string }> {
   const unreadable: Diagnostic[] = [];
   const found = findMemoryDocumentByTypeAndIdAtRev(root, sha, memoryYaml, element.type, element.id, {
     includeArchived: true,
     onDiagnostic: (diagnostic) => unreadable.push(diagnostic),
   });
-  if (found !== undefined) return coreOk(found.path);
+  if (found !== undefined) return coreOk({ element, path: found.path });
+  const scanned: Diagnostic[] = [];
+  const resolution = resolveElementReference(loadMemoryDocumentsAtRev(root, sha, memoryYaml, { onDiagnostic: (diagnostic) => scanned.push(diagnostic) }), memoryYaml, element.id, {
+    type: element.type,
+  });
+  if (resolution.kind === 'ambiguous') return coreErr(ambiguousReferenceError(element.id, resolution.candidates));
+  if (resolution.kind === 'found') return coreOk({ element: { type: element.type, id: String(resolution.document.frontmatter['id']) }, path: resolution.document.path });
+  for (const diagnostic of scanned) if (!unreadable.some((known) => known.file === diagnostic.file)) unreadable.push(diagnostic);
   return coreErr({
     code: 'NOT_FOUND',
     message: `element not found: ${element.type}:${element.id}`,
@@ -528,6 +544,8 @@ async function runPipeline<T>(
     throw error;
   }
   onHead(sha);
+  // The deduction's diagnostics, as `workflow next` lists them, one `warning:` line each (§3.3 step 2, bug-339).
+  if (deduced?.ok === true) for (const diagnostic of deduced.value.diagnostics) reportWarning(diagnosticWarning(diagnostic));
   const config = loadCommittedConfig(root, sha);
   if (!config.ok) return config;
   const { dna, memoryYaml } = config.value;
@@ -555,9 +573,10 @@ async function runPipeline<T>(
     if (!stepElement.ok) return stepElement;
     target = stepElement.value;
   }
-  const elementRef = `${target.type}:${target.id}`;
   const element = requireElement(root, sha, memoryYaml, target);
   if (!element.ok) return element;
+  target = element.value.element; // the full id, whatever reference `--element` gave
+  const elementRef = `${target.type}:${target.id}`;
   // §3.2 step 3 — the role: `--role`, else the step's, else (stepless) the developer default, with a warning.
   let role: string;
   if (step === undefined) {
@@ -585,7 +604,8 @@ async function runPipeline<T>(
   const identity = requireGitIdentity(root);
   if (!identity.ok) return identity;
 
-  // Step 6 — the run log, declared and unmodified (`paths` is passthrough; `runs` is spec-016 §4.1's).
+  // Step 6 — the run log, declared and unmodified (`runs` is spec-016 §4.1's declared category; `paths`
+  // also admits a project's own categories through its typed catchall, task-312).
   const runs = (dna.paths as Record<string, readonly string[] | undefined> | undefined)?.['runs'];
   const logPath = runLogPreflight(root, runs, target.id);
   if (!logPath.ok) return logPath;
@@ -656,7 +676,7 @@ async function runPipeline<T>(
       adapter: adapter.value,
       stateRef: sha,
       logPath: logPath.value,
-      elementPath: element.value,
+      elementPath: element.value.path,
       templatePath,
       bootstrap,
       mcpServer,

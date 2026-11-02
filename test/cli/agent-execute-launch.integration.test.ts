@@ -16,7 +16,7 @@
  * - AC 7 — the bootstrap carries the attribution line naming the selected `team.agents` entry;
  * - the B3 handover: a `dna.yaml` unknown-field warning is printed once, labelled `HEAD:`.
  */
-import { spawn, spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -25,7 +25,7 @@ import { join } from 'node:path';
 import { git, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
 import { DNA_YAML, seed, TASK_ID, TASK_REF } from '../agent/helpers/agent-execute-fixture';
 import { distBuildStamp } from './helpers/dist-stamp';
-import { CLI_ENTRY } from './helpers/spawn-cli';
+import { CLI_ENTRY, spawnCapture } from './helpers/spawn-cli';
 
 const scratch: string[] = [];
 const repos: string[] = [];
@@ -78,14 +78,16 @@ function fakeEntries(recordFile: string): FakeEntry[] {
     .map((line) => JSON.parse(line) as FakeEntry);
 }
 
-/** Run `agent execute` to completion. */
+/**
+ * Run `agent execute` to completion. `spawnCapture` throws on a child that ends on a signal, so a run
+ * returned here always ended on an exit: its `signal` is `null`.
+ */
 function execute(repo: string, args: readonly string[], env: Record<string, string> = {}): Run {
   const setup = runEnv(env);
-  const run = spawnSync(process.execPath, [CLI_ENTRY, 'agent', 'execute', ...args], { cwd: repo, encoding: 'utf-8', env: setup.env });
-  if (run.error) throw run.error;
+  const run = spawnCapture(process.execPath, [CLI_ENTRY, 'agent', 'execute', ...args], { cwd: repo, env: setup.env });
   return {
     status: run.status,
-    signal: run.signal,
+    signal: null,
     stdout: run.stdout,
     stderr: run.stderr,
     leftInTmp: readdirSync(setup.tmp),

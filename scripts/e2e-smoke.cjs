@@ -42,6 +42,11 @@
  * command's exit code and the commit it writes; the smoke requires its exit 0, its `OK:` line, and those commands
  * in its transcript ({@link JOURNEY_COMMANDS}).
  *
+ * Before the templates, with `--repository <path>` (task-327, `bug-404`; `--candidate` defaults it to this checkout),
+ * the workflow reads run in that repository with the build under test: `workflow list --all`, `workflow show` for
+ * every workflow it names, and `workflow status`, each `--format json`. Each is a check — a non-zero exit, a stdout
+ * that is not JSON or an error diagnostic fails the smoke — and the report states their counts in its own section.
+ *
  * `--report <path>` writes the run as Markdown (`bug-134`: the report `e2e-smoke.yaml`'s gate declares
  * under `produces:`), on a failure too.
  *
@@ -52,6 +57,7 @@
  *   node scripts/e2e-smoke.cjs --candidate [--report PATH]   # the packed candidate, its stamp bound (task-219)
  *   node scripts/e2e-smoke.cjs [--expect-version X.Y.Z [--expect-commit SHA]] [--report PATH]   # `wingfoil` on PATH
  *   node scripts/e2e-smoke.cjs [...] -- node "$PWD/dist/cli.js"
+ *   node scripts/e2e-smoke.cjs --repository "$PWD" [...]   # also read this repository's workflows (task-327)
  * Every step runs inside a throwaway directory, so a script path after `--` must be absolute.
  * `--expect-version` alone pins the semver of the build stamp and accepts any commit in it;
  * `--expect-commit` (task-254, `bug-235`) requires the whole stamp, `X.Y.Z (SHA)`, which is how the
@@ -772,13 +778,150 @@ function versionCheck(run, expectedVersion, expectedCommit) {
   };
 }
 
+/** `1 workflow`, `2 workflows`: the singular for exactly one. */
+function plural(count, noun) {
+  return `${count} ${noun}${count === 1 ? '' : 's'}`;
+}
+
+/** `first line of stderr` as the `stepCheck` details write it. */
+function refusal(run) {
+  return `expected exit 0, got exit ${run.status ?? 'spawn-error'}: ${run.stderr.trim().split('\n')[0] ?? ''}`;
+}
+
+/**
+ * Judge one workflow read (task-327, `bug-404`): its exit, and — for an exit 0 — whether stdout is a JSON
+ * object and how many of its `diagnostics` there are, how many with severity `error`, and grouped by code and
+ * severity (sorted by code, then severity). `json` is the parsed answer, `null` when there is none.
+ */
+function judgeRead(run) {
+  const nothing = { exit: run.status, json: null, notObject: false, diagnostics: null, errors: null, codes: [] };
+  if (run.status !== 0) return nothing;
+  let json;
+  try {
+    json = JSON.parse(run.stdout);
+  } catch {
+    return nothing;
+  }
+  if (json === null || typeof json !== 'object' || Array.isArray(json)) return { ...nothing, notObject: true };
+  const diagnostics = Array.isArray(json.diagnostics) ? json.diagnostics : [];
+  const groups = new Map();
+  for (const d of diagnostics) {
+    const key = JSON.stringify([String(d?.code), String(d?.severity)]);
+    groups.set(key, (groups.get(key) ?? 0) + 1);
+  }
+  const codes = [...groups]
+    .map(([key, count]) => ({ code: JSON.parse(key)[0], severity: JSON.parse(key)[1], count }))
+    .sort((a, b) => (a.code < b.code ? -1 : a.code > b.code ? 1 : a.severity < b.severity ? -1 : a.severity > b.severity ? 1 : 0));
+  return { exit: 0, json, diagnostics: diagnostics.length, errors: diagnostics.filter((d) => d?.severity === 'error').length, codes };
+}
+
+/** `{ notObject: true }` for an exit-0 answer that is JSON but no object, else nothing (the report words it). */
+const notObjectOf = (judged) => (judged.notObject ? { notObject: true } : {});
+
+/** The `<E> errors: <code> <count>, …` detail of a read that parsed but carries error diagnostics. */
+function errorsDetail(judged) {
+  const errorCodes = judged.codes.filter((c) => c.severity === 'error').map((c) => `${c.code} ${c.count}`);
+  return `${plural(judged.errors, 'error')}: ${errorCodes.join(', ')}`;
+}
+
+/** The failing detail of a judged read (`null` when it passed): refusal, not JSON, or error diagnostics. */
+function failureOf(run, judged) {
+  if (run.status !== 0) return refusal(run);
+  if (judged.notObject) return 'stdout is not a JSON object';
+  if (judged.json === null) return 'stdout is not valid JSON';
+  return judged.errors > 0 ? errorsDetail(judged) : null;
+}
+
+/** An array length, or `0` when the answer has no such array (a JSON answer without it counts 0). */
+const lengthOf = (json, key) => (Array.isArray(json?.[key]) ? json[key].length : 0);
+
+/**
+ * task-327 (`bug-404`): the three workflow reads on a repository, run with the build under test — `workflow
+ * list --all`, `workflow show <name>` for every workflow the list names (in its order, all run, judged as one
+ * check) and `workflow status`, each `--format json`. One check each, labelled `[repository] wingfoil …`; a read
+ * runs only when the one before it passed, so the first failure ends the list. Returns the checks and the counts
+ * the report states (a read not run is absent from `reads`). Never throws: an `invoke` that throws is a spawn error.
+ *
+ * @param {(args: readonly string[], cwd: string) => { status: number | null, stdout: string, stderr: string }} invoke
+ * @param {string} root the repository the reads run in
+ * @returns {{ checks: Array<{ label: string, ok: boolean, detail: string }>, reads: object }}
+ */
+function workflowReads(invoke, root) {
+  const run = (args) => {
+    try {
+      return invoke([...args, '--format', 'json'], root);
+    } catch (error) {
+      return { status: null, stdout: '', stderr: String(error?.message ?? error) };
+    }
+  };
+  const checks = [];
+  const reads = {};
+
+  const listRun = run(['workflow', 'list', '--all']);
+  const list = judgeRead(listRun);
+  const workflows = list.json === null ? null : (Array.isArray(list.json.workflows) ? list.json.workflows : []);
+  reads.list = { exit: list.exit, workflows: workflows === null ? null : workflows.length, diagnostics: list.diagnostics, errors: list.errors, codes: list.codes, ...notObjectOf(list) };
+  const listFailure = failureOf(listRun, list);
+  checks.push({
+    label: '[repository] wingfoil workflow list --all --format json',
+    ok: listFailure === null,
+    detail: listFailure ?? `exit 0, ${plural(workflows.length, 'workflow')}, ${plural(list.diagnostics, 'diagnostic')}, ${plural(list.errors, 'error')}`,
+  });
+  if (listFailure !== null) return { checks, reads };
+  if (workflows.length === 0) {
+    // A candidate repository always declares workflows: an empty list would pass show and status vacuously.
+    checks[0] = { ...checks[0], ok: false, detail: 'exit 0, 0 workflows: a candidate repository always has workflows' };
+    return { checks, reads };
+  }
+
+  const names = workflows.map((w) => String(w?.name));
+  const shows = names.map((name) => {
+    const showRun = run(['workflow', 'show', name]);
+    return { name, run: showRun, judged: judgeRead(showRun) };
+  });
+  reads.show = shows.map((s) => ({ name: s.name, exit: s.judged.exit, diagnostics: s.judged.diagnostics, errors: s.judged.errors, ...notObjectOf(s.judged) }));
+  const showLabel = `[repository] wingfoil workflow show <name> --format json, each of the ${names.length}`;
+  const firstBad = shows.map((s) => ({ s, failure: failureOf(s.run, s.judged) })).find((x) => x.failure !== null);
+  checks.push(
+    firstBad === undefined
+      ? { label: showLabel, ok: true, detail: `exit 0 (${names.length}/${names.length}), 0 errors` }
+      : { label: showLabel, ok: false, detail: `${firstBad.s.name}: ${firstBad.failure}` },
+  );
+  if (firstBad !== undefined) return { checks, reads };
+
+  const statusRun = run(['workflow', 'status']);
+  const status = judgeRead(statusRun);
+  const count = (key) => (status.json === null ? null : lengthOf(status.json, key));
+  reads.status = {
+    exit: status.exit,
+    diagnostics: status.diagnostics,
+    errors: status.errors,
+    open: count('open'),
+    pendingApprovals: count('pendingApprovals'),
+    ungated: count('ungated'),
+    ungatedRoutedTo: count('ungatedRoutedTo'),
+    ...notObjectOf(status),
+  };
+  const statusFailure = failureOf(statusRun, status);
+  checks.push({
+    label: '[repository] wingfoil workflow status --format json',
+    ok: statusFailure === null,
+    detail:
+      statusFailure ??
+      `exit 0, open ${reads.status.open}, pendingApprovals ${reads.status.pendingApprovals}, ungated ${reads.status.ungated}, ${plural(status.errors, 'error')}`,
+  });
+  return { checks, reads };
+}
+
 /**
  * Run the whole smoke: per template, its scenario ({@link smokeTemplate}), its agent run
  * ({@link smokeAgentRun}, task-243), then its Journey 4 run ({@link smokeJourney}, task-242). Stops at the
- * first failing check.
+ * first failing check. With `repository` (task-327, `bug-404`) the workflow reads of {@link workflowReads} run
+ * in it right after `--help` and `--version`, before the first template, and the result carries `workflowReads`.
  * @param {{ command: string, commandArgs?: readonly string[], env?: NodeJS.ProcessEnv,
- *           expectedVersion?: string, expectedCommit?: string, log?: (line: string) => void }} options
- * @returns {{ ok: boolean, checks: ReadonlyArray<{ label: string, ok: boolean, detail: string }> }}
+ *           expectedVersion?: string, expectedCommit?: string, repository?: string,
+ *           log?: (line: string) => void }} options
+ * @returns {{ ok: boolean, checks: ReadonlyArray<{ label: string, ok: boolean, detail: string }>, workflowReads?: object }}
  */
 function runSmoke(options) {
   if (options.expectedCommit !== undefined) {
@@ -796,7 +939,8 @@ function runSmoke(options) {
     log(`${check.ok ? 'ok  ' : 'FAIL'} ${check.label} — ${check.detail}`);
     return check.ok;
   };
-  const done = () => ({ ok: checks.every((c) => c.ok), checks });
+  let reads;
+  const done = () => ({ ok: checks.every((c) => c.ok), checks, ...(reads === undefined ? {} : { workflowReads: reads }) });
 
   const help = invoke(['--help'], tmpdir());
   const helpCheck =
@@ -810,6 +954,14 @@ function runSmoke(options) {
   if (options.expectedVersion !== undefined) {
     const check = versionCheck(invoke(['--version'], tmpdir()), options.expectedVersion, options.expectedCommit);
     if (!record(check)) return done();
+  }
+
+  if (options.repository !== undefined) {
+    const read = workflowReads(invoke, options.repository);
+    reads = read.reads;
+    for (const check of read.checks) {
+      if (!record(check)) return done();
+    }
   }
 
   for (const template of SMOKE_TEMPLATES) {
@@ -832,7 +984,9 @@ function cell(text) {
 /**
  * The Markdown report `--report` writes (`bug-134`): what was driven, the verdict, and every check in run
  * order. Nothing in it comes from a clock, so the same run gives the same bytes.
- * @param {{ ok: boolean, checks: ReadonlyArray<{ label: string, ok: boolean, detail: string }> }} report
+ * With `report.workflowReads` (task-327) a section after the checks table states the reads (see
+ * {@link workflowReadsSection}); without it the report is unchanged.
+ * @param {{ ok: boolean, checks: ReadonlyArray<{ label: string, ok: boolean, detail: string }>, workflowReads?: object }} report
  * @param {{ command: readonly string[], expectedVersion?: string, expectedCommit?: string }} meta
  * @returns {string}
  */
@@ -861,7 +1015,96 @@ function formatReport(report, meta) {
     '|---|--------|-------|--------|',
     ...report.checks.map((c, i) => `| ${i + 1} | ${c.ok ? 'ok' : 'FAIL'} | ${cell(c.label)} | ${cell(c.detail)} |`),
     '',
+    ...(report.workflowReads === undefined ? [] : [...workflowReadsSection(report.workflowReads), '']),
   ].join('\n');
+}
+
+const NOT_RUN = ['—', 'not run: the smoke stopped at an earlier check'];
+
+/** `` `CODE` n (severity), … `` for a list row. */
+function codesText(codes) {
+  return codes.map((c) => `\`${c.code}\` ${c.count} (${c.severity})`).join(', ');
+}
+
+/**
+ * The lines of the "Repository checks on the candidate (workflow reads)" section (task-327, `bug-404`): a
+ * heading, one sentence, and a table with one row per read — the exit and what it counted. A read not run is
+ * a row saying so. Nothing in it comes from a clock, a path or a commit, so the same run gives the same bytes.
+ * @param {{ list?: object, show?: object[], status?: object }} reads
+ * @returns {string[]}
+ */
+function workflowReadsSection(reads) {
+  const exitCell = (exit) => (exit === null ? 'spawn-error' : String(exit));
+  const row = (command, exit, result, suffix = '') => `| \`${command}\`${suffix} | ${cell(exit)} | ${cell(result)} |`;
+  const notRun = (command) => row(command, ...NOT_RUN);
+  const refused = (read) => (read.exit !== 0 ? 'refused: the command did not exit 0' : read.notObject ? 'stdout is not a JSON object' : 'stdout is not valid JSON');
+
+  const listCommand = 'wingfoil workflow list --all --format json';
+  const showCommand = 'wingfoil workflow show <name> --format json';
+  const statusCommand = 'wingfoil workflow status --format json';
+
+  const rows = [];
+  const list = reads.list;
+  if (list === undefined) rows.push(notRun(listCommand));
+  else if (list.workflows === null) rows.push(row(listCommand, exitCell(list.exit), refused(list)));
+  else {
+    const head = `${plural(list.workflows, 'workflow')}; ${plural(list.diagnostics, 'diagnostic')}, **${plural(list.errors, 'error')}**`;
+    const empty = `${plural(list.workflows, 'workflow')}: a candidate repository always has workflows`;
+    rows.push(row(listCommand, exitCell(list.exit), list.workflows === 0 ? empty : list.diagnostics === 0 ? head : `${head}: ${codesText(list.codes)}`));
+  }
+
+  const shows = reads.show;
+  if (shows === undefined) rows.push(notRun(showCommand));
+  else {
+    const total = shows.length;
+    const ran = shows.filter((s) => s.exit === 0).length;
+    const parsed = shows.filter((s) => s.diagnostics !== null);
+    const refusedNames = shows.filter((s) => s.exit !== 0).map((s) => s.name);
+    const unparsedNames = shows.filter((s) => s.exit === 0 && s.diagnostics === null && !s.notObject).map((s) => s.name);
+    const notObjectNames = shows.filter((s) => s.notObject).map((s) => s.name);
+    const parts = [];
+    if (parsed.length > 0) {
+      const withErrors = parsed.filter((s) => s.errors > 0);
+      const errorTotal = withErrors.reduce((sum, s) => sum + s.errors, 0);
+      parts.push(
+        errorTotal === 0
+          ? '**0 errors** each'
+          : `**${plural(errorTotal, 'error')}**: ${withErrors.map((s) => `${s.name} ${s.errors}`).join(', ')}`,
+      );
+      const counts = parsed.map((s) => s.diagnostics);
+      const min = Math.min(...counts);
+      const max = Math.max(...counts);
+      parts.push(min === max ? `${plural(min, 'diagnostic')} each` : `${min}–${max} diagnostics`);
+    }
+    if (unparsedNames.length > 0) parts.push(`stdout not valid JSON: ${unparsedNames.join(', ')}`);
+    if (notObjectNames.length > 0) parts.push(`stdout not a JSON object: ${notObjectNames.join(', ')}`);
+    if (refusedNames.length > 0) parts.push(`refused: ${refusedNames.join(', ')}`);
+    if (parts.length === 0) parts.push('no workflow was read');
+    rows.push(row(showCommand, ran === total ? `0 (${total}/${total})` : `${ran}/${total} exit 0`, parts.join('; '), `, each of the ${total}`));
+  }
+
+  const status = reads.status;
+  if (status === undefined) rows.push(notRun(statusCommand));
+  else if (status.open === null) rows.push(row(statusCommand, exitCell(status.exit), refused(status)));
+  else {
+    rows.push(
+      row(
+        statusCommand,
+        exitCell(status.exit),
+        `\`open\` ${status.open}, \`pendingApprovals\` ${status.pendingApprovals}, \`ungated\` ${status.ungated}, \`ungatedRoutedTo\` ${status.ungatedRoutedTo}, \`diagnostics\` ${status.diagnostics}, **${plural(status.errors, 'error')}**`,
+      ),
+    );
+  }
+
+  return [
+    '## Repository checks on the candidate (workflow reads)',
+    '',
+    'Written by `scripts/e2e-smoke.cjs` (`bug-404`): the build under test runs each read in the repository the smoke was given (`--repository`; the checkout under `--candidate`).',
+    '',
+    '| Command | Exit | Result |',
+    '|---|---|---|',
+    ...rows,
+  ];
 }
 
 /**
@@ -875,7 +1118,19 @@ function versionOfStamp(stamp) {
   return match ? match[1] : null;
 }
 
-/** Parse `[--candidate | --expect-version X [--expect-commit SHA]] [--report PATH] [-- command args...]`. */
+/**
+ * The repository the workflow reads run in (task-327): `--repository` when given, else the checkout `root` under
+ * `--candidate`, else `undefined` (no reads).
+ * @param {{ repository?: string }} parsed
+ * @param {boolean | undefined} candidate
+ * @param {string} root
+ * @returns {string | undefined}
+ */
+function readsRepository(parsed, candidate, root) {
+  return parsed.repository ?? (candidate ? root : undefined);
+}
+
+/** Parse `[--candidate | --expect-version X [--expect-commit SHA]] [--repository PATH] [--report PATH] [-- command args...]`. */
 function parseSmokeArgs(argv) {
   const separator = argv.indexOf('--');
   const own = separator === -1 ? argv : argv.slice(0, separator);
@@ -891,6 +1146,9 @@ function parseSmokeArgs(argv) {
       i += 1;
     } else if (own[i] === '--candidate') {
       options.candidate = true;
+    } else if (own[i] === '--repository' && own[i + 1]) {
+      options.repository = resolve(own[i + 1]);
+      i += 1;
     } else if (own[i] === '--report' && own[i + 1]) {
       options.reportPath = own[i + 1];
       i += 1;
@@ -1018,7 +1276,9 @@ if (require.main === module) {
     if (!candidate || prepared !== undefined) {
       const { cleanup, ...options } = prepared ?? { ...parsed, cleanup: () => undefined };
       try {
-        const report = runSmoke({ ...options, log: (line) => process.stdout.write(`${line}\n`) });
+        // task-327 (`bug-404`): `--candidate` reads the checkout it packed, unless `--repository` names another.
+        const repository = readsRepository(parsed, candidate, dirname(__dirname));
+        const report = runSmoke({ ...options, ...(repository === undefined ? {} : { repository }), log: (line) => process.stdout.write(`${line}\n`) });
         if (reportPath !== undefined) {
           // `--candidate`'s bin lives in a throwaway directory: the report names the candidate, not that path,
           // so the same run still gives the same bytes.
@@ -1051,10 +1311,12 @@ module.exports = {
   parseSmokeArgs,
   prepareCandidate,
   probeFakeRead,
+  readsRepository,
   removeBuildOutput,
   runSmoke,
   smokeAgentRun,
   smokeJourney,
   smokeSteps,
   smokeTemplate,
+  workflowReads,
 };

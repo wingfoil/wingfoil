@@ -23,14 +23,10 @@ import { load } from 'js-yaml';
 import { loadMemoryYaml, loadWorkflowsYaml } from '../../src/core/loaders';
 import { splitFrontmatter } from '../../src/storage';
 
+import { missingCheckFields, type RequiredCheck, type RequiredReading } from './helpers/release-required-check';
+
 const repoRoot = join(__dirname, '..', '..');
 const planningDir = join(repoRoot, 'docs', '04_memory', 'planning');
-
-/** The `define-scope` check, parsed: its required fields and the per-field exempt release ids. */
-interface RequiredCheck {
-  readonly fields: readonly string[];
-  readonly exempt: Readonly<Record<string, readonly string[]>>;
-}
 
 const CHECK_RE = /^frontmatter\.required: \[([^\]]*)\](?: except ([a-z][a-z-]*) for \[([^\]]*)\])?$/;
 
@@ -79,16 +75,11 @@ function releaseDocuments(): [string, Record<string, unknown>][] {
   return out.sort(([a], [b]) => a.localeCompare(b));
 }
 
-function missingFields(id: string, data: Record<string, unknown>, check: RequiredCheck): string[] {
-  return check.fields.filter((field) => {
-    if ((check.exempt[field] ?? []).includes(id)) return false;
-    const value = data[field];
-    return value === undefined || value === null || value === '' || (Array.isArray(value) && value.length === 0);
-  });
-}
-
 describe('release `kind`: memory.yaml, the define-scope check and the release documents agree (bug-175)', () => {
-  const required = loadMemoryYaml(repoRoot).types['release']?.template?.frontmatter.required ?? [];
+  const frontmatter = loadMemoryYaml(repoRoot).types['release']?.template?.frontmatter;
+  const required = frontmatter?.required ?? [];
+  // bug-445: a field is filled as the engine reads it — memory.yaml's `lists` and `not_applicable_allowed`.
+  const reading: RequiredReading = frontmatter ?? {};
   const check = defineScopeCheck();
 
   it("the define-scope check requires exactly the release type's required fields", () => {
@@ -109,7 +100,7 @@ describe('release `kind`: memory.yaml, the define-scope check and the release do
   it('minor-v0.3 carries every field the check requires of it', () => {
     const doc = releaseDocuments().find(([id]) => id === 'minor-v0.3');
     expect(doc).toBeDefined();
-    expect(missingFields('minor-v0.3', doc![1], check)).toEqual([]);
+    expect(missingCheckFields('minor-v0.3', doc![1], check, reading)).toEqual([]);
   });
 
   it("initial-design's seed-releases check states the same rule as define-scope (review F2)", () => {
@@ -133,7 +124,7 @@ describe('release `kind`: memory.yaml, the define-scope check and the release do
 
   it('every release document carries every field the check requires of it', () => {
     const failures = releaseDocuments()
-      .map(([id, data]) => [id, missingFields(id, data, check)] as const)
+      .map(([id, data]) => [id, missingCheckFields(id, data, check, reading)] as const)
       .filter(([, missing]) => missing.length > 0)
       .map(([id, missing]) => `${id}: ${missing.join(', ')}`);
     expect(failures).toEqual([]);

@@ -75,13 +75,20 @@ describe('selectFrontierStep — spec-016 §3.2 step 1', () => {
     expect(selectFrontierStep(result(null, [], null), FIRST.key)).toEqual(noNext);
   });
 
-  it('a --step off the frontier → CONFLICT naming the step and the instance (spec-017 §10)', () => {
-    for (const next of [FIRST, null]) {
+  it('a --step off the frontier → CONFLICT naming the step and the instance, and listing the frontier keys (spec-017 §10, task-330)', () => {
+    for (const [next, frontier] of [[FIRST, [FIRST.key]], [null, []]] as const) {
       expect(selectFrontierStep(result(next), 'loop.review@task:task-1')).toEqual({
         ok: false,
-        error: { code: 'CONFLICT', message: "step 'loop.review@task:task-1' is not on the frontier of delivery-1", details: { step: 'loop.review@task:task-1', instance: 'delivery-1' } },
+        error: {
+          code: 'CONFLICT',
+          message: "step 'loop.review@task:task-1' is not on the frontier of delivery-1",
+          details: { step: 'loop.review@task:task-1', instance: 'delivery-1', frontier },
+        },
       });
     }
+    expect(selectFrontierStep(result(FIRST, [SECOND]), 'loop.review@task:task-1')).toMatchObject({
+      error: { details: { frontier: [FIRST.key, SECOND.key] } },
+    });
   });
 });
 

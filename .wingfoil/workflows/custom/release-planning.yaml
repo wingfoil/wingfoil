@@ -7,7 +7,7 @@ description: >-
   governance into their gated states, identify and spec shared artefacts up front, pull backlog
   tasks for the release, and stamp each included element with its `release`. Set the release
   element to `planning` then `in-development`.
-version: 2.3                     # dl-016: added triage-bugs + reconcile-governance, record-adrs approve, build-backlog release-stamping; 1.2 dl-092: define-scope check gains `kind`; 1.3 dl-095 Q3 (B): + advance-pinned-build (task-112); 1.4 dl-133 Q1 (b): build-backlog check gains the task `kind` (task-150); 1.5 bug-175: define-scope check exempts the pre-dl-092 minors from `kind` (task-148); 1.6 bug-163: define-scope produces under rl-{release-line}/, as memory.yaml 2.3 files a release (task-164); 1.7 spec-003 alignment (task-199): record-adrs/identify-specs/build-backlog name their produces owner as { type, path } (dl-104 D3), build-backlog derives its DL and fix tasks from a selection, npm.pin_advance takes a key: value argument and the lockfile/MCP post-checks are two bound tokens (dl-090), agent.survey_specs becomes agent.execute; 1.8 dl-163 S3e (task-270): advance-pinned-build re-checks the wingfoil-cli directive against the new pin; 1.9 dl-100 §1–§4 (b), dl-102 §2 (task-230): reconcile-governance selects ready decision-logs for a coverage check only (approver ruling 2026-10-12 D2), define-scope states the 20 % reservation, build-backlog checks every criterion and stamps `wave:`, commit-backlog fixes `backlog_committed` and `waves:`; advance-pinned-build's mcp.registered names the KNOWN_READ_FAILURES cleanup (task-239 handover, bug-292); 2.0 (numerically, after 1.9) dl-132 element 4 (task-277, approver rulings 2026-10-10 item 5, 2026-10-12 D1 (c), D2): define-scope sweeps the scheduled change-proposals of the release into its features: (prose + the unbound change-proposals.swept post-check, no selection); 2.1 bug-342 (task-279, approver ruling 2026-10-12 D1 (a)): define-scope drops the hand-amend clause — `memory amend` accepts a release predating dl-092, its `kind` exemption read from memory.yaml `release` template.frontmatter.exempt, which the check restates; 2.2 dl-050 option 1 (task-215, batch ruling D1): reconcile-governance declares the pre-check role-directives.clean, `directives list --role` over every dna.yaml team.roles name, failing on any warning; 2.3 task-291 (dl-185 C4 (i)): advance-pinned-build's after-a-patch case is the merge forward of the patch's line `release/X.Y` into the in-flight release's integration branch, never `main` into the line
+version: 2.4                     # dl-016: added triage-bugs + reconcile-governance, record-adrs approve, build-backlog release-stamping; 1.2 dl-092: define-scope check gains `kind`; 1.3 dl-095 Q3 (B): + advance-pinned-build (task-112); 1.4 dl-133 Q1 (b): build-backlog check gains the task `kind` (task-150); 1.5 bug-175: define-scope check exempts the pre-dl-092 minors from `kind` (task-148); 1.6 bug-163: define-scope produces under rl-{release-line}/, as memory.yaml 2.3 files a release (task-164); 1.7 spec-003 alignment (task-199): record-adrs/identify-specs/build-backlog name their produces owner as { type, path } (dl-104 D3), build-backlog derives its DL and fix tasks from a selection, npm.pin_advance takes a key: value argument and the lockfile/MCP post-checks are two bound tokens (dl-090), agent.survey_specs becomes agent.execute; 1.8 dl-163 S3e (task-270): advance-pinned-build re-checks the wingfoil-cli directive against the new pin; 1.9 dl-100 §1–§4 (b), dl-102 §2 (task-230): reconcile-governance selects ready decision-logs for a coverage check only (approver ruling 2026-10-12 D2), define-scope states the 20 % reservation, build-backlog checks every criterion and stamps `wave:`, commit-backlog fixes `backlog_committed` and `waves:`; advance-pinned-build's mcp.registered names the KNOWN_READ_FAILURES cleanup (task-239 handover, bug-292); 2.0 (numerically, after 1.9) dl-132 element 4 (task-277, approver rulings 2026-10-10 item 5, 2026-10-12 D1 (c), D2): define-scope sweeps the scheduled change-proposals of the release into its features: (prose + the unbound change-proposals.swept post-check, no selection); 2.1 bug-342 (task-279, approver ruling 2026-10-12 D1 (a)): define-scope drops the hand-amend clause — `memory amend` accepts a release predating dl-092, its `kind` exemption read from memory.yaml `release` template.frontmatter.exempt, which the check restates; 2.2 dl-050 option 1 (task-215, batch ruling D1): reconcile-governance declares the pre-check role-directives.clean, `directives list --role` over every dna.yaml team.roles name, failing on any warning; 2.3 task-291 (dl-185 C4 (i)): advance-pinned-build's after-a-patch case is the merge forward of the patch's line `release/X.Y` into the in-flight release's integration branch, never `main` into the line; 2.4 task-305 (dl-206 Q1 (i), Q2 (i), dl-159 A2 item 5, bug-429, release-planning v0.3.2 R8, design gate D3–D6): triage-bugs and define-scope name a patch's eligibility test `git log --no-merges release/X.Y..main`, advance-pinned-build states the pin per line, that the merge forward keeps main's pin, the AGENTS.md §1 status sentence and the line's own node_modules
 element: release
 
 # Selection filter (dl-016 §1) — every phase that considers accumulated elements picks those whose
@@ -22,15 +22,26 @@ phases:
       the release-line, if it is newer. Rule (dl-095 Q3): the pin moves forward only, never backwards,
       and only to a published build; every switch is its own commit changing only package.json and
       package-lock.json (`npm install --save-dev --save-exact wingfoil-released@npm:wingfoil@X.Y.Z`),
-      noted in the active phase plan. The same rule applies after every published patch, when the
+      noted in the active phase plan. The pin is per line (dl-159 A2 item 5, bug-429,
+      release-planning-rel-v0.3.2-plan R8): the switch belongs to the release's integration branch —
+      `main` for a minor, `release/X.Y` for a patch — committed on the phase branch cut from it and merged
+      into it, and a patch line pins only published versions of its own X.Y
+      (on `release/0.3` a `0.3.z`, never a `0.4.z`), a minor on `main` the newest published version of the
+      release-line. The same rule applies after every published patch, when the
       in-flight release's integration branch merges the patch's line forward after the patch's tag —
-      `release/X.Y` into `main`, never back (Q3 (B), dl-159 Decision 2, dl-185 C4 (i); the pin per line is
-      dl-159 A2 item 5, not ruled) — and on a defect that blocks a step
+      `release/X.Y` into `main`, never back (Q3 (B), dl-159 Decision 2, dl-185 C4 (i)); the merge forward keeps
+      `main`'s pin, with or without a conflict on it (git-conventions §1 rule 5), and `main` moves its pin only by a switch commit of its own,
+      never inside the merge — and on a defect that blocks a step
       (move to a published fix; if none exists, work by hand, record it, file a bug for the next patch).
+      The pre-check reads the build installed in the worktree the phase runs in, so on a patch line it needs
+      the line's own node_modules: run `npm ci` in the release worktree first (bug-429).
       On every pin advance the phase re-checks the `wingfoil-cli` directive (dl-163 S3e): it reads the
       bugs tagged `pinned-build` against the new pinned build, notes the surprises it no longer shows,
       and confirms which build runs which command still holds; a change to the directive is its own
-      commit, after the switch commit.
+      commit, after the switch commit. With every pin advance the phase also updates the project-status
+      sentence of `AGENTS.md` §1, and only that sentence, in its own commit after the switch; the rest of
+      `AGENTS.md` stays align-agent-docs' (dl-025), and a drift the re-check finds there is noted in the
+      active phase plan for that phase.
     role: tech-lead
     actions:
       - 'npm.pin_advance(package: wingfoil-released)'   # no-op when the pin already is the newest published version; manual (workflows/bindings.yaml): the version to pin is read from `npm view`
@@ -56,7 +67,10 @@ phases:
       On a release already past `draft`, the write is a `memory amend` of the release by the approver,
       whose `--reason` names the change-proposals swept. A release predating dl-092, which carries no
       `kind:`, is amended the same way: `memory amend` reads its exemption from memory.yaml (bug-342,
-      task-279).
+      task-279). For a `kind: patch` release an element of the scope is eligible only if its file has not
+      changed on `main` since its line was cut, `git log --no-merges release/X.Y..main -- <file>` empty
+      (dl-206 Q2 (i), release-planning-rel-v0.3.2-plan R8); any other is captured again on the line first
+      (dl-206 Q1 (i), git-conventions §1).
     role: product-owner
     actions:
       - memory.submit                          # release: draft -> planning
@@ -80,6 +94,10 @@ phases:
     description: >-
       Select in-scope `open` bugs (selection filter: release empty or == {release in planning}) and
       triage them so downstream phases see only `triaged` bugs. Not-selected bugs are left untouched.
+      For a `kind: patch` release a bug is eligible only if its file has not changed on `main` since its
+      line was cut, `git log --no-merges release/X.Y..main -- <file>` empty (dl-206 Q2 (i),
+      release-planning-rel-v0.3.2-plan R8); any other is captured again on the line first (dl-206 Q1 (i),
+      git-conventions §1).
     role: tech-lead
     where: { type: bug, status: [open], release: ["", "{release.version}"] }
     actions:

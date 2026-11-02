@@ -21,5 +21,27 @@ export function acquireDistLock(options: DistLockOptions & { readonly lockPath: 
 /** Remove the lock if `pid` holds it; returns whether it did. */
 export function releaseDistLock(options: { readonly lockPath: string; readonly pid?: number }): boolean;
 
-/** Take the lock, then delete `<repoRoot>/dist/` and call `build`. The lock stays held. */
-export function prepareDist(options: DistLockOptions & { readonly repoRoot: string; readonly build: () => void }): Promise<void>;
+/**
+ * The staging directory a build writes into before it is renamed onto `dist/`:
+ * `<repoRoot>/.jest-dist.next` (bug-336, task-308).
+ */
+export function distStagingPath(repoRoot: string): string;
+
+/**
+ * Where the previous `dist/` is moved while the staged build takes its place, then removed:
+ * `<repoRoot>/.jest-dist.prev` (bug-336, task-308).
+ */
+export function distPreviousPath(repoRoot: string): string;
+
+/** Whether `pid` is a live process (`process.kill(pid, 0)`; `EPERM` counts as alive). */
+export function isPidAlive(pid: number): boolean;
+
+/**
+ * Take the lock, call `build` with the staging directory (which does not exist on entry), then swap the
+ * staged build onto `<repoRoot>/dist/` by rename and remove the previous one. A build that throws or writes
+ * nothing leaves `dist/` untouched; a `dist/` that cannot be moved or removed rejects with a diagnostic
+ * naming the path and the cause (bug-066). The lock stays held.
+ */
+export function prepareDist(
+  options: DistLockOptions & { readonly repoRoot: string; readonly build: (outDir: string) => void },
+): Promise<void>;

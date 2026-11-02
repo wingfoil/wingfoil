@@ -190,7 +190,7 @@ export function initWingfoilStorage(
   }
 
   // Guard 2 — refuse an unattributable commit (REQ-SEC-01). Returns its error unchanged (VALIDATION, or IO
-  // for a git that cannot be run, task-284).
+  // for a git that cannot be run or cannot read its configuration, task-284, task-324).
   const identity = requireGitIdentity(root);
   if (!identity.ok) return identity as CoreResult<InitStorageValue>;
 

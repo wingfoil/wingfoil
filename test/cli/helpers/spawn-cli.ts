@@ -9,6 +9,19 @@
  * command that exits `0` while printing a git `fatal:` — `bug-071`'s shape — passed them.
  * `test/lint/no-fabricated-stderr.test.ts` keeps the literal from coming back.
  *
+ * Every suite that spawns this repository's `dist/cli.js` does it through this module
+ * (`task-316`, `bug-207`, `bug-197`); `test/lint/cli-spawn-helper.test.ts` keeps it so. The declared
+ * exceptions, which spawn locally:
+ * (i) a spawn of anything other than this repository's `dist/cli.js` — a `scripts/*.cjs`, `bash`,
+ *     `npm`, `git`, `tar`, `node -e`, the fake agent, the pinned build
+ *     `node_modules/wingfoil-released/dist/cli.js`;
+ * (ii) a live child: the async `spawn` of `cli/agent-execute-launch.integration.test.ts`, which
+ *     signals the running command — {@link spawnCapture} is synchronous;
+ * (iii) the CLI inside a shell pipeline (`cli/piped-output-drain.integration.test.ts`, `bash -c …`
+ *     with `CLI_ENTRY` as `$0`);
+ * (iv) JavaScript fixtures, which cannot import a `.ts` module (`test/fixtures/smoke/wingfoil-proxy.cjs`,
+ *     `test/cli/fixtures/cli-harness.cjs`).
+ *
  * `dist/` is built once by jest's `globalSetup` (`bug-003-cli-integration-dist-race`) — never here.
  */
 import { spawnSync } from 'child_process';
@@ -44,6 +57,12 @@ export interface SpawnCaptureOptions {
    * reach a child spawned without `env` (task-268). Pass `process.env` to hand the test's copy on.
    */
   readonly env?: NodeJS.ProcessEnv;
+  /**
+   * The longest the child may run, in milliseconds (`task-316`, `bug-207`). A child still running then
+   * is killed with `SIGTERM`, ends on that signal, and {@link spawnCapture} throws as it does for any
+   * signal. Absent, the child runs to completion.
+   */
+  readonly timeout?: number;
 }
 
 /**
@@ -54,9 +73,20 @@ export interface SpawnCaptureOptions {
  * report: both throw, so neither can read back as an ordinary exit code.
  */
 export function spawnCapture(command: string, args: readonly string[], options: SpawnCaptureOptions = {}): SpawnedRun {
-  const run = spawnSync(command, [...args], { cwd: options.cwd, encoding: 'utf-8', env: options.env });
-  if (run.error) throw run.error;
-  if (run.status === null) throw new Error(`${command} ended on signal ${run.signal ?? 'unknown'}, not an exit`);
+  const run = spawnSync(command, [...args], {
+    cwd: options.cwd,
+    encoding: 'utf-8',
+    env: options.env,
+    timeout: options.timeout,
+  });
+  // A child killed by its `timeout` comes back with both an `ETIMEDOUT` error and the signal: it was
+  // spawned and ended on that signal, so it throws as a signal does, saying why it was sent.
+  const timedOut = (run.error as NodeJS.ErrnoException | undefined)?.code === 'ETIMEDOUT' && run.signal !== null;
+  if (run.error && !timedOut) throw run.error;
+  if (run.status === null) {
+    const why = timedOut ? ` (killed after its ${options.timeout ?? 0} ms timeout)` : '';
+    throw new Error(`${command} ended on signal ${run.signal ?? 'unknown'}, not an exit${why}`);
+  }
   return { status: run.status, stdout: run.stdout, stderr: run.stderr };
 }
 

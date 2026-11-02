@@ -110,13 +110,20 @@ A Memory read reports the files it could not read — a document whose frontmatt
 symbolic link, a document written in a newer `format:` — as the CLI does: one `W_MEMORY_UNREADABLE`
 line per file (`spec-017` §1.4), in path order, in a top-level `warnings` array beside `contents`
 (`["W_MEMORY_UNREADABLE (<file>): unreadable frontmatter in <file>: <reason>", …]`). A collection read
-(`wingfoil://memory/{type}`) scans every document and reports every such file. A single-document read
-(`wingfoil://memory/{type}/{id}`) is a lookup that stops at its match, so it reports only the files it
-passed, in path order, before reaching the document; a file after the match is not read and not
-reported. A read that left nothing out carries no `warnings` field. A single-document read that finds
-nothing has passed every file, and still answers "resource not found", with those lines as
-`error.data.details` (`[{"detail": "<line>"}, …]`, §4.3 item 4), since the document may be one of them. Every Resource derived from a
-core operation carries that operation's warnings the same way.
+(`wingfoil://memory/{type}`) scans every document and reports every such file that type can hold: a
+document whose frontmatter does not parse, and a link, when the type's `path` pattern can produce its
+path (`spec-017` §1.4's token rule: a token in the file name is one name, a token in a directory one or
+more directories), and a document in a newer `format:` when its own `type:` is the type read, as for
+membership in the listing. A path several types' patterns can produce is reported to each of them (this
+repository's `task`, `docs/04_memory/{release}/{id}.md`, produces every path under `docs/04_memory/`).
+A single-document read (`wingfoil://memory/{type}/{id}`) is a lookup that stops at its match, so it
+reports only the files that type can hold — by path, or by `type:` for a newer-format document, as
+above — that it passed, in path order, before reaching the document; a file after the match is not
+read and not reported. A read that left nothing out carries no `warnings` field. A single-document
+read that finds nothing has passed every file, and still answers "resource not found", with those
+lines as `error.data.details` (`[{"detail": "<line>"}, …]`, §4.3 item 4), since the document may be
+one of them. Every Resource derived from a core operation carries that operation's warnings the same
+way.
 
 #### 2.3 Write refusal (fit criterion, verbatim)
 
@@ -607,3 +614,13 @@ of `workflow adopt` and `workflow rekey` (P4.21, `dl-187`; the commands ship in 
 P5.2.3 in v0.4) are added, and `workflow start` / `workflow end` carry the v0.4 mark `spec-006` §3 and `spec-017`
 §9 already give them (the `dl-022` cross-spec review of the same date). Edited in place without a supersede or a
 state change (`dl-047`), pending the approver's `memory amend`.
+
+**Revision (2026-10-30, `task-314-scope-the-unreadable-document-warnings-of-memory-type-to-that-type`, `bug-283`) —
+§2.2: a typed read reports only the files its type can hold.** `wingfoil://memory/{type}` and
+`wingfoil://memory/{type}/{id}` reported the unreadable files of every type, because the scan reported them before
+the type filter. They now report an unparsable document or a link only when the type's `path` pattern can produce
+its path (`spec-017` §1.4), and a newer-format document only when its `type:` is the type read (design gate D2 (a));
+a path several types produce is reported to each. The same rule holds for `memory search --type`, for the
+at-commit lookup behind `agent execute` and for the read of one type behind the WIP-limit count
+(`loadTypeDocumentCopiesAtRevs`, `requireWipSlot`). Edited in place without a supersede or a state change (`dl-047`), pending
+the approver's `memory amend` at `task-314`'s review.

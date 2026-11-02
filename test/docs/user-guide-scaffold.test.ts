@@ -9,9 +9,19 @@ import { join } from 'path';
 
 import { load as loadYaml } from 'js-yaml';
 
-import { TEMPLATES, templateScaffold, type TemplateDefinition } from '../../src/storage/templates';
+import { loadWorkflowsYaml } from '../../src/core/loaders';
+import { formatDiagnostic, ValidationError, type Diagnostic } from '../../src/validation';
+import { makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
+import {
+  TEMPLATES,
+  initProjectCommitMessage,
+  resolveTemplate,
+  templateScaffold,
+  type TemplateDefinition,
+} from '../../src/storage/templates';
 
 const GUIDE = readFileSync(join(__dirname, '..', '..', 'docs', 'user-guide.md'), 'utf-8');
+const CLI_REFERENCE = readFileSync(join(__dirname, '..', '..', 'docs', 'cli-reference.md'), 'utf-8');
 
 /** The rows of the first table under `## 7. Workflows`: first cell (backticked names) → last cell. */
 function workflowTableRows(): Array<{ names: string[]; phases: string }> {
@@ -61,4 +71,67 @@ describe('task-296 AC 4 — user-guide §7 names the phases the scaffold declare
       });
     }
   }
+});
+
+/**
+ * task-321 AC 2 (`bug-409`) — the user guide and the CLI reference quote the `init` commit subject as
+ * `initProjectCommitMessage` writes it, with no internal feature id.
+ */
+describe('task-321 AC 2 — the docs quote the init commit subject without an internal feature id (bug-409)', () => {
+  const SUBJECT = 'chore(wingfoil): initialize .wingfoil/ with the Scrum template';
+
+  it('the user guide quotes the Scrum subject init writes', () => {
+    expect(initProjectCommitMessage(resolveTemplate('Scrum') as TemplateDefinition)).toBe(SUBJECT);
+    expect(GUIDE).toContain(`The commit is \`${SUBJECT}\``);
+  });
+
+  it('the CLI reference quotes the subject with its <Template> placeholder', () => {
+    expect(CLI_REFERENCE).toContain('**Commit:** `chore(wingfoil): initialize .wingfoil/ with the <Template> template`');
+  });
+
+  it('neither document puts (P5.1.1) next to initialize .wingfoil/', () => {
+    for (const [name, text] of [['docs/user-guide.md', GUIDE], ['docs/cli-reference.md', CLI_REFERENCE]] as const) {
+      const quoted = text.split('\n').filter((line) => line.includes('initialize .wingfoil/') && line.includes('(P5.1.1)'));
+      expect([name, quoted]).toEqual([name, []]);
+    }
+  });
+});
+
+/**
+ * task-325 AC (`bug-394`) — the user guide's §12 quotes the line the program prints for the 0.2.x include path.
+ * The quoted line is built from the code (the real Scrum scaffold with its include rewritten to the 0.2.x path),
+ * so the guide and the diagnostic cannot drift.
+ */
+describe('task-325 — user-guide §12 quotes the E_WORKFLOW_INCLUDE_UNRESOLVED line the code produces (bug-394)', () => {
+  function producedLine(): string {
+    const repo = makeTempGitRepo();
+    try {
+      for (const file of templateScaffold(resolveTemplate('Scrum') as TemplateDefinition)) {
+        const content = file.path.endsWith('workflows/custom/sw-life-cycle.yaml')
+          ? file.content.replace('include: scrum-delivery\n', 'include: workflows/custom/scrum-delivery.yaml\n')
+          : file.content;
+        writeFixtureFile(repo, file.path, content);
+      }
+      try {
+        loadWorkflowsYaml(repo);
+      } catch (err) {
+        expect(err).toBeInstanceOf(ValidationError);
+        const diagnostics = (err as unknown as { diagnostics: Diagnostic[] }).diagnostics;
+        return formatDiagnostic(diagnostics[0] as Diagnostic);
+      }
+      throw new Error('expected loadWorkflowsYaml to throw');
+    } finally {
+      removeTempDir(repo);
+    }
+  }
+
+  it('characterization — the guide has its numbered "Upgrading from 0.2.x" heading, the section the message names', () => {
+    expect(GUIDE).toMatch(/^## \d+\. Upgrading from 0\.2\.x$/m);
+  });
+
+  it('AC — the guide quotes the diagnostic line exactly as formatDiagnostic renders it', () => {
+    const line = producedLine();
+    expect(line).toContain("write 'include: scrum-delivery'");
+    expect(GUIDE.replace(/\s+/g, ' ')).toContain(line);
+  });
 });

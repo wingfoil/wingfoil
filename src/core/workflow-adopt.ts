@@ -26,6 +26,7 @@
  * read at `HEAD`. `--plan` reads `HEAD`, declared; the deduction's `W_UNCOMMITTED_INPUTS` go out as success
  * warnings and the payload keeps §8's shape (D5).
  */
+import { ambiguousReferenceError, resolveElementReference } from '../memory';
 import type { MemoryDocumentSummary } from '../memory/query';
 import { planAdoptions } from '../workflow/adopt';
 import { deduceWorkflowState, resolveInstanceRef, W_UNCOMMITTED_INPUTS, type Baseline, type DeducedStep, type Deduction, type DeductionSnapshot, type ElementRef, type Instance } from '../workflow/deduce';
@@ -153,10 +154,17 @@ function adoptOne(
 
   let element: ElementRef;
   if (named !== null) {
-    const found = elementAt(snapshot.documents, named.type, named.id);
+    // `--element <type>:<ref>` takes a short reference (task-332, `spec-008` §7): everything below, the record
+    // included, names the element's full id.
+    const resolution =
+      snapshot.memoryYaml === null
+        ? ({ kind: 'missing' } as const)
+        : resolveElementReference(snapshot.documents, snapshot.memoryYaml, named.id, { type: named.type });
+    if (resolution.kind === 'ambiguous') return coreErr(ambiguousReferenceError(named.id, resolution.candidates));
+    const found = resolution.kind === 'found' ? elementAt(snapshot.documents, named.type, String(resolution.document.frontmatter['id'])) : null;
     if (found === null) return coreErr({ code: 'NOT_FOUND', message: `element not found: ${named.type}:${named.id}` });
     const provenance = resolveProvenance(snapshot, openInstances(deduction));
-    const ownerKey = `${named.type}:${named.id}`;
+    const ownerKey = `${found.type}:${found.id}`;
     const owner = provenance.owners.get(ownerKey) ?? provenance.conflicts.find((conflict) => `${conflict.element.type}:${conflict.element.id}` === ownerKey)?.claims[0];
     if (owner !== undefined) {
       return coreErr({

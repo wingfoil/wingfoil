@@ -60,7 +60,8 @@ export interface Proposal {
 export interface Settled {
   readonly id: string;
   readonly metric: string;
-  readonly settled: 'adopted and effective' | 'adopted, no effect yet' | 'not adopted' | 'superseded';
+  /** `pending` when the previous release is a patch, which runs no retrospective (`bug-443`). */
+  readonly settled: 'adopted and effective' | 'adopted, no effect yet' | 'not adopted' | 'superseded' | 'pending';
   readonly outcome: string | null;
   readonly element: string | null;
   readonly note?: string;
@@ -90,7 +91,7 @@ export function evaluateFloor(id: string, entry: MetricEntry | null | undefined)
 export function compareReports(input: { catalogue: Catalogue; current: Report; previous: Report | null; history?: readonly Report[]; remeasure?: (previous: Report) => Promise<Report> }): Promise<Comparison>;
 export function propose(comparison: Comparison, options: { search: (id: string) => SearchResult | Promise<SearchResult>; memoryYaml: unknown }): Promise<Comparison>;
 export function parseProposals(markdown: string): { id: string; metric: string; element: string | null }[];
-export function settle(previousProposals: readonly { id: string; metric: string }[], retroText: string | null, comparison: Comparison): Settled[];
+export function settle(previousProposals: readonly { id: string; metric: string }[], retroText: string | null, comparison: Comparison, previousKind?: 'major' | 'minor' | 'patch'): Settled[];
 export function renderReport(comparison: Comparison): string;
 export function compareRelease(root: string, options: { release: string; report?: string; out?: string; catalogue?: string; search?: (id: string) => SearchResult | Promise<SearchResult>; remeasure?: false | ((previous: Report) => Promise<Report>); offline?: boolean; toolchain?: boolean; anyNode?: boolean; maxWorkers?: number }): Promise<{ path: string; comparison: Comparison }>;
 export function main(argv: readonly string[]): Promise<number>;

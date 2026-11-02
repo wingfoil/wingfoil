@@ -24,8 +24,9 @@
 #             guard off, so the script is the only guard. The version is NOT live yet: it waits in npm's stage
 #             queue until the approver approves it on npm with 2FA (adr-011), and goes live under the tag it was
 #             staged with (npm 11.19.0 `npm-stage.md`: the tag is "an immutable property of the staged package").
-#   release → once `npm view wingfoil@<version> version` answers exactly that version (never `@latest`,
-#             dl-159), create the GitHub Release `vX.Y.Z` with the version's CHANGELOG.md section as notes
+#   release → once `npm view wingfoil@<version> version dist.tarball --json` answers exactly that version (never
+#             `@latest`, dl-159) and its tarball answers HTTP 200 (npm lists a version minutes before it serves the
+#             tarball; task-306, bug-433), create the GitHub Release `vX.Y.Z` with the version's CHANGELOG.md section as notes
 #             (`scripts/changelog-section.cjs`, extracted first, so a missing section fails at once), and
 #             attach the gate's four test reports — jest-results.json, coverage-summary.json, lcov.info and
 #             test-results.md (dl-136 Q1 (c), Q3 (a): the tag's run describes the published commit). The wait

@@ -61,6 +61,27 @@ export function pathPatternFolder(pattern: string): string {
 }
 
 /**
+ * A `memory.yaml` type `path` pattern as a whole-path regular expression (`spec-017` §1.4). A token in the
+ * file name is one name; a token in a directory is one or more directories, since a value such as the
+ * plan's `{scope}` nests (`rl-v1/rel-v0.3`, `.wingfoil/memory.yaml` `plan.path`).
+ *
+ * The one test of "a path this type's pattern can produce": the workflow deduction uses it to tell a
+ * frontmatter-less Memory document from a non-document (`src/workflow/deduce.ts`), and the type-scoped
+ * Memory reads to decide which unreadable files a read of one type reports (task-314, `bug-283`,
+ * `src/memory/query.ts`). Several types' patterns can produce one path — `docs/04_memory/{release}/{id}.md`
+ * produces every path under `docs/04_memory/` — and such a path belongs to each of them.
+ */
+export function pathPatternRegExp(pattern: string): RegExp {
+  const slash = pattern.lastIndexOf('/');
+  const convert = (part: string, token: string): string =>
+    part
+      .split(/\{[^{}]+\}/)
+      .map((piece) => piece.replace(/[.*+?^$()|[\]\\]/g, '\\$&'))
+      .join(token);
+  return new RegExp(`^${convert(pattern.slice(0, slash + 1), '[^/]+(?:/[^/]+)*')}${convert(pattern.slice(slash + 1), '[^/]+')}$`);
+}
+
+/**
  * Whether the normalized root-relative `path` lies strictly under `folder`. An empty folder confines nothing
  * beyond the root: a path that climbs out of it or is absolute was already refused by the root checks, which
  * run first.

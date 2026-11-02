@@ -142,8 +142,8 @@ describe('AC 1 / AC 2 — every workflow loads at HEAD with zero errors and only
       // task-288 (dl-159 A1.8, approver ruling D3): on-integration-branch is bound (scripts/integration-branch.cjs);
       // which phase branch has merged into the integration branch is a reading no command asserts.
       ["release-publishing", "phases[2].checks.pre[1]", "phase-branch-merged-to-integration-branch"],
-      // task-229 (dl-130 Action 2): the prose post check also names the GitHub Release; task-238 (dl-130 step 2) the MCP Registry listing; task-244 (dl-136) the test reports attached to the Release.
-      ["release-publishing", "phases[3].checks.post[0]", "staged version approved on npm, live on the npm registry, its GitHub Release created with the test reports attached and its MCP Registry listing published"],
+      // task-229 (dl-130 Action 2): the prose post check also names the GitHub Release; task-238 (dl-130 step 2) the MCP Registry listing; task-244 (dl-136) the test reports attached to the Release; task-306 (bug-433): installable once its tarball answers HTTP 200.
+      ["release-publishing", "phases[3].checks.post[0]", "staged version approved on npm, installable from the npm registry once its tarball answers HTTP 200, its GitHub Release created with the test reports attached and its MCP Registry listing published"],
       // task-222 (dl-089 §1): the report checks, unbound until scripts/release-health/ ships them (task-231, task-241).
       ["release-health", "phases[0].checks.post[0]", "every catalogue metric has a value or an explicit not-measurable reason"],
       ["release-health", "phases[1].checks.post[0]", "every regressed metric and every breached floor has a finding"],
@@ -273,7 +273,7 @@ function measure(workflows: readonly Workflow[]): { checkpoints: string[]; final
 }
 
 describe('AC 4 — spec-017 §12\'s deduction consequences, re-measured', () => {
-  it('17 checkpoint phases (28 at 4fd77678: end-of-life.deprecate now selects what it deprecates; 27 until task-207: e2e-smoke.gate produces its report, bug-134; 27 again from task-219: release-publishing.release-commit, while staging-rehearsal produces its transcript; 28 from task-222: release-health.propose writes into the report compare produced; 29 from task-212: vision-change.update-vision; 30 from task-230: wave.re-plan, the re-plan checkpoint of dl-100 §2; 28 from task-244: release-submit.pre-release-checks produces the candidate’s test-results summary and release-publishing.publish the tag run’s, dl-136; 17 from task-301: the eleven phases of user-story-mapping, specification-by-examples, volere-requirements and backlog-export produce their module’s output directory, bug-389)', () => {
+  it('18 checkpoint phases (28 at 4fd77678: end-of-life.deprecate now selects what it deprecates; 27 until task-207: e2e-smoke.gate produces its report, bug-134; 27 again from task-219: release-publishing.release-commit, while staging-rehearsal produces its transcript; 28 from task-222: release-health.propose writes into the report compare produced; 29 from task-212: vision-change.update-vision; 30 from task-230: wave.re-plan, the re-plan checkpoint of dl-100 §2; 28 from task-244: release-submit.pre-release-checks produces the candidate’s test-results summary and release-publishing.publish the tag run’s, dl-136; 17 from task-301: the eleven phases of user-story-mapping, specification-by-examples, volere-requirements and backlog-export produce their module’s output directory, bug-389; 18 from task-306: release-publishing.merge-forward, recorded by workflow finalize, bug-428)', () => {
     expect(measure(registry().workflows).checkpoints).toEqual([
       'vision-change.update-vision',
       'release-planning.advance-pinned-build',
@@ -288,6 +288,7 @@ describe('AC 4 — spec-017 §12\'s deduction consequences, re-measured', () => 
       'release-submit.approve-release',
       'release-publishing.release-commit',
       'release-publishing.tag',
+      'release-publishing.merge-forward',
       'release-health.propose',
       'retrospective.additional-points',
       'retrospective.approve',
@@ -317,7 +318,7 @@ describe('AC 4 — spec-017 §12\'s deduction consequences, re-measured', () => 
     ]);
   });
 
-  it('7 approvals recorded by workflow finalize (7 at 4fd77678: retrospective.approve now carries its decision-log; align-agent-docs lives in agent-docs; 6 until task-230 added wave.re-plan)', () => {
+  it('8 approvals recorded by workflow finalize (7 at 4fd77678: retrospective.approve now carries its decision-log; align-agent-docs lives in agent-docs; 6 until task-230 added wave.re-plan; 8 from task-306: release-publishing.merge-forward, bug-428)', () => {
     expect(measure(registry().workflows).finalizeApprovals).toEqual([
       'wave.re-plan',
       'user-docs.align-user-docs',
@@ -325,6 +326,7 @@ describe('AC 4 — spec-017 §12\'s deduction consequences, re-measured', () => 
       'e2e-smoke.gate',
       'release-submit.approve-release',
       'release-publishing.publish',
+      'release-publishing.merge-forward',
       'retrospective.additional-points',
     ]);
   });

@@ -123,6 +123,20 @@ function isHasElement(v: unknown): v is HasElement {
   return typeof v === 'object' && v !== null && 'element' in v;
 }
 
+/**
+ * True when `schema` declares a **typed catchall** — `.catchall(<schema>)` with a schema other than
+ * `z.unknown()` — so that every key absent from its `shape` is declared, and validated, by the catchall
+ * (task-312, `bug-316`: `Paths` admits a project-specific category as a `string[]`, spec-002). Read
+ * structurally from Zod 4's `def.catchall.def.type`: `.passthrough()` sets an `unknown` catchall (its extra
+ * keys are kept but not declared, so they still warn), a plain object has none, and `.strict()` sets a
+ * `never` one (its extra keys are refused, not declared, and fail validation before this warning runs).
+ */
+function hasTypedCatchall(schema: HasShape): boolean {
+  const def = (schema as { readonly def?: { readonly catchall?: { readonly def?: { readonly type?: unknown } } } }).def;
+  const type = def?.catchall?.def?.type;
+  return type !== undefined && type !== 'unknown' && type !== 'never';
+}
+
 /** True for a plain (non-array) object — a candidate raw value to recurse into. */
 function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -139,11 +153,13 @@ function collectUnknownFields(
   prefix: string,
 ): string[] {
   const known = new Set(Object.keys(schema.shape));
+  const extrasDeclared = hasTypedCatchall(schema);
   const out: string[] = [];
   for (const key of Object.keys(raw)) {
     const path = prefix ? `${prefix}.${key}` : key;
     if (!known.has(key)) {
-      out.push(path);
+      // A typed catchall declares (and validates) every extra key, so none of them is unknown.
+      if (!extrasDeclared) out.push(path);
       continue;
     }
     // Known key: descend when the declared field is itself a passthrough object schema (or an

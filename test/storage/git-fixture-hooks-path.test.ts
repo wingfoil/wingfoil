@@ -11,7 +11,9 @@
  * `GIT_CONFIG_NOSYSTEM`), handed through an explicit `env` to the git processes this suite spawns itself
  * ({@link gitIsolated}, {@link commitIsolated}): the developer's real git configuration is never
  * written, and those calls never read it. The fixture helpers this suite exercises (`makeTempGitRepo`,
- * `cloneTempRepo`, `commitAll`, `git`) spawn git with no `env`, so they still read it. Explicit, not an assignment to
+ * `cloneTempRepo`, `commitAll`, `git`) spawn git with `fixtureGitEnv()`, which reads no global or system
+ * configuration at all (`bug-278`, task-308): the pin of `core.hooksPath` keeps the planted hooks running for
+ * the git processes this suite spawns under its global file. Explicit, not an assignment to
  * `process.env`: jest gives each suite a sandboxed copy of `process.env`, and `child_process` spawns
  * with the real one unless `env` is passed — which is why `src/storage/commit.ts` passes
  * `env: process.env` explicitly, and why this suite commits the way it does (see {@link commitIsolated}).

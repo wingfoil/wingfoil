@@ -14,14 +14,13 @@
  * The fixture lives outside `test/fixtures/agents/custom/` so the fake adapters every other suite and
  * the e2e-smoke gate copy from there are unchanged; it is copied into the project's `agents/custom/`.
  */
-import { spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { git, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
 import { AGENTS_FIXTURES, DNA_YAML, seed, TASK_ID, TASK_REF } from '../agent/helpers/agent-execute-fixture';
-import { CLI_ENTRY } from './helpers/spawn-cli';
+import { CLI_ENTRY, spawnCapture } from './helpers/spawn-cli';
 
 const ADAPTER = 'fake-config-arg';
 const FIXTURE = join(AGENTS_FIXTURES, 'config-arg', `${ADAPTER}.yaml`);
@@ -43,7 +42,7 @@ interface FakeEntry {
 const scratch: string[] = [];
 let repo: string;
 let before: string;
-let run: { status: number | null; stdout: string; stderr: string; leftInTmp: string[]; fake: FakeEntry[] };
+let run: { status: number; stdout: string; stderr: string; leftInTmp: string[]; fake: FakeEntry[] };
 
 function scratchDir(prefix: string): string {
   const dir = mkdtempSync(join(tmpdir(), prefix));
@@ -62,12 +61,10 @@ beforeAll(() => {
   const tmp = scratchDir('wf-config-arg-tmp-');
   const recordFile = join(scratchDir('wf-config-arg-rec-'), 'fake.jsonl');
   const inherited = Object.fromEntries(Object.entries(process.env).filter(([name]) => !/^(GIT_(AUTHOR|COMMITTER)_|WINGFOIL_FAKE_AGENT_)/.test(name)));
-  const result = spawnSync(process.execPath, [CLI_ENTRY, 'agent', 'execute', '--element', TASK_REF, '--role', 'developer'], {
+  const result = spawnCapture(process.execPath, [CLI_ENTRY, 'agent', 'execute', '--element', TASK_REF, '--role', 'developer'], {
     cwd: repo,
-    encoding: 'utf-8',
     env: { ...inherited, TMPDIR: tmp, TMP: tmp, TEMP: tmp, WINGFOIL_FAKE_AGENT_RECORD: recordFile, WINGFOIL_FAKE_AGENT_CONNECT: '1' },
   });
-  if (result.error) throw result.error;
   const fake = existsSync(recordFile)
     ? readFileSync(recordFile, 'utf-8').split('\n').filter((line) => line !== '').map((line) => JSON.parse(line) as FakeEntry)
     : [];

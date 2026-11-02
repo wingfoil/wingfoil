@@ -20,6 +20,14 @@
  * - AC 5 (red-first, reclassified at design): `bindings.yaml`'s git comments, `WORKFLOW.md`'s Dev Loop and
  *   Release Publishing texts and nodes; D5: `sw-life-cycle.yaml` and `release-cycle.yaml` headers.
  *   (`git-conventions` §1 is `test/directives/dev-loop-done-order.test.ts`.)
+ *
+ * task-319 (`bug-386`, `bug-387`; design gate approved by the approver on 2026-10-30: D1 (a), D2 yes, D3 yes):
+ * - AC1 (red-first): the comment above `on-integration-branch` states exit 1 (another branch, or detached) and
+ *   exit 2 for a HEAD git cannot read; `bindings.yaml` `version:` ≥ 2.8 with a 2.8 entry naming task-319;
+ * - AC2 (red-first): the binding's `version` pattern admits only a minor's `vX.Y` and a patch's `vX.Y.Z` (Z ≥ 1),
+ *   no leading zeros (D3: the union; the script ties a shape to its kind) — the exact-`args` and good/bad pins of
+ *   task-288 are rewritten; every release of `rl-v1` at HEAD passes the pattern and the derivation
+ *   (characterization).
  */
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
@@ -27,6 +35,7 @@ import { join } from 'node:path';
 
 import { load as yamlLoad } from 'js-yaml';
 
+import { integrationBranch } from '../../scripts/integration-branch.cjs';
 import { loadWorkflowRegistryAtHead } from '../../src/core';
 import { resolveToken } from '../../src/workflow/bindings';
 import type { Phase, Workflow } from '../../src/workflow/schema';
@@ -67,11 +76,11 @@ function versionLine(raw: string): { value: number; rest: string } {
 
 /**
  * The history entry of `version` in a version-line comment: the first `;`- or `(prev`-delimited segment that
- * names `version` as a word and `task-288`.
+ * names `version` as a word and `task` (`task-288` unless given; task-319 passes its own).
  */
-function historyEntry(rest: string, version: string): string | undefined {
+function historyEntry(rest: string, version: string, task = 'task-288'): string | undefined {
   const word = new RegExp(`(^|[\\s(])${version.replace('.', '\\.')}([\\s):,]|$)`);
-  return rest.split(/;|\(prev /).find((segment) => word.test(segment) && segment.includes('task-288'));
+  return rest.split(/;|\(prev /).find((segment) => word.test(segment) && segment.includes(task));
 }
 
 function workflow(name: string): Workflow {
@@ -154,9 +163,9 @@ describe('task-288 AC 2 — dev-loop.yaml merges from / into the integration bra
 });
 
 describe('task-288 AC 3 — release-publishing `tag` on the integration branch (1.8 → 1.9), the bound pre-check', () => {
-  it('the phase order is unchanged; `tag` pre-checks the integration branch first and evidence-only last', () => {
+  it('the phase order is unchanged but for task-306\'s merge-forward, appended last; `tag` pre-checks the integration branch first and evidence-only last', () => {
     const wf = workflow('release-publishing');
-    expect(wf.phases.map((p) => p.name)).toEqual(['release-commit', 'staging-rehearsal', 'tag', 'publish', 'mark-released']);
+    expect(wf.phases.map((p) => p.name)).toEqual(['release-commit', 'staging-rehearsal', 'tag', 'publish', 'mark-released', 'merge-forward']);
     expect(phaseOf(wf, 'tag').checks?.pre).toEqual([
       ON_INTEGRATION_BRANCH,
       'phase-branch-merged-to-integration-branch',
@@ -192,11 +201,12 @@ describe('task-288 AC 3 — release-publishing `tag` on the integration branch (
       checks: Record<string, { run: string[]; severity?: string; args?: Record<string, string> }>;
     };
 
+    // task-319 AC2 rewrites the `version` pattern of this pin (D3: a minor's vX.Y or a patch's vX.Y.Z, Z ≥ 1).
     it('the binding runs the script in check mode, at severity reject, with the kind and version patterns', () => {
       expect(bindings.checks['on-integration-branch']).toEqual({
         run: ['node', 'scripts/integration-branch.cjs', '--check-head', '--kind', '{kind}', '--version', '{version}'],
         severity: 'reject',
-        args: { kind: '^(minor|patch)?$', version: '^v[0-9]+\\.[0-9]+(\\.[0-9]+)?$' },
+        args: { kind: '^(minor|patch)?$', version: '^v(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(\\.[1-9][0-9]*)?$' },
       });
     });
 
@@ -206,10 +216,11 @@ describe('task-288 AC 3 — release-publishing `tag` on the integration branch (
       for (const bad of ['major', '-x', 'patch;x']) expect(bad).not.toMatch(pattern);
     });
 
-    it('the `version` pattern accepts vX.Y and vX.Y.Z and refuses anything else', () => {
+    // task-319 AC2 widens the refused set of this pin: a vX.Y.0, leading zeros and a pre-release are refused.
+    it('task-319 AC2 — the `version` pattern accepts a minor\'s vX.Y and a patch\'s vX.Y.Z (Z ≥ 1) and refuses anything else', () => {
       const pattern = new RegExp(bindings.checks['on-integration-branch']?.args?.['version'] ?? '(?!)');
-      for (const good of ['v0.3', 'v0.3.1']) expect(good).toMatch(pattern);
-      for (const bad of ['0.3.1', 'v0.3.1;x', '-v0.3']) expect(bad).not.toMatch(pattern);
+      for (const good of ['v0.3', 'v0.3.1', 'v10.20.3']) expect(good).toMatch(pattern);
+      for (const bad of ['v0.3.0', 'v01.3', 'v0.3.1-rc.1', '0.3.1', 'v0.3.1;x', '-v0.3', 'garbage']) expect(bad).not.toMatch(pattern);
     });
 
     it('the pre-check token resolves to that command', () => {
@@ -288,5 +299,96 @@ describe('task-288 D5 — sw-life-cycle.yaml (1.1 → 1.2) and release-cycle.yam
     const entry = historyEntry(rest, version);
     expect(entry).toBeDefined();
     expect(entry).toContain('dl-159');
+  });
+});
+
+/**
+ * task-306 AC 1 (red-first; `bug-428`, `release-planning-rel-v0.3.2-plan` R8) — `release-publishing` declares the
+ * merge forward of a patch line as its last phase, `merge-forward`: optional (a minor does no work in it), role
+ * `tech-lead`, under the approver's approval, recorded by `workflow finalize` (`spec-017` §4.10: an optional last
+ * phase is never skipped). Read at `HEAD`, like the rest of this file; the version pin is "≥" plus the history entry
+ * naming task-306 and bug-428 (bug-314).
+ */
+describe('task-306 AC 1 — release-publishing ends with the merge-forward phase (2.0 → 2.1)', () => {
+  it('merge-forward is the last phase: optional, role tech-lead, the approver\'s approval, the merge and one agent step, no checks or produces', () => {
+    const wf = workflow('release-publishing');
+    expect(wf.phases[wf.phases.length - 1]?.name).toBe('merge-forward');
+    const phase = phaseOf(wf, 'merge-forward');
+    expect(phase.optional).toBe(true);
+    expect(phase.role).toBe('tech-lead');
+    expect(phase.approval).toEqual({ by_role: 'approver' });
+    expect(phase.actions).toEqual(['git.merge(from: integration_branch, ff: false)', 'agent.execute']);
+    expect(phase.checks).toBeUndefined();
+    expect(phase.produces).toBeUndefined();
+  });
+
+  it('the registry loads at HEAD with no error, and its only warnings are the 65 unbound checks', () => {
+    const { diagnostics } = loadWorkflowRegistryAtHead(ROOT);
+    const codes = diagnostics.map((d) => d.code);
+    expect(codes.filter((code) => code.startsWith('E_'))).toEqual([]);
+    expect(new Set(codes)).toEqual(new Set(['W_WORKFLOW_UNBOUND_TOKEN']));
+    expect(codes.length).toBe(65);
+  });
+
+  it("the merge-forward merge is a bound manual step", () => {
+    const { bindings } = loadWorkflowRegistryAtHead(ROOT);
+    expect(resolveToken('git.merge(from: integration_branch, ff: false)', 'action', bindings).kind).toBe('manual');
+  });
+
+  it('`version:` is 2.1 or later, with a 2.1 entry naming task-306 and bug-428', () => {
+    const raw = atHead(PUBLISHING_FILE);
+    const { value, rest } = versionLine(raw);
+    expect(value).toBeGreaterThanOrEqual(2.1);
+    expect(raw).toMatch(/2\.1 [^;]*task-306/);
+    const entry = rest.split(/;|\(prev /).find((segment) => /(^|[\s(])2\.1([\s):,]|$)/.test(segment) && segment.includes('task-306'));
+    expect(entry).toBeDefined();
+    expect(entry).toContain('bug-428');
+  });
+});
+
+describe('task-319 — on-integration-branch: the binding comment, the version and the releases of rl-v1 (bindings.yaml 2.7 → 2.8)', () => {
+  const raw = readFileSync(join(ROOT, '.wingfoil', 'workflows', 'bindings.yaml'), 'utf-8');
+
+  it('AC1 — the comment above the binding states exit 1 (another branch, or detached) and exit 2 for a HEAD git cannot read', () => {
+    // From the end of the `evidence-only-since-candidate:` line to the `on-integration-branch:` line.
+    const from = raw.indexOf('\n', raw.indexOf('  evidence-only-since-candidate:'));
+    const to = raw.indexOf('  on-integration-branch:');
+    expect(from).toBeGreaterThan(0);
+    expect(to).toBeGreaterThan(from);
+    const block = flat(raw.slice(from, to).replace(/^\s*#\s?/gm, ''));
+    expect(block).toContain('Exit 1 = HEAD on another branch or detached');
+    expect(block).toContain('a HEAD git cannot read');
+    expect(block).not.toContain('Exit 2 = a kind or a patch version the derivation refuses');
+  });
+
+  it('AC1, AC2 — `version:` is 2.8 or later with a 2.8 entry naming task-319', () => {
+    const { value, rest } = versionLine(raw);
+    expect(value).toBeGreaterThanOrEqual(2.8);
+    expect(historyEntry(rest, '2.8', 'task-319')).toBeDefined();
+  });
+
+  /** Every release file of rl-v1 as HEAD holds it: its `kind` (undefined when absent) and `version`. */
+  function releasesAtHead(): Array<{ path: string; kind: string | undefined; version: string }> {
+    const dir = 'docs/04_memory/planning/rl-v1';
+    const paths = execFileSync('git', ['-C', ROOT, 'ls-tree', '--name-only', 'HEAD', `${dir}/`], { encoding: 'utf-8' })
+      .split('\n')
+      .filter((path) => path.endsWith('.md'))
+      .sort();
+    return paths.map((path) => {
+      const text = atHead(path);
+      const match = /^---\n([\s\S]*?)\n---/.exec(text);
+      if (!match) throw new Error(`${path} has no frontmatter`);
+      const fm = yamlLoad(match[1] ?? '') as { kind?: unknown; version?: unknown };
+      return { path, kind: typeof fm.kind === 'string' ? fm.kind : undefined, version: String(fm.version) };
+    });
+  }
+
+  it('AC2 (characterization) — every release of rl-v1 at HEAD passes the version pattern and the derivation', () => {
+    const bindings = yamlLoad(raw) as { checks: Record<string, { args?: Record<string, string> }> };
+    const pattern = new RegExp(bindings.checks['on-integration-branch']?.args?.['version'] ?? '(?!)');
+    const releases = releasesAtHead();
+    expect(releases.length).toBeGreaterThanOrEqual(8);
+    const refused = releases.filter(({ kind, version }) => !pattern.test(version) || !integrationBranch({ kind, version }).ok);
+    expect(refused).toEqual([]);
   });
 });

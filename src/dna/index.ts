@@ -29,7 +29,7 @@ export {
 // place a dotted path is split, and therefore the one definition of the quoted-segment rule that makes
 // an entry named `Node.js` addressable. `isValidKeyPath` is that parser reduced to a boolean, and
 // `quoteDnaSegment` is its inverse, used where a refusal echoes part of a path.
-export { isValidKeyPath, quoteDnaSegment, splitDnaPath, setDnaValueInText, DNA_KEY_ALIASES } from './set';
+export { isValidKeyPath, quoteDnaSegment, splitDnaPath, DNA_KEY_ALIASES } from './set';
 export type { DnaPathSplit } from './set';
 
 // task-093-dna-mutation-surface-add-remove-update — the mutation surface `dl-081-dna-mutation-surface-shape`

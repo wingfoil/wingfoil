@@ -542,6 +542,30 @@ export function unresolvedRef<T>(known: KnownRefs, ref: string): CoreResult<T> {
 }
 
 /**
+ * The instance `ref` selects (`spec-017` §3.3): a workflow name — its most recently started open
+ * instance — or an open instance id; without `ref`, the active instance (`null` when none is open).
+ * A `ref` that names no open instance is `NOT_FOUND` (§10): `workflow is not open: <ref>` for a loaded
+ * workflow or an instance plan, `unknown workflow: <ref>` for anything else ({@link unresolvedRef}).
+ *
+ * The §10 answer needs `snapshot`: a {@link Deduction} carries the open instances only, so without it the
+ * function cannot tell a loaded workflow or a closed instance plan from a name that is nothing, and
+ * answers `workflow is not open: <ref>` for every unresolved `ref`. That answer without the snapshot is
+ * not reliable, and the snapshot becomes a mandatory argument in v0.4 (`bug-465`); pass it.
+ *
+ * @param snapshot the snapshot `deduction` was deduced from (`readDeductionSnapshotAtHead`).
+ */
+export function selectWorkflowInstance(
+  deduction: Deduction,
+  ref?: string,
+  snapshot?: Pick<DeductionSnapshot, 'workflows' | 'documents'>,
+): CoreResult<InstanceDeduction | null> {
+  const found = resolveInstanceRef(deduction, ref);
+  if (ref === undefined || found !== null) return coreOk(found);
+  if (snapshot === undefined) return coreErr({ code: 'NOT_FOUND', message: `workflow is not open: ${ref}`, details: { ref } });
+  return unresolvedRef({ workflows: snapshot.workflows, plans: instancePlanIds(snapshot.documents) }, ref);
+}
+
+/**
  * Why an instance whose frontier is empty has no next step (`spec-017` §7.3): complete, abandoned (§4.11)
  * or its workflow not loaded. Shared by `next` and `finalize` (task-226).
  */

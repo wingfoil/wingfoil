@@ -35,8 +35,9 @@ batch job — not only WingFoil's own CLI+MCP shape.
 ## Specification
 
 `DnaYaml` is the top-level Zod object. The TypeScript type is derived exclusively via
-`z.infer<typeof DnaYaml>` — no hand-written duplicate `interface`. Every object node is declared with
-`.passthrough()` (forward-compat convention): unknown keys are **preserved, not stripped**, so a file
+`z.infer<typeof DnaYaml>` — no hand-written duplicate `interface`. Every object node but `Paths` is
+declared with `.passthrough()` (forward-compat convention; `Paths` declares its extra keys with a typed
+catchall, [Categories](#categories-p25)): unknown keys are **preserved, not stripped**, so a file
 written by a newer WingFoil version stays loadable by an older client, with validation still
 succeeding.
 
@@ -164,7 +165,8 @@ const Paths = z.object({
   config:     z.array(z.string()).optional(),
   governance: z.array(z.string()).optional(),
   runs:       z.array(z.string()).length(1).optional(),
-}).passthrough();
+  health:     z.array(z.string()).length(1).optional(),
+}).catchall(z.array(z.string()));   // a project's own category: an ordered string[] (Categories)
 
 export const DnaYaml = z.object({
   version: z.number().positive(),
@@ -275,8 +277,12 @@ or forced — sets `dna.yaml`'s `version:` to its next content revision, by the 
 `wingfoil paths [category]` queries `paths` by the seven category names **sources, tests, docs, config,
 governance, runs, health** (X_cli-cmds.md; `runs` per `spec-016-agent-execution` §4.1; `health` per
 `dl-089-release-health-analyses-before-retrospective` §1 (A)). Each maps to an
-ordered `string[]`; missing categories are permitted, and `.passthrough()` allows a future category to
-be added without invalidating existing files.
+ordered `string[]`; missing categories are permitted. A project may also add **its own category** (e.g.
+`extras: [notes/]`): `Paths` declares it with a typed catchall, `.catchall(z.array(z.string()))`, so it is
+validated like the others — one that is not a list of strings is a validation error at `paths.<name>` — loads
+with no unknown-field warning (`spec-009` §2), and `wingfoil paths <name>` serves it. The write verbs
+(`dna set | add | remove | update`) still address only the seven declared categories: an extra one is refused
+as an unknown DNA field, exit 1 (`dl-081`), and is edited by hand.
 
 `runs` is the one category with a cardinality rule: it names the directory of the agent run log
 (`<runs>/<element-id>.jsonl`), so it holds **exactly one** entry, and a document declaring zero or two
@@ -502,3 +508,11 @@ two `health` directories. Edited in place without a supersede or a state change 
 `patch-v0.3.1`, § "Writes keep the file's text, or are refused" gains `dl-174` (a)'s rule, by reference to
 `spec-006` §6 item 7. Edited in place without a supersede or a state change (`dl-047`), pending the approver's
 `memory amend`.
+
+**Revision (2026-10-30, `task-312`, the fix task of `bug-316`)
+— a project's own `paths` category is declared, per `bug-316`.** Categories allowed a future category through
+`.passthrough()`, yet the unknown-field warning reported each one as "ignored" while `wingfoil paths <name>` served
+it. `Paths` now takes `.catchall(z.array(z.string()))`: an extra category is an ordered `string[]`, validated, and
+loads with no warning (`spec-009` §2 states the rule); the write verbs still refuse it. The Zod listing gains the
+catchall and the `health` line `task-222` added to Categories. A document valid before stays valid unless an extra
+category is not a list of strings. Edited in place without a supersede or a state change (`dl-047`).

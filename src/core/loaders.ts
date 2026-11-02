@@ -16,7 +16,7 @@ import { DirectiveFrontmatter, RolesYaml } from '../directives/schema';
 import { checkDirectiveVersion } from '../directives/version';
 import { DnaYaml } from '../dna/schema';
 import { MemoryYaml } from '../memory/schema';
-import { documentExists, extractFrontmatter, readDocument, readPathAtRev, readPathsAtRev } from '../storage';
+import { extractFrontmatter, readDocument, readPathAtRev, readPathsAtRev } from '../storage';
 import {
   Diagnostic,
   DiagnosticsError,
@@ -41,7 +41,7 @@ import {
 } from '../validation/format';
 import { Workflow, WorkflowsYaml } from '../workflow/schema';
 
-import { atHeadOr, listPathsAtCommit, resolveRevision } from './revision';
+import { atHeadOr, listBlobEntriesAtCommit, resolveRevision } from './revision';
 import { BINDINGS_FILE, BindingsYaml } from '../workflow/bindings';
 import {
   BindingsContext,
@@ -182,17 +182,62 @@ export class ConfigFileMissingError extends Error {
 }
 
 /**
+ * A configuration file the read needs exists but cannot be read (task-309, `bug-251`): a directory where
+ * the file should be, a mode that denies the read, a symbolic-link loop. Like
+ * {@link ConfigFileMissingError} the message names the file repository-relative and the cause, never the
+ * host's absolute path nor Node's raw text, and the original errno is kept as `code`. `coreErrorOf` maps
+ * it to the `IO` refusal (exit `1`): the storage failed, the project's configuration did not.
+ *
+ * - `EACCES` / `EPERM`: `<rel> cannot be read: permission denied`;
+ * - `EISDIR`: `<rel> is a directory, not a file`;
+ * - any other errno: `<rel> cannot be read (<code>)`.
+ */
+export class ConfigFileUnreadableError extends Error {
+  /**
+   * @param relativePath - the unreadable file, relative to the repository root (`.wingfoil/dna.yaml`).
+   * @param code - Node's errno for the failed read (`EACCES`, `EISDIR`, …), kept as it was.
+   */
+  constructor(
+    readonly relativePath: string,
+    readonly code: string,
+  ) {
+    super(unreadableMessage(relativePath, code));
+    this.name = 'ConfigFileUnreadableError';
+  }
+}
+
+/** {@link ConfigFileUnreadableError}'s message for `code` (the design gate's D4, task-309). */
+function unreadableMessage(relativePath: string, code: string): string {
+  if (code === 'EACCES' || code === 'EPERM') return `${relativePath} cannot be read: permission denied`;
+  if (code === 'EISDIR') return `${relativePath} is a directory, not a file`;
+  return `${relativePath} cannot be read (${code})`;
+}
+
+/**
+ * The WingFoil error a failed read of the configuration file `relativePath` becomes: `ENOENT` is a
+ * {@link ConfigFileMissingError}, any other errno a {@link ConfigFileUnreadableError}. An error without a
+ * string `code` (not a file-system failure: a programmer error) is returned as it was, for the caller to
+ * re-throw unchanged.
+ */
+function configReadError(error: unknown, relativePath: string): unknown {
+  const code = (error as NodeJS.ErrnoException | null)?.code;
+  if (typeof code !== 'string') return error;
+  if (code === 'ENOENT') return new ConfigFileMissingError(relativePath);
+  return new ConfigFileUnreadableError(relativePath, code);
+}
+
+/**
  * Read a working-tree configuration file named repository-relative (`.wingfoil/dna.yaml`): a missing one
- * is a {@link ConfigFileMissingError}, any other failure propagates unchanged. The relative path is also
- * the label every parse and validation issue carries (task-179, `bug-245`), as the `HEAD:`-labelled
- * readers already do.
+ * is a {@link ConfigFileMissingError}, one that exists but cannot be read a {@link ConfigFileUnreadableError}
+ * (task-309, `bug-251`), and a failure that is not a file-system one propagates unchanged. The relative
+ * path is also the label every parse and validation issue carries (task-179, `bug-245`), as the
+ * `HEAD:`-labelled readers already do.
  */
 function readConfigFile(root: string, relativePath: string): string {
   try {
     return readDocument(join(root, relativePath));
   } catch (error) {
-    if ((error as NodeJS.ErrnoException | null)?.code === 'ENOENT') throw new ConfigFileMissingError(relativePath);
-    throw error;
+    throw configReadError(error, relativePath);
   }
 }
 
@@ -483,9 +528,18 @@ function parseYamlOrDiagnostic(
 export function loadWorkflowsYaml(root: string): WorkflowsLoadResult {
   const configDir = join(root, '.wingfoil');
   return loadWorkflowsFrom({
+    // Absent is `null` (an empty registry, or `E_WORKFLOW_FILE_NOT_FOUND`): `ENOENT` (a dangling link
+    // included), or `ENOTDIR` (a parent that is a file), as the former `existsSync` pre-check read them.
+    // Any other failure — a directory, a denied mode, a symbolic-link loop — is refused as
+    // `readConfigFile` refuses it (task-309, `bug-251`, D5 (a)), never mistaken for an absent file.
     read: (file) => {
-      const path = join(configDir, file);
-      return documentExists(path) ? readDocument(path) : null;
+      try {
+        return readDocument(join(configDir, file));
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException | null)?.code;
+        if (code === 'ENOENT' || code === 'ENOTDIR') return null;
+        throw configReadError(error, `.wingfoil/${file}`);
+      }
     },
     // Repository-relative, never the host path (task-179, `bug-245`).
     label: (file) => `.wingfoil/${file}`,
@@ -673,6 +727,38 @@ export interface DirectiveFile {
 export const DIRECTIVES_DIR_PATH = '.wingfoil/directives' as const;
 
 /**
+ * The top-level keys a directive's frontmatter must carry: each {@link DirectiveFrontmatter} field that
+ * rejects an absent value (`id`, `name`, `type`, `kind`, `title` today), read from the schema so the list
+ * cannot drift from it.
+ */
+const REQUIRED_DIRECTIVE_KEYS: ReadonlySet<string> = new Set(
+  Object.entries(DirectiveFrontmatter.shape)
+    .filter(([, field]) => !field.safeParse(undefined).success)
+    .map(([key]) => key),
+);
+
+/**
+ * Run `validate` (the directive frontmatter's Zod pass) and word each issue about a required key that
+ * `data` does not carry as P3.5's message, `invalid directive: missing required field '<key>'` (task-309,
+ * `bug-025`; design gate D1 (a), D2 (a)). Code, path, file, issue order and exit code are unchanged; a key
+ * that is present with the wrong value (`null`, a number) keeps Zod's own text.
+ */
+function withMissingFieldMessages<T>(validate: () => T, data: unknown): T {
+  try {
+    return validate();
+  } catch (error) {
+    if (!(error instanceof ValidationError)) throw error;
+    const present = typeof data === 'object' && data !== null ? (data as Record<string, unknown>) : null;
+    const absent = (key: string): boolean =>
+      present !== null && REQUIRED_DIRECTIVE_KEYS.has(key) && !Object.prototype.hasOwnProperty.call(present, key);
+    const issues = error.issues.map((issue) =>
+      absent(issue.path) ? { ...issue, message: `invalid directive: missing required field '${issue.path}'` } : issue,
+    );
+    throw new ValidationError(issues, error.exitCode);
+  }
+}
+
+/**
  * The Directives pillar's per-file parse, over bytes that may come from anywhere — the working-tree
  * file ({@link loadDirectives}) or a git revision ({@link loadDirectivesAtHead}). `filePath` is a
  * label only: it rides every issue this raises, so an error names the baseline it came from
@@ -707,7 +793,7 @@ function parseDirectiveFile(
   // `version` never fails the pillar (task-144 review, R1): a lossy number or a wrong type is a warning.
   const versionCheck = checkDirectiveVersion(data, frontmatterText);
   if (versionCheck.warning !== null) warn(versionCheck.warning);
-  const frontmatter = runValidation(DirectiveFrontmatter, versionCheck.data, filePath);
+  const frontmatter = withMissingFieldMessages(() => runValidation(DirectiveFrontmatter, versionCheck.data, filePath), versionCheck.data);
   // `join`, so `DirectiveFile.path` carries the platform separator on both loaders — `requireCustomAsset`
   // and `selectDirectivesById` see one spelling whichever baseline produced the file.
   return { path: join('directives', ...relativePath.split('/')), frontmatter };
@@ -728,7 +814,9 @@ export interface DirectiveInventory {
 /**
  * The working-tree directive inventory, warnings included: the form a caller with a channel of its
  * own reads. `directives list` puts the warnings in its payload (`dl-042`), so they reach `--format
- * json` readers and MCP clients; `directive remove` puts them in its refusal's `details`. `src/core`
+ * json` readers and MCP clients. `directive remove` decides at `HEAD` ({@link loadDirectiveInventoryAtHead},
+ * task-311) and reads this only to word a refusal it has already decided, adding these warnings to its
+ * `details`. `src/core`
  * never prints them itself (task-143 review: a stray stderr line breaks spec-005 §3.2's one-object
  * error under `--format json`).
  *
@@ -803,7 +891,8 @@ export function loadDirectives(root: string): DirectiveFile[] {
  * untracked directive file used to be bindable, and the committed `roles.yaml` then named a directive
  * present in no commit — a dangling reference by construction, since every other clone gets the
  * binding without the file (REQ-SYS-08's referential integrity, the same way `bug-082` broke it for
- * `--role`).
+ * `--role`). `directive remove` resolves the directive it deletes from the same tree, through
+ * {@link loadDirectiveInventoryAtHead}, which also reports the symbolic links this skips (task-311).
  *
  * Unlike every other committed-baseline loader, this one needs a **directory listing at a revision**
  * (`storage.listPathsAtRev`, task-096) rather than one `readPathAtRev`: the pillar's members are
@@ -825,9 +914,10 @@ export function loadDirectivesAtHead(root: string): DirectiveFile[] {
 /**
  * Load and validate every Directives file **as commit `rev` holds it** (task-137, `spec-012` §2
  * `stateRef`) — the general form of {@link loadDirectivesAtHead}, which is this at `'HEAD'`: the
- * `.md` files `storage.listPathsAtRev` lists under `.wingfoil/directives/` at that commit, in its
+ * `.md` files `storage.listBlobEntriesAtRev` lists under `.wingfoil/directives/` at that commit, in its
  * sorted order, all read in one batch with `storage.readPathsAtRev` at the resolved sha (task-283). An empty array when the commit holds no
- * directive file; a later commit and the working tree are never read.
+ * directive file; a later commit and the working tree are never read. An entry the commit records as a
+ * **symbolic link** is skipped, never parsed: its blob is the link's target text, not a directive (task-311 D6 (a)).
  *
  * @param rev - A revision naming one commit, resolved once (`resolveRevision`, `./revision.ts`).
  * @throws `RevisionError` when `rev` is malformed or names no commit — never an empty array.
@@ -847,7 +937,24 @@ export function loadDirectivesAtCommit(root: string, sha: string): DirectiveFile
 }
 
 function directivesAt(root: string, sha: string, label: string): DirectiveFile[] {
-  const paths = listPathsAtCommit(root, sha, DIRECTIVES_DIR_PATH).filter((path) => path.endsWith('.md'));
+  return directiveEntriesAt(root, sha, label).files;
+}
+
+/**
+ * The directives commit `sha` holds, with the `.md` entries it records as **symbolic links** set apart
+ * (task-311, `dl-080` (B)). A link is a blob whose text is its target, not a directive: parsing that text
+ * refused every read of the pillar at the commit (`E_MISSING_FRONTMATTER`), so one committed link made
+ * every `directive assign` fail (task-311 D6 (a)). It is skipped, never parsed; `symlinks` lists it
+ * root-relative, in the listing's sorted order, for a caller with a channel to report it.
+ */
+function directiveEntriesAt(
+  root: string,
+  sha: string,
+  label: string,
+): { readonly files: DirectiveFile[]; readonly symlinks: string[] } {
+  const entries = listBlobEntriesAtCommit(root, sha, DIRECTIVES_DIR_PATH).filter((entry) => entry.path.endsWith('.md'));
+  const symlinks = entries.filter((entry) => entry.symlink).map((entry) => entry.path);
+  const paths = entries.filter((entry) => !entry.symlink).map((entry) => entry.path);
   // One batched read (`readPathsAtRev`, one `git cat-file --batch`) for every directive, not one `git show`
   // each (task-283, `bug-309`: 13 spawns per `workflow next` on this repository). `task-096`'s suite pins
   // this read by name, through the `../storage` barrel.
@@ -861,7 +968,39 @@ function directivesAt(root: string, sha: string, label: string): DirectiveFile[]
     if (raw === null) return;
     files.push(parseDirectiveFile(raw, `${label}:${path}`, path.slice(DIRECTIVES_DIR_PATH.length + 1)));
   });
-  return files;
+  return { files, symlinks };
+}
+
+/**
+ * The directive inventory **as `HEAD` records it**, with what it had to skip (task-311, `bug-108`,
+ * `dl-080` (B)): the committed counterpart of {@link loadDirectiveInventory}, read by the gate that
+ * resolves the directive `directive remove` deletes.
+ *
+ * `files` is {@link loadDirectivesAtHead}'s answer. A `.md` entry `HEAD` records as a symbolic link is
+ * skipped — no commit holds the directive it points at — and named twice: in `symlinks` (root-relative,
+ * sorted), and in `warnings` as `directive entry '<path>' skipped at HEAD: it is a symbolic link, whose
+ * target no commit records`. A repository with no commit yet answers the empty inventory. A committed
+ * file that fails to parse or validate stays fatal (`ValidationError`, naming `HEAD:<path>`), as every
+ * directive read is.
+ */
+export interface HeadDirectiveInventory extends DirectiveInventory {
+  /** The `.md` paths `HEAD` records as symbolic links, root-relative and sorted; empty when none. */
+  readonly symlinks: readonly string[];
+}
+
+/** See {@link HeadDirectiveInventory}. */
+export function loadDirectiveInventoryAtHead(root: string): HeadDirectiveInventory {
+  return atHeadOr(
+    root,
+    (): HeadDirectiveInventory => {
+      const { files, symlinks } = directiveEntriesAt(root, resolveRevision(root, 'HEAD'), 'HEAD');
+      const warnings = symlinks.map(
+        (path) => `directive entry '${path}' skipped at HEAD: it is a symbolic link, whose target no commit records`,
+      );
+      return { files, warnings, symlinks };
+    },
+    { files: [], warnings: [], symlinks: [] },
+  );
 }
 
 /**

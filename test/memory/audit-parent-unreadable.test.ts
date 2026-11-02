@@ -72,3 +72,67 @@ describe('an unreadable revision in the parent', () => {
     expect(() => reconstructMemoryTransitions(root, DOC, { strict: true })).toThrow(`${DOC}@${fixed}^1`);
   });
 });
+
+/**
+ * task-313 AC 3 (`bug-262`; approver design gate 2026-10-30, D4 (a)) — a past revision written in a newer `format`
+ * than this WingFoil reads is unreadable, as one whose frontmatter does not parse: tolerant, its transition has no
+ * `toState` and an `unreadable` naming `E_INVALID_FORMAT` (the current-document scan's wording), and the next one no
+ * `fromState`; strict, the read throws. Only a newer integer format is checked (spec-001), so `format: 1`, an absent
+ * `format` and `format: 1.5` read the status as before.
+ */
+describe('a past revision written in a newer format (task-313 AC 3, bug-262)', () => {
+  const NEWER = 'E_INVALID_FORMAT: this file is written in format 2; this WingFoil reads up to format 1: upgrade WingFoil';
+
+  /** add (format 1, draft) → submit (`middleFormat`, pending) → reject (format 1, draft). */
+  function threeRevisions(middleFormat: string | null): { root: string; shas: string[] } {
+    const root = makeTempGitRepo();
+    repos.push(root);
+    const doc = (status: string, format: string | null): string =>
+      ['---', 'id: task-1', 'type: task', `status: ${status}`, ...(format === null ? [] : [`format: ${format}`]), '---', '', 'Body.', ''].join('\n');
+    writeFixtureFile(root, DOC, doc('draft', '1'));
+    const add = commitAt(root, '10:00', 'wf(task): add task-1');
+    writeFixtureFile(root, DOC, doc('pending', middleFormat));
+    const submit = commitAt(root, '11:00', 'wf(task): submit task-1');
+    writeFixtureFile(root, DOC, doc('draft', '1'));
+    const reject = commitAt(root, '12:00', 'wf(task): reject task-1 [pending → draft]');
+    return { root, shas: [add, submit, reject] };
+  }
+
+  it('red-first: tolerant — the format-2 revision reads no status and carries the E_INVALID_FORMAT reason; the next reads fromState null', () => {
+    const { root, shas } = threeRevisions('2');
+    const transitions = reconstructMemoryTransitions(root, DOC);
+    expect(transitions.map((t) => [t.sha, t.fromState, t.toState, t.unreadable ?? null])).toEqual([
+      [shas[0], null, 'draft', null],
+      [shas[1], 'draft', null, NEWER],
+      [shas[2], null, 'draft', null],
+    ]);
+    expect('unreadable' in transitions[2]!).toBe(false);
+  });
+
+  it('red-first: strict — the read throws a ValidationError whose first issue is E_INVALID_FORMAT', () => {
+    const { root } = threeRevisions('2');
+    let thrown: unknown;
+    try {
+      reconstructMemoryTransitions(root, DOC, { strict: true });
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(ValidationError);
+    expect((thrown as ValidationError).issues[0]?.code).toBe('E_INVALID_FORMAT');
+  });
+
+  it.each([
+    ['format: 1', '1'],
+    ['an absent format', null],
+    ['format: 1.5 (read loosely, spec-001)', '1.5'],
+  ])('characterization: %s reads the status as before, tolerant and strict', (_label, format) => {
+    const { root, shas } = threeRevisions(format);
+    const expected = [
+      [shas[0], null, 'draft', null],
+      [shas[1], 'draft', 'pending', null],
+      [shas[2], 'pending', 'draft', null],
+    ];
+    expect(reconstructMemoryTransitions(root, DOC).map((t) => [t.sha, t.fromState, t.toState, t.unreadable ?? null])).toEqual(expected);
+    expect(reconstructMemoryTransitions(root, DOC, { strict: true }).map((t) => [t.sha, t.fromState, t.toState, t.unreadable ?? null])).toEqual(expected);
+  });
+});

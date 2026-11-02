@@ -200,7 +200,7 @@ flowchart TD
 
     RS["**submit** → `release-submit`\npre-release-checks → enter-releasing → approve-release\n✔ tests.no-identity: the suite with no git identity\nnpm run test:report → the candidate's test-results summary (dl-136)\n🔑 Approval gate — *approver*\nrelease: in-development → releasing\n↩ REJECT → pre-release-checks"]
 
-    RP2["**publishing** → `release-publishing`\nrelease-commit → staging-rehearsal → tag → publish → mark-released\nrelease commit = the candidate · staging rehearsal on it · git tag · npm stage publish + approve\n🔑 Approval gate — *approver*\nrelease: releasing → released\n(see sub-diagram below)"]
+    RP2["**publishing** → `release-publishing`\nrelease-commit → staging-rehearsal → tag → publish → mark-released → merge-forward\nrelease commit = the candidate · staging rehearsal on it · git tag · npm stage publish + approve\n🔑 Approval gate — *approver*\nrelease: releasing → released\n(see sub-diagram below)"]
 
     RT["**retrospective** → `retrospective`\nexplore → collect-feedback → additional-points → capture → approve\nexplore reads every Retrospective subsection first, lists its secondary sources (dl-115), the release-health report among them, and those of the patches released since the previous retrospective (dl-167)\ncollect-feedback (read-only, dl-163) reads every active repository service's feedback_inbox at its main, one row per note with a proposed outcome: `docs/09_retrospectives/rl-{release.release-line}/rel-{release.version}-feedback-triage.md`\n✔ pre additional-points: every proposal and every consumer note has one outcome (four; six for a consumer note, dl-163)\n✔ P4.12: [title]\n🔑 Approval gates — *approver* (approve: decision-log.set_state(ready), retro in-discussion → ready)\nOUTPUT: `docs/04_memory/design/dls/retro-{release.version}.md`"]
 
@@ -310,7 +310,12 @@ implementing the task (detail not predictable at planning time).
 
 Eight steps in sequence; `record-adrs` is optional. `advance-pinned-build` moves the pinned
 published build forward first (dl-095) and re-checks the `wingfoil-cli` directive against the new
-pin (dl-163 S3e); `triage-bugs` and `reconcile-governance` sweep in-scope
+pin (dl-163 S3e). The pin is per line: a patch's switch is committed on `release/X.Y` and pins only a
+published `X.Y.z`, a minor's on `main`; run `npm ci` in the release worktree before the pre-check (`bug-429`).
+After the switch the phase updates `AGENTS.md` §1's status sentence, and only it, in its own commit. For a
+`kind: patch`, `define-scope` and `triage-bugs` admit an element only if
+`git log --no-merges release/X.Y..main -- <file>` prints nothing; any other is captured again on the line first
+(`dl-206`, `git-conventions` §1). `triage-bugs` and `reconcile-governance` sweep in-scope
 `open` bugs and not-ready decision-logs/ADRs into their gated states (dl-016), selecting only
 elements whose `release` is empty or this release; `reconcile-governance` also selects `ready`
 decision-logs, for a coverage check only: each one of this release must be named by a task's `ref:`
@@ -330,7 +335,7 @@ which `memory submit` and `memory amend` read and the check restates (bug-342).
 
 ```mermaid
 flowchart TD
-    AB["**advance-pinned-build** *(tech-lead)*\nnpm.pin_advance(package: wingfoil-released)\nforward only, published builds only\n✔ check:lockfile · check:mcp · wingfoil-cli re-check"]
+    AB["**advance-pinned-build** *(tech-lead)*\nnpm.pin_advance(package: wingfoil-released)\nforward only, published builds only, per line\n✔ check:lockfile · check:mcp · wingfoil-cli re-check\n→ AGENTS.md §1 status"]
     DS["**define-scope** *(product-owner)*\nmemory.submit\nrelease: draft → planning\n✔ P4.12: [title, kind, version, pillar, features, requirements, release-line]\n(kind exempt for minor-v0.1 … minor-v1.0)\n20 % reserved for fixes and debt (dl-100 §4 (b))\nsweeps the scheduled change-proposals of the release\ninto its features: (dl-132 element 4; ✔ change-proposals.swept)\npast draft: memory amend by the approver\n(no kind: too, bug-342)"]
     TB["**triage-bugs** *(tech-lead)*\nmemory.approve: bug open → triaged\n🔑 Approval gate — *approver*\n↩ REJECT → closed"]
     RG["**reconcile-governance** *(product-owner)*\nmemory.approve: decision-log in-discussion → ready\nadr pending → accepted\nready decision-logs: coverage check only (a task ref: names each)\n✔ pre: role-directives.clean (check:role-directives)\n🔑 Approval gate — *approver*\n↩ REJECT → draft"]
@@ -388,7 +393,10 @@ and `agent list --past`, then, per template, Journey 4 (task-242): the self-chec
 `docs/examples/06-workflow-approval/run.sh` creates and starts a workflow, adds a task with `memory add
 --workflow`, routes its approval (the "human needed" line of `workflow status`), records a checkpoint with
 `workflow finalize` and ends the instance with `workflow end`, each checked for its exit code and its commit; and
-the repository's MCP registration checked. The
+the repository's MCP registration checked. Before the
+templates the gate also reads the repository's own workflows with the build under test (task-327, bug-404):
+`workflow list --all`, `workflow show` for every workflow it names and `workflow status`, each `--format json`;
+a non-zero exit, a stdout that is not JSON or an error diagnostic fails it, and the report states the counts. The
 gate hard-rejects, and its report is the phase's evidence (`produces:`, bug-134). The same smoke runs
 on every push in `ci.yml`'s `e2e-smoke` job, against the packed tarball.
 
@@ -415,17 +423,25 @@ HEAD on any other branch. Before the tag, `evidence-only-since-candidate` (task-
 <candidate>..<tip>` and passes only when the candidate is an ancestor of the tip and every changed path is
 an evidence path its binding declares; otherwise the candidate is re-cut. After a patch's tag, its
 `release/X.Y` line is merged forward into `main` with `--no-ff` (`git-conventions` §1, `dl-185` C1), never the
-other way: the phase's last step, run by hand until a workflow declares it.
+other way: the last phase, `merge-forward` (`optional: true`, role `tech-lead`, under the approver's
+approval; `bug-428`, task-306). The approver records it with `workflow finalize` first, the run's plan is
+ended and pushed on `release/X.Y`, and then the merge runs in a detached worktree at `origin/main`, with the
+commands `git-conventions` §1 rule 6 lists. A minor has nothing to merge forward and records the phase with
+`workflow finalize` and a `--reason` saying so: an optional last phase is never skipped (`spec-017` §4.10).
+`publish`'s `release` and `mcp-registry` jobs wait until the version's `dist.tarball` answers HTTP 200, not
+only until `npm view` lists it (`bug-433`), and its pre-check `tests.passing` is the run on the release
+commit, `npm run test:no-identity` (`bug-405`).
 
 ```mermaid
 flowchart TD
     RC["**release-commit** *(tech-lead)*\ngit.commit: the version bump (package.json, package-lock.json,\nserver.json, CHANGELOG.md, SECURITY.md) → merged: the candidate"]
     SR["**staging-rehearsal** *(qa)*\nnpm run publish:staging -- --expect-commit <candidate> --transcript …\n✔ staging-rehearsal-passed: closing line + the stamp's commit\n`docs/07_gates/rl-{release-line}/rel-{version}-staging-rehearsal.md`"]
     TG["**tag** *(tech-lead)*\n✔ pre: on-integration-branch: HEAD on main (minor) or release/X.Y (patch)\n✔ pre: staging-rehearsal-passed (again)\n✔ pre: evidence-only-since-candidate: only evidence paths changed since the candidate\ngit.tag on the candidate the transcript names, on the pushed integration branch"]
-    PB["**publish** *(tech-lead)*\n✔ pre: services.verify-sweep (warn) — the approver runs each service's verify\npush the tag → publish.yml: gate → stage → promote (npm stage publish) → release + mcp-registry\n🔑 Approval gate — *approver* (npm stage approve, 2FA)\nrelease: GitHub Release + the tag run's four test reports · mcp-registry: MCP Registry listing (GitHub OIDC) — once npm serves the version\nthe summary + coverage-summary.json committed under `docs/07_gates/rl-{release-line}/rel-{version}-…` (dl-136)"]
+    PB["**publish** *(tech-lead)*\n✔ pre: tests.passing — the run on the release commit, npm run test:no-identity (bug-405)\n✔ pre: services.verify-sweep (warn) — the approver runs each service's verify\npush the tag → publish.yml: gate → stage → promote (npm stage publish) → release + mcp-registry\n🔑 Approval gate — *approver* (npm stage approve, 2FA)\nrelease: GitHub Release + the tag run's four test reports · mcp-registry: MCP Registry listing (GitHub OIDC) — once npm serves the version\nthe summary + coverage-summary.json committed under `docs/07_gates/rl-{release-line}/rel-{version}-…` (dl-136)"]
     MR["**mark-released** *(tech-lead)*\nrelease: releasing → released"]
+    MF["**merge-forward** *(tech-lead, optional)*\n🔑 Approval gate — *approver* (workflow finalize, before the merge)\na patch: release/X.Y merged into main --no-ff in a detached worktree, git push origin HEAD:main, git merge --ff-only origin/main\na minor: workflow finalize --reason, nothing to merge forward"]
 
-    RC --> SR --> TG --> PB --> MR
+    RC --> SR --> TG --> PB --> MR --> MF
 ```
 
 ### Release Health — `release-health`
@@ -449,8 +465,9 @@ readings taken at run time (G15, Q17, E01–E05) are never compared. Under any o
 (`publish.yml` `env.NODE_VERSION`) the toolchain metrics are not-measurable unless `--any-node` is passed; the
 bound steps pass `--any-node` and `--max-workers 2` (bug-344), so each toolchain entry records `node` and
 `node_pinned`. To measure under the pin, run the same command under it, e.g.
-`n -d exec 22.12.0 node scripts/release-health/measure.cjs --release <version>` (`-d` downloads that Node when
-it is not cached) or `npx -p node@22.12.0 node scripts/release-health/measure.cjs --release <version>`;
+`N_PREFIX=<writable-dir> n -d exec 22.12.0 node scripts/release-health/measure.cjs --release <version>` (`-d`
+downloads that Node when it is not cached, under `N_PREFIX`, which must name a directory you can write when `n`'s
+default `/usr/local` is root-owned) or `npx -p node@22.12.0 node scripts/release-health/measure.cjs --release <version>`;
 dl-089 §6 forbids them writing git configuration.
 
 ```mermaid

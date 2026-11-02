@@ -222,7 +222,7 @@ WingFoil-Version: 0.3.0 (6ca54978a01dc29c81e395d363efcdeac8a513fd)
 | **[Examples](docs/examples/)** | Runnable, self-checking scripts for the main scenarios |
 | **[Guide for AI agents](docs/agents.md)** | What an agent needs to operate in a WingFoil project |
 | **[Comparison](docs/comparison.md)** | WingFoil beside agent-rule files, spec-driven development tools, coding agents and IDEs |
-| **[Case study](docs/case-study.md)** | How WingFoil develops WingFoil, with the release-health figures of v0.1 and v0.2 |
+| **[Case study](docs/case-study.md)** | How WingFoil develops WingFoil, with the release-health figures of v0.1, v0.2, v0.3 and v0.3.1 |
 | **[Changelog](CHANGELOG.md)** | What changed in each release |
 
 ---
@@ -276,6 +276,7 @@ WingFoil is built one pillar per release until all five are integrated in 1.0.
 | **0.2.2** | Patch: configuration at the repository root, staged npm publishing, first-use fixes | ✓ Released (`wingfoil@0.2.2` on npm) |
 | **0.3** | + Project Workflow: workflow state, approval routing, agent execution | ✓ Released (`wingfoil@0.3.0` on npm) |
 | **0.3.1** | Patch: adopt existing elements into a workflow, follow a renamed phase, manual checks, guided `init` workflows | ✓ Released (`wingfoil@0.3.1` on npm) |
+| **0.3.2** | Patch: short element references, clearer configuration errors, `agent execute` warnings, `init` scaffold fixes | ✓ Released (`wingfoil@0.3.2` on npm) |
 | **0.4** | + Interaction Layer polish | Planned |
 | **1.0** | MVP complete | Planned |
 

@@ -379,9 +379,12 @@ registered, so they are rejected as unknown options, exit `2`, per `spec-005` §
   Action 3. The BDD's `--name <workflow>` spelling on the workflow commands (P4.2/P4.3/P4.7/P4.8) is
   amended to `spec-017`'s positional `<ref>` in its own task (`spec-017` Consequences); nothing in the
   P5.3 files uses it.
-- P5.3.1 scenario 2 runs `--element task:202`. Element ids are full ids (`memory.yaml` `id_pattern`),
-  so `task:202` resolves only if such an id exists. The scenario keeps its meaning ("regardless of
-  the next step"), and its fixture needs a matching id.
+- P5.3.1 scenario 2 runs `--element task:202`. The id of an element is its full id (`memory.yaml`
+  `id_pattern`), so `task:202` resolves only if such an id exists. Since `patch-v0.3.2` the `<id>` of
+  `--element` may also be a short reference (`spec-008` §7), so the scenario may be written `task:task-202`
+  (`<type prefix>-<n>`, or a unique prefix of the full id), among the documents of `<type>` at `HEAD`. The
+  scenario keeps its meaning ("regardless of the next step"), and its fixture needs an element the reference
+  names; the run records the full id.
 - P5.3.1 scenario 1's "ready within 30 seconds" is read as §3.3's launch point, not as the agent's
   own start-up.
 - P5.4.3 scenarios 1–2 (`P5.4.3-context-preloading.feature:9-16`: "When the agent initializes / Then
@@ -412,7 +415,7 @@ In this order, each a gating read at `HEAD` (`spec-006` §6):
    (§3.3 step 2), so the step, the element and the context come from one commit.
 2. **Element**: `--element` if given, else the step's scope element, else the instance's bound
    element (`spec-017` §3.4). A step with none of the three (a collection-entry scope on an unbound
-   instance) → `NO_STEP_ELEMENT`. The element must exist at `HEAD` → else `NOT_FOUND`.
+   instance) → `NO_STEP_ELEMENT`. The element must exist at `HEAD` → else `NOT_FOUND`; a short reference (`spec-008` §7) is resolved here, among the documents of the type at `HEAD`, and everything after names the full id; several matches → `CONFLICT`.
 3. **Role**: `--role` if given, else the step's `role` (P5.3.2); a step with `role: null` and no
    `--role` → `NO_STEP_ROLE`. Without `--next`, `--workflow` or `--step`, and without `--role`, the
    role is the `developer` default of `X_cli-cmds.md:223`, and a `warning:` line says so
@@ -449,7 +452,10 @@ repository.
 2. Load `dna.yaml` and `memory.yaml` and, when a step is resolved (`--next`, `--workflow`, `--step`),
    the workflow registry at `HEAD`; list the adapter directories (a name present in both is refused
    here, before any resolution; every entry that is not an adapter is printed as a `W_ADAPTER_IGNORED`
-   warning, §2.1). The stepless form resolves no step and reads no workflow file. `roles.yaml` and the
+   warning, §2.1). When a step is resolved, the deduction's diagnostics (the ones `workflow next` lists,
+   for example `W_UNCOMMITTED_INPUTS`) are printed first, on stderr, one `warning:` line per distinct diagnostic in the form
+   `<code> (<file>): <message>` that `agent list` prints for the same deduction (`task-330`, `bug-339`),
+   before any resolution refusal. The stepless form resolves no step, reads no workflow file and prints none. `roles.yaml` and the
    directives are read by the context builder at step 7, so a missing `roles.yaml` is step 7's
    `INVALID_CONTEXT`.
 3. Resolve (§3.2).
@@ -464,6 +470,7 @@ repository.
    documents the builder could not read (`W_MEMORY_UNREADABLE`, `spec-012` §3). The builder's notes
    (the DNA note, P5.3.3 sc. 3's `no relevant Memory found for task`) are not warnings: they reach the
    agent inside the `{role}-session` Prompt's `warnings` (`spec-004` §3.2), not stderr.
+   The deduction's diagnostics of step 2 are printed before these, and before any refusal.
 9. Compute the run id (§4.3).
 10. Render `{bootstrap}` / `{bootstrap_file}` and `{mcp_config_file}`.
 11. **MCP pre-flight**: spawn `{mcp_command} {mcp_args}`, complete MCP `initialize`, get the
@@ -571,10 +578,11 @@ P4.12:
 | any `spec-003` load error in the workflow registry (step 2) | `VALIDATION` | `1` | as `spec-017` §10's first row: the first error in `spec-003`'s order, every diagnostic in `details` |
 | `--workflow` names no workflow | `NOT_FOUND` | `1` | `unknown workflow: <name>` (`spec-017` §10) |
 | `--workflow` names no open instance | `NOT_FOUND` | `1` | `workflow is not open: <ref>` (`spec-017` §10) |
-| `--step` names no step on the instance's frontier | `CONFLICT` | `1` | `step '<key>' is not on the frontier of <instance>` (`spec-017` §10) |
+| `--step` names no step on the instance's frontier | `CONFLICT` | `1` | `step '<key>' is not on the frontier of <instance>` (`spec-017` §10); `details` holds `step`, `instance` and `frontier`, the frontier's keys in frontier order (`task-330`, `bug-340`) |
 | `NO_NEXT_STEP` | `NOT_FOUND` | `1` | `no next step to execute` (P5.3.1 sc. 3, verbatim) |
 | `NO_STEP_ELEMENT` | `VALIDATION` | `1` | `step '<key>' has no element: give --element <type>:<id>` |
 | element absent at `HEAD` | `NOT_FOUND` | `1` | `element not found: <type>:<id>` |
+| `--element` short reference matching several elements | `CONFLICT` | `1` | `ambiguous reference: <id> matches <N> elements` (`spec-008` §6), `hint:` `give the full id, or a longer prefix of it`, `details.candidates` and one `details` line per full id, in id order |
 | `NO_STEP_ROLE` | `VALIDATION` | `1` | `step '<key>' declares no role: give --role <role>` |
 | step role not in DNA | `VALIDATION` | `1` | `step role '<r>' not defined in dna.yaml` — a defence, reached only by a step deduced without `spec-003`'s role check: against the same committed `dna.yaml` the registry already refuses such a phase at step 2 (`E_PHASE_ROLE_UNKNOWN`, `unknown role '<r>' (not defined in dna.yaml)`, the row above), which is what a repository shows and what P5.3.2 sc. 3 expects (approver ruling 2026-10-11) |
 | `--role` not in DNA | `VALIDATION` | `1` | `unknown role '<r>' (not defined in dna.yaml)` (P5.4.2 sc. 3 text) |
@@ -731,7 +739,10 @@ segment equals the file's basename, and be byte for byte the §4.2 serialization
 to — a CR before the newline, whitespace outside a string, or another spelling of a value (`1.0` for
 `1`, an escaped character the writer writes as is) is refused (`bug-288`), with the detail `not in the
 serialized form of spec-016 §4.2 (a CR, whitespace outside a string, or another spelling of a value)`.
-Within the files read, ids must be unique. A violation is
+Every reader reads the blob's kind: a run log committed as a symbolic link is not
+read. It yields no records and a `W_RUN_LOG_SYMLINK` warning (`run log <path> is a symbolic link: not
+read`) names it; `agent list` also carries it in `diagnostics` (`task-330`, `bug-354`). Within the files
+read, ids must be unique. A violation is
 `VALIDATION`, exit `1`, `run log <path>: line <k> is not a valid run record: <detail>`, or `run log
 <path>: run id <id> recorded twice`.
 
@@ -1176,3 +1187,8 @@ server Codex started for `wingfoil` had the command and args of the adapter's `-
 `.codex/config.toml`, loaded because the directory was trusted before that run, names a same-named server on a build
 without the session template; whether `-c` replaces or merges that table was not observed (§2.5); the record carried `agent_version` `codex-cli 0.145.0` and `not-reported`
 for session, model and tokens. Edited in place without a supersede or a state change (`dl-047`).
+
+**Revision (2026-11-01, `task-332-resolve-a-short-element-reference-prefix-and-number-or-a-unique-prefix-of-the-full-id-in-the-memory-verbs`) — §3.2 step 2, the error table and the Process note on P5.3.1 scenario 2.** `--element` takes a short
+reference (`spec-008` §7): the Process note's "Element ids are full ids … resolves only if such an id exists" no longer
+holds, an ambiguous reference is a `CONFLICT` row, and the run records the full id (approver design gate 2026-11-01,
+D1 (b)). Edited in place without a supersede or a state change (`dl-047`), pending the approver's `memory amend`.

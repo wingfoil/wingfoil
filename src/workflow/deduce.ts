@@ -54,6 +54,8 @@
 import type { MemoryYaml, StateMachine } from '../memory/schema';
 import { memoryUnreadableDiagnostic, type MemoryDocumentSummary } from '../memory/query';
 import { isArchivedStatus, resolveStateMachine, validateFrontmatterState } from '../memory/state-machine';
+// The module, not the `../storage` barrel, as `src/memory/entry.ts` imports `resolveConfinedMemoryPath`.
+import { pathPatternRegExp } from '../storage/memory-path';
 import { isNumericToken, patternToSource, type Diagnostic, type ValidationError } from '../validation';
 // The modules, not the `../core` barrel: `src/core` imports this one.
 import { creatingPhaseIndex, isImplicitOwnerProduces } from '../core/workflow-diagnostics';
@@ -453,21 +455,6 @@ interface Element {
 /** Code-unit order (`Array.prototype.sort`'s default), as a comparator. */
 function compareText(a: string, b: string): number {
   return Number(a > b) - Number(a < b);
-}
-
-/**
- * A `memory.yaml` type `path` pattern as a whole-path regular expression. A token in the file name is one
- * name; a token in a directory is one or more directories, since a value such as the plan's `{scope}`
- * nests (`rl-v1/rel-v0.3`, `.wingfoil/memory.yaml` `plan.path`).
- */
-function pathPatternRegExp(pattern: string): RegExp {
-  const slash = pattern.lastIndexOf('/');
-  const convert = (part: string, token: string): string =>
-    part
-      .split(/\{[^{}]+\}/)
-      .map((piece) => piece.replace(/[.*+?^$()|[\]\\]/g, '\\$&'))
-      .join(token);
-  return new RegExp(`^${convert(pattern.slice(0, slash + 1), '[^/]+(?:/[^/]+)*')}${convert(pattern.slice(slash + 1), '[^/]+')}$`);
 }
 
 /** A frontmatter value as a non-blank string, or `null`. */

@@ -34,17 +34,20 @@ import {
   renderCustomDirective,
 } from '../directives/create';
 import { parseDirectiveIds, withAssignedDirectives } from '../directives/roles-edit';
-import { commitFailureSummary, documentExists, readDocument, readPathAtRev, storesAsBlob, StorageError, writeAndCommit, writeDocument } from '../storage';
+import { commitFailureSummary, documentExists, pathPorcelainStatus, readDocument, readPathAtRev, resolveRealPathInRoot, storesAsBlob, StorageError, writeAndCommit, writeDocument } from '../storage';
 // Not re-exported by the `../storage` barrel, imported directly per that module's own convention
 // (same as `src/memory/entry.ts`): `memory add` needs the CONFINED target path before it writes, to
 // run task-092's absence guard on it.
 import { resolveConfinedMemoryPath } from '../storage/memory-path';
+import { targetIsSymlink } from '../storage/confinement';
 import { E_PATH_ESCAPES_ROOT, E_PATH_OUTSIDE_TYPE_FOLDER, E_TARGET_IS_SYMLINK } from '../storage/errors';
 import {
   expandFieldTokens,
   findMemoryDocumentById,
+  ambiguousReferenceError,
   firstLineOf,
   formatMemoryCommitMessage,
+  loadMemoryDocuments,
   memoryUnreadableDiagnostic,
   hasNumericToken,
   isArchivedStatus,
@@ -54,6 +57,7 @@ import {
   readAuthorDate,
   reconstructMemoryTransitions,
   renderAddDocument,
+  resolveElementReference,
   REJECTION_REASON_FIELD,
   renderRejectDocument,
   describeSubmitContent,
@@ -70,8 +74,13 @@ import {
 } from '../memory';
 
 import {
+  ConfigFileUnreadableError,
+  type DirectiveInventory,
+  DIRECTIVES_DIR_PATH,
   DNA_YAML_PATH,
+  type HeadDirectiveInventory,
   loadDirectiveInventory,
+  loadDirectiveInventoryAtHead,
   loadDnaYaml,
   loadMemoryYaml,
 } from './loaders';
@@ -133,6 +142,8 @@ export const MODULE_NAME = 'core' as const;
 export {
   // A missing working-tree configuration file, named repository-relative (task-179, `bug-245`).
   ConfigFileMissingError,
+  // One that exists but cannot be read, named the same way (task-309, `bug-251`).
+  ConfigFileUnreadableError,
   DIRECTIVES_DIR_PATH,
   DNA_YAML_PATH,
   MEMORY_YAML_PATH,
@@ -168,7 +179,7 @@ export type { CheckTokenView, ListEntry, ListResult, PhaseView, ShowInputs, Show
 // task-216: `workflow next` at `HEAD` (`spec-017` §6, §7.3, §8 `Step` / `NextResult`); the operation is
 // `CORE_MODULES`' `workflowNext`, and the step builder is what `agent execute --next` (task-235) and `status`
 // (task-225) reuse. `workflowNextAtHead` is also what the MCP Resource `wingfoil://workflows/-/next` serves (task-239).
-export { buildStep, nextWorkflow, renderNextConsole, workflowNextAtHead } from './workflow-next';
+export { buildStep, nextWorkflow, renderNextConsole, selectWorkflowInstance, workflowNextAtHead } from './workflow-next';
 // task-226: `workflow finalize` (`spec-017` §7.9, §8 `FinalizeResult`); the operation is `CORE_MODULES`'
 // `workflowFinalize`.
 export { NO_ACTIVE_WORKFLOW_TO_FINALIZE, phaseRecordTrailers, renderFinalizeConsole, workflowFinalizeAtHead } from './workflow-finalize';
@@ -200,7 +211,7 @@ export { W_WORKFLOW_CHECKS_NOT_RUN, workflowCoreDiagnostics } from './workflow-c
 export type { CheckedRegistry, WorkflowCoreInputs } from './workflow-core-checks';
 export { iterationStartState, machineStates, workflowExitStates } from './workflow-exit-state';
 export type { ExitStart, HeldGate, InstanceState, PhaseExitState, UndeterminedAction } from './workflow-exit-state';
-export { deduceWorkflowStateAtHead, readDeductionSnapshotAtHead, selectWorkflowInstance } from './workflow-deduction';
+export { deduceWorkflowStateAtHead, readDeductionSnapshotAtHead } from './workflow-deduction';
 export {
   deduceWorkflowState,
   NO_ITERATION_NOTE,
@@ -337,7 +348,8 @@ export interface RootParams {
 /**
  * Run a synchronous, throwing pillar loader (task-004's `load*` functions) and map its expected
  * failures onto a `CoreResult` (spec-006 §2): a `ValidationError` from the shared two-pass pipeline
- * becomes `VALIDATION`, a missing file (Node's `ENOENT`) becomes `NOT_FOUND`; anything else
+ * becomes `VALIDATION`, a missing file (Node's `ENOENT`) becomes `NOT_FOUND`, a configuration file that
+ * exists but cannot be read becomes `IO` (task-309, `bug-251`); anything else
  * propagates as a genuine thrown exception (a programmer bug, not a domain failure — spec-006 §2's
  * "no function throws for *expected* domain failures" implies unexpected ones still may). Every
  * read-only query (`dnaShowFn`, `pathsFn`, `workflowListFn`, …) maps its loader's failures through it,
@@ -364,7 +376,9 @@ function loadOrError<R>(loader: () => R): CoreResult<R> {
  * - a loader that collects spec-003 diagnostics (task-136): the first error is the reason, and the whole
  *   ordered array rides `details` under spec-003's own name for it, `diagnostics`;
  * - a `ValidationError` from the shared two-pass pipeline: `details.issues`;
- * - a missing file (`ENOENT`): `NOT_FOUND`, with the system message.
+ * - a missing file (`ENOENT`): `NOT_FOUND`, with the system message;
+ * - a configuration file that exists but cannot be read (`ConfigFileUnreadableError`, task-309,
+ *   `bug-251`): `IO`, with its repository-relative message.
  */
 export function coreErrorOf(error: unknown): CoreError | null {
   if (error instanceof DiagnosticsError) {
@@ -372,6 +386,9 @@ export function coreErrorOf(error: unknown): CoreError | null {
   }
   if (error instanceof ValidationError) {
     return { code: 'VALIDATION', message: error.message, details: { issues: error.issues } };
+  }
+  if (error instanceof ConfigFileUnreadableError) {
+    return { code: 'IO', message: error.message };
   }
   const errno = error as NodeJS.ErrnoException | null;
   if (errno && errno.code === 'ENOENT') {
@@ -398,7 +415,7 @@ export function loadDnaRoleSet(root: string): CoreResult<readonly string[]> {
  * refused first with the shared not-initialized message ({@link requireInitializedProject}, task-143),
  * which names no path; otherwise the loader runs and its failures map as `loadOrError` maps them — a
  * missing file as `ConfigFileMissingError`'s repository-relative message (task-179, `bug-198`,
- * `bug-245`).
+ * `bug-245`), an unreadable one as `ConfigFileUnreadableError`'s (task-309, `bug-251`).
  */
 function loadConfigOrError<R>(root: string, loader: () => R): CoreResult<R> {
   const initialized = requireInitializedProject(root);
@@ -445,9 +462,10 @@ export interface PathsShowResult {
  * - category omitted -> `coreOk(<whole paths node>)` (see {@link PathsParams}'s doc comment on why;
  *   symmetric with `dna show` returning the whole DNA when no section is given).
  *
- * `dna.paths` is `.passthrough()` (spec-002), so an entry beyond the five named categories is still a
- * plain object property here, not necessarily an array — `Array.isArray` guards that case rather than
- * assuming the shape.
+ * `dna.paths` declares the seven named categories and, through its typed catchall
+ * (`.catchall(z.array(z.string()))`, spec-002, task-312), a project's own category as a `string[]`, so
+ * any category present here is an array. `Array.isArray` still guards the category that is absent —
+ * a declared one left out of `paths:`, or a name nothing maps — rather than assuming it.
  */
 const pathsFn: CoreFn<unknown, PathsShowResult | Paths> = async (params) => {
   const { root, positional: category } = params as PathsParams;
@@ -1111,13 +1129,13 @@ const NO_MEMORY_SEARCH_MATCHES_MESSAGE = 'no documents matched the query';
  *    guard at all, and resolves to `''` below.
  * 2. **Load `memory.yaml`** via the same `loadOrError` + `loadMemoryYaml` path every other read op uses.
  * 3. **Scan + rank** via {@link searchMemoryDocuments} (task-008: deterministic metadata-before-body
- *    ranking, REQ-SYS-07), narrowed by `--tag` through its own `MemorySearchOptions.tag` — the ONE
- *    filter the scan primitive itself understands.
- * 4. **`--type`/`--status` narrow the already-ranked result** — a plain array filter, not a second
- *    scan pass: both are base frontmatter fields every Memory document carries
- *    (spec-010-memory-frontmatter-schema), and `searchMemoryDocuments` already projects both onto
- *    each match (task-021 added `type` alongside the pre-existing `status`), so no extra file read is
- *    needed.
+ *    ranking, REQ-SYS-07), narrowed by `--tag` and `--type` through its own `MemorySearchOptions` —
+ *    `--type` there, not as a filter of the result, because it also scopes the unreadable-file warnings
+ *    to the files that type can hold (task-314, `bug-283`: its `path` pattern produces the path, or a
+ *    newer-format document's own `type:` is it; an undeclared type is told about no file).
+ * 4. **`--status` narrows the already-ranked result** — a plain array filter, not a second scan pass:
+ *    it is a base frontmatter field every Memory document carries (spec-010-memory-frontmatter-schema),
+ *    and `searchMemoryDocuments` already projects it onto each match, so no extra file read is needed.
  * 5. **Zero matches is `coreOk`, never `coreErr`** (P1.5 BDD "Error - query with no matches" — the
  *    scenario's own title says "Error" but its assertion is exit `0`, so this is deliberately a
  *    successful, empty result carrying the exact message, per spec-005-cli-command-contract §1: a
@@ -1147,11 +1165,12 @@ const memorySearchFn: CoreFn<unknown, MemorySearchResult> = async (params) => {
   const diagnostics: Diagnostic[] = [];
   const scanned = searchMemoryDocuments(root, loaded.value, query, {
     ...(tag !== undefined ? { tag } : {}),
+    ...(type !== undefined ? { type } : {}),
     ...(isArchivedStatus(status) ? { includeArchived: true } : {}),
     onDiagnostic: (diagnostic) => diagnostics.push(diagnostic),
   });
   const matches: MemorySearchResultItem[] = scanned
-    .filter((match) => (type === undefined || match.type === type) && (status === undefined || match.status === status))
+    .filter((match) => status === undefined || match.status === status)
     .map(({ path, id, title, type: docType, status: docStatus, tags }) => ({ path, id, title, type: docType, status: docStatus, tags }));
 
   // task-171 (`bug-031`): a file the scan could not read is a warning, never the search's failure.
@@ -1223,8 +1242,9 @@ export interface MemoryHistoryEntryView {
    */
   readonly wingfoil: string | null;
   /**
-   * Present only when this commit's frontmatter does not parse (task-171, `bug-188`): why, as the
-   * first line of the parse error. `to` is then `null`, and so is the next entry's `from`.
+   * Present only when this commit's revision cannot be read (task-171, `bug-188`): why, as the first
+   * line of the parse error, or `E_INVALID_FORMAT: <message>` when the revision is written in a newer
+   * element format (task-313, `bug-262`). `to` is then `null`, and so is the next entry's `from`.
    */
   readonly unreadable?: string;
 }
@@ -1270,10 +1290,11 @@ export interface MemoryHistoryResult {
  * `IO` (exit `1`) carrying git's message, never an empty trail (task-142, `bug-072`).
  */
 const memoryHistoryFn: CoreFn<unknown, MemoryHistoryResult> = async (params) => {
-  const { root, positional: id } = params as MemoryHistoryParams;
-  if (id === undefined || id.trim().length === 0) {
+  const { root, positional: reference } = params as MemoryHistoryParams;
+  if (reference === undefined || reference.trim().length === 0) {
     throw new UsageError(missingOperandReason('id'));
   }
+  let id = reference;
 
   const loaded: CoreResult<MemoryYaml> = loadConfigOrError(root, () => loadMemoryYaml(root));
   if (!loaded.ok) return loaded;
@@ -1282,6 +1303,21 @@ const memoryHistoryFn: CoreFn<unknown, MemoryHistoryResult> = async (params) => 
   let found: ReturnType<typeof findMemoryDocumentById>;
   try {
     found = findMemoryDocumentById(root, loaded.value, id, { onDiagnostic: (diagnostic) => diagnostics.push(diagnostic) });
+    if (!found) {
+      // Not a full id: a short reference (task-332, `spec-008` §7), over the same working-tree documents. From here
+      // the answer carries the element's full id, never the reference.
+      const scanned: Diagnostic[] = [];
+      const documents = loadMemoryDocuments(root, loaded.value, { onDiagnostic: (diagnostic) => scanned.push(diagnostic) });
+      for (const diagnostic of scanned) {
+        if (!diagnostics.some((known) => known.file === diagnostic.file)) diagnostics.push(diagnostic);
+      }
+      const resolution = resolveElementReference(documents, loaded.value, reference);
+      if (resolution.kind === 'ambiguous') return coreErr(ambiguousReferenceError(reference, resolution.candidates));
+      if (resolution.kind === 'found') {
+        found = resolution.document;
+        id = String(found.frontmatter.id);
+      }
+    }
   } catch (error) {
     // The `dl-149` refusal of the element the lookup names (task-257, `bug-241`): a document written in
     // a newer format is not read by today's rules. Any other failure (an unreadable directory) is not
@@ -1294,7 +1330,7 @@ const memoryHistoryFn: CoreFn<unknown, MemoryHistoryResult> = async (params) => 
     });
   }
   if (!found) {
-    return coreErr({ code: 'NOT_FOUND', message: `document not found: ${id}` });
+    return coreErr({ code: 'NOT_FOUND', message: `document not found: ${reference}` });
   }
 
   let transitions: ReturnType<typeof reconstructMemoryTransitions>;
@@ -1380,14 +1416,15 @@ export interface MemorySubmitResult {
  *    requires it only on the approval gates (`dl-027`).
  */
 const memorySubmitFn: CoreFn<unknown, MemorySubmitResult> = async (params) => {
-  const { root, positional: id } = params as MemorySubmitParams;
+  const { root, positional: reference } = params as MemorySubmitParams;
 
-  if (id === undefined || id.trim().length === 0) {
+  if (reference === undefined || reference.trim().length === 0) {
     throw new UsageError(missingOperandReason('id'));
   }
 
-  const prepared = beginMemoryTransition(root, id, 'submit');
+  const prepared = beginMemoryTransition(root, reference, 'submit', { resolveReference: true });
   if (!prepared.ok) return prepared;
+  const { id } = prepared.value; // the element's full id, whatever reference the verb was given (task-332)
   const { type, path, frontmatter, content, from, to } = prepared.value;
 
   const fieldsFilled = requireRequiredFields(prepared.value.memoryYaml, type, frontmatter, 'submit');
@@ -1505,15 +1542,16 @@ export interface MemoryApproveResult {
  *    `commit` is the approve's.
  */
 const memoryApproveFn: CoreFn<unknown, MemoryApproveResult> = async (params) => {
-  const { root, positional: id, options } = params as MemoryApproveParams;
+  const { root, positional: reference, options } = params as MemoryApproveParams;
 
-  if (id === undefined || id.trim().length === 0) {
+  if (reference === undefined || reference.trim().length === 0) {
     throw new UsageError(missingOperandReason('id'));
   }
   const reason = requireReason(options);
 
-  const prepared = beginMemoryTransition(root, id, 'approve');
+  const prepared = beginMemoryTransition(root, reference, 'approve', { resolveReference: true });
   if (!prepared.ok) return prepared;
+  const { id } = prepared.value; // the element's full id, whatever reference the verb was given (task-332)
   const { type, path, content, from, to } = prepared.value;
 
   const authorized = requireApprovalAuthority(root, type, prepared.value.identity);
@@ -1665,15 +1703,16 @@ export interface MemoryRejectResult {
  * attribution (adr-001/adr-006) — under the `APPROVER_ROLE` the authority was exercised as.
  */
 const memoryRejectFn: CoreFn<unknown, MemoryRejectResult> = async (params) => {
-  const { root, positional: id, options } = params as MemoryRejectParams;
+  const { root, positional: reference, options } = params as MemoryRejectParams;
 
-  if (id === undefined || id.trim().length === 0) {
+  if (reference === undefined || reference.trim().length === 0) {
     throw new UsageError(missingOperandReason('id'));
   }
   const reason = requireReason(options);
 
-  const prepared = beginMemoryTransition(root, id, 'reject');
+  const prepared = beginMemoryTransition(root, reference, 'reject', { resolveReference: true });
   if (!prepared.ok) return prepared;
+  const { id } = prepared.value; // the element's full id, whatever reference the verb was given (task-332)
   const { type, path, from, to, content } = prepared.value;
 
   const authorized = requireApprovalAuthority(root, type, prepared.value.identity);
@@ -1764,9 +1803,9 @@ export interface MemoryDeprecateResult {
  * that shape back — it parses `Reason:` independently of `Approver:` for exactly this verb.
  */
 const memoryDeprecateFn: CoreFn<unknown, MemoryDeprecateResult> = async (params) => {
-  const { root, positional: id, options } = params as MemoryDeprecateParams;
+  const { root, positional: reference, options } = params as MemoryDeprecateParams;
 
-  if (id === undefined || id.trim().length === 0) {
+  if (reference === undefined || reference.trim().length === 0) {
     throw new UsageError(missingOperandReason('id'));
   }
   // `--reason` is optional here (`dl-027`), but a reason that IS given must be recordable in the
@@ -1775,8 +1814,9 @@ const memoryDeprecateFn: CoreFn<unknown, MemoryDeprecateResult> = async (params)
   // `bug-042` F2/F3, whose amendment makes THIS verb the exploitable one).
   const reason = optionalReason(options);
 
-  const prepared = beginMemoryTransition(root, id, 'deprecate');
+  const prepared = beginMemoryTransition(root, reference, 'deprecate', { resolveReference: true });
   if (!prepared.ok) return prepared;
+  const { id } = prepared.value; // the element's full id, whatever reference the verb was given (task-332)
   const { type, path, from, to, content } = prepared.value;
   if (from === to) {
     return coreErr({ code: 'VALIDATION', message: `document already deprecated: ${id}` });
@@ -1836,15 +1876,16 @@ export interface MemoryParkResult {
  * not by this verb.
  */
 const memoryParkFn: CoreFn<unknown, MemoryParkResult> = async (params) => {
-  const { root, positional: id, options } = params as MemoryParkParams;
+  const { root, positional: reference, options } = params as MemoryParkParams;
 
-  if (id === undefined || id.trim().length === 0) {
+  if (reference === undefined || reference.trim().length === 0) {
     throw new UsageError(missingOperandReason('id'));
   }
   const reason = requireReason(options);
 
-  const prepared = beginMemoryTransition(root, id, 'park');
+  const prepared = beginMemoryTransition(root, reference, 'park', { resolveReference: true });
   if (!prepared.ok) return prepared;
+  const { id } = prepared.value; // the element's full id, whatever reference the verb was given (task-332)
   const { type, path, from, to, content } = prepared.value;
 
   const message = formatMemoryCommitMessage({ type, op: 'park', ids: [id], transition: { from, to }, reason });
@@ -1917,15 +1958,16 @@ export interface MemoryAmendResult {
  *    `wf(<type>): amend <id> [<s> → <s>]` with the `Approver:` / `Reason:` body (`spec-008` §2).
  */
 const memoryAmendFn: CoreFn<unknown, MemoryAmendResult> = async (params) => {
-  const { root, positional: id, options } = params as MemoryAmendParams;
+  const { root, positional: reference, options } = params as MemoryAmendParams;
 
-  if (id === undefined || id.trim().length === 0) {
+  if (reference === undefined || reference.trim().length === 0) {
     throw new UsageError(missingOperandReason('id'));
   }
   const reason = requireReason(options);
 
-  const prepared = beginMemoryTransition(root, id, 'amend');
+  const prepared = beginMemoryTransition(root, reference, 'amend', { resolveReference: true });
   if (!prepared.ok) return prepared;
+  const { id } = prepared.value; // the element's full id, whatever reference the verb was given (task-332)
   const { memoryYaml, type, path, content, frontmatter, from, to } = prepared.value;
 
   // Before any question about the edit: is this file the project's to write at all (REQ-SEC-06,
@@ -2152,6 +2194,104 @@ export interface DirectiveRemoveResult {
   readonly path: string;
 }
 
+/** The working-tree directive inventory, or `undefined` when it cannot be read: a refusal's wording only. */
+function workingTreeDirectiveInventory(root: string): DirectiveInventory | undefined {
+  try {
+    return loadDirectiveInventory(root);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Why a directive `directive remove` could not resolve at `HEAD` is nonetheless on the operator's screen
+ * (task-311, `bug-108`, `dl-080` (B)): the clause appended to `unknown directive: <name>` when a
+ * working-tree file defines `<name>`, or `''` when none does. The first that applies, for the file's
+ * root-relative path `P`:
+ *
+ * - it resolves outside the project root (a symlinked directory on its path) — no commit records it;
+ * - it resolves through a symlinked directory inside the root (`bug-124`'s shape) — git records the link,
+ *   so no commit records the file beyond it as a directive;
+ * - `HEAD` records `P` as a symbolic link, whose target no commit holds;
+ * - `P` is itself an uncommitted symbolic link — a commit would record the link, not a directive;
+ * - git ignores `P` (`git status` reports nothing for it) — a plain `git add` would not stage it;
+ * - otherwise no commit records it: the file's `git status` code, and the step that makes it resolvable.
+ *
+ * The working tree words the refusal and never decides it (`command-baseline`), so this never throws: a
+ * read that fails here leaves the bare message. The shape mirrors `checkAssignable`'s unknown-role
+ * sentence (`./directive-assign.ts`): P3.2's `unknown directive: <id>` stays the first sentence.
+ */
+function explainWorkingTreeDirective(
+  root: string,
+  name: string,
+  workingTree: DirectiveInventory | undefined,
+  headSymlinks: readonly string[],
+): string {
+  if (workingTree === undefined) return '';
+  try {
+    const match = selectDirectivesById(workingTree.files, new Set([name])).byId.get(name);
+    if (match === undefined) return '';
+    const path = ['.wingfoil', ...match.path.split(/[\\/]/)].join('/');
+    const resolved = resolveRealPathInRoot(root, path);
+    if (!resolved.within) {
+      return (
+        ` — the working tree's '${path}' defines it, but it resolves to '${resolved.real}', outside the project ` +
+        'root, and no commit of this repository records it (dl-080)'
+      );
+    }
+    // A symlinked directory on the path, inside the root (`bug-124`'s shape): git records the link, and
+    // the file beyond it is not a directive at `HEAD` whatever is committed, so "commit it first" would
+    // be false advice.
+    if (resolved.real !== resolved.absolute) {
+      return (
+        ` — the working tree's '${path}' defines it, but it resolves through a symbolic link to '${resolved.real}', ` +
+        'which no commit of this repository records as a directive (dl-080)'
+      );
+    }
+    if (headSymlinks.includes(path)) {
+      return (
+        ` — the working tree's '${path}' defines it, but HEAD records that path as a symbolic link, whose target ` +
+        'no commit holds, so the directive cannot be resolved from the committed repository (dl-080)'
+      );
+    }
+    // An uncommitted LEAF link (task-311 review): committing it would not help — `HEAD` would record a link
+    // and skip it, as above — so it gets its own sentence, never "commit it first".
+    if (targetIsSymlink(resolved.absolute)) {
+      return (
+        ` — the working tree's '${path}' defines it, but that path is a symbolic link, which a commit records as ` +
+        'a link and not as a directive, so the directive cannot be resolved from the committed repository (dl-080)'
+      );
+    }
+    const status = porcelainStatusOrUndefined(root, path);
+    // `git status --porcelain` is silent for a path that exists here, differs from what `HEAD` resolves, and
+    // is not a link: git ignores it (`.gitignore`, an exclude file). A plain `git add` refuses such a path,
+    // so "commit it first" would be false advice too (task-311 review).
+    if (status === '') {
+      return (
+        ` — the working tree's '${path}' defines it, but git ignores that path (git status reports nothing for ` +
+        'it), so no commit of this repository records it and a plain git add would not stage it (dl-080)'
+      );
+    }
+    const bracket = status === undefined ? '' : ` [git status '${status}']`;
+    return (
+      ` — the working tree's '${path}' defines it${bracket}, but no commit of this repository ` +
+      `records it, and a directive is resolved from the committed repository (dl-080); commit '${path}' first, ` +
+      'then retry'
+    );
+  } catch {
+    return '';
+  }
+}
+
+/** `path`'s two-letter `git status --porcelain` code (`''` when git reports nothing), or `undefined` when git cannot answer. */
+function porcelainStatusOrUndefined(root: string, path: string): string | undefined {
+  try {
+    return pathPorcelainStatus(root, path);
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * `directive remove` `CoreOperation.fn` (P3.3, `mutates: true`; spec-006 §3 row `directiveRemove`,
  * module `directive` per dl-041 B). The first operation in the system that DELETES a file, and the
@@ -2163,22 +2303,26 @@ export interface DirectiveRemoveResult {
  * 1. `<name>` presence — a missing or blank positional is a `UsageError` → exit **2**
  *    (`missing required argument: <name>`, the one missing-operand wording, task-179).
  * 2. `requireGitIdentity` pre-flight (REQ-SEC-01), after the usage check (task-125, `bug-172`).
- * 3. **Resolve the name to a real file**, never to a constructed path. `loadDirectives` reads every
- *    installed directive and {@link selectDirectivesById} picks the winner for that id under
+ * 3. **Resolve the name to a committed file**, never to a constructed path, and **at `HEAD`**
+ *    (task-311, `bug-108`, `dl-080` (B)): {@link loadDirectiveInventoryAtHead} reads every directive
+ *    the repository records and {@link selectDirectivesById} picks the winner for that id under
  *    `dl-037`'s custom-wins precedence (`src/core/context.ts` — the same primitive `directives list`
- *    and context assembly use, so the rule is implemented once). No match is a domain `NOT_FOUND`
- *    with P3.2's wording, reused: `unknown directive: <name>`. Because the path comes from a file
- *    that was just read, a traversal-shaped argument can never reach the filesystem — it simply
- *    resolves to nothing.
+ *    and context assembly use, so the rule is implemented once). Because the path comes from a file
+ *    git has just listed, a traversal-shaped argument can never reach the filesystem — it simply
+ *    resolves to nothing. A committed file that does not parse is `VALIDATION`, naming it at `HEAD`,
+ *    the shape of `checkAssignable`'s refusal.
  *
- *    This read stays on the **working tree**, deliberately (task-096 AC4). It answers *which file on
- *    disk am I being asked to delete* — the asset itself, not a gate on it — and step 7's write guard
- *    (`requireUnmodifiedTarget`, task-092) then decides whether that file may be deleted at all. Resolving it at `HEAD` instead would
- *    answer an **untracked** directive file with `unknown directive: <id>`, which is false to the
- *    user's screen, where the file plainly is; the refusal they need is the write guard's, which
- *    names the file and its `git status` code. Deleting a file that exists in no commit is not this
- *    verb's act anyway: its contract is to produce one commit that *records* the deletion, and there
- *    is nothing there to record.
+ *    No match is a domain `NOT_FOUND` with P3.2's wording, reused: `unknown directive: <name>`, its
+ *    `details.issues` the `HEAD` inventory's skip warnings and then the working tree's. The working
+ *    tree **words** that refusal and never decides it (`command-baseline`): when a file on disk
+ *    defines `<name>`, {@link explainWorkingTreeDirective} appends why it does not count — it
+ *    resolves outside the project root, it resolves through a symlinked directory inside the root,
+ *    `HEAD` records its path as a symbolic link, the path is itself an uncommitted symbolic link, git
+ *    ignores the path, or no commit records it (an untracked or staged file, or a committed one edited
+ *    on disk to a new id), with its `git status` code. Until task-311 this read stayed on the working tree, so a directive
+ *    committed and then deleted on disk was `unknown directive: <name>` although `HEAD` held it, and
+ *    an untracked one reached the write guard; now the first resolves and meets step 7's guard
+ *    (`[git status ' D']`), and the second is unknown, with the reason on the same line.
  * 4. **REQ-SEC-07 clause (a)** — `requireCustomAsset('directive', <that file's path>)`. Passing the
  *    RESOLVED path rather than the bare name is what makes P3.3's pinned
  *    `built-in directives cannot be removed` fire instead of the primitive's generic refusal; task-042's
@@ -2218,17 +2362,32 @@ const directiveRemoveFn: CoreFn<unknown, DirectiveRemoveResult> = async (params)
   const identity = requireGitIdentity(root);
   if (!identity.ok) return identity;
 
-  const inventory = loadOrError(() => loadDirectiveInventory(root));
-  if (!inventory.ok) return inventory;
-  const target = selectDirectivesById(inventory.value.files, new Set([name])).byId.get(name);
+  let atHead: HeadDirectiveInventory;
+  try {
+    atHead = loadDirectiveInventoryAtHead(root);
+  } catch (error) {
+    if (!(error instanceof ValidationError)) throw error;
+    return coreErr({
+      code: 'VALIDATION',
+      message:
+        `cannot resolve the directive inventory: a file committed under '${DIRECTIVES_DIR_PATH}' (at HEAD) is not ` +
+        `readable as a directive: ${error.message}. A directive is resolved from the directives the repository ` +
+        'records (dl-080), so the committed files must be valid; fix it and commit the fix, then retry.',
+      details: { issues: error.issues },
+    });
+  }
+  const target = selectDirectivesById(atHead.files, new Set([name])).byId.get(name);
   if (target === undefined) {
-    // task-143: the entry asked for may be one the loader skipped (a dangling link, an unreadable
-    // file), so its warnings ride this refusal's `details` — the channel both surfaces render
-    // (task-130) — rather than a stderr line from core, which `--format json` cannot carry.
-    const { warnings } = inventory.value;
+    // task-143: the entry asked for may be one a loader skipped (a committed link, a dangling link, an
+    // unreadable file), so the warnings ride this refusal's `details` — the channel both surfaces render
+    // (task-130) — rather than a stderr line from core, which `--format json` cannot carry. The working
+    // tree is read here only to WORD the refusal (task-311, `command-baseline`); a failure to read it
+    // leaves the bare message.
+    const workingTree = workingTreeDirectiveInventory(root);
+    const warnings = [...atHead.warnings, ...(workingTree?.warnings ?? [])];
     return coreErr({
       code: 'NOT_FOUND',
-      message: `unknown directive: ${name}`,
+      message: `unknown directive: ${name}${explainWorkingTreeDirective(root, name, workingTree, atHead.symlinks)}`,
       ...(warnings.length > 0 ? { details: { issues: warnings.map((detail) => ({ detail })) } } : {}),
     });
   }
@@ -2512,7 +2671,7 @@ export const CORE_MODULES: readonly CoreModule[] = [
         options: [
           { name: 'workflow', valueName: 'ref', description: 'take the step from this workflow (its most recent open instance) or open instance id; implies --next' },
           { name: 'step', valueName: 'key', description: 'take this step of the frontier, e.g. dev-loop.red@task:task-042-login-form; implies --next' },
-          { name: 'element', valueName: 'type:id', description: "the element the agent works on, e.g. task:task-042-login-form; with a step, it overrides the step's element" },
+          { name: 'element', valueName: 'type:id', description: "the element the agent works on, e.g. task:task-042-login-form, or a short reference (e.g. task:task-42); with a step, it overrides the step's element" },
           { name: 'role', valueName: 'role', description: "the role the agent runs as, a dna.yaml team.roles name (default: the step's role; with no step, developer, with a warning)" },
           { name: 'agent', valueName: 'name', description: 'the team.agents entry to launch (default: the first with an adapter that executes the role)' },
         ],
@@ -2675,7 +2834,7 @@ export const CORE_MODULES: readonly CoreModule[] = [
         name: 'memoryHistory',
         mutates: false,
         description: "print a document's audit trail, reconstructed from git",
-        positional: { name: 'id', required: true, description: 'the document id, e.g. task-001-my-first-task' },
+        positional: { name: 'id', required: true, description: 'the document id, e.g. task-001-my-first-task, or a short reference (e.g. dl-1, or a unique prefix of the id)' },
         example: 'wingfoil memory history task-001-my-first-task',
         fn: memoryHistoryFn,
       },
@@ -2704,7 +2863,7 @@ export const CORE_MODULES: readonly CoreModule[] = [
         name: 'memorySubmit',
         mutates: true,
         description: "move a document one step forward along its type's sequence — for the default machine, draft → pending",
-        positional: { name: 'id', required: true, description: 'the document id, e.g. task-001-my-first-task' },
+        positional: { name: 'id', required: true, description: 'the document id, e.g. task-001-my-first-task, or a short reference (e.g. dl-1, or a unique prefix of the id)' },
         example: 'wingfoil memory submit task-001-my-first-task',
         fn: memorySubmitFn,
       },
@@ -2716,7 +2875,7 @@ export const CORE_MODULES: readonly CoreModule[] = [
         name: 'memoryApprove',
         mutates: true,
         description: 'pass a gate: move a document forward from a gated state (default machine: pending → approved)',
-        positional: { name: 'id', required: true, description: 'the document id, e.g. task-001-my-first-task' },
+        positional: { name: 'id', required: true, description: 'the document id, e.g. task-001-my-first-task, or a short reference (e.g. dl-1, or a unique prefix of the id)' },
         options: [{ name: 'reason', required: true, valueName: 'text', description: "why you approve it, recorded as the commit's Reason:; needs the approver role" }],
         example: 'wingfoil memory approve task-001-my-first-task --reason "Scope and acceptance criteria are clear."',
         fn: memoryApproveFn,
@@ -2730,7 +2889,7 @@ export const CORE_MODULES: readonly CoreModule[] = [
         name: 'memoryReject',
         mutates: true,
         description: "send a gated document back to its gate's reject target (default machine: pending → draft)",
-        positional: { name: 'id', required: true, description: 'the document id, e.g. task-001-my-first-task' },
+        positional: { name: 'id', required: true, description: 'the document id, e.g. task-001-my-first-task, or a short reference (e.g. dl-1, or a unique prefix of the id)' },
         options: [{ name: 'reason', required: true, valueName: 'text', description: "what must change before resubmitting, recorded as the commit's Reason: and as rejection_reason; needs the approver role" }],
         example: 'wingfoil memory reject task-001-my-first-task --reason "Add acceptance criteria before resubmitting."',
         fn: memoryRejectFn,
@@ -2744,7 +2903,7 @@ export const CORE_MODULES: readonly CoreModule[] = [
         name: 'memoryDeprecate',
         mutates: true,
         description: 'retire a document, from any state, to deprecated',
-        positional: { name: 'id', required: true, description: 'the document id, e.g. task-001-my-first-task' },
+        positional: { name: 'id', required: true, description: 'the document id, e.g. task-001-my-first-task, or a short reference (e.g. dl-1, or a unique prefix of the id)' },
         options: [{ name: 'reason', valueName: 'text', description: "why the document is retired, recorded as the commit's Reason: (not blank when given)" }],
         example: 'wingfoil memory deprecate dl-001-use-postgresql --reason "Superseded by the hosted-DB decision."',
         fn: memoryDeprecateFn,
@@ -2757,7 +2916,7 @@ export const CORE_MODULES: readonly CoreModule[] = [
         name: 'memoryPark',
         mutates: true,
         description: "return a started document to an earlier state along its type's declared returns edge (for a task, in-progress → backlog)",
-        positional: { name: 'id', required: true, description: 'the document id, e.g. task-001-my-first-task' },
+        positional: { name: 'id', required: true, description: 'the document id, e.g. task-001-my-first-task, or a short reference (e.g. dl-1, or a unique prefix of the id)' },
         options: [{ name: 'reason', required: true, valueName: 'text', description: "why the work stops for now, recorded as the commit's Reason:" }],
         example: 'wingfoil memory park task-001-my-first-task --reason "Blocked on the schema decision; back to the backlog."',
         fn: memoryParkFn,
@@ -2770,7 +2929,7 @@ export const CORE_MODULES: readonly CoreModule[] = [
         name: 'memoryAmend',
         mutates: true,
         description: 'record an uncommitted correction to a document as an amendment, leaving its state unchanged',
-        positional: { name: 'id', required: true, description: 'the document id, e.g. spec-001-storage-layout' },
+        positional: { name: 'id', required: true, description: 'the document id, e.g. spec-001-storage-layout, or a short reference (e.g. dl-1, or a unique prefix of the id)' },
         options: [
           {
             name: 'reason',
@@ -2857,7 +3016,7 @@ export const CORE_MODULES: readonly CoreModule[] = [
         description: 'start a workflow: record it as an active plan element and print its first step',
         positional: { name: 'name', required: true, description: 'the startable workflow to start' },
         options: [
-          { name: 'element', valueName: 'type:id', description: 'the element the workflow runs on, when it declares one (default: the active workflow\'s element of that type)' },
+          { name: 'element', valueName: 'type:id', description: 'the element the workflow runs on, when it declares one, the id may be a short reference (default: the active workflow\'s element of that type)' },
           { name: 'title', valueName: 'title', description: "the plan's title (default: '<workflow> — <phase>')" },
           {
             name: 'set',
@@ -2907,7 +3066,7 @@ export const CORE_MODULES: readonly CoreModule[] = [
         positional: { name: 'ref', required: true, description: 'a workflow name or an open workflow instance id' },
         options: [
           { name: 'step', valueName: 'key', description: 'the frontier step the element counts as created by (default: the one frontier step that adds its type)' },
-          { name: 'element', valueName: 'type:id', description: "the existing element to adopt (default: the step's one candidate)" },
+          { name: 'element', valueName: 'type:id', description: "the existing element to adopt; the id may be a short reference (default: the step's one candidate)" },
           { name: 'reason', valueName: 'text', description: 'why; required except with --plan alone, recorded in the commit' },
         ],
         flags: [

@@ -13,8 +13,9 @@
  * must be structure-aware and non-creating.
  *
  * The rule it implements, in the ratification's own words: **the DNA pillar accepts unknown keys when
- * reading a document and refuses to write one.** Pass-through on read stays exactly as
- * `spec-002-dna-yaml-schema` declares it (every node is `.passthrough()`, so a file written by a newer
+ * reading a document and refuses to write one.** Acceptance on read stays exactly as
+ * `spec-002-dna-yaml-schema` declares it (every node is `.passthrough()`, except `paths`, whose typed
+ * catchall declares a project's own category since task-312 — either way a file written by a newer
  * WingFoil still loads); it is the write side that is closed.
  *
  * Two further properties this module owns:

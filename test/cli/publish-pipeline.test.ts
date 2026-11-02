@@ -1011,7 +1011,7 @@ describe('release workflows declare the test reports (task-244)', () => {
   it('release-publishing `publish` post check names the test reports on the GitHub Release', () => {
     const phase = read('release-publishing.yaml').phases.find((p) => p.name === 'publish');
     expect(phase?.checks?.post).toEqual([
-      'staged version approved on npm, live on the npm registry, its GitHub Release created with the test reports attached and its MCP Registry listing published',
+      'staged version approved on npm, installable from the npm registry once its tarball answers HTTP 200, its GitHub Release created with the test reports attached and its MCP Registry listing published',
     ]);
   });
 

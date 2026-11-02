@@ -54,9 +54,10 @@ measured).
 ### 2. Pattern set
 
 Each pattern is a named rule: `{id, regex, description, severity}`. `severity` is `block` (fails the
-scan) or `warn` (reported, does not fail). All regexes are case-insensitive unless noted, anchored to
-match anywhere in a line (not full-line anchored), and run per-line so a match can be reported with a
-file:line location.
+scan) or `warn` (reported, does not fail). A regex is case-sensitive unless it opens with `(?i)` or
+`(?im)`, which makes it case-insensitive (a `(?-i:…)` group inside it stays case-sensitive). Every regex
+matches anywhere in a line (not full-line anchored) and runs per-line, so a match can be reported with
+a file:line location; the `m` of `(?im)` changes nothing for that reason.
 
 ```yaml
 # Canonical secret-hygiene pattern set (informative YAML; the authoritative shape is the table below)
@@ -274,3 +275,16 @@ lower-case words joined by hyphens (`bug-228`); `SECRET_PATTERNS` implements it 
 key words, because Node 22's `RegExp` has no `(?-i:…)` group. §2's notes name the new false-positive
 and false-negative shapes. Edited in place without a supersede or a state change; pending the
 approver's sign-off at that task's review.
+
+**Revision (2026-10-29) — §2 states case sensitivity as the table marks it, and a test ties the table to
+`SECRET_PATTERNS`, per `task-317-widen-the-control-character-gate-tie-spec-007-to-secret-patterns-and-make-lint-claims-say-what-it-read`
+(`bug-247`).** §2 said every regex was case-insensitive unless noted, while the YAML marks
+case-insensitivity per pattern with a leading `(?i)` or `(?im)` (four of ten) and `SECRET_PATTERNS`
+(`src/validation/secret-scan.ts`) compiles the other six case-sensitive; the sentence now says what the
+table and the code already do. No pattern changes. `test/validation/secret-patterns-spec.test.ts` reads
+the YAML block of §2 and compares each entry with its `SECRET_PATTERNS` rule: equal id, description and
+severity, and an equal regex source and flags after the translation `secret-scan.ts` declares — a
+leading `(?i)` or `(?im)` becomes the `i` flag (the `m` dropped, the scan being per-line), a `(?-i:…)`
+group is inlined with the letters outside it case-folded and no flag set, and any other inline modifier
+fails the test. A pattern edited on one side only now fails `npm test`. Edited in place without a
+supersede or a state change; pending the approver's sign-off at that task's review.

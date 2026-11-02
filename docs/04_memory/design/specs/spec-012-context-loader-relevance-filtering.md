@@ -149,7 +149,10 @@ then shadowed ids ascending. None of the three is an error; resolution always co
 
 - **Kind 1** fires when the role contributes no assignments of its own — absent from `assignments`, or
   bound to an explicitly empty list. It still resolves to exactly the globals (`dl-029`'s ratified
-  hybrid); the warning is the operator signal that the role is unbound, not a refusal.
+  hybrid); the warning is the operator signal that the role is unbound, not a refusal. It needs a
+  `roles.yaml`: with none, nothing was read that could bind a role, so nothing is asserted about any
+  role — context assembly resolves no directive and warns nothing, and `directives list --role <r>`
+  prints no role warning either.
 - **Kind 2** checks *every* id bound to the role — through its own `assignments` entry **and** through
   `global`. A dangling **global** is therefore reported too, which matters most: a missing global
   removes a directive from **every** role.
@@ -165,8 +168,14 @@ leave agent-session context assembly silent about the exact directive an agent w
 envelope has no warnings section, so they never enter the serialized payload and never perturb its
 byte stream.
 
-`directives list` **without** a role filter has no role to resolve against, so its `warnings` are kind
-3 only, computed by the same selection primitive over every installed directive file.
+`directives list` **without** a role filter has no role to resolve against. Its `warnings` are, in this
+order: the directive entries the loader skipped; kind 2 for every binding in `roles.yaml` — a role's own
+assignment in kind 2's text, and a `global:` entry, which has no single role to name, as
+`` directive '<id>' bound to every role (roles.yaml 'global') has no directive file `` — ids ascending,
+for each id the global form first, then roles ascending (none without a `roles.yaml`); kind 3, computed
+by the same selection primitive over every installed directive file; then `spec-013`'s scope
+disagreements. A `roles.yaml` that exists but cannot be read is refused on both views; only an absent
+one reads as "nothing is bound".
 
 ### 6. Relevance filtering (`relevance-filter`) — Memory selection
 
@@ -431,3 +440,16 @@ fixture prevails over the illustrative template. Every statement was checked aga
 `entryTokens`/`tokenSelectsModule`, `payloadCandidates` and `writtenFrontmatter` (`src/core/context.ts`) and the tests in
 `test/core/context-payload-format.test.ts`. Edited in place without a supersede or a state change, as
 the earlier Revision notes were.
+
+**Revision (2026-10-30) — §5.1 states kind 1's reach without a `roles.yaml` and the unfiltered listing's
+warnings, per `task-310-make-directives-list-honest-on-an-empty-project-and-flag-a-pending-binding-without-role`
+(`bug-199`, `bug-411`, `bug-455`).** The Kind 1 bullet now says the warning needs a `roles.yaml`:
+`directives list --role <r>` warned that a role had no assignments in a project with no `roles.yaml`
+(`bug-199`), while context assembly already resolved nothing there. The closing paragraph said the
+unfiltered listing carries kind 3 only, which was stale since `task-143` (skipped entries) and `task-144`
+(scope disagreements), and now also gains kind 2 for every binding, with a form for a `global:` entry
+(`bug-411`, design gate D1 (a), D2 (a)); it states the refusal of an unreadable `roles.yaml`
+(`bug-455`). The table of the resolver's three kinds is unchanged. Every statement was checked against
+`buildDirectiveListing`, `danglingBindingWarnings` and `readRolesYaml` (`src/core/directives-list.ts`) and
+the tests in `test/core/directives-list.test.ts`. Edited in place without a supersede or a state change,
+as the earlier Revision notes were.

@@ -6,7 +6,7 @@ breaking its rules. It covers the same ground as the WingFoil MCP server, so it 
 when MCP is not connected and as a reinforcement when it is.
 
 - **Developing WingFoil itself?** This is the wrong file: read `AGENTS.md` at the repository root.
-- **Version:** this file describes release **0.3** (0.3.1). Run
+- **Version:** this file describes release **0.3** (0.3.2). Run
   `wingfoil --version` in the project; if it reports a different version, read this file at the matching
   git tag instead. Where this file and the installed CLI disagree, the CLI is right.
 - **Humans:** the [user guide](user-guide.md) and the [CLI reference](cli-reference.md) cover the same
@@ -123,6 +123,7 @@ line — do not retry blindly) · `2` your command line is wrong (fix the argume
 | Submit it | edit the file (body + `template.frontmatter.required` fields), then `wingfoil memory submit <id>` | the submit commit includes your edits; fails on a gate or a missing required field |
 | Pause started work | `wingfoil memory park <id> --reason "<why>"` | back along the `returns` edge the type declares; not a rejection |
 | Retire a document | `wingfoil memory deprecate <id> --reason "<why>"` | any state → `deprecated`; the document must have no uncommitted edits |
+| Short ids (new in 0.3.2; earlier versions take full ids only) | any `<id>` above, and `--element <type>:<id>` of `workflow start`, `workflow adopt` and `agent execute`, accepts `<type prefix>-<n>` (`dl-1`) or a unique prefix of the full id; `agent list --element` stays exact | an ambiguous reference is refused with every full id listed (exit `1`, nothing written); outputs and commits carry the full id |
 | Start / end a workflow | `wingfoil workflow start <name> [--element <type>:<id>]`, `wingfoil workflow end` | records the run as a `plan` document; `end` only once its steps are complete |
 | Record a step nothing else shows done | `wingfoil workflow finalize [--step <key>] [--reason "<why>"]` | a checkpoint; on a phase with `approval:` it needs the approver — not yours |
 | Link an element added without `--workflow` to its step | `wingfoil workflow adopt <ref> --element <type>:<id> --reason "<why>"` | one empty commit; `--plan` only proposes; `--plan --apply` and `workflow rekey` (a renamed phase) need the approver — not yours |

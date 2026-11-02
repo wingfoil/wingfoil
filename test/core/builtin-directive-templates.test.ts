@@ -39,6 +39,7 @@ import { TEMPLATE_NAMES } from '../../src/storage';
 import { scanProjectSurface } from '../../src/validation';
 import { commitAll, git, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
 import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
+import { withoutCallerNpmConfig } from '../cli/helpers/npm-env';
 
 /** The P3.8 set, sorted — the order a directory listing yields. */
 const P38_IDS_SORTED = ['architecture', 'code-quality', 'code-review', 'documentation', 'security', 'testing'];
@@ -298,6 +299,7 @@ describe('spec-015 §1 — the templates ship inside the npm tarball (files unch
     const raw = execFileSync('npm', ['pack', '--dry-run', '--json', '--ignore-scripts'], {
       cwd: REPO_ROOT,
       encoding: 'utf-8',
+      env: withoutCallerNpmConfig(process.env),
     });
     const [result] = JSON.parse(raw) as Array<{ files: Array<{ path: string }> }>;
     const paths = (result?.files ?? []).map((f) => f.path);

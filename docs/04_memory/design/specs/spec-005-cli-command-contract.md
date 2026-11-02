@@ -49,9 +49,10 @@ Rules:
   mapping above cannot be bypassed by an uncaught code path.
 - A non-zero exit code (`1` or `2`) is **always** accompanied by an error message on stderr in the
   format defined in §3 below — a bare non-zero exit with no message is a contract violation.
-- A **noun invoked without its verb** (`wingfoil dna`), `wingfoil` invoked with no command at all, and
-  `wingfoil help <unknown>` are **"missing required argument"** in the row above — the third case
-  already enumerated there, not a fourth one. The verb is a required argument of the noun, so its
+- A **noun invoked without its verb** (`wingfoil dna`) and `wingfoil` invoked with no command at all
+  are **"missing required argument"** in the row above — the third case already enumerated there, not
+  a fourth one; `wingfoil help <unknown>` is the row's **unknown command**, refused as §3.1 states.
+  The verb is a required argument of the noun, so its
   absence makes the invocation malformed: exit `2`, and — because the rule above admits no exception —
   an `error: ` line naming what was missing, even where the argument parser answers such an invocation
   by printing the command's usage. Printing that usage is not itself the error message.
@@ -176,7 +177,10 @@ error: <reason>
   function of the token and the command set alone. WingFoil computes it (`src/cli/suggest.ts`) and
   writes it through §3.2's `emitError`; the argument parser's own suggestion text is not shown. An
   unknown **option** keeps the parser's closest match, re-worded into the same `hint:` line. A token
-  that reaches the CLI through `wingfoil help <unknown>` carries no `hint:` yet (`bug-115`).
+  that reaches the CLI through the help command (`wingfoil help memroy`, and a verb after a noun's
+  `help`) is refused the same way, `hint:` line included, matched at the level the help command was
+  typed at (`bug-115`). Asking the help command about itself (`wingfoil help help`) is a request for help by
+  name, answered with the help command's own help at exit `0` (§1, `bug-116`).
 - **Missing operand:** a command invoked without the positional it requires is refused at exit `2`
   with `missing required argument: <name>` — the placeholder `--help` shows for it — and the
   command's usage, its required options included, on the `hint:` line. One form for every command:
@@ -419,6 +423,21 @@ through the one renderer, at the moment it is raised (`bug-202`: the unknown-fie
 loaders wrote raw); so a refusal can follow warnings, each its own document. A consumer reads stderr as
 a stream of documents, the error last. The error object's shape and every exit code are unchanged.
 Edited in place without a supersede or a state change, per `dl-047-tech-specs-carry-no-version-field`.
+
+**Revision (2026-10-30, `task-315-give-help-a-closest-command-hint-and-a-true-message-for-help-help`) —
+§3.1's unknown-command suggestion covers the help command, per `bug-115` and `bug-116`.** §3.1 carved
+`wingfoil help <unknown>` out of the suggestion rule (no `hint:` yet), and `wingfoil help help` printed
+the root help, then `error: unknown command 'help'` at exit `2`, for a command `--help` lists. The
+carve-out is removed: a token typed after the help command is matched, like any other, at the level the
+help command was typed at, so `wingfoil help memroy` prints the same two lines as the token typed
+directly. The
+help command asked about itself is answered with its own help at exit `0`, which §1's "an explicit
+request for help by name" already required. §1's rule on incomplete invocations no longer classes
+`wingfoil help <unknown>` as a missing required argument: it is an unknown command, the line the CLI has
+emitted since `task-103` (correction from `task-315`'s review). No exit code of a refusal, format or
+other rule changed.
+Edited in place without a supersede or a state change (`dl-047`); pending the approver's `memory amend`
+at `task-315`'s review.
 
 ## Process Notes
 

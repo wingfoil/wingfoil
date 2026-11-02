@@ -24,6 +24,7 @@ import { StorageError, initStorage } from '../../src/storage';
 import { resolveConfinedMemoryPath } from '../../src/storage/memory-path';
 import { writeMemoryEntry } from '../../src/memory';
 import { git, makeTempGitRepo, removeTempDir } from '../storage/helpers/git-fixture';
+import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
 
 // A `decision-log`-shaped path pattern, matching the BDD scenario's "decision-1" document — the
 // exact per-type pattern value (from `memory.yaml`) is not this test's concern (see
@@ -124,6 +125,8 @@ describe('P1.11 scenario 3 — Error: writing a Memory entry to a path outside t
     repo = makeTempGitRepo();
     initStorage(repo);
     const before = git(repo, ['rev-list', '--all', '--count']).trim();
+    // task-316 (bug-271): the full writes-nothing snapshot, beside the narrow checks below.
+    const snapshot = snapshotPersistence(repo);
 
     let thrown: unknown;
     try {
@@ -146,5 +149,7 @@ describe('P1.11 scenario 3 — Error: writing a Memory entry to a path outside t
     expect(git(repo, ['rev-list', '--all', '--count']).trim()).toBe(before);
     // ...and nothing written to the working tree either (writeDocument never ran).
     expect(git(repo, ['status', '--porcelain', '--untracked-files=all']).trim()).toBe('');
+    // ...nor any file, ref, branch or HEAD move anywhere (test/storage/helpers/persistence-snapshot.ts).
+    assertPersistenceUnchanged(repo, snapshot);
   });
 });

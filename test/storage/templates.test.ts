@@ -499,3 +499,207 @@ describe('scaffolded dna.yaml declares the run log, paths.runs (task-138, spec-0
     });
   }
 });
+
+/** The text of one scaffolded file of `def`. */
+function scaffoldTextOf(def: TemplateDefinition, path: string): string {
+  const file = templateScaffold(def).find((f) => f.path === path);
+  expect([path, file === undefined]).toEqual([path, false]);
+  return file!.content;
+}
+
+/** Writes `text` as `<tmp>/.wingfoil/dna.yaml` and loads it with the real two-pass loader `dna show` uses. */
+function loadDnaText(text: string): ReturnType<typeof loadDnaYaml> {
+  const root = mkdtempSync(join(tmpdir(), 'wf-task-321-'));
+  try {
+    mkdirSync(join(root, '.wingfoil'));
+    writeFileSync(join(root, '.wingfoil', 'dna.yaml'), text);
+    return loadDnaYaml(root);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+/**
+ * task-321 AC 1 (`bug-393`) — a fresh `init` writes a commented `team.members` approver example and a
+ * commented `paths.health` (`spec-002`: `init` does not map `health`), in the device the scaffold already
+ * uses for `technologies` and `agents` (task-118, task-296): an example block that, uncommented in place,
+ * loads; the file as written loads with zero errors. The layout after a `dna add` is not pinned.
+ */
+describe('task-321 AC 1 — scaffolded dna.yaml shows commented team.members and paths.health examples (bug-393)', () => {
+  const MEMBERS_LINE = '  members: []';
+  const MEMBERS_HEAD = '  # members:';
+  const HEALTH_EXAMPLE = '  # health: [docs/health/]';
+
+  /** `  # members:` plus the deeper-indented comment lines after it. */
+  function membersExampleOf(text: string): string[] {
+    const lines = text.split('\n');
+    const head = lines.indexOf(MEMBERS_HEAD);
+    expect(head).toBeGreaterThanOrEqual(0);
+    const rest = lines.slice(head + 1);
+    const end = rest.findIndex((l) => !l.startsWith('  #   '));
+    return [MEMBERS_HEAD, ...(end === -1 ? rest : rest.slice(0, end))];
+  }
+
+  for (const def of TEMPLATES) {
+    it(`${def.name}: the commented members example, uncommented in place of \`members: []\`, loads an approver member`, () => {
+      const text = scaffoldTextOf(def, '.wingfoil/dna.yaml');
+      const example = membersExampleOf(text).map((l) => l.replace(/^(\s*)# /, '$1'));
+      const lines = text.split('\n');
+      const at = lines.indexOf(MEMBERS_LINE);
+      expect(at).toBeGreaterThanOrEqual(0);
+      lines.splice(at, 1, ...example);
+
+      const dna = loadDnaText(lines.join('\n'));
+      expect(dna.team.members).toEqual([
+        { name: 'Ada Lovelace', email: 'ada@example.com', roles: ['approver', 'developer'] },
+      ]);
+    });
+
+    it(`${def.name}: a comment names the \`wingfoil dna add team.members\` command that adds an approver`, () => {
+      const lines = scaffoldTextOf(def, '.wingfoil/dna.yaml').split('\n');
+      expect(
+        lines.some((l) => /^\s*# or run: wingfoil dna add team\.members .*--entry-roles approver(,|\s|$)/.test(l)),
+      ).toBe(true);
+    });
+
+    it(`${def.name}: a commented \`health: [docs/health/]\` sits at the end of paths:, and uncommented loads paths.health`, () => {
+      const text = scaffoldTextOf(def, '.wingfoil/dna.yaml');
+      const lines = text.split('\n');
+      const runs = lines.indexOf('  runs: [docs/runs/]');
+      const at = lines.indexOf(HEALTH_EXAMPLE);
+      expect(runs).toBeGreaterThanOrEqual(0);
+      expect(at).toBeGreaterThan(runs);
+      lines.splice(at, 1, '  health: [docs/health/]');
+
+      const dna = loadDnaText(lines.join('\n'));
+      expect(dna.paths.health).toEqual(['docs/health/']);
+    });
+
+    it(`${def.name}: as written, the scaffold loads with no member and no health path, and passes DnaYaml`, () => {
+      const text = scaffoldTextOf(def, '.wingfoil/dna.yaml');
+      const dna = loadDnaText(text);
+      expect(dna.team.members).toEqual([]);
+      expect(dna.paths.health).toBeUndefined();
+      expect(DnaYaml.safeParse(loadYaml(text)).success).toBe(true);
+    });
+  }
+});
+
+/**
+ * task-321 AC 2 (`bug-409`) — the `init` commit subject carries no internal feature id.
+ */
+describe('task-321 AC 2 — the init commit subject carries no internal feature id (bug-409)', () => {
+  it('Scrum: the subject is the plain sentence naming the template', () => {
+    expect(initProjectCommitMessage(resolveTemplate('Scrum') as TemplateDefinition)).toBe(
+      'chore(wingfoil): initialize .wingfoil/ with the Scrum template',
+    );
+  });
+
+  for (const def of TEMPLATES) {
+    it(`${def.name}: the subject names no parenthesised feature id`, () => {
+      expect(initProjectCommitMessage(def)).not.toMatch(/\(P\d+(\.\d+)*\)/);
+    });
+  }
+});
+
+/** A WingFoil-internal id: a feature (`P2.4`, `P5.1.1`), a requirement, a tech-spec or a decision-log. */
+const INTERNAL_ID = /\b(P\d+\.\d+(\.\d+)*|REQ-[A-Z]+-\d+|spec-\d+|dl-\d+)\b/;
+
+/**
+ * task-321 design gate D3 (a) — the scaffold's configuration files name no WingFoil-internal id in their
+ * comments: the seven of the header comments (`dna.yaml` P2.4; `memory.yaml` P1.13, REQ-STATE-08,
+ * spec-001; `roles.yaml` P3.2 / P3.7, REQ-SEC-08; `workflows.yaml` P4.1) are the same class as the
+ * `bug-409` commit subject. The built-in assets (`/built-in/`) are not this file's generators.
+ */
+describe('task-321 D3 — the scaffolded configuration files name no internal id in their comments', () => {
+  for (const def of TEMPLATES) {
+    const yamlFiles = templateScaffold(def).filter((f) => f.path.endsWith('.yaml') && !f.path.includes('/built-in/'));
+
+    it(`${def.name}: the scaffold has the four top-level configuration files among its YAML files`, () => {
+      expect(yamlFiles.map((f) => f.path)).toEqual(
+        expect.arrayContaining(['.wingfoil/dna.yaml', '.wingfoil/memory.yaml', '.wingfoil/roles.yaml', '.wingfoil/workflows.yaml']),
+      );
+    });
+
+    for (const file of yamlFiles) {
+      it(`${def.name}: ${file.path} names no internal id in a comment`, () => {
+        const hits = file.content
+          .split('\n')
+          .map((line, index) => ({ line: index + 1, comment: line.includes('#') ? line.slice(line.indexOf('#')) : '' }))
+          .filter((entry) => INTERNAL_ID.test(entry.comment));
+        expect(hits).toEqual([]);
+      });
+    }
+  }
+});
+
+/**
+ * task-321 AC 3 (`bug-338`, `bug-350`) — the built-in Memory scaffolds carry the provenance fields
+ * `contributor`, `credit`, `reported_by` on the types that take a contribution (design gate D1 (a): adr,
+ * bug, decision-log, tech-spec, as this repository's templates do), and the release scaffold the planning
+ * fields `backlog_committed`, `waves` and a `## Scope changes` section. Additive: the other types gain
+ * none of them. Their comments name no internal id (design gate D2).
+ */
+describe('task-321 AC 3 — the built-in Memory scaffolds carry the provenance and planning fields (bug-338, bug-350)', () => {
+  const PROVENANCE_TYPES = ['adr', 'bug', 'decision-log', 'tech-spec'];
+  const PROVENANCE_KEYS = ['contributor', 'credit', 'reported_by'];
+  const PLANNING_KEYS = ['backlog_committed', 'waves'];
+  const SCOPE_TABLE_HEADER = '| Task | From | Admitted at | Count vs backlog_committed |';
+
+  function memoryTemplatesOf(def: TemplateDefinition): ScaffoldFile[] {
+    return templateScaffold(def).filter((f) => f.path.startsWith('.wingfoil/memory/templates/'));
+  }
+
+  function frontmatterOf(content: string): Record<string, unknown> {
+    return loadYaml(extractFrontmatter(content) as string) as Record<string, unknown>;
+  }
+
+  for (const def of TEMPLATES) {
+    for (const type of PROVENANCE_TYPES) {
+      it(`${def.name}: the ${type} scaffold carries contributor: "", credit: "" and reported_by: []`, () => {
+        const fm = frontmatterOf(scaffoldTextOf(def, `.wingfoil/memory/templates/${type}.md`));
+        expect({ contributor: fm.contributor, credit: fm.credit, reported_by: fm.reported_by }).toEqual({
+          contributor: '',
+          credit: '',
+          reported_by: [],
+        });
+      });
+    }
+
+    it(`${def.name}: the release scaffold carries backlog_committed (empty) and waves: []`, () => {
+      const fm = frontmatterOf(scaffoldTextOf(def, '.wingfoil/memory/templates/release.md'));
+      expect(Object.prototype.hasOwnProperty.call(fm, 'backlog_committed')).toBe(true);
+      expect(fm.backlog_committed).toBeNull();
+      expect(fm.waves).toEqual([]);
+    });
+
+    it(`${def.name}: the release scaffold body has a ## Scope changes section with its table header`, () => {
+      const lines = scaffoldTextOf(def, '.wingfoil/memory/templates/release.md').split('\n');
+      const head = lines.indexOf('## Scope changes');
+      expect(head).toBeGreaterThanOrEqual(0);
+      const rest = lines.slice(head + 1);
+      const next = rest.findIndex((l) => l.startsWith('## '));
+      expect(next === -1 ? rest : rest.slice(0, next)).toContain(SCOPE_TABLE_HEADER);
+    });
+
+    it(`${def.name}: the other scaffolded types gain none of the provenance or planning keys (additive)`, () => {
+      const extra = memoryTemplatesOf(def)
+        .map((f) => ({ type: frontmatterOf(f.content).type as string, keys: Object.keys(frontmatterOf(f.content)) }))
+        .flatMap(({ type, keys }) => [
+          ...(PROVENANCE_TYPES.includes(type) ? [] : keys.filter((k) => PROVENANCE_KEYS.includes(k)).map((k) => `${type}.${k}`)),
+          ...(type === 'release' ? [] : keys.filter((k) => PLANNING_KEYS.includes(k)).map((k) => `${type}.${k}`)),
+        ]);
+      expect(extra).toEqual([]);
+    });
+
+    it(`${def.name}: no Memory scaffold's frontmatter comment names an internal id`, () => {
+      const hits = memoryTemplatesOf(def).flatMap((f) =>
+        (extractFrontmatter(f.content) as string)
+          .split('\n')
+          .filter((line) => line.includes('#') && INTERNAL_ID.test(line.slice(line.indexOf('#'))))
+          .map((line) => `${f.path}: ${line}`),
+      );
+      expect(hits).toEqual([]);
+    });
+  }
+});

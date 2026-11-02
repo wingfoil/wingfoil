@@ -5,10 +5,8 @@
  * in the operation is synchronous and no in-process timeout could stop it. Also the `{slug}` nit: the
  * collision check predicts the id from the title `memory add` will slug (`<workflow> — <phase>`).
  */
-import { spawnSync } from 'child_process';
-
 import { commitAll, git, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
-import { CLI_ENTRY } from './helpers/spawn-cli';
+import { CLI_ENTRY, spawnCapture } from './helpers/spawn-cli';
 
 const DNA_YAML = `version: 1.0
 modules:
@@ -44,10 +42,13 @@ function writeProject(root: string, plan: { path: string; idPattern: string }): 
   commitAll(root, 'fixture');
 }
 
-/** `wingfoil workflow start checklist --format json`, killed after 20 s. */
-function start(root: string): { timedOut: boolean; status: number | null; stdout: string; stderr: string } {
-  const run = spawnSync('node', [CLI_ENTRY, 'workflow', 'start', 'checklist', '--format', 'json'], { cwd: root, encoding: 'utf-8', timeout: 20_000 });
-  return { timedOut: run.signal !== null, status: run.status, stdout: run.stdout, stderr: run.stderr };
+/**
+ * `wingfoil workflow start checklist --format json`, killed after 20 s. A killed child ends on a signal,
+ * and `spawnCapture` throws on a signal, so a run returned here did not time out: `timedOut` is `false`.
+ */
+function start(root: string): { timedOut: boolean; status: number; stdout: string; stderr: string } {
+  const run = spawnCapture('node', [CLI_ENTRY, 'workflow', 'start', 'checklist', '--format', 'json'], { cwd: root, timeout: 20_000 });
+  return { timedOut: false, ...run };
 }
 
 describe('workflow start ends on every plan pattern (task-217 review F1)', () => {

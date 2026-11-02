@@ -18,12 +18,13 @@
  * unlinking).
  */
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, lstatSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { CORE_MODULES, initWingfoilProject } from '../../src/core';
 import { exitCodeForResult } from '../../src/core/exit-code';
+import { loadDirectivesAtHead, loadRolesYamlAtHead } from '../../src/core/loaders';
 import type { CoreFn } from '../../src/core/registry';
 import type { CoreResult } from '../../src/core/types';
 import { renderCustomDirective } from '../../src/directives/create';
@@ -111,6 +112,21 @@ describe('directive remove — confinement to the project root (REQ-SEC-06, bug-
       expect(result.error.message).not.toContain('beyond a symbolic link');
     });
 
+    // task-311 (bug-108, dl-080 (B)): `HEAD` records `custom` as a link, so no commit records
+    // `legacy-rule` — the refusal is decided as `NOT_FOUND`, and the working tree words it (the W-out
+    // explanation of the task's design, D5, approved verbatim at its design gate on 2026-10-29).
+    it('decides the refusal at HEAD as NOT_FOUND, explaining the out-of-root working-tree file verbatim (task-311)', async () => {
+      const result = await call(repo, 'legacy-rule');
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error.code).toBe('NOT_FOUND');
+      expect(result.error.message).toBe(
+        `unknown directive: legacy-rule — the working tree's '${CUSTOM_DIR}/legacy-rule.md' defines it, but it ` +
+          `resolves to '${join(realpathSync(outside), 'legacy-rule.md')}', outside the project root, and no commit of ` +
+          'this repository records it (dl-080)',
+      );
+    });
+
     // AC2: a refusal writes no history either — the verb's whole contract is one commit or none.
     it('creates no commit', async () => {
       const sha = head(repo);
@@ -139,23 +155,75 @@ describe('directive remove — confinement to the project root (REQ-SEC-06, bug-
   });
 
   /**
-   * AC6, second half — bug-044's "benign case, verified safe": a symlinked **`.md` file** inside a
-   * real `custom/` directory removes correctly today (git stages a symlink as a blob; it refuses
-   * only to reach *through* a symlinked directory), and the link's target survives because `unlink`
-   * removes the link, not what it points at. This is why the confinement check resolves the target's
-   * **parent directory** and keeps the leaf's own name: resolving the leaf too would refuse this
-   * case, turning a working removal into a refusal.
+   * AC6, second half — bug-044's "benign case": a symlinked **`.md` file** inside a real `custom/`
+   * directory. `task-102` pinned its removal as working; `task-311` (bug-108, dl-080 (B)) changed it on
+   * purpose, as its design gate ruled on 2026-10-29 (D1 (a)): `directive remove` resolves the directive
+   * at `HEAD`, and `HEAD` records the LINK, not a directive — its id cannot be read from any commit. So
+   * the HEAD inventory skips the entry with a warning, the removal is `NOT_FOUND`, and the working tree
+   * only words why (D5, verbatim). `git rm` by hand remains the way to delete such a link. The
+   * confinement check still resolves the target's parent directory and keeps the leaf's own name
+   * (`resolveRealPathInRoot`), which is why this case reads as a link rather than as outside the root.
    */
-  it('still removes a symlinked directive FILE inside a real custom/ directory, leaving its target intact', async () => {
+  it('refuses a symlinked directive FILE committed inside a real custom/ directory as unknown at HEAD (task-311 D1 (a)), leaving link and target intact', async () => {
+    const target = join(outside, 'target-rule.md');
+    writeFileSync(target, renderCustomDirective('benign-rule'), 'utf-8');
+    const link = join(repo, CUSTOM_DIR, 'benign-rule.md');
+    symlinkSync(target, link);
+    commitAll(repo, 'fixture: plant a symlinked directive file');
+    const sha = head(repo);
+    const targetBefore = readFileSync(target, 'utf-8');
+    const unchanged = snapshotPersistence(repo);
+
+    const result = await call(repo, 'benign-rule');
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(exitCodeForResult(result)).toBe(1);
+    expect(result.error.code).toBe('NOT_FOUND');
+    expect(result.error.message).toBe(
+      `unknown directive: benign-rule — the working tree's '${CUSTOM_DIR}/benign-rule.md' defines it, but HEAD ` +
+        'records that path as a symbolic link, whose target no commit holds, so the directive cannot be resolved ' +
+        'from the committed repository (dl-080)',
+    );
+    expect(result.error.details?.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          detail: `directive entry '${CUSTOM_DIR}/benign-rule.md' skipped at HEAD: it is a symbolic link, whose target no commit records`,
+        }),
+      ]),
+    );
+    expect(lstatSync(link).isSymbolicLink()).toBe(true);
+    expect(readFileSync(target, 'utf-8')).toBe(targetBefore);
+    expect(head(repo)).toBe(sha);
+    assertPersistenceUnchanged(repo, unchanged);
+  });
+
+  /**
+   * task-311 D6 (a), approved at its design gate on 2026-10-29 — the same committed link must not break
+   * `directive assign`, whose inventory is also read at a commit (`loadDirectivesAtHead`, `directivesAt` in
+   * `src/core/loaders.ts`). Before the fix the link's target TEXT is parsed as a directive: on this base,
+   * in a `wingfoil init --template scrum` project with a committed `custom/benign-rule.md` symlink,
+   * `wingfoil directive assign --directive spare --role qa` printed `error: cannot resolve the directive
+   * inventory: a file committed under '.wingfoil/directives' (at HEAD) is not readable as a directive:
+   * E_MISSING_FRONTMATTER (HEAD:.wingfoil/directives/custom/benign-rule.md): directive file has no
+   * frontmatter block. …`, exit 1. The committed read skips a symlink entry, as the HEAD inventory does.
+   */
+  it('directive assign still binds a committed directive in a repository committing a symlinked directive file (task-311 D6 (a))', async () => {
     const target = join(outside, 'target-rule.md');
     writeFileSync(target, renderCustomDirective('benign-rule'), 'utf-8');
     symlinkSync(target, join(repo, CUSTOM_DIR, 'benign-rule.md'));
     commitAll(repo, 'fixture: plant a symlinked directive file');
 
-    const result = await call(repo, 'benign-rule');
+    expect(() => loadDirectivesAtHead(repo)).not.toThrow();
+    const ids = loadDirectivesAtHead(repo).map((file) => file.frontmatter.id);
+    expect(ids).toContain('determinism');
+    expect(ids).not.toContain('benign-rule');
+
+    const assign = CORE_MODULES.find((module) => module.name === 'directive')?.operations.directiveAssign;
+    if (!assign) throw new Error('fixture bug: "directiveAssign" operation not registered on the directive module');
+    const result = await assign.fn({ root: repo, options: { directive: 'determinism', role: 'qa' } });
 
     expect(result.ok).toBe(true);
-    expect(existsSync(join(repo, CUSTOM_DIR, 'benign-rule.md'))).toBe(false);
-    expect(existsSync(target)).toBe(true);
+    expect(loadRolesYamlAtHead(repo)?.assignments.qa).toContain('determinism');
   });
 });

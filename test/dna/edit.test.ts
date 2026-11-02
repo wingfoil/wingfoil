@@ -1,15 +1,15 @@
 /**
- * The comment-preserving structural edit (`src/dna/edit.ts`, task-093) — the sequence-aware sibling of
- * `setDnaValueInText` (`task-063`, `bug-004-dna-set-strips-yaml-comments`).
+ * The comment-preserving structural edit (`src/dna/edit.ts`, task-093) — the sequence-aware successor of
+ * task-063's mapping-only text setter (`bug-004-dna-set-strips-yaml-comments`), removed by task-312.
  *
- * `setDnaValueInText` rewrites or inserts exactly one **mapping** line and deliberately skips every
- * sequence branch, so it can express none of the shapes `dl-081`'s verbs write. Its fallback — a
+ * That setter rewrote or inserted exactly one **mapping** line and deliberately skipped every
+ * sequence branch, so it could express none of the shapes `dl-081`'s verbs write. Its fallback — a
  * whole-file `dump()` — is correct but strips every comment, including the inline `[SPEC]`/`[AUTHORING]`
  * field-provenance annotations `bug-004` exists to protect. That fallback is rare for `dna set` and
  * would be the NORM for `dna add`, so the structural edit is part of the mutation surface rather than a
  * follow-up to it.
  *
- * Same safety contract as `setDnaValueInText`: every candidate edit is verified by re-parsing it and
+ * Same safety contract as that setter: every candidate edit is verified by re-parsing it and
  * comparing the WHOLE document against the intended object, and anything it cannot do provably-minimally
  * returns `undefined` for the caller to fall back on.
  */

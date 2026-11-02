@@ -2,15 +2,16 @@
  * task-294 AC 4 (characterization, design D4 as ruled at the design gate, 2026-10-24) — the provenance records
  * are not Memory operations, for every reader that sorts commits into Memory operations and the rest:
  *
- * - `scripts/check-governance.cjs` checks no `wf()` rule on `workflow: adopt …` (single, or bulk with an
- *   `Approver:` line by a non-approver) or `workflow: rekey …`, as it checks none on `workflow: finalize …`, and
- *   counts them among the other commits; the run exits 0;
+ * - `scripts/check-governance.cjs` checks no `wf()` rule on `workflow: adopt …` or `workflow: rekey …`, as it checks
+ *   none on `workflow: finalize …`, and counts them among the other commits; since task-328 (`bug-444`) the one
+ *   rule it does apply is the `Approver:` line's authority check, so the two records here that carry an `Approver:`
+ *   line by a non-approver (bulk adoption, rekey) each draw exactly one `authority` finding, and the run exits 1;
  * - `parseMemoryOperation` reads each subject as `null`;
  * - `memory history` of an adopted element lists the same entries before and after its adoption (the record
  *   changes no file).
  *
- * Passes at red: the behaviour exists (design facts, scratch run of 2026-10-24). The authority hole on a
- * `workflow:` record's `Approver:` line is the coordinator's candidate finding F29, not this task's.
+ * task-328 D4 (approver design-gate ruling, 2026-10-31) amends the check test below: it pinned the authority hole
+ * that `bug-444` closes. The `parseMemoryOperation` and `memory history` cases are unchanged.
  */
 import { execFileSync } from 'node:child_process';
 
@@ -65,7 +66,7 @@ types:
 
 const DEVELOPER = { name: 'Dev Eloper', email: 'developer@example.invalid' };
 
-describe('task-294 AC 4 — check-governance treats workflow: adopt / rekey records as non-Memory commits', () => {
+describe('task-294 AC 4 / task-328 — check-governance treats workflow: adopt / rekey records as non-Memory commits, and checks their Approver: line', () => {
   const root = makeTempGitRepo();
   afterAll(() => removeTempDir(root));
 
@@ -91,15 +92,27 @@ describe('task-294 AC 4 — check-governance treats workflow: adopt / rekey reco
   const rekey = empty(`${REKEY}\n\nApprover: Dev Eloper <developer@example.invalid> (approver)\nReason: phase renamed\n\nWingFoil-Instance: life-1-plan\nWingFoil-Rekey-From: life.seed\nWingFoil-Rekey-To: life.seed-line`);
   const report = checkGovernance(root);
 
-  it('reports no finding on any of the three records', () => {
-    expect(report.findings.filter((finding) => [single, bulk, rekey].includes(finding.sha))).toEqual([]);
+  it('reports no finding on the single adoption, which carries no Approver: line', () => {
+    expect(report.findings.filter((finding) => finding.sha === single)).toEqual([]);
   });
 
-  it('checks only the wf() commit, counts the three records among the other commits, and exits 0', () => {
+  it('task-328: reports exactly one authority finding on each record whose Approver: line is by a non-approver', () => {
+    for (const sha of [bulk, rekey]) {
+      expect(
+        report.findings
+          .filter((finding) => finding.sha === sha)
+          .map(({ rule, message, check }) => ({ rule, message, check })),
+      ).toEqual([
+        { rule: 'authority', message: 'the author <developer@example.invalid> holds no approver role in team.members (dl-094)', check: 'workflow-record-authority' },
+      ]);
+    }
+  });
+
+  it('checks only the wf() commit, counts the three records among the other commits, and exits 1', () => {
     expect(report.checked).toBe(1);
     expect(report.otherCommits).toBe(3);
-    expect(report.findings).toEqual([]);
-    expect(exitCodeFor(report)).toBe(0);
+    expect(report.findings).toHaveLength(2);
+    expect(exitCodeFor(report)).toBe(1);
   });
 });
 

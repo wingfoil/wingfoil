@@ -6,7 +6,7 @@
  * that nothing but `init` CAN reach `.wingfoil/agents/`:
  *
  * 1. **Registry.** The `agent` module of `CORE_MODULES` carries no mutating operation that has not been
- *    reviewed against `REQ-SEC-07` ({@link REVIEWED_AGENT_WRITERS}, empty today). The task that adds
+ *    reviewed against `REQ-SEC-07` ({@link REVIEWED_AGENT_WRITERS}, which holds `agentExecute`). The task that adds
  *    `agentExecute` (or any other mutating `agent` operation) fails here until it lists the operation
  *    and states, in its own test, that the operation writes nothing under `agents/built-in/`.
  * 2. **Code paths.** The adapter directory is spelled, in code (comments excluded), only by the init

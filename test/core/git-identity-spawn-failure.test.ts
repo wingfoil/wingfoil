@@ -16,9 +16,11 @@
  * a directory holding a mode-0644 file named `git` (EACCES). `PATH` is restored before any fixture git
  * call, and in `afterEach`.
  *
- * Rows (iv) and (v) are characterization (they pass before the fix): the read-only `readGitIdentity`
- * keeps returning an empty identity on a spawn failure (D3), and a git that RUNS and exits `128` keeps
- * REQ-SEC-01's message (D2).
+ * Row (iv) is characterization (it passes before the fix): the read-only `readGitIdentity` keeps
+ * returning an empty identity on a spawn failure (D3). Row (v) was characterization of task-284's D2
+ * (a git that RUNS and exits `128` keeps REQ-SEC-01's message); task-324 (bug-379, approver gate of
+ * 2026-10-31, D2 (a)) changed it: a root git cannot enter is refused as `could not read git
+ * configuration: <git's message>` (red-first).
  */
 import { execFileSync } from 'node:child_process';
 import { chmodSync, mkdtempSync, writeFileSync } from 'node:fs';
@@ -32,8 +34,6 @@ import type { CoreResult } from '../../src/core/types';
 import { removeTempDir } from '../storage/helpers/git-fixture';
 import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
 
-const IDENTITY_ERROR = 'git identity not configured (user.name/user.email)';
-
 const KEYS = [
   'PATH',
   'GIT_CONFIG_GLOBAL',
@@ -43,6 +43,7 @@ const KEYS = [
   'GIT_AUTHOR_EMAIL',
   'GIT_COMMITTER_NAME',
   'GIT_COMMITTER_EMAIL',
+  'LC_ALL',
 ] as const;
 
 function memoryAdd(): (params: Record<string, unknown>) => Promise<CoreResult<unknown>> {
@@ -139,12 +140,18 @@ describe('task-284 — a git that cannot be spawned is refused as "could not run
     expect(identity).toEqual({ name: '', email: '' });
   });
 
-  it('AC 1 (characterization, D2): a git that runs and exits 128 (a root it cannot enter) keeps REQ-SEC-01\'s message', () => {
+  it('AC 1 (red-first, task-324 D2 (a)): a git that runs and exits 128 (a root it cannot enter) is refused as "could not read git configuration"', () => {
     // A fresh temp directory's child that is never created: git's `-C` cannot enter it (exit 128).
     binDir = mkdtempSync(join(tmpdir(), 'wf-missing-root-'));
-    const result = requireGitIdentity(join(binDir, 'nonexistent'));
+    const root = join(binDir, 'nonexistent');
+    // git's message is localised: pin the C locale for this one run.
+    process.env.LC_ALL = 'C';
+    const result = requireGitIdentity(root);
 
-    expect(result).toEqual({ ok: false, error: { code: 'VALIDATION', message: IDENTITY_ERROR } });
+    expect(result).toEqual({
+      ok: false,
+      error: { code: 'IO', message: `could not read git configuration: cannot change to '${root}': No such file or directory` },
+    });
     expect(exitCodeForResult(result)).toBe(1);
   });
 });

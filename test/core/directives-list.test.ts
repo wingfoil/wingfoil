@@ -26,7 +26,7 @@
  * `resolveRoleDirectives` warnings — the dl-029 no-assignments warning and the dangling-binding
  * warning. `entries` is unchanged: this listing still does not deduplicate — see the `shadowed id` cases.
  */
-import { cpSync, symlinkSync } from 'fs';
+import { chmodSync, cpSync, mkdirSync, realpathSync, symlinkSync } from 'fs';
 import { join } from 'path';
 
 import { buildDirectiveListing, CORE_MODULES, WINGFOIL_NOT_INITIALIZED } from '../../src/core';
@@ -361,9 +361,14 @@ describe('directivesList — the warnings channel (dl-042 A + D)', () => {
   const SHADOW_WARNING =
     "directive 'testing' defined in directives/built-in/testing.md, directives/custom/testing.md; using directives/custom/testing.md";
 
+  // task-310 (bug-411, D2 (a)): the unfiltered listing now also names ROLES_YAML's dangling
+  // `developer` -> `no-direct-db-access` binding, ahead of the shadow warning.
   it('A — without --role, a shadowed id is reported, naming both files and the custom/ winner (dl-037)', async () => {
     const listing = await listingOk(repo);
-    expect(listing.warnings).toEqual([SHADOW_WARNING]);
+    expect(listing.warnings).toEqual([
+      "directive 'no-direct-db-access' bound to role 'developer' has no directive file",
+      SHADOW_WARNING,
+    ]);
     // The inventory itself is unchanged: both files still listed.
     expect(listing.entries.filter((entry) => entry.frontmatter.id === 'testing')).toHaveLength(2);
   });
@@ -372,7 +377,8 @@ describe('directivesList — the warnings channel (dl-042 A + D)', () => {
     removeTempDir(repo);
     repo = makeTempGitRepo();
     writeFixtureFile(repo, '.wingfoil/directives/custom/testing.md', directiveDoc('testing', 'Testing'));
-    writeFixtureFile(repo, '.wingfoil/roles.yaml', ROLES_YAML);
+    // task-310 (bug-411): every binding resolves, so no dangling-binding warning either.
+    writeFixtureFile(repo, '.wingfoil/roles.yaml', 'version: 1.0\nassignments:\n  developer:\n    - testing\nglobal: []\n');
     expect((await listingOk(repo)).warnings).toEqual([]);
   });
 
@@ -391,13 +397,16 @@ describe('directivesList — the warnings channel (dl-042 A + D)', () => {
     ]);
   });
 
-  it('D — --role with no roles.yaml at all is an unbound role: warning, exit 0', async () => {
+  // task-310 (bug-199, AC1, RED-FIRST; design gate D3 (a)): with no roles.yaml nothing was read that
+  // could establish a role's bindings, so the listing asserts nothing about the role — as context
+  // assembly already does (`assembleExecutionContext`, src/core/context.ts).
+  it('D — --role with no roles.yaml at all makes no role assertion: no warning, exit 0 (task-310, bug-199)', async () => {
     removeTempDir(repo);
     repo = makeTempGitRepo();
     writeFixtureFile(repo, '.wingfoil/directives/custom/testing.md', directiveDoc('testing', 'Testing'));
-    const listing = await listingOk(repo, { role: 'developer' });
-    expect(listing.entries).toEqual([]);
-    expect(listing.warnings).toEqual(["no directives assigned to role 'developer'"]);
+    const result = await runList(repo, { role: 'developer' });
+    expect(exitCodeForResult(result)).toBe(0);
+    expect(await listingOk(repo, { role: 'developer' })).toEqual({ entries: [], warnings: [] });
   });
 
   it('a bound role with nothing dangling and nothing shadowed yields no warnings', async () => {
@@ -435,7 +444,14 @@ describe('directivesList — a dangling symlink is skipped and reported (task-14
     expect(exitCodeForResult(result)).toBe(0);
     const listing = await listingOk(repo);
     expect(listing.entries.map((entry) => entry.frontmatter.id)).toEqual(['testing']);
-    expect(listing.warnings).toEqual([WARNING]);
+    // task-310 (bug-411, D1/D2 (a)): ROLES_YAML's bindings with no file follow the skipped entry,
+    // ids ascending, the global one in its own form.
+    expect(listing.warnings).toEqual([
+      WARNING,
+      "directive 'code-review' bound to role 'reviewer' has no directive file",
+      "directive 'no-direct-db-access' bound to role 'developer' has no directive file",
+      "directive 'security-secrets' bound to every role (roles.yaml 'global') has no directive file",
+    ]);
   });
 
   it('buildDirectiveListing called without skipped warnings adds none (the parameter is optional)', () => {
@@ -568,9 +584,12 @@ global:
     expect((await listingOk(repo)).warnings).toEqual([]);
   });
 
+  // task-310 (bug-411): still no scope warning, but the global binding with no file is now named.
   it('a global id with no directive file is not a scope disagreement (nothing declares anything)', async () => {
     writeFixtureFile(repo, '.wingfoil/directives/custom/testing.md', directiveDoc('testing', 'Testing'));
-    expect((await listingOk(repo)).warnings).toEqual([]);
+    expect((await listingOk(repo)).warnings).toEqual([
+      "directive 'security-secrets' bound to every role (roles.yaml 'global') has no directive file",
+    ]);
   });
 
   it('for a shadowed id only the file in force is compared, after the shadow warning', async () => {
@@ -636,5 +655,222 @@ describe('directivesList — a project made by wingfoil@0.2.2 init (task-144 rev
     } finally {
       removeTempDir(repo);
     }
+  });
+});
+
+// task-310 (bug-199), AC1, RED-FIRST (design gate D3 (a)): with no `roles.yaml`, `--role` makes no
+// role assertion — no dl-029 "no directives assigned" warning — because nothing was read that could
+// establish it; the loader's own skipped-entry warnings stay. With a `roles.yaml` the `--role` warnings
+// are unchanged: pinned by the `D —` cases and "one rule" of the warnings-channel describe above.
+describe('directivesList — --role with no roles.yaml makes no role assertion (task-310, bug-199)', () => {
+  let repo: string;
+
+  beforeEach(() => {
+    repo = makeTempGitRepo();
+  });
+
+  afterEach(() => removeTempDir(repo));
+
+  it('an empty .wingfoil/ (the bug\'s own case): --role developer lists nothing and warns nothing, exit 0', async () => {
+    mkdirSync(join(repo, '.wingfoil'));
+    const result = await runList(repo, { role: 'developer' });
+    expect(exitCodeForResult(result)).toBe(0);
+    expect(await listingOk(repo, { role: 'developer' })).toEqual({ entries: [], warnings: [] });
+  });
+
+  it('no roles.yaml and a dangling directive symlink: --role warns exactly the skipped entry', async () => {
+    writeFixtureFile(repo, '.wingfoil/directives/custom/testing.md', directiveDoc('testing', 'Testing'));
+    symlinkSync(join(repo, 'gone.md'), join(repo, '.wingfoil/directives/custom/dangling.md'));
+    const listing = await listingOk(repo, { role: 'developer' });
+    expect(listing.warnings).toEqual([
+      "directive entry '.wingfoil/directives/custom/dangling.md' skipped: it is a symbolic link whose target does not exist",
+    ]);
+  });
+
+  it('a roles.yaml that is a dangling symbolic link reads as absent: --role warns nothing (bug-455)', async () => {
+    writeFixtureFile(repo, '.wingfoil/directives/custom/testing.md', directiveDoc('testing', 'Testing'));
+    symlinkSync(join(repo, 'gone.yaml'), join(repo, '.wingfoil', 'roles.yaml'));
+    expect(await listingOk(repo, { role: 'developer' })).toEqual({ entries: [], warnings: [] });
+  });
+
+  it('buildDirectiveListing with no roles.yaml and a role returns no role warning', () => {
+    writeFixtureFile(repo, '.wingfoil/directives/custom/testing.md', directiveDoc('testing', 'Testing'));
+    const files = loadDirectives(repo);
+    expect(files).toHaveLength(1);
+    expect(buildDirectiveListing(files, undefined, 'developer').warnings).toEqual([]);
+  });
+});
+
+// task-310 (bug-411), AC2, RED-FIRST (design gate D1 (a), D2 (a), D4 (a)): the unfiltered listing
+// warns on every `roles.yaml` binding that names a directive with no file, as `--role` does — a
+// warning, never an error (dl-042 D). One warning per binding: a role's own assignment in the `--role`
+// text verbatim, a `global:` entry in its own form; ids ascending, the global one first, then roles
+// ascending. Order: skipped entries, dangling bindings, shadowed ids, scope disagreements.
+describe('directivesList — the unfiltered listing reports a dangling binding (task-310, bug-411)', () => {
+  let repo: string;
+
+  const rolesWith = (lines: { readonly qa?: readonly string[]; readonly developer?: readonly string[]; readonly global?: readonly string[] }): string =>
+    [
+      'version: 1.0',
+      'assignments:',
+      '  developer:',
+      ...['testing', 'no-direct-db-access', ...(lines.developer ?? [])].map((id) => `    - ${id}`),
+      '  reviewer:',
+      '    - code-review',
+      '  qa:',
+      ...['testing', ...(lines.qa ?? [])].map((id) => `    - ${id}`),
+      'global:',
+      ...['security-secrets', ...(lines.global ?? [])].map((id) => `  - ${id}`),
+      '',
+    ].join('\n');
+
+  beforeEach(() => {
+    repo = makeTempGitRepo();
+    writeFixtureFile(repo, '.wingfoil/directives/custom/testing.md', directiveDoc('testing', 'Testing'));
+    writeFixtureFile(repo, '.wingfoil/directives/custom/security-secrets.md', directiveDoc('security-secrets', 'Security & secrets', 'global'));
+    writeFixtureFile(repo, '.wingfoil/directives/custom/code-review.md', directiveDoc('code-review', 'Code review'));
+    writeFixtureFile(repo, '.wingfoil/directives/custom/no-direct-db-access.md', directiveDoc('no-direct-db-access', 'No direct DB access'));
+  });
+
+  afterEach(() => removeTempDir(repo));
+
+  /** The listing's warnings, after checking the read is a success with exit 0 (a warning, not an error). */
+  async function unfilteredWarnings(): Promise<readonly string[]> {
+    const result = await runList(repo);
+    expect(exitCodeForResult(result)).toBe(0);
+    return (await listingOk(repo)).warnings;
+  }
+
+  // Transcribes P3.4's "Edge - a role binding names a missing directive" scenario.
+  it('Edge - a role binding names a missing directive: the warnings name "ghost-directive" and role "qa"', async () => {
+    writeFixtureFile(repo, '.wingfoil/roles.yaml', rolesWith({ qa: ['ghost-directive'] }));
+    expect(await unfilteredWarnings()).toEqual(["directive 'ghost-directive' bound to role 'qa' has no directive file"]);
+  });
+
+  it('a `global:` entry with no file is named as bound to every role', async () => {
+    writeFixtureFile(repo, '.wingfoil/roles.yaml', rolesWith({ global: ['ghost-global'] }));
+    expect(await unfilteredWarnings()).toEqual([
+      "directive 'ghost-global' bound to every role (roles.yaml 'global') has no directive file",
+    ]);
+  });
+
+  it('one id bound to two roles and global: three warnings, the global one first, then roles ascending', async () => {
+    writeFixtureFile(repo, '.wingfoil/roles.yaml', rolesWith({ qa: ['ghost'], developer: ['ghost'], global: ['ghost'] }));
+    expect(await unfilteredWarnings()).toEqual([
+      "directive 'ghost' bound to every role (roles.yaml 'global') has no directive file",
+      "directive 'ghost' bound to role 'developer' has no directive file",
+      "directive 'ghost' bound to role 'qa' has no directive file",
+    ]);
+  });
+
+  it('two dangling ids are named in ascending id order', async () => {
+    writeFixtureFile(repo, '.wingfoil/roles.yaml', rolesWith({ developer: ['zeta-ghost'], qa: ['alpha-ghost'] }));
+    expect(await unfilteredWarnings()).toEqual([
+      "directive 'alpha-ghost' bound to role 'qa' has no directive file",
+      "directive 'zeta-ghost' bound to role 'developer' has no directive file",
+    ]);
+  });
+
+  it('the order is skipped entries, dangling bindings, shadowed ids, scope disagreements', async () => {
+    writeFixtureFile(repo, '.wingfoil/roles.yaml', rolesWith({ qa: ['ghost-directive'] }));
+    symlinkSync(join(repo, 'gone.md'), join(repo, '.wingfoil/directives/custom/dangling.md'));
+    writeFixtureFile(repo, '.wingfoil/directives/built-in/testing.md', directiveDoc('testing', 'Testing (built-in)'));
+    writeFixtureFile(repo, '.wingfoil/directives/custom/code-review.md', directiveDoc('code-review', 'Code review', 'global'));
+    expect(await unfilteredWarnings()).toEqual([
+      "directive entry '.wingfoil/directives/custom/dangling.md' skipped: it is a symbolic link whose target does not exist",
+      "directive 'ghost-directive' bound to role 'qa' has no directive file",
+      "directive 'testing' defined in directives/built-in/testing.md, directives/custom/testing.md; using directives/custom/testing.md",
+      "directive 'code-review' declares scope: global in directives/custom/code-review.md, but roles.yaml 'global' does not list it; roles.yaml decides: not global",
+    ]);
+  });
+
+  // T1: CHARACTERIZATION — with no roles.yaml nothing is bound, so nothing can dangle (passes today).
+  it('with no roles.yaml there is no dangling-binding warning', async () => {
+    // No `scope` either: with no roles.yaml a `scope: global` is a scope warning of its own (task-144).
+    writeFixtureFile(repo, '.wingfoil/directives/custom/security-secrets.md', directiveDoc('security-secrets', 'Security & secrets'));
+    expect(await unfilteredWarnings()).toEqual([]);
+  });
+});
+
+// task-310 (bug-455), AC3 (design gate D5 (a)): a `roles.yaml` that exists but cannot be read is refused
+// as the other configuration readers refuse it since task-309 (`IO`, exit 1); only an absent file (ENOENT,
+// a dangling link) reads as "no roles.yaml". RED-FIRST: the symbolic-link loop and the link into a closed
+// directory (today both read as absent, exit 0). CHARACTERIZATION (pass today): a directory, a file with
+// mode 000, a dangling link.
+describe('directivesList — a roles.yaml that exists but cannot be read is refused (task-310, bug-455)', () => {
+  let repo: string;
+  const rolesPath = (): string => join(repo, '.wingfoil', 'roles.yaml');
+  // Mode bits do not bind root, so the permission pins only mean something to an unprivileged user.
+  const unprivileged = typeof process.getuid === 'function' && process.getuid() !== 0;
+
+  beforeEach(() => {
+    repo = makeTempGitRepo();
+    writeFixtureFile(repo, '.wingfoil/directives/custom/testing.md', directiveDoc('testing', 'Testing'));
+  });
+
+  afterEach(() => removeTempDir(repo));
+
+  async function expectRefused(options: Record<string, string> | undefined, message: string): Promise<void> {
+    const result = await runList(repo, options);
+    expect(exitCodeForResult(result)).toBe(1);
+    if (result.ok) throw new Error('expected a refusal');
+    expect(result.error).toEqual({ code: 'IO', message });
+    expect(result.error.message).not.toContain(repo);
+    expect(result.error.message).not.toContain(realpathSync(repo));
+    expect(result.error.message).not.toContain('too many symbolic links');
+  }
+
+  const VIEWS = [
+    ['without --role', undefined],
+    ['with --role developer', { role: 'developer' }],
+  ] as const;
+
+  // RED-FIRST.
+  it.each(VIEWS)('a symbolic link to itself, %s: IO, exit 1, "cannot be read (ELOOP)"', async (_label, options) => {
+    symlinkSync('roles.yaml', rolesPath());
+    await expectRefused(options, '.wingfoil/roles.yaml cannot be read (ELOOP)');
+  });
+
+  // RED-FIRST.
+  (unprivileged ? it.each(VIEWS) : it.skip.each(VIEWS))(
+    'a symbolic link into a directory with mode 000, %s: IO, exit 1, "permission denied"',
+    async (_label, options) => {
+      writeFixtureFile(repo, 'locked/roles.yaml', ROLES_YAML);
+      symlinkSync('../locked/roles.yaml', rolesPath());
+      const locked = join(repo, 'locked');
+      chmodSync(locked, 0o000);
+      try {
+        await expectRefused(options, '.wingfoil/roles.yaml cannot be read: permission denied');
+      } finally {
+        chmodSync(locked, 0o755);
+      }
+    },
+  );
+
+  // CHARACTERIZATION — refused since task-309.
+  it.each(VIEWS)('a directory, %s: IO, exit 1, "is a directory, not a file"', async (_label, options) => {
+    mkdirSync(rolesPath());
+    await expectRefused(options, '.wingfoil/roles.yaml is a directory, not a file');
+  });
+
+  // CHARACTERIZATION — refused since task-309.
+  (unprivileged ? it.each(VIEWS) : it.skip.each(VIEWS))('the file with mode 000, %s: IO, exit 1, "permission denied"', async (_label, options) => {
+    writeFixtureFile(repo, '.wingfoil/roles.yaml', ROLES_YAML);
+    chmodSync(rolesPath(), 0o000);
+    try {
+      await expectRefused(options, '.wingfoil/roles.yaml cannot be read: permission denied');
+    } finally {
+      chmodSync(rolesPath(), 0o644);
+    }
+  });
+
+  // CHARACTERIZATION — a dangling link is an absent file (the `--role` view of it is AC1's red, above).
+  it('a dangling symbolic link reads as no roles.yaml: ok, every entry unassigned, no warning', async () => {
+    symlinkSync(join(repo, 'gone.yaml'), rolesPath());
+    const result = await runList(repo);
+    expect(exitCodeForResult(result)).toBe(0);
+    const listing = await listingOk(repo);
+    expect(listing.entries.map((entry) => entry.assignment)).toEqual(['unassigned']);
+    expect(listing.warnings).toEqual([]);
   });
 });

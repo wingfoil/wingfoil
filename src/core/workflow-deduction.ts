@@ -39,10 +39,8 @@ import {
   deduceWorkflowState,
   OPEN_PLAN_STATUSES,
   PLAN_TYPE,
-  resolveInstanceRef,
   type Deduction,
   type DeductionSnapshot,
-  type InstanceDeduction,
   type InstanceHistory,
   type PhaseRecord,
   type Reentry,
@@ -57,7 +55,6 @@ import { producesPath, type Workflow } from '../workflow/schema';
 
 import { DIRECTIVES_DIR_PATH, DNA_YAML_PATH, loadDnaYamlAtCommit, loadMemoryYamlAtCommit, MEMORY_YAML_PATH, ROLES_YAML_PATH } from './loaders';
 import { atHeadOr, listPathsAtCommit, resolveRevision } from './revision';
-import { coreErr, coreOk, type CoreResult } from './types';
 import { loadWorkflowRegistryAtCommit } from './workflow-registry';
 
 /** The trailer that marks a phase record (`spec-003` § "Evidence"). */
@@ -577,15 +574,4 @@ export function readDeductionSnapshotAtHead(root: string): DeductionSnapshot {
  */
 export function deduceWorkflowStateAtHead(root: string): Deduction {
   return deduceWorkflowState(readDeductionSnapshotAtHead(root));
-}
-
-/**
- * The instance `ref` selects (`spec-017` §3.3): a workflow name — its most recently started open
- * instance — or an open instance id; without `ref`, the active instance (`null` when none is open).
- * A `ref` that names no open instance is `NOT_FOUND` `workflow is not open: <ref>` (§10).
- */
-export function selectWorkflowInstance(deduction: Deduction, ref?: string): CoreResult<InstanceDeduction | null> {
-  const found = resolveInstanceRef(deduction, ref);
-  if (ref !== undefined && found === null) return coreErr({ code: 'NOT_FOUND', message: `workflow is not open: ${ref}`, details: { ref } });
-  return coreOk(found);
 }

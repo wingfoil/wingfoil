@@ -32,6 +32,8 @@ import {
   setFrontmatterField,
   slugifyTitle,
 } from '../memory';
+import { ambiguousReferenceError, resolveElementReference } from '../memory';
+import type { ElementReferenceResolution } from '../memory';
 import { commitFailureSummary, StorageError } from '../storage';
 import { generateId, patternTokens } from '../validation';
 import { deduceWorkflowState, PLAN_TYPE, resolveInstanceRef, type Baseline, type Deduction, type ElementRef, type Instance, type InstanceDeduction } from '../workflow/deduce';
@@ -148,7 +150,7 @@ function resolveStartElement(
   declared: string | undefined,
   given: { type: string; id: string } | null,
   deduction: Deduction,
-  exists: (type: string, id: string) => boolean,
+  resolve: (type: string, reference: string) => ElementReferenceResolution,
 ): CoreResult<{ bound: ElementRef | { type: string; id: string } | null; context: ElementRef | null }> {
   const active = deduction.instances[0]?.instance ?? null;
   if (declared === undefined) {
@@ -161,8 +163,11 @@ function resolveStartElement(
     return inherited !== null && inherited.type === declared ? coreOk({ bound: inherited, context: null }) : needs;
   }
   if (given.type !== declared) return needs;
-  if (!exists(given.type, given.id)) return coreErr({ code: 'NOT_FOUND', message: `element not found: ${given.type}:${given.id}`, details: { element: `${given.type}:${given.id}` } });
-  return coreOk({ bound: given, context: null });
+  // `--element <type>:<ref>` takes a short reference (task-332, `spec-008` §7): the plan binds the element's full id.
+  const resolution = resolve(given.type, given.id);
+  if (resolution.kind === 'ambiguous') return coreErr(ambiguousReferenceError(given.id, resolution.candidates));
+  if (resolution.kind === 'missing') return coreErr({ code: 'NOT_FOUND', message: `element not found: ${given.type}:${given.id}`, details: { element: `${given.type}:${given.id}` } });
+  return coreOk({ bound: { type: given.type, id: String(resolution.document.frontmatter['id']) }, context: null });
 }
 
 /**
@@ -236,12 +241,13 @@ export async function workflowStart(params: WorkflowStartParams, verbs: StartVer
   if (workflow === undefined) return coreErr({ code: 'NOT_FOUND', message: unknownWorkflowMessage(usage.name), details: { ref: usage.name } });
   if (!workflowFacts(workflow).startable) return coreErr({ code: 'VALIDATION', message: `cannot start a sub workflow directly: ${usage.name}` });
   const planType = snapshot.memoryYaml?.types[PLAN_TYPE];
-  if (planType === undefined) return coreErr({ code: 'VALIDATION', message: NO_PLAN_TYPE_MESSAGE });
+  if (planType === undefined || snapshot.memoryYaml === null) return coreErr({ code: 'VALIDATION', message: NO_PLAN_TYPE_MESSAGE });
+  const planMemoryYaml = snapshot.memoryYaml;
 
   const deduction = deduceWorkflowState(snapshot);
-  const exists = (type: string, id: string): boolean =>
-    snapshot.documents.some(({ frontmatter }) => frontmatter['type'] === type && frontmatter['id'] === id);
-  const resolved = resolveStartElement(usage.name, workflow.element, usage.element, deduction, exists);
+  const resolve = (type: string, reference: string): ElementReferenceResolution =>
+    resolveElementReference(snapshot.documents, planMemoryYaml, reference, { type });
+  const resolved = resolveStartElement(usage.name, workflow.element, usage.element, deduction, resolve);
   if (!resolved.ok) return resolved;
   const recorded = resolved.value.bound ?? resolved.value.context;
   const base = recorded?.id ?? DEFAULT_PHASE;

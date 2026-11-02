@@ -191,9 +191,12 @@ Stages, in order (the CI job invokes the same `scripts/publish-staging.cjs` a de
 5. **release** — after promote, a GitHub Release for the version (`dl-130` step 1, Q1 (a)). The job's
    ephemeral `GITHUB_TOKEN` holds `contents: write`, and no other job's does; it extracts the notes first —
    the version's `## [X.Y.Z]` section of `CHANGELOG.md` (`scripts/changelog-section.cjs`; a missing,
-   duplicated or empty section fails) — then polls `npm view wingfoil@<version> version` until npm answers exactly that version
-   (`scripts/wait-npm-version.cjs`; npm that cannot be run, or answers E401/E403, fails at once, and each
-   call is bounded), and only then runs `gh release create` on the existing tag, attaching stage 1's four
+   duplicated or empty section fails) — then polls `npm view wingfoil@<version> version dist.tarball --json` until
+   npm answers exactly that version and the tarball URL it names answers HTTP 200 to a `HEAD` request
+   (`scripts/wait-npm-version.cjs`; npm that cannot be run, or answers E401/E403, fails at once; any other
+   answer, a tarball answering anything but 200 among them, is not live yet; each npm call and each tarball
+   request is bounded): npm lists a version minutes before its registry serves the tarball (`bug-433`). Only
+   then it runs `gh release create` on the existing tag, attaching stage 1's four
    test reports as Release assets (`dl-136` Q1 (c)). Since
    stage 4 only stages the version, "promote succeeded" no longer means "npm has it": the poll is what
    makes a Release follow the publish, so an unapproved or rejected stage never gets one. The poll is
@@ -246,8 +249,9 @@ stage 3 smoke (the same scenario of `scripts/e2e-smoke.cjs`, against the staged 
 registry, so it is a gate run once per candidate (`dl-099` §4 (a)); `publish.yml`'s `stage` job runs the same
 script again in CI on the tagged build. Without `--tarball` the script packs the checkout: it refuses a change
 under the pack inputs (`PACK_INPUTS`, `scripts/write-build-info.cjs`) and removes `dist/` first, so the pack
-rebuilds it from the commit alone. `--check-transcript` also fails a transcript with a line recording a failure
-(`FAIL`, `FAILED`), a `--version` line for another stamp, or two distinct commits. Before the tag,
+rebuilds it from the commit alone. `--check-transcript` also fails a transcript with a non-empty line that does not
+start with the `[publish:staging] ` prefix (`LOG_PREFIX`), a line recording a failure (`FAIL`, `FAILED`), a
+`--version` line for another stamp, or two distinct commits. Before the tag,
 `evidence-only-since-candidate` (`node scripts/publish-staging.cjs --check-evidence-only <transcript> --evidence
 <prefix/> …`) passes only when the candidate is an ancestor of the tip and every path `git diff --name-only
 <candidate>..<tip>` lists is an evidence path its binding declares; otherwise it names the paths, and the
@@ -845,3 +849,26 @@ push to `main` or to a `release/X.Y` line has a concurrency group of its own com
 cancelled (`task-267`). The pins are `test/cli/check-release-tag.test.ts`, `test/cli/publish-pipeline.test.ts`,
 `test/cli/ci-workflow.test.ts` and `test/cli/governance-workflow.test.ts`. Edited in place: no supersede, no
 state change, no `version:` bump (`dl-047`), as in the revisions above.
+
+**Revision (2026-10-28, `task-306`) — §3 stage 5, reused by stage 6: the poll waits for the tarball (`bug-433`).**
+At the 0.3.1 publish, `npm view
+wingfoil@0.3.1 version` answered the version about four minutes before the registry served its tarball, so the
+GitHub Release, the MCP Registry listing and the Pages deploy were announced before `npm install` could fetch the
+version. Stage 5 polled `npm view wingfoil@<version> version` until npm answered exactly that version; it now asks
+`npm view wingfoil@<version> version dist.tarball --json` and is satisfied only when npm answers exactly that version
+with a non-empty `dist.tarball` and a `HEAD` request to that URL answers HTTP 200 (each request bounded by
+`TARBALL_TIMEOUT_MS`, a tarball answering anything else being "not live yet" until the deadline). Stage 6 ("stage
+5's bounded poll") and `pages.yml`'s build inherit it. The command line, the exit codes, the jobs and the bound are
+unchanged. The pins are `test/cli/wait-npm-version.test.ts`, `test/cli/wait-npm-version-failures.test.ts` and
+`test/cli/wait-npm-version-tarball.test.ts`. Edited in place: no supersede, no state change, no `version:` bump
+(`dl-047`), as in the revisions above.
+
+**Revision (2026-10-31, `task-326`) — §3: `--check-transcript` judges every non-empty line (`bug-382`).** The check
+read only the closing line and the lines it matched by content, so a line without the `[publish:staging] ` prefix
+(`LOG_PREFIX`), such as a hand-added `--version` line, went unjudged. `checkTranscript` now refuses the first
+non-empty line that does not start with the prefix, after the closing-line check and before the failure scan, with
+the reason `line <n> does not start with "[publish:staging] ": "<line>"`; whitespace-only lines and CRLF line ends
+still pass, and `--check-evidence-only` inherits the refusal. A passing run writes no unprefixed line, and the two
+committed rehearsal transcripts hold none. The pins are `test/cli/staging-rehearsal.test.ts` and
+`test/cli/evidence-only-tag.test.ts`. Edited in place: no supersede, no state change, no `version:` bump
+(`dl-047`), as in the revisions above.

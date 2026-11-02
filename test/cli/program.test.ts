@@ -596,6 +596,49 @@ describe("buildProgram — the exit callback's own behaviour (task-103, `bug-103
     expect(exitSpy).toHaveBeenCalledWith(2);
   });
 
+  it('`help <near-miss>` gets the closest-command `hint:` line, at the root and under a noun (task-315, `bug-115`, AC 1)', async () => {
+    // `--format yaml` keeps Commander's help text out of stderr, so the refusal is the whole of it.
+    const program = await buildFixtureProgramWithRealExitCallback();
+    await parseIgnoringFallout(program, '--format', 'yaml', 'help', 'dnaa');
+    expect(written(stderrSpy)).toBe(`error: unknown command 'dnaa'\nhint: did you mean "dna"?\n`);
+    expect(exitSpy).toHaveBeenCalledWith(2);
+
+    stderrSpy.mockClear();
+    exitSpy.mockClear();
+    const nested = await buildFixtureProgramWithRealExitCallback();
+    await parseIgnoringFallout(nested, '--format', 'yaml', 'dna', 'help', 'sett');
+    expect(written(stderrSpy)).toBe(`error: unknown command 'sett'\nhint: did you mean "set"?\n`);
+    expect(exitSpy).toHaveBeenCalledWith(2);
+  });
+
+  it('the help command is found by consulting Commander\'s built-ins, not by its name: a renamed one still hints (task-315, AC 1)', async () => {
+    const program = await buildFixtureProgramWithRealExitCallback();
+    program.helpCommand('assist [command]');
+    await parseIgnoringFallout(program, '--format', 'json', 'assist', 'dnaa');
+    expect(written(stderrSpy)).toBe(`${JSON.stringify({ error: "unknown command 'dnaa'", hint: 'did you mean "dna"?' })}\n`);
+    expect(exitSpy).toHaveBeenCalledWith(2);
+  });
+
+  // Design gate D1 (b): `help help` is a request for the help command's own help, answered at exit 0 —
+  // Commander's help of its built-in `<name> [command]` command, the `wingfoil …` usage prefix admitted.
+  it.each([
+    [['help', 'help'], 'help', /^Usage: (wingfoil )?help \[command\]$/],
+    [['dna', 'help', 'help'], 'help', /^Usage: (wingfoil dna )?help \[command\]$/],
+    [['assist', 'assist'], 'assist', /^Usage: (wingfoil )?assist \[command\]$/],
+  ] as const)(
+    '`%j` prints the built-in `%s` command\'s own help at exit 0, no unknown-command line (task-315, `bug-116`, AC 2)',
+    async (argv, helpName, usage) => {
+      const program = await buildFixtureProgramWithRealExitCallback();
+      if (helpName !== 'help') program.helpCommand(`${helpName} [command]`);
+      await parseIgnoringFallout(program, ...argv);
+      expect(exitSpy).toHaveBeenCalledWith(0);
+      expect(written(stderrSpy)).not.toContain('unknown command');
+      expect(written(stderrSpy)).toBe('');
+      expect(written(stdoutSpy).split('\n')[0]).toMatch(usage);
+      expect(written(stdoutSpy)).toContain('display help for command');
+    },
+  );
+
   it("a commander refusal under `--format json` is WingFoil's `{error}` object (task-130, `bug-114`)", async () => {
     const program = await buildFixtureProgramWithRealExitCallback();
     await parseIgnoringFallout(program, '--format', 'json', 'dna', 'show', '--bogus');

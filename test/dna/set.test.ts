@@ -10,8 +10,8 @@
  * `setDnaValue` used to live here and is gone: it treated every segment as an object key and created
  * an object for any segment it could not descend into, which is the mechanism `bug-084` filed — and
  * the semantics it stood for are now `applyDnaMutation`'s (`src/dna/mutate.ts`), which resolves
- * against the schema first. The remaining write helper, `setDnaValueInText`, has its own suite
- * (`./set-in-text.test.ts`).
+ * against the schema first. task-063's text setter went the same way (task-312, `bug-254`): every DNA
+ * write goes through `applyDnaEditInText` (`src/dna/edit.ts`, tested by `./edit.test.ts`).
  */
 import { isValidKeyPath, DNA_KEY_ALIASES } from '../../src/dna/set';
 

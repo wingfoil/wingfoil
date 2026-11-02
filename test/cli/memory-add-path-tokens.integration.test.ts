@@ -5,12 +5,17 @@
  *
  * - red-first: a `..`/`.` segment, an absolute path or an empty segment → exit 2, nothing written, with and
  *   without `--dry-run`; `workflow start` the same;
- * - red-first: the committed-pattern type-folder refusal → exit 1 (ruling D1);
- * - characterization: the root escape → exit 1, `E_PATH_ESCAPES_ROOT`'s message.
+ *
+ * task-313 AC 1 (`bug-360`) — a committed `path` holding a literal `..` (the second fixture project) → exit 1, the
+ * committed `memory.yaml` refusal naming both types on stderr, nothing on stdout, nothing written (approver design
+ * gate 2026-10-30, D1 (a), D3 (a)).
  */
+import { existsSync } from 'fs';
+import { join } from 'path';
+
 import { git, makeTempGitRepo, removeTempDir } from '../storage/helpers/git-fixture';
 import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
-import { ROOT_ESCAPE_PREFIX, SPELLING_REFUSALS, TYPE_FOLDER_MESSAGE, writePathTokenProject } from '../core/helpers/path-token-fixture';
+import { DOT_SEGMENT_REFUSAL, SPELLING_REFUSALS, writeDotSegmentProject, writePathTokenProject } from '../core/helpers/path-token-fixture';
 import { runCliEntry } from './helpers/spawn-cli';
 
 describe('task-281 AC 3 (bug-325) — wingfoil memory add / workflow start --set on the compiled CLI', () => {
@@ -37,21 +42,27 @@ describe('task-281 AC 3 (bug-325) — wingfoil memory add / workflow start --set
     expect([run.status, run.stdout, run.stderr]).toEqual([2, '', `error: ${message}\n`]);
     assertPersistenceUnchanged(repo, unchanged);
   });
+});
 
-  it("red-first: a committed `path` whose literal `..` leaves the type's folder → exit 1 (ruling D1), nothing written", () => {
+describe('task-313 AC 1 (bug-360) — wingfoil memory add on a committed `path` holding a literal `..`', () => {
+  let repo: string;
+  beforeEach(() => {
+    repo = makeTempGitRepo();
+    writeDotSegmentProject(repo);
+  });
+  afterEach(() => removeTempDir(repo));
+
+  it.each([
+    ['t', 'docs/t-one.md'],
+    ['r', '../r-one.md'],
+  ])('red-first: --type %s → exit 1, the memory.yaml refusal naming both types, nothing written', (type, wouldBe) => {
     const before = git(repo, ['rev-parse', 'HEAD']).trim();
     const unchanged = snapshotPersistence(repo);
-    const run = runCliEntry(repo, ['memory', 'add', '--type', 't', '--title', 'x', '--set', 'scope=a', '--set', 'name=one']);
-    expect([run.status, run.stdout, run.stderr]).toEqual([1, '', `error: ${TYPE_FOLDER_MESSAGE}\n`]);
+    const run = runCliEntry(repo, ['memory', 'add', '--type', type, '--title', 'x', '--set', 'scope=a', '--set', 'name=one']);
+    expect([run.status, run.stdout, run.stderr]).toEqual([1, '', `error: ${DOT_SEGMENT_REFUSAL}\n`]);
+    expect(existsSync(join(repo, wouldBe))).toBe(false);
     expect(git(repo, ['rev-parse', 'HEAD']).trim()).toBe(before);
-    assertPersistenceUnchanged(repo, unchanged);
-  });
-
-  it('characterization: a committed `path` leaving the project root → exit 1, E_PATH_ESCAPES_ROOT\'s message, nothing written', () => {
-    const unchanged = snapshotPersistence(repo);
-    const run = runCliEntry(repo, ['memory', 'add', '--type', 'r', '--title', 'x', '--set', 'scope=a', '--set', 'name=one']);
-    expect(run.status).toBe(1);
-    expect(run.stderr.startsWith(`error: ${ROOT_ESCAPE_PREFIX}`)).toBe(true);
+    expect(git(repo, ['status', '--porcelain'])).toBe('');
     assertPersistenceUnchanged(repo, unchanged);
   });
 });

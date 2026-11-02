@@ -27,6 +27,9 @@
  *             the committed `.wingfoil/memory.yaml`), and in each only the items holding an added line
  *   --format  `text` (default) or `github` (`::warning file=…,line=…::…` annotations)
  *   <file>…   lint these files whole instead
+ * With neither `--base` nor a file it reads nothing, says so on stderr with this usage line, and exits
+ * 0 (`npm run lint:claims` runs it so). The summary line tells the files read from the items checked:
+ * every item of a file given whole, only the items holding an added line under `--base` (`bug-330`).
  * Exit: 0 whatever it found · 2 it could not run (bad usage, a missing file, a git failure).
  */
 'use strict';
@@ -170,13 +173,17 @@ function firstMatch(item, patterns) {
 }
 
 /**
- * The warnings of one Markdown text. When `lines` is given, only the items that hold one of those
- * (1-based) lines are linted — the items a change touched.
+ * The warnings of one Markdown text, with the number of its items (`total`) and of those linted
+ * (`checked`). When `lines` is given, only the items that hold one of those (1-based) lines are
+ * linted — the items a change touched.
  */
-function lintMarkdown(text, lines) {
+function lintMarkdownItems(text, lines) {
   const warnings = [];
-  for (const item of splitItems(text)) {
+  const items = splitItems(text);
+  let checked = 0;
+  for (const item of items) {
     if (lines !== undefined && !item.lines.some((_line, offset) => lines.has(item.start + offset))) continue;
+    checked += 1;
     const whole = item.lines.join('\n');
     const commands = countCommands(whole);
     const claim = firstMatch(item, STATE_PATTERNS);
@@ -196,7 +203,16 @@ function lintMarkdown(text, lines) {
       });
     }
   }
-  return warnings.sort((a, b) => a.line - b.line || (a.kind < b.kind ? -1 : a.kind > b.kind ? 1 : 0));
+  warnings.sort((a, b) => a.line - b.line || (a.kind < b.kind ? -1 : a.kind > b.kind ? 1 : 0));
+  return { warnings, checked, total: items.length };
+}
+
+/**
+ * The warnings of one Markdown text. When `lines` is given, only the items that hold one of those
+ * (1-based) lines are linted — the items a change touched.
+ */
+function lintMarkdown(text, lines) {
+  return lintMarkdownItems(text, lines).warnings;
 }
 
 function git(root, args) {
@@ -251,6 +267,13 @@ function changedDocuments(root, base) {
 function lintClaims(root, options) {
   const warnings = [];
   const files = [];
+  const items = { checked: 0, total: 0 };
+  const add = (file, result) => {
+    files.push(file);
+    items.checked += result.checked;
+    items.total += result.total;
+    for (const warning of result.warnings) warnings.push({ file, ...warning });
+  };
   if (options.base !== undefined) {
     try {
       git(root, ['rev-parse', '--verify', '--quiet', `${options.base}^{commit}`]);
@@ -258,9 +281,7 @@ function lintClaims(root, options) {
       throw new UsageError(`--base ${options.base} is not a commit of ${root}`);
     }
     for (const { path, added } of changedDocuments(root, options.base)) {
-      files.push(path);
-      const text = git(root, ['show', `${HEAD}:${path}`]);
-      for (const warning of lintMarkdown(text, added)) warnings.push({ file: path, ...warning });
+      add(path, lintMarkdownItems(git(root, ['show', `${HEAD}:${path}`]), added));
     }
   }
   for (const file of options.files ?? []) {
@@ -271,11 +292,9 @@ function lintClaims(root, options) {
     } catch {
       throw new UsageError(`cannot read ${file}`);
     }
-    const shown = relative(root, absolute).split('\\').join('/');
-    files.push(shown);
-    for (const warning of lintMarkdown(text)) warnings.push({ file: shown, ...warning });
+    add(relative(root, absolute).split('\\').join('/'), lintMarkdownItems(text));
   }
-  return { files, warnings };
+  return { files, warnings, items };
 }
 
 /** The report as printed lines, in `format`. */
@@ -287,11 +306,19 @@ function formatClaimReport(report, format) {
   );
   const withWarnings = new Set(report.warnings.map((warning) => warning.file)).size;
   lines.push(
-    `claim lint: ${report.warnings.length} warnings in ${withWarnings} file${withWarnings === 1 ? '' : 's'} (warn-only), ` +
-      `${report.files.length} file${report.files.length === 1 ? '' : 's'} read`,
+    `claim lint: ${report.warnings.length} warning${report.warnings.length === 1 ? '' : 's'} in ${withWarnings} file${withWarnings === 1 ? '' : 's'} (warn-only), ` +
+      `${report.files.length} file${report.files.length === 1 ? '' : 's'} read, ` +
+      `${report.items.checked} of ${report.items.total} item${report.items.total === 1 ? '' : 's'} checked`,
   );
   return lines.join('\n');
 }
+
+/** The stderr line of a run that names nothing to read (`bug-330`). */
+const NOTHING_READ =
+  'claim lint: no --base and no file given, so nothing was read. ' +
+  'Usage: node scripts/lint-claims.cjs [--root <dir>] [--base <rev>] [--format text|github] [<file>…]; ' +
+  '--base <rev> reads the Memory documents <rev>...HEAD added or modified (only their items holding an added line), ' +
+  '<file>… reads those files whole.';
 
 function parseArgs(argv) {
   const options = { format: 'text', files: [] };
@@ -318,6 +345,7 @@ function main(argv) {
     const root = options.root ?? git(process.cwd(), ['rev-parse', '--show-toplevel']).trim();
     const report = lintClaims(root, { base: options.base, files: options.files });
     process.stdout.write(`${formatClaimReport(report, options.format)}\n`);
+    if (options.base === undefined && options.files.length === 0) process.stderr.write(`${NOTHING_READ}\n`);
     return 0;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

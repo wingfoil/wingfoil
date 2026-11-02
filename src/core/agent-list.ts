@@ -158,7 +158,7 @@ export function agentListAtHead(root: string, selection: Selection): CoreResult<
       past = [];
       warnings.push(NO_RUN_LOG_WARNING);
     } else {
-      const records = readRunLogsAt(root, commit, dir);
+      const records = readRunLogsAt(root, commit, dir, (diagnostic) => diagnostics.push(diagnostic));
       if (!records.ok) return records;
       past = records.value.filter(
         (record) => (selection.element === undefined || record.element === selection.element) && (selection.phase === undefined || record.phase === selection.phase),

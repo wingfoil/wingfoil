@@ -45,9 +45,9 @@ import {
   smokeSteps,
   smokeTemplate,
 } from '../../scripts/e2e-smoke.cjs';
+import { CLI_ENTRY, spawnCapture } from './helpers/spawn-cli';
 
 const REPO_ROOT = join(__dirname, '..', '..');
-const DIST_CLI = join(REPO_ROOT, 'dist', 'cli.js');
 const PROXY = join(REPO_ROOT, 'test', 'fixtures', 'smoke', 'wingfoil-proxy.cjs');
 const SCRIPT = join(REPO_ROOT, 'scripts', 'e2e-smoke.cjs');
 const { version } = JSON.parse(readFileSync(join(REPO_ROOT, 'package.json'), 'utf-8')) as { version: string };
@@ -80,7 +80,7 @@ describe('dl-023 smoke (task-060) — scripts/e2e-smoke.cjs', () => {
   });
 
   it('passes against the compiled CLI: --help, --version, and the whole scenario per template', () => {
-    const report = runSmoke({ command: process.execPath, commandArgs: [DIST_CLI], expectedVersion: version });
+    const report = runSmoke({ command: process.execPath, commandArgs: [CLI_ENTRY], expectedVersion: version });
     const failed = report.checks.filter((c) => !c.ok);
     expect(failed).toEqual([]);
     expect(report.ok).toBe(true);
@@ -130,7 +130,7 @@ describe('dl-023 smoke (task-060) — scripts/e2e-smoke.cjs', () => {
   });
 
   it('fails when the installed version is not the one staged', () => {
-    const report = runSmoke({ command: process.execPath, commandArgs: [DIST_CLI], expectedVersion: '9.9.9' });
+    const report = runSmoke({ command: process.execPath, commandArgs: [CLI_ENTRY], expectedVersion: '9.9.9' });
     expect(report.ok).toBe(false);
     expect(report.checks.find((c) => c.label === 'wingfoil --version = 9.9.9')?.ok).toBe(false);
   });
@@ -221,7 +221,7 @@ describe('dl-023 smoke (task-060) — scripts/e2e-smoke.cjs', () => {
       try {
         const env = { ...process.env, GIT_AUTHOR_NAME: 'S', GIT_AUTHOR_EMAIL: 's@s.invalid', GIT_COMMITTER_NAME: 'S', GIT_COMMITTER_EMAIL: 's@s.invalid' };
         spawnSync('git', ['init', '--quiet'], { cwd: repo });
-        const init = spawnSync(process.execPath, [DIST_CLI, 'init', '--template', template, '--format', 'json'], { cwd: repo, encoding: 'utf-8', env });
+        const init = spawnCapture(process.execPath, [CLI_ENTRY, 'init', '--template', template, '--format', 'json'], { cwd: repo, env });
         expect(init.status).toBe(0);
         const memory = yamlLoad(readFileSync(join(repo, '.wingfoil', 'memory.yaml'), 'utf-8')) as {
           defaults: { states: unknown };
@@ -405,8 +405,7 @@ describe('dl-023 smoke (task-060) — scripts/e2e-smoke.cjs', () => {
 
     /** `dist/cli.js` driven directly, the shape `smokeAgentRun`'s `invoke` takes. */
     const invoke = (args: readonly string[], cwd: string, env: NodeJS.ProcessEnv = process.env) => {
-      const r = spawnSync(process.execPath, [DIST_CLI, ...args], { cwd, env, encoding: 'utf-8' });
-      return { status: r.status, stdout: r.stdout ?? '', stderr: r.stderr ?? '' };
+      return spawnCapture(process.execPath, [CLI_ENTRY, ...args], { cwd, env });
     };
     const argsOf = (step: AgentStep): readonly string[] | undefined => ('args' in step ? step.args : undefined);
     const isExecute = (step: AgentStep) => argsOf(step)?.slice(0, 2).join(' ') === 'agent execute';
@@ -771,7 +770,7 @@ describe('dl-023 smoke (task-060) — scripts/e2e-smoke.cjs', () => {
     describe('Q1 — the example runs on the compiled CLI and checks itself', () => {
       let run: { status: number | null; stdout: string; stderr: string };
       beforeAll(() => {
-        const r = spawnSync('bash', [EXAMPLE], { encoding: 'utf-8', env: { ...process.env, WINGFOIL: `node ${DIST_CLI}` } });
+        const r = spawnSync('bash', [EXAMPLE], { encoding: 'utf-8', env: { ...process.env, WINGFOIL: `node ${CLI_ENTRY}` } });
         run = { status: r.status, stdout: r.stdout ?? '', stderr: r.stderr ?? '' };
       });
 
@@ -840,7 +839,7 @@ describe('dl-023 smoke (task-060) — scripts/e2e-smoke.cjs', () => {
         'workflow finalize',
         'workflow end',
       ];
-      const ARGV = [process.execPath, DIST_CLI];
+      const ARGV = [process.execPath, CLI_ENTRY];
       const journey = (script: string, template = 'Scrum', env: NodeJS.ProcessEnv = process.env) => {
         expect(typeof smokeJourney).toBe('function');
         return smokeJourney(template, ARGV, env, script);

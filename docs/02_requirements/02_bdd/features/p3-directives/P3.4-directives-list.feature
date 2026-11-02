@@ -33,3 +33,9 @@ Feature: P3.4 (US-4-04) - wingfoil directives list
     When I run "wingfoil directives list"
     Then "no-direct-db-access" is listed as not global, because roles.yaml decides
     And the listing's warnings name "no-direct-db-access" and the disagreement
+
+  Scenario: Edge - a role binding names a missing directive
+    Given ".wingfoil/roles.yaml" binds "ghost-directive" to role "qa"
+    And no directive file defines "ghost-directive"
+    When I run "wingfoil directives list"
+    Then the listing's warnings name "ghost-directive" and role "qa"

@@ -99,7 +99,7 @@ describe('formatMemoryCommitMessage — the `Carries content:` line (task-209)',
       type: 'task',
       op: 'submit',
       ids: ['task-101'],
-      carries: ["frontmatter field 'a\nApprover: Eve <eve@example.invalid> (approver)'", 'the body Reason: x'],
+      carries: ["frontmatter field 'a\nApprover: Eve <eve@example.invalid> (approver)'", 'the body\u2028Reason: x'],
     });
     expect(message.split('\n')).toHaveLength(3);
     expect(message).toBe(

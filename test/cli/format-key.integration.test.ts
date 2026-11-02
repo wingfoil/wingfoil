@@ -4,12 +4,9 @@
  * failure. Runs the compiled `dist/cli.js` (built once by jest's globalSetup, bug-003) in a fixture
  * repository.
  */
-import { spawnSync } from 'child_process';
-import { join } from 'path';
-
 import { commitAll, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
+import { runCliEntry } from './helpers/spawn-cli';
 
-const CLI = join(__dirname, '..', '..', 'dist', 'cli.js');
 const UPGRADE = 'this file is written in format 2; this WingFoil reads up to format 1: upgrade WingFoil';
 
 const DNA = (format: string) =>
@@ -23,7 +20,7 @@ describe('a newer `format` at the CLI — exit 1, the file, the format and "upgr
   });
   afterEach(() => removeTempDir(repo));
 
-  const run = (...args: string[]) => spawnSync(process.execPath, [CLI, ...args], { cwd: repo, encoding: 'utf8' });
+  const run = (...args: string[]) => runCliEntry(repo, args);
 
   it('`dna show` on a format-2 dna.yaml: console', () => {
     writeFixtureFile(repo, '.wingfoil/dna.yaml', DNA('2'));
