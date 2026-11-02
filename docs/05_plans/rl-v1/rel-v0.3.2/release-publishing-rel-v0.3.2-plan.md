@@ -102,7 +102,7 @@ finding must be a known one (the release-submit set of 11, `bug-402`); anything 
 
 ### S2 — `release-commit` · tech-lead
 
-WFCoord is told first: **`release/0.3` is frozen from the release commit to the tag** (task-282). By hand, not
+The coordination session is told first: **`release/0.3` is frozen from the release commit to the tag** (task-282). By hand, not
 `npm version`, on the phase branch:
 
 - `package.json` `version`; `package-lock.json` `version` and `packages[""].version` → `0.3.2`;
@@ -145,7 +145,7 @@ docs/04_memory/ --evidence docs/05_plans/ --evidence docs/07_gates/`), `phase-br
 2. `services.verify-sweep` (`node scripts/service-verify-sweep.cjs`, warn: every pending and active `service`): the approver runs
    each `verify`, and the dated result is recorded here (dl-130 step 4).
 3. Tag on M: `git tag -a v0.3.2 -m "release v0.3.2" <M>` and `git push origin v0.3.2` — the approver, or the agent on
-   explicit instruction. WFCoord told the freeze is over.
+   explicit instruction. the coordination session told the freeze is over.
 
 ### S6 — `publish` · tech-lead (approval: approver)
 
@@ -232,7 +232,7 @@ phase register) are prepared at S9 for the approver's `memory amend`.
 **P** — measured 2026-11-02 before the plan's add, all met (the table above). **S0** — add `a6b53c9af`, submit
 `3e1da9e9f` (`draft → active`). **S1** — secret sweep: 11 blocking findings, the known set (`bug-402`), none new.
 
-**S2 — `release-commit`** (2026-11-02). WFCoord told first that `release/0.3` is frozen until the tag. By hand on the
+**S2 — `release-commit`** (2026-11-02). the coordination session told first that `release/0.3` is frozen until the tag. By hand on the
 phase branch: `package.json` and `package-lock.json` (`version`, `packages[""].version`) and `server.json` (both
 `version`s) → `0.3.2`; CHANGELOG `## [0.3.2] - 2026-11-02` (its test-results link to
 `…/releases/download/v0.3.2/test-results.md` was written at user-docs); README row 0.3.2 `✓ Released` (D3); SECURITY.md
@@ -262,7 +262,7 @@ findings. The approver pushed `release/0.3` (`origin/release/0.3` = `e2170a174`,
 `exit 0`) and the browser checks: all OK **except `svc-012` (mcp.so): wingfoil is not yet listed** — a warning, it blocks
 nothing (dl-130 Q3 (a)). `on-integration-branch` → "HEAD is on release/0.3, the integration branch of v0.3.2"; M an
 ancestor of `origin/release/0.3`. On the approver's instruction the agent created `git tag -a v0.3.2 -m "release v0.3.2"
-6de2e13c0…` (tag object `64295c368`) and pushed it; WFCoord told the freeze was over. (While checking, the agent
+6de2e13c0…` (tag object `64295c368`) and pushed it; the coordination session told the freeze was over. (While checking, the agent
 detached `../.wf2-wt/release-0.3`'s HEAD at M by mistake and put it back on `release/0.3` at once: tree clean, nothing
 written.) The `ci` run of the `release/0.3` push (41484515244) also passed: 551 suites, 9700 tests, 0 vulnerabilities.
 
@@ -285,6 +285,18 @@ draft, not prerelease, assets `coverage-summary.json`, `jest-results.json`, `lco
 in progress at the check. **Produces:** `gh release download v0.3.2 --pattern test-results.md --pattern
 coverage-summary.json` → `docs/07_gates/rl-v1/rel-v0.3.2-test-results.md` (commit `6de2e13c0…`, tag `v0.3.2`, run
 41485157776, result passed) and `rel-v0.3.2-coverage-summary.json` (99.29 / 97.29 / 98.09 / 99.69).
+
+**S8 — `mark-released`** on the approver's explicit instruction (chat, 2026-11-02): `status:` of
+`docs/04_memory/planning/rl-v1/patch-v0.3.2.md` `releasing → released`, one line, one file, `cf5401723`
+`wf(release): finalize patch-v0.3.2 [releasing → released]`; `check-governance --base origin/release/0.3` → 0 findings;
+`node dist/cli.js memory history patch-v0.3.2` reads the last entry `finalize releasing → released`.
+
+**S9 — close.** F8's corrections prepared uncommitted for the approver's `memory amend` of
+`user-docs-rel-v0.3.2-plan`, `e2e-smoke-rel-v0.3.2-plan` and `release-submit-rel-v0.3.2-plan` (each its own commit;
+`memory amend <id> --dry-run` lists only that element's file): the citations of the maintainer's local kit replaced by
+neutral wording, and in the release-submit plan the coordination session named as such. The approver's finalize of
+this plan records the `publish` approval (deployment and npm stage approve, 2026-11-02) and the `merge-forward`
+go-ahead (D6).
 
 ### Retrospective
 
