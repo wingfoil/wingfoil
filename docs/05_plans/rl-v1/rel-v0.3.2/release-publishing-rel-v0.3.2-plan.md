@@ -256,6 +256,36 @@ not make), 0 `not ok`; `node scripts/publish-staging.cjs --check-transcript <tra
 passed for wingfoil@0.3.2 on candidate 6de2e13c004bbf419acfa7dc4d98d5a7468cd693". The transcript copied to the phase
 branch.
 
+**S5 — handover** (2026-11-02). Pre-push: secret sweep 11 known; `check-governance --base origin/release/0.3` → 0
+findings. The approver pushed `release/0.3` (`origin/release/0.3` = `e2170a174`, `0 0`). **`services.verify-sweep`**
+(`node scripts/service-verify-sweep.cjs` → 21 services): the approver ran every `verify` on 2026-11-02 (24 commands, each
+`exit 0`) and the browser checks: all OK **except `svc-012` (mcp.so): wingfoil is not yet listed** — a warning, it blocks
+nothing (dl-130 Q3 (a)). `on-integration-branch` → "HEAD is on release/0.3, the integration branch of v0.3.2"; M an
+ancestor of `origin/release/0.3`. On the approver's instruction the agent created `git tag -a v0.3.2 -m "release v0.3.2"
+6de2e13c0…` (tag object `64295c368`) and pushed it; WFCoord told the freeze was over. (While checking, the agent
+detached `../.wf2-wt/release-0.3`'s HEAD at M by mistake and put it back on `release/0.3` at once: tree clean, nothing
+written.) The `ci` run of the `release/0.3` push (41484515244) also passed: 551 suites, 9700 tests, 0 vulnerabilities.
+
+**S6 — `publish`** (run 41485157776 of `publish.yml`): `gate` success 16:49–17:04 UTC ("commit 6de2e13c0… of tag v0.3.2
+is on origin/release/0.3"; 551 suites, 9700 tests; coverage 99.29 / 97.29 / 98.09 / 99.69); `stage` success ("staged
+wingfoil@0.3.2 and smoke passed"); `promote` waited on `npm-publish`, **the approver approved the deployment**, then
+`npm stage publish … --provenance --access public --tag latest` → "+ wingfoil@0.3.2 (staged with id
+413b2991-6988-4577-a280-005cc82cdcee)"; after npm's automated review **the approver approved the stage on npm** (2FA).
+`release` and `mcp-registry` each waited with `scripts/wait-npm-version.cjs` (the version listed and its `dist.tarball`
+answering HTTP 200, `bug-433`): "attempt 6: wingfoil@0.3.2 is live", then success. Run conclusion `success`.
+
+**S7 — verify.** `npm view wingfoil dist-tags --json` → `latest: 0.3.2`; `npm view wingfoil@0.3.2 version mcpName
+repository.url dist` → `io.github.wingfoil/wingfoil`, attestations with `https://slsa.dev/provenance/v1`; the tarball
+answers `HEAD` 200. Isolated `npm install -g --prefix <tmp> --cache <tmp> wingfoil@0.3.2` → 0; `wingfoil --version` →
+`0.3.2 (6de2e13c004bbf419acfa7dc4d98d5a7468cd693)`; in a fresh repository `init --template Scrum`, `workflow list`,
+`memory add --type task`, `memory submit task-1` (a short reference) → exit 0, tree clean. `gh release view v0.3.2` → not
+draft, not prerelease, assets `coverage-summary.json`, `jest-results.json`, `lcov.info`, `test-results.md`; `gh api
+…/releases/latest` → `v0.3.2`. The CHANGELOG link `…/releases/download/v0.3.2/test-results.md` → 200. MCP Registry
+(`/v0/servers?search=io.github.wingfoil/wingfoil`) lists 0.3.2 `active`, `isLatest: true`. Pages: the run for the tag
+in progress at the check. **Produces:** `gh release download v0.3.2 --pattern test-results.md --pattern
+coverage-summary.json` → `docs/07_gates/rl-v1/rel-v0.3.2-test-results.md` (commit `6de2e13c0…`, tag `v0.3.2`, run
+41485157776, result passed) and `rel-v0.3.2-coverage-summary.json` (99.29 / 97.29 / 98.09 / 99.69).
+
 ### Retrospective
 
 <!-- Notes for v0.4's retrospective (a patch runs none), one line per item with its evidence. Owed after the tag (not
