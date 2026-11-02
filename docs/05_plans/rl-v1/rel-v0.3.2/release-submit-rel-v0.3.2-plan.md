@@ -219,6 +219,15 @@ one heavy step at a time behind the slot, load 7.4; log `devloop-kit/gate-rs032.
 
 **S2** — the summary committed `e60e2808a` at `docs/07_gates/rl-v1/rel-v0.3.2-test-results-candidate.md`.
 
+**S3 — `enter-releasing`** on the approver's explicit instruction (chat, 2026-11-02): `release/0.3` unmoved
+(`954138f7c`, `0 0`); `status:` of `docs/04_memory/planning/rl-v1/patch-v0.3.2.md` `in-development → releasing`, one
+line, one file, `7bb7bbecc` `wf(release): start patch-v0.3.2 [in-development → releasing]` (D1), no `Approver:`;
+`check-governance --base origin/release/0.3` → 0 findings; `node dist/cli.js memory history patch-v0.3.2` reads the last
+entry `start in-development → releasing`.
+
+**S4 — `approve-release`**: the approver's finalize of this plan, with `Approver:` and `Reason:` (D3), follows this
+commit.
+
 ### Retrospective
 
 <!-- Notes for v0.4's retrospective (a patch runs none), one line per item with its evidence. -->
