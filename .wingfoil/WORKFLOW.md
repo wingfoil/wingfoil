@@ -310,7 +310,12 @@ implementing the task (detail not predictable at planning time).
 
 Eight steps in sequence; `record-adrs` is optional. `advance-pinned-build` moves the pinned
 published build forward first (dl-095) and re-checks the `wingfoil-cli` directive against the new
-pin (dl-163 S3e); `triage-bugs` and `reconcile-governance` sweep in-scope
+pin (dl-163 S3e). The pin is per line: a patch's switch is committed on `release/X.Y` and pins only a
+published `X.Y.z`, a minor's on `main`; run `npm ci` in the release worktree before the pre-check (`bug-429`).
+After the switch the phase updates `AGENTS.md` §1's status sentence, and only it, in its own commit. For a
+`kind: patch`, `define-scope` and `triage-bugs` admit an element only if
+`git log --no-merges release/X.Y..main -- <file>` prints nothing; any other is captured again on the line first
+(`dl-206`, `git-conventions` §1). `triage-bugs` and `reconcile-governance` sweep in-scope
 `open` bugs and not-ready decision-logs/ADRs into their gated states (dl-016), selecting only
 elements whose `release` is empty or this release; `reconcile-governance` also selects `ready`
 decision-logs, for a coverage check only: each one of this release must be named by a task's `ref:`
@@ -330,7 +335,7 @@ which `memory submit` and `memory amend` read and the check restates (bug-342).
 
 ```mermaid
 flowchart TD
-    AB["**advance-pinned-build** *(tech-lead)*\nnpm.pin_advance(package: wingfoil-released)\nforward only, published builds only\n✔ check:lockfile · check:mcp · wingfoil-cli re-check"]
+    AB["**advance-pinned-build** *(tech-lead)*\nnpm.pin_advance(package: wingfoil-released)\nforward only, published builds only, per line\n✔ check:lockfile · check:mcp · wingfoil-cli re-check\n→ AGENTS.md §1 status"]
     DS["**define-scope** *(product-owner)*\nmemory.submit\nrelease: draft → planning\n✔ P4.12: [title, kind, version, pillar, features, requirements, release-line]\n(kind exempt for minor-v0.1 … minor-v1.0)\n20 % reserved for fixes and debt (dl-100 §4 (b))\nsweeps the scheduled change-proposals of the release\ninto its features: (dl-132 element 4; ✔ change-proposals.swept)\npast draft: memory amend by the approver\n(no kind: too, bug-342)"]
     TB["**triage-bugs** *(tech-lead)*\nmemory.approve: bug open → triaged\n🔑 Approval gate — *approver*\n↩ REJECT → closed"]
     RG["**reconcile-governance** *(product-owner)*\nmemory.approve: decision-log in-discussion → ready\nadr pending → accepted\nready decision-logs: coverage check only (a task ref: names each)\n✔ pre: role-directives.clean (check:role-directives)\n🔑 Approval gate — *approver*\n↩ REJECT → draft"]

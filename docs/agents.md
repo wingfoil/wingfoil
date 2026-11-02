@@ -6,7 +6,7 @@ breaking its rules. It covers the same ground as the WingFoil MCP server, so it 
 when MCP is not connected and as a reinforcement when it is.
 
 - **Developing WingFoil itself?** This is the wrong file: read `AGENTS.md` at the repository root.
-- **Version:** this file describes release **0.3** (0.3.1). Run
+- **Version:** this file describes release **0.3** (0.3.2). Run
   `wingfoil --version` in the project; if it reports a different version, read this file at the matching
   git tag instead. Where this file and the installed CLI disagree, the CLI is right.
 - **Humans:** the [user guide](user-guide.md) and the [CLI reference](cli-reference.md) cover the same

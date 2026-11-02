@@ -219,6 +219,13 @@ with `error: no paths mapped for category 'health'` (exit `1`) until you add it.
 `init` writes shows `health` and a `team.members` approver as commented examples, next to where
 each key goes.
 
+You may also declare a category of your own by editing `dna.yaml` by hand and committing it (new in
+0.3.2): `extras: [notes/]` under `paths:` loads without a warning, and `wingfoil paths extras` prints
+it. Its value must be a list of paths — `extras: notes/` is refused with
+`error: E_VALIDATION paths.extras (.wingfoil/dna.yaml): Invalid input: expected array, received string`.
+`dna set`, `dna add` and `dna update` write only the seven categories above
+(`error: unknown DNA field 'paths.extras': 'extras' is not declared under 'paths'`).
+
 The fields each collection accepts are listed in the
 [CLI reference](cli-reference.md#wingfoil-dna-add). You can also edit `dna.yaml` by hand — then commit it.
 
@@ -233,6 +240,11 @@ The fields each collection accepts are listed in the
 | `template.file` | The scaffold `memory add` copies, under `.wingfoil/` |
 | `template.frontmatter.required` | Fields that must be filled |
 | `states` | Optional: the type's own state machine. Without it, the type uses `defaults.states` |
+
+The templates `init` writes (0.3.2 and later) carry a few optional fields WingFoil's own records use: `adr`,
+`bug`, `decision-log` and `tech-spec` have `contributor`, `credit` and `reported_by` (who an element comes from,
+when not the git author), and `release` has `backlog_committed`, `waves` and a `## Scope changes` table (how a
+release's backlog grew after it was committed). Leave them empty if you do not need them.
 
 ### 5.1 State machines
 

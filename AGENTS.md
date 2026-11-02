@@ -25,13 +25,13 @@ Layer (CLI + MCP)**.
 
 > **Project status: implementation under way.** The release line `rl-v1` is `active`; `minor-v0.1`,
 > `minor-v0.2`, the patches `patch-v0.2.2` and `patch-v0.3.1` and `minor-v0.3` are `released` (`wingfoil@0.3.1`
-> on npm, the pinned build), and **the bug-fix patch `patch-v0.3.2` is in `release-planning`** on the maintenance
-> line `release/0.3`, before `v0.4` (approver ruling of 2026-10-26, recorded in `dl-186`), while `main` carries
-> `v0.4` (`docs/04_memory/planning/`). The repository carries a real implementation under
-> `src/` — ten modules: `core, validation, storage, memory, dna, directives, workflow, cli, mcp, agent` — a
-> packaged `wingfoil` CLI (`package.json` `bin` → `dist/cli.js`) and an MCP server (`wingfoil mcp`), all
-> covered by a full Jest suite (`npm test`). Read, run, test and reason about `src/` as you would in any
-> other codebase.
+> on npm, the pinned build), and **the bug-fix patch `patch-v0.3.2` is `in-development`** on the maintenance
+> line `release/0.3` — its implementation closed, its release phases under way — before `v0.4` (approver ruling
+> of 2026-10-26, recorded in `dl-186`), while `main` carries `v0.4` (`docs/04_memory/planning/`). The repository
+> carries a real implementation under `src/` — ten modules: `core, validation, storage, memory, dna,
+> directives, workflow, cli, mcp, agent` — a packaged `wingfoil` CLI (`package.json` `bin` → `dist/cli.js`) and
+> an MCP server (`wingfoil mcp`), all covered by a full Jest suite (`npm test`). Read, run, test and reason about
+> `src/` as you would in any other codebase.
 >
 > **The command surface** is derived mechanically from `CORE_MODULES` (`src/core/index.ts`) — 35 commands,
 > each with an entry in `docs/cli-reference.md`:
@@ -107,13 +107,17 @@ the move. Start from `.wingfoil/README.md`.
   --version` prints it. It moves forward only, to published builds, through `release-planning`'s
   `advance-pinned-build` phase. Its known surprises are the bugs tagged `pinned-build`
   (`npm run -s wingfoil -- memory search --type bug --tag pinned-build`).
+- The pin is **per line** (`release-planning`'s `advance-pinned-build`, `dl-159` A2 item 5): `release/X.Y` pins a
+  published `X.Y.z`, `main` the newest published version of the release line, and a merge forward keeps `main`'s
+  pin (`git-conventions` §1 rule 5). Read the pin of the branch you are on.
 - Do **not** use `npx wingfoil`: once `dist/` is built it runs this repository's own CLI, whichever build
   you meant.
 - The workflow reads (`workflow list`, `show`, `next`, `status`, the MCP resource `wingfoil://workflows`) run on
   the pinned build since the pin reached a build that reads the `{ type, path }` form of a `produces` entry
   (`dl-104` D3); the workflow commands that write a commit stay on the code build with the Memory operations.
   They left it while the pin was 0.3.0, which refuses the `manual: true` check binding (`dl-172` (a), `task-298`,
-  the `pinned-build` bug `bug-414`), and are back on it since the pin reached 0.3.1.
+  the `pinned-build` bug `bug-414`), and are back on it on a line whose pin is 0.3.1 or later; a line still pinned
+  at 0.3.0 runs them on the code build.
 
 | File                                                       | Pillar                 | What it holds                                                                                                                                                                                        |
 |------------------------------------------------------------|------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
@@ -250,7 +254,10 @@ on a `memory add --workflow … --step …`, and `WingFoil-Phase:`, `WingFoil-In
 `workflow rekey` record. To add a trailer to such a commit,
 amend with `git commit --amend --no-edit --trailer "…"`, which joins that paragraph; never add a new paragraph
 after it, or a reader takes `WingFoil-Version:` into the `Reason:` block and the workflow deduction, which reads
-only the final paragraph, loses the step link or the phase record (`git-conventions` §8, `bug-236`). Only a commit not yet pushed may be amended.
+only the final paragraph, loses the step link or the phase record (`git-conventions` §8, `bug-236`). Only a commit
+not yet pushed may be amended. On push, the governance check flags a `WingFoil-*` trailer outside the final
+paragraph (`bug-391`) and holds an `Approver:` line on a `workflow:` record to an approval's grammar and authority
+(`bug-444`, `git-conventions` §9).
 
 **AI attribution** (`git-conventions` §7, `dl-117`). Every commit an agent writes, **except an `approve` or
 `reject` commit**, ends with the trailer paragraph
@@ -439,7 +446,7 @@ non-blank (`--reason` itself stays optional, `dl-027`).
       every one of its releases is `released`).
         - `delivery` → `release-cycle` *(iterate_over: release, scoped to this release-line)*:
             - `planning` → `release-planning` *(`advance-pinned-build` → `define-scope` → `triage-bugs` →
-              `reconcile-governance` → `record-adrs` → `identify-specs` → `build-backlog` →
+              `reconcile-governance` → `record-adrs` (optional) → `identify-specs` → `build-backlog` →
               `commit-backlog`)*;
             - `implementation` → `wave` *(iterate_over: `element:waves`, the release's `waves:`)*: per wave,
               `tasks` → `dev-loop` *(iterate_over: task, where `release` and `wave` match)* → `wave-checks`
@@ -457,7 +464,8 @@ non-blank (`--reason` itself stays optional, `dl-027`).
             - `e2e-smoke` *(dl-023: `fresh-init` → `drive-cli` → `mcp-registration` → `gate`)* →
               `release-submit` (`pre-release-checks` → `enter-releasing` → `approve-release`) →
               `release-publishing` (`release-commit` → `staging-rehearsal` → `tag` on the integration branch →
-              `publish` → `mark-released` → `merge-forward`, optional: a patch's `release/X.Y` merged forward into `main`, a minor recording it with `workflow finalize`, `git-conventions` §1 rule 6) →
+              `publish` → `mark-released` → `merge-forward`, optional: a patch's `release/X.Y` merged forward
+              into `main`, a minor recording it with `workflow finalize`, `git-conventions` §1 rule 6) →
               `release-health` *(dl-089: `measure` → `compare` → `propose`
               against `docs/08_health/metrics.yaml`; not a gate)* → `retrospective` (`explore` →
               `collect-feedback` → `additional-points` → `capture` → `approve`, → decision-logs).
@@ -510,7 +518,8 @@ Bindings are by **role**, never by person (REQ-SYS-08).
 `command-baseline` states which state a command may read and write (`dl-080`); `claim-evidence` states that
 a sentence asserting a fact about the code names the command that establishes it; `git-conventions`
 (`dl-119`) covers branch prefixes, staying current with the integration branch, tags, `wf()` subjects,
-identity, id allocation, AI attribution and amending a tool commit; `wingfoil-cli` (`task-270`) says which
+identity, id allocation, AI attribution, amending a tool commit, the two release lines and their merge forward (§1)
+and the governance check on pushed commits (§9); `wingfoil-cli` (`task-270`) says which
 build runs which command (§3). `roles.yaml` declares its own `version:`; read it there.
 
 When executing under a role, **auto-load and obey that role's directives** (P3.6/P5.4.2).
