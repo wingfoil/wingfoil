@@ -26,6 +26,14 @@ Only unit tests hold them; the release gate does not:
 3. The `dna set` and `dna add` steps assert exit code, a clean tree and the re-loaded value, but not the `version:`
    raise that `task-299` added to every configuration write.
 
+v0.3.2 shipped two more behaviours the gate does not hold either:
+
+4. Short element references (`task-332`): every smoke step names an element by its full id, and nothing asserts the
+   refusal of an ambiguous reference (`ambiguous reference: <ref> matches <N> elements`, exit 1, nothing written).
+5. The workflow-deduction diagnostics of `agent execute` (`task-330`): the smoke runs it only in the adhoc form
+   (`--element task:… --role developer`), which prints none; the step forms (`--next`, `--workflow` / `--step`), where
+   they are printed as `warning:` lines, are never driven.
+
 ## Steps to Reproduce
 
 From the repository root:
@@ -43,6 +51,12 @@ From the repository root:
    `team.members` fields, but not `version`. A dna write does raise it. In a scratch `init --template Scrum` project,
    `wingfoil dna add team.members …` followed by `git log -p -1 -- .wingfoil/dna.yaml | grep '^[-+]version'` shows
    `-version: 1` / `+version: 1.1`, and `wingfoil dna show --format json` returns `version` `1.1`.
+4. `grep -n "args: \[" scripts/e2e-smoke.cjs | grep "memory', '\(approve\|submit\|history\)"`: each names its element
+   as `{<name>.id}`, the full id; `grep -n "ambiguous" scripts/e2e-smoke.cjs` finds nothing. The v0.3.2 gate report
+   (`docs/07_gates/rl-v1/rel-v0.3.2-e2e-smoke.md`, candidate c79a7612f) shows only full ids
+   (`memory approve task-001-approved-task`, `memory history task-002-rejected-task`, …).
+5. `grep -n "'agent', 'execute'" scripts/e2e-smoke.cjs` → one step, line 280, `--element task:{agent.id} --role
+   developer`; `grep -n "'--next'\|'--step'\|'--workflow'" scripts/e2e-smoke.cjs` finds nothing.
 
 ## Expected Behavior
 
@@ -54,6 +68,9 @@ The smoke, and `drive-cli`'s description and `actions:`, cover the following on 
   step has its actions and evidence kinds, per template;
 - the `version` that `dna show` re-loads after the `dna set` and `dna add` steps (two raises from the scaffold's
   value).
+- one verb run with a short reference (`<prefix>-<n>`) and one ambiguous prefix, asserting the refusal's message,
+  exit 1 and no commit;
+- one `agent execute` run in a step form, its stderr checked for the deduction's `warning:` lines.
 
 ## Actual Behavior
 
@@ -72,6 +89,9 @@ Unit tests alone hold these behaviours. A packaging or wiring fault in them woul
 
 - 2026-10-27 — captured by `bug-ingest-rel-v0.4-v0.3.1-followups-plan` (follow-ups of the patch-v0.3.1 dev-loop,
   e2e-smoke and release-publishing phases); destination `v0.4`.
+- 2026-11-03 — scope widened by `bug-ingest-rel-v0.4-v0.3.2-followups-plan` (follow-ups of patch-v0.3.2's
+  `e2e-smoke` phase, F5 and F6): items 4 and 5, the two v0.3.2 behaviours the gate does not hold, rather than a
+  separate bug.
 
 ### Retrospective
 
