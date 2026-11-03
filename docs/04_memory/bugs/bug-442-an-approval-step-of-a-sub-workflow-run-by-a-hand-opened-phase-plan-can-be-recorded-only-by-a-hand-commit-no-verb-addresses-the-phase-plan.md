@@ -17,7 +17,7 @@ tmpl_version: 261010   # Orignal template version
 
 `workflow finalize` records an `approval:` phase that no element carries, but only on the frontier of an open
 instance, that is, a plan with an empty `parent`. A sub workflow such as `release-submit` or `release-publishing` is
-run on this repository by a phase plan opened by hand (`parent: "release-cycle.release-submit"`), because no
+run on this repository by a phase plan opened by hand (`parent: "release-cycle.submit"`), because no
 `sw-life-cycle` instance exists. Neither that plan nor the sub workflow can be addressed by any verb, and the
 sub workflow cannot be started on its own. So its approval is recorded as a hand-written
 `wf(plan): finalize … [active → done]` commit carrying `Approver:` and `Reason:`. The engine cannot read that commit as
@@ -26,12 +26,19 @@ the phase record. Its authority is checked only afterwards, by the governance ch
 (db6e8b44) and v0.3.1's release-publishing (e99f0a05, which records the publish approval and the plan's close in one
 commit).
 
+The same gap closes every phase plan by hand, not only the approval steps: `workflow end`, which moves an instance plan
+`active → done`, answers `unknown workflow` for a plan whose `parent` is set, so each phase plan is finalized by a
+hand-written `wf(plan): finalize … [active → done]`. At v0.3.1 the dev-loop plan (9712089e6); at v0.3.2 the dev-loop
+plan (ebf6855c5) and all five release-phase plans: user-docs (32c0790a9), e2e-smoke (23ddb204d), release-submit
+(c0cab2960), release-publishing (2ee7058e2) and release-health (e5d6ce976).
+
 ## Steps to Reproduce
 
 From the repository root, with the code build (`npm run build`, then `node dist/cli.js`), every command `--dry-run`:
 
 1. `grep -m4 "^status:\|^parent:\|^workflow:\|^phase:" docs/05_plans/rl-v1/rel-v0.3.1/release-submit-rel-v0.3.1-plan.md`
-   → `status: done`, `workflow: "release-submit"`, `phase: "rel-v0.3.1"`, `parent: "release-cycle.release-submit"`.
+   → `status: done`, `workflow: "release-submit"`, `phase: "rel-v0.3.1"`, `parent: "release-cycle.submit"`
+   (`"release-cycle.release-submit"` before the `bug-474` correction).
 2. `node dist/cli.js workflow end release-submit-rel-v0.3.1-plan --dry-run` → `error: unknown workflow:
    release-submit-rel-v0.3.1-plan`, exit 1.
 3. `node dist/cli.js workflow finalize release-submit-rel-v0.3.1-plan --step release-submit.approve-release --reason x
@@ -53,6 +60,10 @@ From the repository root, with the code build (`npm run build`, then `node dist/
 8. `grep -n "approval:" .wingfoil/workflows/custom/release-submit.yaml .wingfoil/workflows/custom/release-publishing.yaml`
    → `approve-release` (release-submit, line 49) and `publish` (release-publishing, line 125), both
    `{ by_role: approver }`.
+9. `node dist/cli.js workflow end user-docs-rel-v0.3.2-plan --dry-run` and `… workflow end dev-loop-rel-v0.3.2-plan
+   --dry-run` → `error: unknown workflow: <plan>`, exit 1 (code build at 1db90b57f); both plans declare a `parent`
+   (`grep -H "^parent:" docs/05_plans/rl-v1/rel-v0.3.2/*.md`). `git log -1 --format='%h %s' ebf6855c5` (and the five
+   release-phase shas above) shows the hand `wf(plan): finalize <plan> [active → done]`.
 
 ## Expected Behavior
 
@@ -62,6 +73,9 @@ run by a hand-opened phase plan. Two candidates, to settle with `dl-203` (the en
 
 - `workflow finalize` (and `workflow end`) accept a phase plan, meaning a plan with `parent:` set, as `<ref>`;
 - a phase of a main can be run as a startable unit that has its own instance.
+
+Either way, the close of a phase plan (`active → done`) is written by a verb too, as `workflow end` writes an instance
+plan's, so no phase plan is finalized by a hand commit.
 
 ## Actual Behavior
 
@@ -85,6 +99,10 @@ carrying an `Approver:` line", `sed -n 25,28p scripts/check-governance.cjs`), no
 
 - 2026-10-27 — captured by `bug-ingest-rel-v0.4-v0.3.1-followups-plan` (follow-ups of the patch-v0.3.1 dev-loop,
   e2e-smoke and release-publishing phases); destination `v0.4`.
+- 2026-11-03 — scope widened by `bug-ingest-rel-v0.4-v0.3.2-followups-plan` (follow-ups of patch-v0.3.2's release
+  phases): the close of a phase plan by `workflow end`, refused for every plan with a `parent` (Summary, step 9,
+  Expected Behavior), rather than a separate bug; step 1 quotes the v0.3.1 plan's `parent`
+  as corrected for `bug-474`.
 
 ### Retrospective
 
