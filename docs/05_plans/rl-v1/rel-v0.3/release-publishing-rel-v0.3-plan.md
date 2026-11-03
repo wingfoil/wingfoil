@@ -7,7 +7,7 @@ version: "1.0"         # optional — plan version
 workflow: "release-publishing"           # REQUIRED — the workflow this plan executes, e.g. "dev-loop"
 phase: "rel-v0.3"              # REQUIRED — the phase/scope this plan covers, e.g. "rel-v0.1" or "retrospective"
 element: "minor-v0.3"  # optional — the Memory element this phase iterates (e.g. a release id)
-parent: "release-cycle.release-publishing" # optional — empty for a started workflow (an instance, `wingfoil workflow start`); "<workflow>.<phase>" for the plan of one phase (spec-017 §3.1)
+parent: "release-cycle.publishing" # optional — empty for a started workflow (an instance, `wingfoil workflow start`); "<workflow>.<phase>" for the plan of one phase (spec-017 §3.1)
 release: "v0.3"      # optional — target release, e.g. "v0.1"
 tmpl_version: 261010   # Orignal template version
 ---
