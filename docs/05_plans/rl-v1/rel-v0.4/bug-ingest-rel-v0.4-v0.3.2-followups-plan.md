@@ -69,7 +69,26 @@ instruction.
 ## Execution Notes
 
 - 2026-11-03: plan added `a8e7c213`.
+- 2026-11-03: plan submitted `168f9ef4`. Each bug drafted against the tree at `1db90b57` (every finding re-checked by
+  the command its body names: F1 reproduced in a throwaway `init --template Scrum` project, the fixture's warnings
+  counted at 27 in one run, F9's 21 commits counted with `git log --format='%(trailers:key=Co-Authored-By,valueonly)'`),
+  then added and submitted (`draft → open`) by the agent, approved `open → triaged` by the approver and assigned v0.4
+  (add / submit / approve / assign):
+  - `bug-471` (low, v0.4) — F1, `paths --help` and extra categories — e29ece4b / c5d791af / c6a40c9c / 64765bbc.
+  - `bug-472` (low, v0.4) — F2, `docs/comparison.md` "the release being published" — 53f80217 / c2d43df0 / 8a441deb / 50f3c0f7.
+  - `bug-473` (low, v0.4) — F4, the `wingfoil-cli` directive and the per-line pin — 5c98c962 / c492218a / 6fa31d98 / bf9bd4fe.
+  - `bug-474` (low, v0.4) — F7, no check of a phase plan's `parent` — b6434ac4 / 74e26d76 / af6a790f / 32853413.
+  - `bug-475` (medium, v0.4) — F9, the governance check and the `Co-Authored-By` value — 41958664 / dfb49711 / fd631c92 / 4a68b26f.
+  - `bug-476` (low, v0.4) — the `workflow-next` fixture's unknown-field warnings — c8550166 / 9aef9148 / e2629066 / 9ee984a5.
+- 2026-11-03: the approver's `memory amend`s, edits prepared by the agent: `bug-440` widened with F5 and F6
+  (`f34072db`); `bug-442` widened with the close of a phase plan by `workflow end` (`5ffc8f27`); the `parent` of the
+  four plans corrected for F7 — `release-submit-rel-v0.3-plan` (`b2864056`), `release-publishing-rel-v0.3-plan`
+  (`af733328`), `release-submit-rel-v0.3.1-plan` (`f4adf80e`), `release-publishing-rel-v0.3.1-plan` (`99e8fbe4`).
+- 2026-11-03: `workflow end` refuses this plan (`workflow 'bug-ingest' is not complete: current step
+  bug-ingest.capture`: the bugs were added without `--workflow` / `--step`), so the plan is finalized by hand, as the
+  v0.3.1 follow-ups ingest was.
 
 ### Retrospective
 
-- None yet.
+- F9 recurred in the release phases because the runtime proposed an attribution string different from
+  `dna.yaml` `team.agents` and nothing checked the value at push; `bug-475` makes the check mechanical.
