@@ -67,9 +67,10 @@ tags: ["benchmark","cost","process"]
 
 ## Relations
 
-- **Verifies:** `dl-147-a-request-run-through-wingfoil-s-process-costs-about-1.5-times-a-plain-agent-run-with-no-gain-in-quality-the-workflow-engine-is-expected-to-bring-that-ratio-below-1.5-on-the-smallest-scenario`,
-  its Action 2 (the re-measure of M-K1 on S1 in the benchmark's v0.2 reference campaign): the target, below 1.5×, is
-  missed at 1.70×, with the workflow engine never started; its Action 3 (the follow-up on proportionate process) is
+- **Re-measures:** `dl-147-a-request-run-through-wingfoil-s-process-costs-about-1.5-times-a-plain-agent-run-with-no-gain-in-quality-the-workflow-engine-is-expected-to-bring-that-ratio-below-1.5-on-the-smallest-scenario`,
+  its Action 2 (M-K1 on S1 in the benchmark's v0.2 reference campaign): 1.70×, above the 1.5× target, but with the
+  workflow engine never started, while Action 2 asked for WingFoil v0.3 with the engine; so the engine's effect (the
+  benchmark's H1) is not tested by this measure. Whether Action 3 (the follow-up on proportionate process) applies is
   for the Decision above.
-- **Source:** the benchmark's finding note `findings/81ebb2691f9c-1-s1-1.0-m-k1-baseline+wingfoil.md` and its
-  campaign-002's Findings; the benchmark's WingFoil feedback note F-047 states the command-sequence reading.
+- **Source:** the benchmark's finding note `findings/81ebb2691f9c-1-s1-1.0-m-k1-baseline+wingfoil.md` (its permalink at
+  the benchmark's v0.3 tag, once released) and the benchmark's v0.2 reference campaign's Findings.
