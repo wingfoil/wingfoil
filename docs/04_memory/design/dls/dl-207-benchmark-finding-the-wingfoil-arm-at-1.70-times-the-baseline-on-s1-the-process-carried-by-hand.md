@@ -3,7 +3,7 @@ id: dl-207-benchmark-finding-the-wingfoil-arm-at-1.70-times-the-baseline-on-s1-t
 type: decision-log
 title: "Benchmark finding: the wingfoil arm at 1.70 times the baseline on S1, the process carried by hand"              # REQUIRED — e.g. "Retrospective v0.1" or "Use Jest for unit testing"
 status: draft          # auto-set by wingfoil
-context: ""            # optional — short label for the context, e.g. "retrospective", "planning", "ad-hoc"
+context: "benchmark finding"            # optional — short label for the context, e.g. "retrospective", "planning", "ad-hoc"
 release: ""            # optional — implementation release this DL is assigned to (stamped at release-planning/build-backlog, dl-016), e.g. "v0.1"
 contributor: ""        # optional — who originated this contribution, if not the git author (dl-020); credited for AI-generated work derived from it
 credit: ""             # optional — free-text credit note (dl-020)
@@ -12,30 +12,64 @@ tmpl_version: 261017   # Orignal template version
 tags: ["benchmark","cost","process"]
 ---
 
-<!-- `wingfoil memory add` copies this scaffold, setting only `id`, `title` and `status` (and any
-     `--tags` or `--set` value). Fill the required frontmatter fields and replace these placeholder
-     comments yourself; `wingfoil memory submit` then checks the required fields, moves `status`
-     forward and commits the document as you left it, naming in the commit body the content it
-     carries. -->
-
 ## Context
 
-<!-- The situation or question that prompted this decision. -->
+### The reading
+
+- Reading: the wingfoil arm's manual had the agent itself carry WingFoil's sequence of commands at every step, inside
+  its own session: read its role's rules and the approved decisions, add each request as a task and each design decision
+  as a decision-log, submit every one, and ask for an approval when its work needed one (1 step of 15). WingFoil 0.3.0's
+  workflow engine was never started (task-095). The 1.70× the baseline's mean cost per run (n = 3) is the cost of that
+  process carried by hand, as the manual set it, not of the process run as WingFoil commands, where an agent would
+  execute each step and a person give only the approvals.
+
+### The campaign
+
+- Benchmark campaign 81ebb2691f9c, execution 1, model claude-sonnet-5-5.
+- WingFoil commit: cc31d7a8ca3940c6ec96dca4e0ef77f32f52dfb1.
+- Finding note: findings/81ebb2691f9c-1-s1-1.0-m-k1-baseline+wingfoil.md; aggregate: results/81ebb2691f9c/1/aggregate.json.
+- The runs, in the benchmark repository:
+  - `bench run show 81ebb2691f9c/1/runs/S1@1.0/baseline/claude-sonnet-5-5/r1`
+  - `bench run show 81ebb2691f9c/1/runs/S1@1.0/baseline/claude-sonnet-5-5/r2`
+  - `bench run show 81ebb2691f9c/1/runs/S1@1.0/baseline/claude-sonnet-5-5/r3`
+  - `bench run show 81ebb2691f9c/1/runs/S1@1.0/wingfoil/claude-sonnet-5-5/r1`
+  - `bench run show 81ebb2691f9c/1/runs/S1@1.0/wingfoil/claude-sonnet-5-5/r2`
+  - `bench run show 81ebb2691f9c/1/runs/S1@1.0/wingfoil/claude-sonnet-5-5/r3`
+  - `bench run compare 81ebb2691f9c/1/runs/S1@1.0/baseline/claude-sonnet-5-5/r1 81ebb2691f9c/1/runs/S1@1.0/wingfoil/claude-sonnet-5-5/r1`
+
+### baseline
+
+- cost: 0.3209 EUR (r1), 0.3451 EUR (r2), 0.3703 EUR (r3); range 0.3209 EUR–0.3703 EUR
+- tokens input: 48 (r1), 46 (r2), 48 (r3); range 46–48
+- tokens output: 17991 (r1), 20699 (r2), 22147 (r3); range 17991–22147
+- tokens cache creation: 54959 (r1), 55788 (r2), 60523 (r3); range 54959–60523
+- tokens cache read: 425255 (r1), 404325 (r2), 424159 (r3); range 404325–425255
+
+### wingfoil
+
+- cost: 0.6013 EUR (r1), 0.6001 EUR (r2), 0.5556 EUR (r3); range 0.5556 EUR–0.6013 EUR
+- tokens input: 84 (r1), 88 (r2), 82 (r3); range 82–88
+- tokens output: 31992 (r1), 31989 (r2), 28686 (r3); range 28686–31992
+- tokens cache creation: 102055 (r1), 99239 (r2), 95454 (r3); range 95454–102055
+- tokens cache read: 990927 (r1), 1048698 (r2), 973912 (r3); range 973912–1048698
 
 ## Decision
 
-<!-- What was decided. State it directly, in the present tense.
-     Do NOT mark the body as unratified (no "proposed, not yet ratified" preamble): `status:` already
-     says whether the decision is `in-discussion` or `ready`, and a body marker cannot be corrected by
-     `memory.approve`, which per AGENTS.md §5.1 may change only `status`. The result is a `ready`
-     document that goes on declaring itself unratified — this had accumulated across 16 decision-logs
-     before the convention was adopted. Where options are still open, present them as options; the
-     approver's choice is recorded in the approve commit's `Reason:`. -->
+<!-- To fill: what WingFoil decides about this finding (the benchmark exports the facts; the decision is WingFoil's). -->
 
 ## Rationale
 
-<!-- Why this option was chosen over alternatives. Include the key trade-offs considered. -->
+<!-- To fill: why, and the alternatives weighed. -->
 
 ## Actions
 
-<!-- Optional: follow-up actions that result from this decision, with owners and deadlines. -->
+<!-- To fill: follow-ups, if any. -->
+
+## Relations
+
+- **Verifies:** `dl-147-a-request-run-through-wingfoil-s-process-costs-about-1.5-times-a-plain-agent-run-with-no-gain-in-quality-the-workflow-engine-is-expected-to-bring-that-ratio-below-1.5-on-the-smallest-scenario`,
+  its Action 2 (the re-measure of M-K1 on S1 in the benchmark's v0.2 reference campaign): the target, below 1.5×, is
+  missed at 1.70×, with the workflow engine never started; its Action 3 (the follow-up on proportionate process) is
+  for the Decision above.
+- **Source:** the benchmark's finding note `findings/81ebb2691f9c-1-s1-1.0-m-k1-baseline+wingfoil.md` and its
+  campaign-002's Findings; the benchmark's WingFoil feedback note F-047 states the command-sequence reading.
