@@ -80,7 +80,7 @@ tech-spec at `identify-specs`, and sent to the template repository then.
    compact view, the `--check` contract.
 3. **Tasks** at `build-backlog`, if the scope holds it: the generator, the bindings, WingFoil's adoption.
 
-**Small findings of the prototype, filed separately through `bug-ingest`:** a built-in action's argv omits the
+**Small findings of the prototype, filed separately as `bug-479`, `bug-480`, `bug-481` and `bug-482`:** a built-in action's argv omits the
 element id (`wingfoil memory submit`); `dna show` has no vision or north-star field; the Kanban and Scrum templates'
 roles carry no description; one workflow file declaring neither startable nor includable makes every workflow
 command fail (`E_WORKFLOW_NEITHER_STARTABLE_NOR_INCLUDABLE`).
