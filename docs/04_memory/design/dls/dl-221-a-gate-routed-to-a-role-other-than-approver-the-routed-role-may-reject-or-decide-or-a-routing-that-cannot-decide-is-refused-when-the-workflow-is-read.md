@@ -53,7 +53,7 @@ no reject target) is refused when the workflow is read, so the mismatch is seen 
 - **Approve stays narrow**: REQ-SEC-03 and adr-006 keep the forward edge with `approver`; `dl-212`'s agent refusal
   applies unchanged, since the shared check is where it lives.
 - **(b) widens authority** per workflow file, which a project's contributor can edit without an approval (see the
-  decision-log on non-gate authority filed from the same read).
+  decision-log on non-gate authority, `dl-220`).
 - **(c) alone** keeps the duplication of roles the consumer reports.
 
 ## Actions
