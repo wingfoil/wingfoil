@@ -21,8 +21,8 @@ not", and `scripts/check-governance.cjs` says in its header that it is not shipp
 flags an approval commit that carries an agent trailer.
 
 **A consumer needs it.** The WingFoil UI shows that a hand-committed `status:` change with a CLI-shaped subject is
-read as the new state and that `memory history` reports a forged approval as genuine (reproduced on 0.3.2; the bug
-filed from the same row). WingFoil's own repository is protected by the script in CI and by the pre-push hook; a
+read as the new state and that `memory history` reports a forged approval as genuine (reproduced on 0.3.2;
+`bug-496`, filed from the same row). WingFoil's own repository is protected by the script in CI and by the pre-push hook; a
 project that installs WingFoil has nothing to run in its CI or before a merge.
 
 ## Decision
@@ -45,7 +45,7 @@ from the repository's own. (b) ships an unversioned interface; (c) leaves every 
 - **State lives in frontmatter**, so the only defence against a forged transition is a reader that checks the commit
   history; it must be available where the history is.
 - **One implementation**: WingFoil's CI running the shipped verb dogfoods it.
-- **`memory history`'s unverified mark** (the bug filed with this) and the verb share the same checks.
+- **`memory history`'s unverified mark** (`bug-496`) and the verb share the same checks.
 
 ## Actions
 
