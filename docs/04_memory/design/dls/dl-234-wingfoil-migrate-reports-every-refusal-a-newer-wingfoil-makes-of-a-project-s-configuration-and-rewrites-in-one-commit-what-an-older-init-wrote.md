@@ -65,5 +65,5 @@ hand edit; (c) is what failed for this consumer.
 ## Relations
 
 - **Related:** `dl-149` (Action 3, format key), `dl-177` (capabilities query), `dl-205` (in-discussion, v0.4:
-  shape changes and the pinned build), `bug-394` (closed: the refusal names the fix), the `workflow list` bug filed
-  with this decision-log (one refusal hides every workflow), `dl-200` (validate verb), P5.1.4.
+  shape changes and the pinned build), `bug-394` (closed: the refusal names the fix), `bug-505`, the `workflow list`
+  bug (one refusal hides every workflow), `dl-200` (validate verb), P5.1.4.
