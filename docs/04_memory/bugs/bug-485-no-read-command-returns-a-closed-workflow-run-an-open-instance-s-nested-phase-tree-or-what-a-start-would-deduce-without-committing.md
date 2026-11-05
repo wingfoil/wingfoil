@@ -66,9 +66,9 @@ throwaway clone (one adoption and eight finalizes).
   not the tree), `dl-186` S4 (ready: the adoption done by hand). `grep -rliE "dry-run.*deduc|simulat|nested"` over
   `docs/04_memory` finds no element covering these.
 - The same preview run also showed two releases (`minor-v0.4` and `minor-v1.0`, both `planning`) on the frontier at
-  once; that is row C-11, filed as its own element.
+  once; that is `bug-483` (row C-11).
 - A preview must mark steps that are finalizable only through a manual binding: see the bug on manual bindings filed
-  from the same notes (row C-12).
+  from the same notes (row C-12, `bug-486`).
 
 ## Triage & Execution Notes
 
