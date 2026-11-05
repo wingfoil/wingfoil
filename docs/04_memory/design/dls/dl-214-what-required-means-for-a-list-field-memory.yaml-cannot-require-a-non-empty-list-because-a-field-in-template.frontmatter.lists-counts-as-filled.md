@@ -4,7 +4,7 @@ type: decision-log
 title: "What `required` means for a list field: `memory.yaml` cannot require a non-empty list, because a field in `template.frontmatter.lists` counts `[]` as filled"              # REQUIRED — e.g. "Retrospective v0.1" or "Use Jest for unit testing"
 status: ready          # auto-set by wingfoil
 context: "planning"   # optional — short label for the context, e.g. "retrospective", "planning", "ad-hoc"
-release: ""            # optional — implementation release this DL is assigned to (stamped at release-planning/build-backlog, dl-016), e.g. "v0.1"
+release: "v0.4"            # optional — implementation release this DL is assigned to (stamped at release-planning/build-backlog, dl-016), e.g. "v0.1"
 contributor: ""        # optional — who originated this contribution, if not the git author (dl-020); credited for AI-generated work derived from it
 credit: ""             # optional — free-text credit note (dl-020)
 reported_by: ["svc-020-github-repository-wingfoil-benchmark-the-benchmark-consumer-project-and-its-feedback-inbox/F-045@5ad262b24f7bc2bf01976bb77ee29f03c9b77982"]   # optional — LIST of consumer feedback notes this element answers, as provenance only (dl-163 S3c), each "<service id>/F-<nnn>@<sha>": the full id of an active kind: repository service with a feedback_inbox, the note's id in that inbox, and the full sha of the consumer commit read; restate the note in this element, never copy it; a GitHub issue gets contributor + credit instead (COLLABORATION.md)
