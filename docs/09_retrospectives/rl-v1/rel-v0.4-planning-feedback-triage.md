@@ -298,3 +298,61 @@ Cite prefix: none (no registered inbox; no `reported_by:` possible).
 
 The elements filed are listed below, with the rows each answers.
 
+Filed on `ingest/v0.4-feedback` (2026-11-05) under `bug-ingest-rel-v0.4-planning-feedback-plan` and
+`decision-log-ingest-rel-v0.4-planning-feedback-plan`: 29 bugs `open` and 21 decision-logs `in-discussion`
+(`memory search`), 46 `reported_by:` cites to the registered notes. A row may give two elements when its defect and its
+decision need different fixes.
+
+| Element | Rows answered |
+|---|---|
+| `bug-477` | svc-020 F-042 |
+| `bug-478` | svc-020 F-045 |
+| `dl-214` | svc-020 F-045 (its second point: the meaning of `required` for a list) |
+| `dl-215` | svc-020 F-046 |
+| `bug-479` | C-04 |
+| `bug-480` | C-05 |
+| `bug-481` | C-06 |
+| `bug-482` | C-07 |
+| `bug-483` | C-11 |
+| `bug-484` | svc-019 F-027 |
+| `bug-485` | C-08; C-09; C-10 |
+| `bug-486` | C-12 |
+| `bug-487` | C-01 |
+| `dl-216` | C-13 |
+| `dl-217` | svc-019 F-032; svc-019 F-037 |
+| `dl-218` | svc-018 F-037; svc-018 F-039 |
+| `bug-488` | svc-020 F-043 |
+| `bug-489` | svc-020 F-044 |
+| `dl-219` | svc-020 F-009; svc-020 F-030 |
+| `bug-490` | svc-018 F-034 |
+| `bug-491` | svc-018 F-038 |
+| `bug-492` | svc-018 F-040; svc-018 F-041 |
+| `bug-493` | svc-019 F-013 |
+| `dl-220` | svc-019 F-009; svc-019 F-034 |
+| `dl-221` | svc-019 F-018 |
+| `bug-494` | svc-019 F-023; svc-019 F-035 |
+| `bug-495` | svc-019 F-028 |
+| `bug-496` | svc-019 F-030 |
+| `dl-222` | svc-019 F-030 |
+| `bug-497` | svc-020 F-031 |
+| `bug-498` | svc-020 F-037 |
+| `bug-499` | C-02 |
+| `dl-223` | C-15 |
+| `bug-500` | C-20 |
+| `bug-501` | C-23 |
+| `bug-502` | svc-020 F-033 |
+| `dl-224` | svc-018 F-032; C-31; C-32 |
+| `dl-225` | svc-020 F-023; svc-019 F-036; svc-018 F-036 (items 2 and 3) |
+| `dl-226` | svc-018 F-036 (item 1); svc-020 F-035 |
+| `bug-503` | svc-019 F-026 |
+| `bug-504` | svc-019 F-033 |
+| `dl-227` | svc-018 F-016 |
+| `dl-228` | svc-018 F-020 |
+| `dl-229` | svc-018 F-026 |
+| `dl-230` | svc-018 F-035 |
+| `dl-231` | svc-019 F-005 |
+| `dl-232` | svc-019 F-006 |
+| `dl-233` | svc-019 F-008 |
+| `dl-234` | svc-019 F-029 |
+| `bug-505` | svc-019 F-029 |
+
