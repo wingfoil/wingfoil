@@ -46,7 +46,7 @@ The scaffold omits the field; a project fills it only if its author already know
 
 - A separate "vision" field is not needed for the summary: `north_star` is the declared one. Adding another would be a
   `spec-002` change first.
-- Same scaffold, related gap: the scaffolded roles carry no description (the bug filed from row C-06).
+- Same scaffold, related gap: the scaffolded roles carry no description (`bug-481`).
 - `dl-211` (ready, v0.4) names this among its prototype's findings to file through `bug-ingest`.
 - Source of the finding: `docs/09_retrospectives/rl-v1/rel-v0.4-planning-feedback-triage.md`, row C-05 (reproduced on
   0.3.2).
