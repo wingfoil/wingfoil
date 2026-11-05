@@ -38,7 +38,7 @@ Options:
 - **(a) Two verb families.**
   - `memory move <id> [--id <new-id>] [--type <type>]`: one commit `wf({type}): move <old> → <new>` that `git mv`s
     the file to the new type's path, rewrites `id` / `type`, rewrites the references to the old id in the elements
-    whose declared relation fields cite it (the relations decision-log filed with this one), and lists those it
+    whose declared relation fields cite it (`dl-225`), and lists those it
     cannot rewrite (body prose) without failing. A retype requires the element's state to exist in the target type's
     machine, or `--state <s>` naming one; needs the approver role when the element is past its first state.
     `memory history --follow` reads the move as an entry.
