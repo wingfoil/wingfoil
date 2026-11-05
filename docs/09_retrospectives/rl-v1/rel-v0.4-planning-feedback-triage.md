@@ -285,4 +285,16 @@ Cite prefix: none (no registered inbox; no `reported_by:` possible).
 
 ## Ruling
 
-<!-- The approver's ruling on the proposed outcomes, and the elements filed from them, recorded after the ruling. -->
+**Approver ruling (2026-11-05):**
+1. Every outcome other than `restated` is taken as proposed (covered, element, superseded, declined).
+2. The 63 `restated` rows are filed as about forty elements, grouped so that one defect or decision is one element:
+   A, reading and deducing workflow runs; B, plan parking (one decision-log); C, authority and integrity; D, the element
+   model; E, configuration, schemas, packs and documentation; F, agents (C-15 a decision-log that refines `dl-181`).
+   Decision-logs are submitted to `in-discussion` for `reconcile-governance`, bugs to `open` for `triage-bugs`, where the
+   release follows ruling R6 of `release-planning-rel-v0.4-plan`.
+3. The process rows C-16, C-18, C-19 (channel) and F-040 (`svc-020`) become rulings of v0.4's dev-loop plan, C-19 also a
+   `w0` task; they are not filed as elements. The one `needs-info` row, C-11, is a question for the approver and is
+   filed as a gap instead.
+
+The elements filed are listed below, with the rows each answers.
+
