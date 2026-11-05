@@ -326,6 +326,16 @@ Every `open` bug in scope (those S1c filed) triaged, with the release R6 assigns
 - 2026-11-05, S3: the approver triaged the 29 bugs (`open → triaged`), 23 for `v0.4` (every medium included) and 6 for
   `v0.4.1`, each reason naming the release build-backlog stamps; no bug is `open`. Frontier:
   `reconcile-governance@release:minor-v0.4`.
+- 2026-11-05, S4: 51 `in-discussion` decision-logs prepared as ruling packets by four read-only sub-agents (one per
+  theme, one brief). The approver ruled: 46 approved (`in-discussion → ready`; 39 for v0.4, 7 ratified for v1.0:
+  `dl-225`, `dl-226`, `dl-228`, `dl-230`, `dl-231`, `dl-232`, `dl-234`), `dl-193` and `dl-195` deprecated, `dl-164`,
+  `dl-169` and `dl-233` deferred (`v1.0`, stamped at build-backlog). Conditions in the reasons: `dl-212` with `dl-222`
+  (the shipped check) and an AGENTS.md §5.1 amendment in the L0 task; `dl-217` with a marker `workflow start` writes;
+  `dl-221` through `dl-212`'s agent refusal. Budget: tier 2 moved to `v1.0` (approver choice "A");
+  `minor-v0.4` amended (P1.4, P2.3, P5.1.2, P5.1.3 out of `features:`, tier journey corrected to 0b). 49 commits, one
+  file each, no AI trailer. The frontier stays at `reconcile-governance` until build-backlog stamps the deferred
+  releases (dl-016 §4).
+- 2026-11-05, S5 `record-adrs`: skipped (optional; no ADR `pending`).
 
 ### Retrospective
 
