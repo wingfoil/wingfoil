@@ -45,5 +45,5 @@ search` and `directives list` succeed).
 
 - Reported by UI (svc-019 F-029, seen on 0.3.1); the reproduction on 0.3.2 is the read record's.
 - Severity `low`: no record is written or lost; the answer is incomplete, not wrong.
-- Related: `bug-394` (closed, v0.3.2: the refusal names the fix), the `wingfoil migrate` decision-log filed with this
-  bug (an upgrade check listing every refusal), `dl-149`, `dl-205`.
+- Related: `bug-394` (closed, v0.3.2: the refusal names the fix), `dl-234`, the `wingfoil migrate` decision-log
+  (an upgrade check listing every refusal), `dl-149`, `dl-205`.
