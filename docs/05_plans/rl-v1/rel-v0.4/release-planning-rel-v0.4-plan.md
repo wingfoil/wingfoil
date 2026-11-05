@@ -312,6 +312,20 @@ Every `open` bug in scope (those S1c filed) triaged, with the release R6 assigns
   done, and the engine offers manual-binding steps as finalizable (filed at S1c).
 - 2026-11-05: feedback notes received for S1c from the coordination channel (ten) and from two anonymous projects
   (two notes on plan parking and resume; one candidate to reproduce), each as content only.
+- 2026-11-05, S1c: read record `docs/09_retrospectives/rl-v1/rel-v0.4-planning-feedback-triage.md` (`7e611f682`): 158
+  notes (`svc-018` 42 at `a663618d`, `svc-019` 37 at `c0dae1df`, `svc-020` 47 at `5ad262b2`, channel 32), read by four
+  read-only sub-agents with one brief; outcomes covered 30, element 26, restated 63, superseded 33, declined 5,
+  needs-info 1. The approver ruled (`b81eae08c`): non-restated outcomes as proposed; the restated rows filed as 29 bugs
+  (`bug-477` … `bug-505`, `open`) and 21 decision-logs (`dl-214` … `dl-234`, `in-discussion`) on `ingest/v0.4-feedback`
+  (drafted by four sub-agents, filed one by one), 46 `reported_by:` cites; cross-references by id recorded by 18
+  approver amends; merged into `main` `8e881404e` and pushed; this branch merged `main` (`314eb00cb`). The process rows
+  (C-16, C-18, C-19, `svc-020` F-040) go to the v0.4 dev-loop plan.
+- 2026-11-05, S2: `cp-001` amended to the next free ids P4.22, US-6-14, REQ-STATE-12 (P4.21, US-6-13 and REQ-STATE-11
+  had been taken by Element Provenance) and accepted (`61bbcd35b`, `da50c9ffa`); `minor-v0.4` amended (`8e594f6a5`):
+  `## Scope` with tiers 1–2, deferrals to `v1.0`, budget and reservation; `features:` + P4.21, − P5.4.5 (deferred).
+- 2026-11-05, S3: the approver triaged the 29 bugs (`open → triaged`), 23 for `v0.4` (every medium included) and 6 for
+  `v0.4.1`, each reason naming the release build-backlog stamps; no bug is `open`. Frontier:
+  `reconcile-governance@release:minor-v0.4`.
 
 ### Retrospective
 
