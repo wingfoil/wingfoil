@@ -2,7 +2,7 @@
 id: "dl-040-spec-006-resource-uri-divergence"
 type: decision-log
 title: "Core operations diverge from spec-006 §3's Resource-URI column, and nothing tracks it"
-status: in-discussion
+status: ready
 context: "dev-loop-review"
 release: "v0.4"
 contributor: ""
