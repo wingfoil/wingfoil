@@ -5,7 +5,7 @@ title: "WingFoil v0.4 - Interaction Layer + Polish"
 status: planning
 version: "v0.4"
 pillar: "P5"
-features: [P1.4, P2.3, P4.18, P4.19, P4.20, P4.21, P5.1.1, P5.1.2, P5.1.3, P5.1.4, P5.2.3]
+features: [P4.18, P4.19, P4.20, P4.21, P5.1.1, P5.1.4, P5.2.3]
 requirements: "docs/03_backlog/04_backlog/by-release/v0.4.json"
 release-line: "v1"
 tmpl_version: 260703
@@ -27,15 +27,17 @@ R6 and S2):
   (`dl-223`). The generator (`dl-143`, refined by `dl-208`) with `dl-209`'s alternative B — `agent sync` and
   `agent context` in v0.4, the hook engine in `v1.0` — and `dl-210` D1–D3 and D7. Positioning: `dl-140` Action 2 on
   every public surface, with its runnable example and its announcement.
-- **Tier 2, migration** (Journeys 5 and 6): P1.4 `memory import` (`dl-144`, OpenSpec first), P2.3 `dna infer`, P5.1.2
-  `init --mode infer`, P5.1.3 `audit`. If the release's budget does not hold, this tier moves to `v1.0` as a whole.
-- **Deferred to `v1.0`:** P5.4.5 (agent-assisted init wizard, removed from `features:`), `dl-209`'s hook engine, `dl-210` D4–D6, and the
+- **Tier 2, migration** (journey 0b): P1.4 `memory import` (`dl-144`, OpenSpec first), P2.3 `dna infer`, P5.1.2
+  `init --mode infer`, P5.1.3 `audit`, with `dl-226`'s import and `dl-234`'s `migrate`. Moved to `v1.0` as a whole at
+  `reconcile-governance` (approver, 2026-11-05): the decision-logs ratified there for v0.4 took the budget this tier
+  held, so the four features leave `features:`.
+- **Deferred to `v1.0`:** tier 2 (above); P5.4.5 (agent-assisted init wizard, removed from `features:`), `dl-209`'s hook engine, `dl-210` D4–D6, and the
   decision-logs that place themselves after v1.0.
 - **Change-proposals:** `cp-001` (a feature for the vision-change process, P4.22) is accepted into v0.4; its
   `update-vision`, downcasts and `schedule` run as one task, and P4.22 joins `features:` when `schedule` stamps it.
 
-**Budget and reservation** (`dl-100` §4 (b), `dl-191`, `dl-133`): about 110–120 tasks, about 75 feature tasks for
-tiers 1 and 2 and about 40 fix tasks. At least 20 % of the task budget is reserved for bug fixes and governance debt,
+**Budget and reservation** (`dl-100` §4 (b), `dl-191`, `dl-133`): about 125–135 tasks after tier 2 left: tier 1 and
+the decision-logs ratified for v0.4 at `reconcile-governance`, and about 40 fix tasks; build-backlog fixes the count. At least 20 % of the task budget is reserved for bug fixes and governance debt,
 and within it at least 10 % goes to the oldest low-severity bugs. Every medium bug, and the low bugs of the modules the
 features touch, are fixed in v0.4 (about 2.5 bugs per fix task); the other low bugs are stamped `v0.4.1`, a patch whose
 element is added after the `v0.4.0` tag. No element in scope is left without a release.
@@ -49,10 +51,10 @@ element is added after the `v0.4.0` tag. No element in scope is left without a r
 Per `docs/01_vision/07_sequencer.md` (Week 4 Definition of Done):
 
 - All v0.3 features stable (no regressions)
-- `wingfoil init --mode infer` functional
-- `wingfoil audit` functional
-- `wingfoil dna infer` functional (or simplified fallback)
-- `wingfoil memory import` functional
+- `wingfoil init --mode infer` functional — deferred to `v1.0` with tier 2
+- `wingfoil audit` functional — deferred to `v1.0` with tier 2
+- `wingfoil dna infer` functional (or simplified fallback) — deferred to `v1.0` with tier 2
+- `wingfoil memory import` functional — deferred to `v1.0` with tier 2
 - MCP server stable (Resources + Tools + Prompts all working)
 - Reference workflow templates (Scrum, Kanban, Lean, Trunk-Based) functional
 - CLI help + error messages polished
