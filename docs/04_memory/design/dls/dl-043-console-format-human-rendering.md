@@ -2,7 +2,7 @@
 id: "dl-043-console-format-human-rendering"
 type: decision-log
 title: "--format console falls back to JSON for every read-only command, against spec-008 §2"
-status: in-discussion
+status: ready
 context: "dev-loop-review"
 release: "v0.4"
 contributor: ""
