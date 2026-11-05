@@ -295,6 +295,23 @@ Every `open` bug in scope (those S1c filed) triaged, with the release R6 assigns
   S4. `dl-212` is the approval-binding decision-log `dl-140` D5 refers to.
 - 2026-11-05, outside this phase: `ingest/svc-official-contact` files `svc-023` (the official contact address,
   `pending`) on the approver's request.
+- 2026-11-05: both ingest branches merged into `main` (`9f628fd23`, `c93bba10a`) and pushed after the secret sweep
+  (the 11 known findings of `bug-402`, none in the merged files) and `check-governance --base origin/main` (0
+  findings); `dl-209`, `dl-210`, `dl-211` `ready`, `svc-023` `active`. This branch merged `main` (`c13cc6090`).
+- 2026-11-05, S1: pin switch `647ac3a15` (0.3.0 → 0.3.2; `npm run -s wingfoil -- --version` → `0.3.2`);
+  `check:lockfile` and `check:mcp` exit 0; `workflow list`, `status`, `next` exit 0 on the pinned build; no open
+  `pinned-build` bug. `wingfoil-cli` 1.5 (`eb4324002`, `a46f34a30`: the first carried a bug id in the version note,
+  which `test/directives/wingfoil-cli.test.ts` refuses; fixed in a new commit). AGENTS.md §1 (`acc330b00`).
+  `bug-473` closed by the approver (`147ca493a`).
+- 2026-11-05, S1b: `workflow start sw-life-cycle --dry-run` would have named the instance after `dl-208`, the active
+  ingest run's element (`bug-413`), so the instance was opened with `memory add --type plan` (`sw-life-cycle-1-plan`,
+  `47d0bf83c`, `f0d20410a`). The approver applied the adoption of `release-line:rl-v1` (`87ecc6fb8`). Finalized:
+  the four `initial-design` seeds (`23925c074`, `d44aca7d0`, `651374a21`, `728497d62`, done by hand on 2026-07-03)
+  and `advance-pinned-build@release:minor-v0.4` (`f5caf3c9b`). Frontier: `reconcile-governance@release:minor-v0.4`
+  (selection). `advance-pinned-build@release:minor-v1.0` is offered as finalizable and is NOT finalized: it was not
+  done, and the engine offers manual-binding steps as finalizable (filed at S1c).
+- 2026-11-05: feedback notes received for S1c from the coordination channel (ten) and from two anonymous projects
+  (two notes on plan parking and resume; one candidate to reproduce), each as content only.
 
 ### Retrospective
 
