@@ -55,5 +55,5 @@ The decision only widens what `lists` can say; it changes no outcome for a proje
 ## Relations
 
 - Related: `bug-147` and `task-168` (introduced `lists`), `bug-342` / `task-279` (`exempt`), the upgrade-notes bug
-  filed from the same row (svc-020 F-045).
+  `bug-478`, filed from the same row (svc-020 F-045).
 - Source of the finding: `docs/09_retrospectives/rl-v1/rel-v0.4-planning-feedback-triage.md`, row svc-020 F-045.
