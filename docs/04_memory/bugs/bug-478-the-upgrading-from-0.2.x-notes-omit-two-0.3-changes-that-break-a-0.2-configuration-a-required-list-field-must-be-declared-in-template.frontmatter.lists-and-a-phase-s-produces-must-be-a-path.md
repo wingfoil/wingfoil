@@ -53,7 +53,7 @@ Neither list names them; a 0.2 project meets the two refusals with no upgrade no
   neither the fix nor the note). `dl-213` (in-discussion, v0.4: fixed changelog lines a script can read) is adjacent and
   could carry a rule that keeps an "Upgrading from …" list complete, e.g. every refusal a release adds is checked
   against a project the previous version initialised.
-- The list half also raises a semantic question, filed separately as a decision-log: once a field is in `lists`, `[]`
+- The list half also raises a semantic question, filed separately as `dl-214`: once a field is in `lists`, `[]`
   is filled, so `memory.yaml` cannot require a non-empty list.
 - Source of the finding: `docs/09_retrospectives/rl-v1/rel-v0.4-planning-feedback-triage.md`, row svc-020 F-045
   (outcome `restated`, reproduced on 0.3.2).
