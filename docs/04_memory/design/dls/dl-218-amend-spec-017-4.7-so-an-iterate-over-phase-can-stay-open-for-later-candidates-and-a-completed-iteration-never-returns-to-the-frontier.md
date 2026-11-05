@@ -65,5 +65,5 @@ methodologies with repeating streams unable to use one workflow.
 ## Relations
 
 - **Related:** spec-017 §4.7; `dl-160` (ready, v0.4: a selection that never empties, the converse case); the
-  empty-selection behaviour also met by the bug on a second instance reading the first's evidence (svc-020 F-043);
+  empty-selection behaviour also met by `bug-488`, a second instance reading the first's evidence (svc-020 F-043);
   P4.16.
