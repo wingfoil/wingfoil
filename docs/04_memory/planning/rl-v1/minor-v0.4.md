@@ -5,7 +5,7 @@ title: "WingFoil v0.4 - Interaction Layer + Polish"
 status: planning
 version: "v0.4"
 pillar: "P5"
-features: [P1.4, P2.3, P4.18, P4.19, P4.20, P5.1.1, P5.1.2, P5.1.3, P5.1.4, P5.2.3, P5.4.5]
+features: [P1.4, P2.3, P4.18, P4.19, P4.20, P4.21, P5.1.1, P5.1.2, P5.1.3, P5.1.4, P5.2.3]
 requirements: "docs/03_backlog/04_backlog/by-release/v0.4.json"
 release-line: "v1"
 tmpl_version: 260703
@@ -13,7 +13,32 @@ tmpl_version: 260703
 
 ## Scope
 
-v0.4 completes the Interaction Layer (P5) with full MCP server support, migration tooling for existing projects, and CLI polish. This release delivers `wingfoil init --mode infer` for adoption by teams already in development, `wingfoil audit` to scan and summarize project state, `wingfoil dna infer` to auto-propose project structure, `wingfoil memory import` to ingest existing documentation, and MCP Tools for agents to submit deliverables and update workflow state. The reference workflow templates (P4.18–P4.20: Scrum, Kanban, Lean Inception, Trunk-Based, with template expansion and customization) move here from v0.3, so a team adopting WingFoil can pick a methodology at `init` time. CLI help, error messages, and formatting are refined for intuitive user experience. The MCP server now exposes full Resources, Prompts, and Tools endpoints, completing the agent integration surface.
+v0.4 completes the Interaction Layer (P5): the MCP Tools through which agents submit deliverables and update workflow
+state, an agent run that works without a terminal and is recorded, and the agent instruction files generated from the
+project's own configuration. Around that core it delivers the reference workflow templates (P4.18–P4.20) as packs, the
+third verb of Element Provenance (P4.21, `transfer`), the migration path for projects already in development, and CLI
+polish. Scope as ruled at release-planning's `define-scope` (approver, 2026-11-05, `release-planning-rel-v0.4-plan`
+R6 and S2):
+
+- **Tier 1, the Interaction Layer.** P5.2.3 MCP Tools; P5.1.4 CLI UX (compact listings, `dl-215`; reading workflow
+  runs, `bug-485` … `bug-487`); P4.18–P4.20 through packs (`dl-138`, `dl-178`; the published `software` pack adopted
+  in `w0`); P4.21 `transfer` (`dl-187`). Agents: the headless work run (`dl-181`, `dl-183`, `dl-188`), approval binding
+  L0 (`dl-212`), the `coordinator` role and the hand-driven cycle (`dl-203` Q3, Q4), permissions per role if ratified
+  (`dl-223`). The generator (`dl-143`, refined by `dl-208`) with `dl-209`'s alternative B — `agent sync` and
+  `agent context` in v0.4, the hook engine in `v1.0` — and `dl-210` D1–D3 and D7. Positioning: `dl-140` Action 2 on
+  every public surface, with its runnable example and its announcement.
+- **Tier 2, migration** (Journeys 5 and 6): P1.4 `memory import` (`dl-144`, OpenSpec first), P2.3 `dna infer`, P5.1.2
+  `init --mode infer`, P5.1.3 `audit`. If the release's budget does not hold, this tier moves to `v1.0` as a whole.
+- **Deferred to `v1.0`:** P5.4.5 (agent-assisted init wizard, removed from `features:`), `dl-209`'s hook engine, `dl-210` D4–D6, and the
+  decision-logs that place themselves after v1.0.
+- **Change-proposals:** `cp-001` (a feature for the vision-change process, P4.22) is accepted into v0.4; its
+  `update-vision`, downcasts and `schedule` run as one task, and P4.22 joins `features:` when `schedule` stamps it.
+
+**Budget and reservation** (`dl-100` §4 (b), `dl-191`, `dl-133`): about 110–120 tasks, about 75 feature tasks for
+tiers 1 and 2 and about 40 fix tasks. At least 20 % of the task budget is reserved for bug fixes and governance debt,
+and within it at least 10 % goes to the oldest low-severity bugs. Every medium bug, and the low bugs of the modules the
+features touch, are fixed in v0.4 (about 2.5 bugs per fix task); the other low bugs are stamped `v0.4.1`, a patch whose
+element is added after the `v0.4.0` tag. No element in scope is left without a release.
 
 ## Pillar Focus
 
