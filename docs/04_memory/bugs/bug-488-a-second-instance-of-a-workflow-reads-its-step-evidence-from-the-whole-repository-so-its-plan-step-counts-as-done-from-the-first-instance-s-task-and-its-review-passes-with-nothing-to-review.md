@@ -60,7 +60,7 @@ because its selection is empty.
   `HEAD`, while §4.8's history walk bounds only records and linkage to the instance. The fix touches §4.3 (or the
   Kanban scaffold's evidence), so the triage may route it through identify-specs.
 - Related: `dl-160` (ready, v0.4: the converse, a selection that never empties), `bug-388` (triaged, v0.4: deduction
-  against the configuration at `HEAD`), `dl-187` (adopt), and the Kanban scaffold bug filed from svc-020 F-044 (why a
+  against the configuration at `HEAD`), `dl-187` (adopt), and `bug-489` (the Kanban scaffold, svc-020 F-044) (why a
   second instance is needed at all). `grep -rliE "selects nothing|empty selection|nothing to select" docs/04_memory`
   finds no element on it.
 
