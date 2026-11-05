@@ -53,7 +53,7 @@ edit is still taken as the new state (`memory search` reports `approved`, and th
 - WingFoil's own repository catches this with `scripts/check-governance.cjs` (`dl-103` §1, `task-167`: the
   authority and state rules), run in CI and by the pre-push hook; its header says it is not shipped in the npm package
   (`package.json` `files`: `dist`, `README.md`), so a project that uses WingFoil cannot run it. Whether to ship it
-  is the decision-log filed from the same row.
+  is `dl-222`, filed from the same row.
 - `verifyTransitionConsistency` and the attribution audit (`dl-103` Rationale) are the code `memory history` would
   call for the mark.
 - Related: `dl-212` (L0: agent markers on approvals), adr-006 (git identity is attribution, not authentication).
