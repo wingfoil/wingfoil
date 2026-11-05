@@ -43,6 +43,9 @@ The approver's ruling at the parent plan's `triage-bugs` or `reconcile-governanc
 ## Execution Notes
 
 - 2026-11-05: plan added.
+- 2026-11-05: 29 bugs filed and submitted, `bug-477` … `bug-505`, all `open` (`memory search --type bug`); the first (`bug-477`) carries
+  the step trailers, the others were added without `--workflow` once `capture` left the frontier. Rows answered: the
+  read record's Ruling section.
 
 ### Retrospective
 

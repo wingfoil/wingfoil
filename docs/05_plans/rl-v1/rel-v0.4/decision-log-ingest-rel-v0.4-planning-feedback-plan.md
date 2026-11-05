@@ -43,6 +43,8 @@ The approver's ruling at the parent plan's `triage-bugs` or `reconcile-governanc
 ## Execution Notes
 
 - 2026-11-05: plan added.
+- 2026-11-05: 21 decision-logs filed and submitted, `dl-214` … `dl-234`, all `in-discussion`; the first (`dl-214`) carries the step
+  trailers. Rows answered: the read record's Ruling section.
 
 ### Retrospective
 
