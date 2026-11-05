@@ -54,7 +54,15 @@ decision-log it captured is decided.
 ## Execution Notes
 
 - 2026-11-05: plan added (`4b562759f`).
+- 2026-11-05: plan submitted (`6492ec73d`). Six decision-logs added and submitted, each `in-discussion`
+  (`memory search --type decision-log`): `dl-208` (rulesync refinement), `dl-209` (plugins), `dl-210` (scoped
+  directives), `dl-211` (cheat sheet), `dl-212` (approval binding, L0), `dl-213` (CHANGELOG). Only `dl-208` carries the
+  step trailers: after its add the `capture` step left the frontier (`step 'decision-log-ingest.capture' is not on the
+  frontier`), so the other five were added without `--workflow`, as in earlier multi-element ingests. Code build at
+  `16c28e9ce`, the source of `origin/main` at `1be558880` (the three commits between them change one decision-log).
 
 ### Retrospective
 
-- None yet.
+- An ingest's `capture` step takes one element, so an ingest that files several leaves all but the first unlinked
+  to its run (`dl-209` … `dl-213` here). Proposal: a capture step that accepts several elements, or one ingest per
+  element.
