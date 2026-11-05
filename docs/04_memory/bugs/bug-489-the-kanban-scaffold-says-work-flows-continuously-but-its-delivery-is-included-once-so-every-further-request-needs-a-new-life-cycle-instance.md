@@ -27,7 +27,7 @@ instance, with its own inception and specification to finalize. Reproduced by re
 2. `grep -n "include" .wingfoil/workflows/*/sw-life-cycle.yaml` → one `include: kanban-delivery`.
 3. `grep -n "iterate\|cadence" .wingfoil/workflows/*/kanban-delivery.yaml` → no match; its header says work flows
    continuously.
-4. Optionally, step 1 of the bug filed from svc-020 F-043: after one delivery, `wingfoil workflow next` →
+4. Optionally, step 1 of `bug-488`: after one delivery, `wingfoil workflow next` →
    `sw-life-cycle.sunset`.
 
 ## Expected Behavior
@@ -42,8 +42,8 @@ One delivery per instance, while the scaffold describes a continuous flow.
 ## Notes
 
 - Whether `iterate_over: task` alone would carry later requests in one instance has not been checked; it meets
-  spec-017 §4.7's rule that a later phase closes an iteration (the decision-log filed from svc-018 F-037/F-039).
-- The second-instance path is where the evidence defect filed from svc-020 F-043 shows.
+  spec-017 §4.7's rule that a later phase closes an iteration (`dl-218`).
+- The second-instance path is where the evidence defect `bug-488` shows.
 - Related: `dl-138` (ready, v0.4: scaffolds from a versioned pack source), the natural home of the scaffold change.
 
 ## Triage & Execution Notes
