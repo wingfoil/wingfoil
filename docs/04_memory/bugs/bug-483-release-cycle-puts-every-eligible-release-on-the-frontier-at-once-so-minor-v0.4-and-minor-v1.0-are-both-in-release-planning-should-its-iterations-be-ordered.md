@@ -53,7 +53,7 @@ planning of `minor-v1.0` beside that of `minor-v0.4`.
 ## Notes
 
 - Seen in the same observation: steps whose binding is `manual: true` are reported finalizable for both releases, so a
-  loop that finalizes what the engine calls finalizable would record steps nobody did; that is row C-12 of the same read, filed on its own.
-- Related: `dl-186` S4 (state adoption); row C-10 of the same read (no read-only preview of the deduction).
+  loop that finalizes what the engine calls finalizable would record steps nobody did; that is `bug-486`.
+- Related: `dl-186` S4 (state adoption); `bug-485` (no read-only preview of the deduction, row C-10).
 - Source of the finding: `docs/09_retrospectives/rl-v1/rel-v0.4-planning-feedback-triage.md`, row C-11 (outcome
   `needs-info`, filed as a gap bug so the approver rules on it at triage).
