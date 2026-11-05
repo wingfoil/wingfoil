@@ -4,7 +4,7 @@ type: decision-log
 title: "Vision, feature and requirement documents declare themselves *Approved* but no verb can approve them, so their approvals are hand-written commits `memory history` cannot see"
 status: ready
 context: "retrospective"
-release: "v0.4"
+release: "v1.0"
 contributor: ""
 credit: ""
 tmpl_version: 260703
