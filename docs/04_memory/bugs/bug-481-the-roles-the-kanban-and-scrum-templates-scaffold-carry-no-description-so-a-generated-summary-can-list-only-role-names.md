@@ -42,7 +42,7 @@ Roles are names only.
 
 ## Notes
 
-- Same scaffold, related gap: `project.north_star` is not scaffolded (the bug filed from row C-05).
+- Same scaffold, related gap: `project.north_star` is not scaffolded (`bug-480`).
 - `dl-138` (ready, v0.4: templates from a versioned pack source) may move the scaffolds; the descriptions belong to
   whatever source holds the role list then.
 - `dl-211` (ready, v0.4) names this among its prototype's findings to file through `bug-ingest`.
