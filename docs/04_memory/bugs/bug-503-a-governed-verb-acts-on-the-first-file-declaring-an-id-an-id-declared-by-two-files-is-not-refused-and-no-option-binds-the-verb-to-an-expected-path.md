@@ -48,5 +48,5 @@ lookup order. A client learns of the mismatch only from the `path` in the answer
 - Severity `medium`: the approval is recorded on a file the approver did not inspect — the record is wrong.
 - No existing element covers duplicate Memory ids: `grep -rliE 'duplicate(d)? id' docs/04_memory` finds none on
   Memory ids.
-- Related: the move/rename decision-log filed with this bug (a move must not create a second file for one id);
+- Related: `dl-226`, the move/rename decision-log (a move must not create a second file for one id);
   `dl-200` (in-discussion, v0.4: `memory validate` could report duplicates).
