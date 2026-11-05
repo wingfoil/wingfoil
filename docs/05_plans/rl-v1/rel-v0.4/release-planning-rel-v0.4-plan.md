@@ -285,6 +285,16 @@ Every `open` bug in scope (those S1c filed) triaged, with the release R6 assigns
   commits of another session (`dl-207`). The `dl-140` amendment is prepared uncommitted (R3).
 - 2026-11-05: plan added (`wf(plan): add release-planning-rel-v0.4-plan`, `94680638c`); body written; rulings R1–R13
   (R13 after the approver's proof-point input, checked with the commands it lists).
+- 2026-11-05, S0: the approver amended `dl-140` (`66e87f46e`) and approved `dl-140`, `dl-188`, `dl-181`, `dl-183`,
+  `dl-202` and `dl-191` (`c1a5876b1` … `2d23a2381`), each commit one file with its `Approver:` line and no AI trailer.
+  `decision-log-ingest-rel-v0.3-run-token-counts-plan` ended (`80b1f6d2a`); the market-decisions run adopted `dl-140`
+  into its capture step (`f0a4c17c7`) and ended (`a02480998`).
+- 2026-11-05, S0b: `ingest/v0.4-planning-inputs` (from `origin/main` `1be558880`, which now carries `dl-207`): plan
+  `decision-log-ingest-rel-v0.4-planning-inputs-plan` and `dl-208` … `dl-213`, all `in-discussion`. Ratification of
+  `dl-209`, `dl-210` and `dl-211` (ruled by the maintainer) prepared for the approver; `dl-208`, `dl-212`, `dl-213` go to
+  S4. `dl-212` is the approval-binding decision-log `dl-140` D5 refers to.
+- 2026-11-05, outside this phase: `ingest/svc-official-contact` files `svc-023` (the official contact address,
+  `pending`) on the approver's request.
 
 ### Retrospective
 
