@@ -71,5 +71,5 @@ three notes with one model, and the traceability directive can point to a declar
 ## Relations
 
 - **Related:** `dl-065` (the `supersedes:` trigger), `dl-028` (`superseded` is archived), `dl-200` (in-discussion,
-  v0.4: type-definition read), `dl-138` (ready, v0.4: scaffold content), `spec-001`; the decision-log on moving, renaming and importing elements, filed with this one,
+  v0.4: type-definition read), `dl-138` (ready, v0.4: scaffold content), `spec-001`; `dl-226`, the decision-log on moving, renaming and importing elements,
   which updates the references this one declares.
