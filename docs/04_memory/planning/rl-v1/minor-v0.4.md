@@ -8,6 +8,8 @@ pillar: "P5"
 features: [P4.18, P4.19, P4.20, P4.21, P5.1.1, P5.1.4, P5.2.3]
 requirements: "docs/03_backlog/04_backlog/by-release/v0.4.json"
 release-line: "v1"
+backlog_committed: 27   # optional — set at release-planning's commit-backlog: the count of the release's tasks then (dl-100 §2); the growth threshold's baseline (memory.yaml `release.growth_threshold`)
+waves: [w0]              # optional — the release's wave keys, e.g. [w0] (dl-100 §1 (a)); a non-empty list fixed at commit-backlog; each later wave is appended at the previous wave's re-plan (every listed wave runs at once)
 tmpl_version: 260703
 ---
 
