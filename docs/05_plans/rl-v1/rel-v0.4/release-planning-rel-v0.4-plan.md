@@ -336,6 +336,19 @@ Every `open` bug in scope (those S1c filed) triaged, with the release R6 assigns
   file each, no AI trailer. The frontier stays at `reconcile-governance` until build-backlog stamps the deferred
   releases (dl-016 §4).
 - 2026-11-05, S5 `record-adrs`: skipped (optional; no ADR `pending`).
+- 2026-11-05/06, S6 `identify-specs`: a read-only survey listed 36 amendments of 15 approved specs and six new
+  tech-specs. Ruling (approver): only the one w0 needs is written now — `spec-018` (approval binding L0), drafted by a
+  sub-agent, reviewed twice under `dl-022` (13 should-fix, then ready), approved (`ad61c282f`, `ddadc1251`); C-2 (a):
+  the MCP surface is not a marker, P5.2.3 decides it through a `spec-004` amendment. The other new specs come before
+  their waves (capabilities query and the shipped governance check before w1, packs before w3, the agent bridge and
+  the cheat-sheet generator before w4); the amendments of w0 are made inside its tasks, at the design gate.
+- 2026-11-06, S7 `build-backlog`: waves ruled w0 process and autonomy, w1 MCP and the Interaction Layer, w2 the Memory
+  model and the engine, w3 templates and packs, w4 generator, plugins, documentation; only w0's tasks are created now
+  (a task's wave must be one of the release's `waves:`). 69 release assignments (37 to `v0.4`, 19 to `v0.4.1`, 13 to
+  `v1.0`), one commit each. 27 tasks `task-333` … `task-359` (19 feature, 8 fix), drafted by a sub-agent and checked by
+  an independent review (`acceptance-criteria.consistent`: 12 fixes; approver rulings Q1 (a) on `bug-370`, Q2 (b) on
+  `bug-474`, which stays `triaged`); 36 bugs synced `triaged → planned`. Estimated release: 129 tasks (fix share 27 %,
+  oldest low bugs 10.1 %). dl-010 covered by the `code-review` directive, dl-125 `v1.0`, dl-147 `v0.4` with no task.
 
 ### Retrospective
 
