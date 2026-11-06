@@ -92,8 +92,9 @@ that writes this plan — monitors and measures without doing the orchestrator's
     `workflow finalize --step dev-loop.design@task:<id> --reason "…"`, run as the design gate's command — the gate's
     evidence is that commit;
   - `red`, `green` and `refactor` are recorded by the orchestrator (`workflow finalize --step …`, no `Approver:`);
-  - records are written with the code build of `main` (this plan's worktree's `dist/`, rebuilt when `main` moves), run
-    from the task worktree, never with the task's own build (`task-345` and `task-346` change these commands);
+  - records are written with the code build of `main` — the `dist/` of the worktree detached at `main` from which the
+    tasks are merged, rebuilt after each merge — run from the task worktree, never with the task's own build
+    (`task-345` and `task-346` change these commands);
   - after each merge the supervision checks with `workflow next sw-life-cycle-1-plan` (pinned build) that the task's
     steps are gone from the frontier;
   - steps of `minor-v1.0` that the engine offers as finalizable are never recorded (`bug-486`).
