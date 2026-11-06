@@ -2,7 +2,7 @@
 id: "minor-v0.4"
 type: release
 title: "WingFoil v0.4 - Interaction Layer + Polish"
-status: planning
+status: in-development
 version: "v0.4"
 pillar: "P5"
 features: [P4.18, P4.19, P4.20, P4.21, P5.1.1, P5.1.4, P5.2.3]
