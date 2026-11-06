@@ -349,6 +349,18 @@ Every `open` bug in scope (those S1c filed) triaged, with the release R6 assigns
   an independent review (`acceptance-criteria.consistent`: 12 fixes; approver rulings Q1 (a) on `bug-370`, Q2 (b) on
   `bug-474`, which stays `triaged`); 36 bugs synced `triaged → planned`. Estimated release: 129 tasks (fix share 27 %,
   oldest low bugs 10.1 %). dl-010 covered by the `code-review` directive, dl-125 `v1.0`, dl-147 `v0.4` with no task.
+- 2026-11-06, S8 `commit-backlog`: the full suite on the phase branch gave 549 of 551 suites green; the two failures
+  were a stale `dist/` (`build-info`) and the planned names of `spec-018` missing from the name-resolvability
+  allowlist, fixed in `a23c91413` (12 entries, 10 planned by `task-333`, `task-334`, `task-338`), both suites rerun
+  green. The approver amended `minor-v0.4` (`backlog_committed: 27`, `waves: [w0]`, `517814b1e`) and approved the 27
+  tasks `pending → backlog` (`01c33c6fd` … `a5cb1b5ca`). `memory approve minor-v0.4` was refused: `planning` is a
+  `waiting` state of `release`, not a gate. The approver wrote the commit by hand, as for `minor-v0.2`, `minor-v0.3`
+  and `patch-v0.3.2` (`2d397c087`, `planning → in-development`). The defect is filed as `bug-506` through
+  `bug-ingest-rel-v0.4-release-planning-gate-plan`.
+- 2026-11-06, S9 close-out: after `2d397c087` the engine's frontier was `identify-specs`, because `spec-018` was added
+  without `--workflow`. Its phase declares `approval:`, so the approver records it with `workflow finalize`. A
+  simulation in a throwaway clone showed `build-backlog` and `commit-backlog` deduced complete after that record, and
+  the frontier moving to `dev-loop.start` of the w0 tasks.
 
 ### Retrospective
 
@@ -364,3 +376,9 @@ Every `open` bug in scope (those S1c filed) triaged, with the release R6 assigns
   not a stop the engine sees.
 - The history of the patch releases was first rebuilt with `git log --follow`, which attributed their files to a
   rename-similarity commit; `memory history` gave the right answer at once. Read Memory with the Memory commands.
+- `memory approve` cannot move a release `planning → in-development`, so the one approval of commit-backlog has been
+  written by hand at every release since v0.2, outside the tool's checks (`bug-506`).
+- A new tech-spec that names code not yet written must add its names to the name-resolvability allowlist in its own
+  change; `spec-018` did not, and the full suite found it only at commit-backlog (`a23c91413`).
+- An element created by hand inside a phase, without `--workflow`/`--step` (`spec-018`), leaves the engine's frontier
+  on that phase after the work is done; the record has to be written afterwards (S9).
