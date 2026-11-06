@@ -57,3 +57,310 @@ the jest run, so a hostile global `core.excludesFile` fails 11 tests.
 ## Execution Notes
 
 <!-- Filled by the dev-loop. -->
+
+### design (architect, 2026-11-06)
+
+**Inputs read.** `depends_on: []` (no `dl-015` gate). `dl-170` is `ready` (`grep -n "^status" docs/04_memory/design/dls/dl-170-*.md`
+→ `status: ready`), read in full with its three evidence notes (B5, B6, B8); `bug-446` read in full. Base: `main`
+`67e35dc34` + the start commit `c49a185a6` and the bug sync `d3e443948` (`git log --oneline main..HEAD` → two commits).
+`task-344` (AC1 reads this task's trace) and `task-357` (its AC3 runs coverage "through `task-349`'s slot") are not started;
+their Description and ACs were read for the trace and the coverage route below. One approved tech-spec covers what changes:
+`spec-015` §2 (`status: approved`) says "Existing `build`/`prepack`/`lint` unchanged" and quotes `test:report` as
+`jest --coverage --json …` (`sed -n 118,133p docs/04_memory/design/specs/spec-015-packaging-publishing.md`), so its §2 is
+amended at this gate (pending amendment below). No BDD scenario covers the test harness (`grep -rln "run-tests\|global-setup"
+docs/02_requirements` → no output). The PATH guard ran first, through the task's PATH shim: `wingfoil --version` and
+`node dist/cli.js --version` both → `0.3.2 (67e35dc34…)`.
+
+**The defects, reproduced on this base** (scratch outside the worktree, nothing committed):
+- No lock: `grep -n "lock" scripts/run-tests.cjs` matches only the module comment (as the Implementation Notes say);
+  `grep -n '"test' package.json` → `"test:coverage": "jest --coverage"`, `"test:report": "jest --coverage --json …"`.
+- `bug-446`: a global config whose `core.excludesFile` names a file holding `*`, then
+  `GIT_CONFIG_GLOBAL=<it> npx jest test/core/memory-approve.test.ts test/core/init.test.ts --maxWorkers=2` →
+  `Tests: 11 failed, 17 passed, 28 total` (4 in `init.test.ts`, 7 in `memory-approve.test.ts`), the bug's figure.
+  `git config --global --get core.excludesFile` → exit 1 on this machine, so the stock run is green only by luck.
+- **The same class reaches the fixture helper too.** `GIT_CONFIG_GLOBAL` replaces `~/.gitconfig` and
+  `$XDG_CONFIG_HOME/git/config`, but git still reads its *default* ignore file `$XDG_CONFIG_HOME/git/ignore`
+  (`~/.config/git/ignore`) when no `core.excludesFile` is set. In a scratch repo holding `a.txt`, with
+  `XDG_CONFIG_HOME=<dir whose git/ignore holds '*'>`: `GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 git status
+  --porcelain` → no output (the file is ignored), while `XDG_CONFIG_HOME=<empty dir>` → `?? a.txt` (git 2.43.0). So
+  `fixtureGitEnv` (`test/storage/helpers/git-fixture.ts`, `GIT_CONFIG_GLOBAL: devNull`) is not isolated from a hostile
+  `~/.config/git/ignore`, and this machine has one (`wc -l ~/.config/git/ignore` → one line, not `*`). AC6's fix covers
+  both, from one place (below), so `git-fixture.ts` itself does not change.
+
+**Existing tests of every file this task changes**, run before any pin (one jest process each, `--maxWorkers=2`):
+- `npx jest test/cli/run-tests.test.ts test/lint/dist-lock.test.ts test/cli/build-info.test.ts test/lint/typecheck-clean.test.ts
+  test/core/dev-loop-v1-5.test.ts test/core/dev-loop-v1-6.test.ts test/core/dev-loop-v2-0.test.ts
+  test/core/workflow-repository-conformance.test.ts test/storage/git-fixture-isolation.test.ts test/cli/test-no-identity.test.ts
+  test/directives/integration-branch-baseline.test.ts test/core/workflow-list-show.test.ts
+  test/cli/workflow-list-show.integration.test.ts test/lint/version-bump.test.ts test/core/init.test.ts
+  test/core/memory-approve.test.ts test/cli/publish-pipeline.test.ts --maxWorkers=2` → `Test Suites: 17 passed`,
+  `Tests: 313 passed`.
+- With the prepared `spec-015` amendment and its allowlist entry in the working tree: `npx jest
+  test/docs/name-resolvability.test.ts test/docs/enumeration-parity.allowlist.test.ts --maxWorkers=2` → `Tests: 14 passed`
+  (without the entry: 1 failed, naming `spec-015-packaging-publishing.md|path|scripts/heavy-gate.cjs`).
+
+**Tests that pin what changes** (`grep -rln "dev-loop" test/` → 52 files; those reading this repository's `dev-loop.yaml`,
+`package.json` scripts or `testing.md`, checked one by one). The `dev-loop.yaml` change below was applied in a scratch clone
+of this branch, committed there, and every suite naming `dev-loop` run against it (`npx jest $(grep -rl "dev-loop" test
+--include=*.test.ts) --maxWorkers=2` in the clone → `Test Suites: 4 failed, 46 passed`, `Tests: 4 failed, 964 passed`). The
+four failures, and the other pins the package.json change breaks, are older tests whose contract this task changes: `qa`
+updates them in `red` to the new contract (so they are red's files, frozen for green, T4), each listed in `### red (qa)`:
+- `test/core/workflow-repository-conformance.test.ts` (the warning rows: three new `dev-loop` rows,
+  `phases[3].checks.pre[0]`, `phases[4].checks.pre[0]`, `phases[5].checks.pre[4]`, `gate.slot-free`, in spec-003 order);
+- `test/core/workflow-integration-branch.test.ts` and `test/core/workflow-manual-prose-checks.test.ts` (the count 65 → 68);
+- `test/core/dev-loop-v1-6.test.ts` line 134 (`review.checks.pre` names gain `gate.slot-free` last);
+- `test/cli/build-info.test.ts:144` and `test/lint/dist-lock.test.ts:522` (`scripts.build` exact text);
+- `test/cli/test-report.test.ts:149` (`scripts['test:report']` exact text);
+- `test/lint/typecheck-clean.test.ts` through `test/lint/helpers/typecheck.ts` `typecheckScript()` (the `typecheck`
+  script's exact text; the helper changes with it, the projects list `TYPECHECK_PROJECTS` does not);
+- not broken: `test/core/dev-loop-v1-5.test.ts` (testing.md version regex `1\.[1-9]\d*` admits 1.4),
+  `test/directives/integration-branch-baseline.test.ts` (testing ≥ 1.3, line names `task-286` and `dl-159`: kept in the
+  history), `test/core/dev-loop-v2-0.test.ts` (dev-loop ≥ 2.0 and `prev 1.9` kept in the history),
+  `test/cli/run-tests.test.ts` (`plannedRuns` unchanged; its `scripts.test` pin stays `node scripts/run-tests.cjs`).
+
+**`.wingfoil/` proved on the pinned build** (0.3.2), in this worktree before the change and in the scratch clone after it:
+- `npm run check:mcp` (this worktree) → `.mcp.json "wingfoil" runs the pinned wingfoil 0.3.2 … (prompts: 8, resources: 4,
+  tools: 0)` and `the build under development (dist/cli.js) serves [prompts, resources, tools] …; every listed Resource
+  read and Prompt get answered`. Green re-runs it with the change.
+- In the clone with `dev-loop.yaml` 2.3 committed: `workflow list --format json` → exit 0; `workflow show dev-loop --format
+  json` → exit 0, `green`, `refactor` and `review` each show `gate.slot-free` with binding kind `unbound`, `evaluated:
+  false`; `workflow next sw-life-cycle-1-plan --format json` → exit 0, 68 diagnostics (65 before), no error, and the output
+  with `diagnostics` and `baseline` removed is **equal** before and after (a JSON comparison). So the change adds no step,
+  renames no phase and leaves the frontier the engine deduces for the live instance `sw-life-cycle-1-plan` unchanged:
+  step keys are `dev-loop.<phase>@task:<id>` and checks are not evaluated (P4.12).
+
+**Design.**
+
+*The heavy-gate lock — `scripts/heavy-gate.cjs` (new) with `scripts/heavy-gate.d.cts` (AC1–AC3).* Repository tooling, not
+the shipped product (not under `src/`, not in coverage), plain CommonJS like `scripts/run-tests.cjs`. Its own lock primitives,
+on the algorithm of `test/dist-lock.cjs` (`bug-095`; that per-worktree lock stays, unchanged): the lock is created atomically
+(content written to a private temp file, hard-linked onto the lock path, `EEXIST` = held), a stale lock is deleted only
+under `<lock>.break`, a release removes the lock only when it records the releaser's pid. Exports (the intended interface):
+- `GATE_DIR_ENV = 'WINGFOIL_GATE_DIR'`, `GATE_HOLDER_ENV = 'WINGFOIL_GATE_HOLDER'`;
+- `gateDir(env, { tmpdir, uid })` → `env.WINGFOIL_GATE_DIR` when non-empty, else `<tmpdir>/wingfoil-heavy-gate-<uid>`
+  (defaults `os.tmpdir()`, `process.getuid()`); created on first use (`mkdir -p`). Outside every worktree, one per machine
+  user (D5), emptied by a reboot, so a pid recorded before a reboot is never mistaken for a live one;
+- `gateLockPath(dir)` → `<dir>/heavy-gate.lock`; `gateTracePath(dir)` → `<dir>/heavy-gate.trace.jsonl`;
+- `async acquireHeavyGate({ dir, gate, worktree, pid, env, loadavg, cpus, isAlive, now, sleep, log, pollMs })` →
+  `{ nested: boolean }`. Defaults: `pid = process.pid`, `env = process.env`, `loadavg = os.loadavg`,
+  `cpus = () => os.cpus().length`, `isAlive` = `process.kill(pid, 0)` (EPERM = alive), `now = Date.now`, a real `sleep`,
+  `log` = one line on stderr, `pollMs = 2000`. Behaviour:
+  1. **Nested** (AC2): when `env.WINGFOIL_GATE_HOLDER` is a pid, the lock file records that same pid and it is alive, the
+     call returns `{ nested: true }` at once: no load check, no wait, no lock or trace change. Its own lock and its own
+     parent's load can never block a gate started inside a gate (a nested `npm run build`, `npm run typecheck`, a coverage
+     run inside the full suite). A different dir, a dead holder or a mismatching pid is not nested.
+  2. Otherwise it loops: when `loadavg()[0] > cpus()` it waits (Decision 3, Q3: the threshold is `cores`, 12 here; the
+     interim 14 is retired); else it tries to create the lock; held by a live pid → wait; held by a dead pid or unreadable
+     content → take over under `<lock>.break`, write a `takeover` trace record and one stderr line, loop. The cap is fixed at
+     one holder (D1). No timeout: it waits until both conditions clear (D6).
+  3. **One wait line** (Decision 3): the first poll that waits writes exactly one stderr line, never another for the same
+     call:
+     `heavy gate <gate>: waiting for <reasons> (dl-170).` where `<reasons>` is one or both of
+     `the machine-wide lock <lockPath>, held by pid <pid> in <worktree> since <start>` and
+     `the 1-minute load average <x.xx> to fall to the <n> cores`, joined by ` and `.
+     Takeover line: `heavy gate <gate>: took over the lock <lockPath> left by pid <pid> in <worktree>, which is not running (dl-170).`
+  4. On success the lock file holds one JSON line `{"pid":…,"worktree":…,"gate":…,"start":"<ISO>"}` and the trace gains an
+     `acquire` record.
+- `releaseHeavyGate({ dir, pid, now, status })` → `boolean`: removes the lock only if it records `pid`, writes the `release`
+  record; a no-op (`false`) otherwise.
+- `async withHeavyGate(options, run)`: acquire; call `run(childEnv)` with `childEnv = { ...env, WINGFOIL_GATE_HOLDER: <pid> }`
+  (the holder's pid, inherited when nested), so every process the gate starts is recognised as nested; release in a
+  `finally` unless nested; return `run`'s result (the exit status).
+- CLI: `node scripts/heavy-gate.cjs <gate> -- <command> [args…]`: runs the command under the lock (`spawnSync`, `stdio:
+  'inherit'`, the child env above, `shell: false`, the command looked up on `PATH`, which `npm run` prefixes with
+  `node_modules/.bin`), exits with its status (1 when it ended on a signal, saying so on stderr, as run-tests does); a
+  missing gate name or `--` is a usage error, exit 2. `<gate>` is one of `test`, `coverage`, `build`, `typecheck`.
+- The worktree recorded is the absolute repository root of the script (`join(__dirname, '..')`), the same path
+  `git worktree list` prints.
+
+*The trace (AC3, agreed format for `task-344`).* `<gateDir>/heavy-gate.trace.jsonl`, append-only (`appendFileSync`, one
+`write` per record), one JSON object per line, keys in this order, no other content: no environment, no argument vector,
+no secret (only pids, absolute worktree paths, gate names, ISO-8601 UTC times from the injected clock, an exit status).
+- `{"v":1,"event":"acquire","gate":"coverage","pid":4242,"worktree":"/abs/worktree","start":"2026-11-06T17:00:00.000Z","waited_ms":0}`
+- `{"v":1,"event":"release","gate":"coverage","pid":4242,"worktree":"/abs/worktree","start":"2026-11-06T17:00:00.000Z","end":"2026-11-06T17:09:30.000Z","status":0}`
+  (`status` the gate's exit code, `null` when it ended on a signal);
+- `{"v":1,"event":"takeover","gate":"test","pid":4343,"worktree":"/abs/other","at":"<ISO>","stale":{"pid":4242,"worktree":"/abs/worktree","gate":"coverage","start":"<ISO>"}}`.
+A hold is the pair `acquire`/`release` with equal `pid`, `worktree` and `start`; an `acquire` with no `release`, closed by a
+later `takeover` naming it as `stale`, is a gate killed before its release (Decision 4). Nested gates write nothing (they
+hold nothing). A record that cannot be written is reported once on stderr and the gate goes on: a broken trace never blocks
+a gate. `task-344` reads: for a report claiming a heavy gate in worktree W between two commits, a hold whose `worktree` is W
+and whose `[start, end]` lies in that window; it locates the file with `gateTracePath(gateDir(process.env))`, exported for
+that purpose. The trace lives in the temporary directory and is lost at a reboot (D5).
+
+*`scripts/run-tests.cjs` (AC1, AC2).* New exports `isHeavyRun(args)` and `gateName(args)`; `plannedRuns` unchanged.
+- `isHeavyRun(args)` is `false` (a targeted run, Decision 1) when an argument names a suite — a non-option argument starting
+  with `test/`, `./test/`, `src/` or `./src/`, or ending in `.test.ts` — or when `--testPathPattern`, `--testPathPatterns`
+  or `--findRelatedTests` is given (with `=` or as a separate argument); a latency-suite argument is therefore targeted too.
+  Every other argument list, the empty one included, is heavy (`--silent`, `--coverage`, `-t name`, `--maxWorkers=2`).
+  Erring towards heavy only costs a wait.
+- `gateName(args)` → `coverage` when `--coverage` is among the arguments, else `test`.
+- `main` wraps **all** of `plannedRuns`' invocations in one `withHeavyGate` when `isHeavyRun`, so the parallel run and an
+  opted-in latency pass are one hold; a targeted run spawns jest exactly as today. `main` gains injectable dependencies
+  (`runTests({ args, env, spawn, gate })`, exported; `main` calls it with the real ones) so the wrapping is tested without a
+  real jest: the `/* istanbul ignore next */` moves to the real-spawn default only.
+- `scripts/run-tests.d.cts` gains the new exports.
+
+*`package.json` scripts (AC2, D2).*
+- `"test:coverage": "node scripts/run-tests.cjs --coverage"` and
+  `"test:report": "node scripts/run-tests.cjs --coverage --json --outputFile=coverage/jest-results.json"` (the arguments
+  reach jest unchanged; release-health's `npm run test:coverage -- --coverageReporters=… --coverageDirectory=…` keeps working);
+- `"build": "node scripts/heavy-gate.cjs build -- tsc -p tsconfig.build.json && node scripts/write-build-info.cjs"` (the lock
+  is held for the `tsc` step, the heavy one; the build record is milliseconds);
+- `"typecheck": "node scripts/heavy-gate.cjs typecheck -- tsc --noEmit -p tsconfig.json && node scripts/heavy-gate.cjs typecheck -- tsc --noEmit -p tsconfig.build.json"`;
+  `typecheckScript()` in `test/lint/helpers/typecheck.ts` builds that text from `TYPECHECK_PROJECTS`;
+- unchanged: `test` (`node scripts/run-tests.cjs`, which now locks itself), `test:latency`, `prepublishOnly`, `prepack`.
+- `test/global-setup.cjs` keeps composing `tsc` itself and takes no gate lock: inside a full run it is nested in run-tests'
+  hold; in a targeted run it is not a heavy gate (AC2, literal; the B6 hole stays, D7). `test/lint/dist-lock.test.ts`'s
+  mirror check compares the setup's composition with the build script minus its `node scripts/heavy-gate.cjs build --` prefix.
+
+*Coexistence with the external slot during the rest of `w0`* (the agents' slot script outside the repository: a FIFO queue
+of tickets, `ps`-based, no lock held). It never holds what the in-repo lock waits on, and the lock never waits on it, so
+neither can deadlock the other:
+- an agent that took the external slot then runs `npm test`: the slot holds nothing, run-tests takes the in-repo lock (free,
+  since every agent queues on the slot first) and runs; the global-setup build inside it is nested (no wait);
+- the external slot's busy test matches `^(node|npm).*(jest --coverage|scripts/run-tests.cjs|tsc -p tsconfig.build.json)`:
+  every new heavy command line still matches it (`node scripts/run-tests.cjs --coverage …`, `node scripts/heavy-gate.cjs
+  build -- tsc -p tsconfig.build.json`), so a gate holding or waiting for the lock keeps the external slot closed; a process
+  waiting on the lock counts as busy there, which only delays a waiter, never blocks the holder;
+- the external slot keeps what the lock does not have (FIFO order among waiters, D6), so keeping both until the end of `w0`
+  is safe; of the two load rules the lock's is the stricter (on 12 cores it waits above 12, the external slot above 14).
+
+*`dev-loop.yaml` 2.2 → 2.3 (AC4, D4).* `checks.pre` gains one token on each phase that runs heavy gates — `green`
+(`tests.passing` = `npm test`), `refactor` (`tests.passing`, `tests.coverage`, `typecheck.clean`) and `review`
+(`tests.bdd.passing` = `npm test`, after `docs.parity`):
+`"gate.slot-free(each heavy gate the phase runs — the full suite, the coverage run, the production type-check or build — waits for the machine-wide lock of scripts/heavy-gate.cjs and while the 1-minute load average is above the cores; dl-170)"`,
+left unbound (a command could decide it from the trace, so by task-303's rule it is not `manual`). The version comment
+opens `# 2.3 task-349 (dl-170 Q2 (C)): green, refactor and review declare checks.pre gate.slot-free … no phase, step or
+action changes (prev 2.2 …` and closes one more parenthesis. No phase, step, action, role or fallback changes;
+`.wingfoil/WORKFLOW.md`'s dev-loop prose is `align-agent-docs`' (`dl-025`), not changed here.
+
+*The `testing` directive 1.3 → 1.4 (AC5).* A clause **T5 — Heavy gates run attached and under the lock (`dl-170` Decision
+4)** in *WingFoil-specific clauses*, whose intro names `dl-170` beside `dl-121` and `dl-134`: a heavy gate (the full suite,
+the coverage run, the production type-check or build) is run in the foreground or as a background command its session
+tracks and reads, never detached (`nohup`, `setsid`, `&` and `disown`, a terminal multiplexer); it goes through the npm
+scripts, which hold the machine-wide lock; and an agent is resumed only after checking that its worktree has no live gate
+process (`ps -eo pid,etime,args` filtered on the worktree path, quoted in the notes), a live one being waited for or ended
+first. The version line: `"1.4"   # 1.4: T5, heavy gates attached and under the machine-wide lock (task-349, dl-170
+Decision 4) (prev 1.3 … (task-286, dl-159 A1.6) (prev 1.2))`. `roles.yaml` is unchanged: `testing` is already bound to
+`developer`, `qa` and `reviewer`, the roles that run heavy gates and resume agents.
+
+*Git isolation of the jest run (AC6, `bug-446`).* New `test/git-isolation.cjs` with `test/git-isolation.d.cts`:
+- `isolatedGitEnv(base, { globalConfig, xdgConfigHome })` (pure) → `base` without `GIT_CONFIG_PARAMETERS`,
+  `GIT_CONFIG_COUNT`, `GIT_CONFIG_KEY_<n>`, `GIT_CONFIG_VALUE_<n>`, plus `GIT_CONFIG_GLOBAL = globalConfig`,
+  `GIT_CONFIG_NOSYSTEM = '1'`, `XDG_CONFIG_HOME = xdgConfigHome`; identity variables are kept;
+- `prepareGitIsolation(root)` → `{ dir, globalConfig, xdgConfigHome }`: `mkdtemp(<tmp>/wf-git-isolation-r<pid>-)`, the
+  file `gitconfig` holding `ISOLATED_GLOBAL_CONFIG` (required from `scripts/test-no-identity.cjs`, one source:
+  `[user] useConfigOnly = true`), an empty directory `xdg/`.
+- `test/global-setup.cjs`, in jest's main process before any worker forks (as `WF_FIXTURE_RUN_TAG` is set), applies it to
+  `process.env` and records the directory as `WF_GIT_ISOLATION_DIR`; `test/global-teardown.cjs` removes it in its chain
+  (before the fixture sweep, which never sees it: its name carries no `wf-storage-` prefix).
+So every worker, the code under test and every process it spawns (the compiled CLI included) read no developer or system
+git configuration, and `fixtureGitEnv`'s `devNull` now sits on an empty `XDG_CONFIG_HOME`. The suites that test global
+configuration on purpose set `GIT_CONFIG_GLOBAL` themselves (`grep -rln GIT_CONFIG_GLOBAL test` → 10 suites) and are
+unaffected. Prototype in the scratch clone (the setup change only): `GIT_CONFIG_GLOBAL=<hostile> XDG_CONFIG_HOME=<dir whose
+git/ignore holds '*'> npx jest test/core/memory-approve.test.ts test/core/init.test.ts
+test/storage/git-fixture-isolation.test.ts --maxWorkers=2` → `Tests: 33 passed, 33 total`.
+The whole suite on the same prototype, under the external heavy-gate slot (granted 2026-11-06T18:39:30+01:00, load
+`1.38 2.24 3.44`), with the hostile global config and the hostile `XDG_CONFIG_HOME` exported: `node scripts/run-tests.cjs
+--maxWorkers=2` in the clone → `Test Suites: 4 failed, 547 passed, 551 total`, `Tests: 4 failed, 9696 passed, 9700 total`.
+The four are exactly the `dev-loop` pins listed above (the clone's HEAD still carried the 2.3 proposal they read at HEAD):
+no other test depends on the developer's git configuration or identity, so D8 (a) breaks nothing.
+
+**Classification and what `qa` pins.** Every AC is red-first: none of the behaviour exists (no lock, no trace, no token, no
+clause, no isolation). Interfaces are the ones above; time, load, cores and liveness are injected (`now` returning a
+counter, `loadavg: () => [x, 0, 0]`, `cpus: () => n`, `isAlive`, a `sleep` that resolves at once and counts its calls, `log`
+collecting lines), never a wall-clock sleep or the real load in an assertion (`determinism`). Every lock test uses a
+`mkdtemp` directory as `dir` and an `env` it builds itself, never `process.env`: a full run's own `WINGFOIL_GATE_HOLDER` is
+in the worker's environment. Expected reds: `npx tsc --noEmit -p tsconfig.json` → TS2307 for `scripts/heavy-gate.cjs` and
+`test/git-isolation.cjs` (no `.d.cts` yet) and TS2305 for the new `run-tests.cjs` exports; jest → "Cannot find module" and
+`TypeError: … is not a function` (`isolatedModules`, no type check at run time).
+
+| AC | Class | What `qa` pins (test file) |
+|----|-------|-----------------------------|
+| 1 | red-first | `test/cli/heavy-gate.test.ts`: free lock + load ≤ cores → acquired, lock file JSON (`pid`, `worktree`, `gate`, `start`), no wait line; live holder → waits, exactly one stderr line naming the holder's pid and worktree and the lock path, then acquires once the holder releases (the fake `sleep` releases it on its n-th call); `loadavg [13] / cpus 12` → waits with one line naming `13.00` and `12 cores`, acquires when the fake load drops to 12 (12 is not above 12); both conditions → still one line; dead holder (`isAlive` false) and unreadable lock content → taken over, one takeover line, `takeover` record; release by a non-holder pid → `false`, lock kept. `test/cli/run-tests.test.ts` (extended): `isHeavyRun([])`, `(['--silent'])`, `(['--coverage'])`, `(['-t','x'])` true; `(['test/core/foo.test.ts'])`, `(['./test/x.test.ts','-t','y'])`, a latency suite, `(['--testPathPattern','core'])`, `(['--findRelatedTests','src/a.ts'])` false; `gateName`; `runTests` with a fake `gate` and `spawn`: heavy args → one hold around every planned run (latency opt-in included), the child env carries `WINGFOIL_GATE_HOLDER`; targeted args → no hold. One black-box spawn of `node scripts/heavy-gate.cjs test -- node -e "process.exit(3)"` with `WINGFOIL_GATE_DIR=<tmp>` holding a lock whose pid is the test's own and `WINGFOIL_GATE_HOLDER=<that pid>`: exits 3 at once (nested, so the machine's load cannot make it wait), lock and trace untouched; and without `--` → exit 2. |
+| 2 | red-first | `test/cli/heavy-gate.test.ts`: the nested case of `acquireHeavyGate` returns `{ nested: true }` even with a fake load above the cores and writes nothing; `withHeavyGate` passes `WINGFOIL_GATE_HOLDER` to `run` and releases only when not nested. Pins of `package.json` (exact strings above): `test:coverage`, `test:report` (`test/cli/test-report.test.ts:149`), `build` (`test/cli/build-info.test.ts:144`, `test/lint/dist-lock.test.ts:522`, the latter's mirror check without the prefix), `typecheck` (`typecheckScript()`), `test` unchanged. `isHeavyRun` of AC1 covers "a targeted run does not take it". |
+| 3 | red-first | `test/cli/heavy-gate.test.ts`: after an acquire/release with the counter clock, the trace file's lines parse to exactly the `acquire` and `release` records above, keys in that order, `start` equal in both, `end` after `start`, `status` the run's; a takeover adds the `takeover` record with `stale`; a nested call adds no line; no record carries a key outside the declared ones (so no env, no argv); `gateTracePath(gateDir({ WINGFOIL_GATE_DIR: d }))` = `<d>/heavy-gate.trace.jsonl`, and `gateDir({}, { tmpdir: '/t', uid: 7 })` = `/t/wingfoil-heavy-gate-7`. |
+| 4 | red-first | `test/core/dev-loop-v2-3.test.ts`, read at HEAD (`loadWorkflowRegistryAtHead`, as `dev-loop-v2-0`): `green`, `refactor` and `review` each declare `checks.pre` `gate.slot-free` (review: after `docs.parity`), its prose naming `scripts/heavy-gate.cjs` and `dl-170`; no other phase declares it; `workflowShowAtHead(ROOT, 'dev-loop')` shows it `unbound`, `evaluated: false`; phase names and their order unchanged; `version:` ≥ 2.3, its comment naming `task-349` and keeping `prev 2.2` (bug-314: ≥, never exact); zero errors. Plus the four older pins listed above. |
+| 5 | red-first | `test/directives/testing-heavy-gates.test.ts`: `testing.md` (whitespace-flattened) carries the T5 heading, `dl-170` Decision 4, "never detached", the lock, and the resume check (no live gate process in the worktree); version ≥ 1.4, its line naming `task-349` and keeping `task-286`; `roles.yaml` still binds `testing` to developer, qa and reviewer. |
+| 6 | red-first | `test/storage/jest-git-isolation.test.ts` (T2: the invariant): in the worker, `process.env.GIT_CONFIG_NOSYSTEM === '1'`, `GIT_CONFIG_GLOBAL` names a file whose content is `ISOLATED_GLOBAL_CONFIG`, `XDG_CONFIG_HOME` names an existing empty directory, no `GIT_CONFIG_COUNT`/`GIT_CONFIG_PARAMETERS`; `git config --global --list` run with `process.env` prints `user.useconfigonly=true` only. `isolatedGitEnv` on a hostile base (`GIT_CONFIG_GLOBAL` → a file with `core.excludesFile` = a file holding `*`, `XDG_CONFIG_HOME` → a dir whose `git/ignore` holds `*`, `GIT_CONFIG_COUNT=1` + `KEY_0=core.excludesFile` + `VALUE_0`=that file): the result drops the three config variables, and `git status --porcelain` in a scratch repo holding `a.txt`, run with it, prints `?? a.txt` (with the hostile base: nothing). The bug's own run (`GIT_CONFIG_GLOBAL=<hostile> npx jest test/core/memory-approve.test.ts test/core/init.test.ts`) is recorded by `green` and `review` as a command and its output (28 passed), not as a nested jest. |
+
+**Files expected to change** (the orchestrator checks the diff against this list):
+- `scripts/heavy-gate.cjs` (new), `scripts/heavy-gate.d.cts` (new)
+- `scripts/run-tests.cjs`, `scripts/run-tests.d.cts`
+- `package.json` (scripts `build`, `typecheck`, `test:coverage`, `test:report`)
+- `test/git-isolation.cjs` (new), `test/git-isolation.d.cts` (new), `test/global-setup.cjs`, `test/global-teardown.cjs`
+- `.wingfoil/workflows/custom/dev-loop.yaml` (2.2 → 2.3), `.wingfoil/directives/custom/testing.md` (1.3 → 1.4)
+- red (`qa`), new: `test/cli/heavy-gate.test.ts`, `test/core/dev-loop-v2-3.test.ts`, `test/directives/testing-heavy-gates.test.ts`,
+  `test/storage/jest-git-isolation.test.ts`; red, updated: `test/cli/run-tests.test.ts`,
+  `test/core/workflow-repository-conformance.test.ts`, `test/core/workflow-integration-branch.test.ts`,
+  `test/core/workflow-manual-prose-checks.test.ts`, `test/core/dev-loop-v1-6.test.ts`, `test/cli/build-info.test.ts`,
+  `test/lint/dist-lock.test.ts`, `test/cli/test-report.test.ts`, `test/lint/helpers/typecheck.ts`
+- `test/docs/name-resolvability.allowlist.ts` (prepared now, uncommitted, with the amendment)
+- `docs/04_memory/design/specs/spec-015-packaging-publishing.md` (pending amendment, the approver's `memory amend`)
+- this task file.
+Version bumps: `dev-loop.yaml` 2.2 → 2.3, `testing.md` 1.3 → 1.4; nothing else versioned changes (`bindings.yaml`,
+`roles.yaml`, `workflows.yaml` untouched; `spec-015` takes no `version:` bump, `dl-047`).
+
+**Decisions for the approver.**
+- **D1 — the cap.** Fixed at one holder, as Q1 (a) rules; `WINGFOIL_GATE_SLOTS` is not read now (Q1's "later": a variable
+  nothing reads would be an unasserted promise, `testing` T1). Recommended: (a) fixed at 1.
+- **D2 — which scripts are heavy gates.** Decision 1 names `npm test` without a filter, `npm run test:coverage`,
+  `tsc -p tsconfig.build.json` and `npm run build`. The design also routes `test:report` (the same suite with coverage, the
+  publish gate's) and `npm run typecheck` (whose second step is the production type-check, its first the heavier
+  whole-project one). (a) all six, as designed; (b) only the four named, leaving `test:report` and `typecheck` as they are
+  (then `test-report.test.ts` and `typecheck.ts` are not touched and the `spec-015` amendment drops `test:report`).
+  Recommended: (a).
+- **D3 — CI.** In a GitHub runner (2–4 cores, one job) the lock is harmless, but the load wait can hold `npm test` right
+  after `npm run build` until the 1-minute average decays. (a) apply both everywhere, as Decision 3 reads; (b) skip the load
+  wait, not the lock, when `CI=true`. Recommended: (a) for now, the CI timings of the next push being the evidence for a
+  later (b); a design detail the approver may flip without a new design.
+- **D4 — the `dev-loop.yaml` token.** (a) `gate.slot-free` on `green`, `refactor` and `review`, unbound (68 warnings, four
+  older pins updated), as designed; (b) bound `manual: true` in `bindings.yaml` (65 warnings stay, `bindings.yaml` 2.9 → 3.0,
+  but a command can decide it from the trace, against task-303's rule); (c) on `refactor` only, as `dl-170` Q2 (B)'s example
+  (then `green` and `review` run heavy gates the workflow does not name). Recommended: (a).
+- **D5 — where the lock and the trace live.** `<os.tmpdir()>/wingfoil-heavy-gate-<uid>/`, overridable by
+  `WINGFOIL_GATE_DIR`: per user (another user's stale lock would be undeletable, EPERM), cleared at a reboot (no pid reuse
+  across boots), and the trace with it — `task-344` checks a report right after its phase, so a trace that does not survive a
+  reboot is enough for it. Recommended: as designed.
+- **D6 — no hold limit, no FIFO.** `dl-170`'s B8 note asks for a maximum hold time or a liveness probe for a hung gate, and
+  the external slot added FIFO order after a waiter starved; neither is in the ACs. The design names the holder (pid,
+  worktree, start) in the wait line so a person can end a hung one, and keeps the external slot's FIFO during `w0`.
+  Recommended: no change in this task; a follow-up element (decision-log) for the hold limit and the order, at the
+  approver's choice.
+- **D7 — the targeted run's build.** AC2 says a targeted run does not take the lock, so its global-setup `tsc` still runs
+  beside a holder (the B6 note's hole). Recommended: accept as the AC says; the hole is the follow-up of D6's element.
+- **D8 — how far the jest run is isolated (AC6).** (a) as designed: identity-free global config (`user.useConfigOnly`), no
+  system config, empty `XDG_CONFIG_HOME`, config-injection variables dropped — every local run behaves as `npm run
+  test:no-identity` does for git config, so a test that passes only with the developer's identity fails locally (it already
+  fails the release's no-identity gate); (b) only `GIT_CONFIG_GLOBAL=/dev/null` + `GIT_CONFIG_NOSYSTEM=1`, which leaves
+  `~/.config/git/ignore` read (shown above) and the identity in place. Recommended: (a).
+
+**Pending amendments (approver).** Prepared in this worktree, left uncommitted (`dl-047`), to be recorded before `red`:
+- `spec-015-packaging-publishing` — §2's `build` and `test:report` bullets and a *Revision (2026-11-06, `task-349`) — §2
+  heavy gates* note. `--reason "Amend spec-015 §2 for task-349 (dl-170 Decisions 1–4, Q1 (a), Q2 (C)): build runs its tsc
+  step, and test without a suite filter, test:coverage and test:report run, under the machine-wide heavy-gate lock of
+  scripts/heavy-gate.cjs; what is built and tested is unchanged."`
+- With it, uncommitted in the same change: `test/docs/name-resolvability.allowlist.ts` gains `spec-015 | path |
+  scripts/heavy-gate.cjs`, `PLANNED`, `plannedBy: ['task-349']`; once the amend is in `git log` it is committed alone
+  (`test(docs): name-resolvability allowlist — spec-015's scripts/heavy-gate.cjs, planned by task-349`), before red.
+If D2 is (b), the amendment's `test:report` bullet and the note's mention of it are dropped before the amend.
+
+**Risks for the other `w0` tasks.**
+- From this task's merge every heavy gate waits on the lock, the orchestrator's `npm run build` before a tool commit
+  included: with three tasks in progress a build may wait for another worktree's full suite or coverage run. That is
+  Decision 1's rule; the wait line names who holds it.
+- `task-357` (AC2 moves the in-process latency suites and lets `test:coverage` count them) builds on `test:coverage` =
+  `node scripts/run-tests.cjs --coverage`: its design reads this route (`plannedRuns` gets `--coverage` as an ordinary
+  argument today).
+- `task-344` reads the trace format above; a change to it after this merge is a change to both.
+- A jest worker now carries `WINGFOIL_GATE_HOLDER` in a full run and the isolated git variables in every run: a new test
+  that spawns `scripts/heavy-gate.cjs` or reads git's global config must set its own environment (the AC1 and AC6 tests
+  show how).
+
+### Retrospective
+
+<!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
+     reconstructed afterwards. One line per item: what happened, the evidence (a command and what it
+     printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
+     Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
+     here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
