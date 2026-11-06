@@ -2,7 +2,7 @@
 id: decision-log-ingest-rel-v0.3-market-decisions-plan
 type: plan
 title: "Decision-log-ingest — rel-v0.3 market positioning and direction decisions"
-status: active
+status: done
 version: "1.0"
 workflow: "decision-log-ingest"
 phase: "rel-v0.3-market-decisions"

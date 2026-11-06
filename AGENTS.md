@@ -24,10 +24,9 @@ Layer (CLI + MCP)**.
 - **License:** MIT · **Distribution:** npm (public) · **Tech:** TypeScript / Node.js 22.12+.
 
 > **Project status: implementation under way.** The release line `rl-v1` is `active`; `minor-v0.1`,
-> `minor-v0.2`, the patches `patch-v0.2.2` and `patch-v0.3.1` and `minor-v0.3` are `released` (`wingfoil@0.3.1`
-> on npm, the pinned build), and **the bug-fix patch `patch-v0.3.2` is `in-development`** on the maintenance
-> line `release/0.3` — its implementation closed, its release phases under way — before `v0.4` (approver ruling
-> of 2026-10-26, recorded in `dl-186`), while `main` carries `v0.4` (`docs/04_memory/planning/`). The repository
+> `minor-v0.2`, `minor-v0.3` and the patches `patch-v0.2.2`, `patch-v0.3.1` and `patch-v0.3.2` are `released`
+> (`wingfoil@0.3.2` on npm, the build `main` pins), and **`minor-v0.4` is in `release-planning`** on `main`; the
+> maintenance line `release/0.3` stays open with no patch planned (`docs/04_memory/planning/`). The repository
 > carries a real implementation under `src/` — ten modules: `core, validation, storage, memory, dna,
 > directives, workflow, cli, mcp, agent` — a packaged `wingfoil` CLI (`package.json` `bin` → `dist/cli.js`) and
 > an MCP server (`wingfoil mcp`), all covered by a full Jest suite (`npm test`). Read, run, test and reason about
