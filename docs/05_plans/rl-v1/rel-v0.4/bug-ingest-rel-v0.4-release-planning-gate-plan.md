@@ -43,7 +43,10 @@ the code build (`node dist/cli.js --version` → `0.3.2 (a23c9141…)`, `wingfoi
 
 ## Execution Notes
 
-<!-- Filled as the phase runs. -->
+- 2026-11-06, capture: `bug-506` added on the capture step (`74ac32ac6`) and submitted (`45178c4bf`), severity
+  `medium`, feature P1.7.
+- 2026-11-06, triage: the approver accepted it for v0.4 (`9f9f1bd69`, `open → triaged`); its release is stamped at the
+  re-plan of the wave that takes it.
 
 ### Retrospective
 
