@@ -606,6 +606,47 @@ Against `code-review`, every AC re-read with its evidence:
   — its `### Retrospective` states how the Expected Behavior is now met, with the reproduction's command and result.
   `--reason "Record in bug-446's Retrospective how task-349 meets its Expected Behavior: the jest global setup isolates the run's git configuration (ruling D8 (a)), and the reproduction with a hostile global core.excludesFile now passes 28 of 28 tests."`
 
+### review fixes (developer, 2026-11-07)
+
+The independent review returned approve-with-fixes, 0 blockers, two findings to fix in the task. The PATH guard ran
+first, through the task's PATH shim: `wingfoil --version` and `node dist/cli.js --version` both → `0.3.2 (6f1e0b286…)`;
+`git rev-list --count HEAD..main` → `0` at the start and the end (no merge).
+
+- **F1 — a leftover `<lock>.break` hung every heavy gate silently.** `breakStale` returned nothing while any
+  `<lock>.break` existed, so a process killed while holding it left no reason and no wait line, and with no timeout (D6)
+  every gate waited forever. Fixed in `7c7fbb292` (`scripts/heavy-gate.cjs`): a break lock whose pid is not running, or
+  which holds no pid record, is removed (re-read just before the removal, so one recreated meanwhile by a live taker is
+  kept) with one stderr line, `heavy gate <gate>: removed the break lock <lock>.break left by pid <pid>, which is not
+  running (dl-170).`, and the takeover is tried again at once; one held by a live pid is a wait reason, `the break lock
+  <lock>.break, held by pid <pid> while it takes over the lock left by pid <pid> (remove <lock>.break if no heavy gate is
+  starting)`, in the one wait line. Pinned by my new file `test/cli/heavy-gate-break-lock.test.ts` (not red's): a dead-pid
+  `.break` over a dead-pid lock → removed, taken over, acquired with no sleep, trace `takeover`, `acquire`; a `.break`
+  holding no pid record → removed, acquired; a live-pid `.break` → exactly one wait line naming the `.break` path, then
+  the takeover once it is gone. `npx jest test/cli/heavy-gate-break-lock.test.ts test/cli/heavy-gate.test.ts
+  test/cli/heavy-gate-cli.test.ts test/cli/run-tests.test.ts --maxWorkers=2` → `Test Suites: 4 passed`, `Tests: 67 passed`.
+- **F2 — `spec-015` §2 left out ruling D3 (b).** The §2 bullet and the *Revision (2026-11-06, `task-349`)* note now say a
+  gate waits on the load "outside CI (`CI=true` skips the load wait, never the lock)", the same class already fixed in
+  `dev-loop.yaml` and testing T5. Edited in the worktree, left uncommitted (pending amendment below); with it in the tree
+  `npx jest test/docs/name-resolvability.test.ts test/docs/enumeration-parity.allowlist.test.ts
+  test/cli/publish-pipeline.test.ts --maxWorkers=2` → `Tests: 96 passed`.
+- **The reviewer's observation** `isHeavyRun(['--coverageDirectory', 'test/out'])` → `false`: left as it is. It is not
+  F1's class (a silent hang); it errs towards a targeted run, an option's separate value being read as a suite, and the one
+  caller passing that option, release-health's measure, writes it with `=` (`--coverageDirectory=<dir>`,
+  `scripts/release-health/measure.cjs:1538`), which `isHeavyRun` reads as heavy. I did not touch those lines.
+
+**Gates** (with both pending amendments in the tree): `bash <the external slot script>` (asked 10:22:58, granted
+10:28:05+01:00, load `11.07 13.26 10.44`), `npm run build` → exit 0, `npm test -- --maxWorkers=2` → `Test Suites: 558
+passed, 558 total`, `Tests: 9802 passed, 9802 total`, the trace's `acquire`/`release` of gate `test`, pid 1395654,
+`"status":0`, and `ls /tmp/wingfoil-heavy-gate-1000` → the trace only; `npm run lint` → exit 0; `npx tsc --noEmit -p
+tsconfig.json` → exit 0. **T4:** `git log --first-parent --no-merges --format=%h 3c45dcd75..HEAD -- <red's 18 files>` →
+no output.
+
+**Pending amendments (approver), added by the review fixes:**
+- `spec-015-packaging-publishing` — §2's bullet and its *Revision (2026-11-06, `task-349`)* note gain "outside CI
+  (`CI=true` skips the load wait, never the lock)".
+  `--reason "Amend spec-015 §2 for task-349's review finding F2: a heavy gate waits on the 1-minute load average only outside CI, where CI=true skips the load wait and keeps the lock (approver ruling D3 (b))."`
+- `bug-446-…` stays as listed above, unchanged.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -620,3 +661,6 @@ Against `code-review`, every AC re-read with its evidence:
 - A run killed before its teardown leaves its git isolation directory, as fixtures were left before `bug-208`: one such
   directory, from a pid not running, was in `/tmp` when this phase began (refactor above); the teardown's dead-run sweep
   now covers it. None else.
+- A break lock was handled as the lock's helper, not as a lock of its own: the review found that a leftover `.break`
+  hangs every gate silently (finding F1, fixed in `7c7fbb292`). Proposal: a design that adds a lock lists each file the
+  algorithm creates and what happens when its creator dies.
