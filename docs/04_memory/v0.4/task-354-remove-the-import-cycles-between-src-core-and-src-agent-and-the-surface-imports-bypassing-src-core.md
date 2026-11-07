@@ -308,6 +308,99 @@ After the gate the prepared allowlist entry was committed alone: `300ca3eed` `te
 spec-006's src/core/surface-reads.ts, planned by task-354` (`npx jest test/docs/name-resolvability --maxWorkers=2` → 11
 passed); green removes it in the commit that adds the file.
 
+### red (qa, 2026-11-07)
+
+**Red commit `dc64f578b`** (`git log --oneline -1` → `dc64f578b test(core): task-354 — failing test: load order, import
+graph, HEAD labels`), test files only (`git show --stat dc64f578b` → five files, 721 insertions):
+`test/core/load-order.test.ts` and its probe `test/core/helpers/load-order-probe.cjs`, `test/lint/import-graph.test.ts`,
+`test/core/loaders-label.test.ts`, `test/cli/head-label.integration.test.ts`. No `src/`, `scripts/` or `.d.cts` file: every
+red imports exports that already exist; the new argument is what is missing. Base unchanged: `git rev-list --count
+HEAD..main` → `0`, no merge. The task's PATH shim was checked first: `command -v wingfoil` → the shim, `wingfoil
+--version` and `node dist/cli.js --version` → both `0.3.2 (300ca3eed115dc888e6b8a10f87be411894a9d84)`.
+
+**Run.** `npx jest test/core/load-order.test.ts test/lint/import-graph.test.ts test/core/loaders-label.test.ts
+test/cli/head-label.integration.test.ts --maxWorkers=2` → `Test Suites: 4 failed, 4 total`, `Tests: 22 failed, 10
+passed, 32 total` (load-order 1 failed / 3, import-graph 2 / 7, loaders-label 10 / 13, head-label 9 / 9).
+`npx tsc --noEmit -p tsconfig.json` → 14 diagnostics, all in `test/core/loaders-label.test.ts` and all intended:
+`TS2554` "Expected 2 arguments, but got 3" at l.91, 92, 96, 97, 101, 102, 112, 137, 144 (`loadDnaYamlAtRev`,
+`loadDnaYamlAtCommit`, `loadMemoryYamlAtRev`, `loadMemoryYamlAtCommit`, `loadRolesYamlAtRev`, `loadRolesYamlAtCommit`,
+`loadDirectivesAtRev`, `loadDirectivesAtCommit`), "Expected 2-3 arguments, but got 4" at l.120, 121, 125
+(`loadWorkflowsYamlAtRev`, `loadWorkflowsYamlAtCommit`, `loadWorkflowRegistryAtRev`), "Expected 2-4 arguments, but got
+5" at l.130 (`loadWorkflowRegistryAtCommit`), and `TS2353` "'label' does not exist in type 'ContextRequest'" at
+l.159. `npx jest test/lint --maxWorkers=2` with the files in place → `Test Suites: 2 failed, 12 passed, 14 total`,
+`Tests: 3 failed, 157 passed, 160 total`: the two red-first assertions of `import-graph.test.ts` and
+`typecheck-clean.test.ts` "tsconfig.json typechecks with zero diagnostics" on the 14 diagnostics above; nothing else.
+`npx eslint` on the five files → no output. The suites that walk `test/` outside `test/lint` (`grep -rlE
+"TEST_ROOT|join\(REPO_ROOT, 'test'\)|'test'\)" test --include=*.test.ts`): `npx jest test/docs/dl-086-citations.test.ts
+test/core/latency-budget-placement.test.ts test/storage/jest-git-isolation-xdg.test.ts --maxWorkers=2` → `Tests: 1246
+passed`. The invisible-character `grep -nP` over the five files → no output (exit 1).
+
+**Per AC** (first failing assertion of each failing test):
+- **AC1 (red-first)**, `test/core/load-order.test.ts`, the probe run by `spawnCapture(process.execPath, [probe,
+  DIST_DIR])` against jest's `dist/`, building nothing (`node test/core/helpers/load-order-probe.cjs dist` alone →
+  138 modules, 8.5 s):
+  - "no first module leaves a CORE_MODULES operation without fn, or changes the shape of any exported constant" →
+    `expect(report.problems).toEqual({})` received exactly the design's four: `agent/execute.js` → missingFn
+    `agent.agentList`; `core/agent-execute.js` → `agent.agentExecute`, `agent.agentList`; `core/agent-list.js` →
+    `agent.agentList`; `core/agent-show.js` → `agent.agentShow`; each with shapeDiffs `core/index.js CORE_MODULES`.
+  - controls, pass: "the probe tried every compiled module but dist/cli.js, in byte order (D6)" (the test lists
+    `dist/` itself), "with the barrel dist/core/index.js loaded first, every CORE_MODULES operation has its fn".
+- **AC2 (red-first)**, `test/lint/import-graph.test.ts` (TypeScript AST, Q07's import rules, sorted Tarjan,
+  `RECORDED_DEVIATIONS` empty):
+  - "no runtime import cycle remains in src/ (file level, D8)" → received two components: one of 32 files
+    (`src/agent/{execute,launch,run-log,step}.ts`, 26 `src/core` files, `src/memory/{audit,index}.ts`) and
+    `src/mcp/index.ts src/mcp/server.ts`. The design's count reads "22 `src/core` files" for the same 32; the list
+    printed holds 26 (4 + 26 + 2 = 32).
+  - "no surface module … imports past src/core outside a recorded deviation" → received exactly the design's six:
+    `src/cli.ts imports ./storage/git-root (src/storage)`, `src/cli/init-command.ts imports ../storage (src/storage)`,
+    `src/cli/program.ts imports ../storage (src/storage)`, `src/mcp/memory-resource.ts imports ../memory/query
+    (src/memory)`, `src/mcp/memory-resource.ts imports ../storage (src/storage)`, `src/mcp/prompt.ts imports ../storage
+    (src/storage)`.
+  - pass: "reads the source tree …"; "every recorded deviation names an existing docs/04_memory document …, and none is
+    recorded (D1 (a))"; the planted-source controls "finds a planted runtime cycle and ignores a type-only one", "finds a
+    planted bypass, type-only and require() included, and passes an import of src/core", "a recorded deviation covers
+    its file and module only".
+- **AC3 (red-first)**, (a) `test/core/loaders-label.test.ts`, on `test/agent/helpers/agent-execute-fixture.ts`'s `seed`
+  with an unknown key in `dna.yaml`, `memory.yaml`, `roles.yaml`, `workflows.yaml` and one workflow file, and a second
+  commit holding a directive that does not parse, under `withWarningSink`:
+  - the nine `HEAD`-label tests (dna, memory, roles, a label naming no commit, the workflows loader, the two registry
+    loaders, the two directive loaders) → each received the sha label, e.g. `expected ["HEAD:.wingfoil/dna.yaml:
+    unknown field(s) ignored: mystery"]`, received `["<sha>:.wingfoil/dna.yaml: …"]`; the directive ones `Expected
+    substring: "(HEAD:.wingfoil/directives/custom/broken.md)"`, received `"E_YAML_PARSE_ERROR (<sha>:.wingfoil/…`
+    (ts-jest's `isolatedModules` ignores the extra argument, as the design said).
+  - "stateRef: sha, label: "HEAD" → …" → `warnings.filter(includes(sha))` expected `[]`, received the memory, dna and
+    roles warnings with the sha label.
+  - characterization, pass: the three "without a label …" tests (`<sha>:<path>` for the loaders, the directive parse
+    error and `assembleExecutionContext`'s `stateRef`).
+  - (b) + (c) `test/cli/head-label.integration.test.ts`, on `test/agent/helpers/agent-execute-step-fixture.ts`'s
+    `seedStep` with `mystery: 1` appended to `dna.yaml`, `delivery-1` started on `minor-1` and one run recorded with
+    `recordRun`: the seven commands and `workflow next delivery-1 --format json` → `Expected substring: "warning:
+    HEAD:.wingfoil/dna.yaml: unknown field(s) ignored: mystery\n"`, received `"warning: <sha>:.wingfoil/dna.yaml: …"`
+    (json: `Received array: ["<sha>:.wingfoil/dna.yaml: …"]`). The red output was first copied from a real run: a
+    scratch probe outside the worktree built the same fixture (the three fixture helpers compiled with `npx tsc
+    --ignoreConfig --module commonjs` into the scratch directory) and ran `node dist/cli.js` with each command; every
+    one printed exactly one stderr line `warning: 77fcfab4296f76582aab96cfaaab6955f1b55885:.wingfoil/dna.yaml: unknown
+    field(s) ignored: mystery` (that fixture's HEAD), exit 0.
+- **AC4 (characterization, by command, D5 (a))**: no test, as ruled; refactor and review run the commands of the design.
+
+**Departures from the design, for the coordinator** (none silent; the tests are written to the AC's intent):
+- *(c) is red-first, not characterization.* `agent execute --step loop.implement@task:task-202-explicit-override
+  --dry-run` on this fixture printed TWO lines at red (the scratch probe above): `warning: <sha>:.wingfoil/dna.yaml:
+  unknown field(s) ignored: mystery`, then `warning: HEAD:.wingfoil/dna.yaml: …` — the step's resolution reads `dna.yaml`
+  outside the rewrite. The test asserts the design's intended output (exactly the `HEAD:` line once), so it fails now
+  (`Expected "warning: HEAD:…\n"`, received both lines) and passes once every `HEAD` caller passes `'HEAD'` (D2 (b)).
+  The existing `--element … --role` case of `test/cli/agent-execute-launch.integration.test.ts` is unchanged.
+- *A workflow-file parse error carries no revision label.* On this base a `DiagnosticsError` of the workflow loader
+  names the file relative to `.wingfoil/` (`file: "workflows/custom/a.yaml"`, message `E_YAML_PARSE_ERROR
+  (workflows/custom/a.yaml): …`, scratch run of `dist/core/loaders.js` `loadWorkflowsYamlAtRev`), and
+  `test/core/loaders-at-rev.test.ts` pins that it equals the working-tree loader's (task-136 contract). So the workflow
+  pillar's label is pinned through what carries it — the manifest's and a workflow file's unknown-field warnings, and
+  the registry's — not through a parse error as the design's AC3 (a) worded it. The directive parse error does carry
+  the label and is pinned as designed.
+
+**For the developer.** The registry tests compare the set of distinct warnings (the registry may load a pillar more
+than once); `assembleExecutionContext`'s payload must not contain a `"label"` key and must still contain the sha.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
