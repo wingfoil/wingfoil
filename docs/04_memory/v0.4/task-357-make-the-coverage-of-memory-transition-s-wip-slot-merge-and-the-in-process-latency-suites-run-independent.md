@@ -584,6 +584,22 @@ This entry supersedes the `bug-361` entry under `### Pending amendments (approve
 - `bug-361-the-branch-coverage-of-the-wip-slot-s-cross-ref-merge-in-memory-transition.ts-differs-between-identical-runs` (uncommitted in the worktree, as listed above, with the sentence corrected):
   `--reason "Record task-357's fix of bug-361: the WIP-slot merge and its unreadable-document diagnostics now give identical results on identical runs, the readPathsAtRev failure detail moved to bug-509 at task-357's design gate, and the re-throw arm of the ValidationError catch at memory-transition.ts:521 is never hit, the same in every run observed, so it is not run-dependent; fill the retrospective."`
 
+### review fixes 3 (developer, 2026-11-07)
+
+`bug-221`, which this task closes, had no `### Retrospective` (an older bug template: `sed -n '/^### Retrospective/,$p'`
+on the file printed nothing). Added, uncommitted, at the end of its `## Triage & Execution Notes`: the heading, the
+comment of `.wingfoil/memory/templates/bug.md` verbatim, and two lines. Its Expected Behavior is met in full: no budget
+in `npm test`'s parallel pass (rule 6 of `test/core/latency-budget-placement.test.ts`; `npx jest --listTests | grep -i
+latency` lists none of the four latency suites), and the coverage gate does not depend on the pass (the targeted coverage
+of the new parallel suites equals that of the four suites as on `main`, per file and column; `test:coverage` unchanged
+at `99.29 | 97.31 | 98.09 | 99.69`). Gates: `npx jest test/docs test/lint --maxWorkers=2` with both bug amendments in the tree → `Test Suites: 43 passed`, `Tests: 487 passed`.
+
+### Pending amendments (approver) — review fixes 3
+
+- `bug-221-the-in-process-latency-suites-still-run-in-the-parallel-jest-pass-and-can-fail-under-load` (uncommitted in the worktree: a `### Retrospective` at the end of its `## Triage &
+  Execution Notes`): `--reason "Record task-357's fix of bug-221: the in-process REQ-PERF-01, REQ-PERF-02 and REQ-PERF-04 suites run only in the latency pass and refuse a loaded run, what they assert besides the time runs in the parallel pass, and the coverage gate counts the same code; add the bug's retrospective."`
+- `bug-361` is unchanged since review fixes 2; its entry there stands.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
