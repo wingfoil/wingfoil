@@ -66,9 +66,11 @@ module.exports = {
   // `collectCoverageFrom` excludes only true re-export barrels, each by its literal path
   // (task-122-coverage-measures-every-index-file-with-logic, bug-021). A CommonJS re-export compiles to
   // one getter thunk per name, which the report counts as an uncalled function, so a barrel only drags
-  // the `functions` total down. The earlier `!src/**/index.ts` glob also hid `src/core/index.ts` and
-  // `src/mcp/index.ts`, which hold logic. An `index.ts` not listed here is measured, so forgetting to
-  // list a new barrel costs a few function points rather than hiding code.
+  // the `functions` total down. The earlier `!src/**/index.ts` glob also hid `src/core/index.ts`, which
+  // holds logic, and `src/mcp/index.ts`, which did until task-354 moved `registerReadOnlyResources` to
+  // `src/mcp/read-only-resources.ts`; it is a barrel now and, not listed here, still measured. An `index.ts`
+  // not listed here is measured, so forgetting to list a new barrel costs a few function points rather than
+  // hiding code.
   // `test/lint/coverage-scope.test.ts` fails if an entry is a glob, names a missing file, or names a
   // file that is not a barrel (anything beyond re-exports, type-only statements and literal constants).
   collectCoverageFrom: [

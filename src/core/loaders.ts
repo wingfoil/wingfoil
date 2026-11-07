@@ -559,16 +559,18 @@ export function loadWorkflowsYaml(root: string): WorkflowsLoadResult {
  * registry is read at `HEAD`): the manifest and every file it includes, read at that commit. It runs
  * the same body as {@link loadWorkflowsYaml} over the committed bytes, so the result — or the
  * {@link DiagnosticsError} and its ordered `diagnostics` array (task-136) — is the one the working-tree
- * loader gives for the same bytes. Only the parse-error labels differ (`<label>:.wingfoil/<file>`, the revision as given by default); every
- * diagnostic's `file` stays relative to `.wingfoil/`. A path the commit holds as a directory counts as
- * absent (`E_WORKFLOW_FILE_NOT_FOUND`).
+ * loader gives for the same bytes: every diagnostic, a parse error included, names its `file` relative to
+ * `.wingfoil/`, with no revision. The revision label (`<label>:.wingfoil/<file>`) reaches only the unknown-field
+ * warnings of the manifest, the workflow files and `bindings.yaml`. A path the commit holds as a directory counts
+ * as absent (`E_WORKFLOW_FILE_NOT_FOUND`).
  *
  * @param rev - A revision naming one commit, resolved once (`resolveRevision`, `./revision.ts`).
  * @param overlay - Files that replace the commit's own, keyed by repository-relative path (`.wingfoil/…`);
  *   `null` reads as absent. `workflow create` / `remove` (task-211) load the registry as their commit would
  *   leave it, before writing it. Empty by default: the commit alone.
- * @param label - How warnings and errors name the revision (`<label>:<path>`); `rev` as given by default. A caller
- *   that resolved `HEAD` itself and passes the sha passes `'HEAD'` (task-354, `bug-317`).
+ * @param label - How the unknown-field warnings name the revision (`<label>:<path>`; the diagnostics carry none);
+ *   `rev` as given by default. A caller that resolved `HEAD` itself and passes the sha passes `'HEAD'` (task-354,
+ *   `bug-317`).
  * @throws `RevisionError` when `rev` is malformed or names no commit — never an empty registry.
  */
 export function loadWorkflowsYamlAtRev(
@@ -584,10 +586,10 @@ export function loadWorkflowsYamlAtRev(
  * {@link loadWorkflowsYamlAtRev} for a `sha` already resolved to a commit, read without resolving it
  * again (task-283, `bug-309`).
  *
- * @param sha - The full sha of a commit, as `resolveRevision` returned it; labels name it.
+ * @param sha - The full sha of a commit, as `resolveRevision` returned it.
  * @param overlay - As {@link loadWorkflowsYamlAtRev}'s.
- * @param label - How warnings and errors name the revision (`<label>:<path>`); `sha` by default. A caller that
- *   resolved `HEAD` to that sha passes `'HEAD'` (task-354, `bug-317`).
+ * @param label - How the unknown-field warnings name the revision (`<label>:<path>`; the diagnostics carry none);
+ *   `sha` by default. A caller that resolved `HEAD` to that sha passes `'HEAD'` (task-354, `bug-317`).
  */
 export function loadWorkflowsYamlAtCommit(
   root: string,
