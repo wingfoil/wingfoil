@@ -5,7 +5,9 @@
  * 1. Remove the run's git isolation directory `WF_GIT_ISOLATION_DIR` (`bug-446`, task-349), the one
  *    `test/global-setup.cjs` created in this process: only a directory whose name carries this process's
  *    pid (`wf-git-isolation-r<pid>-…`) is removed, so a child jest that inherited the parent's variable never
- *    removes the parent's. A failure to remove it is reported, never fatal.
+ *    removes the parent's; and, in the run that owns its fixture tag, the isolation directories of runs no
+ *    longer alive (a run killed before its teardown), as the fixture sweep below does. A failure to remove one
+ *    is reported, never fatal.
  *
  * 2. Release the `dist/` lock `test/global-setup.cjs` took (bug-095, task-146). Only the run holding
  *    the lock releases it: `releaseDistLock` removes the lock only when it records this process's pid.
@@ -173,11 +175,35 @@ function removeGitIsolation(dir, pid) {
   return unremoved.length > 0 ? `git isolation teardown: could not remove ${dir}` : null;
 }
 
+/**
+ * Remove every entry of `tmpRoot` named `wf-git-isolation-r<pid>-…` whose pid is not `ownPid` and that `isAlive`
+ * says is not a live process, in sorted order: the isolation directories of runs killed before their teardown.
+ *
+ * @param {string} tmpRoot - The temp directory the isolation directories were created in.
+ * @param {{ ownPid: number, isAlive: (pid: number) => boolean }} options
+ * @returns {{ found: string[], unremoved: string[] }}
+ */
+function sweepDeadGitIsolationDirs(tmpRoot, { ownPid, isAlive }) {
+  const pattern = new RegExp(`^${ISOLATION_DIR_PREFIX}([1-9][0-9]*)-`);
+  const found = readdirSync(tmpRoot)
+    .filter((name) => {
+      const match = pattern.exec(name);
+      return match !== null && Number(match[1]) !== ownPid && !isAlive(Number(match[1]));
+    })
+    .sort()
+    .map((name) => join(tmpRoot, name));
+  return { found, unremoved: removeAll(found) };
+}
+
 /** The jest `globalTeardown` entry point: one self-contained async function, easy to chain. */
 module.exports = async () => {
   try {
     const isolationReport = removeGitIsolation(process.env.WF_GIT_ISOLATION_DIR, process.pid);
     if (isolationReport) console.warn(isolationReport);
+    if (process.env.WF_FIXTURE_RUN_TAG === `r${process.pid}`) {
+      const dead = sweepDeadGitIsolationDirs(tmpdir(), { ownPid: process.pid, isAlive: isPidAlive });
+      if (dead.unremoved.length > 0) console.warn(`git isolation teardown: could not remove ${dead.unremoved.join(', ')}`);
+    }
     const report = teardownRun({ tag: process.env.WF_FIXTURE_RUN_TAG, pid: process.pid, tmpRoot: tmpdir() });
     if (report) console.warn(report);
   } finally {
@@ -190,3 +216,4 @@ module.exports.sweepDeadRunDirs = sweepDeadRunDirs;
 module.exports.formatDeadRunReport = formatDeadRunReport;
 module.exports.teardownRun = teardownRun;
 module.exports.removeGitIsolation = removeGitIsolation;
+module.exports.sweepDeadGitIsolationDirs = sweepDeadGitIsolationDirs;

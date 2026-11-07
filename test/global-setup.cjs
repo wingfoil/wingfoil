@@ -76,3 +76,4 @@ module.exports = async () => {
     },
   });
 };
+module.exports.applyGitIsolation = applyGitIsolation;
