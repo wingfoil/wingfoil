@@ -164,18 +164,59 @@ function traceWriter(dir, gate, log) {
   };
 }
 
+/** The pid a break lock records, or `null` when it is gone or its content is not a pid record. */
+function readBreakHolder(breakPath) {
+  let raw;
+  try {
+    raw = readFileSync(breakPath, 'utf-8');
+  } catch (err) {
+    if (err.code === 'ENOENT') return { gone: true };
+    throw err;
+  }
+  try {
+    const parsed = JSON.parse(raw.trim());
+    if (parsed !== null && typeof parsed === 'object' && Number.isInteger(parsed.pid) && parsed.pid > 0) {
+      return { gone: false, pid: parsed.pid, raw };
+    }
+  } catch {
+    // not a record: treated as left by a dead process
+  }
+  return { gone: false, pid: null, raw };
+}
+
 /**
- * Delete the lock if it is still stale, holding `<lock>.break` while doing so. Returns the stale record it removed,
- * or `null` when it removed nothing (another taker holds the break lock, or the lock changed meanwhile).
+ * Delete the lock if it is still stale, holding `<lock>.break` while doing so. Returns `{ removed }`, the stale
+ * record it removed; `{ blockedBy }`, the live pid holding the break lock; or `{}` when it removed nothing (the lock
+ * or the break lock changed meanwhile, or a break lock left by a dead process was removed: the caller polls again).
+ *
+ * A break lock is held for a few system calls. One whose pid is not running (or whose content is not a pid record)
+ * was left by a process killed inside that window and is removed, so it cannot hold every gate on the machine
+ * forever; one whose pid is running is named in the wait line, with what to do if no gate is starting.
  */
-function breakStale(lockPath, pid, isAlive) {
+function breakStale(lockPath, pid, isAlive, onBreakRemoved) {
   const breakPath = `${lockPath}.break`;
-  if (!tryCreate(breakPath, `${JSON.stringify({ pid })}\n`, pid)) return null;
+  if (!tryCreate(breakPath, `${JSON.stringify({ pid })}\n`, pid)) {
+    const breaker = readBreakHolder(breakPath);
+    if (breaker.gone) return {};
+    if (breaker.pid !== null && isAlive(breaker.pid)) return { blockedBy: breaker.pid };
+    // Re-read just before removing, so a break lock recreated meanwhile by a live taker is not removed.
+    let now;
+    try {
+      now = readFileSync(breakPath, 'utf-8');
+    } catch (err) {
+      if (err.code === 'ENOENT') return {};
+      throw err;
+    }
+    if (now !== breaker.raw) return {};
+    unlinkIfPresent(breakPath);
+    onBreakRemoved(breaker.pid);
+    return {};
+  }
   try {
     const held = readLock(lockPath);
-    if (held === null || (held.valid && isAlive(held.pid))) return null;
+    if (held === null || (held.valid && isAlive(held.pid))) return {};
     unlinkIfPresent(lockPath);
-    return held;
+    return { removed: held };
   } finally {
     unlinkIfPresent(breakPath);
   }
@@ -234,8 +275,25 @@ async function acquireHeavyGate({
     const held = readLock(lockPath);
     if (held !== null && (!held.valid || !isAlive(held.pid))) {
       // Left by a gate killed before its release: taken over, but only under the break lock.
-      const stale = breakStale(lockPath, pid, isAlive);
-      if (stale !== null) {
+      const breakPath = `${lockPath}.break`;
+      let removedBreak = false;
+      const broken = breakStale(lockPath, pid, isAlive, (breakerPid) => {
+        removedBreak = true;
+        log(
+          breakerPid === null
+            ? `heavy gate ${gate}: removed the break lock ${breakPath}, whose content is not a pid record (dl-170).`
+            : `heavy gate ${gate}: removed the break lock ${breakPath} left by pid ${breakerPid}, which is not running (dl-170).`,
+        );
+      });
+      if (removedBreak) continue; // a break lock left by a dead process: try the takeover again at once
+      const stale = broken.removed ?? null;
+      if (broken.blockedBy !== undefined) {
+        reasons.push(
+          `the break lock ${breakPath}, held by pid ${broken.blockedBy} while it takes over the lock left by ` +
+            (held.valid ? `pid ${held.pid}` : 'an unreadable record') +
+            ` (remove ${breakPath} if no heavy gate is starting)`,
+        );
+      } else if (stale !== null) {
         const takenAt = new Date(now()).toISOString();
         log(
           stale.valid
