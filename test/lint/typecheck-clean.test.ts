@@ -35,7 +35,10 @@ describe('typecheck.clean (dl-044, task-173)', () => {
     };
     expect(TYPECHECK_PROJECTS).toEqual(['tsconfig.json', 'tsconfig.build.json']);
     expect(pkg.scripts?.typecheck).toBe(typecheckScript());
-    expect(pkg.scripts?.typecheck).toBe('tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.build.json');
+    // task-349 (dl-170 Decision 1, ruling D2 (a)): each tsc run under the machine-wide heavy-gate lock.
+    expect(pkg.scripts?.typecheck).toBe(
+      'node scripts/heavy-gate.cjs typecheck -- tsc --noEmit -p tsconfig.json && node scripts/heavy-gate.cjs typecheck -- tsc --noEmit -p tsconfig.build.json',
+    );
   });
 
   it.each(['tsconfig.json', 'tsconfig.build.json'])(

@@ -129,9 +129,9 @@ describe('AC 1 — dev-loop.yaml v1.6 declares the seven v0.3 gates (red-first)'
   });
 
   describe('review — claim re-run (dl-097 (a)), re-review (dl-098), parity suites (dl-116)', () => {
-    it('`review.checks.pre` keeps `tests.bdd.passing` first and adds the three checks', () => {
+    it('`review.checks.pre` keeps `tests.bdd.passing` first and adds the three checks (task-349 appends `gate.slot-free` last)', () => {
       const names = (phase('review').checks?.pre ?? []).map(tokenName);
-      expect(names).toEqual(['tests.bdd.passing', 'claims.rerun', 'rereview.previous-reject', 'docs.parity']);
+      expect(names).toEqual(['tests.bdd.passing', 'claims.rerun', 'rereview.previous-reject', 'docs.parity', 'gate.slot-free']);
       expect(declaringLine('review', 'claims.rerun')).toMatch(/dl-097/);
       expect(declaringLine('review', 'rereview.previous-reject')).toMatch(/dl-098/);
       expect(declaringLine('review', '"docs.parity"')).toMatch(/dl-116/);

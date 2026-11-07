@@ -165,9 +165,9 @@ describe('task-303 AC 2 — the prose checks a human confirms are bound manual: 
     ]);
   });
 
-  it('the registry warns 65 times (86 → 65), every warning an unbound check, none naming a check bound manual', () => {
+  it('the registry warns 68 times (86 → 65, then 68 with task-349\'s three unbound gate.slot-free), every warning an unbound check, none naming a check bound manual', () => {
     const diagnostics = loadWorkflowRegistryAtHead(ROOT).diagnostics as readonly Diag[];
-    expect(diagnostics.length).toBe(65);
+    expect(diagnostics.length).toBe(68);
     expect(diagnostics.filter((d) => d.code !== 'W_WORKFLOW_UNBOUND_TOKEN' || d.severity !== 'warning')).toEqual([]);
     const tokens = diagnostics.map((d) => tokenName(/token '(.*)' has no/.exec(d.message)![1]!));
     expect(tokens.filter((name) => (MANUAL_NAMES as readonly string[]).includes(name))).toEqual([]);
