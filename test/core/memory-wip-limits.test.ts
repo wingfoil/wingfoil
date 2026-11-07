@@ -13,6 +13,11 @@
  *   depends on which refs were fetched;
  * - a `reject` along a gate's reject edge and a `park` along a `returns` edge take no slot check: a
  *   reject or returns edge is exempt.
+ *
+ * task-357 (`bug-361`, REQ-SYS-07): the copy an element counts with across refs does not depend on the
+ * order the refs are read in — the order of their tip shas (`refBaselineCommits`), which changes from run
+ * to run with the commits' wall-clock dates. A test that relies on an order fixes it (`readFirst`), and
+ * on equal states the copy whose path sorts first wins, so the refusal names the holders in one order.
  */
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, symlinkSync } from 'node:fs';
@@ -56,6 +61,11 @@ types:
       gates:
         pending: { reject: draft }
       limits: { active: 1 }
+  shelf:
+    path: "docs/memory/shelves/{release}/{id}.md"
+    states:
+      sequence: [draft, in-progress, done]
+      limits: { in-progress: 2 }
   slot:
     path: "docs/memory/slots/{id}.md"
     id_pattern: "slot-{n}"
@@ -100,6 +110,11 @@ status: open
 
 function doc(id: string, type: string, status: string): string {
   return `---\nid: "${id}"\ntype: ${type}\ntitle: "A ${type}"\nstatus: ${status}\n---\n\nBody.\n`;
+}
+
+/** A document of a type whose path carries the element's release (the `shelf` type of task-357). */
+function releasedDoc(id: string, type: string, release: string, status: string): string {
+  return `---\nid: "${id}"\ntype: ${type}\ntitle: "A ${type}"\nrelease: "${release}"\nstatus: ${status}\n---\n\nBody.\n`;
 }
 
 function operation<T = unknown>(name: string): CoreFn<unknown, T> {
@@ -307,6 +322,28 @@ describe('per-state WIP limits (task-180, dl-110 P3 (a))', () => {
   /** The branch the fixture was seeded on. */
   const trunk = (): string => gitOut(repo, ['rev-parse', '--abbrev-ref', 'HEAD']);
 
+  /**
+   * task-357 (bug-361): make the WIP count read the tip of `first` before the tip of `second`. The refs
+   * are read in the order of their full tip shas (`refBaselineCommits`, a string sort), so while
+   * `first`'s sorts after `second`'s, both tips are amended with a new subject (a new sha every try: the
+   * same message in the same second would give the same sha), then the branch that was current is checked
+   * out again. Both, not `second` alone: a `first` tip near `ffff…` would need more amends of `second`
+   * than any bound, while two fresh shas are in order with probability 1/2 per try. The number of tries
+   * varies; the order read does not.
+   */
+  function readFirst(first: string, second: string): void {
+    const current = gitOut(repo, ['rev-parse', '--abbrev-ref', 'HEAD']);
+    for (let tries = 1; gitOut(repo, ['rev-parse', first]) > gitOut(repo, ['rev-parse', second]); tries++) {
+      if (tries > 64) throw new Error(`fixture bug: the tip of ${first} still sorts after the tip of ${second} after 64 amends`);
+      for (const ref of [second, first]) {
+        git(repo, ['checkout', '--quiet', ref]);
+        const subject = gitOut(repo, ['log', '-1', '--format=%s']);
+        git(repo, ['commit', '--amend', '--quiet', '-m', `${subject} (reorder ${tries})`]);
+      }
+      git(repo, ['checkout', '--quiet', current]);
+    }
+  }
+
   /** A hand commit setting `status` of one document, on the branch checked out. */
   function commitStatus(path: string, id: string, type: string, status: string): void {
     writeFixtureFile(repo, path, doc(id, type, status));
@@ -383,7 +420,11 @@ describe('per-state WIP limits (task-180, dl-110 P3 (a))', () => {
     expect(result.error.message).toContain("(limit 1): held by card-003. Move one of them out of 'in-progress'");
   });
 
-  it('when several refs changed an element, the most advanced of their changed copies wins over the decided one', async () => {
+  // task-357 (bug-361): run in both read orders, so both arms of the merge's comparison run on every run.
+  it.each([
+    ['main', 'task/y'],
+    ['task/y', 'main'],
+  ])('when several refs changed an element, the most advanced of their changed copies wins over the decided one (read first: %s)', async (first, second) => {
     const main = trunk();
     git(repo, ['branch', 'task/x']);
     commitStatus('docs/memory/wide/wide-003.md', 'wide-003', 'wide', 'done');
@@ -397,10 +438,48 @@ describe('per-state WIP limits (task-180, dl-110 P3 (a))', () => {
     git(repo, ['checkout', '--quiet', 'task/x']);
     writeFixtureFile(repo, 'docs/memory/wide/wide-005.md', doc('wide-005', 'wide', 'draft'));
     commitAll(repo, 'wide-005 draft');
+    // task/x and task/y were cut before the trunk's commit, and task/y's tip is no other ref's ancestor,
+    // so amending either tip leaves the scenario as it is.
+    readFirst(first, second);
+    expect(gitOut(repo, ['rev-parse', first]) < gitOut(repo, ['rev-parse', second])).toBe(true);
     const result = await verb('memorySubmit', repo, 'wide-005');
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error.message).toContain('(limit 2): held by wide-001, wide-002.');
+  });
+
+  // task-357 (bug-361, D1 (a)): two copies in the same state tie on the state; the one whose path sorts
+  // first wins, so the holders are named in the same order whichever ref is read first.
+  it.each([
+    ['a', 'b'],
+    ['b', 'a'],
+  ])('an element two refs moved into the state at different paths is named in the same place, whichever ref is read first (read first: %s)', async (first, second) => {
+    const main = trunk();
+    writeFixtureFile(repo, 'docs/memory/shelves/r1/shelf-a.md', releasedDoc('shelf-a', 'shelf', 'r1', 'draft'));
+    writeFixtureFile(repo, 'docs/memory/shelves/r5/shelf-m.md', releasedDoc('shelf-m', 'shelf', 'r5', 'in-progress'));
+    writeFixtureFile(repo, 'docs/memory/shelves/r1/shelf-n.md', releasedDoc('shelf-n', 'shelf', 'r1', 'draft'));
+    commitAll(repo, 'seed shelves');
+    git(repo, ['checkout', '--quiet', '-b', 'a']);
+    writeFixtureFile(repo, 'docs/memory/shelves/r1/shelf-a.md', releasedDoc('shelf-a', 'shelf', 'r1', 'in-progress'));
+    commitAll(repo, 'a: shelf-a in-progress at r1');
+    git(repo, ['checkout', '--quiet', '-b', 'b', main]);
+    git(repo, ['rm', '--quiet', 'docs/memory/shelves/r1/shelf-a.md']);
+    writeFixtureFile(repo, 'docs/memory/shelves/r9/shelf-a.md', releasedDoc('shelf-a', 'shelf', 'r9', 'in-progress'));
+    commitAll(repo, 'b: shelf-a moved to r9, in-progress');
+    git(repo, ['checkout', '--quiet', main]);
+    readFirst(first, second);
+    expect(gitOut(repo, ['rev-parse', first]) < gitOut(repo, ['rev-parse', second])).toBe(true);
+
+    const before = gitOut(repo, ['rev-parse', 'HEAD']);
+    const result = await verb('memorySubmit', repo, 'shelf-n');
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('CONFLICT');
+    expect(exitCodeForResult(result)).toBe(1);
+    expect(result.error.message).toBe(
+      `WIP limit reached for 'in-progress' on type 'shelf' (limit 2): held by shelf-a, shelf-m. Move one of them out of 'in-progress', then retry. ${REFS_SENTENCE}`,
+    );
+    expectUnchanged(before, 'docs/memory/shelves/r1/shelf-n.md', releasedDoc('shelf-n', 'shelf', 'r1', 'draft'));
   });
 
   it('an element two refs record in the same state is one holder, not two (characterization)', async () => {
