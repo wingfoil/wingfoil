@@ -563,6 +563,27 @@ builds.
   the `### Retrospective` filled in place of `None.`):
   `--reason "Record task-357's fix of bug-361: the WIP-slot merge and its unreadable-document diagnostics now give identical results on identical runs, the readPathsAtRev failure detail moved to bug-509 at task-357's design gate, and the ValidationError catch at memory-transition.ts:521 is never hit in any run, so it is not run-dependent; fill the retrospective."`
 
+### review fixes 2 (developer, 2026-11-07)
+
+The re-review returned two text-only fixes (no code, no tests). Base unchanged (`git rev-list --count HEAD..main` →
+`0`).
+
+- **Correction to `### review fixes` F1:** `bug-509` and `bug-510` are not yet on `main` (`git merge-base --is-ancestor
+  ingest/l1-design-followups main` → not an ancestor): `ingest/l1-design-followups` is to be merged into `main` before
+  this task's merge.
+- **`bug-361` amendment (still uncommitted):** the sentence on the diagnostics now adds "except one blob shared by two
+  paths, a candidate finding outside the task (filed separately)", and the `--reason` says only what was observed
+  about line 521.
+
+Gates: `npx jest test/docs test/lint --maxWorkers=2` with the amendment in the tree → `Test Suites: 43 passed`, `Tests: 487 passed`; `git merge-base --is-ancestor ingest/l1-design-followups main` → exit 1.
+
+### Pending amendments (approver) — review fixes 2
+
+This entry supersedes the `bug-361` entry under `### Pending amendments (approver) — review fixes`.
+
+- `bug-361-the-branch-coverage-of-the-wip-slot-s-cross-ref-merge-in-memory-transition.ts-differs-between-identical-runs` (uncommitted in the worktree, as listed above, with the sentence corrected):
+  `--reason "Record task-357's fix of bug-361: the WIP-slot merge and its unreadable-document diagnostics now give identical results on identical runs, the readPathsAtRev failure detail moved to bug-509 at task-357's design gate, and the re-throw arm of the ValidationError catch at memory-transition.ts:521 is never hit, the same in every run observed, so it is not run-dependent; fill the retrospective."`
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
