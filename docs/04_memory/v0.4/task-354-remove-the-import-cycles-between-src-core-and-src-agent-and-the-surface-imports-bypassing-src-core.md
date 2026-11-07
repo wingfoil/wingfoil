@@ -418,6 +418,69 @@ Two rulings the approver gave after red and green, both as recommended:
      developer test pins it, so bug-317's Expected Behavior ("the *AtRev loaders take an optional label parameter so
      the caller decides how the source is named") is met in full.
 
+### green (developer, 2026-11-07)
+
+**Start.** The task's PATH shim was checked first: `command -v wingfoil` → the shim, `wingfoil --version` and
+`node dist/cli.js --version` → both `0.3.2 (dc64f578b6ab80e1a2aefe03290839df41beae1e)`. `git rev-list --count
+HEAD..main` → `0`, no merge at the start.
+
+**Green 1 — `342b0a06a`** `fix(core): task-354 — no import cycle in src, surface reads through src/core, readers take
+a revision label (bug-345, bug-317, bug-470)`, as the design was ruled:
+- the cycles: `src/memory/audit.ts` imports `isConfiguredIdentity` from `../core/git-identity`; `registerReadOnlyResources`
+  and its options move verbatim to the new `src/mcp/read-only-resources.ts`, re-exported by `src/mcp/index.ts`;
+  `src/mcp/server.ts` imports `./prompt`, `./read-only-resources` and `./session-resource`;
+- the six bypasses: the new non-barrel `src/core/surface-reads.ts` re-exports the ten names; `src/cli.ts`,
+  `src/cli/init-command.ts`, `src/cli/program.ts`, `src/mcp/memory-resource.ts` and `src/mcp/prompt.ts` import from it;
+  the `PLANNED` `src/core/surface-reads.ts` entry leaves `test/docs/name-resolvability.allowlist.ts` in the same commit;
+- the labels: every reader at a revision of `src/core/loaders.ts` and both registry readers take an optional last
+  `label` (`rev`/`sha` by default); `ContextRequest.label?` defaults to `stateRef` as given and never reaches the
+  payload; every caller the design lists passes `'HEAD'`, `src/mcp/prompt.ts` passes `label: state`; `agentExecutePipeline`
+  calls `withDistinctWarnings(run)` with no rewrite, `onHead` and `let sha` are gone (`grep -n "join('HEAD:')\|onHead"
+  src/agent/execute.ts` → no output, exit 1). `src/core/index.ts`, `src/core/agent-execute.ts`, `src/validation/warning.ts`
+  and `.wingfoil/` are unchanged (`git diff main --stat -- <those>` → no output).
+- red → green: `npx jest test/core/load-order.test.ts test/lint/import-graph.test.ts test/core/loaders-label.test.ts
+  test/cli/head-label.integration.test.ts --maxWorkers=2` → `Test Suites: 4 passed`, `Tests: 32 passed, 32 total` (red:
+  22 failed / 32); `npx tsc --noEmit -p tsconfig.json` → no output (red: 14 diagnostics); `npx eslint src/` → no output.
+- full suite, after `waitslot.sh` (exit 0) and `npm run build` (exit 0): `npm test -- --maxWorkers=2` (13:01:16 →
+  13:16:21) → `Test Suites: 1 failed, 561 passed, 562 total`, `Tests: 1 failed, 9843 passed, 9844 total`. The failure:
+  `test/lint/coverage-scope.test.ts` "src/mcp/index.ts holds logic, so it is not a barrel" (received `[]`): the ruled
+  split left the index a pure barrel. A file outside the design: stop-the-line, reported; the approver widened the scope
+  (`### rulings (approver, 2026-11-07)`).
+
+**Merge of `main`.** `git rev-list --count HEAD..main` → `42` at the resume: `git merge --no-edit main` (no conflict),
+trailers added by `git commit --amend --no-edit --trailer …` → `git rev-parse HEAD` → `41aa8664c`. The merge brought no new
+caller of a reader at a revision (`grep -rnE "load(MemoryYaml|DnaYaml|WorkflowsYaml|Directives|RolesYaml)At(Rev|Commit)\(|loadWorkflowRegistryAt(Rev|Commit)\(|loadMemoryDocumentSummaryAtRev\(|listAdaptersAtRev\(" src`,
+comments and definitions dropped → the green 1 calls plus `src/core/memory-transition.ts:203`).
+
+**Green 2 — `2ab454b48`** `fix(core): task-354 — the memory summary and adapter listing readers take a revision label
+too (bug-317, bug-345)`, the widened scope:
+- `loadMemoryDocumentSummaryAtRev(root, rev, relativePath, label = rev)` (`src/memory/query.ts`) and
+  `listAdaptersAtRev(root, rev, label = rev)` (`src/agent/discovery.ts`) label their error `<label>:<path>`;
+- `src/core/memory-transition.ts:203` (`recordedIdAt`) passes `'HEAD'`: its `sha` is the one `prepareMemoryTransition`
+  resolves at l.307, `atHeadOr(root, () => resolveRevision(root, 'HEAD'), null)`, handed to it at l.386 — so `HEAD` is the
+  revision it resolved. `recordedIdAt` catches every error (explain-only), so the label never reaches output there today.
+  `listAdaptersAtRev` has no `src` caller outside its module and `src/agent/index.ts`'s re-export (`grep -rn
+  "listAdaptersAtRev" src`), so no caller changes;
+- `test/lint/coverage-scope.test.ts`: `src/mcp/index.ts` leaves `LOGIC_INDEX_FILES` (comment and header item 3 say why).
+  `jest.config.js` is NOT changed: the index stays measured, which the gate allows (an unlisted `index.ts` is measured);
+- new developer test `test/core/at-rev-label-widening.test.ts` (4 tests): a document whose frontmatter does not parse and
+  an adapter name in both directories, read at the sha with `'HEAD'` (`HEAD:<path>`, no sha) and without (`<sha>:<path>`).
+  Without the new parameter the `'HEAD'` calls are `TS2554` and the label stays the sha.
+- no `.d.cts` or API page names either function (`git ls-files | grep "\.d\.cts$"` → only `scripts/*.d.cts`); `npm run
+  docs:api` runs at refactor.
+- commands: `npx tsc --noEmit -p tsconfig.json` → no output (exit 0); `npx eslint` on the five files → exit 0; `npx jest
+  test/core/at-rev-label-widening.test.ts test/lint/coverage-scope.test.ts test/memory/query-at-rev.test.ts
+  test/agent/discovery.test.ts --maxWorkers=2` → `Tests: 52 passed, 52 total`; `npx jest test/lint --maxWorkers=2` →
+  `Test Suites: 14 passed, 14 total`, `Tests: 158 passed, 158 total`.
+- full suite, after `waitslot.sh` (exit 0, twice) and `npm run -s build` (exit 0, 19:55:57 → 19:56:08):
+  `npm test -- --maxWorkers=2` (19:56:33 → 20:30:45, `Time: 2042.399 s`) → `Test Suites: 564 passed, 564 total`,
+  `Tests: 10496 passed, 10496 total`.
+- T4: `git log --first-parent --no-merges --format=%h dc64f578b..HEAD -- test/core/load-order.test.ts
+  test/core/helpers/load-order-probe.cjs test/lint/import-graph.test.ts test/core/loaders-label.test.ts
+  test/cli/head-label.integration.test.ts` → no output. `test/lint/coverage-scope.test.ts` is not a red file
+  (`git show --stat dc64f578b` lists the five above only).
+- invisible characters: the `grep -nP` of the prompt over the changed files of each commit → no output (exit 1).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
