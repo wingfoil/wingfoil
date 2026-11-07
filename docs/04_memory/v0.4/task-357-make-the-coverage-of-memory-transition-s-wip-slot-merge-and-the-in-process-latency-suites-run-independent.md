@@ -311,6 +311,24 @@ eight lines above this task's hunk at `:613` (a `label` argument there would be 
 `src/core/agent-execute` (an import path `task-354` may move). Whichever merges second runs `git merge --no-edit main`
 and re-runs the two suites.
 
+### design gate (approver, 2026-11-07)
+
+The approver recorded the gate on this branch: `164aa6274` `wf(tech-spec): amend spec-015-packaging-publishing [approved →
+approved]` (§2, the latency suites — D6) and `6524fb910` `workflow: finalize sw-life-cycle-1-plan
+dev-loop.design@task:task-357-…` with `Approver:` (`git log -2 --format='%h %s'`). Rulings, from that record's `Reason:`,
+all as the design recommended:
+
+- **D1** (a): on equal states the copy whose path sorts first wins, fixed in `src/core/memory-transition.ts`; AC1 is
+  red-first (the tie case), its "most advanced" part characterization.
+- **D2** (a): each latency suite is split — its budget tests move to the in-process latency pass with the idle verdict,
+  everything else to a new parallel-pass suite.
+- **D3** (a): all four suites, `agent-execute-latency` included.
+- **D4** (a): `server.test.ts` AC (a) drops its small-fixture p95.
+- **D5** (a): the run-dependent EPIPE branch in `src/storage/commit.ts` is outside this task: filed as a new low bug for
+  `v0.4`, named when `bug-361` closes.
+- **D6**: the `spec-015` §2 amendment is recorded at this gate (`164aa6274`).
+- **D7**: the latency pass that no workflow gate runs is filed as a new low bug (outside this task).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
