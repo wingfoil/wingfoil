@@ -49,3 +49,272 @@ the `testing` directive forbids ("Tests are deterministic and isolated").
 ## Execution Notes
 
 <!-- Filled by the dev-loop. -->
+
+### design (architect, 2026-11-07)
+
+**Inputs read.** `depends_on: [task-349]`: its Execution Notes read in full (design, design gate, red, green, refactor,
+review), merged into `main` at `da1f1016c`. What this task builds on: `test:coverage` is `node scripts/run-tests.cjs
+--coverage` (`grep -n '"test' package.json` → lines 43–46), `plannedRuns(['--coverage'], env)` plans the parallel run
+only (`scripts/run-tests.cjs` `plannedRuns`: any argument → `[[...args]]`), and a heavy run holds the machine-wide lock
+around every planned run (`runTests`, `isHeavyRun`). Base: `main` `da1f1016c` + the start commit `3d9621b71` and the bug
+syncs `7d305977b`, `74d2d77b8` (`git log --oneline -4`). PATH guard first, through the task's PATH shim: `command -v
+wingfoil` → the shim, `wingfoil --version` and `node dist/cli.js --version` → `0.3.2 (da1f1016c863…)`. `spec-001` and
+`spec-015` are `approved`, `dl-156` and `dl-179` `ready` (`grep -n "^status"` on each). No `.wingfoil/` file changes
+(planned: `git diff --stat main...HEAD -- .wingfoil` stays empty), so `npm run check:mcp` and the pinned-build workflow
+reads are not required. No BDD scenario covers the test harness; `P1.13-memory-element-schema.feature`'s WIP scenarios
+name a single holder (`grep -n "held by" docs/02_requirements/02_bdd/features/p1-memory/P1.13-memory-element-schema.feature`
+→ `held by card-001`), so no scenario changes.
+
+**bug-361 reproduced** (targeted, no slot; load `3,28 3,53 3,30` by `uptime`). Three identical runs of
+`npx jest --coverage --coverageReporters=json --coverageDirectory=<scratch>/cov<i> --collectCoverageFrom=src/core/memory-transition.ts --maxWorkers=2 test/core/memory-wip-limits.test.ts`
+→ `Tests: 31 passed` each; `branchMap`/`b` of `coverage-final.json` read by a scratch script outside the worktree:
+
+| run | `:613` `if` | `:613` `binary-expr` | file branches |
+|---|---|---|---|
+| 1 | `[8,0]` | `[8,1]` | 80 / 147 |
+| 2 | `[7,1]` | `[8,1]` | 81 / 147 |
+| 3 | `[7,1]` | `[8,1]` | 81 / 147 |
+
+(`:609` `cond-expr [1,10]` and `:611` `if [19,8]` are equal in the three runs.) The bug's `:560` is today's `:613`
+(`grep -n "known === undefined" src/core/memory-transition.ts` → 613).
+
+**Root cause.** The read order of the refs is the order of their tip shas: `refBaselineCommits` returns
+`[...commits].sort()` of full shas (`src/memory/add.ts:190-197`), and `requireWipSlot` iterates `moved` in that order
+(`src/core/memory-transition.ts:586`, `:608`). The fixture's commits carry the wall-clock date (`commitAll`,
+`test/storage/helpers/git-fixture.ts:110-113`, sets no `GIT_AUTHOR_DATE`/`GIT_COMMITTER_DATE`), so the order of two tips
+changes from run to run. In the one test where two refs changed the same element — `when several refs changed an
+element, the most advanced of their changed copies wins over the decided one` (`main` records `wide-003` `done`,
+`task/y` `in-progress`) — the second copy read is compared with `isMoreAdvancedState`: `done` read first → `false`
+(`[8,0]`), `in-progress` read first → `true` (`[7,1]`). Every other cross-ref test has at most one moved ref per element
+(read: `sed -n 316,436p` and `sed -n 471,535p test/core/memory-wip-limits.test.ts`), and no other suite declares a limit
+it transitions into (`grep -rln "limits:" test` → schema, context and parity suites only).
+
+**Which holder is chosen.** The state an element counts in does not depend on the order: `isMoreAdvancedState` is a
+strict order on (rank, name) (`:650-659`), so the most advanced copy wins in both orders and the test passes in both.
+But two copies in the **same** state tie (`isMoreAdvancedState(s, s)` is `false`), the first one read is kept, and its
+`path` orders the holders in the refusal (`:621-625`). So when an element sits at different paths on two refs that both
+moved it into the limited state (a task file moved to another release directory on one branch), the order of the names
+in the refusal depends on the sha order. Reproduced with the code build in a scratch repository outside the worktree
+(type `shelf`, path `docs/memory/shelves/{release}/{id}.md`, `limits: { in-progress: 2 }`; seed on `main`: `shelf-a`
+`r1` draft, `shelf-m` `r5` in-progress, `shelf-n` `r1` draft; branch `a`: `shelf-a` in-progress at `r1`; branch `b`
+from `main`: `shelf-a` moved to `r9`, in-progress; on `main`, `node dist/cli.js memory submit shelf-n`, then `b`'s tip
+amended with a new message to change its sha), four runs:
+- `a` read first (3 runs): exit 1, `error: WIP limit reached for 'in-progress' on type 'shelf' (limit 2): held by shelf-a, shelf-m. Move one of them out of 'in-progress', then retry. The holders are counted at HEAD …`;
+- `b` read first (1 run): exit 1, the same line with `held by shelf-m, shelf-a`.
+
+The count and the holder set are the same (`command-baseline` 1.8, *Declared baselines*, the WIP row: the commits
+read and "each element counts once" are unchanged); only the order of the names, a REQ-SYS-07 defect of the same read,
+moves. The fix proposed (Decision D1) is in `src/core/memory-transition.ts`: on equal states, the copy whose `path`
+sorts first (UTF-16 code units, as the holder sort) wins, so the copy chosen is a total order of (rank, state, path)
+and never the read order. It reads the same commits and counts the same holders: not a change of `command-baseline`'s
+row, nor of `spec-001`'s `limits` row ("the most advanced of those copies"), which names no path. The fixture fix makes
+the order the tests rely on explicit, so the branch hits are equal on every run.
+
+**bug-221: the suites that time in the parallel pass.** `grep -rln "sampleLatency(\|sampleMarginalLatency(" test` and
+`node -e "console.log(require('./test/latency-suites.cjs'))"` (`LATENCY_SUITES`: `command-latency`,
+`workflow-next-command-latency`, `workflow-next-latency`) give four suites outside the latency pass that time real code
+against a budget. Measured in one targeted run (`npx jest --maxWorkers=2 --json --outputFile=<scratch>/lat.json …`, load
+`6,49` → `5,46`), per test duration from the JSON:
+
+| suite | budget | what else it asserts | test durations |
+|---|---|---|---|
+| `test/core/query-latency.test.ts` | REQ-PERF-02, 4 × p95 < 1,000 ms | P1.5 singleton match, P1.10 trail entries and reasons, non-empty search | 24, 1557, 1128, 1816 ms |
+| `test/mcp/resource-latency.test.ts` | REQ-PERF-04, 2 × p95 < 1,000 ms; the session trend `lastMean < max(firstMean × 3, 5)` | an unknown id is a protocol read failure; 200 fetches on one connection without error, alive at the end | 33, 866, 2532 ms |
+| `test/mcp/server.test.ts` AC (a) | REQ-PERF-04, p95 < 1,000 ms on a small fixture | the document's content and metadata | 19 ms |
+| `test/agent/agent-execute-latency.test.ts` | REQ-PERF-01, p95 < 30,000 ms | every run reaches the spawn (steps 1–14, the 60-document context) | 24,762 ms (20 runs) |
+
+The SARD makes "an otherwise idle machine" a measurement condition of every REQ-PERF target "unless otherwise stated"
+(`sed -n 9,13p docs/02_requirements/03_sard/02_performance-nfr.md`), REQ-PERF-01 included. Rule 5 of
+`test/core/latency-budget-placement.test.ts` already defines what an in-process latency suite is (it times, spawns
+nothing it times, reads the load and calls `inProcessIdleVerdict(`), and `IN_PROCESS_LATENCY_SUITES` already holds one
+(`workflow-next-latency`, task-216).
+
+**AC2 design (Decision D2 (a), D3 (a), D4 (a)).** Each of the four keeps its wall-clock assertions in a latency suite
+and gives what it asserts besides the time to the parallel pass:
+- `test/core/query-latency.test.ts`, `test/mcp/resource-latency.test.ts` and `test/agent/agent-execute-latency.test.ts`
+  join `IN_PROCESS_LATENCY_SUITES` (so `jest.config.js` ignores them and `jest.latency.config.js` selects them, both
+  from `test/latency-suites.cjs`; `plannedRuns` routes a named one to the latency config). Each reads
+  `readLoadAverage()` before and after its sampling and refuses a loaded run with `inProcessIdleVerdict(load,
+  cpus().length)`, a budget assertion counting only on an idle run, as `test/core/workflow-next-latency.test.ts` does.
+  The budgets are unchanged (1,000 ms, 30,000 ms, the trend rule), and their sanity assertions stay with them.
+- `test/mcp/server.test.ts` AC (a) fetches the document once and keeps its content assertions; its p95 goes, because
+  REQ-PERF-04's single-fetch budget is asserted by `resource-latency`'s worst-case fetch on the 1,000-document
+  reference repository (same resource template, larger fixture, same 1,000 ms): the budget moves, it is not loosened.
+- What the three moved suites assert besides the time runs in three new parallel-pass suites, one call each and no
+  clock: `test/core/query-reference-repo.test.ts` (the P1.5 and P1.10 functional clauses on the reference repository,
+  with the leading-comment feature citations that make `scripts/test-report.cjs` count it BDD, as `query-latency` is
+  counted today), `test/mcp/resource-reference-repo.test.ts` (unknown id; 200 fetches on one connection without error,
+  alive at the end) and `test/agent/agent-execute-full-context.test.ts` (one run of the 60-document fixture reaches the
+  spawn instant). They exercise the same `src/` paths with the same fixtures, so `test:coverage` (the parallel run,
+  unchanged: `package.json`, `plannedRuns` and the jest configs' coverage settings do not change) keeps counting what the
+  moved suites covered: the latency pass then holds only sampling loops over code the parallel pass already runs.
+- Why not merging the latency pass into `test:coverage` (D2 (b)): jest has no cross-invocation merge, so `run-tests.cjs`
+  would merge `coverage-final.json` itself through `istanbul-lib-coverage`/`-report` (present only as jest's transitive
+  dependencies, `ls node_modules | grep istanbul`) and enforce the thresholds itself; and the coverage gate would then run
+  the budgets and the idle verdicts, failing on a loaded machine — the dependence AC2's second clause forbids.
+
+**AC classification and what qa pins.** Red runs `npx tsc --noEmit -p tsconfig.json` and `npx jest test/lint
+--maxWorkers=2` before its commit. No new `src/` export: no TS2305 red.
+
+| AC | Class | Why |
+|---|---|---|
+| 1 WIP merge | red-first (with D1 (a)) | the tie case's refusal names `shelf-m, shelf-a` when `b` is read first (reproduced above); the ordered most-advanced case is characterization (passes in both orders today) |
+| 2 latency placement | red-first | four suites time a REQ-PERF budget in the parallel pass today (table above) |
+| 3 coverage | characterization | a gate run at refactor; no test |
+
+- **AC1 — `test/core/memory-wip-limits.test.ts`** (existing file).
+  - A test-local helper `readFirst(first: string, second: string): void` on the describe's `repo`: while
+    `gitOut(repo, ['rev-parse', first]) > gitOut(repo, ['rev-parse', second])` (string comparison of full shas, the
+    order of `refBaselineCommits`, `src/memory/add.ts:196`), check out `second`, `git commit --amend --quiet -m
+    "<its subject> (reorder <n>)"` through the fixture's `git` helper, and check out the branch that was current;
+    at most 64 tries, then `throw new Error('fixture bug: …')`. The message must change on every try (an amend with the
+    same message in the same second gives the same sha). It names the order a test relies on; the number of tries
+    varies, the order read does not.
+  - Replace `when several refs changed an element, the most advanced of their changed copies wins over the decided one`
+    by an `it.each([['main', 'task/y'], ['task/y', 'main']])` of the same scenario: after the commits, on `task/x`,
+    `readFirst(first, second)` (amending `main`'s tip is safe: `task/x` and `task/y` were cut before it; `task/y`'s tip is
+    no ancestor of another ref), then the submit of `wide-005` → `ok: false`, message containing
+    `'(limit 2): held by wide-001, wide-002.'` in both cases (characterization; it makes both arms of the `if` run on
+    every run).
+  - New, red-first: `it.each([['a', 'b'], ['b', 'a']])('an element two refs moved into the state at different paths is
+    named in the same place, whichever ref is read first (read first: %s)')`. Add to the file's `MEMORY_YAML` a type
+    `shelf` with `path: "docs/memory/shelves/{release}/{id}.md"`, `sequence: [draft, in-progress, done]`, `limits:
+    { in-progress: 2 }`, and a doc builder with a `release:` field (the scratch fixture above, its shapes copied: `id`,
+    `type: shelf`, `title: "A shelf"`, `release`, `status`). Commit on the trunk `shelf-a` (`r1`, draft), `shelf-m` (`r5`,
+    in-progress), `shelf-n` (`r1`, draft); branch `a`: `shelf-a` in-progress at `r1`; branch `b` from the trunk: `git rm`
+    `r1/shelf-a.md`, `shelf-a` in-progress at `r9`; back on the trunk, `readFirst(first, second)`; `verb('memorySubmit',
+    repo, 'shelf-n')` → `ok: false`, `CONFLICT`, `exitCodeForResult` 1, message exactly `WIP limit reached for
+    'in-progress' on type 'shelf' (limit 2): held by shelf-a, shelf-m. Move one of them out of 'in-progress', then retry.
+    ${REFS_SENTENCE}` in both cases, the repository unchanged (`expectUnchanged(before)`). Expected red: the `b` case
+    fails with `held by shelf-m, shelf-a` (the scratch output above); the `a` case passes.
+  - If D1 is (b), the tie case is not written and AC1 is characterization only.
+- **AC2 — `test/core/latency-budget-placement.test.ts`** (existing file; red owns it, green does not edit it, T4).
+  - Rule 6, new: a scanned file that times (`classify(path).times`) is the helper, a suite of `LATENCY_SUITES`, or one of
+    the helper's own unit tests in a new `HELPER_UNIT_TESTS: Record<string, string>` (path → reason: synthetic samples,
+    no budget on a measurement of the code): `core/latency-helper.test.ts`, `core/latency-in-process-idle.test.ts`,
+    `core/latency-report-writer.test.ts`, `release-health/latency-report.test.ts`,
+    `cli/fixtures/latency-report-pass/report.fixture.ts`. An `it.each(SCANNED_FILES)` with the failure message naming
+    the remedy ("time it in a suite of IN_PROCESS_LATENCY_SUITES (test/latency-suites.cjs) and keep what it asserts
+    besides the time in the parallel pass"), plus a liveness check that every `HELPER_UNIT_TESTS` entry exists and times.
+    Expected red: four cases fail, `test/core/query-latency.test.ts`, `test/mcp/resource-latency.test.ts`,
+    `test/mcp/server.test.ts`, `test/agent/agent-execute-latency.test.ts`.
+  - The membership pin: `[...IN_PROCESS_LATENCY_SUITES].sort()` equals `['test/agent/agent-execute-latency.test.ts',
+    'test/core/query-latency.test.ts', 'test/core/workflow-next-latency.test.ts', 'test/mcp/resource-latency.test.ts']`
+    (with D3 (b): without the agent-execute suite, and rule 6 gains it as an exemption with its reason). Rule 5's
+    existing `it.each` then holds the new members to `readLoadAverage(` and `inProcessIdleVerdict(`.
+  - The first test's pin `for (const timingSuite of ['core/query-latency.test.ts', 'mcp/resource-latency.test.ts',
+    'mcp/server.test.ts'])` → the first two only, and `expect(classify('mcp/server.test.ts').times).toBe(false)`
+    (red today: it imports the helper).
+  - The three parallel-pass suites are the developer's (new files in green, carrying the moved non-timing assertions);
+    red does not write them.
+
+**Pins that change, found with `grep -rln "latency-suites\|IN_PROCESS_LATENCY_SUITES\|LATENCY_SUITES" test scripts`.**
+`test/core/latency-budget-placement.test.ts` (above); `test/cli/run-tests.test.ts` iterates `LATENCY_SUITES` for
+`plannedRuns` and takes the new members without an edit; `scripts/test-report.cjs` names the latency suites only in the
+summary's prose (`:210-211`); `test/cli/latency-report-pass.test.ts` runs its own fixture config. The latency pass's
+report parser (`parseLatencyReport`, `scripts/release-health/measure.cjs:1317`) matches `^machine: `, `(one window: `
+and `<command>: marginal p95`: the moved suites print, if anything, `describeSamples`/`describeLoad` lines as
+`workflow-next-latency` does, never those forms.
+
+**Files to touch.**
+- `src/core/memory-transition.ts` (D1 (a): the tie rule at `:613` and `requireWipSlot`'s doc comment)
+- `test/core/memory-wip-limits.test.ts` (red)
+- `test/core/latency-budget-placement.test.ts` (red; module doc gains rule 6)
+- `test/latency-suites.cjs` (green: the three members, its doc comment)
+- `test/core/query-latency.test.ts`, `test/mcp/resource-latency.test.ts`, `test/agent/agent-execute-latency.test.ts` (green: load window and idle verdict, headers)
+- `test/mcp/server.test.ts` (green: AC (a) without the p95, header)
+- `test/core/query-reference-repo.test.ts`, `test/mcp/resource-reference-repo.test.ts`, `test/agent/agent-execute-full-context.test.ts` (green, new)
+- `jest.config.js`, `jest.latency.config.js`, `scripts/run-tests.cjs` (green: comments that say the latency suites time spawned processes only)
+- `docs/04_memory/design/specs/spec-015-packaging-publishing.md` (pending amendment, uncommitted)
+
+No `version:` bump: no configuration file changes, the test files and scripts carry none, and the spec revision is
+edited in place (`dl-047`).
+
+**Existing tests of those files, run here** (targeted, `--maxWorkers=2`, no slot needed; the spec amendment in the tree):
+- `npx jest test/core/memory-wip-limits.test.ts` (×3, with coverage, above) → `Tests: 31 passed` each.
+- `npx jest --maxWorkers=2 test/agent/agent-execute-latency.test.ts test/core/query-latency.test.ts test/mcp/resource-latency.test.ts test/mcp/server.test.ts test/core/latency-budget-placement.test.ts`
+  → `Test Suites: 5 passed`, `Tests: 1246 passed` (load `3,81` → `6,43`).
+- `npx jest --maxWorkers=2 test/cli/run-tests.test.ts test/cli/latency-report-pass.test.ts test/core/latency-helper.test.ts test/core/latency-in-process-idle.test.ts test/core/latency-report-writer.test.ts test/memory/element-schema-park-limits.test.ts test/memory/type-document-copies-scoped-warnings.test.ts test/docs/name-resolvability.test.ts test/cli/test-report.test.ts`
+  → `Test Suites: 9 passed`, `Tests: 141 passed`.
+- `npx jest --maxWorkers=2 test/docs test/lint` → `Test Suites: 43 passed`, `Tests: 487 passed`.
+- Not run here: the full suite and `npm run test:coverage` (about 25 minutes each under the lock, `task-349`'s refactor
+  notes: `npm test` from 07:56 to 08:21 UTC); AC3's baseline is the integration branch's last recorded figure,
+  `task-349`'s refactor run on the head merged at `da1f1016c`: `All files | 99.29 | 97.3 | 98.09 | 99.69`. The
+  refactor re-baselines if `main` moves (`git merge --no-edit main`).
+
+**What green and refactor must show (for the review).**
+- AC1: two identical targeted coverage runs (the command of bug-361's step 1, `--maxWorkers=2`) give equal `b` arrays
+  for `src/core/memory-transition.ts` (`diff` of the extracted `branchMap`/`b`), every `:613` arm hit; then the full
+  `npm run test:coverage` once.
+- AC2: `npx jest --listTests | grep -i latency` lists none of the three moved suites; `node -e
+  "console.log(require('./test/latency-suites.cjs'))"` lists them; a targeted coverage run of the three new suites and
+  `test/mcp/server.test.ts`, with `--collectCoverageFrom` on the files the moved suites reach (at least
+  `src/memory/query.ts`, `src/memory/history.ts`, `src/mcp/memory-resource.ts`, `src/core/agent-execute.ts`), against
+  the same run of the four suites as `main` has them, per file and column, not lower;
+  `npm run test:latency` once under the slot, with `WINGFOIL_LATENCY_REPORT=1`, its report still parsed by
+  `parseLatencyReport` (or, on a loaded machine, the refusal lines quoted as the evidence: the in-process bound is half
+  of the 12 cores, `nproc` → 12).
+- AC3: `npm run test:coverage -- --maxWorkers=2` after `waitslot.sh`, > 80 % and each column not below the baseline.
+
+**Decisions for the approver.**
+- **D1 — the WIP merge's tie (AC1).** (a) Fix it in `src/core/memory-transition.ts`: on equal states the copy whose
+  path sorts first wins, so the refusal names the holders in the same order whatever the read order; red-first as above.
+  (b) Fixture only: AC1 is characterization, and the order of names is filed as a new bug. **Recommendation: (a)** — a
+  same-class defect of the read the task fixes (W0-R10), local, with a red that fails deterministically; holders, count
+  and commits read are unchanged.
+- **D2 — how the in-process budgets leave the parallel pass (AC2).** (a) Split: the timing in a latency suite, what the
+  suite asserts besides the time in the parallel pass; `test:coverage` unchanged. (b) Move the whole files and merge the
+  latency pass's coverage into `test:coverage`. (c) Keep each file in both passes and skip its budget tests unless the
+  latency config runs it. **Recommendation: (a)** — no new mechanism (rule 5 already holds an in-process latency suite),
+  and the coverage gate runs no budget; (b) makes the coverage gate depend on the load (above); (c) adds a "which pass
+  am I in" signal to the jest configs that nothing else needs.
+- **D3 — which suites (AC2).** (a) All four in the table, `agent-execute-latency` included: the SARD's idle condition
+  covers REQ-PERF-01, and its file's "holds on a loaded machine too" is not measured (24.8 s for 20 runs at a load near
+  6, a margin; `task-141` saw a 1,000 ms budget fail with a mean margin of the same order). (b) Only the two `bug-221`
+  names and `server.test.ts`'s same-class budget; `agent-execute-latency` stays, listed in rule 6 with its reason.
+  **Recommendation: (a)**, for one rule without exceptions.
+- **D4 — `server.test.ts` AC (a)'s small-fixture p95.** (a) Drop it; the single-fetch REQ-PERF-04 budget is asserted by
+  `resource-latency` on the 1,000-document fixture. (b) Move it into a fourth latency suite. **Recommendation: (a)**:
+  the same budget on a larger fixture already runs in the latency pass; the test keeps its content assertions.
+- **D5 — bug-361's third run-dependent branch.** The bug's note of 2026-10-16 adds `readPathsAtRev`'s failure detail in
+  `src/storage/commit.ts:739-741` (`run.error` vs `run.stderr`, an EPIPE race when git exits 128 at once), outside
+  AC1's file. (a) Out of this task: file it as a new bug (low, `v0.4`) at this gate, and bug-361's closing names it.
+  (b) Include it here. **Recommendation: (a)** — a different file and module, and a race that needs its own design (no
+  test can choose the arm today); AC1 names `src/core/memory-transition.ts` only.
+- **D6 — the `spec-015` §2 amendment** below (not named by an AC): §2 says the parallel run leaves out "the suites that
+  time spawned processes"; after this task it also leaves out the in-process REQ-PERF suites. **Recommendation:**
+  record it at this gate, as prepared.
+
+No contradiction with an approved spec or a ready DL was found: `dl-156` Q1 (a) ("the most advanced wins") and
+`spec-001`'s `limits` row decide the state, not which equal copy's path; `dl-179` is unaffected (the new
+`query-reference-repo` suite carries the feature citations); the approver's ruling of 2026-10-03 (no publish blocked by
+wall-clock noise) is what moves the budgets to the opt-in pass.
+
+### Pending amendments (approver)
+
+- `spec-015-packaging-publishing` (uncommitted in the worktree: §2's `test` bullet and a new *Revision (2026-11-07,
+  `task-357`) — §2 in-process latency suites* note; names only existing files, so no name-resolvability allowlist
+  entry; `npx jest test/docs test/lint --maxWorkers=2` → 43 suites passed with it in the tree):
+  `--reason "Amend spec-015 §2 for task-357 (bug-221): the parallel run leaves out every latency suite, the in-process REQ-PERF suites as well as those that time spawned processes, so no budget in it depends on an idle machine; the test scripts and what test:coverage measures are unchanged."`
+
+**Candidate finding (not filed).** `scripts/run-tests.cjs`'s module comment says `npm run test:latency` is "the
+dev-loop gate, on an idle machine", but no workflow binds it: `grep -rn "latency" .wingfoil/` → no output. Expected: a
+check of `dev-loop.yaml` (or `wave-checks`) runs the latency pass, or the comment says only release-health's Q12 runs
+it (`scripts/release-health/measure.cjs:1542`). Severity: low. With this task the latency pass holds four of the
+repository's REQ-PERF budgets, so a pass nothing runs matters more.
+
+**Risks for the other open `w0` task.** `task-354` (fix, in progress; its branch holds only the start and bug syncs:
+`git -C <task-354 worktree> diff --stat main...HEAD` → four Memory files). Its Implementation Notes name the `*AtRev`
+loaders and `src/core/agent-execute.ts`: `src/core/memory-transition.ts` calls `loadTypeDocumentCopiesAtRevs` at `:594`,
+eight lines above this task's hunk at `:613` (a `label` argument there would be an adjacent conflict, small), and
+`test/agent/agent-execute-latency.test.ts` plus the new `agent-execute-full-context` suite import `agentExecuteFn` from
+`src/core/agent-execute` (an import path `task-354` may move). Whichever merges second runs `git merge --no-edit main`
+and re-runs the two suites.
+
+### Retrospective
+
+<!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
+     reconstructed afterwards. One line per item: what happened, the evidence (a command and what it
+     printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
+     Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
+     here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
