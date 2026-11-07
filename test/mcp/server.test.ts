@@ -10,6 +10,10 @@
  * real `Client` (mirroring `test/mcp/read-only-resources.test.ts`), so the three P5.2.1 acceptance
  * criteria are asserted against exactly what an MCP client sees from the production server — not a
  * private registrar list — and the v0.1 read-only-only channel scope (spec-014 §3) is pinned.
+ *
+ * No latency budget is asserted here (task-357, `bug-221`): AC (a)'s "in under 1 second" is REQ-PERF-04's
+ * single-fetch budget, timed by `test/mcp/resource-latency.test.ts` in the opt-in latency pass
+ * (`test/latency-suites.cjs`), on its 1,000-document reference repository.
  */
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
@@ -17,7 +21,6 @@ import { McpError } from '@modelcontextprotocol/sdk/types.js';
 
 import { WRITE_REFUSAL_MESSAGE } from '../../src/mcp';
 import { createMcpServer } from '../../src/mcp/server';
-import { P95_BUDGET_MS, p95, RUNS, sampleLatency } from '../core/helpers/latency';
 import { commitAll, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
 import { assertFilesUnchanged, attemptEveryResourceWrite, snapshotFiles } from './helpers/channel-enumeration';
 
@@ -102,18 +105,13 @@ describe('task-030 — production MCP server (createMcpServer), spec-014 §2', (
 
   afterAll(() => removeTempDir(root));
 
-  // "in under 1 second" is REQ-PERF-04's budget, so it is measured in REQ-PERF-04's shape — p95 over
-  // >= 20 runs — rather than from one sample (task-154, `bug-012`). Every run's result is the same
-  // document; the content assertions read the last one.
-  it('AC (a): fetching a Memory document returns its full content + id/type/status/title metadata, in under 1 second at p95 over >= 20 runs', async () => {
-    let result: Awaited<ReturnType<Client['readResource']>> | undefined;
-    const samples = await sampleLatency(RUNS, async () => {
-      result = await client.readResource({ uri: 'wingfoil://memory/decision-log/decision-12' });
-    });
-
-    expect(samples).toHaveLength(RUNS);
-    expect(p95(samples)).toBeLessThan(P95_BUDGET_MS);
-    if (!result) throw new Error('no readResource result was recorded');
+  // AC (a)'s "in under 1 second" is REQ-PERF-04's single-fetch budget. It is not timed here (task-357, `bug-221`,
+  // decision D4 (a)): a budget in the parallel pass competes with jest's own workers, and the same 1,000 ms over
+  // the same resource template is asserted by `test/mcp/resource-latency.test.ts` on the 1,000-document reference
+  // repository's worst-case fetch, in the opt-in latency pass on an otherwise idle machine. This test keeps AC (a)'s
+  // content and metadata clauses, on one fetch.
+  it('AC (a): fetching a Memory document returns its full content + id/type/status/title metadata (its 1-second budget: test/mcp/resource-latency.test.ts)', async () => {
+    const result = await client.readResource({ uri: 'wingfoil://memory/decision-log/decision-12' });
     const content = result.contents[0]!;
     expect(content.mimeType).toBe('text/markdown');
     expect('text' in content && content.text).toContain('id: decision-12');

@@ -552,7 +552,9 @@ export const WIP_REFS_SENTENCE =
  *   `sha` counts every copy it holds). The refs are those {@link refBaselineCommits} lists for
  *   `memory add`'s id counter (`dl-101` §2 (a)); a ref that is an ancestor of `sha` changed nothing.
  *   When several refs changed it, the most advanced of their copies wins
- *   ({@link isMoreAdvancedState}), the decided commit's copy not competing;
+ *   ({@link isMoreAdvancedState}), the decided commit's copy not competing; between copies in the same
+ *   state, the one whose `path` sorts first (UTF-16 code units, as the holders are sorted), so the copy
+ *   chosen is a total order of (rank, state, path) and never the read order (task-357, `bug-361`);
  * - otherwise the state commit `sha` records.
  *
  * So a stale branch does not keep a parked holder counted, and an older copy elsewhere does not hide an
@@ -564,7 +566,8 @@ export const WIP_REFS_SENTENCE =
  * Only the type's directory is read, every commit's listing and every distinct blob in one batch each,
  * each blob parsed once (`loadTypeDocumentCopiesAtRevs`; task-274 review F2, the `bug-178` class);
  * one `git merge-base` per ref. A document none of those reads can parse is not counted (task-171's
- * tolerant scan) and is returned as a `W_MEMORY_UNREADABLE` diagnostic, once per file, which the
+ * tolerant scan) and is returned as a `W_MEMORY_UNREADABLE` diagnostic, once per file (of two unreadable
+ * copies of one file, the diagnostic whose message sorts first; the files in path order, task-357), which the
  * caller's success carries as a warning and a refusal carries in `details.issues`, so a limit that may
  * be undercounted says so. Without a declared limit nothing is read and nothing is returned.
  */
@@ -586,9 +589,12 @@ export function requireWipSlot(
   const moved = refs.map((ref, index) => ({ ref, base: bases[index] as string | null })).filter(({ ref, base }) => base !== ref);
   const revs = [...new Set([decided, ...moved.map(({ ref }) => ref), ...moved.flatMap(({ base }) => (base === null ? [] : [base]))])];
 
-  const unreadable: Diagnostic[] = [];
+  // One diagnostic per file: of a file's diagnostics, the one whose message sorts first; the files in path
+  // order. Both by UTF-16 code units, so neither depends on the order the commits were read in (REQ-SYS-07).
+  const byFile = new Map<string, Diagnostic>();
   const onDiagnostic = (diagnostic: Diagnostic): void => {
-    if (!unreadable.some((known) => known.file === diagnostic.file)) unreadable.push(diagnostic);
+    const known = byFile.get(diagnostic.file);
+    if (known === undefined || diagnostic.message < known.message) byFile.set(diagnostic.file, diagnostic);
   };
   const copiesAt = new Map<string, Map<string, WipCopy>>();
   loadTypeDocumentCopiesAtRevs(root, revs, memoryYaml, type, { onDiagnostic }).forEach((copies, index) => {
@@ -601,6 +607,7 @@ export function requireWipSlot(
     }
     copiesAt.set(revs[index] as string, byKey);
   });
+  const unreadable = [...byFile.keys()].sort().map((file) => byFile.get(file) as Diagnostic);
 
   // The decided commit's copy, unless a ref changed the element since the fork.
   const elements = new Map<string, WipCopy>(copiesAt.get(decided));
@@ -611,6 +618,9 @@ export function requireWipSlot(
       if (atBase.get(key)?.state === copy.state) continue;
       const known = changed.get(key);
       if (known === undefined || isMoreAdvancedState(machine, copy.state, known.state)) changed.set(key, copy);
+      // Two copies in the same state tie: the one whose path sorts first wins, so the copy kept — and
+      // where the refusal names it — never depends on the order the refs were read in (REQ-SYS-07).
+      else if (copy.state === known.state && copy.path < known.path) changed.set(key, copy);
     }
   }
   for (const [key, copy] of changed) elements.set(key, copy);
