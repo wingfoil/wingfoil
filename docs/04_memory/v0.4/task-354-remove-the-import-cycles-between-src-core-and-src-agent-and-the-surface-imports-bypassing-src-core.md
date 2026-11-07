@@ -481,6 +481,95 @@ too (bug-317, bug-345)`, the widened scope:
   (`git show --stat dc64f578b` lists the five above only).
 - invisible characters: the `grep -nP` of the prompt over the changed files of each commit → no output (exit 1).
 
+### refactor (developer, 2026-11-07)
+
+**Base.** Head `e242f724a` (the green record) at the start; `git rev-list --count HEAD..main` → `0` at the start and at
+the end of refactor, no merge.
+
+**Change — `cc7f55328`** `refactor(core): task-354 — name the label parameter of the internal readers, point prompt.ts
+at read-only-resources.ts`: the private `workflowsYamlAt` and `rolesYamlAt` of `src/core/loaders.ts` carried the label
+in a parameter named `rev` (renamed `label`; `rolesYamlAt`'s local becomes `file`), `loadWorkflowsYamlAtRev`'s TSDoc
+says the parse-error label is `<label>:.wingfoil/<file>`, and `src/mcp/prompt.ts`'s module comment names
+`./read-only-resources.ts` for `registerReadOnlyResources` (same-class stale pointer in a file this task touches). No
+behaviour change: `npx tsc --noEmit -p tsconfig.json` → no output (exit 0); `npx eslint src/mcp/prompt.ts
+src/core/loaders.ts` → exit 0; `npx jest --maxWorkers=2 test/core/loaders-at-rev.test.ts test/core/loaders-label.test.ts
+test/core/loaders test/directives test/core/at-rev-label-widening.test.ts test/docs/name-resolvability.test.ts
+test/docs/command-surface-specs.test.ts test/lint/control-characters.test.ts test/docs/api-docs.test.ts` →
+`Test Suites: 21 passed, 21 total`, `Tests: 354 passed, 354 total` (with the two pending spec amendments in the tree).
+
+**Gates** (heavy ones after `waitslot.sh`, each exit 0 with no output, `--maxWorkers=2`, foreground or a tracked
+background command; the two pending amendments below in the working tree for every run after 21:18):
+- `npm run -s lint` → exit 0 (before and after `cc7f55328`).
+- `npm run -s docs:api` → exit 0 (before and after `cc7f55328`).
+- `npm run -s typecheck` (both tsconfigs, 20:36:02 → 20:36:43) → exit 0, no output.
+- document parity (`docs.parity`'s ten suites of `.wingfoil/workflows/bindings.yaml` plus `test/docs/api-docs.test.ts`):
+  `npx jest --maxWorkers=2 test/docs/cli-reference.test.ts test/docs/command-surface-specs.test.ts
+  test/docs/commands-parity.test.ts test/docs/enumeration-parity.allowlist.test.ts test/docs/exit-codes-parity.test.ts
+  test/docs/llms-txt.test.ts test/docs/mcp-surface-parity.test.ts test/docs/memory-types-parity.test.ts
+  test/docs/name-resolvability.test.ts test/docs/workflow-md.test.ts test/docs/api-docs.test.ts` → `Test Suites: 11
+  passed`, `Tests: 66 passed, 66 total`. No command, help text or `docs/cli-reference.md` entry changes.
+- `npm test -- --maxWorkers=2` (green 2, 19:56:33 → 20:30:45) → `Test Suites: 564 passed, 564 total`, `Tests: 10496
+  passed, 10496 total`.
+- `npm run test:coverage -- --maxWorkers=2` (20:37:38 → 21:18:22, `Time: 2429.643 s`) → `Test Suites: 564 passed`,
+  `Tests: 10496 passed, 10496 total`; `All files | 99.29 | 97.27 | 98.1 | 99.69` (statements, branches, functions, lines;
+  `coverage/coverage-summary.json` `total` gives the same four). New files: `src/core/surface-reads.ts` and
+  `src/mcp/read-only-resources.ts` 100 / 100 / 100 / 100. `src/mcp/index.ts` now reads functions 44.44 %: it is a
+  re-export barrel, whose getter thunks count as uncalled functions (`bug-021`'s note); see the decision below.
+
+**AC4 by command** (after `npm run -s build`, exit 0, on the tree of `e242f724a`; `cc7f55328` changes no export):
+`sha1sum dist/core/index.d.ts` → `be7bb7bce0ba1f54498b9041e1d622df08146058`, the design's base value;
+`node -e 'console.log(Object.keys(require("./dist/core")).length)'` → `166`; `git diff main -- src/core/index.ts` → no
+output; the sorted runtime keys of `dist/mcp` → 28 names, `DNA_SECTION_URI_TEMPLATE` … `startMcpServer`, identical (`diff`
+→ no output) to the runtime export names of `main`'s `src/mcp/index.ts`, listed by a TypeScript-AST walk of
+`git show main:src/mcp/index.ts` in a scratch directory outside the worktree.
+
+### self-review (developer, 2026-11-07)
+
+Read against `code-review`, `architecture`, `determinism`, `traceability` and `claim-evidence`, over `git diff
+main...HEAD`.
+- **AC1** (red-first) met: `test/core/load-order.test.ts` passes in both full runs above; it fails on `main`'s shape (red
+  `dc64f578b`, four first modules). The one edge that closed the large cycle, `src/memory/audit.ts`'s barrel import,
+  is gone (`grep -n "from '../core'" src/memory/audit.ts` → no output, exit 1; positive case `grep -n "from
+  '../core" src/memory/audit.ts` → l.32 `import { isConfiguredIdentity } from '../core/git-identity';`).
+- **AC2** (red-first) met: `test/lint/import-graph.test.ts` passes (no component with a cycle, no bypass, `RECORDED_DEVIATIONS`
+  empty). Positive case: its planted-source controls (a planted cycle, a planted bypass) still fail as they should, in the
+  same suite.
+- **AC3** (red-first, (c) reclassified red-first by the approver) met: `test/core/loaders-label.test.ts`,
+  `test/cli/head-label.integration.test.ts` and the developer test `test/core/at-rev-label-widening.test.ts` pass; the
+  rewrite is gone (`grep -n "join('HEAD:')\|onHead" src/agent/execute.ts` → no output, exit 1; the positive case: the
+  same `grep -c "onHead\|join(" src/agent/execute.ts` → `6`, the other `join(` calls, so the file was read).
+  `withDistinctWarnings` keeps `rewrite` (D4, `src/validation/warning.ts` unchanged). `ContextRequest.label` never
+  reaches the payload (the `loaders-label` test asserts no `"label"` key and the sha in it).
+- **AC4** (characterization) met: the commands above.
+- **Scope**: `git diff --name-only main...HEAD` lists only the design's files, the four widened ones
+  (`src/memory/query.ts`, `src/agent/discovery.ts`, `test/lint/coverage-scope.test.ts`, the new developer test), red's
+  five, the three spec amendments recorded at the gate, this task file and the bug syncs. `src/core/index.ts`,
+  `src/core/agent-execute.ts`, `src/validation/warning.ts` and `.wingfoil/` are not in it. The name-resolvability allowlist
+  entry was added and removed on the branch, so it is not in the diff either.
+- **Same class**: every caller of a reader at a revision in `src` names its label (the `grep -rnE` of `### green`); the
+  two stale pointers to `src/mcp/index.ts` for `registerReadOnlyResources` in approved specs are prepared as pending
+  amendments below; the one in `src/mcp/prompt.ts` is fixed in `cc7f55328`. Two more in test comments outside the task's
+  files are a candidate finding (reported, not fixed): `test/mcp/helpers/channel-enumeration.ts` l.8 and
+  `test/mcp/read-only-resources.test.ts` l.6 (`grep -rn "registerReadOnlyResources" test --include=*.ts | grep -i index`).
+- **Determinism**: the labels are constants (`'HEAD'`) or the caller's own argument (`state`, `stateRef`); no clock,
+  environment or ordering input.
+- **T4**: `git log --first-parent --no-merges --format=%h dc64f578b..HEAD -- test/core/load-order.test.ts
+  test/core/helpers/load-order-probe.cjs test/lint/import-graph.test.ts test/core/loaders-label.test.ts
+  test/cli/head-label.integration.test.ts` → no output.
+- **Decision for the approver**: `src/mcp/index.ts` is a barrel now but stays measured (not listed in `jest.config.js`'s
+  `collectCoverageFrom` exclusions), at 44.44 % functions; listing it would raise the functions total slightly. Left
+  as is: the gate allows it, and the coverage-scope test was the only file the ruling named.
+
+### Pending amendments (approver)
+
+Prepared in the worktree, uncommitted (`git status --short` → the two spec files), the gates run with them in the tree:
+- `spec-006-core-domain-api` (§3 "MCP exposure of the v0.3 rows" names `src/mcp/read-only-resources.ts`; one sentence
+  in the task-354 Revision note) — `--reason "Name src/mcp/read-only-resources.ts as where registerReadOnlyResources
+  lives since task-354 moved it out of the src/mcp barrel (bug-345)."`
+- `spec-017-workflow-commands-and-state-deduction` (Context: `src/mcp/read-only-resources.ts:28-34` for
+  `src/mcp/index.ts:84-90`; a new Revision note) — `--reason "Follow registerReadOnlyResources to
+  src/mcp/read-only-resources.ts, where task-354 moved it to break the src/mcp import cycle (bug-345)."`
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -493,3 +582,10 @@ too (bug-317, bug-345)`, the widened scope:
   bypasses (`measure.cjs … --at da1f1016c` → `recorded_deviations: 3`); the design's AC2 test does not reuse that rule (D1).
 - design: one `--no-toolchain --offline` measurement took 15 min 48 s (`time` of the run above), too slow to re-check Q07
   inside a phase; the AST walk of `src/` reproduced its cycles and bypasses in about a second.
+- green: the design's list of tests pinning what changes missed `test/lint/coverage-scope.test.ts`, which pins that
+  `src/mcp/index.ts` holds logic; the ruled split made it a barrel and the full suite failed on it (`342b0a06a`: 1 failed /
+  9844), a scope stop and a second green round. Proposal: when a design moves code out of a file, `grep -rln "<file>" test`
+  for tests that pin the file itself, not only its names.
+- green/refactor: the full suite took 15 min (13:01 → 13:16), then 34 min (19:56 → 20:30) and coverage 41 min
+  (20:37 → 21:18) under the shared machine's load, the slot queue behind each run (`ps -eo pid,etime,args` showed task-335
+  and task-345 waiting in `waitslot.sh`).
