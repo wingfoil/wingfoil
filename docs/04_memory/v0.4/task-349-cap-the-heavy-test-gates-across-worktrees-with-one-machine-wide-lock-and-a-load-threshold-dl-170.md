@@ -357,6 +357,36 @@ If D2 is (b), the amendment's `test:report` bullet and the note's mention of it 
   that spawns `scripts/heavy-gate.cjs` or reads git's global config must set its own environment (the AC1 and AC6 tests
   show how).
 
+### design gate (approver, 2026-11-07)
+
+The approver recorded the gate on this branch: `ed8417f14` `wf(tech-spec): amend spec-015-packaging-publishing [approved →
+approved]` (§2 heavy gates, the amendment the design prepared) and `deb70aa9b` `workflow: finalize sw-life-cycle-1-plan
+dev-loop.design@task:task-349-…` with `Approver:` (`git log -2 --format='%h %s'`). Rulings, from that record's `Reason:`:
+
+- **D1** (a): the cap is fixed at one holder; `WINGFOIL_GATE_SLOTS` is not read.
+- **D2** (a): all six heavy gates — `npm test` with no suite filter, `test:coverage`, `test:report`, `build`'s `tsc` step
+  and both `tsc` runs of `typecheck`.
+- **D3** (b), **changed from the design's recommendation**: when `CI=true` the load wait is skipped and the lock is kept.
+  The approver's reason: the load wait has no timeout (D6), so on a runner whose load stays above its cores a job would
+  hang until its own timeout (`grep -n "timeout-minutes" .github/workflows/ci.yml` → no output, so GitHub's default
+  applies; `publish.yml` `gate` declares 45). red pins it: with `CI=true` and the injected load above the cores the gate
+  is acquired at once, with no wait line, and the lock and the trace are written as usual; without `CI` (or with any
+  other value) the load wait stands as designed.
+- **D4** (a): `gate.slot-free` on `green`, `refactor` and `review`, unbound and not evaluated.
+- **D5**: lock and trace under `<os.tmpdir()>/wingfoil-heavy-gate-<uid>`, overridable by `WINGFOIL_GATE_DIR`, as designed.
+- **D6**: a maximum hold time, a liveness probe and FIFO order among waiters stay out of this task; a follow-up
+  decision-log owns them, and the external FIFO slot of the dev-loop stays in use through `w0`.
+- **D7**: accepted — a targeted run's global-setup build stays unlocked (AC2 as written), tracked in D6's follow-up.
+- **D8** (a): identity-free global config, `GIT_CONFIG_NOSYSTEM=1`, an empty `XDG_CONFIG_HOME` and the `GIT_CONFIG_*`
+  injection variables dropped, all set in the jest global setup. The design's candidate finding on
+  `test/storage/helpers/git-fixture.ts` `fixtureGitEnv` (it still lets git read `$XDG_CONFIG_HOME/git/ignore`) is covered
+  by D8: no element; the developer proves it in refactor with a test whose `XDG_CONFIG_HOME` holds a hostile
+  `git/ignore` and records the command and result.
+
+After the gate the prepared allowlist entry was committed alone: `bd26c8f21` `test(docs): name-resolvability allowlist —
+spec-015's scripts/heavy-gate.cjs, planned by task-349` (`npx jest test/docs/name-resolvability --maxWorkers=2` → 11
+passed).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
