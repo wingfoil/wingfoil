@@ -122,8 +122,9 @@ scheme (§4), not hand-edited at publish time.
 - `publish:staging`: the **local-first** entry point (`scripts/publish-staging.*`) that runs the full
   staging→smoke flow (§3) against a Verdaccio instance, usable identically on a dev machine and in CI.
 - Existing `prepack`/`lint` unchanged; `prepack → build` still produces `dist/`. `build` runs its
-  `tsc -p tsconfig.build.json` under the machine-wide heavy-gate lock of `scripts/heavy-gate.cjs`, and so
-  do `test` with no suite filter, `test:coverage` and `test:report`: see the *Revision (2026-11-06) — §2
+  `tsc -p tsconfig.build.json` under the machine-wide heavy-gate lock of `scripts/heavy-gate.cjs` (a gate
+  waits while another holds it and, outside CI (`CI=true` skips the load wait, never the lock), while the
+  1-minute load average is above the number of cores), and so do `test` with no suite filter, `test:coverage` and `test:report`: see the *Revision (2026-11-06) — §2
   heavy gates* note below. `test` is
   `node scripts/run-tests.cjs`: the parallel jest run, which leaves out the suites that time spawned
   processes (`test/latency-suites.cjs`). Those run alone (`jest.latency.config.js`) only when asked
@@ -880,8 +881,8 @@ committed rehearsal transcripts hold none. The pins are `test/cli/staging-rehear
 under one machine-wide lock (`dl-170`, `ready`; Decisions 1–4, Q1 (a), Q2 (C)).** §2 said `build` was unchanged and
 quoted `test:report` as a bare `jest --coverage …`. Each of them is a heavy gate in `dl-170`'s sense, and nothing bounded
 how many worktrees of one machine ran them at the same time. `scripts/heavy-gate.cjs` now holds one lock per machine,
-outside every worktree: a heavy gate waits while another holds it or while the 1-minute load average is above the number
-of cores, says so once on stderr naming the holder's worktree and pid, and takes over a lock whose holder is no longer
+outside every worktree: a heavy gate waits while another holds it or, outside CI (`CI=true` skips the load wait, never the
+lock), while the 1-minute load average is above the number of cores, says so once on stderr naming the holder's worktree and pid, and takes over a lock whose holder is no longer
 running. `test` takes it when no argument names a suite (a targeted run does not), `test:coverage` and `test:report` run
 through `scripts/run-tests.cjs` with `--coverage` and take it the same way, and `build` runs its `tsc` step under it; a
 gate started inside a gate that holds the lock (the jest global setup, a nested build) runs without waiting on it. What
