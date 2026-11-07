@@ -4,7 +4,9 @@
  * given one statistical shape and an honest statement of its reach by
  * `task-154-give-latency-budgets-statistical-shape-guard-says-what` (`bug-012`, `bug-013`, `bug-014`);
  * rule 3 added by `task-248-assert-req-perf-02-s-total-and-marginal-budgets-on-an-idle-machine` (`dl-146`);
- * rule 4 by `task-263-record-the-machine-load-in-the-req-perf-02-latency-pass-and-flag-a-loaded-run` (`bug-276`).
+ * rule 4 by `task-263-record-the-machine-load-in-the-req-perf-02-latency-pass-and-flag-a-loaded-run` (`bug-276`);
+ * rule 6 by `task-357-make-the-coverage-of-memory-transition-s-wip-slot-merge-and-the-in-process-latency-suites-run-independent`
+ * (`bug-221`).
  *
  * **What it enforces — a same-file, textual check.** For every `.ts`/`.cjs` file under `test/` (this
  * file excepted), it reads that file's own source text and asserts two rules, and a third on the
@@ -41,6 +43,12 @@
  *    times no process start (no spawn marker, no spawn helper), and calls `readLoadAverage(` and
  *    `inProcessIdleVerdict(` so a run on a loaded machine is refused rather than counted. It has no
  *    process-start floor, so rules 3 and 4 (which judge one) apply to the spawning suites only.
+ * 6. **No budget in the parallel pass** (task-357, `bug-221`). A file that times is the helper itself, a suite
+ *    of `LATENCY_SUITES` (run alone, only when asked for, on an otherwise idle machine — the SARD's measurement
+ *    condition of every REQ-PERF target), or one of the helper's own unit tests listed in
+ *    {@link HELPER_UNIT_TESTS} with its reason (synthetic samples, no budget on a measurement of the code). So
+ *    no file of `npm test`'s parallel pass asserts a wall-clock budget, and none can fail because the machine
+ *    is loaded; what a latency suite asserts besides the time lives in a parallel-pass suite of its own.
  *
  * **What it does not see.** The check reads one file at a time and follows no import other than the
  * two named above. A spawn reached through any other module is invisible to it: the git calls inside
@@ -112,6 +120,31 @@ const EXEMPTIONS: Readonly<Record<string, string>> = {
     'test/core/workflow-next-latency.test.ts; it runs alone and only when asked for (test/latency-suites.cjs), ' +
     'because both budgets presuppose an idle machine.',
 };
+
+/**
+ * Rule 6: the files allowed to time outside `test/latency-suites.cjs` besides the helper, each the helper's own
+ * unit test with the reason its timing is no budget on a measurement of the code. Paths relative to `test/`.
+ */
+const HELPER_UNIT_TESTS: Readonly<Record<string, string>> = {
+  'core/latency-helper.test.ts':
+    "pins the helper's shapes (the nearest-rank p95, the refusal of fewer than 20 runs, the run-aligned marginal) " +
+    'on synthetic samples; it asserts nothing about an elapsed value, so no load can fail it.',
+  'core/latency-in-process-idle.test.ts':
+    "pins inProcessIdleVerdict on synthetic load windows; it times nothing and asserts no budget.",
+  'core/latency-report-writer.test.ts':
+    'pins reportLatency and its opt-in on synthetic samples; nothing is spawned and nothing is timed.',
+  'release-health/latency-report.test.ts':
+    "pins parseLatencyReport (scripts/release-health/measure.cjs) to latencyReport's format on synthetic samples; " +
+    'nothing is spawned and nothing is timed.',
+  'cli/fixtures/latency-report-pass/report.fixture.ts':
+    "stands in for the REQ-PERF-02 suite in test/cli/latency-report-pass.test.ts's own two-file pass, reporting " +
+    'synthetic samples; not collected by jest.config.js, and it times nothing.',
+};
+
+/** Rule 6's remedy, named in every failure. */
+const REMEDY_PARALLEL_BUDGET =
+  'time it in a suite of IN_PROCESS_LATENCY_SUITES (test/latency-suites.cjs) and keep what it asserts besides the time ' +
+  'in the parallel pass';
 
 /** What to do instead, named in every failure so a hit costs no lookup. */
 const REMEDY_CLOCK = `time through test/${LATENCY_HELPER} (sampleLatency or sampleMarginalLatency, then p95) instead of reading the clock here`;
@@ -225,9 +258,11 @@ describe('latency budgets: one clock, no timed spawn without a documented exempt
     expect(SCANNED_FILES).not.toContain(SELF);
     expect(SCANNED_FILES).toContain(LATENCY_HELPER);
     expect(classify(LATENCY_HELPER)).toMatchObject({ times: true, spawns: false });
-    for (const timingSuite of ['core/query-latency.test.ts', 'mcp/resource-latency.test.ts', 'mcp/server.test.ts']) {
+    for (const timingSuite of ['core/query-latency.test.ts', 'mcp/resource-latency.test.ts']) {
       expect({ timingSuite, ...classify(timingSuite) }).toMatchObject({ times: true, spawns: false });
     }
+    // task-357 (D4 (a)): server.test.ts keeps its content assertions and no budget, so it does not time.
+    expect(classify('mcp/server.test.ts').times).toBe(false);
     expect(classify('cli/program.integration.test.ts').spawns).toBe(true);
     expect(classify('cli/helpers/spawn-cli.ts')).toMatchObject({ spawns: true, times: false });
   });
@@ -272,6 +307,31 @@ describe('latency budgets: one clock, no timed spawn without a documented exempt
     const code = codeOnly(readFileSync(join(TEST_ROOT, relativePath), 'utf-8'));
     expect(code).toContain('readLoadAverage(');
     expect(code).toContain('inProcessIdleVerdict(');
+  });
+
+  it('the in-process opt-in suites are exactly the four in-process REQ-PERF suites (task-357, bug-221)', () => {
+    expect([...IN_PROCESS_LATENCY_SUITES].sort()).toEqual([
+      'test/agent/agent-execute-latency.test.ts',
+      'test/core/query-latency.test.ts',
+      'test/core/workflow-next-latency.test.ts',
+      'test/mcp/resource-latency.test.ts',
+    ]);
+  });
+
+  it.each(SCANNED_FILES)('test/%s asserts no budget in the parallel pass: a file that times is the helper, a latency suite or a helper unit test (rule 6)', (relativePath) => {
+    const { times } = classify(relativePath);
+    const allowed = relativePath === LATENCY_HELPER || LATENCY_SUITES.includes(`test/${relativePath}`) || relativePath in HELPER_UNIT_TESTS;
+    const problems = times && !allowed ? [`test/${relativePath} times in the parallel pass: ${REMEDY_PARALLEL_BUDGET}`] : [];
+    expect(problems).toEqual([]);
+  });
+
+  it('every helper unit test of rule 6 is live: it names an existing file that times and is no latency suite, and gives a reason', () => {
+    for (const [relativePath, reason] of Object.entries(HELPER_UNIT_TESTS)) {
+      expect({ relativePath, exists: existsSync(join(TEST_ROOT, relativePath)) }).toEqual({ relativePath, exists: true });
+      expect({ relativePath, times: classify(relativePath).times }).toEqual({ relativePath, times: true });
+      expect({ relativePath, latencySuite: LATENCY_SUITES.includes(`test/${relativePath}`) }).toEqual({ relativePath, latencySuite: false });
+      expect(reason.trim().length).toBeGreaterThan(0);
+    }
   });
 
   it('rule 3 catches the plain ways of dropping one of the two quantities (guards the guard)', () => {
