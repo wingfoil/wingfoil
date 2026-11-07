@@ -486,7 +486,7 @@ each warning shipped today is pinned:
 | `dna set\|add\|update\|remove --force`, when the whole file was rewritten | `dna.yaml was rewritten as a whole file (--force): comments are not kept, and neither are quoting, flow style, blank lines, line endings or number formatting (1.0 becomes 1)` |
 | `agent execute` without `--role` (`spec-016` §3.2 step 3) | `no --role given and no workflow step to take one from: running as the default role 'developer'` |
 | `agent execute`, per entry of the adapter tree that is not an adapter (`spec-016` §2.1) | `W_ADAPTER_IGNORED (<path>): not an adapter: an adapter is a .yaml file directly inside .wingfoil/agents/built-in/ or .wingfoil/agents/custom/ (spec-016 §2.1)`, or, for a basename outside the ID class, `W_ADAPTER_IGNORED (<path>): not an adapter: its name '<name>' is not an id, characters [a-z0-9-.] only (spec-009 §1), so no agent can select it` |
-| any command, per configuration file with a key its schema does not declare (`spec-009` §2) | `<file>: unknown field(s) ignored: <paths>` — `agent execute` prints each distinct one once, and a `<file>` label naming the commit it read reads `HEAD:` (`spec-016` §3.3) |
+| any command, per configuration file with a key its schema does not declare (`spec-009` §2) | `<file>: unknown field(s) ignored: <paths>` — a `<file>` label naming a commit the command resolved from `HEAD` reads `HEAD:`, never the sha (`bug-317`); `agent execute` prints each distinct one once (`spec-016` §3.3) |
 | `agent execute`, per post-run lookup that fails or reports a value of the wrong type (`spec-016` §2.6) | `adapter '<name>': the usage lookup failed (<cause>): model and tokens recorded as not-reported`, `adapter '<name>': the session lookup failed (<cause>): session recorded as not-reported`, `adapter '<name>': version_args failed (<cause>): agent_version recorded as not-reported`, `adapter '<name>': version_args printed nothing: agent_version recorded as not-reported`, `adapter '<name>': the session lookup's session id is not a non-empty string: recorded as not-reported`, or `adapter '<name>': the usage lookup's <field> is not a non-negative integer: recorded as not-reported` (`model`: `is not a non-empty string`); `<cause>` is `exited <n>`, `timed out after <ms> ms`, `ended by <signal>`, `printed more than 1 MiB on stdout or stderr`, `could not start: <code>` or `printed no JSON` |
 
 **Notices and a payload on stderr** (`spec-016` §3.4, task-228). A command that hands its stdout to a
@@ -1432,3 +1432,11 @@ descriptive titles are long. A reference `<type prefix>-<n>` or a unique prefix 
 `CONFLICT` and lists every candidate (approver design gate 2026-11-01, D1 (b), D2 (a), D3 (a), D4 (a), D5 (a), D6 (a),
 D7 (a), D8 (a), D9 (a), D10 (a), D11 (a)). Edited in place without a supersede or a state change (`dl-047`), pending the
 approver's `memory amend`.
+
+**Revision (2026-11-07, `task-354-remove-the-import-cycles-between-src-core-and-src-agent-and-the-surface-imports-bypassing-src-core`)
+— §6's unknown-field row says every command that resolved `HEAD` labels the file `HEAD:`.** The readers at a revision
+labelled a file with whatever revision their caller passed, so `workflow list`, `show`, `next` and `status`, `agent list`
+and `agent show` printed the warning under the 40-hex sha they had resolved, while `agent execute` rewrote its own
+warnings to `HEAD:` after the fact (`bug-317`). The readers take the label from their caller now, every caller that
+resolved `HEAD` passes `HEAD`, and the rewrite is gone. No exit code and no other text changes. Edited in place without a
+supersede or a state change (`dl-047`), pending the approver's `memory amend`.
