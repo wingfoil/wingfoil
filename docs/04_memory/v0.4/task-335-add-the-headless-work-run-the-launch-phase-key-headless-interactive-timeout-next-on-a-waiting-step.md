@@ -79,3 +79,339 @@ step that only waits. Prerequisite of the print-mode pilot (`release-planning-re
 ## Execution Notes
 
 <!-- Filled by the dev-loop. -->
+
+### design (architect, 2026-11-07)
+
+**Inputs read.** `depends_on: []` (no `dl-015` gate). Base `main` `013640ed8` plus the start commit `ed0bf9ff5` and the
+two bug syncs `c7b9ced96` (`bug-392`) and `8d07e4fe4` (`bug-380`): `git log --oneline -4` → those three on top of
+`013640ed8`. The task's PATH shim was checked first: `command -v wingfoil` → the shim; `wingfoil --version` and
+`node dist/cli.js --version` → both `0.3.2 (013640ed82c8531dc93f730fb73bb52b6281ccec)`. Read: `dl-181`, `dl-183`,
+`dl-171`, `dl-205` (all `ready`), `dl-223` (`ready`, `task-339`'s), `bug-392`, `bug-380`; `spec-003` Layer 2 and
+§ "Diagnostics", `spec-008` §2, §3, §10, §12, `spec-016` §2.2–§3.7, §4.2, §7, `spec-017` §6.3, §8 (all `approved`);
+`.wingfoil/workflows/custom/dev-loop.yaml` 2.3; the code of `src/agent/{schema,manifest,placeholders,execute,launch,
+step,index}.ts`, `src/core/agent-execute.ts`, the `agentExecute` entry of `src/core/index.ts`, `src/workflow/schema.ts`
+`Phase`, `src/core/workflow-diagnostics.ts` (the executor rows), `src/core/workflow-next.ts` (`Step`, `buildStep`,
+`humanNeededLine`), `src/cli/program.ts` (flag registration), `src/storage/builtin-adapters.ts`; `task-354`'s design on
+its branch. No AC contradicts a ratified DL; the points where the ACs leave a choice open are D1–D11 below.
+
+**`dl-205` Q1 (a) — the `launch:` key against the pinned build 0.3.2** (scratch clone of this branch at `8d07e4fe4`,
+outside the worktree, `node_modules` and `dist/` linked from the worktree; nothing committed here). With
+`launch: interactive` on `dev-loop.design`, `launch: headless` on `dev-loop.green` and `launch: any` on
+`dev-loop.review` committed in the clone:
+- `node node_modules/wingfoil-released/dist/cli.js --version` → `0.3.2 (6de2e13c004bbf419acfa7dc4d98d5a7468cd693)`;
+- `… workflow list --format json` → exit `0`, stderr `{"warning":"<sha>:.wingfoil/workflows/custom/dev-loop.yaml: unknown
+  field(s) ignored: phases[1].launch, phases[3].launch, phases[5].launch"}`; the payload's `diagnostics` the same 68
+  `W_WORKFLOW_UNBOUND_TOKEN` as the same command before the change (both outputs saved in the design scratch);
+- `… workflow show dev-loop` → exit `0`, the same one `warning:` line; `… workflow next sw-life-cycle-1-plan` → exit `0`,
+  the same line;
+- `node scripts/check-mcp-registration.cjs <clone>` → exit `0`: `.mcp.json "wingfoil" runs the pinned wingfoil 0.3.2,
+  advertising [prompts, resources, tools] (prompts: 8, resources: 4, tools: 0)` and `the build under development
+  (dist/cli.js) serves [...]; every listed Resource read and Prompt get answered`.
+
+So the pinned build reads a phase that declares `launch` and ignores the key with one warning per read: no break to
+declare, and no `KNOWN_READ_FAILURES` entry or `wingfoil-cli` exception is owed (`dl-205` Q2 does not arise). **No phase
+of this repository gains `launch:` in this task** (D3): `.wingfoil/` changes only in
+`.wingfoil/agents/built-in/claude-code.yaml` (AC4/AC9), which no workflow read loads. The green developer still re-runs
+`npm run check:mcp` and `npm run -s wingfoil -- workflow list` after that file changes, and records them.
+
+**The defects, reproduced on this base.**
+- `bug-380` (AC8, the "before" of its check): `grep -nE "X_cli-cmds\.md:[0-9]"
+  docs/04_memory/design/specs/spec-01[67]-*.md` → four lines, all `spec-016`: l.29 `` (`docs/01_vision/X_cli-cmds.md:216`) ``,
+  l.364 `` | `--role <role>` | `X_cli-cmds.md:216,223` | ``, l.376 `` `--role` is in `X_cli-cmds.md:216` ``, l.421
+  `` the `developer` default of `X_cli-cmds.md:223` ``. The bug's own wider pattern (its Steps to Reproduce, step 1) adds
+  two that the AC's grep misses: `spec-016` l.954 `` the Agent Execution section (`:212-224`) `` and `spec-017` l.1306
+  `` `docs/01_vision/X_cli-cmds.md` (`:163-170`) ``; and `spec-017` l.1308 carries a seventh, `` interactive creation
+  (`:169`) ``, on a line neither grep matches. All seven are replaced (the bug's Expected Behavior: "the citations
+  resolve"), each by `X_cli-cmds.md`'s section heading and row: § "Agent Execution Commands" (the
+  `wingfoil agent execute` row), § "Parameters for Agent Execution" (the `--role` row), § "Pillar 4: Project Workflow
+  Commands" (its `wingfoil workflow` rows, the `workflow create` row). With the prepared amendments in the working tree
+  both greps print nothing (exit `1`).
+- `bug-392` (AC7): `src/agent/execute.ts` l.661–665 refuses at step 12 inside `runPipeline`, before `launch` — the
+  dry-run's `launchPlan` callback is never reached (`src/core/agent-execute.ts` l.76). The test that pins this behaviour
+  today is `test/core/agent-execute.test.ts` "NO_TERMINAL with terminal: required; with a terminal it passes to the
+  plan" (l.145–150): its `run` helper is a dry run unless `real` (l.39–48), so it asserts the dry-run refusal and must
+  change in red (below). The user documents state the refusal as current behaviour: `docs/user-guide.md` l.673–675,
+  `docs/cli-reference.md` l.1842–1844, `docs/agents.md` l.106 (`grep -n "needs a terminal\|refuse a dry run"`).
+- AC2's approver clause **exists already**: `src/agent/execute.ts` l.591 `if (role === APPROVER_ROLE) return coreErr(…
+  "role 'approver' is never executed by an agent")`, at §3.2 step 4, before the agent and the adapter are read, for a
+  step's role and for `--role` alike; it is pinned for the option-less forms (`grep -rln "never executed by an agent"
+  test` → `test/core/agent-execute.test.ts`, `test/cli/agent-execute.integration.test.ts`). What
+  is new is that no launch-kind option relaxes it.
+- AC6: `--next` takes `NextResult.next` whatever its `awaiting` (`src/agent/step.ts` `selectFrontierStep`; `grep -n
+  "awaiting" src/agent/*.ts` → nothing), while `src/core/workflow-next.ts` already computes `Step.awaiting` and the line
+  `workflow next` prints for it (`humanNeededLine`, l.668).
+
+**Commander and the two kind flags** (`npm ls commander` → `commander@15.0.0`; probe in the design scratch, not committed): a
+root `--no-interactive` and a subcommand `--interactive` coexist — `agent execute --interactive` sets the subcommand's
+`interactive: true` and leaves the root's; `agent execute --no-interactive` sets only the root's `interactive: false`;
+but `optsWithGlobals()` merges them with the root winning (`--no-interactive agent execute --interactive` →
+`withGlobals {"interactive":false}`). `src/cli/program.ts` l.279 reads `invoked.opts()`, the command's own options,
+so the flags reach `agentExecuteFn` as `params.headless` / `params.interactive` through `buildParams`' spread of
+`ctx.flags` (`src/cli.ts` l.33). The code never reads `optsWithGlobals()` for them (D4).
+
+**Existing tests of the files this task changes**, before any pin, on a clean tree (the prepared amendments stashed
+for the run and restored after; one jest process, `--maxWorkers=2`, after `waitslot.sh`, slot granted 20:31:08):
+`npx jest --maxWorkers=2 test/agent test/core/agent-execute test/core/workflow-next test/core/workflow-list-show
+test/core/workflow-executor-cadence test/core/workflow-diagnostics test/workflow/schema.test.ts test/cli/agent-execute
+test/storage/builtin-adapter test/core/init-builtin-adapters test/docs/x-cli-cmds test/docs/cli-reference
+test/docs/name-resolvability test/docs/command-surface-specs test/docs/exit-codes-parity test/docs/dry-run-documented
+test/docs/vision-revision-history` → `Test Suites: 40 passed, 40 total`, `Tests: 724 passed, 724 total` (192.6 s).
+
+**Design.**
+- *The phase key (AC1).* `src/workflow/schema.ts`: `export const LAUNCH_KINDS = ['interactive', 'headless', 'any'] as
+  const`, `export type LaunchKind`, and in `Phase` `launch: z.enum(LAUNCH_KINDS).optional()` (no default: the raw value
+  stays, as `mode`'s does). An unknown value is the structural `E_VALIDATION` at `phases[<i>].launch` by construction.
+  `src/core/workflow-diagnostics.ts` `E_PHASE_EXECUTOR_WITHOUT_ROLE`: the field loop of l.240 becomes `['mode',
+  'distinct_from', 'launch']` (D2). `src/core/workflow-next.ts`: `Step` gains `readonly launch: LaunchKind | null`,
+  `buildStep` sets `launch: phase.launch ?? null`; `src/core/workflow-list-show.ts`: `PhaseView` gains the same field,
+  same value (D1). No console line changes.
+- *The request and the parse (AC2, AC5).* `src/core/index.ts` `agentExecute`: `flags` gains `headless` ("launch the
+  agent without a terminal, as a work run; overrides the phase's launch") and `interactive` ("launch the agent in this
+  terminal; overrides the phase's launch"); `options` gains `{ name: 'timeout', valueName: 'duration', description: 'stop
+  the agent after this long: <n>s, <n>m or <n>h, at most 24h (SIGTERM, then SIGKILL 10 s later)' }`.
+  `src/core/agent-execute.ts`: `AgentExecuteParams` gains `headless?: boolean`, `interactive?: boolean`; before the
+  project is read, both → `UsageError('invalid flag combination: --headless cannot be combined with --interactive')`,
+  and `--timeout` parsed by a new leaf module `src/agent/duration.ts` (no import): `export function parseDuration(raw:
+  string): { ms: number; label: string } | { error: string }` with `/^([1-9][0-9]*)(s|m|h)$/`, at most 86 400 000 ms,
+  the two `spec-008` §12 messages → `UsageError`. `AgentExecuteRequest` (`src/agent/execute.ts`) gains `launch?:
+  'interactive' | 'headless'` (the option) and `timeout?: { ms: number; label: string }`.
+- *The waiting step (AC6).* `src/agent/step.ts`: `export function refuseWaitingStep(step: Step): CoreResult<Step>` →
+  `CONFLICT`, message `humanNeededLine(step)` (imported from `../core/workflow-next`, whose `workflowNextAtHead` this file
+  already imports), `details: { step: step.key, instance: step.instance, awaiting: step.awaiting.kind }`; `runPipeline`
+  calls it right after `selectFrontierStep` when `request.element === undefined` (D8).
+- *The kind (AC2, AC3).* `src/agent/execute.ts`, after the adapter is loaded (§3.2 step 7): `export function
+  resolveLaunchKind(declared: LaunchKind | null, option: 'interactive' | 'headless' | undefined, manifest:
+  AdapterManifest): { kind: 'interactive' | 'headless'; warning?: string }` — option, else `declared` when it is
+  `interactive` or `headless`, else `interactive`; the warning `phase '<workflow>.<phase>' declares launch: <declared>;
+  launching <kind> (--<kind>)` only when the option names the other kind than a declared `interactive`/`headless`
+  (the pipeline fills `<workflow>.<phase>`; reported through `reportWarning`). Then step 4: `kind === 'headless' &&
+  manifest.launch.headless === undefined` → `VALIDATION` `adapter '<name>' declares no headless launch`, before
+  `agentCommandFound`. The approver refusal stays where it is (step 4 of §3.2, before the kind), so it precedes every
+  kind rule. `PreparedLaunch` gains `kind` and `timeout?`.
+- *The terminal check and the dry run (AC7).* `runPipeline`'s step 12 applies only to `kind === 'interactive'`.
+  `agentExecutePipeline`'s `launch` callback receives the prepared launch either way; the check moves so that a dry run
+  does not refuse: the pipeline gains a `dryRun: boolean` field on the request (set by `agentExecuteFn` from
+  `isDryRunActive()`), and when the check fails under a dry run it calls `reportWarning('interactive launch needs a
+  terminal on stdin and stdout: a run without --dry-run is refused here')` and continues to the plan. `launchPlan` and
+  `AgentLaunchPlan` do not change (D9).
+- *The headless spawn (AC4).* `src/agent/launch.ts`: `LaunchInput` gains `kind: 'interactive' | 'headless'` and
+  `timeout?: { ms: number; label: string }`; `renderLaunchArgv(manifest, values, kind = 'interactive')` renders
+  `launch.<kind>.args` then `session.assign_args`; `runAgent` passes, for `headless`, `{ cwd: root, env: process.env,
+  stdio: ['ignore', 'pipe', 'inherit'], detached: process.platform !== 'win32' }` and drains `child.stdout` without
+  writing it anywhere (`child.stdout?.resume()`), for `interactive` today's options unchanged (D6). The record is built
+  as today: `result: 'n/a'`; `session.id: output` and `usage.from: output` stay `not-reported` (nothing parses stdout
+  until `dl-182`/`dl-188`'s tasks). On success the operation returns, for `headless`, a value whose stdout payload is
+  `{ "run": <record> }`, and the summary line is a notice on stderr: `renderAgentExecuteStderr` keeps rendering an
+  interactive run on stderr, and a headless run's `{ run }` goes to stdout (the green developer chooses the mechanism:
+  `RecordedLaunch` gains `kind`, and `renderToStderr` returns `undefined` for `headless` after `reportNotice`).
+- *Signals and the time bound (AC4, AC5).* `takeOverSignals(kind)`: interactive keeps `IGNORED = [SIGINT, SIGQUIT]`,
+  `FORWARDED = [SIGTERM, SIGHUP]`; headless `IGNORED = [SIGQUIT]`, `FORWARDED = [SIGINT, SIGTERM, SIGHUP]` (Windows: the
+  subsets that exist, as today). `SignalTakeover` gains `send(signal: NodeJS.Signals): void`, the one forwarding path
+  (pending before attach, `child.kill(signal)` only while `exitCode === null && signalCode === null`), which the
+  listeners and the timer both call. `LaunchHost` gains `timer?: (delayMs: number, fire: () => void) => () => void`
+  (returns the cancel function; default `setTimeout` / `clearTimeout`). With `timeout`, from `onSpawn`:
+  `timer(timeout.ms, () => { expired = true; send('SIGTERM'); cancelGrace = timer(TIMEOUT_GRACE_MS, () =>
+  send('SIGKILL')); })`, both cancelled on `exit`; `export const TIMEOUT_GRACE_MS = 10000`. Step 18: `expired` →
+  `IO` `agent timed out after <label>; run <run-id> recorded`, `details: { run_id, exit_status, timeout: <label>,
+  issues: [{ detail: <summary line> }] }`, before the non-zero-exit branch, whatever `exit_status` is (D5).
+- *The built-ins (AC4, AC9).* `src/storage/builtin-adapters.ts` and, byte for byte, this repository's
+  `.wingfoil/agents/built-in/claude-code.yaml` (`test/storage/builtin-adapter-claude-code.test.ts` l.109 requires the
+  two equal): `claude-code` gains `headless: { args: [ -p, "{bootstrap}", --mcp-config, "{mcp_config_file}" ], output:
+  none }` and `verified_with: "2.1.310 (Claude Code)"`; `codex-cli` gains `headless: { args: [ exec, -c,
+  "{mcp_config}", "{bootstrap}" ], output: none }`, `verified_with` unchanged; the TSDoc and the YAML header comments say
+  where each flag was read (D7). Read here, never run: `claude --version` → `2.1.310 (Claude Code)`; `claude --help`
+  (exit `0`, saved in the design scratch) lists `Usage: claude [options] [command] [prompt]`, `-p, --print  Print
+  response and exit (useful for pipes)`, `--mcp-config <configs...>`, `--output-format <format>  Output format (only
+  works with --print)`, `--session-id <uuid>`, `--resume`, `--permission-mode <mode>`, `--strict-mcp-config`;
+  `codex --version` → `codex-cli 0.145.0`; `codex exec --help` (exit `0`) lists `Usage: codex exec [OPTIONS]
+  [PROMPT]`, `-c, --config <key=value>`, `--json  Print events to stdout as JSONL`, `-s, --sandbox <SANDBOX_MODE>`, and
+  "If not provided as an argument (or if `-` is used), instructions are read from stdin". `prompt.via` stays `arg` for
+  both (§2.2 still refuses `stdin` beside a declared `launch.interactive`). No posture flag (`--permission-mode`,
+  `--sandbox`) is declared: that is `task-339`'s (`dl-223`). AC9's by-hand headless run is not an agent's (D7).
+- *Docs and the vision* (green). `docs/cli-reference.md` (the `agent execute` entry: the three options, the work run,
+  the waiting refusal, the dry-run warning replacing l.1842–1844's refusal); `docs/user-guide.md` l.673–675;
+  `docs/agents.md` l.106 (D10); `docs/01_vision/X_cli-cmds.md`: the `wingfoil agent execute` row names `--headless`,
+  `--interactive` and `--timeout <duration>` (`test/docs/x-cli-cmds.test.ts` "every shipped command's row spells its
+  positional and its options as the CLI registers them"), a `--headless`, `--interactive`, `--timeout` row in
+  § "Parameters for Agent Execution", **Version 1.9 → 2.0**, the date and a `## Revision history` entry; the BDD
+  `P5.3.1-agent-execute.feature` gains the scenarios of AC2–AC6 (the work run, the timeout, the waiting refusal, both
+  flags) under a dated revision header comment, each implemented by the integration tests below.
+- *Import graph.* Every new runtime import follows an edge that exists at `013640ed8`: `src/agent/step.ts` →
+  `src/core/workflow-next.ts` (already l.23), `src/agent/execute.ts` → `src/workflow/schema.ts` (type-only; `schema.ts`
+  imports only `zod` and `src/validation`: `grep -n "^import" src/workflow/schema.ts` → `zod`, `../validation/format`,
+  `../validation/id`),
+  `src/core/agent-execute.ts` → `src/agent/duration.ts` (a leaf). After the merge of `main` that brings `task-354`, the
+  green developer runs `npx jest test/lint/import-graph.test.ts --maxWorkers=2` and records it.
+
+**AC classification and what qa must pin.** Expected reds at the red commit: `npx tsc --noEmit -p tsconfig.json` —
+`TS2305` for each new export a test imports (`LAUNCH_KINDS`, `resolveLaunchKind`, `refuseWaitingStep`,
+`parseDuration`, `TIMEOUT_GRACE_MS`), `TS2353`/`TS2339` for the new fields (`launch` on `Step`/`PhaseView`, `kind`,
+`timeout` on `LaunchInput`, `timer` on `LaunchHost`, `headless`/`interactive` on `AgentExecuteParams`), and `TS2741` in
+the `Step` literal of `test/core/workflow-next-render.test.ts` once `Step` gains `launch` (that file is green's to fix if
+red does not touch it); jest fails on assertions and on runtime `TypeError`s of the missing exports (`isolatedModules`).
+Fixtures mirror this repository's shapes: phases named and laid out as `.wingfoil/workflows/custom/dev-loop.yaml`'s; the
+adapters are the custom fakes of `test/fixtures/agents/` (never a real CLI); every expected command line is copied from a
+real run of the fixture, the producing command in the notes.
+
+| AC | Class | What qa pins (observable · interface · fixture · file) |
+|---|---|---|
+| 1 | red-first | (a) `Workflow.safeParse` of a phase with `launch: interactive \| headless \| any` succeeds and keeps the value; without it `phase.launch === undefined`; `launch: 'batch'` fails at path `['phases', 0, 'launch']`. (b) `loadWorkflowsYaml` on a fixture whose phase declares `launch: batch` throws with `diagnostics` `[['E_VALIDATION', 'phases[0].launch']]` (shape of `workflow-executor-cadence.test.ts` "a structurally invalid cadence …"). (c) a phase with no `role` declaring `mode`, `distinct_from` and `launch` → three `E_PHASE_EXECUTOR_WITHOUT_ROLE`, paths `phases[0].mode`, `phases[0].distinct_from`, `phases[0].launch` in that order, the third message `phase '<name>' declares launch but has no role (it has no executor)`. (d) `workflow next --format json` on a fixture instance: `next.launch` is the declared value, `null` for a phase without the key; `workflow show <w> --format json`: each phase's `launch` likewise. New file `test/core/workflow-launch-key.test.ts`; helpers `makeTempGitRepo`/`writeFixtureFile` (`test/storage/helpers/git-fixture.ts`). The existing `STEP_FIELDS` list of `test/core/workflow-next.test.ts` l.481 gains `'launch'` in the red commit. |
+| 2 | red-first (the approver clause: an existing rule, pinned anew under the new flags) | CLI, fake adapter, no terminal: (a) a phase declaring `launch: interactive` + `--headless` → stderr has exactly `warning: phase '<workflow>.<phase>' declares launch: interactive; launching headless (--headless)`, and the fake's record shows the headless argv (`--headless` present, `fake.yaml`'s `launch.headless.args`); the mirror `launch: headless` + `--interactive` → the mirror warning, interactive argv; a phase with no `launch` + `--headless` → no warning. (b) `agent execute --next --headless --interactive` → exit `2`, stderr `error: invalid flag combination: --headless cannot be combined with --interactive`, also outside a git repository (decided before the project is read). (c) a step whose role is `approver` (or `--element … --role approver`) with `--headless`, and with `--interactive` → exit `1`, `error: role 'approver' is never executed by an agent`, nothing spawned. (d) `agent execute --no-interactive --element … --interactive --dry-run` → exit `0` (the global flag and the command flag do not collide). New `test/cli/agent-execute-launch-kind.integration.test.ts`; fixture from `test/agent/helpers/agent-execute-step-fixture.ts`. |
+| 3 | red-first | (a) a custom adapter that is `fake.yaml` without `launch.headless` (inline in the fixture repository or a new `test/fixtures/agents/custom/fake-no-headless.yaml`), `--headless` → exit `1`, `error: adapter '<name>' declares no headless launch`, `stdout` empty, the fake's record file absent, `git status --porcelain` empty; with its `command` also off `PATH` the same error (it precedes `AGENT_NOT_FOUND`). (b) a phase declaring `launch: any`, no option → interactive argv, no warning; `launch: any` + `--headless` → headless argv, no warning; `launch: headless`, no option → headless argv. Unit: `resolveLaunchKind(declared, option, manifest)` over the 4 × 3 table. Same integration file as AC2, plus `test/agent/launch-kind.test.ts`. |
+| 4 | red-first | Work run with `fake.yaml`: the fake's record shows argv = `launch.headless.args` rendered + `session.assign_args`, and `stdin` `""` although `agent execute`'s own stdin was given text (`WINGFOIL_FAKE_AGENT_STDIN=1`); with `fake-terminal.yaml` (`terminal: required`) the headless run still succeeds without a terminal; `agent execute --format json` stdout is exactly one JSON document `{ "run": <record> }` (the fake's own stdout document is not on it); the committed record has `result: "n/a"`, `exit_status: 0`. Unit (in-process, `LaunchHost.spawn` injected, the `FakeChild` pattern of `test/agent/launch.test.ts`): the spawn options for `kind: 'headless'` are `stdio: ['ignore', 'pipe', 'inherit']` and `detached: true` (POSIX); for `interactive` unchanged; headless forwards `SIGINT`, `SIGTERM`, `SIGHUP` and ignores `SIGQUIT`. Files: `test/cli/agent-execute-headless.integration.test.ts`, `test/agent/launch-headless.test.ts`. The built-ins' new blocks: `parseAdapterManifest` of each shipped entry has `launch.headless.output === 'none'` and the installed copy still equals the shipped one (existing l.109 test, unchanged). |
+| 5 | red-first | Unit, no wall clock: `LaunchHost.timer` injected as a recorder whose `fire` the test calls; a `FakeChild` that (i) exits on `SIGTERM` → record `exit_status: 'signal:SIGTERM'`, result `IO` `agent timed out after 5m; run <id> recorded`, `details.timeout === '5m'`; (ii) ignores `SIGTERM` → after the grace timer (`TIMEOUT_GRACE_MS`, asserted `10000`) fires, `kill('SIGKILL')`, `exit_status: 'signal:SIGKILL'`; (iii) traps `SIGTERM` and exits `0` → the same timeout error, `exit_status: 0`; (iv) exits before expiry → both timers cancelled, the outcome as without `--timeout`. `parseDuration`: `90s` → 90000, `5m` → 300000, `24h` → 86400000; `0s`, `05m`, `1d`, `1.5h`, `''`, `25h` refused with `spec-008` §12's two messages. CLI: exit `2` with those messages, before the project is read; and one run with the real fake (`WINGFOIL_FAKE_AGENT_WAIT=signal`) and `--timeout 1s` → exit `1`, `error: agent timed out after 1s; run <id> recorded`, the record `exit_status: "signal:SIGTERM"` (a real 1 s timer, but no assertion on any duration). Files: `test/agent/launch-timeout.test.ts`, `test/agent/duration.test.ts`, the headless integration file. |
+| 6 | red-first | A fixture instance whose next step awaits: (i) an approval with a carried element in a gate state, (ii) an approval record (an `approval:` phase with no element left to approve), (iii) an `awaits:` party. `agent execute --next` (and `--workflow <instance>`, and `--step <key>` alone) → exit `1`, the `error:` line equal to the line `workflow next` prints for that step in the same fixture (copy it from a real `workflow next` run, e.g. `human needed: approve or reject <id> — routed to <name> <email>`), nothing spawned; with `--element <type>:<id>` the step is launched (fake record present). `--next --headless` on a waiting step → the same refusal and no kind warning (the step is resolved first, `dl-183` Q4 (a)); `--next --headless` on a non-waiting step whose phase declares `launch: interactive` → launched headless with the AC2 warning. Unit: `refuseWaitingStep` on the three `awaiting` shapes → `CONFLICT`, `details.awaiting` `approval`/`approval`/`party`. Files: `test/core/agent-execute-awaiting.test.ts`, `test/cli/agent-execute-awaiting.integration.test.ts`. |
+| 7 | red-first | `agent execute --element <task> --role developer --dry-run` with `fake-terminal.yaml` and no terminal → exit `0`, stdout the plan (`--format json`: `{dryRun: true, subject, paths, run, bootstrap}`, keys unchanged), stderr holds exactly `warning: interactive launch needs a terminal on stdin and stdout: a run without --dry-run is refused here`; the same with `--format console` (the plan as indented JSON, the same warning line); without `--dry-run` the existing `NO_TERMINAL` refusal (the integration row l.180, unchanged). The existing `test/core/agent-execute.test.ts` "NO_TERMINAL with terminal: required; with a terminal it passes to the plan" is rewritten in the red commit: the refusal asserted on a real run (`run(…, HOST, true)`), the dry run asserted to succeed with the warning. A headless dry run prints no terminal warning. File: `test/cli/agent-execute-dry-run-terminal.integration.test.ts` (or the existing integration file's dry-run block). |
+| 8 | characterization at red (its red is the design's grep above, before the approver's amend) | `grep -nE "X_cli-cmds\.md:[0-9]" docs/04_memory/design/specs/spec-01[67]-*.md` prints nothing, and the bug's wider pattern (`X_cli-cmds[.a-z]*.?(:\| \(.?:\|: [^(]*\(.?:)[0-9]`) too. A test in `test/docs/` reading the two files is enough; it passes on first run because the amendment is recorded before red. |
+| 9 | characterization | No test: the Execution Notes record the by-hand headless pass of each built-in that gains `launch.headless` (D7), with the CLI version it ran and what it showed. The structural half — each shipped manifest validates as a built-in and declares `launch.headless` — is AC4's unit pin. |
+| 10 | characterization | The four amendments below, recorded by the approver's `memory amend` before red; qa runs `npx jest test/docs/name-resolvability.test.ts test/docs/command-surface-specs.test.ts test/docs/exit-codes-parity.test.ts test/docs/dry-run-documented.test.ts --maxWorkers=2` on the amended tree. |
+
+**Files the task changes** (green unless marked red): `src/workflow/schema.ts`, `src/core/workflow-diagnostics.ts`,
+`src/core/workflow-next.ts`, `src/core/workflow-list-show.ts`, `src/agent/schema.ts` (TSDoc: `HeadlessLaunch` read from
+v0.4), `src/agent/step.ts`, `src/agent/execute.ts`, `src/agent/launch.ts`, `src/agent/duration.ts` (new),
+`src/agent/index.ts`, `src/core/agent-execute.ts`, `src/core/index.ts`, `src/storage/builtin-adapters.ts`,
+`.wingfoil/agents/built-in/claude-code.yaml`, `docs/cli-reference.md`, `docs/user-guide.md`, `docs/agents.md` (D10),
+`docs/01_vision/X_cli-cmds.md`, `docs/02_requirements/02_bdd/features/p5-interaction/P5.3.1-agent-execute.feature`,
+`test/core/workflow-next-render.test.ts` (the `Step` literal gains `launch: null`, green, if red leaves it); red: the new
+test files above, `test/core/workflow-next.test.ts` (`STEP_FIELDS`), `test/core/agent-execute.test.ts` (the NO_TERMINAL
+test), any new fixture under `test/fixtures/agents/custom/`. Lint and docs gates that name these files (`grep -rln
+"<basename>" test/lint test/docs`): `src/agent/index.ts` and `src/core/index.ts` are named by `test/lint/coverage-scope`,
+`test/lint/coverage-parity`, `test/docs/name-resolvability`, `test/docs/vision-index`,
+`test/docs/req-sec-06-confinement-text` (all as module paths, none pins their content); `docs/cli-reference.md` by
+`test/docs/{cli-reference,user-guide-scaffold,directive-remove-baseline-docs,pages-render,dry-run-documented,llms-txt}`;
+`docs/user-guide.md` by `user-guide-scaffold`, `pages-render`, `llms-txt`; `docs/agents.md` by `llms-txt`;
+`X_cli-cmds.md` by `test/docs/{x-cli-cmds,vision-default-machine-text,memory-store-location-text,vision-index,
+vision-revision-history}`; spec-008 by the parity suites listed in AC10; nothing names the other `src` files.
+
+**Version bumps.** `docs/01_vision/X_cli-cmds.md` 1.9 → 2.0 (its `**Version:**`, the date, a revision-history entry;
+`test/docs/vision-revision-history.test.ts`). No `.wingfoil/*.yaml` configuration file changes (`dna.yaml`,
+`memory.yaml`, `workflows.yaml`, `roles.yaml` untouched; the adapter manifest has no `version:`, and its `format` stays
+`1`: `launch.headless` is an existing optional field). The specs carry no `version:`; their change is the Revision note
+of each amendment. No workflow file changes, so no `dev-loop.yaml` bump.
+
+**Tests that pin what changes** (`grep -rln … test`): `test/core/workflow-next.test.ts` `STEP_FIELDS` (the step key set:
+gains `launch`); `test/core/workflow-next-render.test.ts` (a typed `Step` literal); `test/core/workflow-list-show.test.ts`
+(`toMatchObject` on phases, unaffected by an added key); `test/core/agent-execute.test.ts` l.145 (the dry-run refusal,
+rewritten); `test/cli/agent-execute.integration.test.ts` l.179–184 (the real-run NO_TERMINAL row, unchanged);
+`test/agent/launch.test.ts` (the interactive signal sets and the spawn options, unchanged for `interactive`);
+`test/core/workflow-executor-cadence.test.ts` l.273 ("only dev-loop … declares executor attributes": it filters on
+`mode`/`distinct_from` only, and no repository phase gains `launch`, D3); `test/storage/builtin-adapter-*.test.ts` (do
+not pin argv or `verified_with`, by design, l.8–9); `test/docs/x-cli-cmds.test.ts` (the options of the row);
+`test/docs/cli-reference.test.ts` (the entry's options). No test pins a workflow's phase list or count that this task
+changes.
+
+### Pending amendments (approver)
+
+Prepared in the worktree, uncommitted (`git status --short` → the four spec files and `test/docs/name-resolvability.allowlist.ts`), to be recorded before red:
+- `spec-016-agent-execution` — `--reason "Record task-335's design-gate amendment of spec-016: §2.2 reads launch.headless from v0.4, §2.8 gives the built-ins their headless block, §3.1 adds --headless, --interactive and --timeout, §3.2 refuses a waiting step and resolves the launch kind, §3.3 checks the kind at step 4, runs the work run's stdio, signals and time bound and lets a dry run warn at step 12, §3.5 splits the work run from the verification run, §3.7 adds STEP_AWAITING, NO_LAUNCH_KIND and TIMED_OUT, §4.2 gives a work run result n/a, and the X_cli-cmds.md citations name sections, not lines (dl-181, dl-183, dl-171, bug-392, bug-380)."`
+- `spec-003-workflows-yaml-schema` — `--reason "Record task-335's design-gate amendment of spec-003: Layer 2 gains the phase field launch (interactive, headless or any, default interactive), an unknown value is a structural E_VALIDATION, and E_PHASE_EXECUTOR_WITHOUT_ROLE covers launch (dl-183 Q1 (a))."`
+- `spec-008-cli-grammar` — `--reason "Record task-335's design-gate amendment of spec-008: §12 adds agent execute's --headless, --interactive and --timeout with their usage errors and the waiting-step refusal, and §2's dry-run row lets agent execute warn at the terminal check instead of refusing (dl-183, dl-181, dl-171, bug-392)."`
+- `spec-017-workflow-commands-and-state-deduction` — `--reason "Record task-335's design-gate amendment of spec-017: §6.3 and §8 report a phase's launch on Step and PhaseView, and the Consequences bullet cites X_cli-cmds.md by section, not by line (dl-183, bug-380)."`
+
+Name-resolvability (`a23c91413` lesson): with the four amendments in the working tree, `npx jest --maxWorkers=2
+test/docs/name-resolvability.test.ts` failed on three unlisted findings, `spec-016-agent-execution.md|symbol|NO_LAUNCH_KIND`,
+`|STEP_AWAITING` and `|TIMED_OUT`: §3.7's new upper-case identifiers, which the spec itself calls "this spec's
+identifiers for tests", not code (as `NO_NEXT_STEP` and `NO_TERMINAL` already are). They are added to
+`test/docs/name-resolvability.allowlist.ts` in the same uncommitted change, sorted, with that reason (a `PLANNED` entry
+needs the name literally in a task file, which none of the three is). Then `npx jest --maxWorkers=2
+test/docs/name-resolvability.test.ts test/docs/command-surface-specs test/docs/exit-codes-parity
+test/docs/dry-run-documented test/docs/commands-parity test/docs/sard-state-from-history test/lint/control-characters`
+→ `Test Suites: 7 passed`, `Tests: 73 passed`. The allowlist change is a test file outside Memory: it is committed with
+the amendments' record or by red, not by the approver's `memory amend` (which commits only the spec).
+
+**Decisions for the approver** (each with a recommendation; the prepared amendments follow the recommendations).
+- **D1 — where `agent execute` reads a phase's `launch`.** (a) `workflow next`'s `Step` and `workflow show`'s
+  `PhaseView` gain `launch` (declared value or `null`), amending `spec-017` §6.3/§8 (prepared); (b) the payloads stay as
+  they are and `agent execute` re-reads the phase from the registry. **Recommend (a)**: it is what `dl-183` Action 2
+  lists ("`workflow show`/`next` printing it"), every runner of `--next` (and the UI consumer `dl-183` names) can see
+  the kind it will get, and the deduction already carries the step's executor attributes this way. JSON only; the
+  console lines do not change.
+- **D2 — `launch` on a phase without `role`.** (a) `E_PHASE_EXECUTOR_WITHOUT_ROLE`, as `mode` and `distinct_from`
+  (prepared); (b) accepted silently. **Recommend (a)**: a phase with no role has no executor to launch, and the rule
+  exists for exactly that.
+- **D3 — does any phase of this repository declare `launch:` now?** (a) No (prepared); (b) yes, e.g. `dev-loop.green:
+  launch: headless`. **Recommend (a)**: the default keeps every phase's meaning (`dl-183` Q1), the W0-R1 pilot selects
+  headless with `--headless`, and with the pinned build at 0.3.2 every pinned read would print the "unknown field(s)
+  ignored" warning shown above until the pin reaches 0.4.
+- **D4 — `--interactive` beside `spec-008` §2's global `--no-interactive`.** (a) Keep `dl-183`'s names: a command flag
+  read from the command's own options, its distinction stated in `spec-008` §12 (prepared); (b) rename to `--launch
+  interactive|headless`. **Recommend (a)**: the names are ratified, Commander keeps the two apart (probe above) as long
+  as the code never reads `optsWithGlobals()`, and AC2(d) pins it.
+- **D5 — `--timeout`'s grammar and bound.** (a) `<n>s|<n>m|<n>h`, `n` a positive integer without a leading zero, at
+  most `24h`, a fixed 10 s grace, both launch kinds, the message echoing the value as given, the record unchanged (an
+  agent that handles `SIGTERM` and exits with a code records that code; the expiry shows in the exit `1` message only)
+  (prepared); (b) milliseconds only; (c) a configurable grace. **Recommend (a)**: it is the smallest grammar that a person
+  types and a script can generate, `24h` stays well under Node's timer limit (2^31−1 ms), and `dl-181` Q4 (b) rejected an
+  unmeasured default; a record field for the expiry is `task-337`'s record work if wanted.
+- **D6 — the headless child's stdio and process group.** (a) stdin the null device, stdout piped and drained, stderr
+  inherited, the child in its own session and process group (`detached` on POSIX), so it has no controlling terminal and
+  gets each signal once (prepared); (b) the child in `agent execute`'s process group. **Recommend (a)**: "no terminal"
+  then holds even for a CLI that opens `/dev/tty`, and the double delivery `bug-318` describes for `SIGHUP` cannot arise
+  for a headless run. The cost: a `SIGKILL` of `agent execute` itself (which no handler can see) leaves the agent running;
+  `task-336`'s registry, which records the pid, makes it visible. The step-13 banner is unchanged for both kinds.
+- **D7 — the built-ins' headless blocks and who runs AC9's by-hand pass.** (a) The blocks above, `output: none`,
+  `claude-code` `verified_with` moved to `2.1.310 (Claude Code)` (every flag of the manifest re-read in that version's
+  `--help`), `codex-cli` unchanged at `codex-cli 0.145.0`; the by-hand headless run of each (an `agent execute --headless
+  --element <type>:<id> --role developer` in a scratch project, which only a person may launch: agents launch no agent
+  CLI) is the approver's, before the review gate, its output pasted into the notes by the orchestrator; (b) the blocks
+  ship read from `--help` only, the run deferred to the W0-R1 pilot. **Recommend (a)**: `dl-181` Action 3 makes a
+  by-hand pass the condition for a built-in to gain the block. If the approver prefers (b), `spec-016` §2.8's last
+  paragraph says the run is pending and the review gate checks that.
+- **D8 — the waiting-step refusal's text.** (a) `CONFLICT`, the message the `spec-017` §5.3 line `workflow next` prints
+  for the step (`humanNeededLine`), `details` `step`/`instance`/`awaiting` (prepared); (b) `dl-171`'s illustrative texts
+  (`waiting for <role>: approve or reject <ids>`, `run wingfoil workflow finalize --step <key>`). **Recommend (a)**:
+  `dl-171` (c) asks for "the approval line as the message", and one wording for one state keeps `workflow next` and
+  `agent execute` from drifting; the party line already names `workflow finalize`.
+- **D9 — the dry-run plan.** (a) unchanged keys; the terminal case is a `warning:` line (prepared); (b) the plan gains
+  `warnings` and `launch`. **Recommend (a)**: `bug-392`'s Expected Behavior accepts either; a warning line is how every
+  other dry run reports what the real run would meet (`spec-008` §2), and `task-339` adds the permission fragment to the
+  plan, where a `launch` key can join it.
+- **D10 — `docs/agents.md` l.106**, which states `bug-392`'s refusal as current behaviour and is "aligned by `user-docs`
+  with the approver's confirmation" (AGENTS.md §2). (a) Corrected in this task with the other two documents; (b) left to
+  `user-docs`. **Recommend (a)**: the sentence becomes false when this task merges.
+- **D11 — `spec-008` §10.** The ACs cite "§ 10 `--set`", but nothing of `memory add --set` changes; the prepared
+  amendment leaves §10 as it is and gives `--timeout`'s errors §10's `invalid flag value:` form in §12. **Recommend**
+  accepting that reading.
+
+**What the tasks built on this one must read** (`dl-015`): `task-336` — D6 (stdout piped and drained, stderr inherited:
+it replaces the drain with the line forwarding of `dl-182` Q1 and adds `--log`), the headless success payload
+`{ "run": <record> }` and the stderr summary notice, `spec-016` §7's `agent.execute` Tool sentence still reads "until
+headless launch exists (v1.0)" and is its or `w1`'s to revise; `task-337` — §4.2's `result` row is already amended here
+(its AC3 becomes a characterization), the built-ins declare `output: none` (its AC1/AC5 verify `--output-format json` /
+`codex exec --json` before switching to `output: json`), `verified_with` per D7; `task-339` — the headless blocks carry
+no posture flag, `renderLaunchArgv(manifest, values, kind)` is where its fragment is appended, the dry-run plan is
+unchanged (D9); `task-353` — the spawn's `cwd` is still the root in both kinds, `runAgent`'s option object is the one
+place to change, and `claude -p` skips the workspace-trust dialog ("The workspace trust dialog is skipped when Claude is
+run in non-interactive mode (via -p …)", `claude --help` of 2.1.310), which bears on `bug-500`; `task-355` — `bug-318`'s
+double `SIGHUP` remains for the interactive kind only (D6), and `takeOverSignals(kind)` / `send` is the code it changes;
+`task-356` — `codex-cli`'s headless args reuse the `-c` override, so its `bug-372` observation covers both kinds.
+
+**Risks for the other open `w0` tasks.** `task-354` (green; merges into `main` before this task): shared files
+`src/agent/execute.ts` (it drops `runPipeline`'s `onHead`/`sha` rewrite and passes `'HEAD'` labels at l.440, l.442 and
+l.614; this task edits step 3–4, step 12 and the request — near, not the same lines), `src/core/workflow-next.ts` (its
+l.620–621 label; this task `Step`/`buildStep`), `src/core/workflow-list-show.ts` (its l.374–375; this task `PhaseView`),
+and `spec-008` (its amendment is §6's unknown-field row; this task §2's dry-run row and §12). This task merges `main` at
+the start of red or green (W0-R3), after `task-354`'s merge, so its `HEAD` labels are the base the green code is written
+on; `test/lint/import-graph.test.ts` then gates the new imports. `task-345` (design): likely `src/core/workflow-start-end.ts`,
+`src/workflow/deduce.ts`, `src/core/workflow-list-show.ts` (its `workflow list` warning) and `spec-017` §2–§3 and
+`spec-008` §2; overlap with this task is `src/core/workflow-list-show.ts` (different functions) and `spec-017` /
+`spec-008` (different sections); whichever amendment the approver records second is made on the first's text.
+
+**Candidate findings (not filed).**
+- `docs/04_memory/design/specs/spec-006-core-domain-api.md` l.555 cites `` `docs/01_vision/X_cli-cmds.md:95-98` ``, the
+  `bug-380` class in a spec this task does not touch (`grep -rnE "X_cli-cmds\.md:[0-9]" docs/04_memory/design
+  docs/02_requirements` → that line, plus two in `dl-041` and `dl-042`, which are records). Expected: a section or row
+  citation (`dl-075`). Suggested severity: low.
+- `spec-008` §2 declares `--interactive` a negatable global boolean whose positive form is legal, but only
+  `--no-interactive` is registered: `node dist/cli.js --interactive agent list` → `error: unknown option
+  '--interactive'`, `hint: did you mean "--no-interactive"?`, exit `2` (run outside a repository). Expected: §2's row and
+  the program agree (either the positive form registered, or §2 stating only `--no-interactive`). Suggested severity:
+  low.
+
+### Retrospective
+
+<!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
+     reconstructed afterwards. One line per item: what happened, the evidence (a command and what it
+     printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
+     Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
+     here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
