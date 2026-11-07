@@ -387,6 +387,79 @@ After the gate the prepared allowlist entry was committed alone: `bd26c8f21` `te
 spec-015's scripts/heavy-gate.cjs, planned by task-349` (`npx jest test/docs/name-resolvability --maxWorkers=2` → 11
 passed).
 
+### red (qa, 2026-11-07)
+
+**Red commit:** `3c45dcd75` (`test(cli): task-349 — failing test: …`). T4 is measured from it:
+`git log --first-parent --no-merges --format=%h 3c45dcd75..HEAD -- <the files below>` must stay empty in green and
+refactor. Base: `f0dc7c031` (`git rev-list --count HEAD..main` → 0, no merge). The PATH guard ran first, through the
+task's PATH shim: `wingfoil --version` and `node dist/cli.js --version` both → `0.3.2 (bd26c8f21…)`.
+
+**Files (red's, frozen for green under T4).**
+- New suites: `test/cli/heavy-gate.test.ts`, `test/core/dev-loop-v2-3.test.ts`,
+  `test/directives/testing-heavy-gates.test.ts`, `test/storage/jest-git-isolation.test.ts`.
+- New declarations: `scripts/heavy-gate.d.cts`, `test/git-isolation.d.cts`, and the new exports in
+  `scripts/run-tests.d.cts` (`isHeavyRun`, `gateName`, `runTests`, `RunTestsOptions`). The design listed these
+  under green; the orchestrator moved them to red, where the qa brief puts the declarations of every new export a
+  red test imports. They are red files (T4), declarations only, with no implementation file.
+- Older pins updated to the new contract: `test/cli/run-tests.test.ts` (extended; also pins `test:coverage`),
+  `test/core/workflow-repository-conformance.test.ts`, `test/core/workflow-integration-branch.test.ts`,
+  `test/core/workflow-manual-prose-checks.test.ts`, `test/core/dev-loop-v1-6.test.ts`, `test/cli/build-info.test.ts`,
+  `test/lint/dist-lock.test.ts`, `test/cli/test-report.test.ts`, `test/lint/helpers/typecheck.ts`, plus two the
+  design's list missed, added at the orchestrator's ruling:
+  - `test/lint/typecheck-clean.test.ts` line 38 pinned the old `typecheck` literal beside `typecheckScript()`:
+    with only the helper changed, no `package.json` could satisfy both lines;
+  - `test/cli/publish-pipeline.test.ts` ("declares the build/prepack/test/lint scripts spec-015 §2 names") pinned
+    the old `build` string; only that pin changes, to the heavy-gate build. It now fails (red-first).
+
+**Per AC** (all red-first; time, load, cores, liveness, sleep and log injected; every lock in a `mkdtemp` directory
+with an environment the test builds, never `process.env`).
+| AC | Tests | First failing line in red |
+|----|-------|---------------------------|
+| 1 | `heavy-gate.test.ts`, the "AC 1" blocks: a free lock is acquired with no wait line; the gate directory is created; a live holder gives one wait line, then the gate acquires; a load of 13 on 12 cores gives one line, and the gate acquires at 12; both conditions give one line; a dead holder is taken over; an unreadable lock is taken over; a release by a non-holder is `false`; an unwritable trace gives one line. **D3 (b):** `CI=true` with load 13 is acquired at once, with no line, the lock and the `acquire` record written; `CI=true` with a live holder still waits on the lock; `CI` unset, `CI=false` and `CI=1` keep the load wait. The CLI: nested → exit 3, stderr `''`, lock and trace untouched; no `--` or no gate name → exit 2, no lock. `run-tests.test.ts`: `isHeavyRun` (6 heavy, 11 targeted, the latency suites), `gateName`, `runTests` ×5 | `Cannot find module '../../scripts/heavy-gate.cjs' from 'test/cli/heavy-gate.test.ts'` (suite); `TypeError: (0 , run_tests_cjs_1.isHeavyRun) is not a function` (likewise `gateName`, `runTests`) |
+| 2 | `heavy-gate.test.ts` "AC 2" block: the nested call returns `{ nested: true }` with load 99 on 1 core and writes nothing; a mismatching, dead or absent holder is not nested; `withHeavyGate` hands `run` `WINGFOIL_GATE_HOLDER` = the holder's pid, returns its result and releases; nested, it keeps the holder's lock. Package pins: `test:coverage` (run-tests), `test:report`, `build` (build-info, dist-lock mirror minus the prefix, publish-pipeline), `typecheck` (`typecheckScript()` and typecheck-clean) | run-tests: `Expected: "node scripts/run-tests.cjs --coverage"` / `Received: "jest --coverage"`; test-report: `Received: "jest --coverage --json --outputFile=coverage/jest-results.json"`; build-info and dist-lock: `Received: "tsc -p tsconfig.build.json && node scripts/write-build-info.cjs"`; typecheck-clean: `Received: "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.build.json"` |
+| 3 | `heavy-gate.test.ts` "AC 3" blocks: `GATE_DIR_ENV`/`GATE_HOLDER_ENV`; `gateDir`, `gateLockPath`, `gateTracePath`; the exact `acquire`/`release` records (keys `v,event,gate,pid,worktree,start,waited_ms` and `v,event,gate,pid,worktree,start,end,status`, the same `start`, `end` after it); `status: null` on a signal; `waited_ms` a non-negative number; a `takeover` (keys `v,event,gate,pid,worktree,at,stale`, `stale` keys `pid,worktree,gate,start`) is recorded before the taker's `acquire`; a nested call adds no line; no undeclared key | `Cannot find module` (as AC 1) |
+| 4 | `dev-loop-v2-3.test.ts` (7 red-first tests, 1 characterization test that passes: phase order, no error); conformance (three `gate.slot-free` rows: `phases[3].checks.pre[0]`, `phases[4].checks.pre[0]`, `phases[5].checks.pre[4]`), integration-branch and manual-prose (65 → 68), dev-loop-v1-6 (review `checks.pre` gains `gate.slot-free` last) | v2-3: `- Expected - 3` / `+ Received + 1` on `checks.pre`, `Expected: >= 2.3` / `Received: 2.2`; conformance `- Expected - 15`; integration-branch and manual-prose `Expected: 68` / `Received: 65`; v1-6 `- Expected - 1` |
+| 5 | `testing-heavy-gates.test.ts` (5 red-first tests; the roles.yaml binding of `testing` to developer, qa and reviewer is a characterization test and passes) | `Expected substring: "T5 — Heavy gates run attached and under the lock"`; version `Expected: >= 1004` / `Received: 1003` |
+| 6 | `jest-git-isolation.test.ts`. In the worker: `GIT_CONFIG_NOSYSTEM=1`, no injection variables, `GIT_CONFIG_GLOBAL` = `<WF_GIT_ISOLATION_DIR>/gitconfig` holding `ISOLATED_GLOBAL_CONFIG`, `XDG_CONFIG_HOME` = `<…>/xdg` and empty, `git config --global --list` → `user.useconfigonly=true` only. `isolatedGitEnv` is pure, drops the 4 injection variables and keeps identity and `PATH`; `git status --porcelain` prints `''` under the hostile environment and `?? a.txt` under the isolated one | `Cannot find module '../git-isolation.cjs' from 'test/storage/jest-git-isolation.test.ts'` (suite) |
+
+**Red-phase interpretations** (details the design leaves open, accepted by the orchestrator; green implements them as
+pinned):
+- `runTests({ args, env, spawn, gate })`: `gate(options, run)` has `withHeavyGate`'s shape, with `options` carrying
+  `gate: gateName(args)` and `env`; `run(childEnv)` returns the exit status. `spawn(jestArgv, env)` returns one jest
+  run's exit status (`null` on a signal). `runTests` resolves to the first non-zero status, or 0, and a failing
+  parallel run stops the latency pass.
+- `gateDir`'s formula is pinned with a `mkdtemp` directory as `tmpdir` (`join(dir, 'wingfoil-heavy-gate-7')`), not
+  the literal `/t`, so it holds whether or not `gateDir` creates the directory. An empty `WINGFOIL_GATE_DIR` falls
+  back, and `gateDir({})` = `<os.tmpdir()>/wingfoil-heavy-gate-<uid>`.
+- With a live holder and a load above the cores together, exactly one wait line, in one of the three declared forms
+  (the lock reason, the load reason, or both joined by ` and `); the design does not fix which conditions the first
+  poll sees.
+- A takeover of an unreadable lock is pinned by one line starting `heavy gate <gate>: took over the lock <lockPath>`
+  and ending `(dl-170).`, and a `takeover` record with the declared keys; its `stale` value is not pinned (there is no
+  pid or worktree to name).
+- An unwritable trace is pinned as exactly one log line on an acquire that still succeeds.
+
+**Runs.**
+- `npx tsc --noEmit -p tsconfig.json` → exit 0, no diagnostic (with the three declarations in place).
+- `npx eslint` on every changed `.ts`/`.d.cts` → no error.
+- `npx jest test/cli/heavy-gate.test.ts test/cli/run-tests.test.ts test/core/dev-loop-v2-3.test.ts
+  test/directives/testing-heavy-gates.test.ts test/storage/jest-git-isolation.test.ts
+  test/core/workflow-repository-conformance.test.ts test/core/workflow-integration-branch.test.ts
+  test/core/workflow-manual-prose-checks.test.ts test/core/dev-loop-v1-6.test.ts test/cli/build-info.test.ts
+  test/cli/test-report.test.ts test/cli/publish-pipeline.test.ts --maxWorkers=2` → `Tests: 44 failed, 268 passed`,
+  12 suites failed. Failed/passed per file: dev-loop-v2-3 7/1, testing-heavy-gates 5/1, run-tests 25/5, build-info
+  1/23, test-report 1/45, publish-pipeline 1/81, conformance 1/15, integration-branch 1/30, manual-prose 1/47,
+  dev-loop-v1-6 1/20; heavy-gate and jest-git-isolation fail to load (Cannot find module).
+- `npx jest test/lint --maxWorkers=2` → `Test Suites: 2 failed, 11 passed, 13 total`, `Tests: 2 failed, 151
+  passed, 153 total`. The two are the red-first pins of the package.json contract: dist-lock "the build the setup
+  composes still mirrors…" and typecheck-clean "declares `npm run typecheck`…". typecheck-clean's "zero
+  diagnostics" tests pass.
+- **Satisfiability.** In a scratch clone outside the worktree, throwaway prototypes of the design (the lock script,
+  the git isolation and its global-setup wiring, the `run-tests.cjs` exports, the four package.json scripts,
+  dev-loop 2.3 with the design's token, a minimal T5 clause, all committed there) made the same suites plus
+  `test/lint/dist-lock.test.ts` pass: `Test Suites: 12 passed`, `Tests: 292 passed`. Nothing of the prototypes is in
+  this branch.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
