@@ -30,7 +30,7 @@
     "provenance": true
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json && node scripts/write-build-info.cjs",
+    "build": "node scripts/heavy-gate.cjs build -- tsc -p tsconfig.build.json && node scripts/write-build-info.cjs",
     "prepack": "npm run build",
     "prepublishOnly": "npm run build && npm test && npm run lint",
     "publish:staging": "node scripts/publish-staging.cjs",
@@ -38,11 +38,11 @@
     "check:audit": "npm audit --omit=dev --audit-level=high",
     "check:audit:all": "npm audit --audit-level=high",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.build.json",
+    "typecheck": "node scripts/heavy-gate.cjs typecheck -- tsc --noEmit -p tsconfig.json && node scripts/heavy-gate.cjs typecheck -- tsc --noEmit -p tsconfig.build.json",
     "docs:api": "typedoc --options typedoc.json",
     "test": "node scripts/run-tests.cjs",
-    "test:coverage": "jest --coverage",
-    "test:report": "jest --coverage --json --outputFile=coverage/jest-results.json",
+    "test:coverage": "node scripts/run-tests.cjs --coverage",
+    "test:report": "node scripts/run-tests.cjs --coverage --json --outputFile=coverage/jest-results.json",
     "test:latency": "jest -c jest.latency.config.js",
     "test:no-identity": "node scripts/test-no-identity.cjs",
     "wingfoil": "node node_modules/wingfoil-released/dist/cli.js",

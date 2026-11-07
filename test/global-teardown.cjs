@@ -1,13 +1,18 @@
 'use strict';
 /**
- * Jest `globalTeardown` — two duties, chained so that one cannot skip the other:
+ * Jest `globalTeardown` — three duties, chained so that one cannot skip the other:
  *
- * 1. Release the `dist/` lock `test/global-setup.cjs` took (bug-095, task-146). Only the run holding
+ * 1. Remove the run's git isolation directory `WF_GIT_ISOLATION_DIR` (`bug-446`, task-349), the one
+ *    `test/global-setup.cjs` created in this process: only a directory whose name carries this process's
+ *    pid (`wf-git-isolation-r<pid>-…`) is removed, so a child jest that inherited the parent's variable never
+ *    removes the parent's. A failure to remove it is reported, never fatal.
+ *
+ * 2. Release the `dist/` lock `test/global-setup.cjs` took (bug-095, task-146). Only the run holding
  *    the lock releases it: `releaseDistLock` removes the lock only when it records this process's pid.
  *    A run killed before reaching this point leaves a lock whose pid is dead, and the next run takes
  *    it over. It runs in a `finally`, so a failing sweep (e.g. an unreadable temp dir) never leaves
  *    the lock held.
- * 2. Report, by count, the fixture directories this run — and runs no longer alive — left behind,
+ * 3. Report, by count, the fixture directories this run — and runs no longer alive — left behind,
  * and remove them (`bug-064-fixture-temp-dirs-leak-with-no-aggregate-visibility`, task-152).
  *
  * `removeTempDir` (`test/storage/helpers/git-fixture.ts`) never throws: when it cannot remove a
@@ -30,9 +35,10 @@
  */
 const { readdirSync, rmSync } = require('node:fs');
 const { tmpdir } = require('node:os');
-const { join } = require('node:path');
+const { basename, join } = require('node:path');
 
 const { distLockPath, isPidAlive, releaseDistLock } = require('./dist-lock.cjs');
+const { ISOLATION_DIR_PREFIX } = require('./git-isolation.cjs');
 
 /** A tagged fixture directory name: `wf-storage-r<pid>-…`, capturing the pid. */
 const TAGGED_FIXTURE = /^wf-storage-r([1-9][0-9]*)-/;
@@ -153,9 +159,25 @@ function teardownRun({ tag, pid, tmpRoot, isAlive = isPidAlive }) {
   return lines.length > 0 ? lines.join('\n') : null;
 }
 
+/**
+ * Remove the git isolation directory `dir` when this process created it (its name starts with
+ * `wf-git-isolation-r<pid>-`); returns a report line when it could not be removed, else `null`.
+ *
+ * @param {string | undefined} dir - `WF_GIT_ISOLATION_DIR`.
+ * @param {number} pid - The current process id.
+ * @returns {string | null}
+ */
+function removeGitIsolation(dir, pid) {
+  if (!dir || !basename(dir).startsWith(`${ISOLATION_DIR_PREFIX}${pid}-`)) return null;
+  const unremoved = removeAll([dir]);
+  return unremoved.length > 0 ? `git isolation teardown: could not remove ${dir}` : null;
+}
+
 /** The jest `globalTeardown` entry point: one self-contained async function, easy to chain. */
 module.exports = async () => {
   try {
+    const isolationReport = removeGitIsolation(process.env.WF_GIT_ISOLATION_DIR, process.pid);
+    if (isolationReport) console.warn(isolationReport);
     const report = teardownRun({ tag: process.env.WF_FIXTURE_RUN_TAG, pid: process.pid, tmpRoot: tmpdir() });
     if (report) console.warn(report);
   } finally {
@@ -167,3 +189,4 @@ module.exports.formatSweepReport = formatSweepReport;
 module.exports.sweepDeadRunDirs = sweepDeadRunDirs;
 module.exports.formatDeadRunReport = formatDeadRunReport;
 module.exports.teardownRun = teardownRun;
+module.exports.removeGitIsolation = removeGitIsolation;
