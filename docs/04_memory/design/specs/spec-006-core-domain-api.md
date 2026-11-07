@@ -47,6 +47,12 @@ text / JSON-RPC response). `src/storage` (git-backed file I/O) and `src/memory`/
 `src/workflow` (per-pillar rules, e.g. the state machines in `memory.yaml`) sit *underneath* `src/core`
 and are never imported directly by `src/cli` or `src/mcp`.
 
+The few read primitives a surface still needs of its own — the project root of the `bin` entry point, the
+build stamp and the template names of `wingfoil init`'s help, and the raw reads of the MCP Memory Resources and
+role Prompts — reach it through `src/core/surface-reads.ts`, which re-exports them from `src/storage` and
+`src/memory` and is not part of the `src/core` barrel. No runtime import cycle exists in `src`, and a test
+over the sources enforces both rules (`bug-345`).
+
 ```
  wingfoil (CLI, src/cli)        MCP client (agent, src/mcp)
         |                                |
@@ -932,3 +938,10 @@ beside its referrer check, the "working tree, deviating" row is removed, and the
 are read at names `77749a0b2` for this read. The working tree only words its
 refusal (the `command-baseline` directive's rule: the working tree may explain a refusal, never decide it). Edited in place without
 a supersede or a state change (`dl-047`), pending the approver's `memory amend`.
+
+**Revision (2026-11-07, `task-354-remove-the-import-cycles-between-src-core-and-src-agent-and-the-surface-imports-bypassing-src-core`)
+— §1 names the door the surfaces' remaining reads take, and the no-cycle rule.** Six surface imports reached
+`src/storage` and `src/memory` directly, against this section, and two runtime import cycles ran through `src`,
+one of them leaving `CORE_MODULES` operations without their function by load order (`bug-345`, `bug-470`,
+`bug-317`). The surfaces now import those reads from `src/core/surface-reads.ts`; the barrel's exports are
+unchanged. Edited in place without a supersede or a state change (`dl-047`), pending the approver's `memory amend`.
