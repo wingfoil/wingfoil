@@ -14,7 +14,8 @@
  * 1. every negated `collectCoverageFrom` entry is a literal file path — no glob — so the review can
  *    read the list, and a new `index.ts` that nobody adds to it is MEASURED rather than hidden;
  * 2. every such path exists and is a barrel by {@link barrelViolations}'s rule;
- * 3. `src/core/index.ts` and `src/mcp/index.ts` are matched by an include entry and by no exclusion.
+ * 3. `src/core/index.ts` is matched by an include entry and by no exclusion (`src/mcp/index.ts` was too until
+ *    task-354 made it a barrel).
  *
  * Deterministic by construction: a fixed file list, a pure AST walk of each file, and Node's own glob
  * matcher — no clock, no network, no subprocess.
@@ -29,7 +30,10 @@ const REPO_ROOT = join(__dirname, '..', '..');
 const jestConfig = require(join(REPO_ROOT, 'jest.config.js')) as { collectCoverageFrom?: string[] };
 
 /** The two `index.ts` files `bug-021` and this task found holding logic. */
-const LOGIC_INDEX_FILES = ['src/core/index.ts', 'src/mcp/index.ts'];
+// `src/mcp/index.ts` left this list when task-354 (`bug-345`) moved `registerReadOnlyResources` to
+// `src/mcp/read-only-resources.ts`: it is a re-export barrel now. It stays measured all the same, since
+// `jest.config.js` does not list it.
+const LOGIC_INDEX_FILES = ['src/core/index.ts'];
 
 /** Characters that make a `collectCoverageFrom` entry a pattern rather than a literal path. */
 const GLOB_CHARS = /[*?[\]{}()!]/;

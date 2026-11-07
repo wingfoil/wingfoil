@@ -556,12 +556,19 @@ export function loadMemoryDocumentsAtCommit(
  * `null` when that commit does not hold `relativePath` as a file. Like its working-tree counterpart,
  * this single-file read throws when the frontmatter does not parse.
  *
+ * @param label - How errors name the revision (`<label>:<path>`); `rev` as given by default. A caller that resolved
+ *   `HEAD` itself and passes the sha passes `'HEAD'` (task-354, `bug-317`).
  * @throws `RevisionError` when `rev` is malformed or names no commit; `ValidationError` when the
  *   frontmatter does not parse.
  */
-export function loadMemoryDocumentSummaryAtRev(root: string, rev: string, relativePath: string): MemoryDocumentSummary | null {
+export function loadMemoryDocumentSummaryAtRev(
+  root: string,
+  rev: string,
+  relativePath: string,
+  label: string = rev,
+): MemoryDocumentSummary | null {
   const raw = readPathsAtRev(root, resolveRevision(root, rev), [relativePath])[0] as string | null;
-  return raw === null ? null : refuseNewerElement(parseMemoryDocument(raw, relativePath, `${rev}:${relativePath}`));
+  return raw === null ? null : refuseNewerElement(parseMemoryDocument(raw, relativePath, `${label}:${relativePath}`));
 }
 
 function asStringArray(value: unknown): string[] {

@@ -200,7 +200,7 @@ function uncommittedDocumentPath(root: string, memoryYaml: MemoryYaml, id: strin
 function recordedIdAt(root: string, sha: string, path: string): string | undefined {
   let id: unknown;
   try {
-    id = loadMemoryDocumentSummaryAtRev(root, sha, path)?.frontmatter.id;
+    id = loadMemoryDocumentSummaryAtRev(root, sha, path, 'HEAD')?.frontmatter.id; // `sha` is HEAD's (task-354)
   } catch {
     // Explain-only: a document HEAD holds but cannot be read records no id to name.
     return undefined;
