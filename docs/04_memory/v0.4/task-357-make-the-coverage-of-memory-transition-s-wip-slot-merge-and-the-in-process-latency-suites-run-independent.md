@@ -509,6 +509,60 @@ test/core/latency-budget-placement.test.ts` → no output.
 None: `spec-015` §2 was amended at the design gate (`164aa6274`); this phase edits no element past its first state
 other than the bug status syncs.
 
+### review fixes (developer, 2026-11-07)
+
+The independent review returned two should-fix findings, both text only (no code, no tests). Base unchanged
+(`git rev-list --count HEAD..main` → `0`); PATH guard through the task's PATH shim → `0.3.2 (d3310791635c…)` on both
+builds.
+
+- **F1, the bugs of decisions D5 and D7 named by id.** D5 (a): the run-dependent `readPathsAtRev` failure detail in
+  `src/storage/commit.ts`, which `bug-361`'s note of 2026-10-16 had filed under it, is
+  `bug-509-the-failure-detail-of-readpathsatrev-s-batched-git-cat-file-spawn-reaches-its-run.stderr-arm-in-some-runs-only-an-epipe-race-when-git-exits-at-once-so-the-coverage-of-src-storage-commit.ts-differs-between-identical-runs`. D7: the latency pass that no workflow gate runs, and that `npm run test:latency`
+  runs as a bare jest outside the lock (seen in the refactor's first latency run), is
+  `bug-510-no-workflow-gate-runs-the-latency-pass-and-npm-run-test-latency-runs-a-bare-jest-outside-the-machine-wide-heavy-gate-lock-so-the-req-perf-budgets-moved-there-are-checked-only-by-release-health`. Both live on `ingest/l1-design-followups`, merged into `main` before this task. `bug-361` gets a note
+  saying that its third branch moved to `bug-509` at this task's design gate, so its Expected Behavior for the WIP-slot
+  merge is met here, and its `### Retrospective` is filled (pending amendment below).
+- **F2, `bug-361`'s step 4 (`:468`, the `ValidationError` catch).** It is `src/core/memory-transition.ts:521` today
+  (`if (!(error instanceof ValidationError)) throw error;`). It is never hit, the same in every run, so it is not
+  run-dependent: the refactor's `npm run test:coverage` → `memory-transition.ts | 99.13 | 98.67 | 100 | 100 | 236,521`;
+  `coverage/lcov.info` → `BRDA:521,41,0,0`, `BRDA:521,41,1,25`; `bug-361`'s note of 2026-10-27 reports 468 uncovered in
+  both runs it cites. Stated in the same `bug-361` amendment.
+
+- **C2 (the reviewer's candidate, sent by the orchestrator as same class, W0-R10): reproduced and fixed, code change
+  `4ce4ebcf5` (`fix(core): task-357 — WIP-limit diagnostics in path order, one per file by message order, whatever the
+  read order (bug-361, review C2)`), so it needs a re-review.** `requireWipSlot` kept the first `W_MEMORY_UNREADABLE`
+  diagnostic seen per file and listed them in read order (`revs`: the decided commit, then the moved refs in sha order).
+  New test file of mine, `test/core/memory-wip-unreadable-order.test.ts` (red's files untouched): each case in both
+  read orders, the order fixed by amending both tips as in `memory-wip-limits`: two refs adding one unreadable document
+  each (a refusal's `details.issues`, and a success's warnings), and two refs holding one unreadable path with other
+  bytes and another parse error. Against the committed code (`git show HEAD:src/core/memory-transition.ts` copied
+  into the tree for one run, then the fix restored) → `Tests: 4 failed, 2 passed, 6 total`: `read first: a` lists
+  `card-zzz.md` before `card-aaa.md`, and the same-path cases name different reasons in the two orders. Fix: of a
+  file's diagnostics the one whose message sorts first is kept, the files sorted by path (UTF-16 code units).
+  `npx jest --maxWorkers=2 test/core/memory-wip-unreadable-order.test.ts test/core/memory-wip-limits.test.ts` →
+  `Tests: 40 passed` (twice); the other suites naming `requireWipSlot` or a `limits:` block (`grep -rln
+  "requireWipSlot\|limits: {" test`, five suites) → `Tests: 104 passed`. Two identical coverage runs of the two WIP
+  files on `memory-transition.ts` → `diff` of the `branchMap`/`b` dumps prints nothing, `87 / 153` branches each,
+  `:597 if [21,3]`, `:597 binary-expr [24,5]` (the new rule), `:620 if [11,3]`, `:623 if [1,2]` (the merge).
+- **Seen while reproducing C2, outside this task's files: a candidate finding, not fixed.** Two different paths holding
+  the **same bytes** (one blob) on two refs: `loadTypeDocumentCopiesAtRevs` (`src/memory/query.ts`) parses each blob
+  once and reports it once ("once per blob"), under the path read first, so only one of the two paths is named and
+  which one depends on the read order. The first draft of the new test (both documents with the same content) showed
+  it: `read first: a` named only `card-zzz.md`, `read first: b` only `card-aaa.md`. Expected: every unreadable path
+  named. Severity suggested: low.
+- **Gates after the fix**, with the `bug-361` amendment in the tree: `waitslot.sh` (slot 14:03:49 UTC; `ps` showed no
+  heavy gate before it), `npm run build` → 0, `npm run test:coverage -- --maxWorkers=2` → `Test Suites: 559 passed`,
+  `Tests: 10444 passed`, `All files | 99.29 | 97.31 | 98.09 | 99.69` (each column ≥ the baseline),
+  `memory-transition.ts | 99.13 | 98.69 | 100 | 100 | 236,521`. `npx tsc --noEmit -p tsconfig.json` and `npx eslint` on
+  the two files → clean. `npx jest test/docs test/lint --maxWorkers=2` → `Test Suites: 43 passed`, `Tests: 487 passed`
+  (run again after the last edit of these notes and of the `bug-361` amendment).
+
+### Pending amendments (approver) — review fixes
+
+- `bug-361-the-branch-coverage-of-the-wip-slot-s-cross-ref-merge-in-memory-transition.ts-differs-between-identical-runs` (uncommitted in the worktree: a note of 2026-11-07 before its `### Retrospective`, and
+  the `### Retrospective` filled in place of `None.`):
+  `--reason "Record task-357's fix of bug-361: the WIP-slot merge and its unreadable-document diagnostics now give identical results on identical runs, the readPathsAtRev failure detail moved to bug-509 at task-357's design gate, and the ValidationError catch at memory-transition.ts:521 is never hit in any run, so it is not run-dependent; fill the retrospective."`
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
