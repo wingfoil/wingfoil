@@ -22,6 +22,13 @@
  * `test/lint/dist-lock.test.ts` pins that script, so a change to it fails there instead of drifting
  * from this file.
  *
+ * Git isolation (`bug-446`, task-349 AC 6): before anything runs, this main process takes an isolated git
+ * configuration (`test/git-isolation.cjs`: an identity-free global config, no system config, an empty
+ * `XDG_CONFIG_HOME`, no `GIT_CONFIG_*` injection variable) and records its directory as `WF_GIT_ISOLATION_DIR`;
+ * every worker forked after it, and every process they spawn, inherits it. `test/global-teardown.cjs` removes the
+ * directory. The setup takes no heavy-gate lock (`dl-170`, `scripts/heavy-gate.cjs`): inside `npm test` its build is
+ * nested in run-tests' hold, and a targeted run is not a heavy gate.
+ *
  * Deterministic by construction: a fresh output directory, `tsc`, then the build record (which carries
  * no timestamp), no wall-clock or ordering dependence in what is built.
  */
@@ -31,13 +38,27 @@ const { join } = require('node:path');
 
 const { computeBuildInfo, serializeBuildInfo } = require('../scripts/write-build-info.cjs');
 const { prepareDist } = require('./dist-lock.cjs');
+const { isolatedGitEnv, prepareGitIsolation } = require('./git-isolation.cjs');
 
 // Tag this run's fixture directories (bug-064, task-152). Set here, in jest's main process before
 // any worker is forked, so every worker inherits the same value; `test/storage/helpers/git-fixture.ts`
 // puts it in its `mkdtemp` prefix and `test/global-teardown.cjs` counts what carries it at the end.
 process.env.WF_FIXTURE_RUN_TAG = `r${process.pid}`;
 
+/**
+ * Replace this process's git environment with the isolated one (bug-446), so the workers forked after it inherit it.
+ */
+function applyGitIsolation() {
+  const isolation = prepareGitIsolation();
+  const env = isolatedGitEnv(process.env, isolation);
+  for (const key of Object.keys(process.env)) {
+    if (!(key in env)) delete process.env[key];
+  }
+  Object.assign(process.env, env, { WF_GIT_ISOLATION_DIR: isolation.dir });
+}
+
 module.exports = async () => {
+  applyGitIsolation();
   const repoRoot = join(__dirname, '..');
   await prepareDist({
     repoRoot,
@@ -55,3 +76,4 @@ module.exports = async () => {
     },
   });
 };
+module.exports.applyGitIsolation = applyGitIsolation;

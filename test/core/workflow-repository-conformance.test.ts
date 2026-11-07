@@ -66,6 +66,7 @@ describe('AC 1 / AC 2 — every workflow loads at HEAD with zero errors and only
     expect(diagnostics.every((d) => d.severity === 'warning')).toBe(true);
     // task-303 (dl-186 Q6, dl-172 (a)): the 17 prose checks a human confirms on purpose (21 occurrences) are bound
     // `manual: true` in bindings.yaml 2.6; the 65 left are the checks a command could decide (spec-017 §12).
+    // task-349 (dl-170 Q2 (C)): dev-loop 2.3's three gate.slot-free declarations make them 68.
     expect(rows(diagnostics)).toEqual([
       ["sw-life-cycle", "phases[3].checks.post[0]", "frontmatter.required"],
       ["bug-ingest", "phases[0].checks.post[0]", "frontmatter.required"],
@@ -114,8 +115,13 @@ describe('AC 1 / AC 2 — every workflow loads at HEAD with zero errors and only
       ["dev-loop", "phases[2].checks.post[0]", "tests.exist"],
       ["dev-loop", "phases[2].checks.post[1]", "tests.failing"],
       // task-205 (dl-134 §2): declared on green and refactor, evaluated from v1.0 (P4.12); no command asserts it yet.
+      // task-349 (dl-170 Q2 (C), ruling D4 (a)): the phases that run heavy gates name the machine-wide lock; a command
+      // could decide it from the trace, so it is unbound, not manual.
+      ["dev-loop", "phases[3].checks.pre[0]", "gate.slot-free"],
       ["dev-loop", "phases[3].checks.post[1]", "tests.unchanged"],
+      ["dev-loop", "phases[4].checks.pre[0]", "gate.slot-free"],
       ["dev-loop", "phases[4].checks.post[5]", "tests.unchanged"],
+      ["dev-loop", "phases[5].checks.pre[4]", "gate.slot-free"],
       // task-221 (dl-115 Q2 (a)): the file is the task's path, which no binding placeholder carries. `typecheck.clean`
       // and `docs.parity` are bound; claims.rerun and rereview.previous-reject are bound manual (task-303).
       ["dev-loop", "phases[6].checks.post[0]", "retrospective.present"],

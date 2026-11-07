@@ -19,14 +19,22 @@
  *
  * `npm run test:latency` runs the latency pass on its own (the dev-loop gate, on an idle machine).
  *
+ * A run with no suite filter is a heavy gate (`dl-170` Decision 1, task-349): every invocation it plans — the
+ * parallel run and an opted-in latency pass — runs inside one hold of the machine-wide lock of
+ * `scripts/heavy-gate.cjs`, which waits while another worktree holds it or the machine is loaded. `npm run
+ * test:coverage` and `npm run test:report` come through here with `--coverage`, so they hold it as the gate
+ * `coverage`. A targeted run (an argument naming a suite, or a path filter: {@link isHeavyRun}) spawns jest as
+ * before, without the lock.
+ *
  * Usage: node scripts/run-tests.cjs [jest args…]
  */
 'use strict';
 
 const { spawnSync } = require('node:child_process');
-const { join } = require('node:path');
+const { resolve } = require('node:path');
 
 const { LATENCY_SUITES } = require('../test/latency-suites.cjs');
+const { gateDir, withHeavyGate } = require('./heavy-gate.cjs');
 
 /** The jest config holding the suites that must run alone. */
 const LATENCY_CONFIG = 'jest.latency.config.js';
@@ -58,21 +66,91 @@ function plannedRuns(args, env) {
   return env[LATENCY_ENV] === '1' ? [[], ['-c', LATENCY_CONFIG]] : [[]];
 }
 
-/* istanbul ignore next -- the CLI entry point; plannedRuns is the logic, tested directly. */
-function main() {
-  const repoRoot = join(__dirname, '..');
+/** The jest options that select suites by path: a run given one is targeted. */
+const PATH_FILTER_OPTION = /^--(testPathPatterns?|findRelatedTests)(=|$)/;
+
+/** A non-option argument that names a suite or a source file. */
+const SUITE_ARGUMENT = /^(\.\/)?(test|src)\//;
+
+/**
+ * Whether `args` make `npm test` a heavy gate (`dl-170` Decision 1): `false` for a targeted run — an argument
+ * naming a suite (`test/…`, `./test/…`, `src/…`, `./src/…`, or ending in `.test.ts`), or a path filter
+ * (`--testPathPattern`, `--testPathPatterns`, `--findRelatedTests`) — `true` otherwise, the empty list included.
+ * Erring towards heavy only costs a wait.
+ *
+ * @param {readonly string[]} args
+ * @returns {boolean}
+ */
+function isHeavyRun(args) {
+  return !args.some((arg) =>
+    arg.startsWith('-') ? PATH_FILTER_OPTION.test(arg) : SUITE_ARGUMENT.test(arg) || arg.endsWith('.test.ts'),
+  );
+}
+
+/**
+ * The gate name of a heavy run: `coverage` when `--coverage` is among `args`, else `test`.
+ *
+ * @param {readonly string[]} args
+ * @returns {string}
+ */
+function gateName(args) {
+  return args.includes('--coverage') ? 'coverage' : 'test';
+}
+
+/**
+ * Run {@link plannedRuns} for `args`: a heavy run inside one hold of `gate`, a targeted run without one. Resolves
+ * to the first non-zero exit status, or 0; a run that ended on a signal (`spawn` returned `null`) counts as 1, and a
+ * failing run stops the ones after it.
+ *
+ * @param {{
+ *   args: readonly string[],
+ *   env: Readonly<Record<string, string | undefined>>,
+ *   spawn: (argv: readonly string[], env: Record<string, string | undefined>) => number | null,
+ *   gate: (options: { gate: string, env: Readonly<Record<string, string | undefined>> },
+ *          run: (childEnv: Record<string, string | undefined>) => number | Promise<number>) => Promise<number>,
+ * }} options
+ * @returns {Promise<number>}
+ */
+async function runTests({ args, env, spawn, gate }) {
+  const runs = plannedRuns(args, env);
+  const runAll = (childEnv) => {
+    for (const argv of runs) {
+      const status = spawn(argv, childEnv);
+      if (status === null) return 1;
+      if (status !== 0) return status;
+    }
+    return 0;
+  };
+  if (!isHeavyRun(args)) return runAll({ ...env });
+  return gate({ gate: gateName(args), env }, runAll);
+}
+
+/* istanbul ignore next -- the CLI entry point; runTests is the logic, tested directly with a fake spawn and gate. */
+async function main() {
+  const repoRoot = resolve(__dirname, '..');
   const jestBin = require.resolve('jest/bin/jest', { paths: [repoRoot] });
-  for (const argv of plannedRuns(process.argv.slice(2), process.env)) {
-    const run = spawnSync(process.execPath, [jestBin, ...argv], { cwd: repoRoot, stdio: 'inherit' });
+  const spawn = (argv, env) => {
+    const run = spawnSync(process.execPath, [jestBin, ...argv], { cwd: repoRoot, stdio: 'inherit', env });
     if (run.error) throw run.error;
     if (run.status === null) {
       process.stderr.write(`run-tests: jest ${argv.join(' ')} ended on signal ${run.signal}, not an exit\n`);
-      process.exit(1);
     }
-    if (run.status !== 0) process.exit(run.status);
-  }
+    return run.status;
+  };
+  const gate = (options, run) =>
+    withHeavyGate({ dir: gateDir(options.env), gate: options.gate, worktree: repoRoot, env: options.env }, run);
+  return runTests({ args: process.argv.slice(2), env: process.env, spawn, gate });
 }
 
-if (require.main === module) main();
+/* istanbul ignore next -- the CLI entry point. */
+if (require.main === module) {
+  main().then(
+    (status) => process.exit(status),
+    (err) => {
+      process.stderr.write(`run-tests: ${err && err.message ? err.message : String(err)}\n`);
+      process.exit(1);
+    },
+  );
+}
 
-module.exports = { plannedRuns, LATENCY_CONFIG, LATENCY_ENV };
+module.exports = { plannedRuns, isHeavyRun, gateName, runTests, LATENCY_CONFIG, LATENCY_ENV };
