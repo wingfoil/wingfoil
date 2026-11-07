@@ -59,3 +59,22 @@ batch B5 (`dev-loop-rel-v0.3-plan`), reproduced against `main` at `1127a0fd` wit
   REQ-PERF-02's measurement conditions (`docs/02_requirements/03_sard/02_performance-nfr.md`): the in-process
   REQ-PERF-02/04 budgets that still run in `npm test`'s parallel pass (`npx jest --listTests | grep -i latency`)
   measure under a condition the requirement now excludes, which strengthens the case for moving both suites.
+
+### Retrospective
+
+<!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
+     reconstructed afterwards. One line per item: what happened, the evidence (a command and what it
+     printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
+     An item met while fixing goes in the fix task's own subsection; this one holds what belongs to
+     the bug itself (its finding, its triage, why it took more than one task). The retrospective's
+     `explore` reads this subsection first. -->
+
+- `task-357` meets the Expected Behavior in full, by a split rather than either example: the in-process REQ-PERF-01/02/04
+  suites joined `IN_PROCESS_LATENCY_SUITES` (`npx jest --listTests | grep -i latency` lists none of the four latency
+  suites), each refusing a loaded run through `inProcessIdleVerdict` (the latency pass at a 1-minute load of about 5.3,
+  under the bound of 6: all four passed with an idle verdict; at a load of 25 each refused, its budget not counted), and
+  what they assert besides the time runs in three new parallel-pass suites. So no budget is left in the parallel pass
+  (`test/core/latency-budget-placement.test.ts` rule 6), and `test:coverage` counts the same code either way (a targeted
+  coverage run of the new suites against the four suites as on `main`: equal per file and column).
+- The bug sat from W2 to v0.4 because its first fix shape (merging the latency pass's coverage into `test:coverage`)
+  would have made the coverage gate depend on the load; splitting each suite was the shape that met both clauses.
