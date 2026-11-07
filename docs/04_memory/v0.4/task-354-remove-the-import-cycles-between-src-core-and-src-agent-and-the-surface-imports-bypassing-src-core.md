@@ -282,6 +282,32 @@ recorded before red:
 - `spec-012-context-loader-relevance-filtering` (§2 `ContextRequest.label` and Revision note) — `--reason "Add the
   optional label to ContextRequest so the caller names the revision in warnings and errors, per task-354 (bug-317)."`
 
+### design gate (approver, 2026-11-07)
+
+The approver recorded the gate on this branch: `e67a647ff` `wf(tech-spec): amend spec-006-core-domain-api`, `0d0141ba1`
+`wf(tech-spec): amend spec-008-cli-grammar`, `c2bbf70de` `wf(tech-spec): amend
+spec-012-context-loader-relevance-filtering` (each `[approved → approved]`) and `396e86594` `workflow: finalize
+sw-life-cycle-1-plan dev-loop.design@task:task-354-…` with `Approver:` (`git log -4 --format='%h %s' 396e86594`).
+Rulings, from that record's `Reason:`, all as the design recommended:
+
+- **D1** (a): an explicit exception list in the import-graph test, each entry naming an existing element; empty after
+  this task.
+- **D2** (b): every `src` caller that resolved `HEAD` labels it `HEAD`, the MCP session prompt passes its state label;
+  `spec-008` §6 amended (`0d0141ba1`).
+- **D3** (a): the six surface bypasses go through the non-barrel `src/core/surface-reads.ts`; `spec-006` §1 amended
+  (`e67a647ff`).
+- **D4** (a): `withDistinctWarnings` keeps its `rewrite` parameter.
+- **D5** (a): AC4 is shown by command (the `dist/core/index.d.ts` diff, the key counts).
+- **D6**: `dist/cli.js` is left out of AC1's load order.
+- **D7**: AC2's graph is built from the TypeScript AST.
+- **D8**: file-level acyclicity is accepted; the directory-level `core` ↔ `agent` dependency stays, no element.
+- **D9**: the false positive of release-health Q07's recorded-deviation rule is filed as a new low bug (outside this
+  task).
+
+After the gate the prepared allowlist entry was committed alone: `300ca3eed` `test(docs): name-resolvability allowlist —
+spec-006's src/core/surface-reads.ts, planned by task-354` (`npx jest test/docs/name-resolvability --maxWorkers=2` → 11
+passed); green removes it in the commit that adds the file.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
