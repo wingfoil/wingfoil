@@ -62,3 +62,347 @@ not open" for an unknown workflow.
 ## Execution Notes
 
 <!-- Filled by the dev-loop. -->
+
+### design (architect, 2026-11-07)
+
+**Inputs read.** `depends_on: []` (no `dl-015` gate). Base: `main` `013640ed8` + `wf(task): start` `47e76391a` and the
+two bug syncs `755b7481c`, `66b87a094` (`git log --oneline -4` → head `66b87a094`). PATH guard: `command -v wingfoil`
+→ the task's PATH shim; `wingfoil --version` and `node dist/cli.js --version` → `0.3.2
+(013640ed82c8531dc93f730fb73bb52b6281ccec)` (the code build of this worktree, built at `013640ed8`); `npm run -s wingfoil
+-- --version` → `0.3.2 (6de2e13c004bbf419acfa7dc4d98d5a7468cd693)` (the pin). Read: `dev-loop-rel-v0.4-plan` rulings
+W0-R1 … W0-R12 (on `design/dev_loop_v0.4`), `release-planning-rel-v0.4-plan` S4 (`dl-217` ratified "with a marker
+`workflow start` writes") and S6 (the w0 amendments are made at the task's design gate), `dl-217` (`ready`,
+`ae1d54d62`: "Ratifies (a) with an instance marker that workflow start writes and a rule that keeps the instances
+already open"), `dl-205` (`ready`, Q1 (a)), `bug-413`, `bug-465`, `task-346` (builds on this task), `spec-017` and
+`spec-008` (both `approved`, `grep -m1 '^status:'` on each; `dl-217` and `dl-205` `ready` the same way), `task-354`'s design on its branch. No `.wingfoil/` file changes, so
+`npm run check:mcp` and the pinned workflow reads of a modified configuration are not required (`dl-205` Q1 (a)
+applies to the new commit shape instead, checked below).
+
+**The defects, reproduced on this base** (a scratch clone of the worktree at `66b87a094`, outside it, the code build
+`node <worktree>/dist/cli.js`):
+- `bug-413`: `workflow status` → active instance `decision-log-ingest-rel-v0.4-planning-feedback-plan`, bound to
+  `dl-214-…`. Step 1, `workflow start bug-ingest --dry-run --format json` → exit 0, subject `wf(plan): add
+  bug-ingest-dl-214-what-required-means-…-plan`, diff `+phase: "dl-214-…"` and `+element: "dl-214-…"`. Step 2,
+  `workflow start decision-log-ingest --set phase=x --dry-run --format json` → exit 0, `wf(plan): add
+  decision-log-ingest-x-plan`, `+element: "dl-214-…"`. Step 3, `workflow start bug-ingest --element
+  release:minor-v0.4 --dry-run` → exit 1, `error: workflow 'bug-ingest' declares no element: --element is not
+  accepted`. The `--format console` dry run prints the same payload (`"dryRun": true`, the same subject).
+- `dl-217` case 1 (a plan naming no loaded workflow): `memory add --type plan --title "adhoc — migration" --set
+  workflow=adhoc --set phase=migration --set scope=adhoc` then `memory submit adhoc-migration-plan` → `workflow status
+  --format json`: `active` = `adhoc-migration-plan`, one `W_INSTANCE_WORKFLOW_UNKNOWN` (`open plan adhoc-migration-plan
+  names workflow 'adhoc', which the registry does not load`); `workflow next` → `workflow: adhoc (adhoc-migration-plan)`
+  / `no next step: workflow 'adhoc' is not loaded`; `workflow list --format json` carries the same warning in
+  `diagnostics` (exit 0).
+- `dl-217` case 2 (a draft plan merely added): `memory add --type plan --title "sw-life-cycle — draft" --set
+  workflow=sw-life-cycle --set phase=draft --set scope=draftcase` (no submit) → `workflow status --format json`:
+  `active` = `sw-life-cycle-draft-plan` (`draft`) ahead of the five open instances, no diagnostic other than
+  `W_WORKFLOW_UNBOUND_TOKEN`; `workflow next` → `workflow: sw-life-cycle (sw-life-cycle-draft-plan)`, `next step:
+  sw-life-cycle.seed-first-release-line`.
+- `bug-465`: `grep -rn "selectWorkflowInstance" src test` → the definition (`src/core/workflow-next.ts:557`,
+  `(deduction, ref?, snapshot?)`), its re-export from the package's `main` (`src/core/index.ts:182`), and nine call sites in
+  `test/core/workflow-deduction.test.ts` (lines 238–266); no production caller. The test at line 258 pins the
+  snapshot-less call ("still compiles and keeps its answer `workflow is not open: <ref>`" for `nope`).
+
+**AC 3 — the instances open now, and who opened them.** `npm run -s wingfoil -- workflow status` (pinned 0.3.2, head
+`66b87a094`) → exit 0, `open workflows: 5`:
+
+```
+* decision-log-ingest-rel-v0.4-planning-feedback-plan (decision-log-ingest) — active, complete
+  bug-ingest-rel-v0.4-planning-feedback-plan (bug-ingest) — complete
+  sw-life-cycle-1-plan (sw-life-cycle)
+  decision-log-ingest-rel-v0.4-planning-inputs-plan (decision-log-ingest) — complete
+  service-ingest-rel-v0.3-listings-plan (service-ingest)
+```
+
+(the rest is `sw-life-cycle-1-plan`'s frontier, the four ungated elements and `68 diagnostic(s)`, all
+`W_WORKFLOW_UNBOUND_TOKEN` by `--format json`). Their start commits (`--format json`, `instance.startCommit`):
+`e1e2b7957`, `85455ffa4`, `47d0bf83c`, `4b562759f`, `bf05de0d4`. None carries a marker, and none can be told from a
+`memory add`: `git log -1 --format=%B` of each is `wf(plan): add <id>` plus `WingFoil-Version: 0.3.2 (…)` (and the
+two AI trailers), `bf05de0d4` (2026-09-29) has no trailer at all; `sw-life-cycle-1-plan` itself was opened with
+`memory add --type plan` on purpose, to avoid `bug-413` (`release-planning-rel-v0.4-plan`, S1b). So AC 1's wording ("a
+plan added by `memory add` is not [an instance], whatever it names") and AC 3 conflict for every open instance of this
+repository: a rule that keys on how the add commit was written drops all five, `sw-life-cycle-1-plan` included —
+**decision D1**. Two rules that key on content were checked and dropped: "a plan some record or linkage names"
+(`git log --grep="^WingFoil-Instance: <id>$"` → 15 for `sw-life-cycle-1-plan`, 1 for each `rel-v0.4` ingest, **0 for
+`service-ingest-rel-v0.3-listings-plan`**, which would disappear), and "a plan whose add commit's `WingFoil-Version`
+precedes the marker's release" (the code build stamps `package.json`'s `0.3.2` until the release commit, so every
+plan added in this repository during v0.4, and every fixture of the test suite, would read as pre-marker).
+
+**The rule this design proposes (D1 (a)), as `spec-017` §3.2 now states it.** A plan with `parent` empty is an open
+instance when (i) its status is `draft` or `active`, (ii) its `workflow` is loaded and startable, and (iii) its start
+commit carries the marker, or carries none and no marked start is among its ancestors (the **pre-marker rule**). A
+**marked start** is the add commit of any plan with `parent` empty that `HEAD` holds, in any status, whose final
+trailer paragraph carries `WingFoil-Start:` with a non-blank value. Before and after, on this repository: no marked
+start exists, so the five plans above stay instances, in the same order, and `sw-life-cycle-1-plan` stays open. After
+the first `workflow start` on `main` writes a marker, every plan added after it without one (`memory add --type plan`
+of a main, a hand-written plan) is no instance, whatever it names; a plan already open is never dropped by a later
+marked start, since a marked start that comes later is not its ancestor. So "a plan added by `memory add` is not an
+instance" holds from the first marked start of a repository on — in a repository that never ran a `workflow start`
+of a marker-writing build, a `memory add` plan keeps today's behaviour. The two `dl-217` cases are closed by (i)+(iii)
+for a plan added after a marked start, and case 1 also by (ii) in every repository (a plan naming an unloaded
+workflow is never an instance, AC 2).
+
+How the reader decides (iii) with no new git process (`test/core/workflow-next-spawn-count.test.ts` (e) pins 20
+processes, `log 2`, `merge-base 1`): `readStarts` (`src/core/workflow-deduction.ts:78`) already runs one `git log
+--topo-order --no-renames --diff-filter=A --name-only`; it runs over every instance-kind plan path at `HEAD` (any
+status) instead of the open ones only, and its format adds the marker (`%(trailers:key=WingFoil-Start,valueonly,…)`
+on the commit line). `starts` (the map the walk bound and the deduction read) keeps only the open candidates, as
+today; the marked starts are a second result. Ancestry is decided from the walk `readHistory` already reads: a marked
+start outside the walk is reachable from the walk bound's parents (`readWalkBound`, `^@` of the octopus merge base of
+the candidates' starts), so it is an ancestor of every candidate's start; one inside the walk is an ancestor of a
+candidate's start when the walk's parent links reach it from that start (as `instanceWalk` follows them). Every
+candidate keeps its start position; only the classification is new.
+
+**Checked against the pinned build and the governance check before red (`dl-205` Q1 (a), AC 6).** In the scratch
+clone, branch `marker-check` from `66b87a094`: `memory add --type plan --title "bug-ingest — marker-check" --set
+workflow=bug-ingest --set phase=marker-check --set scope=marker-check`, the add commit rewritten to the message
+`workflow start` will write (`wf(plan): add bug-ingest-marker-check-plan` / blank / `WingFoil-Start: bug-ingest` /
+`WingFoil-Version: 0.3.2 (013640ed…)`, `git commit --amend --cleanup=whitespace -F`), then `memory submit`:
+- `node <worktree>/node_modules/wingfoil-released/dist/cli.js workflow status` (the pinned 0.3.2) → exit 0, `open
+  workflows: 6`, `* bug-ingest-marker-check-plan (bug-ingest) — active`, frontier `bug-ingest.capture (developer;
+  missing: produces)`, the five others as before; `workflow next` → `workflow: bug-ingest
+  (bug-ingest-marker-check-plan)`, `next step: bug-ingest.capture`. The pinned build ignores the trailer and reads a
+  marked plan as it reads any open plan: no break for the reads (`wingfoil-cli` §1), no `pinned-build` bug to plan.
+  The difference the pinned build cannot see is the other way round — a `memory add` plan after a marked start, which
+  it still reads as an instance — and lasts until the pin reaches a build with this task.
+- `node scripts/check-governance.cjs --base 66b87a094` (in the clone, `dist` and `node_modules` linked from the
+  worktree, both excluded in the clone's `.git/info/exclude`) → exit 0, `gated: 0 findings on 0 commits` over the two
+  `wf(plan)` commits: an unknown `WingFoil-*` key in the final paragraph is accepted. Positive case, branch
+  `marker-bad`: the same add commit with `WingFoil-Start: bug-ingest` in a paragraph of its own → exit 1, `body: a
+  WingFoil-Start: line sits outside the commit's final paragraph, where the workflow deduction does not read it
+  (git-conventions §8, bug-391)`. So the marker must be written by `commitPaths`' trailer paragraph (it is: `memory
+  add` passes `trailers` to `writeMemoryEntry`, which `stampedMessage` puts before `WingFoil-Version:`, as the linkage
+  of `dl-214`'s add `440a21ea9` shows: `WingFoil-Instance:`, `WingFoil-Step:`, `WingFoil-Version:` in one paragraph).
+
+**AC classification and what qa pins.** qa runs `npx tsc --noEmit -p tsconfig.json` and `npx jest test/lint
+--maxWorkers=2` before the red commit. Expected reds of the signature change: `tsc` TS2345 (a `DeductionSnapshot`
+where `string` is expected) on every new-order call, TS2578 (unused `@ts-expect-error`) on the snapshot-less one; at
+jest run time (`isolatedModules`, no type check) the new-order calls reach the old function with the snapshot as
+`ref` and the ref as `snapshot`, so their assertions fail (a TypeError reading `workflows` of a string, or a wrong
+answer), not the import. New export `START_TRAILER`: `tsc` TS2305 at red; jest reads it `undefined`, so a test that
+builds a trailer line from it must also assert the literal `WingFoil-Start` (the observable).
+
+| AC | Class | Why |
+|---|---|---|
+| 1 marker + only marked/pre-marker plans | red-first | `start` writes no marker (`66b87a094`: the dry run's `message` ends at `WingFoil-Version:`); a `memory add` plan after a start is an instance (case 2 above) |
+| 2 unloaded workflow | red-first | case 1 above: the plan is the active instance |
+| 3 instances kept | characterization | the rule keeps every plan opened before the first marked start: green before and after, by construction of D1 (a) |
+| 4 `bug-413` (c) | red-first | step 3 above refuses `--element`; steps 1–2 take an unrelated context |
+| 5 `bug-465` | red-first | the third parameter is optional (`src/core/workflow-next.ts:557-561`) |
+| 6 amendments + marker check | characterization | the amendments are prepared below, uncommitted; the marker check is the run above; no test |
+
+What qa pins, per AC (fixtures: the `writeProject` repository of `test/core/workflow-start-end.test.ts` —
+`release-cycle` (`element: release`), `report-bug` and `checklist` (no element), `dev-loop` (`kind: sub`), the `plan`
+type `{workflow}-{phase}-plan` under `docs/plans/{scope}/`; a plan file committed by hand is
+`---\nid: "<id>"\ntype: plan\ntitle: "<id>"\nstatus: <s>\nworkflow: "<w>"\nphase: "1"\nelement: ""\nparent: ""\n---\n`;
+operations through `CORE_MODULES` (`workflowStart`, `workflowStatus`, `workflowNext`, `workflowList`, `memory`'s
+`memoryAdd` with `options: { type: 'plan', title, set: ['workflow=…', 'phase=…', 'scope=…'] }`) and
+`deduceWorkflowStateAtHead`; the CLI in `test/cli/workflow-start-end.integration.test.ts` with `runCliEntry`):
+
+1. **AC 1** — new `test/core/workflow-start-marker.test.ts`:
+   - (a) `workflowStart` `checklist`: in `git log -1 --format=%B <add sha>` (the first of `value.commits`) the
+     subject is `wf(plan): add checklist-1-plan`, the body is one paragraph (the trailer paragraph), and in it the line
+     `WingFoil-Start: checklist` comes before the `WingFoil-Version:` line (do not pin the whole message: `task-334`
+     adds the attribution trailers to the verbs' commits, and the stamp varies);
+     `git log -1 --format=%(trailers:key=WingFoil-Start,valueonly)` → `checklist`; the submit commit carries no marker;
+     `--dry-run` of the same start: `message` contains `\n\nWingFoil-Start: checklist\nWingFoil-Version: ` (payload
+     `{dryRun: true, subject, message, paths, diff}`), also through the CLI with `--format console`.
+   - (b) after (a), `memoryAdd` a plan naming `report-bug` (`set: ['workflow=report-bug', 'phase=x', 'scope=x']`):
+     its add commit has no `WingFoil-Start`; `deduceWorkflowStateAtHead` → `instances` ids `['checklist-1-plan']`,
+     `active` `checklist-1-plan`, no new diagnostic; the same after `memory submit` of it (an `active` plan); and
+     `workflowNext` with `positional: 'report-bug-x-plan'` → `NOT_FOUND`, `workflow is not open: report-bug-x-plan`.
+   - (c) the same with the plan committed by hand after the start (no WingFoil trailer at all): not an instance.
+   - (d) the control `dl-217` names: a plan naming the sub `dev-loop`, by hand, before any start: never an instance,
+     no diagnostic (already true; green before and after).
+   - (e) a marked start of a plan now `done` still counts: start `checklist`, then hand-commit its status `done`
+     (`wf(plan): finalize checklist-1-plan [active → done]`), then `memoryAdd` a `report-bug` plan → no instance
+     (`instances` `[]`, `active` `null`).
+2. **AC 2** — same file: a plan naming `no-such-flow`, `status: active`, by hand, in a repository with no marked start,
+   and again with one added by `memoryAdd` after a marked start: `instances` does not list it, `active` is not it
+   (`null` when it is the only one; the started instance when one is open), `workflowStatus` lists only the started one;
+   `deduction.diagnostics` contains exactly one `{ code: 'W_INSTANCE_WORKFLOW_UNKNOWN', severity: 'warning', file:
+   '<its path>', path: 'workflow', message: "open plan <id> names workflow 'no-such-flow', which the registry does not
+   load" }` (the message unchanged); `workflowList` (no `--all`) carries the same entry in `diagnostics`; and
+   `workflowNext` / `workflowEnd` with its id as `positional` → `NOT_FOUND` `workflow is not open: <id>`. A marked plan
+   naming an unloaded workflow (start `checklist`, then commit a `.wingfoil/workflows.yaml` without it) → no instance,
+   the same warning.
+3. **AC 3** — same file, characterization (green on the current code and after): a repository whose plans are all
+   unmarked — two hand-committed (`a-1-plan` naming `checklist`, then `b-1-plan` naming `report-bug`, one commit each)
+   and one `memoryAdd` (`report-bug`, `phase=c`) — lists all three as instances, most recent first, the last one
+   active, exactly as before; then a `workflowStart` of `release-cycle --element release:minor-v1` adds a fourth,
+   active, and the three keep their places after it. qa runs it on the code at red (passes) and says so. The live
+   evidence is the developer's at green: `node dist/cli.js workflow status` on this branch, pasted beside the list
+   above (same five ids, same order).
+4. **AC 4** — `test/core/workflow-start-end.test.ts`, describe `plan tokens and the context element`: replace the
+   test at line 346 (`--element` on a workflow that declares no element → refused) with: `start` `checklist`
+   `--element release:minor-v1` → ok, `instance.context` `{ type: 'release', id: 'minor-v1' }`, plan file
+   `element: "minor-v1"`, id `checklist-minor-v1-plan`; a short reference resolves (`release:minor-v` with one
+   match, the plan records the full id); `--element release:nope` → `NOT_FOUND` `element not found: release:nope`;
+   `--element none` while `release-cycle` (declares `element:`) is active → `context: null`, `element: ""`, id
+   `checklist-1-plan`; with no `--element`: `report-bug` while an element-less main is active (start `checklist`
+   first) → `context: null`, id `report-bug-1-plan`; `report-bug` while `release-cycle` is active → context
+   `minor-v1` (the existing line-281 test, kept); `--element none` on `release-cycle` → `VALIDATION` `workflow
+   'release-cycle' needs a release element: give --element release:<id>`. CLI (`test/cli/workflow-start-end.integration.test.ts`):
+   `workflow start checklist --element none` exit 0; `--element` with no colon other than `none` (`minor-1`) still
+   exit 2 `malformed element-ref "minor-1": expected <type>:<id>` (the existing row at line 159, kept).
+5. **AC 5** — `test/core/workflow-deduction.test.ts` lines 236–268: every call in the new order
+   `selectWorkflowInstance(deduction, snapshot, ref?)`, the same answers as today's with-snapshot test (by name, by
+   id, active, `nope`/`p-sub` → `unknown workflow:`, `p-done`/`p-helper`/`helper`/`release-flow` → `workflow is not
+   open:`, equal to `unresolvedRef(known, ref)`); the test "a call without the snapshot still compiles" is replaced by
+   one holding `// @ts-expect-error — the snapshot is mandatory (bug-465)` above `selectWorkflowInstance(deduction)`
+   inside a function the test never calls, so `npm run typecheck` is the observable.
+6. **AC 6** — no test.
+
+**Existing tests that pin the behaviour that changes — qa updates them in red** (each fails on green otherwise; found
+with `grep -rln "W_INSTANCE_WORKFLOW_UNKNOWN\|is not loaded\|--element is not accepted\|declares no element\|selectWorkflowInstance" test`
+and by reading the hits):
+- `test/core/workflow-start-end.test.ts:346` — the refusal of `--element` on an element-less main (AC 4 above);
+- `test/core/workflow-deduction.test.ts:236-268` (AC 5) and `:270` — "lists an open plan naming no loaded workflow
+  with an empty frontier": the plan is no longer listed, the warning stays (AC 2);
+- `test/workflow/deduce.test.ts:271` — `p3` (`free`, loaded, no start) and `p4` (no `workflow`) in the instances:
+  `p4` names workflow `''`, which the registry does not load, so it leaves `instances` (`[p1, p2, p3]`), the two
+  diagnostics stay `[W_INSTANCE_WORKFLOW_UNKNOWN, W_UNRESOLVED_TOKEN]`; `starts` without the new field reads as
+  pre-marker, so `p1`–`p3` stay;
+- `test/core/workflow-next-views.test.ts:306` — `next ghost-1` "is not loaded": now `NOT_FOUND` `workflow is not
+  open: ghost-1` (its plan is an instance-kind plan, so `unresolvedRef` names it), the `old-1` half unchanged;
+- `test/core/workflow-start-end-arms.test.ts:126` — `end ghost-1-plan` "is not complete: workflow 'ghost' is not
+  loaded": now `NOT_FOUND` `workflow is not open: ghost-1-plan` (the abandoned half unchanged);
+- `test/core/workflow-deduction-provenance.test.ts:520` — "one `git log` with trailers": the start lookup now reads
+  the marker, so exactly two `log` calls carry `%(trailers` (the start lookup and the walk), `argv` keeps the
+  baseline's length and subcommand order (no process added).
+Expected to pass unchanged (green must show it): `test/core/workflow-next-spawn-count.test.ts` (e) 20 processes;
+`test/workflow/provenance.test.ts:407` (the unknown-workflow plan raises no orphan; the order of the codes holds);
+`test/core/workflow-deduction-history.test.ts` (one `log` with `%P`, one `-1` lookup); `test/lint/git-log-readers.test.ts`
+(the start lookup keeps `'--no-show-signature'` right after `'log'`; no new reader file). Fixtures that hand-commit a
+plan after a real `workflowStart` and expect it to be an instance pin the old rule. One is listed above (`workflow-start-end-arms.test.ts:126`); the other files that call
+`workflowStart` (`grep -rlE "workflowStart|'workflow', 'start'|workflow start" test --include=*.ts` → 29 files) were searched for hand-written plans
+(`type: plan` outside a template) and spot-read, not read in full, so green's full suite is the check and reports any
+other it shows.
+
+**Existing tests run on this base** (worktree head `66b87a094`, the two specs edited and uncommitted, no code changed).
+The `dl-170` slot wait queued behind another worktree's full suite (`ps -eo pid,etime,args` at 20:12 →
+`node scripts/run-tests.cjs --maxWorkers=2`, etime 16:04, and two waiters), then `npx jest --maxWorkers=2
+test/core/workflow-start-end.test.ts test/core/workflow-start-end-arms.test.ts test/core/workflow-start-end-coverage.test.ts
+test/core/workflow-deduction.test.ts test/core/workflow-deduction-provenance.test.ts test/core/workflow-deduction-history.test.ts
+test/core/workflow-next-views.test.ts test/core/workflow-next-spawn-count.test.ts test/core/workflow-list-show.test.ts
+test/workflow/deduce.test.ts test/workflow/provenance.test.ts test/cli/workflow-start-end.integration.test.ts
+test/cli/workflow-list-diagnostics.integration.test.ts test/core/workflow-status.test.ts test/lint/git-log-readers.test.ts`
+→ exit 0, `Test Suites: 15 passed, 15 total`, `Tests: 231 passed, 231 total`. With the two amendments in the working
+tree: `npx jest --maxWorkers=2 test/docs/name-resolvability.test.ts test/docs/dry-run-documented.test.ts
+test/docs/commands-parity.test.ts test/docs/exit-codes-parity.test.ts test/docs/command-surface-specs.test.ts
+test/directives/dev-loop-practice.test.ts` (every suite that reads either spec, `grep -rln "spec-017-workflow\|spec-008-cli-grammar" test`)
+→ exit 0, `6 passed`, `41 passed`: the amendments add no unresolved name, so the allowlist does not change.
+
+**Files to touch** (and why):
+- `src/workflow/deduce.ts` — `START_TRAILER` (`'WingFoil-Start'`, exported with TSDoc); `StartCommit` gains an
+  optional classification (absent = pre-marker, so hand-built snapshots keep their meaning); `deduceWorkflowState`
+  keeps an open plan as an instance only when its workflow is loaded and startable and it is not classified "added
+  after a marked start", raises `W_INSTANCE_WORKFLOW_UNKNOWN` for every open plan naming an unloaded workflow (start
+  order, ties by id), and loses the unknown-workflow instance branch; module TSDoc (lines 16–18).
+- `src/core/workflow-deduction.ts` — `readStarts` over every instance-kind plan with the marker in its format; the
+  pre-marker classification of each unmarked candidate from the walk (no new git process); TSDoc.
+- `src/core/index.ts` — `MemoryAddParams.trailers` (core callers only, as `fields`; the CLI and MCP never populate it),
+  appended after the linkage trailers; `workflowStart`'s `--element` option description.
+- `src/core/workflow-start-end.ts` — the marker on the add (`trailers` holding the one line `WingFoil-Start: <name>`, built from `START_TRAILER`); `startUsage`
+  takes `none`; `resolveStartElement` per `spec-017` §3.5 (the active instance's workflow declaration decides);
+  `incompleteReason` loses the unreachable "is not loaded" arm (D5); header TSDoc.
+- `src/core/workflow-next.ts` — `selectWorkflowInstance(deduction, snapshot, ref?)` and its TSDoc (the v0.4 sentence
+  goes); `emptyFrontierMessage` loses the "is not loaded" arm (D5).
+- `src/core/workflow-list-show.ts` — read, no change expected: `ListResult.diagnostics` already carries the deduction's
+  diagnostics (case 1 above), so AC 2's "reported by `workflow list`" needs no code there.
+- `docs/cli-reference.md` — `workflow start` (the `--element` row, the element-less bullet, the error list: the
+  refusal goes, `--element none` on a declared element joins "needs a … element"); `workflow show` (line 1463: "for an
+  open instance whose workflow is not loaded, that workflow's name" goes).
+- `docs/04_memory/design/specs/spec-017-…md`, `spec-008-cli-grammar.md` — the pending amendments below (uncommitted).
+- this task file (notes).
+No `version:` bump: no configuration file, directive or versioned document changes (`docs/cli-reference.md` and the
+two specs carry no `version:` field, `head -12` of each). Lint and docs gates pinning these files (`grep -rln
+"<file>" test/lint test/docs` for each): `src/core/workflow-deduction.ts` is listed by
+`test/lint/git-log-readers.test.ts` (kept, above); `src/core/index.ts` by `coverage-scope`, `coverage-parity`,
+`name-resolvability`, `req-sec-06-confinement-text`, `vision-index` (each reads the file whole — its coverage scope, its names, its text; not checked line by line here, so the developer runs them at refactor); `docs/cli-reference.md`
+by `cli-reference`, `user-guide-scaffold`, `pages-render`, `directive-remove-baseline-docs`, `dry-run-documented`,
+`llms-txt` (the developer runs them at refactor); `src/core/workflow-start-end.ts`, `workflow-next.ts`,
+`workflow-list-show.ts`, `src/workflow/deduce.ts`: none. `npm run docs:api` → exit 0 on this base (TypeDoc,
+`treatWarningsAsErrors`): `selectWorkflowInstance`'s `@param snapshot` stays documented, and `START_TRAILER` needs its
+TSDoc (`requiredToBeDocumented` lists `Variable`).
+
+**Import graph (`task-354`'s `test/lint/import-graph.test.ts`, not on this base).** The design adds no import edge:
+`src/core/workflow-start-end.ts` and `src/core/workflow-deduction.ts` already import `../workflow/deduce` (lines 40 and
+47), which gains `START_TRAILER`; `src/core/index.ts` receives the marker only as data. The test runs after the merge
+of `main` at red (W0-R4), when it exists here.
+
+**What `task-346` must read (`dl-015`).** The marker rides the add commit, whatever happens to the submit: if
+`task-346` leaves the plan `draft` (its AC 1), the plan is still an instance, since (i) admits `draft` and the marker
+is on the add. It changes `workflowStart` in `src/core/workflow-start-end.ts` after this task: keep the `trailers`
+argument of the `verbs.add` call and the order add → (submit); `StartResult.commits` lists what is written. Its AC 3
+rewrites the `task-301` test in `test/core/workflow-deduction.test.ts` (lines 587–628), the file whose lines 236–290 this
+task's red changes. And a `memory add --type plan` it may use in a fixture after a `workflowStart` is no instance.
+
+**Merge with the other w0 tasks.** Shared with `task-354` (in green, merging first): `src/core/workflow-deduction.ts`
+(its hunk is in `readDeductionSnapshotAtHead`'s three loader calls, lines 527–533; this task changes `readStarts` and
+the lines after 543 — adjacent, not the same lines), `src/core/workflow-next.ts` (its hunk is `readNextInputs`, lines
+617–622; this task's is lines 531–577), `spec-008` (its approved amendment `0d0141ba1` appends a Revision note at the
+end of the file, as this one does: a conflict at the tail, resolved by keeping both, `task-354`'s first). `task-354`
+also changes `src/core/workflow-list-show.ts`, which this task does not. Shared with `task-335` (in design): `spec-008`
+§12 (its rows are `agent execute`'s, this one `workflow start`'s) and the end of `spec-008` and `spec-017` (Revision
+notes), `src/core/index.ts` (other operations), `docs/cli-reference.md` (other entries), `src/workflow/` (its
+`schema.ts`, this task's `deduce.ts`). The approver's amend commits of this task's two specs should come after
+`main` is merged here if `task-354` is merged by then: git refuses a merge over an uncommitted edit of the same file.
+
+**Decisions for the approver** (each with the recommendation; the amendments above are written for the recommended
+options):
+- **D1 — the rule for a plan without the marker (AC 1 against AC 3).** (a) the pre-marker rule: an unmarked plan is an
+  instance only when no marked start is among its start commit's ancestors — keeps the five open instances, and makes
+  AC 1 hold from a repository's first marked start on; (b) the marker alone, with a one-off record per open instance
+  written after the merge (a new record kind and the command that writes it, which no task plans), AC 3 reworded
+  "kept by a migration record"; (c) an unmarked plan is an instance only when `active` — fixes `dl-217` case 2 but leaves
+  `memory add` + `memory submit` an instance for ever, against AC 1. **Recommended (a)**: the only one that meets AC 3
+  as written and the ratification's "keeps the instances already open" with no new write, and the classification is
+  read with no new git process.
+- **D2 — the marker's key and value.** (a) `WingFoil-Start: <workflow>` (the name started; a reader needs only a
+  non-blank value); (b) `WingFoil-Start: <plan id>` (redundant with the subject); (c) reusing `WingFoil-Instance: <own
+  id>` on the plan's add (read today as half of a step linkage, `src/core/workflow-deduction.ts:216-241`).
+  **Recommended (a)**; the specs did not fix the key, so it is named here.
+- **D3 — which open plans naming an unloaded workflow are warned about.** (a) every one, marked or not — `dl-217`'s
+  "still reported by `workflow list` as a warning" is said of case 1, a `memory add` plan; (b) only those that would
+  otherwise be instances. **Recommended (a)**, as prepared.
+- **D4 — a moved plan.** (a) as today, a plan starts at the commit that added it at its current path (§3.3,
+  `--no-renames`), so moving an instance's plan after a marked start ends it as an instance, stated in §3.2; (b) follow
+  renames back to the original add (a `git log --follow` per plan, a new git process each). **Recommended (a).**
+- **D5 — the arms that become unreachable.** Every instance's workflow is loaded after AC 2, so `emptyFrontierMessage`'s
+  and `incompleteReason`'s "is not loaded" and `deduceWorkflowState`'s unknown-workflow instance branch can no longer
+  run. (a) remove them, and the two tests that reach them through a hand-made plan change as listed above; (b) keep
+  them as defensive code. **Recommended (a)**: `spec-017` §4.9, §7.3 and §10 drop those texts.
+- **D6 — `--element none` on a workflow that declares `element:`.** (a) `VALIDATION` with the existing `workflow '<name>'
+  needs a <type> element: give --element <type>:<id>`, exit 1; (b) a usage error, exit 2. **Recommended (a)** (§10 row
+  amended): whether `none` fits depends on the workflow, which only the read at `HEAD` knows.
+- **D7 — `bug-465`'s signature.** (a) `selectWorkflowInstance(deduction, snapshot, ref?)`, the bug's Expected Behavior;
+  (b) keep the order with a required third parameter (`ref: string | undefined, snapshot`). **Recommended (a).**
+- **D8 — the CHANGELOG line `bug-465` asks for** (a breaking change of a `main` export). (a) written at `user-docs`'
+  `align-user-docs`, which produces `CHANGELOG.md` (`dl-013`; `documentation` directive line 37): this task's
+  closing notes and `bug-465`'s retrospective name it as an item for that phase; (b) this task adds an
+  `## [Unreleased]` section now. **Recommended (a).**
+- **D9 — the amendments' reach.** AC 1/AC 6 name `spec-017` §2, §3.1–§3.3, §3.5 and `spec-008` §2; the same change also
+  edits `spec-017` §1.3, §4.8, §4.9, §7 (grammar), §7.1, §7.3, §10 and `spec-008` §7 and §12's `workflow start` row,
+  which state the behaviour that changes. (a) amend them all now, as prepared; (b) only the named sections, the rest
+  left contradicting the code. **Recommended (a).**
+- **D10 — this repository's practice after the merge.** Once a `workflow start` of the code build runs on `main`, a main
+  opened with `memory add --type plan` (the way `sw-life-cycle-1-plan` and the `rel-v0.4` ingest plans were opened)
+  is no instance: ingest runs and any other main are opened with `workflow start` (now free of `bug-413`), and a phase
+  plan (`parent` set) is unaffected. `AGENTS.md` §6's "or `memory add --type plan` for a phase run by hand" stays true
+  for a phase plan. (a) tell the orchestrator and the supervision at the merge, leave `AGENTS.md` to `agent-docs`;
+  (b) amend `AGENTS.md` §6 in this task. **Recommended (a).**
+
+### Pending amendments (approver)
+
+Prepared in the worktree, uncommitted (`git diff --stat` → the two files):
+- `spec-017-workflow-commands-and-state-deduction` — `--reason "Amend §1.3, §2, §3.1–§3.3, §3.5, §4.8, §4.9, §7, §7.1, §7.3 and §10 for task-345: workflow start's add commit carries the start marker WingFoil-Start, a plan is an open instance only when it is open, names a loaded startable workflow and was opened by start or before the first marked start, a plan naming an unloaded workflow is no instance and stays a warning, and an element-less main takes its context from --element, none, or an active instance whose workflow declares an element (dl-217 (a), bug-413 option (c))."`
+- `spec-008-cli-grammar` — `--reason "Amend §2, §7 and §12 for task-345: the dry run, the add verb and the build-signature note name workflow start's start marker, the note also names memory add's step linkage, and workflow start --element takes none and names the context of a workflow that declares no element (dl-217 (a), bug-413 option (c))."`
+
+### Retrospective
+
+<!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
+     reconstructed afterwards. One line per item: what happened, the evidence (a command and what it
+     printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
+     Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
+     here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
