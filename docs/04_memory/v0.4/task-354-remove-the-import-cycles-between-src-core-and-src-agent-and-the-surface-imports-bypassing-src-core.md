@@ -401,6 +401,23 @@ passed`. The invisible-character `grep -nP` over the five files → no output (e
 **For the developer.** The registry tests compare the set of distinct warnings (the registry may load a pillar more
 than once); `assembleExecutionContext`'s payload must not contain a `"label"` key and must still contain the sha.
 
+### rulings (approver, 2026-11-07)
+
+Two rulings the approver gave after red and green, both as recommended:
+
+- **AC3 (c) reclassified** from characterization to red-first, the assertion unchanged (one `HEAD:` line). On this
+  base `agent execute --step … --dry-run` on the step fixture with `mystery: 1` in `dna.yaml` prints two warning
+  lines, the sha-labelled one first and then the `HEAD:` one (red `dc64f578b`, departure 1 of `### red`); D2 (b)
+  meets it.
+- **Scope widened** (W0-R10, a fix wider than its design), both points (a):
+  1. `test/lint/coverage-scope.test.ts`: `src/mcp/index.ts` leaves `LOGIC_INDEX_FILES`, since the ruled split moved
+     `registerReadOnlyResources` to `src/mcp/read-only-resources.ts` and the index is now a pure re-export barrel (the
+     one failure of the full suite on green `342b0a06a`).
+  2. `src/memory/query.ts` (`loadMemoryDocumentSummaryAtRev`) and `src/agent/discovery.ts` (`listAdaptersAtRev`)
+     take the same optional label as the other `*AtRev` loaders, `src/core/memory-transition.ts` passes `HEAD`, and a
+     developer test pins it, so bug-317's Expected Behavior ("the *AtRev loaders take an optional label parameter so
+     the caller decides how the source is named") is met in full.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
