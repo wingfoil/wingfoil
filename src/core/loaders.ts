@@ -295,10 +295,12 @@ export function loadMemoryYamlAtHead(root: string): MemoryYaml | null {
  * when that commit does not hold the file; a later commit and the working tree are never read.
  *
  * @param rev - A revision naming one commit, resolved once (`resolveRevision`, `./revision.ts`).
+ * @param label - How warnings and errors name the revision (`<label>:<path>`); `rev` as given by default. A caller
+ *   that resolved `HEAD` itself and passes the sha passes `'HEAD'` (task-354, `bug-317`).
  * @throws `RevisionError` when `rev` is malformed or names no commit — never an empty answer.
  */
-export function loadMemoryYamlAtRev(root: string, rev: string): MemoryYaml | null {
-  return memoryYamlAt(root, resolveRevision(root, rev), rev);
+export function loadMemoryYamlAtRev(root: string, rev: string, label: string = rev): MemoryYaml | null {
+  return memoryYamlAt(root, resolveRevision(root, rev), label);
 }
 
 /**
@@ -307,9 +309,11 @@ export function loadMemoryYamlAtRev(root: string, rev: string): MemoryYaml | nul
  * (task-283, `bug-309`: the workflow deduction's snapshot).
  *
  * @param sha - The full sha of a commit, as `resolveRevision` returned it; parse errors name it.
+ * @param label - How warnings and errors name the revision (`<label>:<path>`); `sha` by default. A caller that
+ *   resolved `HEAD` to that sha passes `'HEAD'` (task-354, `bug-317`).
  */
-export function loadMemoryYamlAtCommit(root: string, sha: string): MemoryYaml | null {
-  return memoryYamlAt(root, sha, sha);
+export function loadMemoryYamlAtCommit(root: string, sha: string, label: string = sha): MemoryYaml | null {
+  return memoryYamlAt(root, sha, label);
 }
 
 function memoryYamlAt(root: string, sha: string, label: string): MemoryYaml | null {
@@ -410,10 +414,12 @@ export function loadDnaYamlAtHead(root: string): DnaYaml | null {
  * that commit does not hold the file; a later commit and the working tree are never read.
  *
  * @param rev - A revision naming one commit, resolved once (`resolveRevision`, `./revision.ts`).
+ * @param label - How warnings and errors name the revision (`<label>:<path>`); `rev` as given by default. A caller
+ *   that resolved `HEAD` itself and passes the sha passes `'HEAD'` (task-354, `bug-317`).
  * @throws `RevisionError` when `rev` is malformed or names no commit — never an empty answer.
  */
-export function loadDnaYamlAtRev(root: string, rev: string): DnaYaml | null {
-  return dnaYamlAt(root, resolveRevision(root, rev), rev);
+export function loadDnaYamlAtRev(root: string, rev: string, label: string = rev): DnaYaml | null {
+  return dnaYamlAt(root, resolveRevision(root, rev), label);
 }
 
 /**
@@ -421,9 +427,11 @@ export function loadDnaYamlAtRev(root: string, rev: string): DnaYaml | null {
  * (task-283, `bug-309`).
  *
  * @param sha - The full sha of a commit, as `resolveRevision` returned it; parse errors name it.
+ * @param label - How warnings and errors name the revision (`<label>:<path>`); `sha` by default. A caller that
+ *   resolved `HEAD` to that sha passes `'HEAD'` (task-354, `bug-317`).
  */
-export function loadDnaYamlAtCommit(root: string, sha: string): DnaYaml | null {
-  return dnaYamlAt(root, sha, sha);
+export function loadDnaYamlAtCommit(root: string, sha: string, label: string = sha): DnaYaml | null {
+  return dnaYamlAt(root, sha, label);
 }
 
 function dnaYamlAt(root: string, sha: string, label: string): DnaYaml | null {
@@ -559,10 +567,17 @@ export function loadWorkflowsYaml(root: string): WorkflowsLoadResult {
  * @param overlay - Files that replace the commit's own, keyed by repository-relative path (`.wingfoil/…`);
  *   `null` reads as absent. `workflow create` / `remove` (task-211) load the registry as their commit would
  *   leave it, before writing it. Empty by default: the commit alone.
+ * @param label - How warnings and errors name the revision (`<label>:<path>`); `rev` as given by default. A caller
+ *   that resolved `HEAD` itself and passes the sha passes `'HEAD'` (task-354, `bug-317`).
  * @throws `RevisionError` when `rev` is malformed or names no commit — never an empty registry.
  */
-export function loadWorkflowsYamlAtRev(root: string, rev: string, overlay: ReadonlyMap<string, string | null> = new Map()): WorkflowsLoadResult {
-  return workflowsYamlAt(root, resolveRevision(root, rev), rev, overlay);
+export function loadWorkflowsYamlAtRev(
+  root: string,
+  rev: string,
+  overlay: ReadonlyMap<string, string | null> = new Map(),
+  label: string = rev,
+): WorkflowsLoadResult {
+  return workflowsYamlAt(root, resolveRevision(root, rev), label, overlay);
 }
 
 /**
@@ -571,9 +586,16 @@ export function loadWorkflowsYamlAtRev(root: string, rev: string, overlay: Reado
  *
  * @param sha - The full sha of a commit, as `resolveRevision` returned it; labels name it.
  * @param overlay - As {@link loadWorkflowsYamlAtRev}'s.
+ * @param label - How warnings and errors name the revision (`<label>:<path>`); `sha` by default. A caller that
+ *   resolved `HEAD` to that sha passes `'HEAD'` (task-354, `bug-317`).
  */
-export function loadWorkflowsYamlAtCommit(root: string, sha: string, overlay: ReadonlyMap<string, string | null> = new Map()): WorkflowsLoadResult {
-  return workflowsYamlAt(root, sha, sha, overlay);
+export function loadWorkflowsYamlAtCommit(
+  root: string,
+  sha: string,
+  overlay: ReadonlyMap<string, string | null> = new Map(),
+  label: string = sha,
+): WorkflowsLoadResult {
+  return workflowsYamlAt(root, sha, label, overlay);
 }
 
 function workflowsYamlAt(root: string, sha: string, rev: string, overlay: ReadonlyMap<string, string | null>): WorkflowsLoadResult {
@@ -920,10 +942,12 @@ export function loadDirectivesAtHead(root: string): DirectiveFile[] {
  * **symbolic link** is skipped, never parsed: its blob is the link's target text, not a directive (task-311 D6 (a)).
  *
  * @param rev - A revision naming one commit, resolved once (`resolveRevision`, `./revision.ts`).
+ * @param label - How warnings and errors name the revision (`<label>:<path>`); `rev` as given by default. A caller
+ *   that resolved `HEAD` itself and passes the sha passes `'HEAD'` (task-354, `bug-317`).
  * @throws `RevisionError` when `rev` is malformed or names no commit — never an empty array.
  */
-export function loadDirectivesAtRev(root: string, rev: string): DirectiveFile[] {
-  return directivesAt(root, resolveRevision(root, rev), rev);
+export function loadDirectivesAtRev(root: string, rev: string, label: string = rev): DirectiveFile[] {
+  return directivesAt(root, resolveRevision(root, rev), label);
 }
 
 /**
@@ -931,9 +955,11 @@ export function loadDirectivesAtRev(root: string, rev: string): DirectiveFile[] 
  * (task-283, `bug-309`: `workflow next`, `status` and `show` read the directives at their snapshot's commit).
  *
  * @param sha - The full sha of a commit, as `resolveRevision` returned it; parse errors name it.
+ * @param label - How warnings and errors name the revision (`<label>:<path>`); `sha` by default. A caller that
+ *   resolved `HEAD` to that sha passes `'HEAD'` (task-354, `bug-317`).
  */
-export function loadDirectivesAtCommit(root: string, sha: string): DirectiveFile[] {
-  return directivesAt(root, sha, sha);
+export function loadDirectivesAtCommit(root: string, sha: string, label: string = sha): DirectiveFile[] {
+  return directivesAt(root, sha, label);
 }
 
 function directivesAt(root: string, sha: string, label: string): DirectiveFile[] {
@@ -1054,10 +1080,12 @@ export function loadRolesYamlAtHead(root: string): RolesYaml | null {
  * that commit does not hold the file; a later commit and the working tree are never read.
  *
  * @param rev - A revision naming one commit, resolved once (`resolveRevision`, `./revision.ts`).
+ * @param label - How warnings and errors name the revision (`<label>:<path>`); `rev` as given by default. A caller
+ *   that resolved `HEAD` itself and passes the sha passes `'HEAD'` (task-354, `bug-317`).
  * @throws `RevisionError` when `rev` is malformed or names no commit — never an empty answer.
  */
-export function loadRolesYamlAtRev(root: string, rev: string): RolesYaml | null {
-  return rolesYamlAt(root, resolveRevision(root, rev), rev);
+export function loadRolesYamlAtRev(root: string, rev: string, label: string = rev): RolesYaml | null {
+  return rolesYamlAt(root, resolveRevision(root, rev), label);
 }
 
 /**
@@ -1065,9 +1093,11 @@ export function loadRolesYamlAtRev(root: string, rev: string): RolesYaml | null 
  * (task-283, `bug-309`).
  *
  * @param sha - The full sha of a commit, as `resolveRevision` returned it; parse errors name it.
+ * @param label - How warnings and errors name the revision (`<label>:<path>`); `sha` by default. A caller that
+ *   resolved `HEAD` to that sha passes `'HEAD'` (task-354, `bug-317`).
  */
-export function loadRolesYamlAtCommit(root: string, sha: string): RolesYaml | null {
-  return rolesYamlAt(root, sha, sha);
+export function loadRolesYamlAtCommit(root: string, sha: string, label: string = sha): RolesYaml | null {
+  return rolesYamlAt(root, sha, label);
 }
 
 function rolesYamlAt(root: string, sha: string, rev: string): RolesYaml | null {

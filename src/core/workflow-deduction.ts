@@ -527,9 +527,10 @@ export function readDeductionSnapshotAtHead(root: string): DeductionSnapshot {
   // `HEAD` is resolved once, above, and every pillar is read at that sha (task-283, `bug-309`): no loader
   // resolves it again, and `memory.yaml` / `dna.yaml` are read and parsed once, for the registry's core
   // checks and for the snapshot alike, in the order the registry reads them.
-  const memoryYamlOnce = once(() => loadMemoryYamlAtCommit(root, sha));
-  const dnaYamlOnce = once(() => loadDnaYamlAtCommit(root, sha));
-  const registry = loadWorkflowRegistryAtCommit(root, sha, undefined, { memoryYaml: memoryYamlOnce, dnaYaml: dnaYamlOnce });
+  // The sha is `HEAD`'s, so every read names its files `HEAD:<path>` (task-354, `bug-317`).
+  const memoryYamlOnce = once(() => loadMemoryYamlAtCommit(root, sha, 'HEAD'));
+  const dnaYamlOnce = once(() => loadDnaYamlAtCommit(root, sha, 'HEAD'));
+  const registry = loadWorkflowRegistryAtCommit(root, sha, undefined, { memoryYaml: memoryYamlOnce, dnaYaml: dnaYamlOnce }, 'HEAD');
   const memoryYaml = memoryYamlOnce();
   const dnaYaml = dnaYamlOnce();
   const scanDiagnostics: Diagnostic[] = [];

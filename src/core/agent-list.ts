@@ -144,7 +144,7 @@ export function agentListAtHead(root: string, selection: Selection): CoreResult<
     diagnostics.push(...deduction.diagnostics);
   } else {
     commit = resolveRevision(root, 'HEAD');
-    dnaYaml = loadDnaYamlAtRev(root, commit);
+    dnaYaml = loadDnaYamlAtRev(root, commit, 'HEAD');
   }
 
   let past: RunRecord[] | undefined;

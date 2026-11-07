@@ -617,8 +617,9 @@ export function readNextInputs(root: string, snapshot: DeductionSnapshot, deduct
     memoryYaml: snapshot.memoryYaml,
     dnaYaml: snapshot.dnaYaml ?? null,
     bindings: snapshot.bindings ?? null,
-    rolesYaml: hasSteps ? loadRolesYamlAtCommit(root, snapshot.commit) : null,
-    directiveFiles: hasSteps ? loadDirectivesAtCommit(root, snapshot.commit) : [],
+    // The snapshot's commit is `HEAD`'s (`readDeductionSnapshotAtHead`): its files are named `HEAD:` (task-354).
+    rolesYaml: hasSteps ? loadRolesYamlAtCommit(root, snapshot.commit, 'HEAD') : null,
+    directiveFiles: hasSteps ? loadDirectivesAtCommit(root, snapshot.commit, 'HEAD') : [],
     plans: instancePlanIds(snapshot.documents),
   };
 }

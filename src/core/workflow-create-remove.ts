@@ -134,7 +134,7 @@ function prospectiveLoad(root: string, sha: string, overlay: ReadonlyMap<string,
   try {
     withWarningSink(
       () => {},
-      () => loadWorkflowRegistryAtRev(root, sha, overlay),
+      () => loadWorkflowRegistryAtRev(root, sha, overlay, 'HEAD'),
     );
     return coreOk(undefined);
   } catch (error) {
@@ -169,7 +169,7 @@ export async function workflowCreate(params: WorkflowCreateParams): Promise<Core
 
   const sha = atHeadOr(root, () => resolveRevision(root, 'HEAD'), null);
   if (sha === null) return coreErr({ code: 'VALIDATION', message: 'workflow create needs a commit at HEAD: commit the project configuration first' });
-  const registry = loadWorkflowRegistryAtRev(root, sha);
+  const registry = loadWorkflowRegistryAtRev(root, sha, undefined, 'HEAD');
   const { name } = workflow;
   if (registry.workflows.some((loaded) => loaded.name === name)) return coreErr({ code: 'CONFLICT', message: workflowExistsMessage(name), details: { name } });
 

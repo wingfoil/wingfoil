@@ -307,7 +307,7 @@ export function prepareMemoryTransition(
   const sha = atHeadOr(root, () => resolveRevision(root, 'HEAD'), null);
   let memoryYaml: MemoryYaml | null;
   try {
-    memoryYaml = sha === null ? null : loadMemoryYamlAtRev(root, sha);
+    memoryYaml = sha === null ? null : loadMemoryYamlAtRev(root, sha, 'HEAD');
   } catch (error) {
     if (!(error instanceof ValidationError)) throw error;
     return coreErr({

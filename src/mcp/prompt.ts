@@ -43,7 +43,7 @@ import {
 } from '../core';
 import type { CoreError, DirectiveFile, ExecutionContextElement } from '../core';
 import { errorDetails, type ErrorDetail } from '../core/error-details';
-import { readDocument, splitFrontmatter, WINGFOIL_DIR } from '../storage';
+import { readDocument, splitFrontmatter, WINGFOIL_DIR } from '../core/surface-reads';
 
 import { readRefusalError, warningDetails, withRefusalDetails, withWarnings } from './read-only';
 
@@ -158,7 +158,8 @@ export function buildSessionContext(root: string, role: string, element: Executi
     if (error instanceof RevisionError) throw promptRequestError(error.message);
     throw error;
   }
-  const result = assembleExecutionContext(root, { role, element, stateRef: sha });
+  // The warnings name the revision the client asked for, not the sha it resolved to (task-354, `bug-317`).
+  const result = assembleExecutionContext(root, { role, element, stateRef: sha, label: state });
   if (!result.ok) {
     const { error } = result;
     if (error.code === 'NOT_FOUND') {

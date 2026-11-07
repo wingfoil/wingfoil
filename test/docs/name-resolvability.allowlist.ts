@@ -100,7 +100,6 @@ export const NAME_ALLOWLIST: readonly AllowlistEntry[] = [
   { document: 'docs/04_memory/design/specs/spec-006-core-domain-api.md', nameClass: 'config', name: 'workflow.start', reason: UNTRIAGED },
   { document: 'docs/04_memory/design/specs/spec-006-core-domain-api.md', nameClass: 'path', name: '.wingfoil/run/', reason: UNTRIAGED },
   { document: 'docs/04_memory/design/specs/spec-006-core-domain-api.md', nameClass: 'path', name: 'src/agent', reason: PLANNED, plannedBy: ['task-177', 'task-206', 'task-218'] },
-  { document: 'docs/04_memory/design/specs/spec-006-core-domain-api.md', nameClass: 'path', name: 'src/core/surface-reads.ts', reason: PLANNED, plannedBy: ['task-354'] },
   { document: 'docs/04_memory/design/specs/spec-006-core-domain-api.md', nameClass: 'symbol', name: 'agentAdvanceStep', reason: UNTRIAGED },
   { document: 'docs/04_memory/design/specs/spec-006-core-domain-api.md', nameClass: 'symbol', name: 'agentExecute', reason: PLANNED, plannedBy: ['task-218'] },
   { document: 'docs/04_memory/design/specs/spec-006-core-domain-api.md', nameClass: 'symbol', name: 'agentResolveNext', reason: UNTRIAGED },
