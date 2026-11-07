@@ -53,3 +53,244 @@ leaves module constants undefined by load order, and the `*AtRev` loaders label 
 ## Execution Notes
 
 <!-- Filled by the dev-loop. -->
+
+### design (architect, 2026-11-07)
+
+**Inputs read.** `depends_on: []` (no `dl-015` gate). Base `main` `da1f1016c` plus the start commit `ef5bae8f6` and
+the three bug syncs (`git log --oneline main..HEAD` → four commits, head `2050a5038`). The task's PATH shim was checked
+first (`command -v wingfoil` → the shim; `wingfoil --version` and `node dist/cli.js --version` → both
+`0.3.2 (da1f1016c863091cf1253f529093ad1ae35c79b1)`). Specs read, all `approved`: `spec-006` §1 (module boundary),
+`spec-008` §6 (the unknown-field row), `spec-012` §2 (`ContextRequest`), `spec-016` §3.3; Q07's definition in
+`docs/08_health/metrics.yaml` and its implementation in `scripts/release-health/measure.cjs` (`q07`, `importCycles`).
+Nothing under `.wingfoil/` changes, so no configuration `version:`, no `npm run check:mcp` and no pinned-build
+workflow read is owed. No AC contradicts a ratified DL.
+
+**The defects, reproduced on this base** (scratch directory outside the worktree; probes not committed):
+- `bug-470`: `node -e 'require("./dist/core/agent-execute"); const c=require("./dist/core"); …'` →
+  `agentExecute:undefined agentList:undefined agentShow:function`; barrel first → `agentExecute:function
+  agentList:function agentShow:function`.
+- `bug-317` (load order, wider than the bug says): a probe that, for every `dist/**/*.js` but `dist/cli.js` in byte
+  order, clears the `dist/` entries of `require.cache`, requires that module, then `dist/core/index.js`, then every
+  module, and compares each module's export shape (keys, `typeof` of every value, recursively into plain objects and
+  arrays to depth 4) with the barrel-first shape, reports four first-modules (`checked 138`, 5.7 s):
+  `agent/execute.js`, `core/agent-execute.js`, `core/agent-list.js`, `core/agent-show.js`, each differing in
+  `core/index.js CORE_MODULES` only. The operations left without `fn`: `agent/execute.js` → `agent.agentList`;
+  `core/agent-execute.js` → `agent.agentExecute agent.agentList`; `core/agent-list.js` → `agent.agentList`;
+  `core/agent-show.js` → `agent.agentShow`. Every other exported constant of every module is load-order independent.
+- `bug-317` (labels): in a scratch clone at `da1f1016c` with `mystery: 1` appended to `.wingfoil/dna.yaml` and
+  committed, the code build printed `warning: <40-hex sha>:.wingfoil/dna.yaml: unknown field(s) ignored: mystery` for
+  `workflow next sw-life-cycle-1-plan`, `workflow status`, `workflow list`, `workflow show dev-loop`, `agent list`,
+  `agent list --waiting` and `agent show task-354-x/design/1`, and `{"warning":"<sha>:.wingfoil/dna.yaml: …"}` for
+  `workflow next … --format json`; `dna show` (working tree) printed `.wingfoil/dna.yaml: …`. `agent execute` alone
+  prints `HEAD:` because it rewrites every `<sha>:` of its warnings (`src/agent/execute.ts` l.520–523), pinned by
+  `test/cli/agent-execute-launch.integration.test.ts` ("one warning line, not two, with no sha in its label").
+- `bug-345`: `node scripts/release-health/measure.cjs --release v0.4 --at da1f1016c --no-toolchain --offline --out
+  <scratch>` (exit 0, 15 min 48 s) → Q07 `{"cycles": 2, "bypasses": 3}`, `recorded_deviations: 3`, failing: the three
+  `src/storage` bypasses of `src/cli/init-command.ts`, `src/cli/program.ts`, `src/mcp/prompt.ts`, the cycle
+  `src/agent/execute.ts → src/core/agent-list.ts → src/core/workflow-deduction.ts → src/memory/audit.ts →
+  src/core/index.ts → src/core/agent-execute.ts`, and `src/mcp/index.ts → src/mcp/server.ts`. The other three
+  bypasses (`src/cli.ts` → `./storage/git-root`, `src/mcp/memory-resource.ts` → `../memory/query` and `../storage`)
+  count as "recorded" only because one table row of `docs/05_plans/rl-v1/rel-v0.1/release-implementation-rel-v0.1-plan.md`
+  (l.197) happens to hold the file names, the module names and the word "deviation" (`grep -rniE deviation docs/04_memory
+  docs/05_plans | grep -E "src/cli\.ts|src/mcp/memory-resource\.ts" | grep -E "src/(storage|memory)"` → that one line):
+  no element records them. A TypeScript-AST walk of `src/` with Q07's rules (type-only imports erased, sorted Tarjan)
+  gives the same two strongly connected components — one of 32 files (`src/agent/{execute,launch,run-log,step}.ts`,
+  22 `src/core` files including `index.ts`, `agent-execute.ts`, `agent-list.ts`, `agent-show.ts`, `write-guard.ts`,
+  `context.ts`, `workflow-deduction.ts`, `memory-transition.ts`, and `src/memory/{audit,index}.ts`) and
+  `src/mcp/{index,server}.ts` — and all six bypasses; a walk of the `require("…")` calls of `dist/` gives the same.
+- The one edge that closes the large cycle: `src/memory/audit.ts` l.32 `import { isConfiguredIdentity } from '../core'`
+  (the barrel). Simulated in a scratch copy of `dist/` with only that `require` pointed at `../core/git-identity`: the
+  32-file component disappears (the `dist/` walk lists only `mcp/index.js mcp/server.js`) and the load-order probe
+  reports nothing (`checked 138`). Simulated in a scratch copy of `src/` with that import changed and `server.ts`
+  importing from leaf modules (`./read-only-resources`, `./prompt`, `./session-resource`): the AST walk lists no
+  component at all. `src/memory/query.ts` already imports `../core/revision`, a leaf, so the fix follows practice.
+
+**Existing tests of every file this task changes**, before any pin (one jest process, `--maxWorkers=2`, after
+`waitslot.sh` → `slot granted 12:07:56`): `npx jest --maxWorkers=2 test/memory/audit test/mcp
+test/cli/init-command.test.ts test/cli/program.test.ts test/cli/program.integration.test.ts
+test/cli/agent-execute-launch.integration.test.ts test/core/agent-execute test/core/agent-list test/core/agent-show
+test/core/context-builder test/core/directive-inventory-at-head-loader test/core/format-key.test.ts test/core/loaders
+test/core/workflow-deduction test/core/workflow-list-show test/core/workflow-next test/core/workflow-registry
+test/validation/warning.test.ts` → `Test Suites: 53 passed, 53 total`, `Tests: 957 passed, 957 total`. Also
+`npm run -s docs:api` → exit 0; `npm run -s typecheck` (after `waitslot.sh` → `slot granted 12:11:18`) → exit 0.
+With the `spec-008` and `spec-012` amendments below in the working tree: `npx jest --maxWorkers=2
+test/docs/name-resolvability.test.ts test/docs/command-surface-specs.test.ts test/lint/control-characters.test.ts` →
+`Tests: 62 passed`; with the `spec-006` one added, `test/docs/name-resolvability.test.ts` failed on one unlisted
+finding, `docs/04_memory/design/specs/spec-006-core-domain-api.md|path|src/core/surface-reads.ts`, and passed
+(`Tests: 11 passed`) once the allowlist gained that entry (`PLANNED`, `plannedBy: ['task-354']`, uncommitted with the
+amendments; green removes it in the commit that adds the file). Tests that pin what changes: `test/cli/agent-execute-launch.integration.test.ts` (the `HEAD:` line;
+must keep passing); `test/validation/warning.test.ts` "passes each distinct warning on once, rewritten" (pins the
+`rewrite` parameter, kept, D4); `test/core/workflow-next-spawn-count.test.ts` pins the git calls at the sha (unchanged:
+the label is not a git argument). No test pins a 40-hex warning label (`grep -rnE '\$\{(sha|head|commit|rev)[A-Za-z()]*\}:'
+test` → only git-argument and git-call fixtures). No test enumerates the files of `src/core` or `src/mcp`
+(`test/core/module-layout.test.ts` reads directories only).
+
+**Design.**
+- *The cycles (AC1, AC2).* `src/memory/audit.ts` imports `isConfiguredIdentity` from `../core/git-identity`, not the
+  barrel. `registerReadOnlyResources` and `RegisterReadOnlyResourcesOptions` move verbatim, TSDoc included, from
+  `src/mcp/index.ts` to a new `src/mcp/read-only-resources.ts`; `index.ts` re-exports both and drops its four
+  imports of l.72–75; `server.ts` imports `registerReadOnlyResources` from `./read-only-resources`,
+  `registerRolePrompts` from `./prompt` and `registerSessionContextResource` from `./session-resource`. The exports
+  of `src/mcp/index.ts` keep their names. `src/core/agent-execute.ts` and `src/core/index.ts` do not change. The
+  directory-level dependency `src/core` ↔ `src/agent` remains (`core/agent-execute.ts` → `agent/execute.ts` →
+  `core/*`); no file-level cycle does (D8).
+- *The six bypasses (AC2, D3 (a)).* A new `src/core/surface-reads.ts` re-exports, with a module TSDoc citing
+  `spec-006` §1: `resolveProjectRoot` (`../storage/git-root`), `readBuildStamp`, `TEMPLATE_NAMES`,
+  `DEFAULT_TEMPLATE`, `resolveTemplate`, `readDocument`, `splitFrontmatter`, `WINGFOIL_DIR` (`../storage`),
+  `findMemoryDocumentByTypeAndId`, `listMemoryDocumentsByType` (`../memory/query`). It is not re-exported by
+  `src/core/index.ts` (AC4). `src/cli.ts` (and its module comment naming `./storage/git-root.ts`),
+  `src/cli/init-command.ts`, `src/cli/program.ts`, `src/mcp/memory-resource.ts` and `src/mcp/prompt.ts` import those
+  names from it. All six fixed, none recorded as a deviation.
+- *The labels (AC3, D2 (b)).* Each reader at a revision of `src/core/loaders.ts` takes an optional last `label`:
+  `loadMemoryYamlAtRev(root, rev, label = rev)`, `loadDnaYamlAtRev`, `loadDirectivesAtRev`, `loadRolesYamlAtRev` the
+  same, `loadWorkflowsYamlAtRev(root, rev, overlay = new Map(), label = rev)`, and the `…AtCommit` variants with
+  `label = sha` (the private `memoryYamlAt`, `dnaYamlAt`, `workflowsYamlAt`, `directivesAt`, `rolesYamlAt` already
+  take one). `src/core/workflow-registry.ts`: `loadWorkflowRegistryAtRev(root, rev, overlay?, label = rev)` and
+  `loadWorkflowRegistryAtCommit(root, sha, overlay?, pillars?, label = sha)`, passed to the workflows load and to the
+  fallback `memory.yaml` / `dna.yaml` loads. `ContextRequest` (`src/core/context.ts`, `spec-012` §2) gains
+  `label?: string`, default `stateRef` as given, passed to its four loader calls and to the `declaredKeyOrder` label
+  of l.851; it never reaches the payload. Every `src` caller that resolved `HEAD` itself passes `'HEAD'`:
+  `readDeductionSnapshotAtHead` (`src/core/workflow-deduction.ts` l.530–532), `src/core/workflow-next.ts` l.620–621,
+  `src/core/workflow-list-show.ts` l.374–375, `src/core/agent-list.ts` l.147, `src/core/agent-show.ts` l.155,
+  `src/core/memory-transition.ts` l.310, `src/core/workflow-create-remove.ts` l.137 and l.172, and
+  `src/agent/execute.ts` l.440, l.442 and the `assembleExecutionContext` call of l.614 (`label: 'HEAD'`);
+  `src/mcp/prompt.ts`'s `buildSessionContext` passes `label: state`, the revision its client named. In
+  `src/agent/execute.ts` `agentExecutePipeline` calls `withDistinctWarnings(run)` with no rewrite, the `onHead`
+  parameter of `runPipeline` and its `let sha` go, and the module comment (l.38–39) and the comment of l.517–519 say
+  that the reads name `HEAD` themselves. `withDistinctWarnings` keeps its `rewrite` parameter (D4). The Memory
+  readers of `src/memory/query.ts` need no label: a scan's diagnostic names the repository-relative path whichever
+  baseline was read (`parseScanned`'s TSDoc). The `*AtRev` callers checked: `grep -rnE
+  "load(MemoryYaml|DnaYaml|WorkflowsYaml|Directives|RolesYaml)At(Rev|Commit)\(|loadWorkflowRegistryAt(Rev|Commit)\(" src`,
+  comment, `export function` and `{@link` lines dropped → 27 call lines in 11 files, listed above plus the four `…AtHead` wrappers of `loaders.ts` (already `'HEAD'`) and
+  the internal calls of `workflow-registry.ts`; `grep -rlE "<same pattern without the paren>" test` → 12 test files,
+  all calling with two or three arguments, which stay valid.
+- *Determinism.* Both new tests read the file system in byte-sorted order and traverse in sorted order; the label is a
+  constant or the caller's own argument, never a clock or an environment value.
+
+**AC classification and what qa must pin.** The expected reds at the red commit: `npx tsc --noEmit -p tsconfig.json`
+reports `TS2554` (expected 2–3 arguments) for each new `label` argument in AC3's unit test and `TS2353` for `label` in a
+`ContextRequest` literal — the only type errors; jest fails on assertions (ts-jest transpiles with
+`isolatedModules`, so an extra argument is ignored at run time and the label stays the sha).
+1. **AC1 — red-first.** New `test/core/load-order.test.ts`. A child `node` process (real CommonJS loading, not jest's
+   registry) runs a helper the test owns: for every `dist/**/*.js` except `dist/cli.js` (the `bin` entry runs the CLI
+   when required, D6), in byte order of the path relative to `dist/`, delete every `require.cache` key under `dist/`,
+   require that module, then `dist/core/index.js`, then every module; record (i) each `CORE_MODULES` operation whose
+   `fn` is not a function, as `<module>.<operation>`, and (ii) each `<module> <export>` whose shape differs from the
+   barrel-first run's (shape as in the probe above). Assert both lists empty for every first module. At red, from
+   the real run above: (i) `agent/execute.js` → `agent.agentList`; `core/agent-execute.js` → `agent.agentExecute`,
+   `agent.agentList`; `core/agent-list.js` → `agent.agentList`; `core/agent-show.js` → `agent.agentShow`; (ii) the same
+   four, `core/index.js CORE_MODULES` each. Runs against the `dist/` the jest global setup builds; budget ~6 s.
+2. **AC2 — red-first.** New `test/lint/import-graph.test.ts`, TypeScript compiler API (`typescript` 6.0.3, already a
+   devDependency and what Q07 uses; no runtime dependency, `test/cli/runtime-dependencies.test.ts` unaffected) over
+   every `src/**/*.ts` read from the working tree in byte order, with Q07's import rules (`measure.cjs` `importsOf`: an
+   import is type-only when the clause is `import type` or every named binding is `type`; `export … from` likewise;
+   `require()`, `import()` and `import('x').T` count). (a) Runtime graph = the non-type-only relative imports
+   resolved to a file of the set; Tarjan over sorted nodes and sorted edges; assert the list of components with a
+   cycle is `[]`. At red: the 32-file component and `src/mcp/index.ts src/mcp/server.ts`. (b) Bypass = any import,
+   type-only included, from `src/cli.ts`, `src/cli/**` or `src/mcp/**` into `src/storage`, `src/memory`, `src/dna`,
+   `src/directives` or `src/workflow`, minus the deviations an explicit list in the test records, each entry
+   `{ file, module, element }` whose `element` must name an existing `docs/04_memory` document (D1 (a)); the list is
+   empty. Assert the sorted `"<file> imports <spec> (<module>)"` list is `[]`. At red: `src/cli.ts imports
+   ./storage/git-root (src/storage)`, `src/cli/init-command.ts imports ../storage (src/storage)`,
+   `src/cli/program.ts imports ../storage (src/storage)`, `src/mcp/memory-resource.ts imports ../memory/query
+   (src/memory)`, `src/mcp/memory-resource.ts imports ../storage (src/storage)`, `src/mcp/prompt.ts imports
+   ../storage (src/storage)`.
+3. **AC3 — red-first.** (a) New `test/core/loaders-label.test.ts`, on a `makeTempGitRepo` fixture
+   (`test/storage/helpers/git-fixture.ts`, as `test/core/loaders-at-rev.test.ts` builds it) whose committed
+   `dna.yaml`, `memory.yaml` and `roles.yaml` each carry one unknown top-level key, under `withWarningSink`
+   (`src/validation/warning.ts`): `loadDnaYamlAtRev(repo, sha, 'HEAD')`, `loadMemoryYamlAtRev`, `loadRolesYamlAtRev`
+   and the `…AtCommit` forms raise `HEAD:<path>: unknown field(s) ignored: <key>`; without the argument the label is
+   the revision as passed (`<sha>:<path>`, characterization of the default). A workflow file and a directive with a
+   parse error give a `ValidationError`/`DiagnosticsError` whose file label starts `HEAD:` through
+   `loadWorkflowsYamlAtRev(repo, sha, new Map(), 'HEAD')`, `loadWorkflowRegistryAtCommit(repo, sha, undefined,
+   undefined, 'HEAD')` and `loadDirectivesAtRev(repo, sha, 'HEAD')`. `assembleExecutionContext(repo, { role, element,
+   stateRef: sha, label: 'HEAD' })` on a fixture with the dna unknown key raises the `HEAD:` warning (reuse
+   `test/agent/helpers/agent-execute-fixture.ts` `seed`/`DNA_YAML` or `test/core/context-builder.test.ts`'s fixture).
+   (b) New `test/cli/head-label.integration.test.ts`, spawning `dist/cli.js` (`test/cli/helpers/spawn-cli.ts`
+   `spawnCapture`, `CLI_ENTRY`) in a fixture project whose committed `dna.yaml` ends with `mystery: 1` and which has
+   a workflow (`test/core/helpers/agent-list-fixture.ts` `writeProject`/`commit`, or the agent-execute fixture): the
+   stderr of `workflow list`, `workflow show <name>`, `workflow next`, `workflow status`, `agent list`,
+   `agent list --waiting` and `agent show <element>/<phase>/1` contains `warning: HEAD:.wingfoil/dna.yaml: unknown
+   field(s) ignored: mystery`, and no line matching `/[0-9a-f]{40}:/`. Fixture of the red output, copied from the run
+   above: `warning: cc1b046a1e469d161977ab2dd042723fc42b69dd:.wingfoil/dna.yaml: unknown field(s) ignored: mystery`
+   (the sha is the fixture's HEAD). (c) Characterization in the same integration file: `agent execute --step …
+   --dry-run` (`test/agent/helpers/agent-execute-step-fixture.ts`) with the dna unknown key prints that warning once,
+   labelled `HEAD:` — it passes today through the rewrite and must still pass without it; the existing
+   `test/cli/agent-execute-launch.integration.test.ts` case stays as is. The removal of the rewrite itself is checked
+   at review by command (`grep -n "join('HEAD:')\|onHead" src/agent/execute.ts` → no output), not by a test of the
+   source text.
+4. **AC4 — characterization, by command (D5 (a)).** No new test. At refactor and review: `npm test`,
+   `npm run typecheck`, `npm run docs:api` (`test/docs/api-docs.test.ts` runs it too), and the public exports of
+   `src/core/index.ts` compared with `main`: `diff` of `dist/core/index.d.ts` built on `main` and on the task head →
+   no output (base: `sha1sum dist/core/index.d.ts` → `be7bb7bce0ba1f54498b9041e1d622df08146058`), and
+   `node -e 'console.log(Object.keys(require("./dist/core")).length)'` → `166` on both. The same check for
+   `src/mcp/index.ts`: the sorted runtime keys of `dist/mcp` (28 names, `DNA_SECTION_URI_TEMPLATE` … `startMcpServer`)
+   are unchanged.
+
+**Files to touch.** Source: `src/memory/audit.ts`, `src/mcp/read-only-resources.ts` (new), `src/mcp/index.ts`,
+`src/mcp/server.ts`, `src/core/surface-reads.ts` (new), `src/cli.ts`, `src/cli/init-command.ts`, `src/cli/program.ts`,
+`src/mcp/memory-resource.ts`, `src/mcp/prompt.ts`, `src/core/loaders.ts`, `src/core/workflow-registry.ts`,
+`src/core/workflow-deduction.ts`, `src/core/workflow-next.ts`, `src/core/workflow-list-show.ts`, `src/core/agent-list.ts`,
+`src/core/agent-show.ts`, `src/core/memory-transition.ts`, `src/core/workflow-create-remove.ts`, `src/core/context.ts`,
+`src/agent/execute.ts`. Tests (red, qa): `test/core/load-order.test.ts`, `test/lint/import-graph.test.ts`,
+`test/core/loaders-label.test.ts`, `test/cli/head-label.integration.test.ts`, and a helper of the first under
+`test/core/helpers/` if qa wants one. Specs (pending amendments): `spec-006`, `spec-008`, `spec-012`; allowlist
+`test/docs/name-resolvability.allowlist.ts` (one `PLANNED` entry for `src/core/surface-reads.ts` in `spec-006`, removed
+by green when the file exists). Unchanged: `src/core/index.ts`, `src/core/agent-execute.ts`, `src/validation/warning.ts`,
+everything under `.wingfoil/`. No `version:` bump (no configuration file and no versioned document changes).
+
+**Risks for the other open tasks.** `task-357` (in progress) changes the WIP-slot merge of
+`src/core/memory-transition.ts` (l.529–640); this task changes one argument at l.310 of the same file: separate hunks.
+`task-335` (`runPipeline` step 12, `launchPlan`) and `task-338` (`attributionLine`, `renderBootstrap`) edit
+`src/agent/execute.ts`; this task changes l.38–39, l.440–442, l.515–545 (`agentExecutePipeline`, `runPipeline`'s
+signature and `onHead(sha)`) and l.614: a merge of `main` after this task touches adjacent but distinct lines, and
+`runPipeline` loses its last parameter. `task-333` adds `src/core/agent-context.ts` and edits
+`src/core/git-identity.ts`: `src/memory/audit.ts` now imports `isConfiguredIdentity` from that file directly, so a
+rename there must follow it (the barrel would have hidden it). None of the three edits `src/core/index.ts` because of
+this task. The new tests fail any later task that closes a cycle or adds a surface bypass — by design.
+
+**Decisions for the approver.**
+- **D1 — AC2's deviation exception.** (a) an explicit list inside the test, each entry naming an existing Memory
+  element, empty after this task; (b) Q07's rule (a line of any Memory document naming the file, the module and the
+  word "deviation"), which today counts three bypasses as recorded through an unrelated plan table row; (c) no
+  exception. Recommendation: (a).
+- **D2 — which callers name `HEAD`.** (a) only what dropping `agent execute`'s rewrite needs — still `workflow
+  list/show/next/status` and `agent list --waiting`, which share the deduction snapshot; (b) every `src` caller that
+  resolved `HEAD` itself, plus the MCP session prompt naming its client's revision, with `spec-008` §6 amended.
+  Recommendation: (b), one argument per call, the `bug-317` rule applied once.
+- **D3 — the six bypasses.** (a) fixed through the non-barrel `src/core/surface-reads.ts` re-export module, `spec-006`
+  §1 amended; (b) recorded as deviations by a decision-log, imports unchanged; (c) core query functions replacing
+  the raw reads (wider than an M task). Recommendation: (a).
+- **D4 — `withDistinctWarnings`'s `rewrite` parameter.** (a) kept (a generic helper with its own test); (b) removed
+  with that test case. Recommendation: (a).
+- **D5 — AC4's evidence.** (a) by command at refactor and review, as above; (b) a test pinning the barrel's export
+  names, which every later task adding an export (`task-333`) would have to edit. Recommendation: (a).
+- **D6 — `dist/cli.js` left out of AC1's load order**, because requiring it runs the CLI. Recommendation: yes.
+- **D7 — AC2's graph from the TypeScript AST** (Q07's definition) rather than from `dist/`'s `require` calls; the two
+  agree at this base. Recommendation: the AST.
+- **D8 — file-level, not directory-level, acyclicity.** `src/core` and `src/agent` keep depending on each other as
+  directories; the load-order hazard is a file-level cycle, which AC1 and AC2 pin. Recommendation: accept, no element.
+
+### Pending amendments (approver)
+
+Prepared in the worktree, uncommitted (`git diff --stat` → three spec files plus the allowlist), approved at this gate,
+recorded before red:
+- `spec-006-core-domain-api` (§1 paragraph and Revision note; with D3 (a)) — `--reason "Name src/core/surface-reads.ts
+  as the door of the surfaces' remaining reads and state the no-cycle rule, per task-354 (bug-345, bug-470, bug-317)."`
+- `spec-008-cli-grammar` (§6 unknown-field row and Revision note; with D2 (b)) — `--reason "Say that every command
+  which resolved HEAD labels a configuration file HEAD: in the unknown-field warning, per task-354 (bug-317)."`
+- `spec-012-context-loader-relevance-filtering` (§2 `ContextRequest.label` and Revision note) — `--reason "Add the
+  optional label to ContextRequest so the caller names the revision in warnings and errors, per task-354 (bug-317)."`
+
+### Retrospective
+
+<!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
+     reconstructed afterwards. One line per item: what happened, the evidence (a command and what it
+     printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
+     Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
+     here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+
+- design: Q07's "recorded deviation" rule matched an unrelated table row of a v0.1 plan and hid three of `bug-345`'s six
+  bypasses (`measure.cjs … --at da1f1016c` → `recorded_deviations: 3`); the design's AC2 test does not reuse that rule (D1).
+- design: one `--no-toolchain --offline` measurement took 15 min 48 s (`time` of the run above), too slow to re-check Q07
+  inside a phase; the AST walk of `src/` reproduced its cycles and bypasses in about a second.
