@@ -329,6 +329,56 @@ all as the design recommended:
 - **D6**: the `spec-015` §2 amendment is recorded at this gate (`164aa6274`).
 - **D7**: the latency pass that no workflow gate runs is filed as a new low bug (outside this task).
 
+### red (qa, 2026-11-07)
+
+**Red commit `59ea47c2e`** (`git log --oneline -1` → `59ea47c2e test(core): task-357 — failing test: …`), test files
+only: `test/core/memory-wip-limits.test.ts`, `test/core/latency-budget-placement.test.ts`. No `.d.cts` needed (no new
+export is imported). Base unchanged: `git rev-list --count HEAD..main` → `0`, no merge. PATH guard through the task's
+PATH shim: `command -v wingfoil` → the shim, `wingfoil --version` and `node dist/cli.js --version` → `0.3.2 (ee34da351…)`.
+
+**Run.** `npx jest --maxWorkers=2 --json --outputFile=<scratch>/red-final.json test/core/memory-wip-limits.test.ts
+test/core/latency-budget-placement.test.ts` → `Test Suites: 2 failed`, `Tests: 7 failed, 1868 passed, 1875 total`
+(memory-wip-limits 1 failed / 34, latency-budget-placement 6 failed / 1841). `npx tsc --noEmit -p tsconfig.json` → no
+output, exit 0. `npx jest test/lint --maxWorkers=2` → `Test Suites: 13 passed`, `Tests: 153 passed`. `npx eslint` on the
+two files → clean. The WIP file alone, six runs in a row (`for i in 1..6; npx jest --maxWorkers=2
+test/core/memory-wip-limits.test.ts`): runs 3–6 with the committed helper → `1 failed, 33 passed` each, always the
+`read first: b` case.
+
+**Per AC** (first failing assertion of each red test):
+- **AC1**, `test/core/memory-wip-limits.test.ts`:
+  - characterization, passes on first run: `when several refs changed an element, the most advanced of their changed
+    copies wins over the decided one (read first: main)` and `(read first: task/y)`, the old single test as an
+    `it.each`; each asserts the read order it set (`rev-parse first < rev-parse second`) before the submit.
+  - red-first: `an element two refs moved into the state at different paths is named in the same place, whichever ref
+    is read first (read first: b)` → `expect(result.error.message).toBe(…)`: expected `… (limit 2): held by shelf-a,
+    shelf-m. …`, received `… held by shelf-m, shelf-a. …` — the design's scratch probe with the code build gave the same
+    line for the `b`-first order. `(read first: a)` passes. The test-local `shelf` type (`docs/memory/shelves/{release}/{id}.md`,
+    `limits: { in-progress: 2 }`) and the `releasedDoc` builder follow the design.
+  - **Departure from the design's helper, declared.** The design's `readFirst` amends `second`'s tip alone. The first
+    run of that version failed `(read first: task/y)` with `fixture bug: the tip of task/y still sorts after the tip of
+    main after 64 amends`: when `first`'s sha sorts near `ffff…`, amends of `second` alone need more tries than any
+    bound. The committed helper amends both tips on each try (in order with probability 1/2 per try, 64 tries); both
+    are safe to amend in both tests (no tip is another ref's ancestor), and the order read is still fixed. The doc
+    comment says so.
+- **AC2 (red-first)**, `test/core/latency-budget-placement.test.ts` (module doc gains rule 6):
+  - `scans a non-trivial, real set of test sources …` → `expect(classify('mcp/server.test.ts').times).toBe(false)`:
+    received `true`.
+  - `the in-process opt-in suites are exactly the four in-process REQ-PERF suites (task-357, bug-221)` → `toEqual`:
+    missing `test/agent/agent-execute-latency.test.ts`, `test/core/query-latency.test.ts`,
+    `test/mcp/resource-latency.test.ts`.
+  - `test/%s asserts no budget in the parallel pass … (rule 6)` → four cases fail, `expect(problems).toEqual([])`
+    receiving `test/<file> times in the parallel pass: time it in a suite of IN_PROCESS_LATENCY_SUITES
+    (test/latency-suites.cjs) and keep what it asserts besides the time in the parallel pass`, for
+    `agent/agent-execute-latency.test.ts`, `core/query-latency.test.ts`, `mcp/resource-latency.test.ts`,
+    `mcp/server.test.ts`; every other scanned file passes.
+  - passes on first run: `every helper unit test of rule 6 is live …` (the five `HELPER_UNIT_TESTS` entries exist, time,
+    and are no latency suite).
+  - Rule 5's existing `it.each` takes the new members once green adds them to `test/latency-suites.cjs`.
+- **AC3 (characterization)**: not pinned in red; the coverage gate runs at refactor.
+
+**For the developer.** Red does not touch `test/latency-suites.cjs`, the four latency suites, or the three new
+parallel-pass suites (design D2 (a)): they are green's files.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
