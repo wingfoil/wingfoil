@@ -552,7 +552,9 @@ export const WIP_REFS_SENTENCE =
  *   `sha` counts every copy it holds). The refs are those {@link refBaselineCommits} lists for
  *   `memory add`'s id counter (`dl-101` §2 (a)); a ref that is an ancestor of `sha` changed nothing.
  *   When several refs changed it, the most advanced of their copies wins
- *   ({@link isMoreAdvancedState}), the decided commit's copy not competing;
+ *   ({@link isMoreAdvancedState}), the decided commit's copy not competing; between copies in the same
+ *   state, the one whose `path` sorts first (UTF-16 code units, as the holders are sorted), so the copy
+ *   chosen is a total order of (rank, state, path) and never the read order (task-357, `bug-361`);
  * - otherwise the state commit `sha` records.
  *
  * So a stale branch does not keep a parked holder counted, and an older copy elsewhere does not hide an
@@ -611,6 +613,9 @@ export function requireWipSlot(
       if (atBase.get(key)?.state === copy.state) continue;
       const known = changed.get(key);
       if (known === undefined || isMoreAdvancedState(machine, copy.state, known.state)) changed.set(key, copy);
+      // Two copies in the same state tie: the one whose path sorts first wins, so the copy kept — and
+      // where the refusal names it — never depends on the order the refs were read in (REQ-SYS-07).
+      else if (copy.state === known.state && copy.path < known.path) changed.set(key, copy);
     }
   }
   for (const [key, copy] of changed) elements.set(key, copy);

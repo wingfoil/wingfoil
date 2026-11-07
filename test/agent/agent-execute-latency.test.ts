@@ -16,61 +16,56 @@
  *
  * In process, so no process of its own is timed (`test/core/latency-budget-placement.test.ts` rule 2):
  * the pre-flight's server is started by the code under test, inside the timed region, as it is for a
- * user. The budget is thirty times REQ-PERF-02's, so it holds on a loaded machine too.
+ * user. The fixture (the 60 documents) is `test/agent/helpers/agent-execute-full-context-fixture.ts`.
+ *
+ * **Placement** (task-357, `bug-221`). The SARD's measurement condition of every REQ-PERF target, REQ-PERF-01
+ * included, is an otherwise idle machine, so this suite runs only in the opt-in latency pass
+ * (`test/latency-suites.cjs` `IN_PROCESS_LATENCY_SUITES`; `npm run test:latency`), never inside the parallel
+ * `npm test`: the budget's margin on a loaded machine was never measured. It reads the load average before and
+ * after its sampling and refuses a loaded run through `inProcessIdleVerdict` rather than counting it, as
+ * `test/core/workflow-next-latency.test.ts` does. What it asserts besides the time — a run on the 60-document
+ * context reaches the spawn — runs in the parallel pass too, one run and no clock, in
+ * `test/agent/agent-execute-full-context.test.ts`.
  */
-import { join } from 'node:path';
+import { cpus } from 'node:os';
 
-import type { AgentExecuteHost } from '../../src/agent';
-import { agentExecuteFn } from '../../src/core/agent-execute';
-import { withNoticeSink, withWarningSink } from '../../src/validation/warning';
-import { describeSamples, MIN_RUNS, p95, sampleLatency } from '../core/helpers/latency';
-import { removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
-import { REPO_ROOT, seed, TASK_REF } from './helpers/agent-execute-fixture';
+import { describeLoad, describeSamples, inProcessIdleVerdict, MIN_RUNS, p95, readLoadAverage, sampleLatency, type LoadWindow } from '../core/helpers/latency';
+import { removeTempDir } from '../storage/helpers/git-fixture';
+import { runToSpawn, SPAWN_REACHED_MESSAGE, seedFullContext } from './helpers/agent-execute-full-context-fixture';
 
 /** REQ-PERF-01's threshold: `< 30,000 ms (p95)`. */
 const REQ_PERF_01_BUDGET_MS = 30000;
 
-/** What the host's `spawn` throws: the run reached step 14. */
-const SPAWN_REACHED = 'the spawn instant (REQ-PERF-01 "agent ready")';
-
-const HOST: AgentExecuteHost = {
-  mcpServer: { command: process.execPath, args: [join(REPO_ROOT, 'dist', 'cli.js'), 'mcp'] },
-  isTerminal: () => false,
-  spawn: () => {
-    throw new Error(SPAWN_REACHED);
-  },
-};
-
-/** A relevant, non-draft task of about 7 KiB: it shares the subject's tag (`spec-012` §6 T4). */
-function relevantDoc(index: number): string {
-  const id = `task-${String(500 + index)}-load`;
-  const paragraph = `Paragraph ${String(index)} of the load fixture, deterministic text for the context builder. `.repeat(8);
-  const body = Array.from({ length: 9 }, () => paragraph).join('\n\n');
-  return ['---', `id: ${id}`, 'type: task', `title: "${id}"`, 'release: "v0.1"', 'status: backlog', 'tags: [ context ]', '---', '', '## Description', '', body, ''].join('\n');
-}
-
 describe('task-228 AC 5 — REQ-PERF-01: steps 1–14 of agent execute in < 30,000 ms (p95)', () => {
   let repo: string;
   beforeAll(() => {
-    repo = seed((root) => {
-      for (let index = 0; index < 60; index += 1) {
-        writeFixtureFile(root, `docs/04_memory/v0.1/task-${String(500 + index)}-load.md`, relevantDoc(index));
-      }
-    });
+    repo = seedFullContext();
   }, 120000);
   afterAll(() => removeTempDir(repo));
 
-  it(`p95 over ${String(MIN_RUNS)} runs, each to the spawn instant`, async () => {
+  let samples: number[] = [];
+  let load: LoadWindow;
+
+  it(`samples ${String(MIN_RUNS)} runs, each to the spawn instant, reading the load before and after`, async () => {
     const outcomes: string[] = [];
-    const samples = await sampleLatency(MIN_RUNS, async () => {
-      const result = await withNoticeSink(
-        () => undefined,
-        () => withWarningSink(() => undefined, () => agentExecuteFn({ root: repo, options: { element: TASK_REF, role: 'developer' }, host: HOST })),
-      );
-      outcomes.push(result.ok ? 'ok' : result.error.message);
+    const before = readLoadAverage();
+    samples = await sampleLatency(MIN_RUNS, async () => {
+      outcomes.push(await runToSpawn(repo));
     });
+    load = { before, after: readLoadAverage() };
+    process.stdout.write(`agent execute to the spawn: ${describeSamples(samples)}; ${describeLoad(load)}\n`);
     // Every run reached the spawn: none was refused earlier, so what was timed is steps 1–14.
-    expect(new Set(outcomes)).toEqual(new Set([`agent command 'node' could not be started (adapter 'fake'): ${SPAWN_REACHED}`]));
-    expect({ p95: p95(samples) < REQ_PERF_01_BUDGET_MS, samples: describeSamples(samples) }).toEqual({ p95: true, samples: describeSamples(samples) });
+    expect(new Set(outcomes)).toEqual(new Set([SPAWN_REACHED_MESSAGE]));
+    expect(samples).toHaveLength(MIN_RUNS);
   }, 900000);
+
+  it('the run was taken on an otherwise idle machine (a loaded run is refused, not counted)', () => {
+    expect(inProcessIdleVerdict(load, cpus().length)).toBe('otherwise idle');
+  });
+
+  it(`p95 over ${String(MIN_RUNS)} runs to the spawn instant stays under 30,000 ms, on an otherwise idle machine`, () => {
+    if (inProcessIdleVerdict(load, cpus().length) !== 'otherwise idle') return; // refused above, not counted
+    const report = `agent execute to the spawn: ${describeSamples(samples)}; ${describeLoad(load)}`;
+    expect({ report, under: p95(samples) < REQ_PERF_01_BUDGET_MS }).toEqual({ report, under: true });
+  });
 });

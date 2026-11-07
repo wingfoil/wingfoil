@@ -10,8 +10,9 @@ module.exports = {
   // `test/lint/coverage-parity.test.ts` fails if the report and `src/` ever disagree.
   roots: ['<rootDir>/test', '<rootDir>/src'],
   testMatch: ['**/*.test.ts'],
-  // The suites that time spawned processes are left out of this run: their budgets presuppose an
-  // otherwise idle machine, and here jest's own workers compete with what they measure. They run
+  // The latency suites — those that time spawned processes and those that time an operation in-process
+  // (task-357, `bug-221`) — are left out of this run: their budgets presuppose an otherwise idle machine,
+  // and here jest's own workers compete with what they measure, so no budget runs here. They run
   // alone, through `jest.latency.config.js`, only when asked for (`npm run test:latency`, or
   // `WINGFOIL_LATENCY=1 npm test` — `scripts/run-tests.cjs`; task-154, `bug-013`). The list is
   // `test/latency-suites.cjs`.

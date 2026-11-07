@@ -3,10 +3,11 @@
  * `npm test` — the parallel jest run, plus the latency suites alone when asked for
  * (`task-154-give-latency-budgets-statistical-shape-guard-says-what`, `bug-013`).
  *
- * The latency suites (`test/latency-suites.cjs`) time spawned commands against REQ-PERF-02's
- * 1,000 ms. A spawn's wall-clock is only about the command on an otherwise idle machine: inside
- * jest's parallel run, or beside other jobs, the measured cost moves by seconds with nothing in the
- * command changed. So `jest.config.js` leaves them out, and they run, alone and in one worker
+ * The latency suites (`test/latency-suites.cjs`) time spawned commands against REQ-PERF-02's and
+ * REQ-PERF-03's budgets, and operations in-process against REQ-PERF-01's to REQ-PERF-04's (task-357,
+ * `bug-221`). A wall-clock is only about the code on an otherwise idle machine: inside jest's parallel
+ * run, or beside other jobs, the measured cost moves by seconds with nothing in the code changed. So
+ * `jest.config.js` leaves them out, no budget runs in the parallel run, and they run, alone and in one worker
  * (`jest.latency.config.js`), only when asked for explicitly — the approver's ruling of 2026-10-03,
  * so that no publish is ever blocked by wall-clock noise:
  *
