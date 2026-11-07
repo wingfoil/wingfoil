@@ -570,6 +570,78 @@ Prepared in the worktree, uncommitted (`git status --short` → the two spec fil
   `src/mcp/index.ts:84-90`; a new Revision note) — `--reason "Follow registerReadOnlyResources to
   src/mcp/read-only-resources.ts, where task-354 moved it to break the src/mcp import cycle (bug-345)."`
 
+### review fixes (developer, 2026-11-07)
+
+The reviewer approved with fixes on `8d13fe958`; findings 1, 2, 3, 5, 6 and 7 are fixed here (finding 4, a barrel
+exclusion for `src/mcp/index.ts`, waits for its own ruling and is not applied). Code and tests in `5c459bbc2`
+`test(core): task-354 — review fixes: …`; specs as pending amendments, uncommitted. The task's PATH shim was checked
+first (`command -v wingfoil` → the shim; both builds `0.3.2 (8d13fe9588c37e9d644c823dc2fc90cde99b80fd)`);
+`git rev-list --count HEAD..main` → `0`, no merge. The task stays `in-review`: no Memory verb was run.
+
+- **1 — spec-018's line citations.** `grep -n "execute.ts:\|server.ts:" docs/04_memory/design/specs/spec-018-*.md` →
+  l.50 and l.127 cite `src/agent/execute.ts:591`, l.65 `src/mcp/server.ts:57-72`. At HEAD the approver-role refusal is
+  l.585 (`grep -n "role === APPROVER_ROLE" src/agent/execute.ts` → 585; `git show main:src/agent/execute.ts | grep -n
+  …` → 591), not the reviewer's 587 (`if (!agent.ok) return agent;`); the empty Tools channel's cited text (its TSDoc
+  through `setRequestHandler(ListToolsRequestSchema, …)`) is l.61-76 (main l.57-72, `sed -n` of both compared). Pending
+  amendment of `spec-018` below: the three citations and a Revision note.
+- **2 — stale pointers to `src/mcp/index.ts`.** `test/mcp/helpers/channel-enumeration.ts` l.8 and
+  `test/mcp/read-only-resources.test.ts` l.6 name `src/mcp/read-only-resources.ts`; `jest.config.js` l.69-73 and
+  `test/lint/coverage-scope.test.ts` (header l.7-9, item 3, the `LOGIC_INDEX_FILES` TSDoc) describe the current state:
+  `src/mcp/index.ts` is a barrel since task-354 and stays measured because no exclusion lists it. `grep -rn
+  "index.ts.*registerReadOnlyResources\|registerReadOnlyResources.*index.ts" src test scripts docs/*.md README.md
+  AGENTS.md .wingfoil` → no output after the fix (`src/mcp/index.ts` itself and `read-only-resources.ts` aside).
+- **3 — the workflow loaders' label doc.** `src/core/loaders.ts`: `parseYamlOrDiagnostic` passes `filePath` to
+  `parseYaml` only, and its diagnostic carries `file` relative to `.wingfoil/`; the label reaches `emitUnknownFieldWarning`
+  for the manifest (l.659), the workflow files (`parseWorkflowFile`, l.487) and `bindings.yaml` (l.736). The TSDoc of
+  `loadWorkflowsYamlAtRev` and both `@param label` now say that.
+- **5 — D2 (b) pinned on two untested callers**, both characterization (they passed on their first run, the behaviour
+  having landed with green `342b0a06a`), each in a new file because `test/cli/head-label.integration.test.ts` is a red
+  file (T4):
+  - `test/cli/head-label-memory-verb.integration.test.ts`: on the agent-execute fixture with `mystery: 1` appended to
+    `memory.yaml`, `memory submit task-999-missing` prints exactly `warning: HEAD:.wingfoil/memory.yaml: unknown
+    field(s) ignored: mystery` then `error: document not found: task-999-missing`, exit 1, no `<40-hex>:`.
+  - `test/mcp/session-context-label.test.ts`: on that fixture with `mystery: 1` in `dna.yaml`, `buildSessionContext`
+    with state `HEAD` warns `HEAD:.wingfoil/dna.yaml: unknown field(s) ignored: mystery` (no sha), with state `<sha>`
+    warns `<sha>:.wingfoil/dna.yaml: …`.
+  - Fixture output from a real run: a scratch probe outside the worktree (the fixture helper compiled with `npx tsc
+    --ignoreConfig --module commonjs`, then `node run.cjs <worktree>/dist/cli.js`) printed `exit 1` and the two stderr
+    lines above for the verb (fixture HEAD `bd63673571bf4b95eff0a6bb2af5a7e7d5af4e13`), and
+    `["HEAD:.wingfoil/dna.yaml: unknown field(s) ignored: mystery"]` / `["39c522ef52829fb68cd0653a2f3ab832b337edc6:.wingfoil/dna.yaml:
+    unknown field(s) ignored: mystery"]` for the two states.
+- **6 — spec-006 §1's door.** `src/cli/init-command.ts` uses `DEFAULT_TEMPLATE` and `resolveTemplate` to pick the
+  template (l.53, l.64, l.83-84, `grep -n "DEFAULT_TEMPLATE\|resolveTemplate" src/cli/init-command.ts`) and
+  `src/cli/program.ts` l.163 `program.version(readBuildStamp())`; §1 now lists the build stamp of `--version`, the
+  template names, the default template and the template lookup. Folded into the pending `spec-006` amendment, reason
+  extended below.
+- **7 — correction of `### green`.** The green notes say `git ls-files | grep "\.d\.cts$"` → only `scripts/*.d.cts`;
+  that is false: `git ls-files | grep "\.d\.cts$" | grep -v "^scripts/"` → `test/dist-lock.d.cts`,
+  `test/git-isolation.d.cts`, `test/latency-suites.d.cts`. None names `loadMemoryDocumentSummaryAtRev` or
+  `listAdaptersAtRev` (`grep -l "loadMemoryDocumentSummaryAtRev\|listAdaptersAtRev" test/*.d.cts scripts/*.d.cts` → no
+  output), so the conclusion — no `.d.cts` to update — stands.
+
+**Gates** (the three pending spec amendments in the working tree): `npx jest
+test/cli/head-label-memory-verb.integration.test.ts test/mcp/session-context-label.test.ts test/lint/coverage-scope.test.ts
+test/mcp/read-only-resources.test.ts test/core/loaders-at-rev.test.ts test/core/loaders-label.test.ts --maxWorkers=2` →
+`Test Suites: 6 passed`, `Tests: 85 passed`; the ten suites importing `test/mcp/helpers/channel-enumeration.ts` → `Test
+Suites: 10 passed`, `Tests: 105 passed`; `npx jest test/docs/name-resolvability.test.ts
+test/docs/command-surface-specs.test.ts test/lint/control-characters.test.ts --maxWorkers=2` → `Tests: 62 passed`; `npx jest
+test/lint --maxWorkers=2` → `Test Suites: 14 passed`, `Tests: 158 passed`; `npm run -s lint` → exit 0; `npm run -s typecheck`
+after `waitslot.sh` (exit 0, 23:02:00 → 23:02:13) → exit 0. The full suite was NOT re-run: the round changes comments,
+TSDoc and two new test files only (`git show --stat 5c459bbc2`), as the round's instructions allow.
+
+### Pending amendments (approver) — review fixes
+
+Uncommitted (`git status --short` → the three spec files); they replace the reasons of the earlier list where they
+overlap:
+- `spec-006-core-domain-api` (as listed in `### Pending amendments (approver)`, plus §1's door sentence and one clause of
+  the task-354 Revision note) — `--reason "Name src/mcp/read-only-resources.ts as where registerReadOnlyResources lives
+  since task-354 moved it out of the src/mcp barrel, and list every wingfoil init read src/core/surface-reads.ts serves
+  (bug-345)."`
+- `spec-017-workflow-commands-and-state-deduction` — unchanged from the earlier list.
+- `spec-018-approval-binding-l0-agent-markers-attribution-trailers-and-the-approver-verb-refusal` (Context l.50, l.65,
+  §1 l.127 and a Revision note) — `--reason "Follow the approver-role refusal to src/agent/execute.ts:585 and the empty
+  Tools channel to src/mcp/server.ts:61-76, where task-354's changes moved them (bug-317, bug-345)."`
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
