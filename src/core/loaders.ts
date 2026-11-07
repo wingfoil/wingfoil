@@ -559,7 +559,7 @@ export function loadWorkflowsYaml(root: string): WorkflowsLoadResult {
  * registry is read at `HEAD`): the manifest and every file it includes, read at that commit. It runs
  * the same body as {@link loadWorkflowsYaml} over the committed bytes, so the result — or the
  * {@link DiagnosticsError} and its ordered `diagnostics` array (task-136) — is the one the working-tree
- * loader gives for the same bytes. Only the parse-error labels differ (`<rev>:.wingfoil/<file>`); every
+ * loader gives for the same bytes. Only the parse-error labels differ (`<label>:.wingfoil/<file>`, the revision as given by default); every
  * diagnostic's `file` stays relative to `.wingfoil/`. A path the commit holds as a directory counts as
  * absent (`E_WORKFLOW_FILE_NOT_FOUND`).
  *
@@ -598,7 +598,7 @@ export function loadWorkflowsYamlAtCommit(
   return workflowsYamlAt(root, sha, label, overlay);
 }
 
-function workflowsYamlAt(root: string, sha: string, rev: string, overlay: ReadonlyMap<string, string | null>): WorkflowsLoadResult {
+function workflowsYamlAt(root: string, sha: string, label: string, overlay: ReadonlyMap<string, string | null>): WorkflowsLoadResult {
   const committedPath = (file: string): string => posix.normalize(`.wingfoil/${file}`);
   // The included files and `bindings.yaml`, read in one `cat-file --batch` once the manifest names them
   // (task-216, REQ-PERF-03: one spawn instead of one per workflow file).
@@ -620,7 +620,7 @@ function workflowsYamlAt(root: string, sha: string, rev: string, overlay: Readon
       const answers = fetch(files);
       files.forEach((file, index) => fetched.set(file, answers[index] ?? null));
     },
-    label: (file) => `${rev}:${committedPath(file)}`,
+    label: (file) => `${label}:${committedPath(file)}`,
   });
 }
 
@@ -1100,11 +1100,11 @@ export function loadRolesYamlAtCommit(root: string, sha: string, label: string =
   return rolesYamlAt(root, sha, label);
 }
 
-function rolesYamlAt(root: string, sha: string, rev: string): RolesYaml | null {
+function rolesYamlAt(root: string, sha: string, label: string): RolesYaml | null {
   const raw = readPathAtRev(root, sha, ROLES_YAML_PATH);
   if (raw === null) return null;
-  const label = `${rev}:${ROLES_YAML_PATH}`;
-  const data = parseYaml(raw, label);
-  refuseNewerFormat(data, ROLES_YAML_FORMAT, label);
-  return runValidation(RolesYaml, data, label);
+  const file = `${label}:${ROLES_YAML_PATH}`;
+  const data = parseYaml(raw, file);
+  refuseNewerFormat(data, ROLES_YAML_FORMAT, file);
+  return runValidation(RolesYaml, data, file);
 }

@@ -2,7 +2,7 @@
  * The role-scoped MCP **Prompts** channel — `{role}-session` prompts that embed the role's assigned
  * directives (task-039-mcp-prompts-role-based-infra, **REQ-INT-02**,
  * `spec-004-mcp-surface-contract` §3). This is the third and last channel type spec-004 §1 names,
- * alongside the Resources channel (`./index.ts`'s `registerReadOnlyResources`, task-011/task-030) and
+ * alongside the Resources channel (`registerReadOnlyResources`, `./read-only-resources.ts`, task-011/task-030) and
  * the still-unshipped Tools channel (P5.2.3, v0.4).
  *
  * **Wired into the production server by `task-058-mcp-prompts-role-based` (P5.2.2).** task-039
