@@ -209,7 +209,7 @@ async function acquireHeavyGate({
   log = defaultLog,
   pollMs = DEFAULT_POLL_MS,
 }) {
-  mkdirSync(dir, { recursive: true });
+  mkdirSync(dir, { recursive: true, mode: 0o700 }); // one per user: nobody else writes the lock or the trace
   const lockPath = gateLockPath(dir);
   if (isNested(env, lockPath, isAlive)) return { nested: true };
 
