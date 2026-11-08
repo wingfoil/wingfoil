@@ -54,3 +54,267 @@ never deduced instances.
 ## Execution Notes
 
 <!-- Filled by the dev-loop. -->
+
+### design (architect, 2026-11-08)
+
+**Inputs read.** Base: `main` `db6d372e7` + `wf(task): start` `19fdf4079` and the three bug syncs `c3da8a90a`,
+`dc9b9ed28`, `bdbdc6030` (`git log --oneline -5` → head `bdbdc6030`). PATH guard: `command -v wingfoil` → the task's
+PATH shim; `wingfoil --version` and `node dist/cli.js --version` → `0.3.2 (db6d372e705877cacdbedec844d027e222f7a327)`
+(the code build of this worktree); `npm run -s wingfoil -- --version` → `0.3.2 (6de2e13c004bbf419acfa7dc4d98d5a7468cd693)`
+(the pin). Read: `dev-loop-rel-v0.4-plan` W0-R1 … W0-R12 (on `design/dev_loop_v0.4`), `spec-017` and `spec-008`
+(`approved`), `dl-217`, `dl-205` and `dl-197` (all `ready`: `grep -m1 '^status:'` on each), `bug-390`, `bug-491`,
+`bug-434`, `.wingfoil/workflows/custom/dev-loop.yaml`, `task-348`'s design on its branch (the `dl-205` procedure),
+and `task-345`'s Execution Notes (`dl-015`, below).
+
+**What `task-345` hands this task (`dl-015`).** (1) The start marker `WingFoil-Start: <workflow>` rides the add commit
+(`trailers` on the `verbs.add` call of `workflowStart`, `src/core/workflow-start-end.ts:292`): an instance is the act
+of starting (`dl-217`), so a plan left `draft` stays an open instance — `spec-017` §3.2 (i) admits `draft`. Kept as is.
+(2) Decision G1, ruled at its review: `workflowStart` passes `fields: { workflow }` when the plan type's patterns hold
+no `{workflow}` token (line 286). Kept, and widened by AC 2. (3) A `memory add --type plan` after a marked start is no
+instance (the pre-marker rule, `bug-515`): no fixture of this task may use one as an instance.
+
+**The defects, reproduced on this base** (scratch repositories outside the worktree, the code build
+`node <worktree>/dist/cli.js`, `git init` + `init --template Kanban --no-interactive`):
+- `bug-390`: `workflow start bug-ingest` → exit 0, `started bug-ingest as bug-ingest-1-plan (active)`; `git log -2
+  --format=%B` → `wf(plan): submit bug-ingest-1-plan` (no `Carries content` line) over `wf(plan): add bug-ingest-1-plan`
+  with `WingFoil-Start: bug-ingest`; the plan reads `status: active` and still holds its placeholder comment.
+- What leaving it `draft` does to the engine, checked on the same repository after `git revert --no-edit HEAD` of the
+  submit (the state AC 1 (a) leaves): `workflow status` → `open workflows: 1`, `* bug-ingest-1-plan (bug-ingest) —
+  active`, frontier `bug-ingest.capture` (the instance kept, the marker on the add); `workflow end` → exit 1, `error:
+  workflow 'bug-ingest' was not submitted: run wingfoil memory submit bug-ingest-1-plan`; a body line appended, then
+  `memory submit bug-ingest-1-plan` → exit 0, `{"from": "draft", "to": "active"}`, commit `wf(plan): submit
+  bug-ingest-1-plan` / `Carries content: the body`, one file. No approver and no `memory amend` needed.
+- `bug-491`, what `task-345`'s G1 left: the plan type edited to `id_pattern: "plan-{n}-{slug}"`, `path:
+  docs/memory/plan/{id}.md` (required `[id, type, title, status, workflow, phase]` unchanged), committed;
+  `workflow start decision-log-ingest` → exit 1, `error: plan plan-001-decision-log-ingest was added but not submitted:
+  run wingfoil memory submit plan-001-decision-log-ingest` / `missing required field on submit: phase`; the file reads
+  `status: draft`, `workflow: "decision-log-ingest"` (G1's half, fixed), `phase: ""` (open). `workflow start adr-ingest
+  --set phase=capture` → exit 1, `error: --set phase: memory type 'plan' has no token {phase} in its id_pattern or
+  path`; `--set scope=x` → the same with `{scope}`; `--set workflow=x` → exit 2, `error: invalid flag value: --set
+  workflow: workflow start sets only phase and scope`. `--dry-run --format json` and `--dry-run` (console) both print
+  the same JSON plan: `title: "adr-ingest"`, `phase: ""`, message ending `WingFoil-Start: adr-ingest` /
+  `WingFoil-Version: …`. **So what remains of `bug-491` is `phase`** (always), the `--set phase=` refusal on a type with
+  no `{phase}` token, and the default title, which today drops the phase when it is not a token (`titleOf(values['phase'])`,
+  line 222) although `spec-017` §7.1 says `<workflow> — <phase>`.
+- `bug-434`: `node <scratch>/ac3-mutation.cjs <worktree>` (requires `dist/core/workflow-deduction.js` and
+  `dist/workflow/deduce.js`, reads `readDeductionSnapshotAtHead(<worktree>)`, mutates the documents in memory):
+  `instancePlanIds ∩ six` → `[]` at HEAD, `[]` with `dev-loop-rel-v0.1-plan` set `status: active`,
+  `["dev-loop-rel-v0.1-plan"]` with its `parent` blanked; `deduced instances ∩ six` → `[]` in all four cases
+  (HEAD, status active, parent blank, both). The five workflows the six name are all sub workflows (`npm run -s
+  wingfoil -- workflow list --all --format json` → `dev-loop`, `initial-design`, `release-planning`,
+  `release-submit`, `retrospective`: `startable false`), so §3.2 (ii) excludes them from the deduced instances
+  whatever their status and `parent`: an assertion on `deduction.instances` cannot fail by any mutation of the six
+  plans' frontmatter. The property they carry is `parent` (phase plans, which no `<ref>` names) — **decision D5**.
+
+**Existing tests of the files this task changes**, before any pin (one jest process, `--maxWorkers=2`, no slot):
+`npx jest --maxWorkers=2 test/core/workflow-start-end.test.ts test/core/workflow-start-end-arms.test.ts
+test/core/workflow-start-end-coverage.test.ts test/core/workflow-start-marker.test.ts
+test/cli/workflow-start-end.integration.test.ts test/cli/workflow-start-plan-patterns.integration.test.ts
+test/core/workflow-deduction.test.ts test/core/workflow-repository-conformance.test.ts` → `Test Suites: 8 passed`,
+`Tests: 130 passed`. With the two spec amendments below in the working tree: `npx jest --maxWorkers=2
+test/docs/name-resolvability.test.ts` → `Tests: 11 passed` (no new unlisted name, so no allowlist entry).
+
+**Every test that pins the behaviour AC 1 changes — measured, not guessed.** A clone of this branch outside the
+worktree, `workflowStart` edited to skip its submit (`commits: [add]`), then the 41 suites that name `workflow start`,
+`workflowStart`, `e2e-smoke.cjs` or `docs/examples` (`grep -rl "workflowStart\|'workflow', 'start'\|workflow
+start\|e2e-smoke.cjs\|docs/examples" test/ --include=*.test.ts`), under the `dl-170` slot (`waitslot.sh` granted
+after `task-335`'s suite), `npx jest --maxWorkers=2 <41 files>` → `Test Suites: 9 failed, 32 passed, 41 total`,
+`Tests: 29 failed, 795 passed, 824 total`. The nine: `test/core/workflow-start-end.test.ts` (sc. 1, sc. 2, P4.3 sc. 1,
+sc. 2, "an instance id selects it too", the incomplete-instance scenario, "each of the two commits…", "a refused
+second commit…"), `test/core/workflow-start-end-arms.test.ts` ("a submit refused by its result…", the abandoned-instance
+`end`), `test/core/workflow-start-end-coverage.test.ts` ("a submit that throws…", "end: a plan deleted in the working
+tree…"), `test/core/workflow-start-marker.test.ts` ((a): `commits` length 2; (e)), `test/core/element-short-reference.test.ts`
+(the two `task-332` AC 5 starts, which count the start's commits), `test/cli/workflow-start-end.integration.test.ts`
+(`--format json parses as StartResult`, P4.3 sc. 1, the incomplete instance, `task-217` AC 5 `planStatus: 'active'`),
+`test/cli/dry-run.integration.test.ts` (`workflowStart` counts two real commits; `workflowEnd` needs a submitted plan),
+`test/cli/e2e-smoke.test.ts` and `test/cli/publish-staging.test.ts` — both only through the Journey 4 example,
+`FAIL: commits written: expected '2', got '1'` (`docs/examples/06-workflow-approval/run.sh:46`); the smoke's own
+scenario (`scripts/e2e-smoke.cjs` `smokeSteps`: `workflow start sw-life-cycle`, two `workflow finalize`, `adopt
+--plan`) passes on a `draft` plan, so `scripts/e2e-smoke.cjs` does not change. Phase and step lists: no workflow file
+changes, so no test pinning a phase list, a step list or a workflow count moves.
+
+**Design (as recommended in D1–D4).**
+- *`src/core/workflow-start-end.ts` (AC 1, AC 2).* `workflowStart` writes only `verbs.add` (fields + the marker
+  trailer, as today) and no submit: `StartVerbs` loses `submit` (D4), `submitFailure` and the `StorageError` /
+  `commitFailureSummary` imports go if unused. Values: `commits: [<add sha>]`, `submit: \`wingfoil memory submit
+  ${id}\`` (new `StartResult` field, TSDoc), `instance.planStatus` `'draft'`; the warnings are the add's.
+  `planTokens`: tokens are the derived values whose names the patterns hold, plus `--set` values for those names; the
+  plan's `workflow` and `phase` values (derived, or `--set phase=`) are always written — as tokens when declared,
+  otherwise through `fields` (with `element`); a `--set scope=` with no `{scope}` token is still passed as a token, so
+  `memory add`'s refusal stays. Title (D3): `--title`, else `<workflow> — <phase>` with the phase the plan records.
+  The `-<n>` suffix rule is unchanged (it applies only when `{phase}` is an `id_pattern` token). `renderStartConsole`:
+  `started <workflow> as <id> (active)\n` + `plan <id> is draft: write its body, then run wingfoil memory submit
+  <id>\n` + what `renderNextConsole` prints. Header TSDoc rewritten (one commit, the plan left `draft`).
+- *`src/core/index.ts`.* `workflowStartFn` hands `{ add: memoryAddFn }`; the TSDoc at the `workflowStart` operation
+  (line ~2586) and at `MemoryAddParams.fields` reworded (it now records `workflow` and `phase` too).
+- *`src/storage/templates.ts`* (the scaffold comments at lines 197, 382, 393: "adds and submits" → adds the plan
+  `draft`, its author submits it) and the byte copy `test/core/fixtures/kanban-memory.yaml` line 61, kept identical
+  (`test/core/helpers/short-reference-fixture.ts` says it is a byte-for-byte copy of what `init --template kanban`
+  writes).
+- *`.wingfoil/memory.yaml`.* The `plan` annotation (line 265) "which `wingfoil workflow start` adds and submits" →
+  "adds as draft, its author submits"; `version: 3.5` → `3.6`, history clause "3.5 -> 3.6 at task-346 (comment-only:
+  the `plan` annotation, workflow start leaves its plan draft, bug-390)". `dl-205` check below.
+- *`docs/cli-reference.md`* (`### wingfoil workflow start`: one commit, the plan `draft`, the `submit` field and the
+  console line, the error list without the failed-second-commit case; § "Git side effects" line 112: `workflow start`
+  no longer the exception) — `test/docs/cli-reference.test.ts` runs at refactor.
+- *`docs/examples/06-workflow-approval/run.sh`* (lines 44–47: one commit, then the body and `memory submit
+  deliver-1-plan` before the `workflow end` of line 114) — run by the example gate at refactor.
+- *`docs/02_requirements/02_bdd/features/p4-workflow/P4.2-workflow-start.feature`* — a scenario for AC 1:
+  "Scenario: The plan of a started workflow is left to be written / When I run "wingfoil workflow start report-bug" /
+  Then its plan is in draft / And the output names "wingfoil memory submit report-bug-1-plan" / And "wingfoil workflow
+  end" is refused until the plan is submitted".
+- Out of the task, for `align-user-docs` / `align-agent-docs` (`minor-v0.4`): `docs/user-guide.md:275` ("adds and
+  submits a plan"), `AGENTS.md` §5.1 (`workflow start` writes a plan's `add` and `submit`), `docs/agents.md` if it
+  says so, and a `CHANGELOG.md` line for the API change (`StartVerbs` loses `submit`, `StartResult` gains `submit`,
+  `commits` holds one sha).
+
+**Per-AC classification and what `red` (qa) must pin.**
+
+| AC | Class | Why |
+|---|---|---|
+| 1 plan left to be written | red-first | `start` writes add + submit today (`bug-390` repro above) |
+| 2 `workflow` and `phase` always | red-first | `phase: ""` and the `--set phase=` refusal today (`bug-491` repro above) |
+| 3 the `task-301` test can fail | characterization, mutation-checked | the rewritten assertion passes on this code; the mutation shows it can fail |
+| 4 the `spec-017` amendment | characterization | the approver's `memory amend` at this gate (below) |
+
+Interface for all: the registered operations (`enumerateOperations(CORE_MODULES)`, `workflowStart`, `memorySubmit`,
+`workflowEnd`), as `test/core/workflow-start-end.test.ts` and `workflow-start-end-arms.test.ts` call them — not
+`workflowStart(params, verbs)` with a hand-built `verbs` (its type changes, D4); the CLI as `node dist/cli.js` in
+`test/cli/*.integration.test.ts`. Expected reds: at runtime (two commits, `status: active`, no `submit`), and `tsc`
+TS2339 where a test reads `value.submit` through the `StartResult` type — qa reads it through the test's own
+`StartValue` interface (as `workflow-start-end.test.ts` does) so the red is a runtime one.
+
+- **AC 1** — new `describe` in `test/core/workflow-start-end.test.ts` (its fixture, `{workflow}-{phase}-plan`, required
+  `[title, workflow, phase]`):
+  1. `start report-bug`: `git rev-list --count <before>..HEAD` → `1`; subject `wf(plan): add report-bug-1-plan`; the
+     commit touches only the plan file; its trailer paragraph holds `WingFoil-Start: report-bug` (assert the line, not
+     the whole message); the file reads `status: draft`; `value.commits` equals `[git rev-parse HEAD]`;
+     `value.instance` matches `{ id: 'report-bug-1-plan', planStatus: 'draft', active: true }`; `value.submit` is
+     `'wingfoil memory submit report-bug-1-plan'`.
+  2. `deduceWorkflowStateAtHead(repo).instances[0].instance` is that plan, `planStatus: 'draft'` (the instance is open
+     from the add, `dl-217`).
+  3. `end` before the submit → `INVALID_TRANSITION`, `workflow 'report-bug' was not submitted: run wingfoil memory
+     submit report-bug-1-plan`, HEAD unchanged.
+  4. A body line written to the plan, then `memorySubmit` (positional the id) → one commit `wf(plan): submit
+     report-bug-1-plan` whose body has `Carries content: the body`, `status: active`; then `end` → `wf(plan): finalize
+     report-bug-1-plan [active → done]`.
+  5. `renderStartConsole(value)` of a real start of `tidy` in `workflow-start-end-arms.test.ts`'s fixture (complete at
+     once) → exactly `started tidy as tidy-1-plan (active)\nplan tidy-1-plan is draft: write its body, then run
+     wingfoil memory submit tidy-1-plan\nno next step: workflow 'tidy' is complete\n`.
+  6. CLI, `test/cli/workflow-start-end.integration.test.ts`: `workflow start … --format json` → exit 0, `commits` of
+     length 1, `submit` as above; console stdout holds the `plan … is draft …` line after the `started` line;
+     `--dry-run --format json` and `--dry-run` (console) → exit 0, `subject: wf(plan): add <id>`, nothing written
+     (`git rev-parse HEAD` unchanged) — the dry run already stops at the add; pin that it still does.
+  Existing pins red must rewrite (they assert the two commits or `active` after a start): in
+  `test/core/workflow-start-end.test.ts` sc. 1 (`planStatus: 'active'`, the two subjects, `status: active`), sc. 2
+  (`planStatus: 'active'`; and its `end`), "each of the two commits touches only the plan file", "a refused second
+  commit leaves the plan draft…" (the arm no longer exists: replace it by item 3), and every `end` after a `start`
+  (P4.3 sc. 1, sc. 2, "an instance id selects it too", the incomplete-instance scenario): a `memorySubmit` of the plan
+  between them; `test/core/workflow-start-end-arms.test.ts` "a submit refused by its result keeps the plan draft…"
+  (removed with the arm) and the `end` cases; `test/core/workflow-start-end-coverage.test.ts` "a submit that throws
+  something other than a storage failure propagates" (removed with the arm) and line 99's console string;
+  `test/core/workflow-start-marker.test.ts` ((a) at line 243, `commits` length 2 → 1, and (e));
+  `test/core/element-short-reference.test.ts` (the two `task-332` AC 5 starts); `test/cli/workflow-start-end.integration.test.ts`
+  (lines 125, 195 and its `end` cases); `test/cli/dry-run.integration.test.ts` (the `workflowStart` and `workflowEnd`
+  rows); `docs/examples/06-workflow-approval/run.sh` lines 44–47 (developer, green: it is not a test file) — the
+  complete list is the blast run above. `test/cli/journey-0a.integration.test.ts:133` (`… (active)`) stays green: the
+  `started` line is unchanged.
+- **AC 2** — `test/core/workflow-start-end-arms.test.ts` (its `memoryYaml(plan)` fixture, required widened to `[title,
+  workflow, phase]` for these cases) and `test/cli/workflow-start-plan-patterns.integration.test.ts`:
+  1. `idPattern: 'plan-{n}-{slug}'`, `path: 'docs/plans/{id}.md'`, start `tidy`: exit ok; the file has `workflow:
+     "tidy"`, `phase: "1"`, `title: "tidy — 1"`, id `plan-001-tidy-1` (D3 (a)); `memorySubmit` of it then succeeds
+     (the required fields filled — `bug-491`'s Expected).
+  2. Same type, `release-cycle --element release:minor-v1`: `phase: "minor-v1"`, `element: "minor-v1"`.
+  3. Same type, `tidy --set phase=capture`: exit ok, `phase: "capture"` (today: `--set phase: memory type 'plan' has
+     no token {phase} in its id_pattern or path`).
+  4. Same type, `tidy --set scope=x`: still `VALIDATION`, `--set scope: memory type 'plan' has no token {scope} in its
+     id_pattern or path`, nothing written (unchanged — pin it).
+  5. `idPattern: 'plan-{n}'` (the existing case): id `plan-001`, and now `phase: "1"` in the file.
+  6. A template with no `phase:` key: the field is still written (`phase: "1"` present in the frontmatter).
+  7. CLI, as `bug-491`'s Steps: `init --template Kanban --no-interactive`, the plan type edited to
+     `plan-{n}-{slug}` / `docs/memory/plan/{id}.md` and committed, `workflow start decision-log-ingest` → exit 0, the
+     file `status: draft`, `workflow: "decision-log-ingest"`, `phase: "1"`; `workflow start adr-ingest --set
+     phase=capture` → exit 0; `memory submit <first id>` → exit 0. Fixture strings copied from the outputs above.
+- **AC 3** — `test/core/workflow-deduction.test.ts`, the `it` at line 603: keep the `W_MEMORY_UNREADABLE` assertion;
+  replace the second by "none of the six ids is an instance plan a `<ref>` can name": `instancePlanIds(
+  readDeductionSnapshotAtHead(root).documents)` (import `instancePlanIds` from `../../src/core/workflow-deduction`,
+  `readDeductionSnapshotAtHead` from `../../src/core`) holds none of `SIX`'s stems; rename the `it` accordingly. Add
+  the mutation as an assertion of the same `it` (so it stays checked): the same documents with one of the six's
+  `parent` set to `''` → `instancePlanIds` holds that id. qa records in `### red (qa)`: the test passes on this code,
+  and, as a temporary uncommitted edit, the in-memory mutation flipped to `status: 'active'` alone stays green (the
+  `parent` keeps it a phase plan, as it should) while `parent: ''` makes the HEAD assertion red — with the commands and
+  the jest lines.
+- **AC 4** — nothing to test: the approver's `memory amend` commits (below) are in `git log` before red.
+
+**`dl-205` — the `.wingfoil/memory.yaml` change, checked with the pinned build on a scratch copy.** A clone of this
+branch outside the worktree, the proposed comment and `version: 3.6` committed there: `npm run -s wingfoil --
+--version` → `0.3.2 (6de2e13c…)`; `workflow list` → exit 0; `workflow show sw-life-cycle` → exit 0; `memory search
+--type plan --status active --format json` → exit 0, the active plans listed; `dna show` → exit 0; `workflow status` →
+`open workflows: 5`; `npm run -s check:mcp` → exit 0, `.mcp.json "wingfoil" runs the pinned wingfoil 0.3.2,
+advertising [prompts, resources, tools] (prompts: 8, resources: 4, tools: 0)` and the build under development serving
+the same. A comment-only change: no shape change, no break to declare. No workflow file changes, so no phase or step
+list moves (`git diff --stat -- .wingfoil/workflows` stays empty).
+
+### Pending amendments (approver)
+
+Uncommitted in this worktree (`git status --short` → the two spec files):
+- `spec-017-workflow-commands-and-state-deduction` — `--reason "Amend §7.1, §8, §10, §11 and §13 for task-346: workflow
+  start writes only its plan's add commit and leaves the plan draft for its author to write and submit with memory
+  submit, which its output names (bug-390), and it writes the plan's workflow and phase whatever the plan type's
+  id_pattern and path declare, so --set phase= is accepted on any plan type (bug-491)."`
+- `spec-008-cli-grammar` — `--reason "Amend §2's --dry-run row and §12's workflow start row for task-346: workflow
+  start writes one commit, so the dry run leaves no submit commit unpredicted, and --set phase= is accepted whether or
+  not the plan type's patterns hold a {phase} token (bug-390, bug-491)."`
+
+**Decisions for the approver.**
+- **D1 — what AC 1 makes of the plan.** (a) `start` always writes only the add and leaves the plan `draft`; its author
+  writes the body and runs `memory submit` (the shape every other element has; `dl-217`: the act is the marked add);
+  (b) an opt-in `workflow start --no-submit` (`bug-390`'s own example), the default unchanged — no existing test
+  breaks, but a plan started without the flag still needs an approver's `memory amend` for its body; (c) the plan
+  stays `active` and gets a non-approver way to write it — no such verb exists (`memory amend` needs the approver,
+  `dl-108`), so it needs a new rule. **Recommended: (a)** — the task's title says it, and the probe above shows the
+  engine already carries a `draft` instance end to end; its cost is the 29 test edits above, the example, and one
+  `memory submit` after every `workflow start` in this repository's procedures.
+- **D2 — how the output names `memory submit <id>`.** (a) a `submit` field in `StartResult` (`"wingfoil memory submit
+  <id>"`) and the console line `plan <id> is draft: write its body, then run wingfoil memory submit <id>` after the
+  `started` line; (b) the console line only, a JSON reader reading `instance.planStatus: "draft"`. **Recommended: (a)**
+  — an agent reads the JSON, and the command is then stated, not inferred. The amendment is written for (a).
+- **D3 — the default title when the plan type's patterns hold no `{phase}`.** (a) `<workflow> — <phase>` with the
+  phase now recorded, as `spec-017` §7.1 says (a `{slug}` id changes: `plan-001-decision-log-ingest-1` instead of
+  `plan-001-decision-log-ingest`); (b) keep `<workflow>` as today. **Recommended: (a)** — same class as `bug-491`
+  (the phase dropped where it is not a token); only types whose patterns hold no `{phase}` see a different title.
+- **D4 — `StartVerbs.submit`.** (a) removed with the arm it served (`StartVerbs` is an exported type: a `CHANGELOG`
+  line for `align-user-docs`); (b) kept and unused. **Recommended: (a)** — dead API otherwise.
+- **D5 — AC 3's mutation.** The AC's parenthesis names "the plan's status changed in a fixture"; the probe above shows
+  no status (nor `parent`) mutation can put one of the six into `deduction.instances`, since all five workflows they
+  name are sub workflows. **Recommended:** AC 3 met by `bug-434`'s own candidate — the six are not `instancePlanIds`
+  (the `<ref>` surface, which depends on `parent`) — with the `parent: ''` mutation as the one that turns it red, kept
+  in the test, and the status-only mutation recorded as the one that rightly stays green.
+- **D6 — `dl-197` against AC 2.** `dl-197` (`ready`, release `v0.4`) ratified (b): `memory add` takes a separate
+  `--field` option, its approve's reason saying `bug-491` and `bug-493` are fixed with it; no `v0.4` task names
+  `--field` (`grep -rl -- "--field" docs/04_memory/v0.4` → only this task file, which does not implement it). AC 2
+  fixes `bug-491` inside `workflow start` through the core-only `fields` (`spec-017` §7.1 already lists `workflow`
+  and `phase` among the fields the add writes), with no CLI option. **Recommended:** close `bug-491` with AC 2, and
+  schedule `dl-197`'s `--field` as its own task (candidate finding 1); `bug-493` stays in `v0.4.1`.
+
+**Risks for the other open `w0` tasks.** `task-335` (in review) changes `spec-008` §2's `--dry-run` row — the same
+physical line as this task's amendment — and appends Revision notes to both specs, and edits `docs/cli-reference.md`
+and `docs/user-guide.md`: whichever merges second resolves the line by keeping both edits (`git diff
+main...task/task-335-… -- docs/04_memory/design/specs/spec-008-cli-grammar.md` → its hunk at line 105 is about
+`agent execute`). `task-348` (in review) bumps `dev-loop.yaml`, not `memory.yaml` (`git diff --name-only main...task/task-348-…`
+→ none of this task's files). The `W0-R3` records are written with the code build of `main` after this task's merge:
+a `workflow start` run from it leaves its plan `draft`, so the orchestrator's procedure owes a `memory submit` after
+each start from then on.
+
+**Candidate findings (not filed).**
+1. `dl-197` is `ready` for `v0.4` with no task implementing its ratified `memory add --field` (`grep -rl -- "--field"
+   docs/04_memory/v0.4` → only `task-346`'s file, which leaves it out; D6). Expected: a task in a later `v0.4` wave or a
+   re-assignment of the DL. Severity: low.
+
+### Retrospective
+
+<!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
+     reconstructed afterwards. One line per item: what happened, the evidence (a command and what it
+     printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
+     Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
+     here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
