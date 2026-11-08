@@ -5,7 +5,8 @@
  * {@link readDeductionSnapshotAtHead} is the one impure step: it resolves `HEAD` once and reads every
  * input at that sha — the workflow registry with its core checks (`loadWorkflowRegistryAtCommit`),
  * `memory.yaml`, `dna.yaml`, every Memory document in sorted path order (tolerant, task-171), the file
- * list, each open plan's start commit and what each instance's walk holds (phase records, step linkages,
+ * list, each open plan's start commit and its standing against the start marker (task-345, §3.2: the marked starts
+ * are read for every instance plan, in the same `git log`, and the ancestry from the walk) and what each instance's walk holds (phase records, step linkages,
  * re-entries, and the provenance records `workflow: adopt` / `workflow: rekey`, read from the same subjects and
  * trailers by `src/workflow/provenance.ts`, task-293) — plus, to **explain** and never to decide, the working-tree paths among the inputs that
  * differ from `HEAD` (`W_UNCOMMITTED_INPUTS`, §1.2; the `command-baseline` directive). The deduction
@@ -593,23 +594,13 @@ export function readDeductionSnapshotAtHead(root: string): DeductionSnapshot {
   // The start lookup reads every instance plan, any status: a marked start counts whatever its plan's status now is.
   const instancePlans = documents.filter(({ frontmatter }) => isInstancePlan(frontmatter));
   const candidates = instancePlans.filter(({ frontmatter }) => OPEN_PLAN_STATUSES.includes(text(frontmatter['status']) ?? '')).map((document) => document.path);
-  const read = readStarts(
-    root,
-    sha,
-    instancePlans.map((document) => document.path),
-  );
+  const read = readStarts(root, sha, instancePlans.map((document) => document.path));
   const candidateStarts = candidates.flatMap((path) => {
     const start = read.get(path);
     return start === undefined ? [] : [[path, start] as const];
   });
   const markedStarts = [...new Set([...read.values()].filter((start) => start.marked).map((start) => start.commit))].sort();
-  const { history, transitions, lastChanges, parents, follows } = readHistory(
-    root,
-    sha,
-    candidateStarts.map(([, start]) => start),
-    memoryYaml,
-    documents,
-  );
+  const { history, transitions, lastChanges, parents, follows } = readHistory(root, sha, candidateStarts.map(([, start]) => start), memoryYaml, documents);
   const starts = new Map<string, StartCommit>(
     candidateStarts.map(([path, start]) => [path, { commit: start.commit, position: start.position, marker: startMarker(start, markedStarts, follows) }]),
   );
