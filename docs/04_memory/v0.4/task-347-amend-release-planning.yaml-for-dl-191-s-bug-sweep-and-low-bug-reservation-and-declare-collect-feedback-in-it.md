@@ -57,3 +57,202 @@ than carried to v0.4's retrospective. No spec amendment (survey: `dl-191` touche
 ## Execution Notes
 
 <!-- Filled by the dev-loop. -->
+
+### design (architect, 2026-11-08)
+
+**Inputs read.** Base: `main` `c31354dd0` + the start commit `4028a1df1` (`git log --oneline -2`); `bug: []`, so no
+bug sync. Builds: the task's PATH shim runs the code build, `wingfoil --version` and `node dist/cli.js --version` →
+`0.3.2 (c31354dd0f783655c573a1fbcd092a518febbbb2)`; the pinned build `node node_modules/wingfoil-released/dist/cli.js
+--version` → `0.3.2 (6de2e13c004bbf419acfa7dc4d98d5a7468cd693)`. `depends_on: [task-348]` (`dl-015`): its
+`### design` read; it is `done` and merged (`c31354dd0`), and its instruction (4) of `dev-loop.design` — load a
+`.wingfoil/` change with the pinned build on a scratch copy and declare any break before red (`pinned-build.reads`)
+— is applied below. Its handover holds: `bindings.yaml` is 3.0 and `dev-loop.yaml` 2.4 on `main`, neither touched
+here; a phase added to `release-planning` shifts that workflow's `phases[N]` rows in
+`test/core/workflow-manual-prose-checks.test.ts` and `test/core/workflow-repository-conformance.test.ts`.
+`dl-191` is `ready`: `npm run -s wingfoil -- memory history dl-191-…` → the approve `2d23a2381` (2026-11-05), Reason
+"Ratify (a): triage-bugs sweeps every open bug and every triaged bug with no release, and a release reserves at least
+10 percent of its task budget for low-severity bugs, oldest first; release-planning.yaml is amended by a v0.4 task."
+Also read: `release-planning.yaml` 2.4, `retrospective.yaml` 1.8 (`collect-feedback`), `bindings.yaml` 3.0,
+`dl-163` S3d and R6, `dl-016` §1–§4, `dl-100` §4, `spec-017` §4 (selection evidence §4.3, targets §4.2, live
+queries §4.7), `release-planning-rel-v0.4-plan` R11 and S1c, the `w0` plan's rulings, `memory.yaml`'s `bug` machine.
+
+**What the engine does with AC 1 as written** (scratch clone of the task branch outside the worktree, `node_modules`
+linked, the variant committed; pinned and code build give the same results).
+- `triage-bugs` with `where: { type: bug, status: [open, triaged], release: [""] }`: once `minor-v1.0`'s
+  `advance-pinned-build` is recorded, `workflow next sw-life-cycle-1-plan` prints for
+  `release-planning.triage-bugs@release:minor-v1.0` the action `wingfoil memory approve bug-506-… … bug-515-…
+  --reason <reason>`, the ten `triaged` bugs with an empty `release` at `HEAD`. That command fails:
+  `node dist/cli.js memory approve bug-515-… --reason simulation --dry-run` → exit `1`, `error: illegal transition
+  triaged -> (none) for type 'bug'` (`triaged` is a `waiting` gate with no `approve` edge, `memory.yaml`). And the
+  selection cannot empty through the phase's own actions: a bug triaged there keeps its empty `release`, so it stays
+  selected until `build-backlog` stamps it, which leaves `triage-bugs` current for the whole planning.
+- With `release: ["", "{release.version}"]` kept and `triaged` added, the `triaged` bugs already assigned to the
+  release (113 for `v0.4` today: `grep -m1 '^status:'` / `'^release:'` over `docs/04_memory/bugs/*.md`) stay
+  selected until `build-backlog` plans them, the same block.
+- Narrowing `release` to `[""]` drops the `open` bugs already stamped with the release in planning, which the
+  selection takes today (`dl-016` §1): 13 of the last 400 `[open → triaged]` approvals had a `release` in the parent
+  commit (a loop over `git log --grep '\[open → triaged\]'` reading `release:` at `<sha>^`).
+So the design keeps `triage-bugs`' selection and puts the unassigned `triaged` bugs in a selection of their own, D1.
+
+**The design** (for green; the text below was loaded, as written, in the scratch clone).
+- `.wingfoil/workflows/custom/release-planning.yaml`, phases in this order: `advance-pinned-build`,
+  **`collect-feedback`**, `define-scope`, `triage-bugs`, **`assign-bugs`**, `reconcile-governance`, `record-adrs`,
+  `identify-specs`, `build-backlog`, `commit-backlog`.
+  - **`collect-feedback`** (new, index 1; AC 3, D2): role `facilitator`; `actions: [agent.execute]`; `produces:
+    ["docs/09_retrospectives/rl-{release.release-line}/rel-{release.version}-planning-feedback-triage.md"]` — the
+    name the `v0.4` planning wrote by hand (`7e611f682`), which keeps `minor-v0.4`'s completed iteration complete;
+    `checks.post` the token of `retrospective.collect-feedback`, character for character (`feedback-notes.recorded`,
+    bound `manual: true` since `task-303`, so `bindings.yaml` does not change). The description restates
+    `retrospective.collect-feedback`'s read (every `active` service of kind `repository` with a `feedback_inbox`, at
+    the consumer's `main`, the remote or a local checkout, the commit read recorded for each; the rows, the cite
+    `<service id>/F-<nnn>@<sha>`, the six outcomes, no consumer configuration, paths or prose; R2, R3, R7), says why
+    it runs at every planning (a patch has no retrospective, `dl-092` Q2 (ii); `release-planning-rel-v0.4-plan`
+    R11), lists the `captured` notes "since the previous read record (a retrospective's or a planning's)", and ends
+    with the ruling: the approver rules every row before `define-scope`; an `element` outcome is filed through
+    `bug-ingest` or `decision-log-ingest` with `reported_by:`, so `triage-bugs`, `assign-bugs` and
+    `reconcile-governance` sweep it into the planning.
+  - **`define-scope`** (AC 2): after "build-backlog plans the feature tasks within the other 80 %." the sentence
+    "Inside that 20 %, at least 10 % of the task budget, rounded up, goes to fix tasks of `low`-severity bugs, the
+    oldest first by bug number (dl-191 (a)): the scope states the count, and build-backlog derives those fix tasks
+    from the selected `triaged` bugs." (D5). No check changes (`test/core/workflow-patch-line-texts.test.ts` holds
+    `define-scope`'s and `triage-bugs`' `checks` equal to their read at `0fcb59ee8`).
+  - **`triage-bugs`** (AC 1): `where:` unchanged; its description gains "Every `open` bug of the selection is decided
+    here, and assign-bugs then gives a release to every `triaged` bug that has none, so no bug stays unassigned past a
+    planning (dl-191 (a))." Its `task-305` sentences stay.
+  - **`assign-bugs`** (new, index 4; AC 1, D1 (b)): role `tech-lead`; `where: { type: bug, status: [triaged],
+    release: [""] }`; `actions: ['element.set_release("{release.version}")']` with the comment "or a later release
+    the approver names, per bug; manual: wf(bug): assign"; no `approval:`, no `fallback:`. The description: each
+    selected bug is assigned this release, a later one the approver names (a `wf(bug): assign` commit), or closed (a
+    `memory reject` by the approver, `triaged -> closed`); the phase is complete when no `triaged` bug has an empty
+    `release`; a bug assigned this release that `build-backlog` gives no fix task stays `triaged` in it.
+  - The workflow `description:` names the inbox read and the assignment; the header comment's "Assignment
+    (`release=`) happens only in build-backlog." gains "and for a triaged bug with no release in assign-bugs (dl-191
+    (a): …)".
+  - `version: 2.4` → `2.5` (AC 4), the clause appended after the 2.4 one: "2.5 task-347 (dl-191 (a), dl-163 S3d,
+    release-planning-rel-v0.4-plan R11, approver ruling 2026-11-05, design gate D1–D4): a collect-feedback phase
+    after advance-pinned-build reads the consumer inboxes as retrospective's does, its read record
+    rel-{release.version}-planning-feedback-triage.md; triage-bugs is followed by assign-bugs, which gives every
+    triaged bug with no release a release or closes it; define-scope reserves at least 10 % of the task budget for
+    low-severity bugs, oldest first, inside the 20 %".
+- `.wingfoil/WORKFLOW.md`: the `release-planning` summary node (line 193), the section's prose and its Mermaid
+  flowchart gain the two phases (nodes with `**collect-feedback**` and `**assign-bugs**`, the chain `AB --> CF --> DS
+  --> TB --> AS --> RG`). `test/docs/workflow-md.test.ts` requires it: in the clone it fails with
+  `release-planning/assign-bugs` and `release-planning/collect-feedback` undocumented.
+- AGENTS.md §6 (the `release-planning` chain) and `.wingfoil/README.md` (the tree) gain the two names (D4).
+- Not touched: `bindings.yaml`, `dev-loop.yaml`, `retrospective.yaml`, the four files `test/lint/version-bump.test.ts`
+  gates, `src/`, every spec. No spec amendment (the ACs name none; the name-resolvability gate scans specs, ADRs and
+  SARD only, so no allowlist entry). Two decision-log amendments are prepared, D3.
+
+**`pinned-build.reads` (`dl-205` Q1 (a)) on this change.** Same scratch clone, the proposal committed, `dist/` a copy
+of the worktree's: pinned build `workflow list --format json` → exit `0`, 68 diagnostics, 0 that is not a warning,
+every `release-planning` one a `W_WORKFLOW_UNBOUND_TOKEN` at the shifted paths (`phases[2]`, `[5]`–`[9]`);
+`workflow show release-planning` (`--format json`, and `--format console`) → exit `0`, the ten phases in the order
+above, `collect-feedback`'s produces with `"owner": "release", "evidence": true` and its check `{ "kind": "manual",
+"source": "project" }`, `assign-bugs`' `selection.where` `{ type: bug, status: [triaged], release: [""] }`;
+`workflow next` and `workflow status --format json` → exit `0`; `npm run -s check:mcp` → exit `0`, "`.mcp.json`
+"wingfoil" runs the pinned wingfoil 0.3.2, advertising [prompts, resources, tools] (prompts: 8, resources: 4,
+tools: 0)" and "the build under development (dist/cli.js) serves … every listed Resource read and Prompt get
+answered". The code build gives the same exits. No break: nothing to declare, no `KNOWN_READ_FAILURES` entry, no
+`wingfoil-cli` §1 exception.
+
+**The open lifecycle instance** (AC 4, the Implementation Notes' risk). `workflow next sw-life-cycle-1-plan --format
+json` and `workflow status --format json`, pinned and code build, on the branch head and on the proposal: the two JSONs
+differ only in nine diagnostic paths of `release-planning` (a node walk of both JSONs with `baseline` removed); the
+frontier (23 step keys, `release-planning.advance-pinned-build@release:minor-v1.0` among them) and the instance's
+`late` list (123 bugs, 67 decision-logs) are identical. Why: `minor-v0.4`'s `collect-feedback` is complete by its
+`produces`, and its `assign-bugs` is a live query complete under `spec-017` §4.7 (its `commit-backlog` is complete);
+`minor-v1.0` stands at `advance-pinned-build`, before both new phases. Counter-checks in the clone: with the read
+record removed, the frontier gains `release-planning.collect-feedback@release:minor-v0.4`; with `minor-v1.0`'s
+`advance-pinned-build` recorded (`workflow finalize`, scratch only) and its read record added, the frontier moves to
+`release-planning.assign-bugs@release:minor-v1.0`, the action `element.set_release("v1.0") [manual: expects
+wf(bug): assign release v1.0 to bug-506-…]`. **No `workflow rekey` and no `workflow finalize` is owed**: no phase is
+renamed and no completed iteration changes. When `minor-v1.0`'s planning goes on, `collect-feedback` and
+`assign-bugs` are new work of that planning, by design.
+
+**Existing tests** (worktree, before any change; the dl-170 wait-slot script returned at once with no output; one
+jest process): the 79 suites that name `release-planning`, `retrospective`, `WORKFLOW.md` or `bindings.yaml` or read
+the registry at `HEAD` (`grep -rlE "release-planning|AtHead\((ROOT|REPO_ROOT|repoRoot)|WORKFLOW\.md|bindings\.yaml|retrospective"
+test --include=*.test.ts`, plus `test/lint/version-bump.test.ts`) → `npx jest <79 files> --maxWorkers=2` → `Test
+Suites: 79 passed, 79 total`, `Tests: 1698 passed, 1698 total`. The same 79 in the scratch clone with the proposal
+committed → `Test Suites: 5 failed, 74 passed`, `Tests: 7 failed, 1691 passed`. Four suites fail on the change:
+- `test/core/workflow-repository-conformance.test.ts` (AC 1 / AC 2, twice: the warning list) — the nine
+  `release-planning` paths shift, `phases[1]` → `[2]`, `[3]` → `[5]`, `[4]` → `[6]`, `[5]` → `[7]`, `[6]` → `[8]`,
+  `[7]` → `[9]`;
+- `test/core/define-scope-sweep.test.ts` "loads with zero errors and reports change-proposals.swept as define-scope
+  checks.post[1]" — its `phases[1].` filter and rows become `phases[2].`;
+- `test/core/workflow-manual-prose-checks.test.ts` "the manual check occurrences at HEAD are exactly …" — a row
+  `['release-planning', 'phases[1].checks.post[0]', 'feedback-notes.recorded']` after the `phases[0].checks.post[2]`
+  row, and `phases[4]`/`[5]`/`[6]` → `[6]`/`[7]`/`[8]`; the count of 68 warnings does not change;
+- `test/docs/workflow-md.test.ts` — the two phases undocumented, green's WORKFLOW.md edit.
+The fifth, `test/cli/test-no-identity.test.ts` (two tests), failed only because the clone's own `.git/config` held a
+`user.email` set for the `finalize` counter-check; with it unset, the suite alone → `Tests: 9 passed`. The prepared
+amendments (D3) in the worktree: `npx jest test/directives/wingfoil-cli.test.ts test/docs/dl-086-citations.test.ts
+test/docs/reported-by.test.ts --maxWorkers=2` → `Tests: 75 passed`.
+
+**Per-AC classification and what `qa` must pin.** Every read is the configuration as `HEAD` holds it
+(`loadWorkflowRegistryAtHead(ROOT)`, `workflowShowAtHead(ROOT, 'release-planning')`, as
+`test/core/workflow-patch-line-texts.test.ts` reads them): the red tests fail on the red commit and pass once
+green's commit is `HEAD`. Descriptions are compared flattened (the `flat` helper of that file: folded whitespace).
+Version pins are "≥" plus the history clause (`bug-314`). New file: `test/core/release-planning-v2-5.test.ts`. No
+command-output fixture is needed.
+
+| AC | Class | What `qa` pins |
+|----|-------|----------------|
+| 1 | red-first (per D1 (b)) | phase names in order: `['advance-pinned-build', 'collect-feedback', 'define-scope', 'triage-bugs', 'assign-bugs', 'reconcile-governance', 'record-adrs', 'identify-specs', 'build-backlog', 'commit-backlog']`; `assign-bugs`: `where` `toEqual({ type: 'bug', status: ['triaged'], release: [''] })`, `actions.map(tokenName)` `['element.set_release']`, `role` `tech-lead`, no `approval`, its description contains `dl-191 (a)`, `` `wf(bug): assign` ``, `` `memory reject` `` and `triaged -> closed`; in `workflowShowAtHead` its action's binding is `manual`; `triage-bugs`: `where` still `{ type: 'bug', status: ['open'], release: ['', '{release.version}'] }`, description contains `dl-191 (a)`, `assign-bugs` and `unassigned past a planning` |
+| 2 | red-first | `define-scope`'s description contains `Inside that 20 %`, `at least 10 % of the task budget, rounded up`, `` `low`-severity ``, `oldest first by bug number` and `dl-191 (a)`; it still matches `/20 %/` (`test/core/release-waves-config.test.ts`) |
+| 3 | red-first | `collect-feedback` at index 1; `role` equals `retrospective.collect-feedback`'s (`facilitator`); `actions.map(tokenName)` `['agent.execute']`; `produces` `toEqual(['docs/09_retrospectives/rl-{release.release-line}/rel-{release.version}-planning-feedback-triage.md'])`; `checks.post` `toEqual` `retrospective.collect-feedback`'s `checks.post`, and `resolveToken(<it>, 'check', bindings)` → `{ kind: 'manual', source: 'project' }`; not `optional`; the description contains `dl-163 S3d`, `R11`, `` `active` ``, `` kind `repository` ``, `` `feedback_inbox` ``, ``the consumer's `main` ``, `records the commit read for each`, `<service id>/F-<nnn>@<sha>` and `before define-scope`; `existsSync('docs/09_retrospectives/rl-v1/rel-v0.4-planning-feedback-triage.md')` (the read record that keeps `minor-v0.4`'s iteration complete) |
+| 4 | red-first for the version row; the pinned-build reads by command | `version` ≥ 2.5; the `;`/`(prev`-delimited history segment naming `2.5` names `task-347` and `dl-191 (a)` (copy `historyEntryOf` from `test/core/workflow-patch-line-texts.test.ts`); the 2.4 segment still names `task-305`. The pinned-build reads (`npm run -s wingfoil -- workflow list`, `workflow show release-planning`, `workflow next sw-life-cycle-1-plan --format json`, `workflow status`, `npm run check:mcp`) are not jest: green re-runs them on the committed change and records exits and the frontier |
+| 5 | characterization, with three pins moved in the red commit | the suites stay green; the red commit updates the pins that enumerate positions, exactly as listed under "Existing tests": `workflow-repository-conformance.test.ts` (the nine paths), `define-scope-sweep.test.ts` (`phases[1].` → `phases[2].`), `workflow-manual-prose-checks.test.ts` (the new row and three shifted rows; the title names `task-347`); the 68-warning count stays. `test/docs/workflow-md.test.ts` is not edited: it passes on red and goes green again with green's WORKFLOW.md |
+
+**Files to touch.** green: `.wingfoil/workflows/custom/release-planning.yaml` (2.4 → 2.5), `.wingfoil/WORKFLOW.md`,
+AGENTS.md §6, `.wingfoil/README.md` (no `version:` in those three). red (qa): new
+`test/core/release-planning-v2-5.test.ts`; edited `test/core/workflow-repository-conformance.test.ts`,
+`test/core/define-scope-sweep.test.ts`, `test/core/workflow-manual-prose-checks.test.ts`. Pending amendments
+(uncommitted in the worktree, D3): `dl-163`, `dl-016`; the red commit must not include them (`git add` by path).
+
+**Decisions for the approver.**
+- **D1 — how `triage-bugs` sweeps the `triaged` bugs with no release.** (a) AC 1 as written, one selection `{ status:
+  [open, triaged], release: [""] }` with an `element.set_release` action: `workflow next` prints a `memory approve`
+  that exits 1 for every `triaged` bug, and the `open` bugs already stamped with the release leave the selection;
+  (b) `triage-bugs` unchanged, a new phase `assign-bugs` right after it selects `{ status: [triaged], release: [""]
+  }` and assigns each a release (this one or a later one) or closes it; (c) no selection: an unbound post-check on
+  `triage-bugs` (the `task-277` form), which the deduction does not see. Recommendation: **(b)**; AC 1 is then read
+  as "release-planning selects every `open` bug in `triage-bugs` and every `triaged` bug with an empty `release` in
+  `assign-bugs`", and the name `assign-bugs` is fixed from here (ids immutable).
+- **D2 — where `collect-feedback` sits and when its rows are ruled** (AC 3 leaves it to design). Recommendation: index
+  1, after `advance-pinned-build`, before `define-scope` — where the v0.4 planning ran it (S1c) — with the approver
+  ruling every row before `define-scope`; the read record named `rel-{release.version}-planning-feedback-triage.md`,
+  the only name that keeps `minor-v0.4` complete (counter-check above). Placing it first would put it ahead of
+  `minor-v1.0`'s current step (not simulated); after `define-scope`, the notes could not shape the scope.
+- **D3 — two decision-log amendments, prepared uncommitted.** `dl-163` S3d places the read in `retrospective.yaml`
+  and R6 says a minor's scope waits for the retrospective; `dl-016` §4 says a bug is assigned only in `build-backlog`
+  and an unassigned one is re-offered. Both stay true for every other case; each gets one dated paragraph naming this
+  change (texts below). Recommendation: **record both with `memory amend` before red**; the alternative is no
+  amendment, with the yaml's version clause as the only record.
+- **D4 — the hand-written lists.** WORKFLOW.md must change here (the parity gate). AGENTS.md §6 and `.wingfoil/README.md`
+  belong to `align-agent-docs` (`dl-025`), but this task's Implementation Notes name AGENTS.md §6; recommendation:
+  **update both chains here** (one line each). COLLABORATION.md ("WingFoil reads every registered inbox at each minor
+  release's retrospective; a patch release has none", line 239) becomes incomplete; it is `align-user-docs`' (`dl-013`):
+  recommendation: **leave it to the v0.4 user-docs phase**, recorded in this task's `### Retrospective` as a handover.
+- **D5 — the reservation's terms.** "Task budget" = the release's task count, 10 % rounded up; "low-severity" = a
+  bug's `severity: low`; "oldest first" = by bug number. Recommendation: **as written**; the alternative "oldest by
+  the add commit's date" needs a history read for each bug.
+
+### Pending amendments (approver)
+
+- `dl-163-consumer-projects-feedback-sources-and-the-feedback-loop` — one dated paragraph after S3d's "The ruling"
+  bullet. `--reason "Record that release-planning declares the collect-feedback read too (task-347, release-planning-rel-v0.4-plan R11): its read record, its ruling before define-scope, and how R6 reads a planning's ruling."`
+- `dl-016-release-planning-governance-reconcile` — one dated paragraph after §4's first paragraph. `--reason "Record that dl-191 (a) replaces section 4's re-offer rule for bugs: a triaged bug with no release is assigned or closed in release-planning's assign-bugs (task-347)."`
+
+### Retrospective
+
+<!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
+     reconstructed afterwards. One line per item: what happened, the evidence (a command and what it
+     printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
+     Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
+     here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+
+- AC 1 as planned (one `where:` over `open` and `triaged` bugs in `triage-bugs`) is not completable by the engine: the
+  printed `memory approve` exits 1 on a `triaged` bug and the selection cannot empty before `build-backlog` (scratch
+  clone, `workflow next sw-life-cycle-1-plan`); found at design, D1. Proposal: a planning AC that adds a selection
+  names the action that empties it.
