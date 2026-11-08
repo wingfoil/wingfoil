@@ -48,3 +48,203 @@ reading the session Prompt and then the Resource.
 ## Execution Notes
 
 <!-- Filled by the dev-loop. -->
+
+### design (architect, 2026-11-08)
+
+**Inputs read.** Base: `main` `b20ddf0a5` (`task-335`'s merge) plus the start commit `aa3b9ca34` and the three bug syncs
+`[planned → in-progress]` (`git log --oneline main..HEAD` → four commits, head `9c52073c9`). `depends_on: [task-335]`
+(`dl-015`): its Execution Notes read in full — D6 (headless agent `detached`, stdout piped and drained, stderr
+inherited), D5 (`--timeout`, fixed 10 s grace), the `SignalTakeover.send` single forwarding path, and its handover
+"`bug-318`'s double `SIGHUP` remains for the interactive kind only (D6), and `takeOverSignals(kind)` / `send` is the
+code it changes". `spec-016` is `approved` (frontmatter `status: approved`; last `wf(tech-spec): amend` `3dbae7f68`,
+`task-335`'s). No ready DL rules on signals, the template's escaping or the pre-flight's carriers (`grep -n -i
+"SIGHUP\|surrogate\|pre-flight" docs/04_memory/design/dls/dl-18[1-3]* docs/04_memory/design/dls/dl-223*` → no ruling
+on them). The task's PATH shim checked first (`command -v wingfoil` → the shim; `wingfoil --version` and `node
+dist/cli.js --version` → `0.3.2 (b20ddf0a5…)`).
+
+**The defects on this build** (code build of `b20ddf0a5`, scratch project from `seed()` of
+`test/agent/helpers/agent-execute-fixture.ts`, outside the repository):
+- `bug-318`, re-run against `main` as it is now: an agent script that records each `SIGHUP` and exits on `SIGTERM`,
+  declared in the fake manifest; `agent execute --element task:<id> --role developer` spawned `detached` (its own
+  process group, standing for a terminal's foreground job), `process.kill(-pgid, 'SIGHUP')` (the kernel's hang-up to
+  the whole group), then `SIGTERM` to `agent execute` alone. Interactive, three runs → each time the agent recorded
+  `["SIGHUP","SIGHUP","SIGTERM"]`. Headless (`--headless`) → `["SIGHUP","SIGTERM"]`. What remains of the bug is the
+  interactive kind only, as `task-335` foresaw; the eol half is unchanged (`ls .gitattributes` → no such file;
+  `git check-attr text eol -- docs/06_runs/x.jsonl` → `text: unspecified`, `eol: unspecified`).
+- `bug-516`: a headless agent script that starts `node -e 'setInterval(…)'` (stdio ignored, not detached) and waits;
+  `agent execute … --headless --timeout 1s` → exit `1`, the record `signal:SIGTERM`; 2 s later `ps -o
+  pid,ppid,pgid,stat,args -p <child>` → the child still running (`Sl`), re-parented, in the agent's process group.
+- `bug-371`: `renderMcpTemplate('x={command = "{mcp_command}", args = {mcp_args}}', …)` from `dist/agent` → U+007F
+  kept raw, `"\ud800"` and `"\udc00"` written as `\ud800` / `\udc00` escapes; a paired surrogate (U+1F600) raw.
+- `bug-376`: `mcpPreflight` against a stub server that answers `resources/read` with text and `prompts/get` with the
+  JSON-RPC error `-32601` → `{"ok":false,…,"cause":"MCP error -32601: Method not found"}`; the stub's method log:
+  `initialize`, `notifications/initialized`, `prompts/get` (the Resource is never reached).
+
+**Existing tests of every file this task changes**, before any pin: after `bash …/waitslot.sh` (granted at once),
+`npx jest --maxWorkers=2 test/agent test/cli/agent-execute test/core/agent-execute test/cli/e2e-smoke-fake-read`
+(20:54–20:57) → `Test Suites: 32 passed, 32 total`, `Tests: 574 passed, 574 total`. With the `spec-016` amendment
+below in the tree: `npx jest --maxWorkers=2 test/docs/name-resolvability test/docs/x-cli-cmds-citations
+test/lint/control-characters test/docs/cli-reference` → `Test Suites: 4 passed`, `Tests: 66 passed` (the amendment
+names no symbol that does not resolve, so no allowlist entry is needed).
+
+**Tests that pin behaviour this task changes** (`grep -rn "SIGHUP\|renderMcpTemplate\|prompts/get" test/agent
+test/cli`), each red's to change:
+- `test/agent/launch-process.test.ts` "SIGINT and SIGQUIT are ignored, SIGHUP forwarded, while the agent runs" (AC 1:
+  interactive `SIGHUP` is now ignored); `test/agent/launch-headless.test.ts`'s header comment repeats the interactive
+  sets.
+- `renderMcpTemplate` callers, which read a string today (AC 3's `CoreResult`): `test/agent/execute.test.ts` (the
+  `renderMcpTemplate (§2.3)` describe), `test/agent/launch.test.ts` ("renderMcpTemplate fills a TOML template …"),
+  `test/agent/execute-config-arg.test.ts` (`prepared.mcpConfig` compared with it).
+- `test/agent/execute.test.ts`'s stubs that answer only `prompts/get` (AC 4): "an empty messages list: MCP_UNREACHABLE
+  naming the empty prompt" (fails after green: its stub never answers `resources/read`) and "the MCP pre-flight has
+  one deadline" (still passes after green, but by waiting on an unanswered request).
+- Not changed: `test/agent/mcp-preflight-resource.test.ts` (its stub's Prompt answer becomes unused), the headless
+  `it.each` of `launch-headless.test.ts` and `launch-timeout*.test.ts` (their `FakeChild` has no `pid`, so the launch
+  keeps `child.kill`, the fallback below), BDD `P5.3.1` (no scenario on `SIGHUP`, the template or the pre-flight's
+  carriers: `grep -n -i "signal\|hang\|prompt" docs/02_requirements/02_bdd/features/p5-interaction/P5.3.1*
+  P5.4.3*` → the `signal:SIGTERM` scenarios only, unchanged).
+- Nothing under `.wingfoil/` changes (`git status --short .wingfoil` → empty), so `npm run check:mcp` and the
+  pinned-build workflow reads are not required; no workflow phase list or count changes.
+
+**Design.**
+- *AC 1 — `src/agent/launch.ts` `TAKEN_OVER`.* Interactive POSIX: `ignored: ['SIGINT', 'SIGQUIT', 'SIGHUP']`,
+  `forwarded: ['SIGTERM']`; Windows interactive and the headless sets unchanged. The terminal's hang-up reaches the
+  agent through the foreground process group, and `agent execute` cannot tell it from a `SIGHUP` sent to it alone
+  (Node gives a listener no sender), so it never forwards one (D1). The header comment's step 15 follows.
+- *AC 5 — `bug-516`, the headless process group (`takeOverSignals`, `LaunchHost`, `launchAgent`).* `LaunchHost` gains
+  `signalGroup?: (pgid: number, signal: NodeJS.Signals) => void`, default `process.kill(-pgid, signal)` with `ESRCH`
+  swallowed (an empty group). `takeOverSignals(kind, signalGroup)`: `send` delivers, while the agent runs, to
+  `signalGroup(child.pid, signal)` when the kind is headless, the platform POSIX and `child.pid` is a number, else
+  `child.kill(signal)` (interactive, Windows, a child with no pid); a delivery to the group sets `signalled`. A new
+  `SignalTakeover.sweep()` sends `signalGroup(child.pid, 'SIGKILL')` once when `signalled` is set and the agent has
+  exited; `launchAgent` calls it in its `finally`, after step 17–18, before `restore()` — the processes the agent
+  started get the lookups' time to exit on the signal they received, and none survives `agent execute` (D2). Every
+  call site of the time bound already goes through `send`, so `--timeout`'s `SIGTERM` and grace `SIGKILL` reach the
+  group with no change of their own. `runAgent` is not changed (`task-336` replaces its stdout drain).
+- *AC 3 — `src/agent/execute.ts` `renderMcpTemplate(template, server): CoreResult<string>`.* Before rendering, the
+  command and then each argument are scanned for the first unpaired surrogate (a high one not followed by a low one,
+  or a low one not preceded by a high one) → `coreErr({ code: 'VALIDATION', message })`, the message
+  ``mcp.template cannot carry the MCP server's command: it holds an unpaired surrogate (U+D800)`` or ``… the MCP
+  server's argument <n>: …`` (`<n>` from 1, four upper-case hex digits). Otherwise `{mcp_command}` is
+  `JSON.stringify(command).slice(1, -1)` and `{mcp_args}` `JSON.stringify(args)`, each with every U+007F replaced by
+  the six characters `\u007f`. `executeAgent` renders once, before `withRunFiles` (step 10), for `config-file` and
+  `config-arg` alike, and returns the refusal: a dry run is refused the same way. JSON.stringify already escapes
+  U+0000–U+001F with escapes TOML shares (`\b \t \n \f \r \uXXXX`), so U+007F is the one character left that TOML's
+  basic string forbids (D3).
+- *AC 4 — `mcpPreflight`.* `initialize`, then `readResource({ uri: sessionContextUri(role, element, stateRef) })`
+  under the one deadline, the "no context text" check unchanged; the `getPrompt` call and its check are removed, with
+  the function's doc comment and the module header's step 11.
+- *AC 2 — `.gitattributes`* (new, repository root): the one line `*.jsonl text eol=lf`, with a comment line naming
+  `spec-016` §4.1's run log. Every committed `*.jsonl` is already LF (`git ls-files --eol '*.jsonl'` → one file,
+  `i/lf w/lf`), so no renormalization is needed.
+- *Documents.* `docs/cli-reference.md` (no `version:` field): the interactive sentence "`SIGTERM` and `SIGHUP` sent to
+  `agent execute` are passed on to the agent" becomes `SIGTERM` only, with a hang-up reaching the agent from the
+  terminal; the headless paragraph adds that on Linux and macOS the signal reaches the processes the agent started
+  and nothing of a signalled or timed-out run outlives it. `docs/user-guide.md`, `docs/agents.md`, `README.md` say
+  nothing on these signals (`grep -n -i "SIGHUP\|signal"` → no match).
+
+**Per-AC classification and what qa pins.**
+
+| AC | Class | What red pins (observable · interface · fixture · file) |
+|----|-------|----------------------------------------------------------|
+| 1 | red-first | (a) Unit, deterministic: `launchAgent`, interactive, the local `FakeChild` of `test/agent/launch-process.test.ts`: `process.emit` of `SIGINT`, `SIGQUIT`, `SIGHUP` → `child.killed` `[]`; then `SIGTERM` → `['SIGTERM']` and `agent exited signal:SIGTERM; run <id> recorded` (rewrite of the existing "SIGHUP forwarded" test). Red today: `Received: ["SIGHUP"]`. (b) The fake pins once (POSIX only), new `test/cli/agent-execute-signals.integration.test.ts`: `fake-agent.cjs` gains `WINGFOIL_FAKE_AGENT_SIGNALS=<file>` — on a launch, before it appends its record line, it installs listeners that append one line `<NAME>` per delivery of `SIGHUP` and `SIGINT` (and keep running) and of `SIGTERM` (then exit `0`). The test seeds with `seed()`, spawns `node <CLI_ENTRY> agent execute --element <TASK_REF> --role developer` with `detached: true`, polls (≤ 30 s) until the record file has the launch line, sends `process.kill(-pid, 'SIGHUP')`, polls until the signals file holds a `SIGHUP` line, then `process.kill(pid, 'SIGTERM')`; after exit: status `0`, the signals file exactly `SIGHUP`, `SIGTERM`. Red today: `SIGHUP`, `SIGHUP`, `SIGTERM` (three runs of the same sequence above). A `--headless` case of the same test, `SIGHUP` then `SIGTERM` once each, is a characterization (passes today). |
+| 2 | red-first | New `test/lint/gitattributes.test.ts`, from the repository root: `.gitattributes` has the line `*.jsonl text eol=lf`; `git check-attr text eol -- <dna.yaml paths.runs[0]>probe.jsonl` → `…: text: set` and `…: eol: lf`; `git ls-files --eol -- '*.jsonl'` → every entry `i/lf` (characterization half). Red today: `ENOENT` and `text: unspecified`. |
+| 3 | red-first | `test/agent/execute.test.ts` (the `renderMcpTemplate (§2.3)` describe): `renderMcpTemplate('x="{mcp_command}"', { command: '/a\u007fb/node', args: [] })` → `{ ok: true, value: 'x="/a\\u007fb/node"' }`; `'{mcp_args}'` with `['/a\u007fb', 'mcp']` → `'["/a\\u007fb","mcp"]'`; no raw U+007F in either value; command `'/a\ud800b'` → `{ ok: false, error: { code: 'VALIDATION', message: "mcp.template cannot carry the MCP server's command: it holds an unpaired surrogate (U+D800)" } }`; `args: ['/x\udc00', 'mcp']` → `"… the MCP server's argument 1: it holds an unpaired surrogate (U+DC00)"`; `'\udc00\ud800'` → `U+DC00`; `'/a😀b'` → ok, raw. The existing cases (quote, backslash, braces) re-read as `.value`; `launch.test.ts` and `execute-config-arg.test.ts` read `.value` too. Pipeline (in process): `agentExecutePipeline` with the `HOST` of `execute-config-arg.test.ts` but `mcpServer: { command: process.execPath, args: ['/x\ud800/cli.js', 'mcp'] }` → that refusal, with and without `dryRun`. Expected reds: `tsc` TS2339 (`ok`/`value` on `string`); jest (`isolatedModules`) assertion failures (`Received: undefined`). |
+| 4 | red-first | `test/agent/execute.test.ts`: a stub that answers `initialize` (capabilities `{ resources: {} }`), `resources/read` with `[{ uri, mimeType: 'text/markdown', text: 'context' }]`, `prompts/get` with the error `{ code: -32601, message: 'Method not found' }`, and appends each request's method to a file → `mcpPreflight` `{ ok: true, value: undefined }` and the method log without `prompts/get`. Red today: `cause` `MCP error -32601: Method not found`. The two stubs answering only `prompts/get` answer `resources/read` instead: the empty one with `contents: []` → `cause` `the session resource wingfoil://session/developer/task:task-001-a/<SHA> returned no context text`; the slow one (1.5 s per answer, 2.5 s deadline) → still `MCP_UNREACHABLE` (both characterizations). |
+| 5 | red-first | (a) Unit, `test/agent/launch-headless.test.ts` (POSIX only): `FakeChild` gains an optional `pid` (helper `test/agent/helpers/fake-child.ts`), `LaunchHost.signalGroup` a recorder that pushes `[pgid, signal]` and calls `child.kill(signal)` while the child runs. Headless, pid `4242`: `process.emit('SIGTERM')` → calls `[[4242,'SIGTERM'],[4242,'SIGKILL']]` (the delivery, then the sweep after the exit); the time bound with an agent that ignores `SIGTERM` → `[[4242,'SIGTERM'],[4242,'SIGKILL'],[4242,'SIGKILL']]` (grace, then sweep); an agent that exits by itself → no call; interactive with a pid → no call, `child.kill` as today. Expected reds: `tsc` TS2353 (`signalGroup` unknown in `LaunchHost`); jest: `Received: []`. (b) Integration, new `test/cli/agent-execute-process-group.integration.test.ts` (POSIX only): `fake-agent.cjs` gains `WINGFOIL_FAKE_AGENT_CHILD=<pid file>` — on a launch, before its record line, it spawns `process.execPath -e "setInterval(() => undefined, 60000)"` (`stdio: 'ignore'`, not detached) and writes its pid — and `WINGFOIL_FAKE_AGENT_CHILD_TRAP=1` (that child ignores `SIGTERM`). Cases: `--headless --timeout 1s` with `WINGFOIL_FAKE_AGENT_WAIT=signal` → exit `1`, `error: agent timed out after 1s; run <id> recorded`, child dead; the same with the trap (only the sweep kills it); `--headless` spawned `detached`, `SIGTERM` to `agent execute` once the pid file exists → exit `1` `agent exited signal:SIGTERM`, child dead. Dead = within 5 s of polling, `process.kill(pid, 0)` throws `ESRCH` or `/proc/<pid>/stat`'s state is `Z`; `afterEach` kills a survivor. Red today: the child alive (`ps` above). |
+
+AC 5 is this design's (approver ruling of 2026-11-08 absorbing `bug-516`); its text for the task's `## Acceptance
+Criteria` is in the pending amendment below: "5. (red-first) A headless run's forwarded signals and `--timeout`'s
+signals reach the agent's whole process group on POSIX, and what is left of the group of an agent a signal reached is
+sent `SIGKILL` once the agent has exited: no child of a timed-out or signalled headless agent survives `agent
+execute`; a fake agent that starts a child pins it (`bug-516` Expected; `spec-016` §3.3 step 15)."
+
+**Files.** Green: `src/agent/launch.ts` (`TAKEN_OVER`, `takeOverSignals`, `SignalTakeover`, `LaunchHost`,
+`launchAgent`, the header comment), `src/agent/execute.ts` (`renderMcpTemplate`, `mcpPreflight`, `executeAgent` step
+10, the header comment), `.gitattributes` (new), `docs/cli-reference.md`. Red: `test/fixtures/agents/fake-agent.cjs`
+(the three variables and its header list), `test/agent/helpers/fake-child.ts`, `test/agent/launch-process.test.ts`,
+`test/agent/launch-headless.test.ts`, `test/agent/execute.test.ts`, `test/agent/launch.test.ts`,
+`test/agent/execute-config-arg.test.ts`, and the new `test/cli/agent-execute-signals.integration.test.ts`,
+`test/cli/agent-execute-process-group.integration.test.ts`, `test/lint/gitattributes.test.ts`. `src/agent/index.ts`
+already exports `LaunchHost` and `renderMcpTemplate` (no change); the new `LaunchHost.signalGroup` needs its TSDoc
+for `npm run docs:api`. **Version bumps: none** — none of these files declares a `version:` (`grep -c "^version:"`
+on each → `0`; `spec-016` has none, a tech-spec revises by its dated note); no configuration file changes.
+
+**Decisions for the approver.**
+- **D1 — the interactive `SIGHUP`.** (a) Ignored while the agent runs, like `SIGINT`/`SIGQUIT`; `SIGTERM` is the one
+  forwarded signal; a `SIGHUP` sent to `agent execute` alone no longer reaches the agent (prepared); (b) forwarded as
+  today, `spec-016` saying the agent may receive it twice and the fake pinning two (the bug's alternative); (c)
+  forwarded only when `agent execute` has no terminal. **Recommend (a)**: AC 1 asks for it, a hang-up reaches the
+  agent through the foreground group (or through the shell's `SIGHUP` to each job's group when run in the
+  background), and (c) guesses the sender from a property that does not identify it.
+- **D2 — `bug-516`'s reach.** (a) Every headless delivery to the agent's process group, plus one `SIGKILL` to what is
+  left of the group, after the record, when a signal reached the agent (prepared); (b) group delivery only (a child
+  that ignores `SIGTERM` outlives an agent that `SIGTERM` ended, since the grace `SIGKILL` is dropped once the agent
+  has exited); (c) the sweep after every headless run, signalled or not. **Recommend (a)**: it is the smallest rule
+  that meets the AC ("no child … survives") with no timer of its own; (c) would also kill what a clean agent
+  intentionally left running, which `bug-516` does not report. The interactive kind keeps its single-pid delivery
+  (its agent shares `agent execute`'s group); see the candidate finding.
+- **D3 — `bug-371`'s shape.** (a) Escape U+007F, refuse an unpaired surrogate at step 10, for `config-file` and
+  `config-arg` alike, `renderMcpTemplate` returning `CoreResult<string>` (prepared); (b) the same rule with
+  `renderMcpTemplate` still returning a string and a separate check called before it. **Recommend (a)**: the bug's
+  Expected Behavior; the refusal lives where the value is rendered, so no caller can skip it; the cost is three
+  existing test call sites, which red rewrites.
+- **D4 — how `bug-516` joins the task.** The premise that `triaged → planned` is an approve gate does not hold: on
+  this build `node dist/cli.js memory approve bug-516-… --reason "…" --dry-run --format json` →
+  `{"error":"illegal transition triaged -> (none) for type 'bug'", … "illegal `approve` from \"triaged\": both a
+  `gates` and `waiting` state — its forward edge is verb-less (fires only via a Workflow action), not `approve`"}]}`,
+  exit `1`; with `--format console` the same text as an `error:` line and one detail line, exit `1`. Release planning moved `bug-318` with hand commits (`git log main -- docs/04_memory/bugs/bug-318-*` →
+  `1ab38049a wf(bug): assign release v0.4 to …`, then `eb2d74bae wf(bug): sync … [triaged → planned]`). Proposed
+  sequence, all on this task's branch, before red: (1) the approver's `memory amend` of this task file, which adds
+  `bug-516` to `bug:`, AC 5 and the Implementation Notes' bug list (prepared, uncommitted, after this design commit);
+  (2) `wf(bug): assign release v0.4 to bug-516-…` (`release: ""` → `"v0.4"`), (3) `wf(bug): sync bug-516-… [triaged
+  → planned]`, (4) `wf(bug): sync bug-516-… [planned → in-progress]` — three hand commits by the orchestrator, each
+  changing one line of the bug file only, with the AI trailers. **Recommend this sequence**: the amend records the
+  absorption with an `Approver:` line, and steps 2–4 are the hand commits release planning wrote for the other three.
+  The alternative, the orchestrator committing the `bug:` change as a plain notes commit, leaves the ruling in no
+  approval record.
+- **D5 — the `spec-016` amendment** below, approved at this gate (release-planning S6), recorded before red.
+
+### Pending amendments (approver)
+
+- `spec-016-agent-execution` (prepared in the worktree, uncommitted: §2.3's rendering paragraph, §2.7's fake, §3.3
+  steps 8, 10, 11 and 15, a §3.7 row, the Revision note) — `--reason "Record task-355's design-gate amendment of
+  spec-016: the interactive launch no longer forwards SIGHUP (bug-318), a headless run signals the agent's whole
+  process group and kills what is left of it after a signalled exit (bug-516), mcp.template's rendering escapes U+007F
+  and refuses an unpaired surrogate at step 10 with a new section 3.7 row (bug-371), and the pre-flight reads only the
+  session Resource (bug-376)."`
+- `task-355-…` (this file; prepared after this design commit, uncommitted: `bug:` gains `bug-516`, AC 5 as quoted above,
+  the Implementation Notes' bug list) — `--reason "Absorb bug-516 into task-355 by the approver's triage ruling of
+  2026-11-08: its fix is in the signal take-over and send of the launch that this task changes for bug-318, so the
+  task lists it in bug: and gains acceptance criterion 5."`
+
+**Risks for the other open `w0` tasks.**
+- `task-336` (after `task-335`): `src/agent/launch.ts` `runAgent` (it replaces the stdout drain, adds `--log`); this
+  task leaves `runAgent` alone and changes `takeOverSignals`, `LaunchHost` and `launchAgent`'s `finally` — same file,
+  other functions; `test/fixtures/agents/fake-agent.cjs`'s header list and `test/agent/helpers/fake-child.ts` are
+  likely shared, a textual conflict the second merge resolves.
+- `task-339` (`dl-223`): `src/agent/execute.ts` (the dry-run plan, the posture fragment) and `renderLaunchArgv` in
+  `launch.ts`; this task changes `renderMcpTemplate`, `mcpPreflight` and `executeAgent`'s step 10 — near its edits in
+  `executeAgent`, not the same lines. Its manifest fixtures are unaffected.
+- `task-356`: `postRunFacts` in `launch.ts` — no overlap.
+- `task-353`: `runAgent`'s `cwd` — no overlap with this task's functions.
+- `task-346`, `task-347`: no shared file (`src/core/workflow-start-end.ts`, `release-planning.yaml`).
+- `spec-016`: `task-339`, `task-336` and `task-356` are likely to amend it too; whichever amendment the approver records
+  second is made on the first's text (§3.3 step 15 and §3.7 are the likely shared places).
+
+**Candidate findings (not filed).**
+- An interactive run's `--timeout` and forwarded `SIGTERM` reach the agent's pid only, so a child of an interactive
+  agent can outlive a timed-out run as in `bug-516` (the agent shares `agent execute`'s process group, so the group
+  cannot be signalled without signalling `agent execute`). Expected: stated as a known limit, or the interactive agent
+  given a process group of its own while keeping the terminal. Suggested severity: low.
+- `wingfoil init` writes no `.gitattributes`, so a project using WingFoil has no eol rule for its run log
+  (`paths.runs`), the second half of `bug-318` outside this repository. Expected: `init` adds `*.jsonl text eol=lf`,
+  or the user guide says why not. Suggested severity: low.
+
+### Retrospective
+
+<!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
+     reconstructed afterwards. One line per item: what happened, the evidence (a command and what it
+     printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
+     Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
+     here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
