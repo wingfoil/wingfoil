@@ -391,6 +391,15 @@ Checks on `eaeb5c6ba`: `npx jest test/core/dev-loop-v2-4.test.ts test/core/dev-l
 --maxWorkers=2` → `Test Suites: 16 passed, 16 total`, `Tests: 176 passed, 176 total`; pinned `npm run -s wingfoil --
 workflow list --format json` → exit `0`, stderr empty, 68 diagnostics, all 68 `W_WORKFLOW_UNBOUND_TOKEN` warnings.
 
+After the notes commit `main` had moved (`git rev-list --count HEAD..main` → `31`, task-345's merge `db6d372e7`;
+`git diff --name-only HEAD...main` names no `.wingfoil/` file and none of red's files), so `git merge --no-edit main`
+→ merge commit `7be2f537c` (trailers added by amend), no conflict, `HEAD..main` → `0`. On it: the same jest run plus
+`test/directives/wingfoil-cli-dl-205.test.ts`, `test/core/dev-loop-v1-6.test.ts` and
+`test/core/workflow-manual-prose-checks.test.ts` → `Test Suites: 19 passed, 19 total`, `Tests: 253 passed, 253
+total`; pinned `workflow list --format json` → exit `0`, stderr empty, 68 diagnostics, all 68 unbound-token warnings;
+`npm run -s check:governance -- --base origin/main` → `gated: 0 findings on 0 commits`, `history: 0 findings on 0
+commits`.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
