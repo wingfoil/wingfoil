@@ -4,20 +4,28 @@
  *
  * 13. The banner, `run <run-id>: launching <agent> (<adapter>) as <role> on <type>:<id>`, as a notice
  *     on stderr (`reportNotice`): the CLI renders it in the active `--format`.
- * 14. The spawn: the adapter's `command` with `launch.interactive.args` (+ `session.assign_args` under
+ * 14. The spawn: the adapter's `command` with `launch.<kind>.args` (+ `session.assign_args` under
  *     `session.id: assign`), every placeholder filling whole argv elements ({@link renderLaunchArgv}),
- *     no shell, the agent inheriting stdin, stdout and stderr, its working directory the project root,
- *     the environment passed through unchanged (`adr-012` point 1). This is REQ-PERF-01's "agent ready".
- * 15. The wait. From the spawn until the record is committed `SIGINT` and `SIGQUIT` are ignored (the
- *     terminal delivers them to the agent itself, in the same foreground process group) and `SIGTERM`
- *     and `SIGHUP` are forwarded to the agent while it runs, so a run ended by a signal is still recorded
- *     as `signal:<NAME>`.
+ *     no shell, its working directory the project root, the environment passed through unchanged
+ *     (`adr-012` point 1). An interactive agent inherits stdin, stdout and stderr; a headless one (the
+ *     work run, §3.5, task-335) reads the null device, its stdout is piped and drained, its stderr is
+ *     `agent execute`'s, and on POSIX it runs in a session and process group of its own (approver ruling
+ *     D6 (a)). This is REQ-PERF-01's "agent ready".
+ * 15. The wait. From the spawn until the record is committed, for an interactive launch `SIGINT` and
+ *     `SIGQUIT` are ignored (the terminal delivers them to the agent itself, in the same foreground
+ *     process group) and `SIGTERM` and `SIGHUP` are forwarded to the agent while it runs; a headless
+ *     agent has no terminal, so `SIGINT` is forwarded too and only `SIGQUIT` is ignored. A run ended by a
+ *     signal is still recorded as `signal:<NAME>`. With `--timeout` the bound runs from the spawn: at
+ *     expiry `SIGTERM` through the same forwarding, then `SIGKILL` {@link TIMEOUT_GRACE_MS} later if the
+ *     agent still runs; both timers stop when it exits.
  * 16. The post-run lookups (§2.6): `version_args`, `session.lookup_args`, `usage.lookup_args`, each run as
  *     `command` + argv with a time limit ({@link LOOKUP_TIMEOUT_MS}); one argv declared twice runs once.
  *     A lookup that fails, times out or prints no JSON, and a value of the wrong type, yield
  *     `not-reported` and a `warning:` line; the lookup never fails the run.
  * 17. The record (§4.2), appended and committed by `recordRun` (task-206): `agent: record <run-id>`.
- * 18. The outcome: success only when the agent exited `0` and the record was committed.
+ * 18. The outcome: success only when the agent exited `0`, the bound did not expire and the record was
+ *     committed. An expired bound is `agent timed out after <duration>; run <run-id> recorded`, whatever
+ *     the exit status. A headless success also prints the summary line as a notice (§3.5).
  *
  * **Determinism.** The argv, the session id and every record field but `duration_ms` are pure functions
  * of committed state and the run's inputs; the temporary-file paths and the Node executable are host
@@ -33,6 +41,7 @@ import { readBuildStamp } from '../storage';
 import { reportNotice, reportWarning } from '../validation/warning';
 import { coreErr, coreOk, type CoreResult } from '../core/types';
 
+import type { TimeBound } from './duration';
 import type { AdapterManifest } from './schema';
 import { deriveNotesField, NOT_REPORTED, recordRun, type ReportedCount, type RunRecord, type RunTokens } from './run-log';
 
@@ -41,6 +50,9 @@ import { deriveNotesField, NOT_REPORTED, recordRun, type ReportedCount, type Run
  * bounds stdout and stderr each, so a lookup with valid stdout and over 1 MiB on stderr loses its values.
  */
 const LOOKUP_MAX_BYTES = 1024 * 1024;
+
+/** How long `--timeout`'s `SIGTERM` waits before `SIGKILL` (§3.3 step 15; approver ruling D5 (a): fixed, 10 s). */
+export const TIMEOUT_GRACE_MS = 10000;
 
 /** How long one post-run lookup may run (§2.6, §3.3 step 16). */
 export const LOOKUP_TIMEOUT_MS = 10000;
@@ -103,13 +115,18 @@ function renderArgv(template: readonly string[], values: LaunchValues): string[]
   });
 }
 
+/** The kind a launch runs as (`spec-016` §3.2 step 7, task-335). */
+export type LaunchKindRun = 'interactive' | 'headless';
+
 /**
- * The launch argv (§3.3 step 14): `launch.interactive.args` rendered, then `session.assign_args`
- * rendered when the session id is assigned. The `command` is not part of it.
+ * The launch argv (§3.3 step 14): `launch.<kind>.args` rendered, then `session.assign_args` rendered when
+ * the session id is assigned. The `command` is not part of it. A headless launch of an adapter without
+ * `launch.headless` is refused before (§3.3 step 4, `NO_LAUNCH_KIND`), so its argv is never rendered here.
  */
-export function renderLaunchArgv(manifest: AdapterManifest, values: LaunchValues): string[] {
+export function renderLaunchArgv(manifest: AdapterManifest, values: LaunchValues, kind: LaunchKindRun = 'interactive'): string[] {
   const assign = manifest.session.id === 'assign' ? (manifest.session.assign_args ?? []) : [];
-  return [...renderArgv(manifest.launch.interactive.args, values), ...renderArgv(assign, values)];
+  const args = kind === 'headless' ? (manifest.launch.headless?.args ?? []) : manifest.launch.interactive.args;
+  return [...renderArgv(args, values), ...renderArgv(assign, values)];
 }
 
 /**
@@ -137,14 +154,28 @@ function commandToSpawn(root: string, command: string): string {
 /** How the agent process ended: its exit code, or `signal:<NAME>` (§4.2 key 16). */
 type ExitStatus = number | string;
 
-/** The signals `agent execute` takes over while the agent runs (§3.3 step 15). */
-const IGNORED_SIGNALS: readonly NodeJS.Signals[] = process.platform === 'win32' ? ['SIGINT'] : ['SIGINT', 'SIGQUIT'];
-const FORWARDED_SIGNALS: readonly NodeJS.Signals[] = process.platform === 'win32' ? ['SIGTERM'] : ['SIGTERM', 'SIGHUP'];
+const WINDOWS = process.platform === 'win32';
+
+/**
+ * The signals `agent execute` takes over while the agent runs (§3.3 step 15), per launch kind: an interactive
+ * agent shares the terminal's foreground process group, so the keyboard's signals reach it directly and are
+ * ignored here; a headless agent has no terminal, so `SIGINT` is forwarded to it as well (task-335, D6 (a)).
+ * Windows has only the subsets that exist there.
+ */
+const TAKEN_OVER: Readonly<Record<LaunchKindRun, { readonly ignored: readonly NodeJS.Signals[]; readonly forwarded: readonly NodeJS.Signals[] }>> = {
+  interactive: { ignored: WINDOWS ? ['SIGINT'] : ['SIGINT', 'SIGQUIT'], forwarded: WINDOWS ? ['SIGTERM'] : ['SIGTERM', 'SIGHUP'] },
+  headless: { ignored: WINDOWS ? [] : ['SIGQUIT'], forwarded: WINDOWS ? ['SIGINT', 'SIGTERM'] : ['SIGINT', 'SIGTERM', 'SIGHUP'] },
+};
 
 /** §3.3 step 15's signal handling, installed before the spawn and attached to the agent once it exists. */
 interface SignalTakeover {
   /** Hand the agent over: a forwarded signal that arrived before it existed is sent to it now. */
   attach(child: ChildProcess): void;
+  /**
+   * The one forwarding path, which a received signal and the time bound both take: `signal` is sent to the
+   * agent while it runs, remembered until it is attached, and dropped once it has exited.
+   */
+  send(signal: NodeJS.Signals): void;
   /** Remove every listener installed. */
   restore(): void;
 }
@@ -152,31 +183,43 @@ interface SignalTakeover {
 /**
  * Install §3.3 step 15's signal handling **before the spawn** (review fix 1: a signal between the
  * pre-launch cleanup's release and the spawn must neither kill `agent execute` nor orphan the agent):
- * `SIGINT`/`SIGQUIT` ignored, `SIGTERM`/`SIGHUP` forwarded to the agent while it runs. One that arrives
- * before the agent exists is remembered and sent as soon as it is attached; once the agent has exited
- * they are ignored, until the record is committed.
+ * the `kind`'s ignored signals ignored, its forwarded ones forwarded to the agent while it runs. One that
+ * arrives before the agent exists is remembered and sent as soon as it is attached; once the agent has
+ * exited they are ignored, until the record is committed.
  */
-function takeOverSignals(): SignalTakeover {
+function takeOverSignals(kind: LaunchKindRun): SignalTakeover {
   let child: ChildProcess | undefined;
   let pending: NodeJS.Signals | undefined;
-  const forward = (signal: NodeJS.Signals): void => {
+  const send = (signal: NodeJS.Signals): void => {
     if (child === undefined) pending = signal;
     else if (child.exitCode === null && child.signalCode === null) child.kill(signal);
   };
+  const { ignored, forwarded } = TAKEN_OVER[kind];
   const installed: [NodeJS.Signals, () => void][] = [
-    ...IGNORED_SIGNALS.map((signal): [NodeJS.Signals, () => void] => [signal, () => undefined]),
-    ...FORWARDED_SIGNALS.map((signal): [NodeJS.Signals, () => void] => [signal, () => forward(signal)]),
+    ...ignored.map((signal): [NodeJS.Signals, () => void] => [signal, () => undefined]),
+    ...forwarded.map((signal): [NodeJS.Signals, () => void] => [signal, () => send(signal)]),
   ];
   for (const [signal, listener] of installed) process.on(signal, listener);
   return {
     attach(spawned) {
       child = spawned;
-      if (pending !== undefined) forward(pending);
+      if (pending !== undefined) send(pending);
     },
+    send,
     restore() {
       for (const [signal, listener] of installed) process.removeListener(signal, listener);
     },
   };
+}
+
+/**
+ * The spawn options of each launch kind (§3.3 step 14). Headless: stdin the null device, stdout piped (and
+ * drained by {@link runAgent}), stderr inherited, and on POSIX a session and process group of its own, so the
+ * agent has no controlling terminal to open and gets each signal once (approver ruling D6 (a)).
+ */
+function spawnOptions(kind: LaunchKindRun, root: string): SpawnOptions {
+  if (kind === 'interactive') return { cwd: root, stdio: 'inherit', env: process.env };
+  return { cwd: root, stdio: ['ignore', 'pipe', 'inherit'], env: process.env, detached: !WINDOWS };
 }
 
 /** Spawn the agent and wait for it: its exit status and the wall-clock duration, or why it could not start. */
@@ -184,18 +227,22 @@ function runAgent(
   spawnAgent: SpawnAgent,
   command: string,
   args: readonly string[],
-  root: string,
+  options: SpawnOptions,
   onSpawn: (child: ChildProcess) => void,
+  onExit: () => void,
 ): Promise<{ ok: true; exitStatus: ExitStatus; durationMs: number } | { ok: false; reason: string }> {
   return new Promise((settle) => {
     let child: ChildProcess;
     const start = performance.now();
     try {
-      child = spawnAgent(command, args, { cwd: root, stdio: 'inherit', env: process.env });
+      child = spawnAgent(command, args, options);
     } catch (error) {
       settle({ ok: false, reason: error instanceof Error ? error.message : String(error) });
       return;
     }
+    // A headless agent's stdout is captured and not echoed (§3.5): read to its end, written nowhere, so a
+    // full pipe never blocks the agent. Nothing parses it yet (`dl-182`, `dl-188`).
+    child.stdout?.resume();
     onSpawn(child);
     let spawned = false;
     child.once('spawn', () => {
@@ -205,6 +252,7 @@ function runAgent(
       if (!spawned) settle({ ok: false, reason: error.message });
     });
     child.once('exit', (code, signal) => {
+      onExit();
       const durationMs = Math.max(0, Math.round(performance.now() - start));
       settle({ ok: true, exitStatus: signal !== null ? `signal:${signal}` : (code ?? 0), durationMs });
     });
@@ -332,6 +380,17 @@ export interface LaunchHost {
   readonly spawn?: SpawnAgent;
   /** {@link LOOKUP_TIMEOUT_MS} by default. */
   readonly lookupTimeoutMs?: number;
+  /**
+   * Arms a timer that calls `fire` after `delayMs` and returns the function that cancels it (`--timeout`,
+   * §3.3 step 15); `setTimeout` / `clearTimeout` by default. A test injects a recorder, so no wall clock runs.
+   */
+  readonly timer?: (delayMs: number, fire: () => void) => () => void;
+}
+
+/** {@link LaunchHost.timer}'s default: a real timer. */
+function realTimer(delayMs: number, fire: () => void): () => void {
+  const handle = setTimeout(fire, delayMs);
+  return () => clearTimeout(handle);
 }
 
 /** What the launch needs from the pre-launch pipeline (`PreparedLaunch`, `./execute.ts`). */
@@ -356,6 +415,10 @@ export interface LaunchInput {
   readonly files: Partial<Record<'bootstrap_file' | 'mcp_config_file', string>>;
   /** The rendered `mcp.template` under `mcp.via: config-arg` (§2.3 `{mcp_config}`); `undefined` otherwise. */
   readonly mcpConfig?: string | undefined;
+  /** The launch kind §3.2 step 7 resolved (task-335). */
+  readonly kind: LaunchKindRun;
+  /** `--timeout`'s bound: its length and the value as given (§3.1); absent, the run is unbounded. */
+  readonly timeout?: TimeBound | undefined;
 }
 
 /** A launched run, recorded: what `agent execute` reports (§3.4's `{ "run": <record> }`). */
@@ -380,10 +443,12 @@ export function launchBanner(input: LaunchInput): string {
  * before the spawn, after the launch has installed its own listeners: it hands the process's signals
  * over from the pre-launch cleanup (`withRunFiles`) to the launch (§3.3 step 15) with no gap between.
  *
- * @returns The recorded run (the agent exited `0` and the record was committed); otherwise `IO`
- *   `agent command '<command>' could not be started …` (no run, no record), `IO` `agent exited
- *   <exit_status>; run <run-id> recorded` with `details: {run_id, exit_status}` and the summary as a
- *   detail line, or `recordRun`'s refusal, the record in its `details` (the run is never lost).
+ * @returns The recorded run (the agent exited `0`, the bound did not expire, and the record was
+ *   committed); otherwise `IO` `agent command '<command>' could not be started …` (no run, no record), `IO`
+ *   `agent timed out after <duration>; run <run-id> recorded` with `details: {run_id, exit_status, timeout}`,
+ *   `IO` `agent exited <exit_status>; run <run-id> recorded` with `details: {run_id, exit_status}` — each
+ *   with the summary as a detail line — or `recordRun`'s refusal, the record in its `details` (the run is
+ *   never lost).
  */
 export async function launchAgent(root: string, input: LaunchInput, host: LaunchHost, releaseSignals: () => void): Promise<CoreResult<RecordedLaunch>> {
   const { manifest } = input.adapter;
@@ -395,15 +460,43 @@ export async function launchAgent(root: string, input: LaunchInput, host: Launch
     mcpConfig: input.mcpConfig,
     sessionId: assigned ?? '',
   };
-  const argv = renderLaunchArgv(manifest, values);
+  const argv = renderLaunchArgv(manifest, values, input.kind);
 
   // Step 13 — the banner; step 14 — the spawn; step 15 — the wait, with the signals taken over.
   reportNotice(launchBanner(input));
   // The launch's listeners go in before the pre-launch cleanup's come out: no signal finds neither.
-  const signals = takeOverSignals();
+  const signals = takeOverSignals(input.kind);
   releaseSignals();
+  // The time bound (step 15): from the spawn, SIGTERM at expiry, SIGKILL after the grace; both stop at the exit.
+  const timer = host.timer ?? realTimer;
+  const { timeout } = input;
+  let expired = false;
+  const cancels: (() => void)[] = [];
+  const armBound = (): void => {
+    if (timeout === undefined) return;
+    cancels.push(
+      timer(timeout.ms, () => {
+        expired = true;
+        signals.send('SIGTERM');
+        cancels.push(timer(TIMEOUT_GRACE_MS, () => signals.send('SIGKILL')));
+      }),
+    );
+  };
+  const stopBound = (): void => {
+    for (const cancel of cancels.splice(0)) cancel();
+  };
   try {
-    const ran = await runAgent(host.spawn ?? spawn, commandToSpawn(root, manifest.command), argv, root, (child) => signals.attach(child));
+    const ran = await runAgent(
+      host.spawn ?? spawn,
+      commandToSpawn(root, manifest.command),
+      argv,
+      spawnOptions(input.kind, root),
+      (child) => {
+        signals.attach(child);
+        armBound();
+      },
+      stopBound,
+    );
     if (!ran.ok) {
       return coreErr({ code: 'IO', message: `agent command '${manifest.command}' could not be started (adapter '${input.adapter.name}'): ${ran.reason}` });
     }
@@ -446,7 +539,14 @@ export async function launchAgent(root: string, input: LaunchInput, host: Launch
     const recorded = recordRun(root, input.logPath, record);
     if (!recorded.ok) return recorded;
 
-    // Step 18 — the outcome.
+    // Step 18 — the outcome: an expired bound first, whatever the exit status (§3.7 `TIMED_OUT`).
+    if (expired && timeout !== undefined) {
+      return coreErr({
+        code: 'IO',
+        message: `agent timed out after ${timeout.label}; run ${record.id} recorded`,
+        details: { run_id: record.id, exit_status: record.exit_status, timeout: timeout.label, issues: [{ detail: runSummaryLine(record, recorded.value.sha) }] },
+      });
+    }
     if (record.exit_status !== 0) {
       return coreErr({
         code: 'IO',
@@ -454,8 +554,11 @@ export async function launchAgent(root: string, input: LaunchInput, host: Launch
         details: { run_id: record.id, exit_status: record.exit_status, issues: [{ detail: runSummaryLine(record, recorded.value.sha) }] },
       });
     }
+    // A work run's stdout carries the record (§3.5), so its summary line is a notice on stderr.
+    if (input.kind === 'headless') reportNotice(runSummaryLine(record, recorded.value.sha));
     return coreOk({ run: record, sha: recorded.value.sha });
   } finally {
+    stopBound();
     signals.restore();
   }
 }

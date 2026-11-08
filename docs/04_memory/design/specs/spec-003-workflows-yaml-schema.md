@@ -149,6 +149,7 @@ Each **`Phase`** object:
 | `fallback`      | `{ step: string, set_state?: string }` | no | On rejection/failure, route back to the named phase (`step`) and optionally reset the active element's state to `set_state` before retrying.                             |
 | `mode`          | `fresh` \| `resume` \| `reference` (default `fresh`) | no | Which non-fresh execution mode the phase **allows** for the agent run that executes it (`dl-135` point 3 and 4; `dl-134` §4 (a)). See § "Execution independence". |
 | `distinct_from` | string[] (phase names)        | no       | Phases of the **same workflow** whose runs this phase's run must never share an agent session with, whatever `mode` is set (`dl-134` §4 (b)). See § "Execution independence". |
+| `launch`        | `interactive` \| `headless` \| `any` (default `interactive`) | no | The launch kind an agent run of the phase takes by default (`dl-183` Q1 (a), from v0.4): `interactive`, the agent owns a terminal and the user works in its session; `headless`, a work run with no terminal that the agent finishes alone (`spec-016` §3.5); `any`, the phase does not care, so the caller's option or the adapter decides, `interactive` first. `agent execute --headless` / `--interactive` overrides it, with a warning when it contradicts a declared `interactive` or `headless` (`spec-016` §3.2 step 7). An absent `launch` reads as `interactive` but stays absent in the parsed phase, so `workflow show` and `workflow next` report it as declared (`spec-017` §6.3). Separate from `mode` (`adr-012` point 4); an executor attribute like `mode` and `distinct_from` (§ "Diagnostics", `E_PHASE_EXECUTOR_WITHOUT_ROLE`). No value relaxes the two fixed cases: a verification run is always headless (v1.0, P4.12), and a phase whose `role` is `approver` is never launched. |
 | `cadence`       | `once` \| `{ recurring: { cron: string } \| { on: string } }` (default `once`) | no | Whether the phase runs once per pass of its workflow or recurs, and on what trigger (`dl-105`). See § "Recurring phases". |
 
 There is **no `entry:` field** (`dl-104` D5 (b)): the generic workflow commands (`workflow start`,
@@ -193,6 +194,8 @@ const Phase = z.object({
   mode: z.enum(["fresh", "resume", "reference"]).optional(),   // absent reads as `fresh`; the
                                                                // checks below run on the raw value
   distinct_from: z.array(z.string()).optional(),
+  launch: z.enum(["interactive", "headless", "any"]).optional(),   // absent reads as `interactive`;
+                                                                   // reported as declared (spec-017 §6.3)
   cadence: Cadence.default("once"),
 });
 export const Workflow = z.object({
@@ -733,7 +736,9 @@ when the loader reported no error. A core check is not decided when its input is
 token, exit state or fallback, and without a type's template no token field. The first two skips are reported:
 each missing file adds one `W_WORKFLOW_CHECKS_NOT_RUN` warning, ahead of the core rows, so an empty
 `diagnostics` means the checks ran and found nothing (`bug-281`). Structural (Zod)
-failures keep `spec-009`'s structural codes, except the named `kind` refusal.
+failures keep `spec-009`'s structural codes, except the named `kind` refusal: a phase `launch` outside
+`interactive`, `headless` and `any`, like a `mode` outside its three values, is one structural `E_VALIDATION`
+error at `phases[<i>].launch` (`dl-183` Q1 (a)).
 
 | Code | Severity | Runs in | Rule | Source |
 |---|---|---|---|---|
@@ -756,7 +761,7 @@ failures keep `spec-009`'s structural codes, except the named `kind` refusal.
 | `E_PHASE_DISTINCT_FROM_UNKNOWN` | error | loader | a `distinct_from` entry names no phase of the same workflow; path `phases[<i>].distinct_from[<k>]`, message `distinct_from phase '<entry>' not found in workflow` | `dl-134` §4 |
 | `E_PHASE_DISTINCT_FROM_SELF` | error | loader | a phase names itself in `distinct_from`; path `phases[<i>].distinct_from[<k>]`, message `phase '<name>' names itself in distinct_from` | `dl-134` §4 |
 | `E_PHASE_MODE_NOT_INDEPENDENT` | error | loader | a phase whose `role` is `reviewer` or `qa` declares `mode` other than `fresh`; path `phases[<i>].mode`, message `phase '<name>' has role '<role>' and must run fresh (mode '<mode>' is not allowed)` | `dl-135` point 3 |
-| `E_PHASE_EXECUTOR_WITHOUT_ROLE` | error | loader | a phase without `role` declares `mode` or `distinct_from`, on the raw declaration (an absent `mode` is not declared); one per field, path `phases[<i>].mode` / `phases[<i>].distinct_from`, message `phase '<name>' declares <field> but has no role (it has no executor)` | open question 4, settled |
+| `E_PHASE_EXECUTOR_WITHOUT_ROLE` | error | loader | a phase without `role` declares `mode`, `distinct_from` or `launch`, on the raw declaration (an absent `mode` or `launch` is not declared); one per field, in that order, path `phases[<i>].mode` / `phases[<i>].distinct_from` / `phases[<i>].launch`, message `phase '<name>' declares <field> but has no role (it has no executor)` | open question 4, settled; `launch` from v0.4 (`dl-183`) |
 | `E_PHASE_PRODUCES_NOT_A_PATH` | error | loader | a `produces` path is not a path pattern | `dl-104` D3 |
 | `E_PHASE_PRODUCES_OWNER_NOT_CREATED` | error | loader | a `{ type: T, path }` entry in a phase that does not `memory.add(type: T)` | `dl-104` D3 |
 | `E_PHASE_SELECTION_UNTYPED` | error | loader | `where` without `iterate_over` and without a `type` key | § "Selections"; `dl-016` |
@@ -1153,3 +1158,13 @@ the message of `E_WORKFLOW_INCLUDE_UNRESOLVED`.** § "Diagnostics" records the s
 unresolved phase `include`: the name to write when a declared workflow is near (the shared closest-name matcher, distance
 2 as in `spec-008` §1) and, for a value written as a file path, the user guide's upgrade section. The rule is unchanged.
 Edited in place without a supersede or a state change (`dl-047`), pending the approver's `memory amend`.
+
+**Revision (2026-11-07, `task-335-add-the-headless-work-run-the-launch-phase-key-headless-interactive-timeout-next-on-a-waiting-step`)
+— Layer 2's `Phase` table and Zod shape, and § "Diagnostics": the `launch` field.** A phase declares the launch kind
+of its agent run, `launch: interactive | headless | any`, default `interactive` (`dl-183` Q1 (a)); the option of
+`agent execute` overrides it (`spec-016` §3.2 step 7). An unknown value is a structural `E_VALIDATION` at
+`phases[<i>].launch`, as an unknown `mode` is, and `launch` on a phase without a `role` is `E_PHASE_EXECUTOR_WITHOUT_ROLE`,
+as `mode` and `distinct_from` are. The field is new to the format but needs no `format` bump: every released build
+loads a phase that declares it, reporting the key as an unknown field it ignores (the pinned build 0.3.2, checked at
+`task-335`'s design, `dl-205` Q1 (a)). Edited in place without a supersede or a state change (`dl-047`), pending the
+approver's `memory amend`.

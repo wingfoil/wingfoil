@@ -12,6 +12,7 @@ import { join } from 'node:path';
 import type { AgentExecuteHost, AgentLaunchPlan } from '../../src/agent';
 import { agentExecuteFn } from '../../src/core/agent-execute';
 import { runAsDryRun } from '../../src/core/dry-run';
+import { UsageError } from '../../src/core/usage-error';
 import type { CoreResult } from '../../src/core/types';
 import { withNoticeSink, withWarningSink } from '../../src/validation/warning';
 import { DNA_YAML, manifest, seed, TASK_ID, TASK_REF } from '../agent/helpers/agent-execute-fixture';
@@ -142,11 +143,17 @@ describe('agentExecuteFn — resolution and pre-flight refusals in process', () 
     expect(outcome.warnings).toEqual(["no --role given and no workflow step to take one from: running as the default role 'developer'"]);
   }, 60000);
 
-  it('NO_TERMINAL with terminal: required; with a terminal it passes to the plan', async () => {
+  it('NO_TERMINAL with terminal: required refuses a real run; a dry run warns and plans (task-335 AC 7, bug-392); with a terminal it passes to the plan', async () => {
     const repo = fixture((root) => writeFixtureFile(root, '.wingfoil/dna.yaml', DNA_YAML.replace('adapter: fake', 'adapter: fake-terminal')));
-    expect(refusal(await run(repo, { element: TASK_REF, role: 'developer' }))?.message).toBe('interactive launch needs a terminal on stdin and stdout');
+    const before = git(repo, ['rev-parse', 'HEAD']).trim();
+    expect(refusal(await run(repo, { element: TASK_REF, role: 'developer' }, HOST, true))?.message).toBe('interactive launch needs a terminal on stdin and stdout');
+    expect(git(repo, ['rev-parse', 'HEAD']).trim()).toBe(before);
+    const dry = await run(repo, { element: TASK_REF, role: 'developer' });
+    expect(dry.result.ok ? (dry.result.value as AgentLaunchPlan).dryRun : refusal(dry)?.message).toBe(true);
+    expect(dry.warnings).toEqual(['interactive launch needs a terminal on stdin and stdout: a run without --dry-run is refused here']);
     const outcome = await run(repo, { element: TASK_REF, role: 'developer' }, { ...HOST, isTerminal: () => true });
     expect(outcome.result.ok).toBe(true);
+    expect(outcome.warnings).toEqual([]);
   }, 60000);
 });
 
@@ -358,5 +365,80 @@ describe('agentExecuteFn — branches the review asked to cover (task-228 review
     const outcome = await run(repo, { element: TASK_REF, role: 'developer' });
     if (!outcome.result.ok) throw new Error(outcome.result.error.message);
     expect((outcome.result.value as AgentLaunchPlan).bootstrap).toContain("Record your handoff in the element's body and in your commit messages.");
+  }, 60000);
+});
+
+/** `fake.yaml` without its `launch.headless` block (task-335 AC 3, `spec-016` §3.7 `NO_LAUNCH_KIND`). */
+const NO_HEADLESS = (text: string): string => text.replace(/^ {2}headless:\n(?: {4}.*\n)+/m, '');
+
+describe('task-335 — the launch-kind flags and --timeout in process (spec-016 §3.1, §3.2 step 7, §3.3 step 4)', () => {
+  /** Run with the command flags `headless` / `interactive` (`params`, as `buildParams` spreads `ctx.flags`). */
+  async function runWith(root: string, flags: { headless?: boolean; interactive?: boolean }, options: Record<string, string>, host: AgentExecuteHost = HOST, real = false): Promise<Outcome> {
+    const warnings: string[] = [];
+    const notices: string[] = [];
+    const call = () => agentExecuteFn({ root, ...flags, options, host } as Parameters<typeof agentExecuteFn>[0]);
+    const result = await withNoticeSink(
+      (text) => notices.push(text),
+      () => withWarningSink((text) => warnings.push(text), () => (real ? call() : runAsDryRun(call))),
+    );
+    return { result, warnings, notices };
+  }
+
+  it('AC 2: --headless with --interactive is a UsageError (exit 2), before the project is read', async () => {
+    const call = agentExecuteFn({ root: '/nonexistent', next: true, headless: true, interactive: true } as Parameters<typeof agentExecuteFn>[0]);
+    await expect(call).rejects.toThrow(UsageError);
+    await expect(agentExecuteFn({ root: '/nonexistent', next: true, headless: true, interactive: true } as Parameters<typeof agentExecuteFn>[0])).rejects.toThrow(
+      'invalid flag combination: --headless cannot be combined with --interactive',
+    );
+  });
+
+  it.each([
+    ['0s', 'invalid flag value: --timeout expects <n>s, <n>m or <n>h, got "0s"'],
+    ['1d', 'invalid flag value: --timeout expects <n>s, <n>m or <n>h, got "1d"'],
+    ['25h', 'invalid flag value: --timeout must be at most 24h, got "25h"'],
+  ])('AC 5: --timeout %s is a UsageError with spec-008 §12\'s message, before the project is read', async (raw, message) => {
+    await expect(agentExecuteFn({ root: '/nonexistent', next: true, options: { timeout: raw } })).rejects.toThrow(UsageError);
+    await expect(agentExecuteFn({ root: '/nonexistent', next: true, options: { timeout: raw } })).rejects.toThrow(message);
+  });
+
+  it('AC 5: under --dry-run a valid --timeout is checked and launches nothing', async () => {
+    const outcome = await runWith(fixture(), { headless: true }, { element: TASK_REF, role: 'developer', timeout: '5m' });
+    expect(outcome.result.ok ? (outcome.result.value as AgentLaunchPlan).dryRun : refusal(outcome)?.message).toBe(true);
+  }, 60000);
+
+  it('AC 2: an approver run is refused whichever kind flag is given', async () => {
+    const repo = fixture();
+    for (const flags of [{ headless: true }, { interactive: true }]) {
+      expect(refusal(await runWith(repo, flags, { element: TASK_REF, role: 'approver' }))?.message).toBe("role 'approver' is never executed by an agent");
+    }
+  }, 60000);
+
+  it('AC 3: an adapter that declares no headless launch is NO_LAUNCH_KIND (VALIDATION), before AGENT_NOT_FOUND', async () => {
+    const repo = fixture((root) => {
+      writeFixtureFile(root, '.wingfoil/dna.yaml', DNA_YAML.replace('adapter: fake', 'adapter: fake-no-headless'));
+      writeFixtureFile(root, '.wingfoil/agents/custom/fake-no-headless.yaml', manifest('fake-no-headless', NO_HEADLESS));
+    });
+    for (const host of [HOST, { ...HOST, searchPath: '' }]) {
+      expect(refusal(await runWith(repo, { headless: true }, { element: TASK_REF, role: 'developer' }, host))).toMatchObject({
+        code: 'VALIDATION',
+        message: "adapter 'fake-no-headless' declares no headless launch",
+      });
+    }
+    // The interactive kind is unaffected.
+    expect((await runWith(repo, {}, { element: TASK_REF, role: 'developer' })).result.ok).toBe(true);
+  }, 60000);
+
+  it('AC 7: a headless dry run with terminal: required prints no terminal warning', async () => {
+    const repo = fixture((root) => writeFixtureFile(root, '.wingfoil/dna.yaml', DNA_YAML.replace('adapter: fake', 'adapter: fake-terminal')));
+    const outcome = await runWith(repo, { headless: true }, { element: TASK_REF, role: 'developer' });
+    expect(outcome.result.ok ? (outcome.result.value as AgentLaunchPlan).dryRun : refusal(outcome)?.message).toBe(true);
+    expect(outcome.warnings).toEqual([]);
+  }, 60000);
+
+  it('AC 4: a real headless run with terminal: required needs no terminal, and is recorded with result n/a', async () => {
+    const repo = fixture((root) => writeFixtureFile(root, '.wingfoil/dna.yaml', DNA_YAML.replace('adapter: fake', 'adapter: fake-terminal')));
+    const outcome = await runWith(repo, { headless: true }, { element: TASK_REF, role: 'developer' }, HOST, true);
+    if (!outcome.result.ok) throw new Error(outcome.result.error.message);
+    expect((outcome.result.value as { run: Record<string, unknown> }).run).toMatchObject({ id: `${TASK_ID}/adhoc/1`, result: 'n/a', exit_status: 0, adapter: 'custom/fake-terminal' });
   }, 60000);
 });

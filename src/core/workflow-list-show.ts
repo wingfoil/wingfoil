@@ -22,7 +22,7 @@ import type { MemoryYaml } from '../memory/schema';
 import type { Diagnostic } from '../validation';
 import { resolveToken, tokenName, type BindingsYaml, type TokenBinding } from '../workflow/bindings';
 import { declaresState, deduceWorkflowState, type Baseline, type Deduction, type EvidenceKind } from '../workflow/deduce';
-import { workflowFacts, type Cadence, type Phase, type PhaseMode, type Workflow } from '../workflow/schema';
+import { workflowFacts, type Cadence, type LaunchKind, type Phase, type PhaseMode, type Workflow } from '../workflow/schema';
 
 import { resolveRoleDirectives } from './context';
 import { loadDirectivesAtCommit, loadRolesYamlAtCommit, type DirectiveFile } from './loaders';
@@ -92,6 +92,8 @@ export interface PhaseView {
   readonly mode: PhaseMode;
   readonly allowedModes: readonly PhaseMode[];
   readonly distinctFrom: readonly string[];
+  /** The declared `launch` kind (`spec-003` Layer 2, task-335), `null` when absent. */
+  readonly launch: LaunchKind | null;
   readonly cadence: Cadence;
   /** The evidence kinds the phase declares (§4.3), in the deduction's order. */
   readonly evidence: readonly EvidenceKind[];
@@ -312,6 +314,7 @@ class Resolver {
         mode: phase.mode ?? 'fresh',
         allowedModes: allowedModes(phase.mode),
         distinctFrom: phase.distinct_from ?? [],
+        launch: phase.launch ?? null,
         cadence: phase.cadence,
         evidence: declaredEvidenceKinds(workflow, p, bound[p]!.type, bound[p]!.holdsGate),
         include: phase.include ?? null,
