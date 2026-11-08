@@ -642,6 +642,28 @@ overlap:
   §1 l.127 and a Revision note) — `--reason "Follow the approver-role refusal to src/agent/execute.ts:585 and the empty
   Tools channel to src/mcp/server.ts:61-76, where task-354's changes moved them (bug-317, bug-345)."`
 
+### review fix — finding 4 (developer, 2026-11-08)
+
+The approver ruled finding 4 (a): `src/mcp/index.ts`, a pure re-export barrel since the split, is excluded from coverage
+like the other barrels (`bug-021`'s rule). The task's PATH shim was checked first (both builds `0.3.2
+(86cc68b0a286720ff1829d87bdfb25cbd1b80213)`); `git rev-list --count HEAD..main` → `0`, no merge; no Memory verb run.
+
+- **Change — `0f9d5e50c`** `test(lint): task-354 — review fix: src/mcp/index.ts excluded from coverage as a re-export
+  barrel (finding 4 (a))`: `jest.config.js` lists `'!src/mcp/index.ts'` in `collectCoverageFrom` (in path order) and its
+  comment says why; `test/lint/coverage-scope.test.ts`'s header, item 3 and `LOGIC_INDEX_FILES` TSDoc describe the new
+  state. No assertion changed: the existing "excludes only existing files that are true re-export barrels" test now runs
+  `barrelViolations` on `src/mcp/index.ts` and passes, so the file holds only re-exports, type-only statements and the
+  literal `MODULE_NAME` (`npx jest test/lint/coverage-scope.test.ts --maxWorkers=2 --verbose` → `Tests: 12 passed`).
+- **Docs check**: `grep -rn "src/mcp/index.ts" docs/04_memory/design .wingfoil docs/*.md` → nine lines, none stating which
+  `index.ts` files are measured: spec-006 l.290 and l.948 and spec-017 l.1676-1678 (the pending amendments), spec-006 l.920
+  and spec-017 l.1582-1583 (Revision notes quoting earlier line ranges, historical), `dl-136` l.95 (`src/mcp/index.ts:11-14`,
+  the module comment's list of Resources, still those lines). No amendment needed.
+- **Gates**: `npx jest test/lint --maxWorkers=2` → `Test Suites: 14 passed`, `Tests: 158 passed`; `npm run -s lint` → exit 0;
+  `npm run -s test:coverage -- --maxWorkers=2` after `waitslot.sh` (exit 0, 08:36:54 → 08:58:27) → `Test Suites: 566
+  passed, 566 total`, `Tests: 10505 passed, 10505 total`, `All files | 99.29 | 97.27 | 98.75 | 99.69` (statements,
+  branches, functions, lines), against `99.29 | 97.27 | 98.1 | 99.69` at refactor; `coverage/coverage-summary.json` holds
+  no `src/mcp/index.ts` key (`src/core/index.ts` still measured).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
