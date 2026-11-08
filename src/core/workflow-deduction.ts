@@ -98,9 +98,9 @@ function readStarts(root: string, sha: string, paths: readonly string[]): Map<st
   let position = -1;
   for (const line of runGitRead(root, [...args, ...paths.map((path) => `:(literal)${path}`)]).stdout.split('\n')) {
     if (line.startsWith(COMMIT_MARK)) {
-      const field = line.indexOf(FIELD_MARK);
-      commit = requireCommitName(field === -1 ? line.slice(1) : line.slice(1, field), 'git log --diff-filter=A');
-      marked = field !== -1 && line.slice(field + 1).split(VALUE_MARK).some((value) => value.trim() !== '');
+      const [name, values = ''] = line.slice(1).split(FIELD_MARK);
+      commit = requireCommitName(name!, 'git log --diff-filter=A');
+      marked = values.split(VALUE_MARK).some((value) => value.trim() !== '');
       position += 1;
     } else if (wanted.has(line) && !starts.has(line)) {
       starts.set(line, { commit, position, marked });
