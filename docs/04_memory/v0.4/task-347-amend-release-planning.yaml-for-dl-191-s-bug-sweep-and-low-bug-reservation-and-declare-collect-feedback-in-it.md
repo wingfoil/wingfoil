@@ -433,6 +433,30 @@ commits and `727db6676`).
 None from green or refactor. The two prepared at design (`dl-163`, `dl-016`) were recorded at the design gate
 (`0e9939455`, `571f014e8`).
 
+### review fixes (developer, 2026-11-08)
+
+**Finding 1 (should-fix-in-task, introduced by green):** `assign-bugs`' description gave "this release" without
+`dl-206` Q2 (i)'s patch eligibility test, which `triage-bugs` and `define-scope` state (`grep -n "release/X.Y..main"
+.wingfoil/workflows/custom/release-planning.yaml` on the reviewed head hit only advance-pinned-build, define-scope and
+triage-bugs). Fixed in `d85644669` `fix(workflow): task-347 — assign-bugs states dl-206's patch eligibility (review
+finding 1)`. The description gains "For a `kind: patch` release, only a bug whose file `git log --no-merges
+release/X.Y..main -- <file>` leaves empty takes this release (dl-206 Q2 (i), release-planning-rel-v0.3.2-plan R8); any
+other takes a later release." WORKFLOW.md's patch sentence gains the same test for `assign-bugs`. Prose only: `version:`
+stays 2.5, the bump this branch already made. The same grep now also hits the `assign-bugs` line (`:157`).
+- Targeted suites: `npx jest test/core/release-planning-v2-5.test.ts test/core/workflow-patch-line-texts.test.ts
+  test/core/release-waves-config.test.ts test/core/define-scope-sweep.test.ts
+  test/core/workflow-repository-conformance.test.ts test/core/workflow-manual-prose-checks.test.ts
+  test/docs/workflow-md.test.ts --maxWorkers=2` → `Test Suites: 7 passed, 7 total`, `Tests: 127 passed, 127 total`.
+- Pinned build: `workflow show release-planning` (`--format json` and console) → exit `0`, ten phases, the
+  `assign-bugs` description holds `dl-206 Q2 (i)`; `workflow next sw-life-cycle-1-plan --format json` → exit `0`. In the
+  scratch clone outside the worktree, the same read at `c0fbcf7f2` (the reviewed head) gives a JSON equal to the one at
+  `d85644669` once `baseline` and `diagnostics` are removed (comparison → `true`): frontier unchanged, 22 keys, with
+  `release-planning.advance-pinned-build@release:minor-v1.0`.
+- `node scripts/check-governance.cjs --base origin/main` → `gated: 0 findings on 0 commits`, `history: 0 findings on 0
+  commits`.
+- T4: no red file touched (`git show --stat d85644669` → `.wingfoil/WORKFLOW.md`,
+  `.wingfoil/workflows/custom/release-planning.yaml` only).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
