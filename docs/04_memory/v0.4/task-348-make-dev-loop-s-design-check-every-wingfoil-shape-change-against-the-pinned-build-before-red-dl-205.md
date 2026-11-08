@@ -217,6 +217,63 @@ or record is owed.
 
 **Pending amendments (approver).** None.
 
+### red (qa, 2026-11-08)
+
+**Base.** Branch head `52ba5c680` (the design gate's record); `git rev-list --count HEAD..main` → `0`, so no merge of
+`main`. Builds through the task's PATH shim: `wingfoil --version` and `node dist/cli.js --version` → `0.3.2
+(f0d52a00e821634e38e89e2db1f9e5a5ff5bed5e)`. **Red commit: `2274f8cbf`.**
+
+**Files.** New `test/core/dev-loop-v2-4.test.ts` (AC 1, AC 3), new `test/directives/wingfoil-cli-dl-205.test.ts`
+(AC 2); edited `test/core/dev-loop-v1-6.test.ts` (the `design.checks.post` pin: four names → five, `pinned-build.reads`
+last) and `test/core/workflow-manual-prose-checks.test.ts` (a 23rd manual row `['dev-loop', 'phases[1].checks.post[4]',
+'pinned-build.reads']` after the `acceptance-criteria.consistent` row of `dev-loop`; the test title and the header
+say task-348's row is included). Tests and no fixtures: every test reads this repository's committed configuration
+(`loadWorkflowRegistryAtHead`, `workflowShowAtHead`, `git show HEAD:`) or, for the directive, the working tree, as
+`test/directives/wingfoil-cli.test.ts` does (its local `section(n)` and `prose()` helpers copied). No new export, so
+no `.d.cts`; no `src/`, `scripts/` or configuration file touched.
+
+**Per AC** (the design's table and the approver's rulings D1–D3 (a), AC 3's version row red-first):
+
+| AC | Class | Tests | Result on the red commit |
+|----|-------|-------|--------------------------|
+| 1 | red-first | `dev-loop-v2-4`: "design.checks.post names its four checks and appends pinned-build.reads, fifth"; "the pinned-build.reads prose names the pinned build, the scratch copy, before red, KNOWN_READ_FAILURES and wingfoil-cli §1"; "no other dev-loop phase declares pinned-build.reads, pre or post"; "design.description states the check: .wingfoil/, the pinned build, a scratch copy, npm run check:mcp, dl-205"; "bindings.yaml binds pinned-build.reads manual: true, and the design token resolves to it"; "workflow show dev-loop at HEAD lists pinned-build.reads on design only, bound manual and evaluated: false (AC 4's jest twin)"; "bindings.yaml `version:` is 3.0 or later, with a task-348 history entry numbered at least 3.0". The two edited pins of `dev-loop-v1-6` and `workflow-manual-prose-checks` | all 9 fail |
+| 2 | red-first | `wingfoil-cli-dl-205`: "§2 says <phrase>" for `A form the pinned build cannot read`, `` `dl-205` Q2 (ii) ``, ``before `red` ``, `` `pinned-build` bug ``, `KNOWN_READ_FAILURES`, `the pin advance`; "`version:` is "1.6" or later; its newest clause names dl-205 Q2 (ii) and task-348, keeping `prev 1.5`"; "the directive still names no bug id" | 6 fail; 2 pass on first run (see below) |
+| 3 | red-first (version row) + characterization | `dev-loop-v2-4`: "`version:` is 2.4 or later and its newest clause names task-348, keeping `prev 2.3`" (red-first); "the phase names and their order are unchanged, and workflow show reports no error" and "the registry still warns 68 times, every warning an unbound check, none naming pinned-build.reads" (characterization). `test/directives/wingfoil-cli.test.ts`, `test/core/workflow-repository-conformance.test.ts` and `test/lint/version-bump.test.ts` stay untouched | version row fails; the two characterization tests pass on first run |
+| 4 | characterization | no jest test of its own: the green developer runs `npm run -s wingfoil -- workflow show dev-loop` (and `--format console`) on the committed change; its jest twin is AC 1's `workflowShowAtHead` test | — |
+
+Two AC 2 tests pass on the red commit, and that is the current text, not a weak test: `` `pinned-build` bug `` already
+occurs in §2's last bullet ("A read the pinned build cannot run … a `pinned-build` bug (§3)"), and "names no bug id"
+is a guard that the new sentence keeps true. The other five §2 phrases and the version row are the red of AC 2.
+
+**Runs.**
+- `npx jest test/core/dev-loop-v2-4.test.ts test/directives/wingfoil-cli-dl-205.test.ts test/core/dev-loop-v1-6.test.ts
+  test/core/workflow-manual-prose-checks.test.ts --maxWorkers=2` → `Test Suites: 4 failed, 4 total`, `Tests: 16
+  failed, 71 passed, 87 total`. Per file: `dev-loop-v2-4` 8 failed, 2 passed; `wingfoil-cli-dl-205` 6 failed, 2
+  passed; `dev-loop-v1-6` 1 failed (the edited pin); `workflow-manual-prose-checks` 1 failed (the edited pin). No
+  `error TS` in the output.
+- First failing assertion of each red test (all jest assertion failures):
+  - five-name list: `expect(received).toEqual(expected)`, `- "pinned-build.reads"` missing from the received four;
+  - token prose: `expect(token).toBeDefined()` → `Received: undefined`;
+  - no other phase: `toEqual(['design'])`, received `[]`;
+  - description: `Expected substring: ".wingfoil/"`;
+  - binding: `expect(bindings?.checks?.[TOKEN]).toEqual({ manual: true })` → `Received: undefined`;
+  - workflow show: `toEqual([['design', 'manual', false]])`, received `[]`;
+  - `bindings.yaml` version: `Expected: >= 3`, `Received: 2.9`;
+  - `dev-loop.yaml` version: `Expected: >= 2.4`, `Received: 2.3`;
+  - §2 phrases: `expect(received).toMatch(expected)`, e.g. `Expected pattern: /A\s+form\s+the\s+pinned\s+build\s+cannot\s+read/`;
+  - `wingfoil-cli` version: `Expected: >= 1.6`, `Received: 1.5`;
+  - `dev-loop-v1-6` pin: `toEqual`, `- "pinned-build.reads"`; `workflow-manual-prose-checks` pin: `toEqual`, the new
+    `dev-loop` row missing.
+- Reachability: on a scratch clone of the branch outside the worktree, with the design's three edits made as its
+  `### design` words them (`dev-loop.yaml` 2.4, `bindings.yaml` 3.0, `wingfoil-cli` 1.6) and committed, the same four
+  files plus `test/directives/wingfoil-cli.test.ts` and `test/core/dev-loop-v2-3.test.ts` → exit `0`, `Tests: 112
+  passed, 112 total`. The clone was deleted; nothing of it is in the worktree.
+- `npx tsc --noEmit -p tsconfig.json` → exit `0`, no output (no missing export: none is expected).
+- `npx jest test/lint --maxWorkers=2` with the red files in place → `Test Suites: 14 passed, 14 total`, `Tests: 158
+  passed, 158 total`.
+- The invisible-character scan (`grep -nP` of the C1, soft-hyphen, zero-width, bidi and BOM ranges) over the four
+  files → no output.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
