@@ -57,17 +57,18 @@ describe.each(CASES)('task-335 AC 6 — %s: a step that only waits is refused (S
     expectNothingRan(repo, run, before);
   });
 
-  it('--json: the refusal carries details step, instance and awaiting', () => {
+  it('--format json: exit 1, the error document is exactly { error: <the step line> } (spec-005 §3.2: no details object)', () => {
+    const before = headOf(repo);
     const run = execute(repo, ['--next', '--format', 'json']);
     const documents = run.stderr
       .split('\n')
       .filter((text) => text !== '')
       .map((text) => JSON.parse(text) as Record<string, unknown>);
     expect(run.status).toBe(1);
-    expect(documents.find((document) => 'error' in document)).toMatchObject({
-      error: line,
-      details: { step: key, instance: AWAITING_INSTANCE[which], awaiting: which === 'outreach' ? 'party' : 'approval' },
-    });
+    // The core error's `details` object (step, instance, awaiting) is pinned in process
+    // (`test/core/agent-execute-awaiting.test.ts`); the CLI renders `details` only from `details.issues`.
+    expect(documents.filter((document) => 'error' in document)).toEqual([{ error: line }]);
+    expectNothingRan(repo, run, before);
   });
 });
 
