@@ -538,7 +538,7 @@ export async function launchAgent(root: string, input: LaunchInput, host: Launch
     const recorded = recordRun(root, input.logPath, record);
     if (!recorded.ok) return recorded;
 
-    // Step 18 — the outcome: an expired bound first, whatever the exit status.
+    // Step 18 — the outcome: an expired bound first, whatever the exit status (§3.7 `TIMED_OUT`).
     if (expired && timeout !== undefined) {
       return coreErr({
         code: 'IO',

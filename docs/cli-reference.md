@@ -1761,7 +1761,8 @@ Launch an agent CLI through its adapter on one Memory element, with its context 
 
 ```
 wingfoil agent execute [--next] [--workflow <ref>] [--step <key>] [--element <type:id>]
-                       [--role <role>] [--agent <name>]
+                       [--role <role>] [--agent <name>] [--headless | --interactive]
+                       [--timeout <duration>]
 ```
 
 At least one of `--next`, `--workflow`, `--step` and `--element` is required.
@@ -1774,6 +1775,9 @@ At least one of `--next`, `--workflow`, `--step` and `--element` is required.
 | `--element <type:id>` | The element the agent works on, as `<type>:<id>`, e.g. `task:task-042-login-form`; `<id>` may be a short reference (new in 0.3.2, see [Short element references](#short-element-references)) and the run records the full id. With a step, it replaces the step's element and keeps its phase and role. |
 | `--role <role>` | The role the agent runs as: a `team.roles` name in `dna.yaml`. Without it the role is the step's; with no step, it is `developer`, and a `warning:` line says so. `approver` is refused: an agent never runs as the role that approves. |
 | `--agent <name>` | The `team.agents` entry to launch. Without it, the first entry, in `dna.yaml` order, that declares an `adapter` and lists the role in `executes_as`. |
+| `--headless` | Launch the agent without a terminal, as a work run (new in 0.4, see below), whatever the step's phase declares in `launch:`. |
+| `--interactive` | Launch the agent in this terminal, whatever the step's phase declares in `launch:`. It is this command's own flag, distinct from the global `--no-interactive`, which keeps its meaning. `--headless` with `--interactive` exits `2` with `error: invalid flag combination: --headless cannot be combined with --interactive`. |
+| `--timeout <duration>` | Stop the agent after this long: `<n>s`, `<n>m` or `<n>h`, `<n>` a positive integer without a leading zero, at most `24h` (new in 0.4). At expiry the agent receives `SIGTERM`, and `SIGKILL` 10 seconds later if it has not exited. A value of another form exits `2` with `error: invalid flag value: --timeout expects <n>s, <n>m or <n>h, got "<value>"`, one over `24h` with `error: invalid flag value: --timeout must be at most 24h, got "<value>"`. |
 
 With a step (`--next`, `--workflow` or `--step`), the run's workflow and phase are the step's, so its run
 id is `<element-id>/<phase>/<n>`, `n` counting the runs of that element in that phase; the element is the
@@ -1783,7 +1787,13 @@ planned, and refused as unknown options); a phase's `distinct_from` is not check
 come first, each exit `1`: `error: no next step to execute` (no open workflow, or none of its steps is
 ready), `error: unknown workflow: <name>`, `error: workflow is not open: <ref>`,
 `error: step '<key>' is not on the frontier of <instance>`, `error: step '<key>' has no element: give
---element <type>:<id>`, `error: step '<key>' declares no role: give --role <role>`. A workflow file with an
+--element <type>:<id>`, `error: step '<key>' declares no role: give --role <role>`. A step that only waits
+(new in 0.4) is refused too, exit `1`, with the line `wingfoil workflow next` prints for it —
+`error: human needed: approve or reject <id> — routed to <members>`,
+`error: human needed: finalize <key> — routed to <members>`, or
+`error: waiting for <party>: <evidence> (a phase record completes it: wingfoil workflow finalize <instance> --step <key>)`
+— and no later step is taken instead; with `--element`, the step is an explicit target and is launched
+(`--step` alone is not one). A workflow file with an
 error (for example a phase whose role `dna.yaml` does not define) refuses every step form, as it refuses
 `wingfoil workflow next`.
 
@@ -1792,12 +1802,15 @@ It reads **as committed at `HEAD`** (see [Git side effects](#git-side-effects)):
 `.wingfoil/agents/custom/`, the run log, and, with a step, the workflows and the Memory they deduce from. That commit is the run's `state_ref`. The one read outside
 it: the WingFoil MCP server it starts for the pre-flight reads your working tree's `dna.yaml` when it
 starts, so an uncommitted change there can refuse the pre-flight. In order, it checks:
-the element exists; the role is defined and is not `approver`; an agent with an adapter runs the role;
-the adapter is valid; its `command` is on `PATH` (or at its path in the project); your git identity is
+the element exists; the role is defined and is not `approver` (whichever of `--headless` and
+`--interactive` is given); an agent with an adapter runs the role; the adapter is valid; it declares the
+launch kind (see below; for a headless launch without `launch.headless`, `error: adapter '<name>' declares no
+headless launch`); its `command` is on `PATH` (or at its path in the project); your git identity is
 set; `dna.yaml` declares `paths.runs` and the element's run log has no uncommitted changes; the
 execution context (DNA, the role's directives, the relevant Memory) assembles and validates; the
 WingFoil MCP server of this same build starts and serves that context (your project's `.mcp.json` is
-neither read nor changed); and, for an adapter whose launch needs one, stdin and stdout are a terminal.
+neither read nor changed); and, for an interactive launch of an adapter that needs one, stdin and stdout are a
+terminal.
 The first check that fails ends the command with exit `1` and its message, for example
 `error: context pre-load failed: MCP server unreachable` or
 `error: invalid execution context: missing 'directives' section`. The context's warnings (a directive
@@ -1831,17 +1844,34 @@ another code, or was ended by a signal, gives exit `1` and
 record that could not be committed gives exit `1` and `error: run <run-id> not recorded: <cause>` (or the
 run-log refusal), with the record itself as a detail line so the run is not lost.
 
-**Nothing is written on stdout**, which belongs to the agent: every line `agent execute` prints goes to
-stderr, and `--format json` / `yaml` only reshape those lines, one document each — `{"warning": …}`,
-`{"notice": "run …: launching …"}`, `{"error": …, "hint"?, "details"?}`, and `{"run": <record>}` for the
-summary.
+**Nothing is written on stdout** by an interactive launch, whose stdout belongs to the agent: every line
+`agent execute` prints goes to stderr, and `--format json` / `yaml` only reshape those lines, one document each
+— `{"warning": …}`, `{"notice": "run …: launching …"}`, `{"error": …, "hint"?, "details"?}`, and
+`{"run": <record>}` for the summary.
+
+**The launch kind** (new in 0.4). `--headless` or `--interactive` if given; else the step's phase `launch:`
+(`interactive`, `headless` or `any`) when it is `interactive` or `headless`; else interactive — with no step,
+with a phase that declares no `launch:`, and with `launch: any`. A flag that contradicts the phase's declared
+kind prints `warning: phase '<workflow>.<phase>' declares launch: <declared>; launching <kind> (--<kind>)`.
+
+**The headless work run** (new in 0.4). The agent starts with no terminal: its stdin is not connected, its
+stdout is captured and not shown, its stderr is `agent execute`'s, and on Linux and macOS it runs in a process
+group of its own. Ctrl-C, `SIGTERM` and `SIGHUP` sent to `agent execute` are passed on to it; Ctrl-\ is
+ignored. Both built-in adapters declare a headless launch (`claude -p …`, `codex exec …`). The record's
+`result` is `n/a`, as for an interactive run. On success stdout carries `{"run": <record>}` (indented under
+`--format console`), and the summary line is a notice on stderr. A timed-out run, interactive or headless, is
+still recorded and exits `1` with `error: agent timed out after <duration>; run <run-id> recorded`, whatever
+the agent's exit status.
 
 With `--dry-run` it runs every check above, launches nothing, and prints on stdout the launch it would
 make: `{"dryRun": true, "subject": "agent: record <run-id>", "paths": [<run log>], "run": {id, element,
 workflow, phase, role, mode, agent, adapter, state_ref}, "bootstrap": "<the prompt the agent would
-receive>"}`. The terminal check is one of them: for an adapter whose launch needs a terminal (both
-built-in adapters), a dry run with stdin or stdout redirected exits `1` with
-`error: interactive launch needs a terminal on stdin and stdout`, although it would launch nothing. With
+receive>"}`. The terminal check does not refuse a dry run, which launches nothing: for an interactive launch of
+an adapter that needs a terminal (both built-in adapters), a dry run with stdin or stdout redirected prints
+`warning: interactive launch needs a terminal on stdin and stdout: a run without --dry-run is refused here`
+and its plan, and exits `0` (changed in 0.4; the run without `--dry-run` is still refused with
+`error: interactive launch needs a terminal on stdin and stdout`). A valid `--timeout` is checked and launches
+nothing. With
 none of `--next`, `--workflow`, `--step` and `--element` it exits `2` with
 `error: missing required argument: --next or --element`.
 
