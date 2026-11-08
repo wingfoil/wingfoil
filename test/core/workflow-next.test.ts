@@ -493,6 +493,7 @@ describe('task-216 AC 3 — NextResult and Step carry exactly spec-017 §8 field
     'fallback',
     'instance',
     'key',
+    'launch',
     'members',
     'mode',
     'optional',

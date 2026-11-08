@@ -53,6 +53,8 @@ export function launchFixture(edit: (manifest: AdapterManifest) => AdapterManife
       phase: 'adhoc',
       role: 'developer',
       mode: 'fresh',
+      // The launch kind (task-335, spec-016 §3.2 step 7): these fixtures are interactive launches.
+      kind: 'interactive',
       agent: { name: 'Hand Agent' },
       adapter: { name: 'hand', kind: 'custom', manifest: edit(BASE) },
       stateRef,
