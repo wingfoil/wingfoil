@@ -604,7 +604,10 @@ phase's `mode` allows (`fresh` always, plus the declared non-fresh mode), and `m
 runs — `fresh` in every v0.3 run, because `--resume`/`--ref` are v0.4. `distinct_from` (phase names) is
 reported as declared. `agentRole: true` marks a role listed in `dna.yaml`
 `team.agents[].executes_as` (`.wingfoil/dna.yaml:127`), which is the predicate `dl-135` point 1 uses
-for `agent list --waiting`. Nothing enforces them in v0.3.
+for `agent list --waiting`. Nothing enforces them in v0.3. `launch` is the phase's declared launch kind
+(`spec-003` Layer 2, `dl-183` Q1 (a)) — `interactive`, `headless` or `any` — or `null` when the phase declares
+none, which reads as `interactive`; it is reported as declared, so a reader can tell a declared kind from the
+default, and `agent execute` takes the run's kind from it (`spec-016` §3.2 step 7, v0.4).
 
 **6.4 Cadence** (`dl-105`). A declared `cadence` is reported. "Overdue" needs the current time and the
 last run's evidence, which `dl-105` R2 (c) keeps outside the repository while the trigger is
@@ -891,6 +894,7 @@ interface Step {
   fallback: { step: string; setState: string | null } | null;
   reentered: boolean; reentryCommit: string | null;
   mode: "fresh"; allowedModes: ("fresh" | "resume" | "reference")[]; distinctFrom: string[];
+  launch: "interactive" | "headless" | "any" | null;                 // null: not declared, reads interactive (§6.3)
   cadence: { recurring: unknown; lastRun: "not-recorded" } | null;   // null: `once` (§6.4)
 }
 interface NextResult { baseline: Baseline; instance: Instance | null; complete: boolean;
@@ -933,7 +937,8 @@ interface PhaseView      { name: string; description: string | null; role: strin
                            iterate: { over: string; where: Record<string, unknown> | null } | null;
                            selection: { where: Record<string, unknown> } | null;
                            mode: "fresh" | "resume" | "reference"; allowedModes: ("fresh" | "resume" | "reference")[];
-                           distinctFrom: string[]; cadence: unknown; evidence: EvidenceKind[];
+                           distinctFrom: string[]; launch: "interactive" | "headless" | "any" | null;
+                           cadence: unknown; evidence: EvidenceKind[];
                            include: string | null; sub: WorkflowView | null }
 interface WorkflowView   { name: string; file: string; startable: boolean; includable: boolean; description: string | null;
                            element: string | null; phases: PhaseView[] }
@@ -1303,9 +1308,10 @@ their command. The checkpoint phases stay 17. `test/core/workflow-repository-con
       `no recipient for notification: unrouted role '<role>'` becomes P4.14's
       `no approver found for role '<role>' in dna.yaml` in v0.3 (§5.1), or is kept for the v0.4
       delivery.
-  - `docs/01_vision/X_cli-cmds.md` (`:163-170`): `workflow status --filter STATUS` is dropped (the
+  - `docs/01_vision/X_cli-cmds.md` (§ "Pillar 4: Project Workflow Commands", its `wingfoil workflow`
+    rows): `workflow status --filter STATUS` is dropped (the
     output is the full status); `workflow remove --verify-includes` is dropped (the check always
-    runs); interactive creation (`:169`) is not in v0.3; `workflow list` shows startable/includable,
+    runs); interactive creation (the `workflow create` row) is not in v0.3; `workflow list` shows startable/includable,
     not `kind`; `workflow finalize` and `memory add --workflow` are added.
   - `docs/01_vision/06_features.md`: `dl-109` Action 3 (the P4.2 / P4.6 descriptions for startable and
     includable); P4.8's "interactive" (`:87`) marked post-v0.3.
@@ -1670,4 +1676,12 @@ bound manual (21 occurrences), 17 checkpoints unchanged. Edited in place without
 **Revision (2026-11-01, `task-332-resolve-a-short-element-reference-prefix-and-number-or-a-unique-prefix-of-the-full-id-in-the-memory-verbs`) — §3.4, §7.11 and §10.** `--element` of `workflow start` and `workflow adopt` takes a short
 reference (`spec-008` §7); the plan binds, and the adoption record names, the element's full id, and an ambiguous
 reference is a `CONFLICT` row (approver design gate 2026-11-01, D1 (b)). Edited in place without a supersede or a
+state change (`dl-047`), pending the approver's `memory amend`.
+
+**Revision (2026-11-07, `task-335-add-the-headless-work-run-the-launch-phase-key-headless-interactive-timeout-next-on-a-waiting-step`)
+— §6.3, §8 and a Consequences citation.** A phase's `launch` (`spec-003` Layer 2, `dl-183` Q1 (a)) is reported on
+each `Step` and `PhaseView` as declared, `null` when absent (§6.3), so that `agent execute` takes a run's launch kind
+from the step it resolves (`spec-016` §3.2 step 7, `dl-183` Q4 (a)); the console renderings do not change. The
+Consequences bullet on `docs/01_vision/X_cli-cmds.md` cited its lines `:163-170` and `:169`, which the file's version
+1.7 had moved: it cites its section and rows instead (`bug-380`, `dl-075`). Edited in place without a supersede or a
 state change (`dl-047`), pending the approver's `memory amend`.
