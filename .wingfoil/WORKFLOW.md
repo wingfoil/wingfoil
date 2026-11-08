@@ -319,7 +319,8 @@ kind `repository` with a `feedback_inbox`, read at the consumer's `main`, the co
 per note in `rel-<version>-planning-feedback-triage.md`, every row ruled by the approver before `define-scope`. For a
 `kind: patch`, `define-scope` and `triage-bugs` admit an element only if
 `git log --no-merges release/X.Y..main -- <file>` prints nothing; any other is captured again on the line first
-(`dl-206`, `git-conventions` §1). `triage-bugs` and `reconcile-governance` sweep in-scope
+(`dl-206`, `git-conventions` §1). By the same test `assign-bugs` gives a bug the patch release, and any other bug a
+later release. `triage-bugs` and `reconcile-governance` sweep in-scope
 `open` bugs and not-ready decision-logs/ADRs into their gated states (dl-016), selecting only
 elements whose `release` is empty or this release; `assign-bugs`, right after `triage-bugs`, gives every `triaged`
 bug with no release this release or a later one (a `wf(bug): assign` commit), or the approver closes it with

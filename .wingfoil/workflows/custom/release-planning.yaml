@@ -153,7 +153,9 @@ phases:
       planning (dl-191 (a)). Each selected bug is assigned this release, or a later one the approver
       names, by a `wf(bug): assign` commit, or closed by the approver with `memory reject`
       (triaged -> closed). The phase is complete when no `triaged` bug has an empty `release`. A bug
-      assigned this release that build-backlog gives no fix task stays `triaged` in it.
+      assigned this release that build-backlog gives no fix task stays `triaged` in it. For a `kind: patch`
+      release, only a bug whose file `git log --no-merges release/X.Y..main -- <file>` leaves empty takes this
+      release (dl-206 Q2 (i), release-planning-rel-v0.3.2-plan R8); any other takes a later release.
     role: tech-lead
     where: { type: bug, status: [triaged], release: [""] }
     actions:
