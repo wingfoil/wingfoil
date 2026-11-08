@@ -97,7 +97,8 @@ describe('task-295 AC 2 — the refusals of spec-017 §10 (exit 1, nothing writt
 
   it('an ended instance: NOT_FOUND "workflow is not open: <id>"', async () => {
     const path = planPath(root, 'life-1-plan');
-    writeFixtureFile(root, path, git(root, ['show', `HEAD:${path}`]).replace(/^status: active$/m, 'status: done'));
+    // The plan `workflow start` writes is `draft` (task-346): the ended state is written over either state.
+    writeFixtureFile(root, path, git(root, ['show', `HEAD:${path}`]).replace(/^status: (?:draft|active)$/m, 'status: done'));
     commitAll(root, 'wf(plan): finalize life-1-plan [active → done]');
     await expectRefusal(root, () => asMorgan(() => rekey(root, 'life-1-plan', { ...VALID })), 'NOT_FOUND', 'workflow is not open: life-1-plan');
   });

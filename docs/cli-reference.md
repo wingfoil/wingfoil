@@ -1171,8 +1171,8 @@ wingfoil workflow end [<ref>]
 open instance; without it, the active instance. It decides at `HEAD`, as `workflow next` does: the plan,
 the workflow files and the deduction of the instance's steps.
 
-It refuses an instance that is not finished: one whose plan is still `draft` (run `wingfoil memory submit
-<id>` once its body is written), and one whose steps are not all complete — the error names the current step, and a
+It refuses an instance that is not finished: one whose plan is still `draft` (run
+`wingfoil memory submit <id>` once its body is written), and one whose steps are not all complete — the error names the current step, and a
 `hint:` line says that `wingfoil memory deprecate <id>` abandons the instance instead. Otherwise it moves
 the plan `active → done` and prints the ended instance and the one now active (`active: none` when none is
 left open); `--format json|yaml` prints `{"baseline": {…}, "ended": {…}, "active": {…} | null, "commit": "<sha>"}`.
