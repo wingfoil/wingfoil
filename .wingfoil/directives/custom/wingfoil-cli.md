@@ -6,13 +6,13 @@ kind: custom
 title: "Which WingFoil build runs which command in this repository"
 tags: [custom, process, cli, determinism]
 scope: global
-version: "1.5"   # 1.5 §1: the pin is per line (dl-159 A2 item 5): a line whose pin is 0.3.1 or later runs the workflow reads on the pinned build, a line still pinned at 0.3.0 on the code build; main moved its pin to 0.3.2 at v0.4 planning (release-planning v0.4) (prev 1.4 §1: the pin is 0.3.1, which reads the `manual: true` check binding, so the workflow reads and the `wingfoil://workflows` Resources are back on the pinned build; `workflow adopt` and `rekey` named with the workflow commands that write a commit (release-planning v0.3.2, advance-pinned-build to 0.3.1) (prev 1.3 §1: while the pin is 0.3.0 the workflow reads run on the code build, because 0.3.0 refuses the `manual: true` check binding (`dl-172` (a), task-298), until the pin reaches 0.3.1 (prev 1.2 §1: the workflow reads (`workflow list`, `show`, `next`, `status`) return to the pinned build, which reads this repository's `{ type, path }` produces from 0.3.0; the workflow commands that write a commit (`start`, `finalize`, `end`, `create`, `remove`) stay on the code build with the Memory operations (release-planning v0.3.1, advance-pinned-build to 0.3.0) (prev 1.1 §1: the workflow commands, `workflow list` included, run on the code build (the pinned 0.2.2 refuses this repository's `{ type, path }` produces); a fix reaches the code build of its integration branch, `main` or `release/X.Y` (task-252, dl-159; approver ruling 2026-10-17)))))
+version: "1.6"   # 1.6 §2: a form the pinned build cannot read is used at once and declared before red (dl-205 Q2 (ii), task-348) (prev 1.5 §1: the pin is per line (dl-159 A2 item 5): a line whose pin is 0.3.1 or later runs the workflow reads on the pinned build, a line still pinned at 0.3.0 on the code build; main moved its pin to 0.3.2 at v0.4 planning (release-planning v0.4) (prev 1.4 §1: the pin is 0.3.1, which reads the `manual: true` check binding, so the workflow reads and the `wingfoil://workflows` Resources are back on the pinned build; `workflow adopt` and `rekey` named with the workflow commands that write a commit (release-planning v0.3.2, advance-pinned-build to 0.3.1) (prev 1.3 §1: while the pin is 0.3.0 the workflow reads run on the code build, because 0.3.0 refuses the `manual: true` check binding (`dl-172` (a), task-298), until the pin reaches 0.3.1 (prev 1.2 §1: the workflow reads (`workflow list`, `show`, `next`, `status`) return to the pinned build, which reads this repository's `{ type, path }` produces from 0.3.0; the workflow commands that write a commit (`start`, `finalize`, `end`, `create`, `remove`) stay on the code build with the Memory operations (release-planning v0.3.1, advance-pinned-build to 0.3.0) (prev 1.1 §1: the workflow commands, `workflow list` included, run on the code build (the pinned 0.2.2 refuses this repository's `{ type, path }` produces); a fix reaches the code build of its integration branch, `main` or `release/X.Y` (task-252, dl-159; approver ruling 2026-10-17))))))
 ref: [P3.5, P3.7, REQ-SYS-08]
 ---
 
 # Directive — Which WingFoil build runs which command in this repository
 
-**Date:** 2026-11-05
+**Date:** 2026-11-08
 
 Custom WingFoil rule. Applies to **every role**: whoever runs a `wingfoil` command in this repository —
 a `developer` submitting a task, the `approver` whose approve commit is written by a verb, a
@@ -80,6 +80,11 @@ run WingFoil from its own source, so the rule has no meaning in a project scaffo
   plan's Execution Notes, and file the defect through `bug-ingest`.
 - **A read the pinned build cannot run** is run with the code build only when a `pinned-build` bug (§3)
   records that it cannot, and the note that reports the read names that bug.
+- **A form the pinned build cannot read** is used at once, declared (`dl-205` Q2 (ii)): a task that gives a
+  `.wingfoil/` file a form the pinned build does not load, and uses it in this repository's configuration,
+  declares the break at `dev-loop`'s `design`, before `red` — a `pinned-build` bug filed through
+  `bug-ingest`, the `KNOWN_READ_FAILURES` entries of `scripts/check-mcp-registration.cjs` and the §1
+  exception — and the pin advance that reaches a build reading the form removes all three.
 
 ## 3. The pinned build's surprises live in bugs tagged `pinned-build`
 
