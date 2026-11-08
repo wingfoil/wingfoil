@@ -14,6 +14,8 @@
  * - AC 7: BDD P4.11 — the deduction reuses `validateFrontmatterState` (characterization).
  * - task-301 AC 1 (`bug-389`): this repository's six v0.1 plans carry their `plan` frontmatter, so no
  *   `W_MEMORY_UNREADABLE` is left; AC 2: the real specification sub-workflows complete by `produces`.
+ * - task-345 AC 5 (`bug-465`): `selectWorkflowInstance(deduction, snapshot, ref?)`, the snapshot mandatory; AC 2:
+ *   an open plan naming no loaded workflow is no instance and stays `W_INSTANCE_WORKFLOW_UNKNOWN`.
  */
 import { readFileSync } from 'fs';
 import { join } from 'path';
@@ -232,48 +234,49 @@ describe('task-198 AC 1 — open instances, start order, the active instance and
     }
   });
 
-  it("<ref> resolves a workflow name (its most recent open instance) or an instance id; with the snapshot every other ref gets spec-017 §10's answer (`unknown workflow:` / `workflow is not open:`)", () => {
+  it("<ref> resolves a workflow name (its most recent open instance) or an instance id; every other ref gets spec-017 §10's answer (`unknown workflow:` / `workflow is not open:`) — task-345 AC 5: selectWorkflowInstance(deduction, snapshot, ref?)", () => {
     const snapshot = readDeductionSnapshotAtHead(repo);
     const deduction = deduceWorkflowState(snapshot);
-    const byName = selectWorkflowInstance(deduction, 'task-flow', snapshot);
+    const byName = selectWorkflowInstance(deduction, snapshot, 'task-flow');
     expect(byName.ok && byName.value?.instance.id).toBe('plan-a');
-    const byId = selectWorkflowInstance(deduction, 'plan-b', snapshot);
+    const byId = selectWorkflowInstance(deduction, snapshot, 'plan-b');
     expect(byId.ok && byId.value?.instance.id).toBe('plan-b');
-    const active = selectWorkflowInstance(deduction, undefined, snapshot);
+    const active = selectWorkflowInstance(deduction, snapshot);
     expect(active.ok && active.value?.instance.id).toBe('plan-b');
+    const explicitlyActive = selectWorkflowInstance(deduction, snapshot, undefined);
+    expect(explicitlyActive.ok && explicitlyActive.value?.instance.id).toBe('plan-b');
     const known = { workflows: snapshot.workflows, plans: instancePlanIds(snapshot.documents) };
     // A name that is no workflow, and a phase plan's id (`parent` set, spec-017 §3.1).
     for (const ref of ['nope', 'p-sub']) {
-      expect(selectWorkflowInstance(deduction, ref, snapshot)).toEqual({ ok: false, error: { code: 'NOT_FOUND', message: `unknown workflow: ${ref}`, details: { ref } } });
+      expect(selectWorkflowInstance(deduction, snapshot, ref)).toEqual({ ok: false, error: { code: 'NOT_FOUND', message: `unknown workflow: ${ref}`, details: { ref } } });
     }
     // A closed instance plan, an instance plan of a sub workflow, a loaded `kind: sub` workflow, a loaded workflow with no open instance.
     for (const ref of ['p-done', 'p-helper', 'helper', 'release-flow']) {
-      expect(selectWorkflowInstance(deduction, ref, snapshot)).toEqual({ ok: false, error: { code: 'NOT_FOUND', message: `workflow is not open: ${ref}`, details: { ref } } });
+      expect(selectWorkflowInstance(deduction, snapshot, ref)).toEqual({ ok: false, error: { code: 'NOT_FOUND', message: `workflow is not open: ${ref}`, details: { ref } } });
     }
     // The commands' one answer, so the two cannot drift.
     for (const ref of ['nope', 'p-sub', 'p-done', 'p-helper', 'helper', 'release-flow']) {
-      expect(selectWorkflowInstance(deduction, ref, snapshot)).toEqual(unresolvedRef(known, ref));
+      expect(selectWorkflowInstance(deduction, snapshot, ref)).toEqual(unresolvedRef(known, ref));
     }
   });
 
-  it('a call without the snapshot still compiles and keeps its answer (`workflow is not open: <ref>`)', () => {
-    const deduction = deduceWorkflowStateAtHead(repo);
-    const byName = selectWorkflowInstance(deduction, 'task-flow');
-    expect(byName.ok && byName.value?.instance.id).toBe('plan-a');
-    const active = selectWorkflowInstance(deduction);
-    expect(active.ok && active.value?.instance.id).toBe('plan-b');
-    for (const ref of ['nope', 'p-done', 'p-sub', 'helper']) {
-      expect(selectWorkflowInstance(deduction, ref)).toEqual({ ok: false, error: { code: 'NOT_FOUND', message: `workflow is not open: ${ref}`, details: { ref } } });
-    }
+  it('task-345 AC 5 (bug-465): a call without the snapshot does not compile (`npm run typecheck` is the observable)', () => {
+    // Never called: the directive below is the assertion. It is unused, and fails the type check, while the
+    // snapshot is optional.
+    const withoutSnapshot = (deduction: Deduction): unknown =>
+      // @ts-expect-error — the snapshot is mandatory (bug-465)
+      selectWorkflowInstance(deduction);
+    expect(typeof withoutSnapshot).toBe('function');
   });
 
-  it('lists an open plan naming no loaded workflow with an empty frontier and W_INSTANCE_WORKFLOW_UNKNOWN', () => {
+  it('task-345 AC 2: an open plan naming no loaded workflow is no instance, and W_INSTANCE_WORKFLOW_UNKNOWN still reports it', () => {
     const unknown = makeTempGitRepo();
     try {
       writeProject(unknown);
       commitFiles(unknown, { 'docs/plans/ghost.md': plan('ghost', 'no-such-flow', 'active') }, 'ghost');
       const deduction = deduceWorkflowStateAtHead(unknown);
-      expect(only(deduction, 'ghost').frontier).toEqual([]);
+      expect(deduction.instances.map((entry) => entry.instance.id)).not.toContain('ghost');
+      expect(deduction.active).toBeNull();
       expect(deduction.diagnostics).toContainEqual({
         code: 'W_INSTANCE_WORKFLOW_UNKNOWN',
         severity: 'warning',

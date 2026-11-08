@@ -513,14 +513,14 @@ describe('task-293 AC 4 (characterization) — the records are read in the one w
     return repo;
   }
 
-  it('one `git log` with trailers and the same number of git processes as the same fixture without the records', () => {
+  it('two `git log` with trailers (the start lookup reads the start marker, task-345; the walk) and the same number of git processes as the same fixture without the records', () => {
     const withRecords = fixture(true);
     const without = fixture(false);
     try {
       const argv = spawned(withRecords);
       const baseline = spawned(without);
       const running = (lines: string[], subcommand: string): string[] => lines.filter((line) => line.split(' ').includes(subcommand));
-      expect(running(argv, 'log').filter((line) => line.includes('%(trailers'))).toHaveLength(1);
+      expect(running(argv, 'log').filter((line) => line.includes('%(trailers'))).toHaveLength(2);
       expect(running(argv, 'rev-list')).toEqual([]);
       expect(argv).toHaveLength(baseline.length);
       // The same subcommands in the same order: no process is added for the records.

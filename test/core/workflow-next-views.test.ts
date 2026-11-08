@@ -2,8 +2,8 @@
  * task-216 — the remaining shapes of a step's view (`spec-017` §4.2 targets, §6.1 bindings, §6.3–§6.4,
  * §7.3 messages), each on a fixture committed at `HEAD`: a selection's typed `set_state` and `set_release`, the
  * `run` elements of an earlier step, an action no element answers, a project `run` binding with an argument,
- * checks before and after, several role holders, a recurring cadence and a non-fresh mode, and the messages of
- * an abandoned instance and of one whose workflow is not loaded. The acceptance criteria are
+ * checks before and after, several role holders, a recurring cadence and a non-fresh mode, the message of an
+ * abandoned instance, and the refusal of a plan whose workflow is not loaded, no instance since task-345. The acceptance criteria are
  * `test/core/workflow-next.test.ts`.
  */
 import { CORE_MODULES, type NextResult, type Step } from '../../src/core';
@@ -303,8 +303,9 @@ describe('task-216 — step views: targets, bindings, executor attributes, messa
     }
   });
 
-  it('an abandoned instance and one whose workflow is not loaded: no step, a message, complete: false (§4.9, §4.11)', async () => {
+  it('an abandoned instance: no step, a message, complete: false (§4.11); a plan whose workflow is not loaded is no instance: `workflow is not open:` (task-345 AC 2)', async () => {
     expect(await next(repo, 'old-1')).toMatchObject({ complete: false, next: null, message: "no next step: workflow 'triage' is abandoned: its element release:minor-0 is deprecated" });
-    expect(await next(repo, 'ghost-1')).toMatchObject({ complete: false, next: null, message: "no next step: workflow 'ghostflow' is not loaded" });
+    const ghost = (await op.fn({ root: repo, positional: 'ghost-1' })) as CoreResult<NextResult>;
+    expect(ghost.ok ? null : ghost.error).toMatchObject({ code: 'NOT_FOUND', message: 'workflow is not open: ghost-1' });
   });
 });
