@@ -63,3 +63,18 @@ Fix options, for the triage:
 - (c) both.
 
 Each of them amends `spec-017` §3.5.
+
+### Retrospective
+
+<!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
+     reconstructed afterwards. One line per item: what happened, the evidence (a command and what it
+     printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
+     An item met while fixing goes in the fix task's own subsection; this one holds what belongs to
+     the bug itself (its finding, its triage, why it took more than one task). The retrospective's
+     `explore` reads this subsection first. -->
+- The bug was worked around before it was fixed: `sw-life-cycle-1-plan` was opened with `memory add --type plan` to
+  avoid it (`release-planning-rel-v0.4-plan` S1b), and that plan is now one of the five instances only the transitory
+  pre-marker rule of `task-345` keeps open (`node dist/cli.js workflow status` on the task branch prints the
+  `W_INSTANCE_PRE_MARKER` line under it). A workaround that bypasses the engine's own write leaves debt the engine later
+  has to carry; proposal: when a bug is worked around by hand, record the workaround on the bug so the fix task plans
+  its unwinding.
