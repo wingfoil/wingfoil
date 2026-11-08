@@ -637,6 +637,65 @@ present:
   `adapter: "built-in/codex-cli"` and `agent_version: "codex-cli 0.145.0"`.
 The orchestrator pastes each run's command, its exit status and the two files into these notes.
 
+### refactor (developer, 2026-11-08)
+
+**Commits.** `454a07b7b refactor(agent): task-335 — one TimeBound type for --timeout, the declared fixed kind read once in
+resolveLaunchKind` (`src/agent/duration.ts` exports `TimeBound`, which `LaunchInput`, `AgentExecuteRequest`,
+`PreparedLaunch` and `parseDuration` share, re-exported by `src/agent/index.ts`; `resolveLaunchKind` reads the declared
+`interactive`/`headless` once); `e2fc9f6e3 test(agent): task-335 — the default real timer of --timeout, in process`
+(new file `test/agent/launch-timeout-real-timer.test.ts`: `launchAgent` with no `timer` injected and a 20 ms bound, so
+the coverage-measured process reaches `realTimer`, which the full coverage run below listed as uncovered,
+`launch.ts` `392-393`). `git rev-list --count HEAD..main` → `0` at the start and the end of refactor: no merge owed.
+
+**Gates** (each heavy one after `bash …/waitslot.sh`, through its npm script, at `454a07b7b`; the slot was granted
+15:06:34, 15:34:57 and 16:08:46):
+- `npm run -s build` → exit `0`; `npm test -- --maxWorkers=2` (15:06–15:20) → `Test Suites: 578 passed, 578 total`,
+  `Tests: 10686 passed, 10686 total` (the vision-index failure of green is gone).
+- `npm run test:coverage -- --maxWorkers=2` (15:35–15:50) → `Tests: 10686 passed`; `All files | 99.26 | 97.22 | 98.66 |
+  99.67` (statements, branches, functions, lines; threshold 80 %). The task's files: `duration.ts` 100/100/100/100,
+  `src/agent/execute.ts` 95.97/89.05/95.74/98.29, `src/agent/launch.ts` 98.55/94.24/95.23/98.82, `src/agent/step.ts`
+  97.87/97.05/100/97.14, `src/core/agent-execute.ts` 100/98.18/100/100, `src/core/workflow-next.ts` 100/98.29/100/100,
+  `src/core/workflow-list-show.ts` 100/98.63/100/100, `src/storage/builtin-adapters.ts` 100/100/100/100. The run
+  predates `e2fc9f6e3`, which only adds a test.
+- `npm run -s typecheck` (both configurations, through `scripts/heavy-gate.cjs`) → exit `0`, no output.
+- `npm run -s lint` → exit `0`; `npm run -s docs:api` → exit `0`, no warning printed.
+- `docs.parity` (the suites of `.wingfoil/workflows/bindings.yaml`'s binding) and the new test, at `e2fc9f6e3`:
+  `npx jest --maxWorkers=2 --coverage=false test/agent/launch-timeout-real-timer.test.ts test/docs/cli-reference.test.ts
+  test/docs/command-surface-specs.test.ts test/docs/commands-parity.test.ts test/docs/enumeration-parity.allowlist.test.ts
+  test/docs/exit-codes-parity.test.ts test/docs/llms-txt.test.ts test/docs/mcp-surface-parity.test.ts
+  test/docs/memory-types-parity.test.ts test/docs/name-resolvability.test.ts test/docs/workflow-md.test.ts` → `Test
+  Suites: 11 passed`, `Tests: 66 passed`.
+
+### self-review (developer, 2026-11-08)
+
+Against `code-review`, the design as ruled (D1–D11 (a)) and each AC:
+- **AC1–AC8** each pinned by the red suites (with `8d4e29828`), all passing in the full suite above; AC9 is the approver's
+  (D7, the commands under `**Approver checks owed (D7)**` in `### green`); AC10 was recorded at the design gate.
+- **The approver rule precedes every kind rule:** in `runPipeline` the `APPROVER_ROLE` refusal (`role === APPROVER_ROLE`)
+  stands before `resolveLaunchKind`; pinned with both flags by `test/cli/agent-execute-launch-kind.integration.test.ts`
+  AC 2 (c) and in process by `test/core/agent-execute.test.ts`.
+- **D4, no global read of the command flags:** `grep -rn "optsWithGlobals" src` → nothing; the positive case,
+  `grep -rn "\.opts(" src/cli` → `src/cli/program.ts:279: const options = invoked.opts<Record<string, unknown>>();` (the
+  command's own options) besides the root's `program.opts` at l.190, 278, 340.
+- **Same class in the files touched** (`bug-380`): `grep -nE "X_cli-cmds\.md:[0-9]" $(git diff --name-only main...HEAD)` →
+  only the quotations of the old citations in `bug-380` and this task's own notes (records of the before state);
+  `src/agent/execute.ts`'s `DEFAULT_ROLE` TSDoc, which cited `X_cli-cmds.md:223`, now cites the section and row.
+- **Determinism:** the argv, the kind and the warning are functions of committed state and the request; the timers are
+  host time bounding a run, never part of a context, injected in tests (`LaunchHost.timer`).
+- **Import graph:** the new imports are type-only (`execute.ts` → `../workflow/schema`, `./duration`; `launch.ts` →
+  `./duration`) or to the leaf `src/agent/duration.ts` (`src/core/agent-execute.ts`); `test/lint/import-graph` passed in
+  the full suite.
+- **T4:** `git log --first-parent --no-merges --format=%h 237055380..HEAD -- <the 19 files of 237055380>` → `8d4e29828`
+  (the qa's red correction) only.
+- **Outside the design's file list, accepted by the orchestrator:** `docs/01_vision/00_index.md` (`88d5fc80d`), tied to
+  every `X_cli-cmds.md` bump by `test/docs/vision-index.test.ts`; and `test/agent/launch-timeout-real-timer.test.ts`, a new
+  test file of green's own.
+- Findings: none open.
+
+### Pending amendments (approver)
+
+None: no element past its first state is edited by green or refactor (`git status --short` → clean before submit).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
