@@ -132,7 +132,7 @@ checks that its target file does not exist on disk.
 | elements a step created or awaits | ascending `(type, id)` |
 | directives | ascending id (`spec-012` §5) |
 | approvers routed to | ascending `(name, email)` |
-| diagnostics | load-time diagnostics in `spec-003`'s order, then this spec's: `W_UNCOMMITTED_INPUTS` first, then `W_MEMORY_*` by path, then `W_INSTANCE_WORKFLOW_UNKNOWN` by instance order, then step-attached codes in frontier order |
+| diagnostics | load-time diagnostics in `spec-003`'s order, then this spec's: `W_UNCOMMITTED_INPUTS` first, then `W_MEMORY_*` by path, then `W_INSTANCE_WORKFLOW_UNKNOWN` in the start order of the plans it names (§3.3's order, ties by id), then step-attached codes in frontier order; `workflow status` appends its own after them, `W_INSTANCE_PRE_MARKER` last, in the order of its `open` (§2, transitory, §3.2) |
 
 - Memory documents are enumerated from `HEAD`'s tree in sorted path order, never by directory
   listing order.
@@ -167,9 +167,10 @@ message }`, one array named `diagnostics`; for these codes `file` is repository-
 | `W_MEMORY_INVALID_STATE` | warning | §1.4, P4.13 sc. 3 |
 | `W_MEMORY_UNREADABLE` | warning | §1.4 |
 | `W_UNRESOLVED_TOKEN` | warning | a token of a `where`, `produces` or action argument has no value on the element it resolves against (§4.1) — the element lacks the field, or the field is blank |
-| `W_INSTANCE_WORKFLOW_UNKNOWN` | warning | an open plan names a workflow the registry does not load; the instance is listed with an empty frontier |
+| `W_INSTANCE_WORKFLOW_UNKNOWN` | warning | an open plan — a plan with `parent` empty and status `draft` or `active` (§3.2) — names a workflow the registry does not load, whoever added it; the plan is not an instance (§3.2): it is never the active instance, no `<ref>` selects it, and the warning is how `workflow list`, `status` and `next` report it |
 | `W_APPROVAL_ROLE_WITHOUT_AUTHORITY` | warning | a member an approval is routed to does not hold the `approver` role (§5.1) |
-| `W_PROVENANCE_ORPHAN` | warning | a linkage, record or adoption in an instance's walk names a `<workflow>.<phase>` the registry does not declare and no `rekey` maps (§4.8); it is evidence of nothing. Not raised for an instance whose workflow the registry does not load: `W_INSTANCE_WORKFLOW_UNKNOWN` reports it |
+| `W_INSTANCE_PRE_MARKER` | warning | `workflow status` only, transitory (§3.2): an open instance it reports is kept only by the pre-marker rule — its start commit carries no start marker. `file` is the instance's plan, `path` is empty, the message is `instance <id> is kept by the pre-marker rule: restart it with workflow start`; one per such instance, in the order of the payload's `open`, after every other diagnostic of the payload |
+| `W_PROVENANCE_ORPHAN` | warning | a linkage, record or adoption in an instance's walk names a `<workflow>.<phase>` the registry does not declare and no `rekey` maps (§4.8); it is evidence of nothing. Not raised for a plan whose workflow the registry does not load: that plan is no instance (§3.2), its walk is not read, and `W_INSTANCE_WORKFLOW_UNKNOWN` reports it |
 | `W_PROVENANCE_CONFLICT` | warning | two or more claims on one element in the walks — linkages and adoptions, at least one of them an adoption — none descending from another (§4.8); the element counts as created by none of them |
 
 An error among `spec-003`'s diagnostics makes every workflow operation exit `1` (`VALIDATION`, §10).
@@ -189,12 +190,53 @@ record inside Memory, where it can be inspected, amended and approved like any e
 practice already in use: `git log --format=%s | grep '^wf(plan)'` counts 26 `add`, 26 `submit` and 20
 `finalize` commits at `997e8998`.
 
-**3.2 Open.** An instance is open when its plan's status is `draft` or `active`. A plan whose
-`workflow` names a workflow that is not startable, or whose `parent` is set, is ignored here.
+**The start marker** (`dl-217` (a), from `minor-v0.4`). Starting is an act, not a document's content: `workflow
+start` writes its `wf(plan): add <id>` commit with the trailer `WingFoil-Start: <workflow>` — the name of the
+workflow it starts — in the commit's final trailer paragraph, before the `WingFoil-Version:` line (`spec-008` §2,
+`git-conventions` §8). `memory add` never writes it, with or without `--workflow`, and no option asks for it. A
+**marked start** is the add commit of a plan whose `parent` is empty, in any status, that carries the trailer with a
+non-blank value in that paragraph; the marked starts are read for the plans `HEAD` holds, as §3.3 finds their start
+commits.
+
+**3.2 Open.** A plan whose `parent` is empty is an **open instance** when all three hold:
+
+- its status is `draft` or `active` (an **open plan**);
+- its `workflow` names a workflow the registry loads and that is startable;
+- `workflow start` opened it: its start commit (§3.3) carries the start marker, or — a plan added before the
+  marker existed — carries none and no marked start is an ancestor of it (the **pre-marker rule**, transitory as
+  stated below, which keeps the instances already open, `dl-217`'s ratification). A plan added without the marker once a marked start is in its
+  history — by `memory add --type plan`, by hand, or by a build older than the marker — is not an instance,
+  whatever it names and whatever its status.
+
+An open plan naming a workflow the registry does not load is no instance and is reported
+`W_INSTANCE_WORKFLOW_UNKNOWN` (§2), whether or not it carries the marker; one naming a loaded workflow that is not
+startable, and a phase plan (`parent` set), are ignored without a diagnostic. A plan that is no instance is never
+the active instance, no `<ref>` selects it (§10: `workflow is not open: <ref>`), and no walk is read for it (§4.8).
+A plan moved to another path starts at the commit that moved it (§3.3), which carries no marker: once a marked start
+precedes it, moving an instance's plan ends it as an instance.
+
+**The pre-marker rule is transitory** (approver ruling at `task-345`'s design gate, `D1` (a)). It exists only so that
+the instances opened before the marker existed stay open; it is not part of the instance model. While it lasts:
+
+- **It is made visible.** `workflow status` reports every open instance that only this rule keeps — an open
+  instance whose start commit carries no marker — with the warning `W_INSTANCE_PRE_MARKER` (§2, §7.4): on stdout,
+  as the console line `    warning: kept by the pre-marker rule: restart it with workflow start` under that
+  instance's lines, and in the payload's `diagnostics` (`--format json` and `--format yaml`, and the MCP Resource
+  that serves the same payload, `spec-004`). No other command raises it, and nothing is written on stderr. An
+  instance whose start commit carries the marker never gets it.
+- **Its removal condition** is that no WingFoil repository holds an open unmarked instance, checked by zero
+  `W_INSTANCE_PRE_MARKER` in `workflow status --format json` of each. Each such instance is ended (`workflow end`,
+  or `memory deprecate` of its plan) and, when its run goes on, restarted with `workflow start`, which writes the
+  marker.
+- **Its removal** is tracked by a follow-up element with a target release. Once the condition holds, that element
+  removes the rule — an unmarked plan is then never an instance — together with `W_INSTANCE_PRE_MARKER`, and amends
+  this section, §2 and §7.4. The code that applies the rule says the same in its comment.
 
 **3.3 Start order and the active instance.** An instance's **start commit** is the commit that added
 its plan file; its start position is that commit's position in `git rev-list --topo-order HEAD`. The
-open instances are ordered most recently started first; the **active instance** is the first.
+open instances (§3.2) are ordered most recently started first; the **active instance** is the first. A plan that
+is no instance takes no place in this order, so neither a draft plan just added nor a plan of ad-hoc work moves the
+active instance.
 `workflow end` of the active instance therefore makes the previous one active again (P4.3 sc. 2), and
 ending the last open instance leaves no active instance (P4.3 sc. 1). Every operation that works on
 one instance takes an optional positional `<ref>` — a workflow name (the most recently started open
@@ -225,11 +267,21 @@ criterion).
 A workflow that is includable as well as startable (`dl-109`) self-binds only when it runs as an
 instance; included, it has the element its includer provides (`spec-003` Layer 2 `element`).
 
-**3.5 The context element.** When a workflow that declares no `element` is started while the active
-instance has a bound element, `start` writes that element's id into the plan's `element` field as the
-instance's **context** (`Instance.context`) — as the practised plans do
+**3.5 The context element** (`bug-413` option (c), from `minor-v0.4`). A workflow that declares no `element` — an
+**element-less main**, the self-creating ones of §3.4 included — may record a **context** (`Instance.context`): the
+id of the element the run is started in, written into the plan's `element` field — as the practised plans do
 (`docs/05_plans/rl-v1/rel-v0.3/bug-ingest-rel-v0.3-planning-findings-plan.md`: `workflow:
-"bug-ingest"`, `element: "minor-v0.3"`). The context never binds and never enters deduction; what the
+"bug-ingest"`, `element: "minor-v0.3"`). `start` decides it in this order:
+
+- `--element <type>:<id>` sets it: the element must exist at `HEAD`, of any declared type, and the `<id>` may be a
+  short reference (`spec-008` §7), resolved among the documents of `<type>`; the plan records the full id;
+- `--element none` clears it: the plan records no context;
+- with no `--element`, the context is the active instance's bound element when the active instance's workflow
+  declares `element:`; when the active instance is itself an element-less main — one ingest started while another
+  is open, or a run started while the lifecycle instance is active — or no instance is open, there is none.
+
+`--element none` on a workflow that declares `element:` is refused as an absent element is (§10). The context
+never binds and never enters deduction; what the
 bug-ingest comment's "the created Memory file inherits that element" means for the created element's
 frontmatter is the Memory pillar's, not this spec's.
 
@@ -417,9 +469,10 @@ Four things are found there.
   alike under that rule: the claim that descends from every other claim of the element owns it, and two or more
   claims none descends from are a conflict (`task-293` design D2 (a)). When an element's claims are all linkages —
   two add commits naming it, as a cherry-picked add that keeps its trailers gives — every one of them counts and
-  none conflicts, as before provenance records existed (approver ruling (ii), 2026-10-24, `task-293` review). The
-  orphans of an instance whose workflow the registry does not load own nothing and raise no `W_PROVENANCE_ORPHAN`:
-  `W_INSTANCE_WORKFLOW_UNKNOWN` already reports that instance (`task-293` design D3 (a)).
+  none conflicts, as before provenance records existed (approver ruling (ii), 2026-10-24, `task-293` review). A
+  plan whose workflow the registry does not load is no instance (§3.2): its walk is not read, so its records own
+  nothing and raise no `W_PROVENANCE_ORPHAN`; `W_INSTANCE_WORKFLOW_UNKNOWN` reports the plan (`task-293` design D3
+  (a)).
 - **Re-entries.** A commit that moved an element to an earlier position of its `sequence` — a
   `reject` (`wf(<type>): reject <ids> [<from> → <to>]`) or a `park` (`dl-110`) naming it. After a
   re-entry of the element a workflow pass runs on, the `record` and `state` evidence of the phases
@@ -474,10 +527,9 @@ instance to the step and `scope` is the step's element or collection entry. A st
 `<workflow>.<phase>`, followed by `@<type>:<id>` or `@<collection>#<key>` when it has a scope (e.g.
 `dev-loop.red@task:task-130`); within one instance a key names one step. Several steps are ready at
 once when several iterations are in flight (parallel `dev-loop`s, `dl-014`). An instance is
-**complete** when its frontier is empty, except an instance whose workflow the registry does not load
-(`W_INSTANCE_WORKFLOW_UNKNOWN`, §2): its frontier is empty because nothing can be deduced, and it is
-reported `complete: false`; and an abandoned instance (§4.11), whose frontier is empty for the same reason,
-is reported `complete: false` too.
+**complete** when its frontier is empty, except an abandoned instance (§4.11): its frontier is empty because
+nothing can be deduced, and it is reported `complete: false`. Every instance's workflow is loaded (§3.2), so no
+other instance has an empty frontier it cannot deduce.
 
 **4.10 Optional phases.** A phase with `optional: true` whose evidence is unsatisfied is **skipped**
 when a later phase of the same workflow is complete other than vacuously (§4.7); otherwise it is
@@ -616,7 +668,7 @@ provisional; v0.3 reports `lastRun: "not-recorded"` and never computes overdue (
 Grammar (`spec-008` §1; target positional per `dl-082`; the shared selector `<ref>` of §3.3):
 
 ```
-wingfoil workflow start    <name> [--element <type>:<id>] [--title <t>] [--set phase=<v>] [--set scope=<v>]
+wingfoil workflow start    <name> [--element <type>:<id>|none] [--title <t>] [--set phase=<v>] [--set scope=<v>]
 wingfoil workflow end      [<ref>]
 wingfoil workflow next     [<ref>] [--assigned-to <who>]
 wingfoil workflow status   [<ref>]
@@ -654,7 +706,8 @@ with `--set` (`spec-008` §10, whose invalid-value errors apply unchanged):
 No `--set` is therefore ever mandatory. A project that nests its plans otherwise, as this repository
 does (`docs/05_plans/rl-v1/rel-v0.3/…`, `phase: "rel-v0.3"`), keeps its layout by passing `--set`. `start` then writes **two commits**, each touching only the
 plan file (`verifyCommittedScope`, `spec-006` §6 item 2): `wf(plan): add <id>` through `memoryAdd`
-(fields `workflow`, `phase`, `element`, `title`, `status: draft`, the template body), then
+(fields `workflow`, `phase`, `element`, `title`, `status: draft`, the template body), its final trailer paragraph
+carrying the start marker `WingFoil-Start: <name>` before `WingFoil-Version:` (§3.1), then
 `wf(plan): submit <id>` (`draft → active`; the template's `required: [title, workflow, phase]` are all
 filled, `.wingfoil/memory.yaml:206-207`). If the second commit fails, the plan stays `draft`, the
 instance is open, and the error names `wingfoil memory submit <id>` as the way on. The new instance
@@ -678,8 +731,7 @@ keeps the steps whose role the named party holds: `me` is the git identity's ema
 consumes; the rest are reported as further ready steps. Exit `0` in every deduced case: with no open
 instance it prints `no open workflows`; with an empty frontier,
 `no next step: workflow '<name>' is complete` (P4.4 sc. 3). An abandoned instance (§4.11) says
-`no next step: workflow '<name>' is abandoned: its element <type>:<id> is <status>`, one whose workflow the
-registry does not load `no next step: workflow '<name>' is not loaded`, and a filter that keeps no step
+`no next step: workflow '<name>' is abandoned: its element <type>:<id> is <status>`, and a filter that keeps no step
 `no next step of workflow '<name>' is assigned to '<who>'`; each has `complete: false`. `me` matches
 emails case-insensitively; a `<who>` that names no member is read as a role name, and one that is neither
 a member's name or email nor a `team.roles` role (or `me` when the identity's email is no member's) is
@@ -689,6 +741,10 @@ reported as a warning.
 and marked, each with its top-level phase progress (`complete` | `current` | `pending` | `skipped`),
 its frontier, its pending approvals and its `late` candidates (§4.7); then the ungated elements
 (§5.1). With no open instance: `no open workflows`, exit `0` (P4.5 sc. 3), the ungated elements listed after it.
+While the transitory pre-marker rule lasts (§3.2), each reported instance that only that rule keeps open carries
+`W_INSTANCE_PRE_MARKER` (§2): the console line `    warning: kept by the pre-marker rule: restart it with workflow
+start` after that instance's lines, counted in the `<n> diagnostic(s)` line, and the diagnostic in the payload; with
+a `<ref>`, only for the instance it selects. Exit `0` as before; stderr carries nothing new.
 
 **7.5 `list`** (P4.6). Without `--all`: the startable workflows, plus every includable workflow that
 is the current phase's sub on some open instance's frontier (P4.6 sc. 1–2). With `--all`: every
@@ -993,16 +1049,15 @@ with P5.2.3 (v0.4); the production server serves no Tool today.
 | unknown workflow name (`start`, `show`, `remove`, a name `<ref>`); a `<ref>` that names neither a loaded workflow nor an instance plan at `HEAD` — a phase plan's id included (§3.1) | `unknown workflow: <name>` | `NOT_FOUND` | 1 |
 | not startable | `cannot start a sub workflow directly: <name>` | `VALIDATION` | 1 |
 | no `plan` type in `memory.yaml` | `memory type 'plan' is not declared in memory.yaml; workflow start records an instance as a plan element` | `VALIDATION` | 1 |
-| element required and absent, or `--element` of another type | `workflow '<name>' needs a <type> element: give --element <type>:<id>` | `VALIDATION` | 1 |
-| `--element` on a workflow that declares no element (`start`) | `workflow '<name>' declares no element: --element is not accepted` | `VALIDATION` | 1 |
+| element required and absent, `--element none`, or `--element` of another type | `workflow '<name>' needs a <type> element: give --element <type>:<id>` | `VALIDATION` | 1 |
 | element not found at `HEAD` | `element not found: <type>:<id>` | `NOT_FOUND` | 1 |
 | `--element` short reference matching several elements (`start`, `adopt`) | `ambiguous reference: <id> matches <N> elements` (`spec-008` §6; every full id in `details`, id order) | `CONFLICT` | 1 |
 | `--set phase=` collides (`start`) | `plan id already exists: <id>` | `CONFLICT` | 1 |
 | second `start` commit failed | `plan <id> was added but not submitted: run wingfoil memory submit <id>` | as the failure | 1 |
 | no open instance (`end`) | `no active workflow to end` | `NOT_FOUND` | 1 |
-| `<ref>` names a loaded workflow with no open instance, or an instance plan (`plan`, `parent` empty) at `HEAD` that is not open — `next`, `status`, `finalize`, `end` and `memory add --workflow <ref>` alike | `workflow is not open: <ref>` | `NOT_FOUND` | 1 |
+| `<ref>` names a loaded workflow with no open instance, or an instance plan (`plan`, `parent` empty) at `HEAD` that is no open instance (§3.2: closed, added without the start marker after a marked start, or naming a workflow the registry does not load) — `next`, `status`, `finalize`, `end` and `memory add --workflow <ref>` alike | `workflow is not open: <ref>` | `NOT_FOUND` | 1 |
 | plan in `draft` at `end` | `workflow '<name>' was not submitted: run wingfoil memory submit <id>` | `INVALID_TRANSITION` | 1 |
-| incomplete at `end` | `workflow '<name>' is not complete: current step <key>` — with an empty frontier, `…: it is abandoned: its element <type>:<id> is <status>` or `…: workflow '<name>' is not loaded`; the hint `wingfoil memory deprecate <id> abandons it` | `CONFLICT` | 1 |
+| incomplete at `end` | `workflow '<name>' is not complete: current step <key>` — with an empty frontier, `…: it is abandoned: its element <type>:<id> is <status>`; the hint `wingfoil memory deprecate <id> abandons it` | `CONFLICT` | 1 |
 | step not on the frontier (`finalize`, `memory add --step`, `adopt --step`, `agent execute --step`) | `step '<key>' is not on the frontier of <instance>`; `details.frontier` holds the frontier's keys in frontier order (`task-330`, `bug-340`) | `CONFLICT` | 1 |
 | no frontier step adds the type (`memory add --workflow`, §7.10; `adopt` without `--step`, §7.11) | `no step of <instance> adds a <type>` | `CONFLICT` | 1 |
 | several frontier steps add the type, no `--step` (`memory add --workflow`, `adopt`) | `no step of <instance> adds a <type> alone: give --step, one of: <key>, <key>` (the keys in frontier order, also in `details.steps`) | `CONFLICT` | 1 |
@@ -1678,3 +1733,24 @@ to `src/mcp/read-only-resources.ts` to break the `src/mcp/index.ts` ↔ `src/mcp
 barrel still re-exports it. The Context cited `src/mcp/index.ts:84-90`, it is now `src/mcp/read-only-resources.ts:28-34`
 (`grep -n "^export function registerReadOnlyResources" src/mcp/read-only-resources.ts` → 28; `dl-075` offset class). No
 rule changes. Edited in place without a supersede or a state change (`dl-047`), pending the approver's `memory amend`.
+
+**Revision (2026-11-07, `task-345-open-an-instance-only-from-a-plan-workflow-start-marked-and-fix-the-element-less-start-context`)
+— §1.3, §2, §3.1–§3.3, §3.5, §4.8, §4.9, §7, §7.1, §7.3 and §10.** `dl-217` (a), ratified with a marker `workflow
+start` writes and a rule that keeps the instances already open: `start`'s add commit carries `WingFoil-Start:
+<workflow>` in its final trailer paragraph (§3.1); a plan is an open instance only when it is open, names a loaded
+startable workflow and was opened by `start` — its start commit carries the marker, or carries none and no marked
+start is among its ancestors (§3.2); an open plan naming an unloaded workflow is no instance and stays reported by
+`W_INSTANCE_WORKFLOW_UNKNOWN`, so §4.8, §4.9, §7.3 and §10 drop the instance "whose workflow the registry does not
+load". `bug-413` option (c), the approver's ruling at the `minor-v0.4` planning: `--element <type>:<id>` on a
+workflow that declares no element sets the context, `--element none` clears it, and with neither the context is taken
+only from an active instance whose workflow declares `element:` (§3.5, §7, §10). Edited in place without a supersede
+or a state change (`dl-047`), pending the approver's `memory amend` at `task-345`'s design gate.
+
+**Revision (2026-11-08, `task-345-open-an-instance-only-from-a-plan-workflow-start-marked-and-fix-the-element-less-start-context`,
+design addendum) — §1.3, §2, §3.2 and §7.4: the pre-marker rule is transitory.** As the approver ruled at `task-345`'s
+design gate (`D1` (a), made transitory): §3.2 declares the pre-marker rule transitory, with its removal condition (no
+open unmarked instance in any WingFoil repository, checked by zero `W_INSTANCE_PRE_MARKER` in each) and its removal
+by a follow-up element with a target release; `workflow status` reports every instance the rule keeps open with the
+new warning `W_INSTANCE_PRE_MARKER` (§2), a console line under the instance and an entry in the payload's
+`diagnostics`, last (§1.3, §7.4). §3.5, §7.1 and §10 state no part of the rule beyond what §3.2 now qualifies, and are
+unchanged. Edited in place without a supersede or a state change (`dl-047`), pending the approver's `memory amend`.

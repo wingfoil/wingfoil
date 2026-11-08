@@ -7,6 +7,8 @@
  * - BDD P4.2 sc. 3 / P4.3 sc. 3: exit 1 with the message, nothing written.
  * - `spec-017` §10's usage row: a missing `<name>`, a malformed `--element`, a `--set` name other than
  *   `phase` / `scope` and a second positional exit 2 before anything is read.
+ * - task-345 AC 4: `--element none` on an element-less main exits 0 (`bug-413` option (c)); a malformed
+ *   `--element` other than `none` still exits 2.
  * - AC 5: a freshly `init`-ed project can `workflow start` with no edit (its `memory.yaml` declares `plan`).
  */
 import { readFileSync } from 'fs';
@@ -152,6 +154,14 @@ describe('task-217 — wingfoil workflow start / end on the compiled CLI', () =>
       "error: workflow 'release-cycle' is not complete: current step release-cycle.ship@release:minor-1\n" +
         'hint: wingfoil memory deprecate release-cycle-minor-1-plan abandons it\n',
     );
+  });
+
+  it('task-345 AC 4 (bug-413 (c)): `--element none` on an element-less main is accepted: exit 0, no context', () => {
+    expect(runCliEntry(repo, ['workflow', 'start', 'release-cycle', '--element', 'release:minor-1']).status).toBe(0);
+    const run = runCliEntry(repo, ['workflow', 'start', 'report', '--element', 'none', '--format', 'json']);
+    expect([run.status, run.stderr]).toEqual([0, '']);
+    const value = JSON.parse(run.stdout) as { instance: { id: string; context: unknown } };
+    expect(value.instance).toMatchObject({ id: 'report-1-plan', context: null });
   });
 
   it.each([

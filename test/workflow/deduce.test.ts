@@ -268,7 +268,7 @@ phases:
     expect(at('released')).toEqual(['rel.odd@release:r1']);
   });
 
-  it('a numeric field substitutes as text; an unknown context id, an empty declared element, a plan with no workflow or no start', () => {
+  it('a numeric field substitutes as text; an unknown context id, an empty declared element; a plan with no workflow (and no start) is no instance (task-345 AC 2); starts with no marker classification read as pre-marker', () => {
     const flow = wf(`name: rel
 kind: main
 element: release
@@ -298,7 +298,6 @@ phases:
       ['p1', 's1', 'r1', null, true],
       ['p2', 's2', null, null, false],
       ['p3', 's3', null, null, false],
-      ['p4', '', null, null, false],
     ]);
     expect(deduction.diagnostics.map((d) => d.code)).toEqual([W_INSTANCE_WORKFLOW_UNKNOWN, W_UNRESOLVED_TOKEN]);
     expect(resolveInstanceRef(deduction, 'p3')?.instance.workflow).toBe('free');
