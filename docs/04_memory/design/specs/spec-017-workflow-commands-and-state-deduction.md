@@ -132,7 +132,7 @@ checks that its target file does not exist on disk.
 | elements a step created or awaits | ascending `(type, id)` |
 | directives | ascending id (`spec-012` §5) |
 | approvers routed to | ascending `(name, email)` |
-| diagnostics | load-time diagnostics in `spec-003`'s order, then this spec's: `W_UNCOMMITTED_INPUTS` first, then `W_MEMORY_*` by path, then `W_INSTANCE_WORKFLOW_UNKNOWN` in the start order of the plans it names (§3.3's order, ties by id), then step-attached codes in frontier order |
+| diagnostics | load-time diagnostics in `spec-003`'s order, then this spec's: `W_UNCOMMITTED_INPUTS` first, then `W_MEMORY_*` by path, then `W_INSTANCE_WORKFLOW_UNKNOWN` in the start order of the plans it names (§3.3's order, ties by id), then step-attached codes in frontier order; `workflow status` appends its own after them, `W_INSTANCE_PRE_MARKER` last, in the order of its `open` (§2, transitory, §3.2) |
 
 - Memory documents are enumerated from `HEAD`'s tree in sorted path order, never by directory
   listing order.
@@ -169,6 +169,7 @@ message }`, one array named `diagnostics`; for these codes `file` is repository-
 | `W_UNRESOLVED_TOKEN` | warning | a token of a `where`, `produces` or action argument has no value on the element it resolves against (§4.1) — the element lacks the field, or the field is blank |
 | `W_INSTANCE_WORKFLOW_UNKNOWN` | warning | an open plan — a plan with `parent` empty and status `draft` or `active` (§3.2) — names a workflow the registry does not load, whoever added it; the plan is not an instance (§3.2): it is never the active instance, no `<ref>` selects it, and the warning is how `workflow list`, `status` and `next` report it |
 | `W_APPROVAL_ROLE_WITHOUT_AUTHORITY` | warning | a member an approval is routed to does not hold the `approver` role (§5.1) |
+| `W_INSTANCE_PRE_MARKER` | warning | `workflow status` only, transitory (§3.2): an open instance it reports is kept only by the pre-marker rule — its start commit carries no start marker. `file` is the instance's plan, `path` is empty, the message is `instance <id> is kept by the pre-marker rule: restart it with workflow start`; one per such instance, in the order of the payload's `open`, after every other diagnostic of the payload |
 | `W_PROVENANCE_ORPHAN` | warning | a linkage, record or adoption in an instance's walk names a `<workflow>.<phase>` the registry does not declare and no `rekey` maps (§4.8); it is evidence of nothing. Not raised for a plan whose workflow the registry does not load: that plan is no instance (§3.2), its walk is not read, and `W_INSTANCE_WORKFLOW_UNKNOWN` reports it |
 | `W_PROVENANCE_CONFLICT` | warning | two or more claims on one element in the walks — linkages and adoptions, at least one of them an adoption — none descending from another (§4.8); the element counts as created by none of them |
 
@@ -202,8 +203,8 @@ commits.
 - its status is `draft` or `active` (an **open plan**);
 - its `workflow` names a workflow the registry loads and that is startable;
 - `workflow start` opened it: its start commit (§3.3) carries the start marker, or — a plan added before the
-  marker existed — carries none and no marked start is an ancestor of it (the **pre-marker rule**, which keeps the
-  instances already open, `dl-217`'s ratification). A plan added without the marker once a marked start is in its
+  marker existed — carries none and no marked start is an ancestor of it (the **pre-marker rule**, transitory as
+  stated below, which keeps the instances already open, `dl-217`'s ratification). A plan added without the marker once a marked start is in its
   history — by `memory add --type plan`, by hand, or by a build older than the marker — is not an instance,
   whatever it names and whatever its status.
 
@@ -213,6 +214,23 @@ startable, and a phase plan (`parent` set), are ignored without a diagnostic. A 
 the active instance, no `<ref>` selects it (§10: `workflow is not open: <ref>`), and no walk is read for it (§4.8).
 A plan moved to another path starts at the commit that moved it (§3.3), which carries no marker: once a marked start
 precedes it, moving an instance's plan ends it as an instance.
+
+**The pre-marker rule is transitory** (approver ruling at `task-345`'s design gate, `D1` (a)). It exists only so that
+the instances opened before the marker existed stay open; it is not part of the instance model. While it lasts:
+
+- **It is made visible.** `workflow status` reports every open instance that only this rule keeps — an open
+  instance whose start commit carries no marker — with the warning `W_INSTANCE_PRE_MARKER` (§2, §7.4): on stdout,
+  as the console line `    warning: kept by the pre-marker rule: restart it with workflow start` under that
+  instance's lines, and in the payload's `diagnostics` (`--format json` and `--format yaml`, and the MCP Resource
+  that serves the same payload, `spec-004`). No other command raises it, and nothing is written on stderr. An
+  instance whose start commit carries the marker never gets it.
+- **Its removal condition** is that no WingFoil repository holds an open unmarked instance, checked by zero
+  `W_INSTANCE_PRE_MARKER` in `workflow status --format json` of each. Each such instance is ended (`workflow end`,
+  or `memory deprecate` of its plan) and, when its run goes on, restarted with `workflow start`, which writes the
+  marker.
+- **Its removal** is tracked by a follow-up element with a target release. Once the condition holds, that element
+  removes the rule — an unmarked plan is then never an instance — together with `W_INSTANCE_PRE_MARKER`, and amends
+  this section, §2 and §7.4. The code that applies the rule says the same in its comment.
 
 **3.3 Start order and the active instance.** An instance's **start commit** is the commit that added
 its plan file; its start position is that commit's position in `git rev-list --topo-order HEAD`. The
@@ -723,6 +741,10 @@ reported as a warning.
 and marked, each with its top-level phase progress (`complete` | `current` | `pending` | `skipped`),
 its frontier, its pending approvals and its `late` candidates (§4.7); then the ungated elements
 (§5.1). With no open instance: `no open workflows`, exit `0` (P4.5 sc. 3), the ungated elements listed after it.
+While the transitory pre-marker rule lasts (§3.2), each reported instance that only that rule keeps open carries
+`W_INSTANCE_PRE_MARKER` (§2): the console line `    warning: kept by the pre-marker rule: restart it with workflow
+start` after that instance's lines, counted in the `<n> diagnostic(s)` line, and the diagnostic in the payload; with
+a `<ref>`, only for the instance it selects. Exit `0` as before; stderr carries nothing new.
 
 **7.5 `list`** (P4.6). Without `--all`: the startable workflows, plus every includable workflow that
 is the current phase's sub on some open instance's frontier (P4.6 sc. 1–2). With `--all`: every
@@ -1716,3 +1738,12 @@ load". `bug-413` option (c), the approver's ruling at the `minor-v0.4` planning:
 workflow that declares no element sets the context, `--element none` clears it, and with neither the context is taken
 only from an active instance whose workflow declares `element:` (§3.5, §7, §10). Edited in place without a supersede
 or a state change (`dl-047`), pending the approver's `memory amend` at `task-345`'s design gate.
+
+**Revision (2026-11-08, `task-345-open-an-instance-only-from-a-plan-workflow-start-marked-and-fix-the-element-less-start-context`,
+design addendum) — §1.3, §2, §3.2 and §7.4: the pre-marker rule is transitory.** As the approver ruled at `task-345`'s
+design gate (`D1` (a), made transitory): §3.2 declares the pre-marker rule transitory, with its removal condition (no
+open unmarked instance in any WingFoil repository, checked by zero `W_INSTANCE_PRE_MARKER` in each) and its removal
+by a follow-up element with a target release; `workflow status` reports every instance the rule keeps open with the
+new warning `W_INSTANCE_PRE_MARKER` (§2), a console line under the instance and an entry in the payload's
+`diagnostics`, last (§1.3, §7.4). §3.5, §7.1 and §10 state no part of the rule beyond what §3.2 now qualifies, and are
+unchanged. Edited in place without a supersede or a state change (`dl-047`), pending the approver's `memory amend`.
