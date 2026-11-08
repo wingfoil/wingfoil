@@ -6,6 +6,12 @@
  * A leaf module (no import), so `src/core/agent-execute.ts` can parse the option before the project is read.
  */
 
+/** A parsed `--timeout`: its length, and the value as given, which the timeout's message echoes. */
+export interface TimeBound {
+  readonly ms: number;
+  readonly label: string;
+}
+
 /** The longest bound `--timeout` accepts: 24 h. */
 export const MAX_TIMEOUT_MS = 24 * 60 * 60 * 1000;
 
@@ -19,7 +25,7 @@ const UNIT_MS: Readonly<Record<string, number>> = { s: 1000, m: 60 * 1000, h: 60
  * Parse `raw` as a `--timeout` value: its length in milliseconds and its label (`raw` itself, which the
  * timeout's message echoes as given), or `spec-008` §12's reason without its `invalid flag value: ` prefix.
  */
-export function parseDuration(raw: string): { ms: number; label: string } | { error: string } {
+export function parseDuration(raw: string): TimeBound | { error: string } {
   const match = DURATION_RE.exec(raw);
   if (match === null) return { error: `--timeout expects <n>s, <n>m or <n>h, got "${raw}"` };
   const ms = Number(match[1]) * UNIT_MS[match[2]!]!;

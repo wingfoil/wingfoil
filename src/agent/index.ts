@@ -64,6 +64,7 @@ export {
 } from './launch';
 export type { LaunchHost, LaunchInput, LaunchKindRun, LaunchValues, RecordedLaunch, SpawnAgent } from './launch';
 export { MAX_TIMEOUT_MS, parseDuration } from './duration';
+export type { TimeBound } from './duration';
 export {
   agentCommandFound,
   attributionLine,

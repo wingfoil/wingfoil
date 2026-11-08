@@ -76,6 +76,7 @@ import { coreErr, coreOk, type CoreResult } from '../core/types';
 import type { Step } from '../core/workflow-next';
 import type { LaunchKind } from '../workflow/schema';
 
+import type { TimeBound } from './duration';
 import type { LaunchHost, LaunchKindRun } from './launch';
 import type { AdapterManifest } from './schema';
 import { adapterTreeDiagnosticsAtRev, duplicateAdapterRefusal, loadAdapter, type LoadedAdapter } from './discovery';
@@ -116,11 +117,11 @@ export function resolveLaunchKind(
   option: LaunchKindRun | undefined,
   manifest: AdapterManifest,
 ): { kind: LaunchKindRun; warning?: string } {
+  const fixed = declared === 'interactive' || declared === 'headless' ? declared : undefined;
   if (option !== undefined) {
-    const contradicted = (declared === 'interactive' || declared === 'headless') && declared !== option;
-    return contradicted ? { kind: option, warning: `declares launch: ${declared}; launching ${option} (--${option})` } : { kind: option };
+    return fixed !== undefined && fixed !== option ? { kind: option, warning: `declares launch: ${fixed}; launching ${option} (--${option})` } : { kind: option };
   }
-  if (declared === 'interactive' || declared === 'headless') return { kind: declared };
+  if (fixed !== undefined) return { kind: fixed };
   // `any`: the first kind the adapter declares, interactive first — interactive for every format-1 manifest (§2.2).
   if (declared === 'any') return { kind: ANY_LAUNCH_ORDER.find((kind) => manifest.launch[kind] !== undefined) ?? 'interactive' };
   return { kind: 'interactive' };
@@ -421,7 +422,7 @@ export interface AgentExecuteRequest {
   /** `--headless` / `--interactive` (task-335); absent → the step's phase `launch`, else interactive (§3.2 step 7). */
   readonly launch?: LaunchKindRun;
   /** `--timeout`, parsed (§3.1); absent → unbounded. */
-  readonly timeout?: { readonly ms: number; readonly label: string };
+  readonly timeout?: TimeBound;
   /** `--dry-run` is active: step 12 warns instead of refusing, since nothing is spawned (`bug-392`). */
   readonly dryRun?: boolean;
 }
@@ -469,7 +470,7 @@ export interface PreparedLaunch {
   /** The launch kind §3.2 step 7 resolved (task-335). */
   readonly kind: LaunchKindRun;
   /** `--timeout`'s bound, when given. */
-  readonly timeout?: { readonly ms: number; readonly label: string } | undefined;
+  readonly timeout?: TimeBound | undefined;
 }
 
 /** The process's own terminals: stdin and stdout both. */

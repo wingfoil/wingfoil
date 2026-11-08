@@ -41,6 +41,7 @@ import { readBuildStamp } from '../storage';
 import { reportNotice, reportWarning } from '../validation/warning';
 import { coreErr, coreOk, type CoreResult } from '../core/types';
 
+import type { TimeBound } from './duration';
 import type { AdapterManifest } from './schema';
 import { deriveNotesField, NOT_REPORTED, recordRun, type ReportedCount, type RunRecord, type RunTokens } from './run-log';
 
@@ -417,7 +418,7 @@ export interface LaunchInput {
   /** The launch kind §3.2 step 7 resolved (task-335). */
   readonly kind: LaunchKindRun;
   /** `--timeout`'s bound: its length and the value as given (§3.1); absent, the run is unbounded. */
-  readonly timeout?: { readonly ms: number; readonly label: string } | undefined;
+  readonly timeout?: TimeBound | undefined;
 }
 
 /** A launched run, recorded: what `agent execute` reports (§3.4's `{ "run": <record> }`). */
