@@ -530,6 +530,113 @@ routed to WingFoil Test <wf-test@example.com>"}`, `{"error":"waiting for the pre
 completes it: wingfoil workflow finalize outreach-1 --step outreach.announce@release:minor-1)"}`.
 `npx jest --maxWorkers=2 test/cli/agent-execute-awaiting.integration.test.ts` on green's build → `Tests: 20 passed`.
 
+### green (developer, 2026-11-08)
+
+**Start.** The task's PATH shim was checked first: `command -v wingfoil` → the shim; `wingfoil --version` and
+`node dist/cli.js --version` → both `0.3.2 (0fc7fa21a946323f5eefb70944c657a5ef12aaef)`. Head `0654dc6c8`,
+`git rev-list --count HEAD..main` → `0` (no merge owed).
+
+**Commits.**
+- `fe96670a6 feat(agent): task-335 — the headless work run, the launch phase key, --headless/--interactive, --timeout,
+  --next refusing a waiting step (bug-392)` — the code, the built-ins' headless blocks and the installed
+  `.wingfoil/agents/built-in/claude-code.yaml` (byte for byte the shipped entry), and `launch: null` in the `Step`
+  literal of `test/core/workflow-next-render.test.ts` (not a red file; the design left it to green).
+- `9336a6166 docs(agent): task-335 — …` — `docs/cli-reference.md`, `docs/user-guide.md`, `docs/agents.md` l.106 (D10),
+  `docs/01_vision/X_cli-cmds.md` 1.9 → 2.0 (the `agent execute` row, a `--headless`, `--interactive` row and a
+  `--timeout` row in § "Parameters for Agent Execution", the date, a revision-history entry), the P5.3.1 BDD feature
+  (seven scenarios under a dated revision header, each implemented by the task's integration suites), and the
+  name-resolvability allowlist without `NO_LAUNCH_KIND`, `STEP_AWAITING` and `TIMED_OUT`.
+- `88d5fc80d docs(vision): task-335 — the vision index follows X_cli-cmds 2.0` — `docs/01_vision/00_index.md` (the
+  `X_cli-cmds.md` row and its section ranges from Agent Execution on, `Last indexed`), a file the design's list missed:
+  the full suite's `test/docs/vision-index.test.ts` pins them (as `task-294` and `task-295` updated it after their
+  `X_cli-cmds` bumps).
+
+**What was built, against the design** (every point as designed unless said):
+- `src/workflow/schema.ts` `LAUNCH_KINDS`, `LaunchKind`, `Phase.launch` (no default); `src/core/workflow-diagnostics.ts`
+  `E_PHASE_EXECUTOR_WITHOUT_ROLE` over `['mode', 'distinct_from', 'launch']`; `Step.launch` (`src/core/workflow-next.ts`)
+  and `PhaseView.launch` (`src/core/workflow-list-show.ts`), the declared value or `null` (D1, D2).
+- `src/agent/duration.ts` (new leaf, no import): `parseDuration`, `MAX_TIMEOUT_MS`; `src/core/agent-execute.ts`: the
+  flags `headless` / `interactive`, the both-flags `UsageError` and `--timeout`'s two `invalid flag value:` messages,
+  all before `requireInitializedProject`; `src/core/index.ts` registers `--headless`, `--interactive`,
+  `--timeout <duration>` (D4, D5, D11).
+- `src/agent/step.ts` `refuseWaitingStep` (D8), called by `runPipeline` right after `selectFrontierStep` when the
+  request has no `--element`.
+- `src/agent/execute.ts` `resolveLaunchKind(declared, option, manifest)`. One deviation in form: its `warning` is the
+  clause `declares launch: <declared>; launching <kind> (--<kind>)`, which the pipeline prefixes with
+  `phase '<workflow>.<phase>' ` (the function has no step). Under `launch: any` it takes the first kind the adapter
+  declares, interactive first (`ANY_LAUNCH_ORDER`). The `NO_LAUNCH_KIND` refusal follows, before `agentCommandFound`; the
+  approver refusal stays before both. Step 12 applies to `kind === 'interactive'` only; under `request.dryRun` it reports
+  `DRY_RUN_TERMINAL_WARNING` and continues (D9). `PreparedLaunch` gains `kind`, `timeout`.
+- `src/agent/launch.ts`: `renderLaunchArgv(manifest, values, kind = 'interactive')`; `takeOverSignals(kind)` from a
+  per-kind table, with `send` as the one forwarding path; `spawnOptions(kind)` (headless: `['ignore', 'pipe',
+  'inherit']`, `detached` off Windows; interactive unchanged) and `child.stdout?.resume()` (D6); `LaunchHost.timer`
+  (default `setTimeout`/`clearTimeout`), the bound armed in `onSpawn`, `TIMEOUT_GRACE_MS = 10000`, both timers cancelled
+  at the exit and in `finally`; step 18's `TIMED_OUT` before the non-zero branch; a headless success reports the summary
+  line with `reportNotice`. The success payload of a work run is `{ run }`: `agentExecuteFn` maps a headless
+  `RecordedLaunch` to `WorkRunReport`, and `renderAgentExecuteStderr` returns `undefined` for a value without `sha`, so
+  the registrar prints it on stdout.
+- `src/storage/builtin-adapters.ts`: `claude-code` `headless: { args: [-p, "{bootstrap}", --mcp-config,
+  "{mcp_config_file}"], output: none }`, `verified_with: "2.1.310 (Claude Code)"`; `codex-cli` `headless: { args: [exec, -c,
+  "{mcp_config}", "{bootstrap}"], output: none }`, `verified_with` unchanged (D7). The flags are the design's reading of
+  `claude --help` (2.1.310) and `codex exec --help` (0.145.0), recorded in `### design`; this phase did not re-run either
+  CLI (no agent CLI is launched by an agent).
+- `src/agent/schema.ts` TSDoc (headless read from v0.4); `src/agent/index.ts` exports `TIMEOUT_GRACE_MS`,
+  `LaunchKindRun`, `parseDuration`, `MAX_TIMEOUT_MS`, `DRY_RUN_TERMINAL_WARNING`, `resolveLaunchKind`.
+
+**The red test sent back.** After `fe96670a6`, three tests ("--json: the refusal carries details step, instance and
+awaiting") of `test/cli/agent-execute-awaiting.integration.test.ts` failed: they expected a `details` object in the CLI
+JSON error document, which `src/cli/error.ts` never prints (`spec-005` §3.2). Reported, not edited; the qa corrected it
+in `8d4e29828` (`### red correction`).
+
+**Red → green.**
+- `npx jest --maxWorkers=2` over the twelve new suites plus `test/core/workflow-next.test.ts` and
+  `test/core/agent-execute.test.ts`, at `fe96670a6` → `Test Suites: 1 failed, 13 passed, 14 total`, `Tests: 3 failed,
+  185 passed, 188 total` (the three tests above; red was `90 failed, 75 passed`). After `8d4e29828` the qa's run of the
+  corrected suite on this build → `Tests: 20 passed` (`### red correction`).
+- `npx tsc --noEmit -p tsconfig.json` → no output, exit `0` (red: 11 errors).
+- `npx eslint` over the changed `src` files and `test/core/workflow-next-render.test.ts` → exit `0`.
+- Docs and adapters: `npx jest --maxWorkers=2 test/docs/name-resolvability test/docs/x-cli-cmds test/docs/cli-reference
+  test/docs/vision-revision-history test/docs/dry-run-documented test/docs/llms-txt test/docs/user-guide-scaffold
+  test/docs/pages-render test/storage/builtin-adapter test/core/init-builtin-adapters test/lint/import-graph
+  test/lint/control-characters` → `Test Suites: 15 passed`, `Tests: 180 passed`. The first run of the doc suites failed
+  twice, both fixed before the commit: `pages-render` (two lines of the new `cli-reference` paragraph began with `<`;
+  reflowed) and `name-resolvability` (`spec-016-agent-execution.md|symbol|TIMED_OUT` unlisted once its entry was
+  dropped; the step-18 comment of `launch.ts` now cites "§3.7 `TIMED_OUT`", as the code cites `MCP_UNREACHABLE` and
+  `NO_NEXT_STEP`). `NO_LAUNCH_KIND` and `STEP_AWAITING` resolve through the comments that cite them in `src/agent`.
+- `.wingfoil/` change on the pinned build (`dl-205`): `npm run -s check:mcp` → exit `0`, `.mcp.json "wingfoil" runs the
+  pinned wingfoil 0.3.2, advertising [prompts, resources, tools] (prompts: 8, resources: 4, tools: 0)` and `the build
+  under development (dist/cli.js) serves […]; every listed Resource read and Prompt get answered`;
+  `npm run -s wingfoil -- workflow list` → exit `0`, stderr empty (0 lines); `npm run -s wingfoil -- agent list
+  --waiting` (which lists the adapter tree) → exit `0`.
+
+**Full suite** (`bash …/waitslot.sh`, then `npm test -- --maxWorkers=2`): `waitslot.sh` waited behind task-345's and then task-348's coverage runs (`ps -eo pid,etime,args` → `50640 08:05
+…/task-345/node_modules/jest/bin/jest.js --coverage --maxWorkers=2`, later `305174 01:45 …/task-348/node_modules/jest/bin/jest.js
+--coverage --maxWorkers=2`, while this waiter `124732` stood at `13:45`). Then `npm run -s build` and `npm test --
+--maxWorkers=2` at `9336a6166` (14:36:34–14:52:18) → `Test Suites: 1 failed, 577 passed, 578 total`, `Tests: 4 failed,
+10682 passed, 10686 total`; the four failures all in `test/docs/vision-index.test.ts` (the `X_cli-cmds.md` version,
+date, line count and section ranges in `00_index.md`). Fixed by `88d5fc80d`; then `npx jest --maxWorkers=2
+test/docs/vision-index test/docs/x-cli-cmds test/docs/vision-revision-history test/docs/llms-txt` → `Tests: 66 passed,
+66 total`. The refactor phase re-runs the full suite.
+
+**T4.** `git log --first-parent --no-merges --format=%h 237055380..HEAD -- <red's 19 files>` → `8d4e29828` only (the qa's red correction); nothing of green's.
+
+**Approver checks owed (D7).** AC 9's by-hand headless pass of each built-in, which only a person runs (agents launch no
+agent CLI). In a scratch project initialized with this build (`WINGFOIL="node $(pwd)/dist/cli.js"`, `$WINGFOIL init`,
+one committed task, `dna.yaml` `team.agents` with the adapter), with stdin and stdout redirected so that no terminal is
+present:
+- `claude-code`: `claude --version` → expect `2.1.310 (Claude Code)`; then `$WINGFOIL agent execute --element
+  task:<id> --role developer --headless --format json < /dev/null > run.json 2> run.err`. The launch is `claude -p
+  "<bootstrap>" --mcp-config <file> --session-id <uuid>`. What proves it: exit `0`; `run.json` is one document
+  `{"run": {…}}` with `adapter: "built-in/claude-code"`, `result: "n/a"`, `exit_status: 0`, `agent_version: "2.1.310
+  (Claude Code)"`; `run.err` holds the two notices (the banner and `run <id>: agent exited 0 after … s (recorded in
+  <sha7>)`); `git log -1 --format=%s` → `agent: record <id>`; and the agent read its context: its work names the
+  session Resource's content (for instance a handoff line in the task's Execution Notes or its commit), which a run
+  without the `wingfoil` server could not have produced.
+- `codex-cli`: `codex --version` → expect `codex-cli 0.145.0`; then the same command with an agent whose adapter is
+  `codex-cli`. The launch is `codex exec -c 'mcp_servers.wingfoil={…}' "<bootstrap>"`. What proves it: the same, with
+  `adapter: "built-in/codex-cli"` and `agent_version: "codex-cli 0.145.0"`.
+The orchestrator pastes each run's command, its exit status and the two files into these notes.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -537,3 +644,10 @@ completes it: wingfoil workflow finalize outreach-1 --step outreach.announce@rel
      printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
      Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
      here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+- Green ran one bare `npx tsc --noEmit -p tsconfig.build.json` (exit `0`) before taking the heavy-gate slot or going
+  through the npm script, against the heavy-gate rule (T5); reported to the orchestrator, not repeated.
+- A red test expected a CLI JSON `details` object that `spec-005` §3.2 never prints (the CLI's `details` is the
+  `{file?, detail?}` array); green stopped, the qa corrected it in `8d4e29828`. Proposal: a red pin of a CLI error
+  document copies it from a real run of a build that prints such a refusal, or pins only `error`.
+- The design's file list missed `docs/01_vision/00_index.md`, which `test/docs/vision-index.test.ts` ties to every
+  `X_cli-cmds.md` bump (`88d5fc80d`). Proposal: a design that bumps a vision document lists `00_index.md` with it.
