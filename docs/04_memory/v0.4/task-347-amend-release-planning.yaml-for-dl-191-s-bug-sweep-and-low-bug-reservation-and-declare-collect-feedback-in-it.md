@@ -321,6 +321,118 @@ No command-output fixture (the design needs none); no new export, so no `.d.cts`
   place → `Test Suites: 14 passed, 14 total`, `Tests: 158 passed, 158 total`.
 - The invisible-character grep over the four files → no hit (exit `1`).
 
+### green (developer, 2026-11-08)
+
+**Base.** The task's PATH shim runs the code build: `command -v wingfoil` → the shim, `wingfoil --version` and
+`node dist/cli.js --version` → `0.3.2 (4b169d7d441724e53e509c01e14b690ab8e1af25)`. `git rev-list --count HEAD..main`
+→ `0` at the start (head `f7f8539a7`), so no merge. Contract read: `### design`, the design record `ed78726ff` (D1 (b),
+D2–D5 (a)), `### red` (red commit `7708cf5ad`).
+
+**Commit** `727db6676` `feat(workflow): task-347 — release-planning 2.5: collect-feedback, assign-bugs, low-bug
+reservation` — the four files the design lists, nothing else (`git show --stat 727db6676` → `.wingfoil/README.md`,
+`.wingfoil/WORKFLOW.md`, `.wingfoil/workflows/custom/release-planning.yaml`, `AGENTS.md`, `4 files changed, 84
+insertions(+), 20 deletions(-)`).
+- `release-planning.yaml` 2.4 → 2.5, as the design writes it: `collect-feedback` at index 1 (role `facilitator`,
+  `agent.execute`, the produces `docs/09_retrospectives/rl-{release.release-line}/rel-{release.version}-planning-feedback-triage.md`,
+  `checks.post` the `feedback-notes.recorded(…)` block scalar copied from `retrospective.yaml` 1.8, the description
+  restating that read with the R11 / `dl-092` Q2 (ii) reason, "since the previous read record (a retrospective's or a
+  planning's)" and the ruling before define-scope); `define-scope` gains the D5 sentence; `triage-bugs` keeps its
+  `where:` and gains the `dl-191` (a) sentence; `assign-bugs` at index 4 (role `tech-lead`, `where: { type: bug,
+  status: [triaged], release: [""] }`, `'element.set_release("{release.version}")'` with the design's comment, no
+  `approval:`, no `fallback:`); the workflow `description:`, the header comment ("and for a triaged bug with no release
+  in assign-bugs") and the 2.5 history clause (`… design gate D1–D5): …`; the design's draft said D1–D4, D5 is also
+  ruled at `ed78726ff`).
+- `.wingfoil/WORKFLOW.md`: the `release-cycle` summary node, the section ("Ten steps in sequence", a `collect-feedback`
+  sentence, an `assign-bugs` clause, the reservation in the `define-scope` sentence) and the flowchart (nodes `CF` and
+  `AS`, the reservation line in `DS`, the chain `AB --> CF --> DS --> TB --> AS --> RG --> RA`).
+- AGENTS.md §6 and `.wingfoil/README.md`: the `release-planning` chain gains the two names (D4).
+
+**Red → green.** `npx jest test/core/release-planning-v2-5.test.ts test/core/workflow-repository-conformance.test.ts
+test/core/define-scope-sweep.test.ts test/core/workflow-manual-prose-checks.test.ts test/docs/workflow-md.test.ts
+--maxWorkers=2` with `727db6676` as `HEAD` → `Test Suites: 5 passed, 5 total`, `Tests: 93 passed, 93 total` (red
+recorded `14 failed, 79 passed, 93 total` on the same five files).
+
+**`pinned-build.reads` on the committed change (`dl-205` Q1 (a), AC 4).** Pinned build `npm run -s wingfoil --
+--version` → `0.3.2 (6de2e13c004bbf419acfa7dc4d98d5a7468cd693)`.
+- `workflow list --format json` → exit `0`, `diagnostics` 68, all `W_WORKFLOW_UNBOUND_TOKEN`, 0 that is not a warning;
+  the `release-planning` ones at `phases[0]`, `[2]`, `[5]`–`[9]`; `workflow list` (console) → exit `0`, 68 lines
+  holding `warning`.
+- `workflow show release-planning` (`--format json` and console) → exit `0`; the ten phases in the design's order;
+  `collect-feedback`'s produces `{"pattern": "docs/09_retrospectives/rl-{release.release-line}/rel-{release.version}-planning-feedback-triage.md",
+  "owner": "release", "evidence": true}`, its check binding `{"kind": "manual", "source": "project"}`; `assign-bugs`'
+  selection `{"where": {"type": "bug", "status": ["triaged"], "release": [""]}}`, its action binding `manual`,
+  `expectedCommit.verbs ["assign"]`.
+- `workflow next sw-life-cycle-1-plan --format json`, `workflow status --format json` and `workflow status` (console)
+  → exit `0`. `npm run -s check:mcp` → exit `0`, "`.mcp.json` "wingfoil" runs the pinned wingfoil 0.3.2, advertising
+  [prompts, resources, tools] (prompts: 8, resources: 4, tools: 0)" and "the build under development (dist/cli.js)
+  serves [prompts, resources, tools] (prompts: 8, resources: 4, tools: 0); every listed Resource read and Prompt get
+  answered".
+- **The frontier does not change with the yaml.** The same two reads on the pinned build in a scratch clone outside the
+  worktree at `f7f8539a7` (the red head, 2.4; `node_modules` linked): the `next` and `status` JSONs equal the ones at
+  `727db6676` once `baseline` and `diagnostics` are removed (a `JSON.stringify` comparison → `true` for both); frontier
+  22 keys in both, the `release-planning` key in both `release-planning.advance-pinned-build@release:minor-v1.0`; the
+  open lifecycle instance's `late` 193 in both (126 bugs, 67 decision-logs). The design measured 23 keys and 190 late
+  (123 + 67): the same read at `ed78726ff` (the design record, in the clone) → 23 keys; the two keys only there are
+  `dev-loop.start@task:task-335-…` (task-335 merged done since) and `dev-loop.red@task:task-347-…` (now
+  `dev-loop.green@task:task-347-…`, the one key only here); the three more late bugs are bugs `main` triaged since
+  (`bug-516`, `bug-517`, `bug-518` in the `late` list). Both differences come from `main` and this task's own progress,
+  not from the change: **no `workflow rekey` and no `workflow finalize` is owed**, as the design states.
+
+### refactor (developer, 2026-11-08)
+
+No refactor of the green text was needed (the design's wording loaded as written). `git rev-list --count HEAD..main`
+→ `0` at the end of refactor, so no merge. Gates, each heavy one after the dl-170 wait-slot script (it returned at once,
+exit `0`, no output, every time), `--maxWorkers=2`, one jest process at a time:
+- `npm run -s build` → exit `0`, on a clean tree before the full suite.
+- `npm test -- --maxWorkers=2` → `Test Suites: 583 passed, 583 total`, `Tests: 10754 passed, 10754 total`, exit `0`.
+- `npm run test:coverage -- --maxWorkers=2` → exit `0`, `All files | 99.27 | 97.18 | 98.68 | 99.68` (statements,
+  branches, functions, lines), `Tests: 10754 passed, 10754 total`. No source changed, so no column can move against the
+  batch baseline.
+- `npm run -s lint` → exit `0`, no output. `npm run -s docs:api` → exit `0`, no output. `npm run -s typecheck` (both
+  tsc configs) → exit `0`.
+- `docs.parity`: the full suite holds every `test/docs` suite; also targeted, `npx jest test/docs/workflow-md.test.ts
+  test/docs/cli-reference.test.ts test/docs/enumeration-parity.allowlist.test.ts test/docs/name-resolvability.test.ts
+  test/docs/llms-txt.test.ts test/docs/commands-parity.test.ts --maxWorkers=2` → `Test Suites: 6 passed`, `Tests: 50
+  passed`. No CLI or help change, so `docs/cli-reference.md` is untouched.
+- AC 5: `test/core` and `test/directives` are in the full suite above (583 suites passed).
+
+### self-review (developer, 2026-11-08)
+
+Read against `code-review` and the design, `git diff main...HEAD` (red's four test files, the two red/design note
+commits and `727db6676`).
+- AC 1 (read per D1 (b)): `triage-bugs` keeps `{ type: bug, status: [open], release: ["", "{release.version}"] }` and
+  names `assign-bugs`; `assign-bugs` selects `{ type: bug, status: [triaged], release: [""] }` — the red tests "assign-bugs
+  selects …", "… description names dl-191 (a) …", "workflow show … manual binding", "triage-bugs keeps its selection …"
+  pass (run above). Positive case of the selection: `workflow show release-planning --format json` prints it (above).
+- AC 2: "define-scope's description states at least 10 % …" passes; `/20 %/` still matches.
+- AC 3: the five `collect-feedback` tests pass; the `checks.post` is equal to `retrospective.collect-feedback`'s (the
+  test compares the two parsed values) and resolves `manual` through `bindings.yaml` 3.0, unchanged
+  (`git diff main...HEAD --stat -- .wingfoil/workflows/bindings.yaml` → empty).
+- AC 4: the version test passes (2.5, the 2.5 segment names `task-347` and `dl-191 (a)`, the 2.4 one `task-305`); the
+  pinned-build reads and the unchanged frontier are under green.
+- AC 5: characterization, the suites green (refactor).
+- Scope: `git diff main...HEAD --stat` → 11 files: the design's four, red's four test files, this task file and the two
+  decision-logs amended at the design gate (`dl-016`, `dl-163`); `bindings.yaml`, `dev-loop.yaml`, `retrospective.yaml`, `src/` and every spec untouched; the four
+  configuration files `test/lint/version-bump.test.ts` gates are not among them, and `release-planning.yaml` raises
+  `version:` once on this branch (`git show main:.wingfoil/workflows/custom/release-planning.yaml | grep -m1 '^version:'`
+  → `version: 2.4`).
+- Same class in the files touched: every hand-written `release-planning` chain in WORKFLOW.md, AGENTS.md and
+  `.wingfoil/README.md` now names the ten phases: `grep -rn "advance-pinned-build → define-scope\|triage-bugs → reconcile"
+  AGENTS.md .wingfoil/` → no hit (exit `1`; AGENTS.md's chain, written with backticks, checked by reading line 447), and
+  the positive case, `grep -rn "collect-feedback" AGENTS.md .wingfoil/README.md` and the `release-planning` node of
+  WORKFLOW.md → `AGENTS.md:447`, `.wingfoil/README.md:101`, `.wingfoil/WORKFLOW.md:193`. Older chains remain in dated plans (`docs/05_plans/rl-v1/rel-v0.1/…`,
+  `rel-v0.2/…`) and in `dl-016`'s body, which are records of their time (and `dl-016` carries the amendment recorded at
+  the design gate, `571f014e8`).
+- T4: `git log --first-parent --no-merges --format=%h 7708cf5ad..HEAD -- test/core/release-planning-v2-5.test.ts
+  test/core/workflow-repository-conformance.test.ts test/core/define-scope-sweep.test.ts
+  test/core/workflow-manual-prose-checks.test.ts` → empty (run before the notes commit).
+- The invisible-character grep over the four changed files before `727db6676` → no hit (exit `1`).
+
+### Pending amendments (approver)
+
+None from green or refactor. The two prepared at design (`dl-163`, `dl-016`) were recorded at the design gate
+(`0e9939455`, `571f014e8`).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -333,3 +445,10 @@ No command-output fixture (the design needs none); no new export, so no `.d.cts`
   printed `memory approve` exits 1 on a `triaged` bug and the selection cannot empty before `build-backlog` (scratch
   clone, `workflow next sw-life-cycle-1-plan`); found at design, D1. Proposal: a planning AC that adds a selection
   names the action that empties it.
+- Handover to the v0.4 `align-user-docs` (design gate D4 (a)): COLLABORATION.md still says the inboxes are read only at
+  each minor's retrospective (`grep -n "retrospective; a patch release has none" COLLABORATION.md` → its line), while
+  `release-planning` 2.5 reads them at every planning too (`727db6676`).
+- The design's frontier figures (23 keys, 190 late) were absolute counts and had moved by green (22 keys, 193 late)
+  through `main` and this task's own steps, not through the change: the same read at `ed78726ff`, `f7f8539a7` and
+  `727db6676` (green notes). Proposal: a `pinned-build.reads` frontier check compares the reads before and after the
+  change at one base, rather than against counts taken at design.
