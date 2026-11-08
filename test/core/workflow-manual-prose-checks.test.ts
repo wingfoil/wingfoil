@@ -140,7 +140,7 @@ describe('task-303 AC 1 — the checks a command can assert stay unbound (charac
 });
 
 describe('task-303 AC 2 — the prose checks a human confirms are bound manual: true (red-first, dl-186 Q6)', () => {
-  it('the manual check occurrences at HEAD are exactly the 21 this task binds plus demo.rendered (task-298) and pinned-build.reads (task-348), in registry order', () => {
+  it('the manual check occurrences at HEAD are exactly the 21 this task binds plus demo.rendered (task-298), pinned-build.reads (task-348) and the release-planning collect-feedback check (task-347), in registry order', () => {
     expect(manualCheckRows()).toEqual([
       ['specification-downcast', 'phases[0].checks.post[0]', '100% of MVP Canvas features covered; edge-case stories present'],
       ['specification-downcast', 'phases[1].checks.post[0]', 'each scenario atomic + testable; zero ambiguous adjectives/adverbs'],
@@ -153,9 +153,10 @@ describe('task-303 AC 2 — the prose checks a human confirms are bound manual: 
       ['initial-design', 'phases[1].checks.pre[0]', 'spec-review.passed'],
       ['initial-design', 'phases[3].checks.pre[0]', 'spec-review.passed'],
       ['release-planning', 'phases[0].checks.post[2]', 'the wingfoil-cli directive re-checked against the new pin'],
-      ['release-planning', 'phases[4].checks.pre[0]', 'spec-review.passed'],
-      ['release-planning', 'phases[5].checks.pre[0]', 'spec-review.passed'],
-      ['release-planning', 'phases[6].checks.post[1]', 'acceptance-criteria.consistent'],
+      ['release-planning', 'phases[1].checks.post[0]', 'feedback-notes.recorded'],
+      ['release-planning', 'phases[6].checks.pre[0]', 'spec-review.passed'],
+      ['release-planning', 'phases[7].checks.pre[0]', 'spec-review.passed'],
+      ['release-planning', 'phases[8].checks.post[1]', 'acceptance-criteria.consistent'],
       ['dev-loop', 'phases[1].checks.post[3]', 'acceptance-criteria.consistent'],
       ['dev-loop', 'phases[1].checks.post[4]', 'pinned-build.reads'],
       ['dev-loop', 'phases[5].checks.pre[1]', 'claims.rerun'],

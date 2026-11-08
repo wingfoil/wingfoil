@@ -90,19 +90,19 @@ describe('AC 1 / AC 2 — every workflow loads at HEAD with zero errors and only
       ["release-planning", "phases[0].checks.pre[0]", "`npm run -s wingfoil -- --version` == the version package.json pins"],
       ["release-planning", "phases[0].checks.post[0]", "new pin >= old pin, and `npm view wingfoil versions` lists it"],
       ["release-planning", "phases[0].checks.post[1]", "the switch commit changes only package.json and package-lock.json"],
-      ["release-planning", "phases[1].checks.post[0]", "frontmatter.required"],
+      ["release-planning", "phases[2].checks.post[0]", "frontmatter.required"],
       // task-277 (approver ruling 2026-10-12 D1 (c)): define-scope's sweep of the scheduled change-proposals, bound later under dl-166 Q2 (ii).
-      ["release-planning", "phases[1].checks.post[1]", "change-proposals.swept"],
+      ["release-planning", "phases[2].checks.post[1]", "change-proposals.swept"],
       // task-230 (dl-100 §1, approver ruling 2026-10-12 D2): the coverage of the ready decision-logs, read by the product-owner.
-      ["release-planning", "phases[3].checks.post[0]", "ready-decision-logs.covered"],
-      ["release-planning", "phases[4].checks.post[0]", "frontmatter.required"],
-      ["release-planning", "phases[5].checks.post[0]", "frontmatter.required"],
+      ["release-planning", "phases[5].checks.post[0]", "ready-decision-logs.covered"],
       ["release-planning", "phases[6].checks.post[0]", "frontmatter.required"],
+      ["release-planning", "phases[7].checks.post[0]", "frontmatter.required"],
+      ["release-planning", "phases[8].checks.post[0]", "frontmatter.required"],
       // task-230 (dl-102 §2): build-backlog's criteria check is bound manual (task-303); (dl-100 §2) commit-backlog's backlog_committed.
       // task-230 review F1: each task's wave is listed; commit-backlog's waves is a non-empty list.
-      ["release-planning", "phases[6].checks.post[2]", "task.wave.declared"],
-      ["release-planning", "phases[7].checks.pre[0]", "frontmatter.required"],
-      ["release-planning", "phases[7].checks.pre[1]", "waves.declared"],
+      ["release-planning", "phases[8].checks.post[2]", "task.wave.declared"],
+      ["release-planning", "phases[9].checks.pre[0]", "frontmatter.required"],
+      ["release-planning", "phases[9].checks.pre[1]", "waves.declared"],
       // task-230 (dl-133 §2): no single command runs the docs/examples scripts (docs/examples/README.md).
       ["wave", "phases[1].checks.post[1]", "docs.examples.passing"],
       // task-221 (dl-133 Q4 (i)): the stop-the-line check reads memory.yaml's rule; no command asserts it yet.
