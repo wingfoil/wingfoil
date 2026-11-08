@@ -311,6 +311,116 @@ each start from then on.
    docs/04_memory/v0.4` → only `task-346`'s file, which leaves it out; D6). Expected: a task in a later `v0.4` wave or a
    re-assignment of the DL. Severity: low.
 
+### red (qa, 2026-11-08)
+
+**Base.** `git rev-list --count HEAD..main` → `19` (the `task-348` merge): `git merge --no-edit main` → `Merge made by the
+'ort' strategy`, no conflict (neither spec's Revision notes were touched by `main`: the merge's file list is `task-348`'s
+eight files), then the attribution trailers by `git commit --amend --no-edit --trailer …` → merge commit `8a8ac2441`
+(`git rev-parse HEAD` after the amend). PATH guard: `command -v wingfoil` → the task's PATH shim; `wingfoil --version` and
+`node dist/cli.js --version` → `0.3.2 (d47eac853c3ce6929438fa2215ae2840508ed3a0)`.
+
+**The design's blast list, re-measured on the merged tree.** `git diff --name-only db6d372e7 HEAD` → no `src/` file and
+none of the 41 suites (Memory files, `task-348`'s four tests, `wingfoil-cli.md`, `bindings.yaml`, `dev-loop.yaml`); the
+41-suite grep of the design run at `db6d372e7` and at `HEAD` → the same 41 files (`diff` empty). A scratch clone of
+`8a8ac2441` outside the worktree, `workflowStart` edited to skip its submit (`commits: [addCommit]`, the add's commit and
+warnings), under the `dl-170` slot (`waitslot.sh` → granted at once, no gate in `ps -eo pid,etime,args`): `npx jest
+--maxWorkers=2 <the 41 files>` → `Test Suites: 9 failed, 32 passed, 41 total`, `Tests: 29 failed, 795 passed, 824 total`
+— **unchanged**, the same nine suites and 29 tests. `test/cli/e2e-smoke.test.ts` (6 tests) and
+`test/cli/publish-staging.test.ts` (1) fail only through `docs/examples/06-workflow-approval/run.sh` (`exit 1: FAIL:
+commits written: expected '2', got '1'`): **owed by green** (the example's lines 44–47 and a `memory submit
+deliver-1-plan` before its `workflow end`), not a test file; red does not touch either suite, and in the blast run above they fail only through the example.
+
+**Red commit `6aa76b03e`** (`git log --oneline -1` → `6aa76b03e test(workflow): task-346 — failing test: workflow start
+leaves its plan draft and writes workflow and phase always`), test files only (`git show --stat` → nine `test/` files,
+398 insertions, 95 deletions): `test/core/workflow-start-end.test.ts`, `test/core/workflow-start-end-arms.test.ts`,
+`test/core/workflow-start-end-coverage.test.ts`, `test/core/workflow-start-marker.test.ts`,
+`test/core/element-short-reference.test.ts`, `test/core/workflow-deduction.test.ts`,
+`test/cli/workflow-start-end.integration.test.ts`, `test/cli/workflow-start-plan-patterns.integration.test.ts`,
+`test/cli/dry-run.integration.test.ts`. No new export is imported, so no `.d.cts`; `StartResult.submit` is read through
+each test's own value interface (`StartValue.submit?`, a JSON cast on the CLI) and the synthetic `StartResult` in the
+arms suite is a type assertion, so `tsc` stays clean before and after green.
+
+**Runs.**
+- `npx jest --maxWorkers=2 test/core/workflow-start-end.test.ts test/core/workflow-start-end-arms.test.ts
+  test/core/workflow-start-end-coverage.test.ts test/core/workflow-start-marker.test.ts
+  test/core/element-short-reference.test.ts test/core/workflow-deduction.test.ts
+  test/cli/workflow-start-end.integration.test.ts test/cli/workflow-start-plan-patterns.integration.test.ts` →
+  `Test Suites: 7 failed, 1 passed, 8 total`, `Tests: 33 failed, 110 passed, 143 total` (workflow-deduction passes).
+- `npx jest --maxWorkers=2 test/cli/dry-run.integration.test.ts` → `Tests: 2 failed, 33 passed, 35 total`.
+- `npx tsc --noEmit -p tsconfig.json` → exit 0, no output. `npx jest test/lint --maxWorkers=2` → `Test Suites: 14
+  passed`, `Tests: 158 passed`.
+
+**Per AC** (first failing assertion of each red test; every one is the behaviour, none a crash on a missing file):
+- **AC 1 (red-first, `bug-390`).** New `describe` "task-346 AC 1" in `test/core/workflow-start-end.test.ts`:
+  - item 1 "one commit, `wf(plan): add <id>`, … `submit` names memory submit" → `rev-list --count` expected `"1"`,
+    received `"2"`;
+  - item 2 "the instance is open from the add …" → `planStatus` expected `"draft"`, received `"active"`;
+  - item 3 "`end` before the submit is INVALID_TRANSITION …" → `Received has value: null` (the `end` succeeded);
+  - item 4 "a body line, then memory submit …" → `toBeNull` received `{"code": "INVALID_TRANSITION", …
+    "message": "illegal transition active -> (none) for type 'plan'"}` (the plan is already `active`).
+  - item 5, in `test/core/workflow-start-end-arms.test.ts` (the `tidy` fixture it names lives there): "a real start of
+    `tidy` …" → the line `- plan tidy-1-plan is draft: write its body, then run wingfoil memory submit tidy-1-plan`
+    missing.
+  - item 6, `test/cli/workflow-start-end.integration.test.ts` new `describe` "task-346 AC 1 item 6": "--format json: …"
+    → `rev-list --count` `"2"` for `"1"`; "console: the draft-plan line follows the started line" → the second stdout
+    line is the step, not the draft-plan line; "--dry-run --format json|console" → **pass** (the dry run already stops at
+    the add; pinned, as the design asked).
+  - The rewritten pins (each now asserts one commit, a `draft` plan, or submits the plan before `end`):
+    `workflow-start-end.test.ts` sc. 1 (`planStatus` `"draft"` for `"active"`), sc. 2 (the same), "the one commit touches
+    only the plan file" (`"2"` for `"1"`), P4.3 sc. 1, sc. 2, "an instance id selects it too", the incomplete-instance
+    scenario (each: `expected a submit of <id>, got INVALID_TRANSITION: illegal transition active -> (none) for type
+    'plan'`); "a refused second commit …" removed (its arm goes, item 3 replaces it). Arms: "a submit refused by its
+    result …" removed (D4); the synthetic renderer case rewritten to a `draft` instance with `submit` (the draft-plan line
+    missing); the abandoned-instance `end` (`writeAndSubmit(...).ok` `false` for `true`). Coverage: "a submit that throws
+    …" removed (D4); "the console rendering of a real start" (the draft-plan line missing); "end: a plan deleted …" and
+    "end: a plan modified …" (`writeAndSubmit` `false` for `true`) — the second was not in the blast list: without the
+    submit it would pass after green on the `draft` refusal instead of the preamble it pins. Marker: (a) `commits` length
+    `2` for `1`; (e) `expected a submit of checklist-1-plan, got INVALID_TRANSITION …`. Short reference: both `task-332`
+    AC 5 starts, `commits` length `2` for `1` (the range is now `<head before>..HEAD`, no longer `HEAD~2..HEAD`). CLI
+    start/end: "--format json parses as StartResult" (length `2` for `1`), P4.3 sc. 1 and the incomplete instance
+    (`memory submit <id> exited 1: error: illegal transition active -> (none) for type 'plan'`), `task-217` AC 5
+    (`planStatus` `"draft"` for `"active"`). Dry run: the `workflowStart` row loses `commits: 2` (`HEAD~1` is not the
+    pre-run head); the `workflowEnd` row submits `finished-1-plan` in its `prepare` (committed before the snapshot), so the
+    red stays on those two rows (`fixture bug: wingfoil memory submit finished-1-plan exited 1: error: illegal transition
+    active -> (none) for type 'plan'`) instead of failing the whole fixture.
+- **AC 2 (red-first, `bug-491`).** New `describe` "task-346 AC 2" in `test/core/workflow-start-end-arms.test.ts` (its
+  `memoryYaml` takes `required` and a template, `PlanShape`):
+  - item 1 `plan-{n}-{slug}` (required `[title, workflow, phase]`) → `expected a start of tidy, got VALIDATION: plan
+    plan-001-tidy was added but not submitted: run wingfoil memory submit plan-001-tidy`;
+  - item 2 (bound element) → the same refusal for `plan-001-release-cycle`;
+  - item 3 `--set phase=capture` → `VALIDATION: --set phase: memory type 'plan' has no token {phase} in its id_pattern or
+    path`;
+  - item 4 `--set scope=x` → **passes** (characterization: `--set scope: memory type 'plan' has no token {scope} in its
+    id_pattern or path`, HEAD and the tree unchanged);
+  - item 5, the existing `plan-{n}` case → `Expected pattern: /^phase: "1"$/m` against `phase: ""`;
+  - item 6, a template with no `phase:` key → the same pattern, the key absent.
+  - item 7, `test/cli/workflow-start-plan-patterns.integration.test.ts` new `describe`: "workflow start
+    decision-log-ingest: …" → `[1, "{\"error\":\"plan plan-001-decision-log-ingest was added but not submitted: run
+    wingfoil memory submit plan-001-decision-log-ingest\",\"details\":[{\"detail\":\"missing required field on submit:
+    phase\"}]}"]` for `[0, ""]`; "(unchanged) --set scope=x …" → **passes**. Fixture strings copied from a real run of the
+    code build in a scratch repository: `git init -b main`, `node <worktree>/dist/cli.js init --template Kanban
+    --no-interactive`, the plan type's `path`/`id_pattern` lines replaced by `docs/memory/plan/{id}.md` /
+    `"plan-{n}-{slug}"` and committed, then `workflow start decision-log-ingest` → exit 1, `error: plan
+    plan-001-decision-log-ingest was added but not submitted: …` / `missing required field on submit: phase`, the file
+    `workflow: "decision-log-ingest"`, `phase: ""`; `workflow start adr-ingest --set phase=capture` → exit 1, `error: --set
+    phase: memory type 'plan' has no token {phase} in its id_pattern or path`; `--set scope=x` → exit 1, `error: --set
+    scope: memory type 'plan' has no token {scope} in its id_pattern or path`. The id the test expects after green,
+    `plan-001-decision-log-ingest-1`, is D3 (a)'s title `decision-log-ingest — 1` slugged.
+- **AC 3 (characterization, mutation-checked, `bug-434`, D5).** `test/core/workflow-deduction.test.ts`, the `it` renamed
+  "reports no W_MEMORY_UNREADABLE at all, and none of the six ids is an instance plan a <ref> can name (task-346 AC 3,
+  bug-434)": `instancePlanIds(readDeductionSnapshotAtHead(root).documents)` holds none of the six stems, and the same
+  documents with `dev-loop-rel-v0.1-plan`'s `parent` set to `''` hold that id → **passes on first run** (the suite: 25
+  passed). Mutations, as temporary uncommitted edits feeding the mutated documents to the HEAD assertion itself, reverted
+  (`diff` against a saved copy → empty): `status: 'active'` alone → `npx jest --maxWorkers=2
+  test/core/workflow-deduction.test.ts -t "task-346 AC 3"` → `Tests: 24 skipped, 1 passed` (green: `parent` keeps it a
+  phase plan); `parent: ''` → the same command → `Tests: 1 failed, 24 skipped`, `Expected value: not
+  "dev-loop-rel-v0.1-plan"` at `for (const [path] of SIX) expect(ids).not.toContain(stem(path))`.
+- **AC 4** — nothing to test: `fc2726b3c` (`spec-017`) and `ae2ed07e3` (`spec-008`) are the approver's amends
+  (`git log --oneline -6 40fda1e04`).
+
+**Owed by green, outside red's files.** `docs/examples/06-workflow-approval/run.sh` (above). Red changed no `src/`,
+`scripts/` or production file (`git show --stat 6aa76b03e` → `test/` only).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
