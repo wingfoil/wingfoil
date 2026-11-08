@@ -729,6 +729,29 @@ deletions(-)` (the conflict hunks only).
   the introduction commit fcd435695…), and 64 other commits`, `gated: 0 findings on 0 commits`, `history: 0 findings on
   0 commits`.
 
+### review fixes (developer, 2026-11-08)
+
+**Finding 1 (review of `0caf6ea81`): the D7 / AC 9 proof criterion, approver ruling (a).** The last criterion of
+`**Approver checks owed (D7)**` in `### green` — "the agent read its context: its work names the session Resource's
+content" — cannot be shown through `agent execute --headless` as shipped: `claude -p` with no posture flag refuses the
+tools that need a permission, `codex exec` runs in a read-only sandbox (the posture is `task-339`'s, `dl-223`), and the
+agent's stdout is drained (§3.5, D6). That text stays as written above; the criterion the approver ruled replaces it:
+
+1. **The mechanics, through `agent execute`**: one headless work run per built-in, the command of `### green` → exit
+   `0`; stdout one document `{"run": {…}}` with `adapter` (`built-in/claude-code` or `built-in/codex-cli`),
+   `result: "n/a"`, `exit_status: 0` and `agent_version` (`2.1.310 (Claude Code)` or `codex-cli 0.145.0`); the two
+   notices on stderr (the banner and `run <id>: agent exited 0 after … s (recorded in <sha7>)`); and the commit
+   `agent: record <id>` (`git log -1 --format=%s`).
+2. **The context, by hand**: the adapter's same headless argv run once by the approver outside `agent execute`, with
+   stdout visible, on the same bootstrap and the same MCP configuration (`claude -p "<bootstrap>" --mcp-config <file>
+   --session-id <uuid>`; `codex exec -c 'mcp_servers.wingfoil={…}' "<bootstrap>"`; the bootstrap and the rendered MCP
+   configuration as `agent execute --dry-run --format json` prints the bootstrap and the adapter's `mcp.template` renders
+   the server). The reply must show the agent read, or tried to read, the session Resource
+   `wingfoil://session/<role>/<type>:<id>/<sha>`. A permission refused there is recorded as evidence for `task-339` /
+   `dl-223`'s posture, not as a failure of this task.
+
+The orchestrator pastes each run's command, exit status and output under this heading.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
