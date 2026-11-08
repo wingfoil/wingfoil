@@ -512,6 +512,24 @@ with no `.wingfoil/` (exit `2`, not the not-initialized refusal); the same for `
 
 **Candidate findings (not filed).** None beyond the design's two.
 
+### red correction (qa, 2026-11-08)
+
+**Correction commit `8d4e29828`** (`git log --oneline -1` → `8d4e29828 test(cli): task-335 — red correction: …`), one
+file: `test/cli/agent-execute-awaiting.integration.test.ts`. Its test "--json: the refusal carries details step,
+instance and awaiting" expected a `details` object in the CLI's JSON error document, which the CLI never prints:
+`src/cli/error.ts` `emitError` renders `details` only as the `{file?, detail?}` array built from
+`CoreError.details.issues` and omits the key when it is empty, the `spec-005` §3.2 contract (`dl-055` option 1). The
+test now asserts exit `1`, the error documents exactly `[{ "error": "<the step line>" }]`, and that nothing ran; the
+core `details` object (`step`, `instance`, `awaiting`) stays pinned in process by `test/core/agent-execute-awaiting.test.ts`.
+The expected documents are copied from green's build at `fe96670a6` (`npm run build`, then `node dist/cli.js --version`
+→ `0.3.2 (fe96670a68e42612d50c91bf68fb2ac9c54f6e90)`): `node dist/cli.js agent execute --next --format json` in copies
+of the `seedAwaiting('gated' | 'signoff' | 'outreach')` repositories outside the worktree → exit `1`, a
+`W_WORKFLOW_UNBOUND_TOKEN` warning document, then `{"error":"human needed: approve or reject task-202-explicit-override
+— routed to WingFoil Test <wf-test@example.com>"}`, `{"error":"human needed: finalize signoff.review@release:minor-1 —
+routed to WingFoil Test <wf-test@example.com>"}`, `{"error":"waiting for the press office: press.ack (a phase record
+completes it: wingfoil workflow finalize outreach-1 --step outreach.announce@release:minor-1)"}`.
+`npx jest --maxWorkers=2 test/cli/agent-execute-awaiting.integration.test.ts` on green's build → `Tests: 20 passed`.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
