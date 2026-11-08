@@ -421,6 +421,154 @@ arms suite is a type assertion, so `tsc` stays clean before and after green.
 **Owed by green, outside red's files.** `docs/examples/06-workflow-approval/run.sh` (above). Red changed no `src/`,
 `scripts/` or production file (`git show --stat 6aa76b03e` → `test/` only).
 
+### merge of main (developer, 2026-11-08)
+
+At the start `git rev-list --count HEAD..main` → `50`; `git merge --no-edit main` → `CONFLICT (content)` in
+`spec-008-cli-grammar.md` (the §2 `--dry-run` row and the end-of-file Revision notes) and
+`spec-017-workflow-commands-and-state-deduction.md` (the Revision notes): `task-335`'s approved amends (`d7fed28d9`,
+`a74f7aac9`) against this task's (`ae2ed07e3`, `fc2726b3c`). Aborted (`git merge --abort`, the tree clean at
+`898670736`), reported, and resolved on the orchestrator's ruling by **union**, as at `task-335`'s identical case
+(`cc7adc164`): the §2 row is `main`'s row (`task-335`'s `bug-392` terminal-check wording) with `ae2ed07e3`'s edit
+applied on top — the two edits touch different sentences, the "Not predicted" one and the `agent execute` one, so
+neither changes the other's words; both Revision notes are kept, `task-335`'s (2026-11-07) first, then this task's
+(2026-11-08). Merge commit `5d0b82eb0` (`git rev-parse HEAD` after the amend that added the attribution trailers and
+moved them after git's `# Conflicts:` lines, which `--no-edit` had kept below them).
+
+Proof, word diffs of the resolved tree (`git diff --word-diff=plain <rev> -- <spec>`, the changed words):
+- `main` → `spec-008`: `[-do,-]{+do and+}`, `[-fires, and the second, `submit` commit of `workflow start` (`spec-017`
+  §7.1)-]{+fires+}`, `{+commit. `workflow start` writes one+}`, `{+its plan's `add` (`spec-017` §7.1, from
+  `minor-v0.4`),+}`, `[-for `workflow start`-]`, `[-token:-]{+value:+}`, `[-accepted;-]` and the added 2026-11-08
+  Revision note — only `ae2ed07e3` (the §2 row and §12's `workflow start` row).
+- `898670736` → `spec-008`: `[-and-]{+included) but+}`, `[-check included),-]{+check, which a dry run needs no
+  terminal for and which prints a `warning:` line where a real run is refused (`bug-392`),+}`, the waiting-step
+  sentence and the two `agent execute` rows of §12 (`--headless`/`--interactive`, `--timeout`), and the added
+  2026-11-07 Revision note — only `task-335`'s amend.
+- `main` → `spec-017`: §7.1's one commit and `draft` plan (`[-**two commits**, each-]{+**one commit**,+}`, the
+  `workflow`/`phase` paragraph, `submit` in §8 `StartResult`), §10's failed-second-commit row removed, §11/§13's
+  "(one commit)", and the added 2026-11-08 Revision note — only `fc2726b3c`.
+- `898670736` → `spec-017`: §6.3's `launch` paragraph, `launch` on `Step` and `PhaseView` in §8, the Consequences
+  citations by section (`(§ "Pillar 4: Project Workflow Commands", …)`, `(the workflow create row)`), and the added
+  2026-11-07 Revision note — only `task-335`'s amend.
+
+Then `node scripts/check-governance.cjs --base origin/main` → `gated: 0 findings on 0 commits`, `history: 0 findings on
+0 commits`.
+
+### green (developer, 2026-11-08)
+
+PATH guard: `command -v wingfoil` → the task's PATH shim; `wingfoil --version` and `node dist/cli.js --version` →
+`0.3.2 (8a8ac24416f43f7a8cb37c2bd0d8710d7aa7be51)` (before the merge above). Contract: the design, the rulings in
+`40fda1e04` (D1–D6 all (a)) and the specs as amended (`fc2726b3c`, `ae2ed07e3`).
+
+**Commit `2b211acbc`** (`fix(workflow): task-346 — workflow start leaves its plan draft and writes workflow and phase
+always (bug-390, bug-491)`), the files the design lists:
+- `src/core/workflow-start-end.ts` — `workflowStart` writes only `verbs.add` (D1 (a)) and returns `commits: [<add
+  sha>]`, `submit: "wingfoil memory submit <id>"` (new `StartResult.submit`, D2 (a)), the add's warnings; `StartVerbs`
+  loses `submit` (D4 (a)), and `submitFailure` and the `StorageError` / `commitFailureSummary` import go with it.
+  `planTokens` passes as tokens only the derived values the patterns hold, plus every `--set` but a `phase` the
+  patterns hold no token for; it returns the recorded `phase`, which `workflowStart` writes as a field (beside
+  `workflow`, task-345's G1, and `element`) when it is no token (`bug-491`); the default title is `<workflow> —
+  <phase>` with that phase (D3 (a)). `renderStartConsole` prints `plan <id> is draft: write its body, then run
+  wingfoil memory submit <id>` after the `started` line. Header TSDoc rewritten.
+- `src/core/index.ts` — `workflowStartFn` hands `{ add: memoryAddFn }`; the TSDoc of `refusalOf`, of
+  `MemoryAddParams.fields` and the registry comment reworded; the operation description "record it as an active plan
+  element" → "a draft plan element" (its `--help` first sentence).
+- `src/storage/templates.ts` and its byte copy `test/core/fixtures/kanban-memory.yaml` (the same comment, kept
+  identical); `.wingfoil/memory.yaml` (the `plan` annotation; `version: 3.5` → `3.6` with its history clause,
+  comment-only).
+- `docs/cli-reference.md` — `### wingfoil workflow start` (one commit, the plan `draft`, `submit` in the JSON, the
+  console line, `--set phase=` on any plan type, the commit line), the `workflow end` paragraph, § "Git side effects".
+- `docs/examples/06-workflow-approval/run.sh` — after the start, one commit `wf(plan): add deliver-1-plan`, the
+  draft-plan line checked, then a body line and `memory submit deliver-1-plan` (one commit) before the workflow's
+  steps; `WINGFOIL_EXAMPLE_TEMPLATE=<t> WINGFOIL="node $(pwd)/dist/cli.js" bash
+  docs/examples/06-workflow-approval/run.sh` → exit 0, `OK: Journey 4: …` for `Scrum` and `Kanban`.
+- `docs/02_requirements/02_bdd/features/p4-workflow/P4.2-workflow-start.feature` — the design's scenario "The plan of
+  a started workflow is left to be written".
+
+**red → green.** `npx tsc --noEmit -p tsconfig.json` → exit 0, no output. `npx jest --maxWorkers=2` over red's nine
+files (`workflow-start-end`, `-arms`, `-coverage`, `workflow-start-marker`, `element-short-reference`,
+`workflow-deduction`, the CLI `workflow-start-end` and `workflow-start-plan-patterns` integrations, `dry-run`) →
+`Test Suites: 9 passed, 9 total`, `Tests: 178 passed, 178 total` (red recorded 33 + 2 failing in them).
+
+**Probe of the code build** (a scratch Kanban repository outside the worktree, the plan type set to
+`plan-{n}-{slug}` / `docs/memory/plan/{id}.md` and committed, `W="node <worktree>/dist/cli.js"`): `$W workflow start
+decision-log-ingest` → exit 0, `started decision-log-ingest as plan-001-decision-log-ingest-1 (active)`, `plan
+plan-001-decision-log-ingest-1 is draft: write its body, then run wingfoil memory submit
+plan-001-decision-log-ingest-1`, then the step; the file `title: "decision-log-ingest — 1"`, `status: draft`,
+`workflow: "decision-log-ingest"`, `phase: "1"`; the commit `wf(plan): add …` with `WingFoil-Start:
+decision-log-ingest` before `WingFoil-Version:`. `$W workflow end` → exit 1, `error: workflow 'decision-log-ingest'
+was not submitted: run wingfoil memory submit plan-001-decision-log-ingest-1`. A body line, then `$W memory submit
+plan-001-decision-log-ingest-1 --format json` → exit 0, `"from":"draft","to":"active"`. `$W workflow start adr-ingest
+--set phase=capture --dry-run` (console) → the JSON plan, `subject: wf(plan): add plan-002-adr-ingest-capture`; the
+same with `--format json` and no dry run → exit 0, `planStatus: "draft"`. `--set scope=x` → exit 1, `error: --set
+scope: memory type 'plan' has no token {scope} in its id_pattern or path` (unchanged).
+
+### refactor (developer, 2026-11-08)
+
+`git rev-list --count HEAD..main` → `0` before the gates and again before this note: no second merge.
+
+- `dl-205`, the `memory.yaml` change on the pinned build (worktree): `npm run -s wingfoil -- --version` → `0.3.2
+  (6de2e13c004bbf419acfa7dc4d98d5a7468cd693)`; `workflow list`, `workflow show sw-life-cycle`, `dna show`, `memory
+  search --type plan --status active --format json` → exit 0 each; `npm run -s check:mcp` → `.mcp.json "wingfoil"
+  runs the pinned wingfoil 0.3.2, advertising [prompts, resources, tools] (prompts: 8, resources: 4, tools: 0)`, and
+  the build under development serving the same, every Resource read and Prompt get answered.
+- After `waitslot.sh` (it waited behind another task's jest; `ps -eo pid,etime,args` showed its holder at `06:37` and
+  an earlier waiter at `04:13`): `npm run -s build`, `npm run lint`, `npm run typecheck` (both tsc configs), `npm run
+  docs:api` → exit 0, no error or warning line.
+- `npm test -- --maxWorkers=2` (slot) → `Test Suites: 2 failed, 580 passed, 582 total`, `Tests: 2 failed, 10750
+  passed, 10752 total`. Both failures came from this change and are fixed in commit `7972a1eef`:
+  `test/core/workflow-rekey.test.ts` "an ended instance" (`Command failed: git commit --quiet -m wf(plan): finalize
+  life-1-plan [active → done]`: its fixture wrote `status: done` over `status: active` only, and a started plan is now
+  `draft`, so nothing changed; it now matches `draft` or `active`, the test's purpose unchanged — not a red file and
+  not in the design's list, see Decisions) and `test/docs/pages-render.test.ts` (`docs/cli-reference.md:1175: <id>` …,
+  my wrap put a paragraph line on a placeholder; rewrapped). `npx jest --maxWorkers=2 test/docs/pages-render.test.ts
+  test/core/workflow-rekey.test.ts test/docs/cli-reference.test.ts` → `Tests: 38 passed, 38 total`. The full suite was
+  not re-run after that commit, which changes one fixture line and one line wrap; the coverage run below had the same
+  two failures and nothing else.
+- `npm run test:coverage -- --maxWorkers=2` (slot, before `7972a1eef`) → `All files | 99.27 | 97.18 | 98.68 | 99.68`
+  (statements, branches, functions, lines); `workflow-start-end.ts | 99.47 | 97.95 | 100 | 100`, uncovered 300, 325,
+  421 (the `id_pattern` default, `!next.ok`, `renderEndConsole`'s dry-run branch: none written by this task). Against
+  `task-345`'s `99.28 / 97.22 / 98.67 / 99.68`: statements −0.01, branches −0.04, functions +0.01, lines equal,
+  measured on a tree that now also holds `task-335`; this task removed covered branches (the submit arms) and added
+  none uncovered.
+- `docs.parity`: the `test/docs/` suites ran in the full suite above, `pages-render` the only failure (fixed);
+  `test/docs/cli-reference.test.ts` passes (above). The e2e smoke and publish-staging suites, which run
+  `docs/examples/06-workflow-approval/run.sh`, passed in the full suite.
+- Invisible characters: the `grep -nP` of the kit's class over every changed file → no hit, before each commit.
+
+### self-review (developer, 2026-11-08)
+
+- **AC 1** (`bug-390`) met: one commit, `draft`, `submit` in the payload and on the console, `end` refused until the
+  submit, the submit with no approver (red's AC 1 items 1–6 pass; the probe above).
+- **AC 2** (`bug-491`) met: `workflow` and `phase` written whatever the patterns hold, `--set phase=` accepted on any
+  plan type, `--set scope=` still refused (red's AC 2 items 1–7 pass; the probe above).
+- **AC 3** (`bug-434`) met by red's characterization (`instancePlanIds` and the `parent: ''` mutation, D5 (a));
+  `test/core/workflow-deduction.test.ts` passes, unchanged by green.
+- **AC 4** met: `fc2726b3c` and `ae2ed07e3` are the approver's amends, merged with `task-335`'s by union (above).
+- Same class in the files touched: `grep -rn "adds and submits" src/ test/ .wingfoil/memory.yaml` → only
+  `src/storage/templates.ts:694` and `:726`, about the scaffolded `capture`/`plan` *phases* adding and submitting
+  elements, not about `workflow start` — left as they are. `grep -rn "active plan element" src/ docs/ test/` → none
+  left. The rekey fixture was the one other test writing over a started plan's `active` (the full suite above).
+- T4: `git log --first-parent --no-merges --format=%h 6aa76b03e..HEAD -- <the nine red files>` → empty.
+- **Doc debts for `align-user-docs` / `align-agent-docs`** (a `workflow start` that no longer submits; not edited, no
+  parity test fails on them): `AGENTS.md:271` ("`workflow start` writes a plan's `add` and `submit`") and `:486`
+  ("records a run as an active `plan` element"); `docs/user-guide.md:275` ("adds and submits a plan (`draft →
+  active`)") and `:400–401` ("an `add` and a `submit` commit"); `docs/agents.md:127` (start / end row: no submit
+  between them); `docs/examples/README.md:20` (the Journey 4 sequence lists no plan submit); and the `CHANGELOG.md`
+  line D4 leaves to `align-user-docs` (`StartVerbs` loses `submit`, `StartResult` gains `submit`, `commits` holds one
+  sha). `.wingfoil/WORKFLOW.md` and `.wingfoil/README.md`: `grep -n "workflow start"` → no start → end sequence.
+  **Practice change after the merge:** every `workflow start` needs a `memory submit` of its plan before `workflow end`.
+
+### Pending amendments (approver)
+
+None. The three bugs already hold their `### Retrospective` (`- None.`), and no spec or other element was edited by
+green or refactor (`git status --short` → empty before submit).
+
+**Decisions for the approver.**
+- `test/core/workflow-rekey.test.ts` is outside the design's file list: its fixture broke because of this change (a
+  started plan is `draft`), so it is fixed in the task as a defect the change causes (a one-line regex and a comment),
+  not a stop-the-line. The design's blast run grepped `workflowStart` / `workflow start` and missed it, because that
+  suite starts its instance through a helper.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -428,3 +576,14 @@ arms suite is a type assertion, so `tsc` stays clean before and after green.
      printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
      Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
      here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+
+- Two `w0` tasks amended the same `spec-008` row and both specs' Revision tails (`task-335`, this task): the merge of
+  `main` into this branch conflicted, green stopped and was relaunched after a union ruling (merge `5d0b82eb0`), as
+  `task-335` had needed at `cc7adc164`. Proposal: when designs in one wave amend the same spec, the design gate names
+  the merge order and the union resolution ahead of time.
+- The design's blast run grepped `test/ --include=*.test.ts`, so a suite that starts its instance through a helper
+  (`test/core/helpers/rekey-fixture.ts:181`, `call('workflowStart', …)`) was missed; the full suite caught it
+  (`test/core/workflow-rekey.test.ts`, fixed in `7972a1eef`). Proposal: grep the helpers too.
+- `git commit --no-edit` on a conflicted merge keeps git's `# Conflicts:` comment lines in the message, and a
+  following `--amend --no-edit --trailer` put the trailers above them, so the trailer paragraph was not the last one;
+  the message was rewritten with `--cleanup=whitespace -F` before anything was pushed (merge `5d0b82eb0`).
