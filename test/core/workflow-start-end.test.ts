@@ -11,13 +11,16 @@
  * - AC 3: each `start` commit touches only the plan file; a refused second commit leaves the plan `draft` and
  *   names `wingfoil memory submit <id>`; a project with no `plan` type is refused with §10's message.
  * - AC 4: the element errors of §10 and the `CONFLICT` of a colliding `--set phase=`.
+ * - task-345 AC 4 (`bug-413` option (c), `spec-017` §3.5): `--element <type>:<id>` on an element-less main sets
+ *   its context, `--element none` clears it, and with neither the context comes only from an active instance
+ *   whose workflow declares `element:`.
  *
  * The CLI's exit codes and usage errors are `test/cli/workflow-start-end.integration.test.ts`.
  */
 import { chmodSync, existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 
-import { CORE_MODULES, enumerateOperations } from '../../src/core';
+import { CORE_MODULES, deduceWorkflowStateAtHead, enumerateOperations } from '../../src/core';
 import type { CoreFn } from '../../src/core/registry';
 import type { CoreResult } from '../../src/core/types';
 import { commitAll, git, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
@@ -343,9 +346,62 @@ describe('workflow start and workflow end (task-217, spec-017 §7.1–§7.2)', (
       });
     });
 
-    it('`--element` on a workflow that declares no element', async () => {
-      const result = await start(repo, { name: 'checklist', element: 'release:minor-v1' });
-      expect(result.ok ? null : result.error).toMatchObject({ code: 'VALIDATION', message: "workflow 'checklist' declares no element: --element is not accepted" });
+    it('task-345 AC 4 (bug-413 (c)): `--element <type>:<id>` on a workflow that declares no element sets the context', async () => {
+      const value = startValue(await start(repo, { name: 'checklist', element: 'release:minor-v1' }));
+      expect(value.instance).toMatchObject({ id: 'checklist-minor-v1-plan', element: null, context: { type: 'release', id: 'minor-v1' } });
+      expect(readFileSync(join(repo, 'docs/plans/checklist/checklist-minor-v1-plan.md'), 'utf-8')).toMatch(/^element: "minor-v1"$/m);
+    });
+
+    it('task-345 AC 4: the context `--element` takes a short reference; the plan records the full id', async () => {
+      const value = startValue(await start(repo, { name: 'checklist', element: 'release:minor-v' }));
+      expect(value.instance).toMatchObject({ element: null, context: { type: 'release', id: 'minor-v1' } });
+      expect(readFileSync(join(repo, `docs/plans/checklist/${value.instance.id}.md`), 'utf-8')).toMatch(/^element: "minor-v1"$/m);
+    });
+
+    it('task-345 AC 4: a context `--element` that does not exist at HEAD is NOT_FOUND, nothing written', async () => {
+      const before = head(repo);
+      const result = await start(repo, { name: 'checklist', element: 'release:nope' });
+      expect(result.ok ? null : result.error).toMatchObject({ code: 'NOT_FOUND', message: 'element not found: release:nope' });
+      expect(head(repo)).toBe(before);
+    });
+
+    it('task-345 AC 4: `--element none` clears the context an active release-cycle would give', async () => {
+      startValue(await start(repo, { name: 'release-cycle', element: 'release:minor-v1' }));
+      const value = startValue(await start(repo, { name: 'checklist', element: 'none' }));
+      expect(value.instance).toMatchObject({ id: 'checklist-1-plan', element: null, context: null });
+      expect(readFileSync(join(repo, 'docs/plans/checklist/checklist-1-plan.md'), 'utf-8')).toMatch(/^element: ""$/m);
+    });
+
+    it('task-345 AC 4: no `--element` while an element-less main is active records no context', async () => {
+      startValue(await start(repo, { name: 'checklist' }));
+      const value = startValue(await start(repo, { name: 'report-bug' }));
+      expect(value.instance).toMatchObject({ id: 'report-bug-1-plan', element: null, context: null });
+    });
+
+    it('task-345 AC 4 (bug-413 step 1): no `--element` while a self-bound element-less main is active records no context', async () => {
+      // A self-creating main (spec-017 §3.4), bound to the release its creating step added.
+      writeFixtureFile(repo, '.wingfoil/workflows/custom/intake.yaml', "name: intake\nstartable: true\nphases:\n  - name: capture\n    role: developer\n    actions:\n      - 'memory.add(type: release)'\n");
+      writeFixtureFile(repo, '.wingfoil/workflows.yaml', `version: 1.0\ninclude:\n${[...WORKFLOWS, 'intake'].map((name) => `  - workflows/custom/${name}.yaml\n`).join('')}`);
+      commitAll(repo, 'a self-creating main');
+      startValue(await start(repo, { name: 'intake' }));
+      writeFixtureFile(repo, 'docs/releases/minor-v2.md', element('release', 'minor-v2', 'draft'));
+      git(repo, ['add', '-A']);
+      git(repo, ['commit', '--quiet', '-m', 'wf(release): add minor-v2', '-m', 'WingFoil-Instance: intake-1-plan\nWingFoil-Step: intake.capture']);
+      expect(deduceWorkflowStateAtHead(repo).instances[0]?.instance).toMatchObject({ id: 'intake-1-plan', element: { type: 'release', id: 'minor-v2' } });
+
+      const value = startValue(await start(repo, { name: 'report-bug' }));
+      expect(value.instance).toMatchObject({ id: 'report-bug-1-plan', element: null, context: null });
+      expect(readFileSync(join(repo, 'docs/plans/report-bug/report-bug-1-plan.md'), 'utf-8')).toMatch(/^element: ""$/m);
+    });
+
+    it('task-345 AC 4 (spec-017 §10, D6 (a)): `--element none` on a workflow that declares an element is refused as an absent element', async () => {
+      const before = head(repo);
+      const result = await start(repo, { name: 'release-cycle', element: 'none' });
+      expect(result.ok ? null : result.error).toMatchObject({
+        code: 'VALIDATION',
+        message: "workflow 'release-cycle' needs a release element: give --element release:<id>",
+      });
+      expect(head(repo)).toBe(before);
     });
 
     it('a colliding `--set phase=` is CONFLICT `plan id already exists: <id>`, nothing written', async () => {

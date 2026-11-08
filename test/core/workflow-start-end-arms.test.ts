@@ -2,8 +2,8 @@
  * task-217 — the arms of `workflow start` / `workflow end` the BDD-shaped suite does not reach
  * (`test/core/workflow-start-end.test.ts` holds the acceptance cases): the console renderers (a dry-run plan,
  * a complete first step, an active instance after `end`), an `id_pattern` with a `{n}` counter and a `path`
- * with no `{scope}`, a submit refused by a result rather than a throw, and the two incomplete instances whose
- * frontier is empty — abandoned (`spec-017` §4.11) and not loaded (§4.9).
+ * with no `{scope}`, a submit refused by a result rather than a throw, an abandoned instance (`spec-017` §4.11),
+ * and a plan whose workflow is not loaded, no instance since task-345 (§3.2).
  */
 import { CORE_MODULES, enumerateOperations, renderEndConsole, renderStartConsole, type EndResult, type StartResult } from '../../src/core';
 import type { CoreFn } from '../../src/core/registry';
@@ -123,7 +123,7 @@ describe('workflow start / end — arms past the acceptance cases (task-217)', (
     expect(git(repo, ['log', '-1', '--format=%s']).trim()).toBe('wf(plan): add tidy-1-plan');
   });
 
-  it('end refuses an abandoned instance (its element deprecated) and one whose workflow is not loaded', async () => {
+  it('end refuses an abandoned instance (its element deprecated), and a plan whose workflow is not loaded as no instance (task-345 AC 2)', async () => {
     repo = makeTempGitRepo();
     writeProject(repo, { path: 'docs/plans/{scope}/{id}.md', idPattern: '{workflow}-{phase}-plan' });
     const started = (await operation('workflowStart')({ root: repo, positional: 'release-cycle', options: { element: 'release:minor-v1' } })) as CoreResult<StartResult>;
@@ -140,7 +140,7 @@ describe('workflow start / end — arms past the acceptance cases (task-217)', (
     writeFixtureFile(repo, 'docs/plans/ghost/ghost-1-plan.md', '---\nid: "ghost-1-plan"\ntype: plan\ntitle: "ghost"\nstatus: active\nworkflow: "ghost"\nphase: "1"\nelement: ""\n---\n');
     commitAll(repo, 'a plan of a workflow the registry does not load');
     const unknown = await operation('workflowEnd')({ root: repo, positional: 'ghost-1-plan' });
-    expect(unknown.ok ? null : unknown.error).toMatchObject({ code: 'CONFLICT', message: "workflow 'ghost' is not complete: workflow 'ghost' is not loaded" });
+    expect(unknown.ok ? null : unknown.error).toMatchObject({ code: 'NOT_FOUND', message: 'workflow is not open: ghost-1-plan' });
   });
 });
 
