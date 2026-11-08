@@ -641,6 +641,195 @@ Suites: 1 failed, 13 passed, 14 total`, `Tests: 1 failed, 157 passed, 158 total`
 `provenance.test.ts:407`, `workflow-deduction-history`, `git-log-readers`) were not run at red; the full suite is
 green's. The code comment the design addendum names cites the follow-up element `bug-515`.
 
+### green (developer, 2026-11-08)
+
+**Base.** Head `b592bc577` (the red record), clean tree; `git rev-list --count HEAD..main` → `0`, no merge of `main`
+owed. PATH guard: `command -v wingfoil` → the task's PATH shim; `wingfoil --version` and `node dist/cli.js --version`
+→ `0.3.2 (4823447506659dbebe161fe42261c10452dd1c5c)`. Contract: `### design`, `### design addendum — D1 transitory`
+and the rulings of the design record `a1b7ffa30` (D1 (a) transitory, D2–D10 (a)).
+
+**Commit `bbe4f0933`** (`feat(workflow): task-345 — open an instance only from a marked workflow start, and fix the
+element-less start context (bug-413, bug-465)`):
+- `src/workflow/deduce.ts` — `START_TRAILER = 'WingFoil-Start'` (exported, TSDoc); `StartMarker` (`'marked' |
+  'pre-marker' | 'after-marker'`) and `StartCommit.marker?` (absent reads as `pre-marker`, so the hand-built snapshots
+  of `test/workflow/deduce.test.ts` keep their meaning); `deduceWorkflowState` keeps an open plan (`parent` empty) as an
+  instance only when its workflow is loaded and startable and its start is not `after-marker`; it raises
+  `W_INSTANCE_WORKFLOW_UNKNOWN` for every open plan naming an unloaded workflow, in start order (ties by id), marked
+  or not (D3 (a)); the unknown-workflow instance branch is gone (D5 (a)); `Deduction.preMarker?` lists the instances
+  whose start is not `marked`, in instance order, with their plan paths (the addendum's carrier; absent when empty);
+  `provenanceDiagnosticsOf` loses its `loaded` filter (every instance is loaded).
+- `src/core/workflow-deduction.ts` — `readStarts` runs over every instance plan at `HEAD` (any status) in its one
+  `git log`, whose format adds `%(trailers:key=WingFoil-Start,valueonly,unfold,separator=%x03)`; `startMarker`
+  classifies each open candidate from the walk `readHistory` already reads (`follows`: a marked start outside the
+  walk is an ancestor of every start, one inside is an ancestor when the walk's parent links reach it;
+  `ancestorsInWalk` is factored out of `instanceWalk`). No git process added. The transitory comment (removal
+  condition, `spec-017` §3.2, `bug-515`) is on `startMarker`.
+- `src/core/workflow-status.ts` — `W_INSTANCE_PRE_MARKER` (exported constant): one entry per reported instance in
+  `deduction.preMarker`, after `approvalDiagnostics`, and the console line under that instance's lines, derived from
+  the payload's entries (no new `StatusEntry` field); a one-line reference to `startMarker` and `bug-515`.
+- `src/core/workflow-start-end.ts` — the add carries `trailers: ['WingFoil-Start: <name>']`; `--element none`
+  (`startUsage`); `resolveStartElement` per `spec-017` §3.5 (it now takes the registry's workflows to read the active
+  instance's declaration; `--element none` on a declared element → the existing `needs a <type> element` refusal,
+  D6 (a)); `incompleteReason` loses the "is not loaded" arm (D5 (a)).
+- `src/core/index.ts` — `MemoryAddParams.trailers` (core callers only, appended after the linkage trailers); the
+  `--element` option description of `workflowStart`.
+- `src/core/workflow-next.ts` — `selectWorkflowInstance(deduction, snapshot, ref?)` (D7 (a)) and its TSDoc;
+  `emptyFrontierMessage` loses the "is not loaded" arm.
+- `docs/cli-reference.md` — `workflow show` (the not-loaded clause goes), `workflow start` (the `--element` row, the
+  marker paragraph, the element-less bullet, the errors), `workflow status` (the pre-marker warning paragraph).
+- `test/docs/name-resolvability.allowlist.ts` — the `W_INSTANCE_PRE_MARKER` entry of `f20c6f043` removed (the symbol
+  exists in `src/core/workflow-status.ts`): `npx jest test/docs/name-resolvability.test.ts` → `11 passed` without it.
+
+**One change beyond the design's list of behaviours, in a design file (decision G1 below).** The first run of the
+red suites left one failure outside red's files: `test/core/workflow-start-end-arms.test.ts` "an id_pattern with a {n}
+counter and a path with no {scope}" → `Received: {"code": "NOT_FOUND", … "message": "workflow is not open: plan-001"}`.
+Reproduced in a scratch repository (plan type `path: docs/plans/{id}.md`, `id_pattern: plan-{n}`, code build
+`workflow start tidy` → exit 1, `error: workflow is not open: plan-001`, the plan file holding `workflow: ""`):
+`start` passes only the tokens the patterns hold, so with no `{workflow}` token the plan named no workflow; before
+this task that plan was listed as an instance of the unloaded workflow `''`, now it is no instance (AC 2) and `start`
+refused after writing its two commits. Fix in `workflowStart`: the plan's `workflow` field is written through
+`fields` when the tokens hold no `workflow` (`spec-017` §3.1: "its `workflow` field names the workflow"). After it:
+`npx jest test/core/workflow-start-end-arms.test.ts test/core/workflow-start-end-coverage.test.ts` → `27 passed`.
+
+**Red → green.** `npx jest --maxWorkers=2` on red's 8 files (red: `Tests: 25 failed, 110 passed, 135 total`) plus
+`test/docs/pages-render.test.ts test/docs/cli-reference.test.ts` → `Test Suites: 10 passed, 10 total`, `Tests: 146
+passed, 146 total`. `npx tsc --noEmit -p tsconfig.json` → no output, exit 0 (the TS2345 ×7, TS2578 and TS2305 of red
+gone). The suites the design expected unchanged: `npx jest --maxWorkers=2 test/core/workflow-next-spawn-count.test.ts
+test/workflow/provenance.test.ts test/core/workflow-deduction-history.test.ts test/lint/git-log-readers.test.ts
+test/core/workflow-status.test.ts test/core/workflow-status-render.test.ts test/cli/workflow-status.integration.test.ts
+test/cli/workflow-list-diagnostics.integration.test.ts test/core/workflow-uncommitted-config.test.ts
+test/mcp/workflow-state-resources.test.ts test/core/workflow-list-show.test.ts` → `11 passed`, `143 passed`.
+
+**AC 3 — the live evidence on this repository** (worktree, head `bbe4f0933`'s tree, built by the jest global setup;
+the pinned build unchanged). `npm run -s wingfoil -- workflow status` (0.3.2 pinned) and `node dist/cli.js workflow
+status`, each filtered to the instance header, warning and count lines (`grep -E "^(\*| ) [a-z]|^open workflows|warning:|diagnostic\(s\)"`;
+the "human needed" lines of the ungated elements, identical on both sides, left out here):
+
+Pinned:
+
+```
+open workflows: 5
+* decision-log-ingest-rel-v0.4-planning-feedback-plan (decision-log-ingest) — active, complete
+  bug-ingest-rel-v0.4-planning-feedback-plan (bug-ingest) — complete
+  sw-life-cycle-1-plan (sw-life-cycle)
+  decision-log-ingest-rel-v0.4-planning-inputs-plan (decision-log-ingest) — complete
+  service-ingest-rel-v0.3-listings-plan (service-ingest)
+69 diagnostic(s): --format json lists them
+```
+
+Code build:
+
+```
+open workflows: 5
+* decision-log-ingest-rel-v0.4-planning-feedback-plan (decision-log-ingest) — active, complete
+    warning: kept by the pre-marker rule: restart it with workflow start
+  bug-ingest-rel-v0.4-planning-feedback-plan (bug-ingest) — complete
+    warning: kept by the pre-marker rule: restart it with workflow start
+  sw-life-cycle-1-plan (sw-life-cycle)
+    warning: kept by the pre-marker rule: restart it with workflow start
+  decision-log-ingest-rel-v0.4-planning-inputs-plan (decision-log-ingest) — complete
+    warning: kept by the pre-marker rule: restart it with workflow start
+  service-ingest-rel-v0.3-listings-plan (service-ingest)
+    warning: kept by the pre-marker rule: restart it with workflow start
+74 diagnostic(s): --format json lists them
+```
+
+The same five ids in the same order on both builds (and as the design listed them at `66b87a094`); the code build adds
+one warning line under each (it is the last line of each instance's block in the unfiltered output) and five
+diagnostics. `node dist/cli.js workflow status --format json`, the `W_INSTANCE_PRE_MARKER` entries: five, in the order
+of `open`, each `{"severity":"warning","path":"","file":"<plan path>","message":"instance <id> is kept by the
+pre-marker rule: restart it with workflow start"}`, the files
+`docs/05_plans/rl-v1/rel-v0.4/decision-log-ingest-rel-v0.4-planning-feedback-plan.md`,
+`docs/05_plans/rl-v1/rel-v0.4/bug-ingest-rel-v0.4-planning-feedback-plan.md`,
+`docs/05_plans/sw-life-cycle/sw-life-cycle-1-plan.md`,
+`docs/05_plans/rl-v1/rel-v0.4/decision-log-ingest-rel-v0.4-planning-inputs-plan.md`,
+`docs/05_plans/rl-v1/rel-v0.3/service-ingest-rel-v0.3-listings-plan.md`.
+
+### refactor (developer, 2026-11-08)
+
+Commits `72df79e5c` (`readStarts` call on one line; the snapshot reader's header names the start marker) and
+`de08d359f` (the start lookup's line split as name and marker values: the `field === -1` branch, unreachable since the
+format always prints the separator, was the one uncovered branch of `readStarts`). After `de08d359f`: `npx tsc
+--noEmit -p tsconfig.json` exit 0, `npx eslint src/core/workflow-deduction.ts` exit 0, `npx jest --maxWorkers=2
+test/core/workflow-start-marker.test.ts test/core/workflow-deduction-provenance.test.ts test/core/workflow-deduction.test.ts
+test/core/git-log-show-signature.test.ts test/core/workflow-next-spawn-count.test.ts` → `5 passed`, `65 passed`.
+`git rev-list --count HEAD..main` → `0` at the start and at the end of refactor: no merge of `main`.
+
+Gates (heavy ones after `waitslot.sh`, `--maxWorkers=2`; the full suite and coverage on `72df79e5c`, the last gate
+run below on the final tree with the pending amendments):
+- `npm run -s build && npm test -- --maxWorkers=2` (slot: `waitslot start 2026-11-08T13:38:41+01:00`, `slot granted
+  2026-11-08T13:38:46+01:00`, no holder in `ps -eo pid,etime,args`) → `Test Suites: 567 passed, 567 total`, `Tests:
+  10530 passed, 10530 total`, exit 0.
+- `npm run -s typecheck` (both tsc configs) → exit 0; `npm run test:coverage -- --maxWorkers=2` (slot: `waitslot
+  start 2026-11-08T14:01:50+01:00`, `slot granted 2026-11-08T14:02:56+01:00`, no holder printed by `ps`) → `567
+  passed`, `10530 passed`, `All files | 99.28 | 97.22 | 98.67 | 99.68` (statements, branches, functions, lines; all
+  above 80 %); the files changed: `workflow-deduction.ts` 99.65 / 97.69 / 98.66 / 100, `workflow-start-end.ts`
+  99.48 / 97.93 / 100 / 100, `workflow-next.ts` 100 / 98.26 / 100 / 100, `workflow-status.ts` 100 / 100 / 100 / 100,
+  `deduce.ts` 99.86 / 99.47 / 99.37 / 99.83.
+- `npm run -s lint` → exit 0; `npm run -s docs:api` → exit 0, no output.
+- `docs.parity` and the `cli-reference` gate: `npx jest --maxWorkers=2 test/docs/cli-reference.test.ts
+  test/docs/user-guide-scaffold.test.ts test/docs/pages-render.test.ts test/docs/directive-remove-baseline-docs.test.ts
+  test/docs/dry-run-documented.test.ts test/docs/llms-txt.test.ts test/docs/commands-parity.test.ts
+  test/docs/exit-codes-parity.test.ts test/docs/command-surface-specs.test.ts` → first `1 failed, 65 passed`
+  (`pages-render`: a paragraph line of `docs/cli-reference.md` began with `<type>:<id>`), after rewrapping the line
+  `9 passed`, `66 passed`; within the full suite above, every `test/docs` suite passed.
+- Final run, on head `de08d359f` with these notes and the two pending amendments in the working tree: `npm run -s
+  build && npm test -- --maxWorkers=2` (slot: `waitslot start 2026-11-08T14:23:03+01:00`, `ps -eo pid,etime,args` then
+  showing another worktree's `node scripts/run-tests.cjs --coverage --maxWorkers=2` at etime `02:51`; `slot granted
+  2026-11-08T14:52:26+01:00`) → `Test Suites: 567 passed, 567 total`, `Tests: 10530 passed, 10530 total`, exit 0.
+
+### self-review (developer, 2026-11-08)
+
+Against `code-review`, per AC (each red test named in `### red (qa)` passes on the final tree: the 8-file run above):
+- **AC 1** met: the add commit's trailer paragraph holds `WingFoil-Start: <workflow>` before `WingFoil-Version:`, the
+  dry run shows it (in-process and CLI, json and console); a `memory add` or hand plan after a marked start is no
+  instance, a `done` marked start still counts; the transitory rule is commented with its removal condition and
+  `bug-515`, and `workflow status` reports each kept instance (cases (f)–(i)); `workflow next` raises nothing (case (h),
+  positive case: (f) on the same fixture raises it).
+- **AC 2** met: unloaded workflow → no instance, one `W_INSTANCE_WORKFLOW_UNKNOWN` with the unchanged message, in the
+  deduction and in `workflow list`; `next`/`end` its id → `workflow is not open:`.
+- **AC 3** met: the characterization test passes, and the live comparison above lists the same five instances.
+- **AC 4** met: `--element <type>:<id>` / short reference / `release:nope` → `NOT_FOUND` / `none` / the self-bound
+  ingest case / `none` on `release-cycle` → `VALIDATION`; CLI `--element none` exit 0, `minor-1` still exit 2.
+- **AC 5** met: the new order compiles (`npx tsc --noEmit -p tsconfig.json` exit 0, so the `@ts-expect-error` above
+  the snapshot-less call is used); positive case of the absence: at red the same command reported TS2578 on it.
+  `grep -rn "selectWorkflowInstance(" src` → the definition only (no production caller to update).
+- **AC 6** — the design's; nothing for green.
+- Same class in the files touched: `grep -rn "is not loaded" src` → nothing left (the three arms D5 names were the
+  only ones); `grep -rn "declares no element: --element" src docs/cli-reference.md` → nothing.
+- Determinism: the marked starts are sorted (`[...new Set(…)].sort()`), the candidates keep document path order, the
+  unknown-workflow warnings start order then id; no clock, no randomness.
+- T4: `git log --first-parent --no-merges --format=%h 482344750..HEAD -- test/core/workflow-start-marker.test.ts
+  test/core/workflow-start-end.test.ts test/cli/workflow-start-end.integration.test.ts test/core/workflow-deduction.test.ts
+  test/workflow/deduce.test.ts test/core/workflow-next-views.test.ts test/core/workflow-start-end-arms.test.ts
+  test/core/workflow-deduction-provenance.test.ts` → empty output, exit 0.
+- No `version:` bump: no configuration file, directive or versioned document changed (as the design said).
+- BDD: the design names no `.feature` change for these ACs; none was made.
+- Invisible characters: the `grep -nP` of the brief over each commit's files → exit 1 (none), every commit.
+
+**Decisions for the approver.**
+- **G1 — `workflow start` writes the plan's `workflow` field when the plan type's patterns hold no `{workflow}`
+  token** (above). Recommended: keep it; without it a project whose `plan` type uses another `id_pattern` (`plan-{n}`)
+  cannot start any workflow after this task (the start writes two commits, then refuses). It follows `spec-017` §3.1,
+  so no spec changes.
+
+**Candidate findings (not filed).** None.
+
+**For `task-346` (`dl-015`).** Beyond the design's note: `workflowStart` now passes `fields` with `workflow` when the
+tokens lack it, and `trailers` with the marker; keep both on the `verbs.add` call.
+
+### Pending amendments (approver)
+
+Uncommitted (`git status --short` → the two bug files); the final gate run below has them in the working tree:
+- `bug-413-workflow-start-of-an-element-less-main-records-the-active-instance-s-element-as-its-context-even-when-it-is-unrelated-and-nothing-can-clear-it`
+  (a `### Retrospective` subsection with the template comment and one item) — `--reason "Add the Retrospective the
+  bug lacked before its closure, for task-345: the plan opened by memory add to work around the bug is now kept only by
+  the transitory pre-marker rule."`
+- `bug-465-selectworkflowinstance-takes-the-snapshot-as-an-optional-third-argument-so-a-call-without-it-still-answers-workflow-is-not-open-for-an-unknown-workflow`
+  (its Retrospective's "None." replaced by the CHANGELOG item) — `--reason "Record in the Retrospective that the
+  CHANGELOG line for the breaking selectWorkflowInstance signature is an item for align-user-docs, as the approver
+  ruled D8 (a) at task-345's design gate."`
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -648,3 +837,9 @@ green's. The code comment the design addendum names cites the follow-up element 
      printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
      Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
      here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+- The design listed the behaviours that change and the tests pinning them, but not a start through a `plan` type whose
+  patterns hold no `{workflow}` token: such a start wrote a plan naming no workflow, which only the old
+  unknown-workflow instance branch made look like an instance. A non-red test (`workflow-start-end-arms.test.ts`, the
+  `plan-{n}` case) caught it at green, and the fix (decision G1) went into `workflowStart`. Proposal: when a design
+  removes a fallback branch, list the producers that relied on it (`grep` for writers of the field the branch
+  tolerated), not only the readers.
