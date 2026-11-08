@@ -399,6 +399,133 @@ Prepared in the worktree, uncommitted (`git diff --stat` → the two files):
 - `spec-017-workflow-commands-and-state-deduction` — `--reason "Amend §1.3, §2, §3.1–§3.3, §3.5, §4.8, §4.9, §7, §7.1, §7.3 and §10 for task-345: workflow start's add commit carries the start marker WingFoil-Start, a plan is an open instance only when it is open, names a loaded startable workflow and was opened by start or before the first marked start, a plan naming an unloaded workflow is no instance and stays a warning, and an element-less main takes its context from --element, none, or an active instance whose workflow declares an element (dl-217 (a), bug-413 option (c))."`
 - `spec-008-cli-grammar` — `--reason "Amend §2, §7 and §12 for task-345: the dry run, the add verb and the build-signature note name workflow start's start marker, the note also names memory add's step linkage, and workflow start --element takes none and names the context of a workflow that declares no element (dl-217 (a), bug-413 option (c))."`
 
+### design addendum — D1 transitory (architect, 2026-11-08)
+
+**Why.** The approver's design record `a1b7ffa30` (`workflow: finalize sw-life-cycle-1-plan dev-loop.design@task:…`,
+on top of the amends `9eba1546b` of `spec-017` and `5aeabc040` of `spec-008`) rules D1 (a) "declared transitory in
+spec-017 §3.2 and in its code comment together with its removal condition (no open unmarked instance in any WingFoil
+repository), made visible by a workflow status warning on every instance the rule keeps open (kept by the pre-marker
+rule: restart it with workflow start), and removed by a follow-up element with a target release", and D9 (a) "the
+transitory status of §3.2 as a pending amendment of this task". The `spec-017` text recorded by `9eba1546b` did not
+say the rule is transitory (`git show 9eba1546b:docs/04_memory/design/specs/spec-017-workflow-commands-and-state-deduction.md
+| grep -c transitory` → `0`). This addendum closes that gap. Base: head `a1b7ffa30`, clean tree; `git rev-list --count
+HEAD..main` → `0`, so no merge of `main` is owed. PATH guard: `command -v wingfoil` → the task's PATH shim;
+`wingfoil --version` and `node dist/cli.js --version` → `0.3.2 (de093c782a6c09e7a78aebdaabf336dd6dea4b44)`.
+
+**The warning** (code `W_INSTANCE_PRE_MARKER`, severity `warning`), raised by `workflow status` only:
+- **When:** for every open instance the status reports (all of them, or the one a `<ref>` selects) whose start
+  commit carries no start marker — the instances only the pre-marker rule keeps open. A marked instance never gets
+  it. A plan that is no instance gets nothing (it is not reported).
+- **`--format json` / `yaml`:** one entry in the payload's `diagnostics` per such instance, `{ code:
+  'W_INSTANCE_PRE_MARKER', severity: 'warning', file: '<the plan's repository-relative path>', path: '', message:
+  'instance <id> is kept by the pre-marker rule: restart it with workflow start' }`, in the order of `open`, after
+  every other diagnostic of the payload (after `approvalDiagnostics`, `src/core/workflow-status.ts:129`). The MCP
+  Resource `wingfoil://workflows/-/status` serves the same payload (`spec-004` line 72 defines it as the JSON `wingfoil
+  workflow status` prints with `--format json`), so it carries the entry too.
+- **Console (stdout):** the line `    warning: kept by the pre-marker rule: restart it with workflow start` (four
+  spaces, as the other per-instance lines of `instanceLines`, `src/core/workflow-status.ts:163`) appended after that
+  instance's lines; the entry is also counted in the closing `<n> diagnostic(s): --format json lists them` line.
+- **stderr:** nothing new; exit `0` as before.
+- **Not raised** by `workflow next`, `list`, `show`, `agent list` or `agent execute`: it is a status-level diagnostic,
+  as `W_APPROVAL_ROLE_WITHOUT_AUTHORITY` is (`statusWorkflow` appends both after `deduction.diagnostics`). Raising it in
+  the deduction would put it in every reader's payload and in `agent list`'s and `agent execute`'s stderr `warning:`
+  lines (`src/core/agent-list.ts:144`, `deduction.diagnostics`), and in the 79 exact `diagnostics` assertions of 28
+  test files (`grep -rn "diagnostics).toEqual(\|diagnostics: \[\]\|diagnostics.map((d) => d.code)).toEqual" test
+  --include=*.ts | wc -l` → 79, `-l … | wc -l` → 28), most of them on fixtures whose plans are committed by hand, so
+  unmarked and kept by the rule. The ruling asks for a `workflow status` warning; this is the narrow reading of it.
+- **What status needs from the deduction:** which reported instances are kept by the rule, and their plan paths. The
+  intended interface is an optional `Deduction` field, e.g. `preMarker?: readonly { instance: string; file: string }[]`
+  in instance order (optional, so the typed `Deduction` literals of `test/core/workflow-next-render.test.ts:118` and
+  `workflow-next-review-fixes.test.ts:84` keep compiling); `Instance` keeps its shape (`spec-017` §8). The developer
+  may choose another carrier; the observable above is the contract.
+
+**The code comment.** Where the classification is computed — the function in `src/core/workflow-deduction.ts` that
+decides, from the marked starts and the walk, whether an unmarked candidate is kept — and, by a one-line reference to
+it, where `src/core/workflow-status.ts` builds `W_INSTANCE_PRE_MARKER`. Content: the rule is **transitory**
+(`spec-017` §3.2; the approver's ruling at `task-345`'s design gate); it keeps the instances opened before the start
+marker existed; its removal condition is that no WingFoil repository holds an open unmarked instance, checked by zero
+`W_INSTANCE_PRE_MARKER` in `workflow status --format json` of each; its removal — this classification, the warning and
+the `spec-017` §1.3/§2/§3.2/§7.4 text — is tracked by a follow-up element with a target release (its id is written in
+the comment once that element is filed, before the task is submitted).
+
+**AC mapping.** The pre-marker rule is AC 1's (its "only a plan carrying it … is an open instance" is what the rule
+qualifies, and AC 1 cites `spec-017` §3.1–§3.3), so the warning and the comment fall under **AC 1**, red-first: no
+`workflow status` prints it on this base (`grep -rn "PRE_MARKER" src` → nothing). AC 3 stays characterization: it pins
+which instances are open, not what status says about them; its fixture (all plans unmarked) gets the warning on every
+instance after green, and AC 3's assertions do not read `diagnostics`. qa adds to `test/core/workflow-start-marker.test.ts`:
+- **(f) kept instance warned, marked one not.** Fixture: the `writeProject` repository; `a-1-plan` (workflow
+  `checklist`, `status: active`) committed by hand (`wf(plan): add a-1-plan`), then `workflowStart` `report-bug`
+  (marked). `workflowStatus` → `open` ids `['report-bug-1-plan', 'a-1-plan']`; `diagnostics.filter((d) => d.code ===
+  'W_INSTANCE_PRE_MARKER')` equals exactly `[{ code: 'W_INSTANCE_PRE_MARKER', severity: 'warning', file:
+  'docs/plans/<scope>/a-1-plan.md' (the path it was committed at), path: '', message: 'instance a-1-plan is kept by the
+  pre-marker rule: restart it with workflow start' }]`, and it is the last entry of `diagnostics`; the console
+  (`renderConsole` of the registered operation, or the CLI below) has the line `    warning: kept by the pre-marker
+  rule: restart it with workflow start` after `a-1-plan`'s lines and not after `report-bug-1-plan`'s.
+- **(g) `<ref>`:** `workflowStatus` with `positional: 'a-1-plan'` carries the entry; with `positional:
+  'report-bug-1-plan'` carries none.
+- **(h) status only:** `workflowNext` with `positional: 'a-1-plan'` → its `diagnostics` hold no `W_INSTANCE_PRE_MARKER`.
+- **(i) CLI** (`test/cli/workflow-status.integration.test.ts` pattern, `runCliEntry`): on the fixture of (f), `workflow
+  status` → exit `0`, stderr `''`, stdout contains the console line; `workflow status --format json` → exit `0`,
+  stderr `''`, `diagnostics` holds the entry of (f).
+
+**Effect on today's repository.** No plan of this repository carries the marker (design notes above), so after green
+`node dist/cli.js workflow status` on `main` prints the console line under each of the five open instances
+(`decision-log-ingest-rel-v0.4-planning-feedback-plan`, `bug-ingest-rel-v0.4-planning-feedback-plan`,
+`sw-life-cycle-1-plan`, `decision-log-ingest-rel-v0.4-planning-inputs-plan`, `service-ingest-rel-v0.3-listings-plan`),
+and its count line grows by five (from the `68 diagnostic(s)` the pinned build prints on this head); `--format json` gains five
+`W_INSTANCE_PRE_MARKER` entries. The pinned build (0.3.2) prints neither until the pin passes this task. Tests and gates
+read:
+- `test/cli/workflow-status.integration.test.ts` (`[run.status, run.stderr]` → `[0, '']`, `toContain` on stdout,
+  `open`/`pendingApprovals` lengths): unaffected — stderr gets nothing, stdout only gains lines.
+- `test/core/workflow-status.test.ts` (filters `diagnostics` by code, `:445`, `:461`, `:473`; `:381` the payload's
+  keys): unaffected — no new key.
+- `test/core/workflow-deduction-provenance.test.ts:560-575` (status before/after an orphan record, `diagnostics`
+  compared without `W_PROVENANCE_ORPHAN`): the fixture's hand plan `ing-1` gets the warning both before and after, so
+  the comparison holds; green must show it.
+- `test/core/workflow-uncommitted-config.test.ts:99-141` (filters `W_UNCOMMITTED_INPUTS`, compares payloads without
+  `diagnostics`): unaffected.
+- `test/core/workflow-status-render.test.ts` (hand-built `StatusResult`): unaffected while the console line is derived
+  from the payload's entries or a field those literals do not set; if the developer adds a required field to
+  `StatusEntry`, those literals change — avoid it.
+- `test/mcp/workflow-state-resources.test.ts` (the Resource's text equals `workflow status --format json`;
+  `:178-179` reads `active`, `open`, `pendingApprovals`): unaffected — both sides carry the entries.
+- `test/cli/mcp-registration.test.ts` and `npm run check:mcp`: the pinned build's Resources, unaffected.
+- `test/core/workflow-repository-conformance.test.ts:62-80`: the registry's diagnostics, not the status payload:
+  unaffected.
+- `scripts/e2e-smoke.cjs` `workflowReads` (`:892-912`, the `[repository] wingfoil workflow status --format json`
+  check): a warning is counted in `diagnostics`, only an error fails it; the report of a run on this repository shows
+  five more diagnostics. Not a gate change.
+- `agent list` / `agent execute`: unaffected (deduction diagnostics only).
+None needs updating. `grep -rn "open workflows: [0-9]" test scripts` → nothing in a test (no exact console pin).
+
+**Other specs.** `spec-008` documents no `workflow status` warning: its §6 "Warnings on a successful command" lists
+stderr lines only, and `grep -n "workflow status" docs/04_memory/design/specs/spec-008-cli-grammar.md` → lines 113 and
+734 (`--format`, the baseline row), neither about warnings. `spec-004` line 72 defines the status Resource as the JSON
+`workflow status` prints, so it needs no text. `spec-017` §3.5, §7.1 and §10 were checked: §3.5 does not state the rule,
+§7.1 states only that `start` writes the marker, §10's `workflow is not open` row names "added without the start marker
+after a marked start", which stays true while the rule lasts and after its removal; none is amended. The amendment
+names a new symbol, so `test/docs/name-resolvability.allowlist.ts` gains `W_INSTANCE_PRE_MARKER` (`spec-017`, class
+`symbol`, `PLANNED`, `plannedBy: ['task-345']`), committed on its own: without it `npx jest
+test/docs/name-resolvability.test.ts` failed with the finding
+`docs/04_memory/design/specs/spec-017-workflow-commands-and-state-deduction.md|symbol|W_INSTANCE_PRE_MARKER`.
+
+**Checks.** The six suites that read the specs, with the amendment in the working tree: `npx jest --maxWorkers=2
+test/docs/name-resolvability.test.ts test/docs/dry-run-documented.test.ts test/docs/commands-parity.test.ts
+test/docs/exit-codes-parity.test.ts test/docs/command-surface-specs.test.ts test/directives/dev-loop-practice.test.ts`
+→ first `1 failed, 40 passed` (the finding above), after the allowlist entry `6 passed`, `41 passed`. Invisible
+characters: `git diff -U0 | grep "^+" | grep -nP '[\x{00A0}\x{200B}-\x{200F}\x{2028}\x{2029}\x{202A}-\x{202E}\x{2060}-\x{2064}\x{FEFF}\x{00AD}]'`
+→ exit `1` (none). The amend's dry run: `node dist/cli.js memory amend
+spec-017-workflow-commands-and-state-deduction --reason "<the reason below>" --dry-run --format json` → exit `0`,
+`subject` `wf(tech-spec): amend spec-017-workflow-commands-and-state-deduction [approved → approved]`, `paths` the spec
+alone, `message` with the `Approver:` and `Reason:` lines; the console dry run prints the same payload (`"dryRun":
+true`, the same subject); `git status --short` after both → only the two uncommitted files, head unchanged.
+
+### Pending amendments (approver) — addendum
+
+- `spec-017-workflow-commands-and-state-deduction` (§1.3, §2, §3.2, §7.4 and a Revision note, uncommitted) —
+  `--reason "Declare the pre-marker rule of §3.2 transitory for task-345, as the approver ruled at its design gate: its removal condition (no open unmarked instance in any WingFoil repository, checked by zero W_INSTANCE_PRE_MARKER in workflow status of each), the workflow status warning W_INSTANCE_PRE_MARKER on every instance the rule keeps open (§1.3, §2, §7.4), and its removal by a follow-up element with a target release."`
+- `spec-008-cli-grammar`: no amendment (above).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
