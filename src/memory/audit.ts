@@ -29,7 +29,7 @@
  * - "Recomputing an element's state at any historical commit ... agrees with the transition history
  *   derived from git log ... no drift" -> {@link verifyTransitionConsistency}.
  */
-import { isConfiguredIdentity } from '../core';
+import { isConfiguredIdentity } from '../core/git-identity';
 import { E_INVALID_FORMAT, EXIT_VALIDATION, isAttributableIdentity, MEMORY_TEMPLATE_FORMAT, newerFormatIssue, parseYaml, ValidationError } from '../validation';
 
 import { parseApproverTrailerLine, parseReasonBlock, parseVersionTrailer } from './commit-message';

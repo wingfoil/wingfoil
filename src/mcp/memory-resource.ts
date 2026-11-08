@@ -42,8 +42,7 @@ import { ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
 import { loadMemoryYaml } from '../core';
-import { findMemoryDocumentByTypeAndId, listMemoryDocumentsByType } from '../memory/query';
-import { readDocument } from '../storage';
+import { findMemoryDocumentByTypeAndId, listMemoryDocumentsByType, readDocument } from '../core/surface-reads';
 import { formatDiagnostic, type Diagnostic } from '../validation';
 
 import {

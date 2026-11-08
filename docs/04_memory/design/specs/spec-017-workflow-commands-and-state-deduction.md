@@ -40,7 +40,7 @@ notifications to v0.4 (R13), and fold `dl-104` into the `spec-003` revision revi
 and `E_NO_MAIN_WORKFLOW`. No check resolves a phase's `include:` against the loaded names (`bug-145`),
 which is why the Kanban scaffold's include-by-path (`bug-144`) passes. The production MCP server
 registers the read-only Resources `wingfoil://workflows` and `wingfoil://workflows/{name}`
-(`src/mcp/workflow-resource.ts:34-37`, wired by `registerReadOnlyResources`, `src/mcp/index.ts:84-90`)
+(`src/mcp/workflow-resource.ts:34-37`, wired by `registerReadOnlyResources`, `src/mcp/read-only-resources.ts:28-34`)
 and deliberately does not call `registerCoreModules` (`src/mcp/server.ts:19-26`), so the mechanical
 `wingfoil://workflow/list` URI exists only in tests.
 
@@ -1677,6 +1677,13 @@ bound manual (21 occurrences), 17 checkpoints unchanged. Edited in place without
 reference (`spec-008` §7); the plan binds, and the adoption record names, the element's full id, and an ambiguous
 reference is a `CONFLICT` row (approver design gate 2026-11-01, D1 (b)). Edited in place without a supersede or a
 state change (`dl-047`), pending the approver's `memory amend`.
+
+**Revision (2026-11-07, `task-354-remove-the-import-cycles-between-src-core-and-src-agent-and-the-surface-imports-bypassing-src-core`)
+— the Context's location of `registerReadOnlyResources`.** `task-354` moved the function verbatim from `src/mcp/index.ts`
+to `src/mcp/read-only-resources.ts` to break the `src/mcp/index.ts` ↔ `src/mcp/server.ts` import cycle (`bug-345`); the
+barrel still re-exports it. The Context cited `src/mcp/index.ts:84-90`, it is now `src/mcp/read-only-resources.ts:28-34`
+(`grep -n "^export function registerReadOnlyResources" src/mcp/read-only-resources.ts` → 28; `dl-075` offset class). No
+rule changes. Edited in place without a supersede or a state change (`dl-047`), pending the approver's `memory amend`.
 
 **Revision (2026-11-07, `task-335-add-the-headless-work-run-the-launch-phase-key-headless-interactive-timeout-next-on-a-waiting-step`)
 — §6.3, §8 and a Consequences citation.** A phase's `launch` (`spec-003` Layer 2, `dl-183` Q1 (a)) is reported on
