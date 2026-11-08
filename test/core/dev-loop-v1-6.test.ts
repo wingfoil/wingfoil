@@ -101,9 +101,9 @@ describe('AC 1 — dev-loop.yaml v1.6 declares the seven v0.3 gates (red-first)'
   });
 
   describe('design — each criterion read against the directives and the ratified specs (dl-102 §4)', () => {
-    it('`design.checks.post` keeps its three checks and adds `acceptance-criteria.consistent`', () => {
+    it('`design.checks.post` keeps its three checks and adds `acceptance-criteria.consistent`, then task-348\'s `pinned-build.reads` (dl-205 Q1 (a))', () => {
       const names = (phase('design').checks?.post ?? []).map(tokenName);
-      expect(names).toEqual(['frontmatter.required', 'tech-spec.approved', 'depends_on.acknowledged', 'acceptance-criteria.consistent']);
+      expect(names).toEqual(['frontmatter.required', 'tech-spec.approved', 'depends_on.acknowledged', 'acceptance-criteria.consistent', 'pinned-build.reads']);
       expect(declaringLine('design', 'acceptance-criteria.consistent')).toMatch(/dl-102/);
     });
   });

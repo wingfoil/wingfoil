@@ -14,7 +14,9 @@
  *   at least 2.6 ("at least", bug-314). The warning list itself is pinned in
  *   `test/core/workflow-repository-conformance.test.ts`, edited with `bindings.yaml` (`task-298` D1 (a)).
  * - AC 3 (characterization): `demo.rendered` is pinned in `test/docs/presentation.test.ts` and
- *   `test/core/workflow-manual-check.test.ts`; here it is one of the 22 rows, at its path.
+ *   `test/core/workflow-manual-check.test.ts`; here it is one of the 23 rows, at its path.
+ * - task-348 (`dl-205` Q1 (a), approver ruling D1 (a)): `dev-loop.design`'s `pinned-build.reads` is bound
+ *   `manual: true`, the 23rd row, after `acceptance-criteria.consistent`.
  *
  * Every registry read is the configuration **as `HEAD` holds it** (`loadWorkflowRegistryAtHead`, task-194).
  * Deterministic: workflows in manifest `include` order, phases in declared order, `pre` before `post`.
@@ -138,7 +140,7 @@ describe('task-303 AC 1 — the checks a command can assert stay unbound (charac
 });
 
 describe('task-303 AC 2 — the prose checks a human confirms are bound manual: true (red-first, dl-186 Q6)', () => {
-  it('the manual check occurrences at HEAD are exactly the 21 this task binds plus demo.rendered (task-298), in registry order', () => {
+  it('the manual check occurrences at HEAD are exactly the 21 this task binds plus demo.rendered (task-298) and pinned-build.reads (task-348), in registry order', () => {
     expect(manualCheckRows()).toEqual([
       ['specification-downcast', 'phases[0].checks.post[0]', '100% of MVP Canvas features covered; edge-case stories present'],
       ['specification-downcast', 'phases[1].checks.post[0]', 'each scenario atomic + testable; zero ambiguous adjectives/adverbs'],
@@ -155,6 +157,7 @@ describe('task-303 AC 2 — the prose checks a human confirms are bound manual: 
       ['release-planning', 'phases[5].checks.pre[0]', 'spec-review.passed'],
       ['release-planning', 'phases[6].checks.post[1]', 'acceptance-criteria.consistent'],
       ['dev-loop', 'phases[1].checks.post[3]', 'acceptance-criteria.consistent'],
+      ['dev-loop', 'phases[1].checks.post[4]', 'pinned-build.reads'],
       ['dev-loop', 'phases[5].checks.pre[1]', 'claims.rerun'],
       ['dev-loop', 'phases[5].checks.pre[2]', 'rereview.previous-reject'],
       ['user-docs', 'phases[1].checks.post[0]', "user-facing docs aligned with the release's shipped CLI/feature surface"],
