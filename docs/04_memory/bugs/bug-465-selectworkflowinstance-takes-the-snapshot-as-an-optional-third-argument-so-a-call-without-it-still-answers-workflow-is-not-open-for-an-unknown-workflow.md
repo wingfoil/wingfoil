@@ -41,4 +41,6 @@ The snapshot is optional; a call without it gives an unreliable answer, document
 - capture (2026-10-31, orchestrator of `w2` of `patch-v0.3.2`): severity proposed `low`; release proposed v0.4 in the approval queue.
 
 ### Retrospective
-- None.
+- The CHANGELOG line this bug asks for (the breaking change of the `main` export `selectWorkflowInstance`, now
+  `(deduction, snapshot, ref?)`, `task-345`) is not written by the fix task: the approver ruled D8 (a) at `task-345`'s
+  design gate (`a1b7ffa30`), so it is an item for the `align-user-docs` phase of `minor-v0.4`.
