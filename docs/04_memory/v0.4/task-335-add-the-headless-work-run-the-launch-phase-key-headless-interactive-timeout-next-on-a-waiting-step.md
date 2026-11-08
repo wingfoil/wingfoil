@@ -696,6 +696,39 @@ Against `code-review`, the design as ruled (D1–D11 (a)) and each AC:
 
 None: no element past its first state is edited by green or refactor (`git status --short` → clean before submit).
 
+### merge of main (developer, 2026-11-08)
+
+**The merge (W0-R3).** `main` moved with `task-345`'s merge `db6d372e7`. The task's PATH shim was checked first
+(`command -v wingfoil` → the shim). `git merge --no-edit main` from `40f9b5e2f` auto-merged `docs/cli-reference.md`,
+`src/core/index.ts` and `src/core/workflow-next.ts`, and conflicted in three places in two files:
+- the tail Revision notes of `spec-008-cli-grammar.md` and `spec-017-workflow-commands-and-state-deduction.md`. In each,
+  every block is kept in merge order, `task-354`'s, then `task-345`'s, then this task's, one blank line apart (`grep -n
+  "^\*\*Revision (2026-11-0"` → spec-008 l.1440 `task-354`, l.1448 `task-345`, l.1457 `task-335`; spec-017 l.1736
+  `task-354`, l.1743 and l.1755 `task-345`, l.1764 `task-335`);
+- `spec-008` §2's `--dry-run` row, which both approved amendments edit in different clauses. A first attempt was aborted
+  (`git merge --abort`) and reported. The orchestrator ruled the resolution: their union, with no new text — main's line
+  with this task's terminal-check clause as it reads at `40f9b5e2f`. Checked with word diffs:
+  - the resolved line against main's: `[-and-] {+included) but+}` and `[-check included),-] {+check, which a dry run
+    needs no terminal for and which prints a `warning:` line where a real run is refused (`bug-392`),+}` (this task's
+    clause only);
+  - the resolved line against `40f9b5e2f`'s: `[-commit.-] {+commit, whose `message` for `workflow start` carries the
+    start marker `WingFoil-Start: <workflow>` before the `WingFoil-Version:` line (`spec-017` §3.1).+}` (`task-345`'s
+    sentence only).
+
+The merge commit is `cc7adc164` (`git rev-parse HEAD` after the trailer amend, parents `40f9b5e2f` and `db6d372e7`).
+`git show --remerge-diff HEAD --stat` → `spec-008-cli-grammar.md | 24 ++++++++--------------`,
+`spec-017-workflow-commands-and-state-deduction.md | 18 ++++++++--------`, `2 files changed, 17 insertions(+), 25
+deletions(-)` (the conflict hunks only).
+
+**Gates at `cc7adc164`** (each heavy one after `bash …/waitslot.sh`, through its npm script; slots granted 17:17:15 and
+17:47:19):
+- `npm run -s build` → exit `0`; `npm test -- --maxWorkers=2` (17:17–17:44) → `Test Suites: 580 passed, 580 total`,
+  `Tests: 10715 passed, 10715 total`. No suite of this task failed under `task-345`'s marker rule.
+- `npm run -s typecheck` → exit `0`; `npm run -s lint` → exit `0`.
+- `npm run -s check:governance -- --base origin/main` → `governance check: 79 wf() commits in da1f1016c…..HEAD (79 after
+  the introduction commit fcd435695…), and 64 other commits`, `gated: 0 findings on 0 commits`, `history: 0 findings on
+  0 commits`.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
