@@ -752,6 +752,56 @@ agent's stdout is drained (§3.5, D6). That text stays as written above; the cri
 
 The orchestrator pastes each run's command, exit status and output under this heading.
 
+### D7 evidence (orchestrator, 2026-11-08)
+
+Run by the approver from their own shell, in a fresh scratch project outside the repository (`git init`, `init
+--template Kanban`, `memory add --type task --title "Headless pilot check"` → `task-001-headless-pilot-check`,
+`dna.yaml` `team.agents` with `Claude` (adapter `claude-code`) and `Codex` (adapter `codex-cli`), committed), with this
+task's build: `wingfoil --version` → `0.3.2 (c9e403d064a95cf6318e928c6c3335cbe90d66a2)`. No terminal: stdin `/dev/null`,
+stdout and stderr to files.
+
+**1. The mechanics, through `agent execute`.** Command, per agent: `wingfoil agent execute --element
+task:task-001-headless-pilot-check --role developer --agent <Claude|Codex> --headless --timeout 15m --format json
+< /dev/null > run.json 2> run.err`.
+
+| | `claude-code` | `codex-cli` |
+|---|---|---|
+| `<cli> --version` | `2.1.310 (Claude Code)` | `codex-cli 0.145.0` |
+| exit | `0` | `0` |
+| `run.json` | one document `{"run": {…}}`: `id` `…/adhoc/1`, `adapter` `built-in/claude-code`, `agent_version` `2.1.310 (Claude Code)`, `session` `ceb74cf4-620c-5c76-b140-27a0a7df2cbe`, `exit_status` `0`, `result` `n/a`, `duration_ms` `46652`, `state_ref` `47ce680…` | one document `{"run": {…}}`: `id` `…/adhoc/2`, `adapter` `built-in/codex-cli`, `agent_version` `codex-cli 0.145.0`, `session` `not-reported` (the adapter declares `session.id: none`), `exit_status` `0`, `result` `n/a`, `duration_ms` `91286`, `state_ref` `e387873…` |
+| `run.err` notices | `run task-001-headless-pilot-check/adhoc/1: launching Claude (built-in/claude-code) as developer on task:task-001-headless-pilot-check`; `run task-001-headless-pilot-check/adhoc/1: agent exited 0 after 46.7 s (recorded in e387873)` | the same two notices for `adhoc/2` (`… agent exited 0 after 91.3 s (recorded in c4fa250)`); between them, the agent's own stderr (codex writes its transcript there, which `agent execute` does not drain) |
+| `git log -1 --format='%h %s'` | `e387873 agent: record task-001-headless-pilot-check/adhoc/1` | `c4fa250 agent: record task-001-headless-pilot-check/adhoc/2` |
+
+The scratch project's log after both runs: `c4fa250` / `e387873` (the two records) on `47ce680` (the agents), and
+`git diff HEAD~2 --stat` → `docs/runs/task-001-headless-pilot-check.jsonl | 2 ++`: the run log only, two lines. Codex's
+stderr also shows it read the session Resource in this run (`mcp: wingfoil/read_mcp_resource started` /
+`(completed)`, then the Resource's directives and workflows quoted) before it stopped on the sandbox (below).
+
+**2. The context, by hand.** The adapters' headless argv run outside `agent execute`, stdout to a file, on the bootstrap
+`agent execute --dry-run --format json` printed (`… Read the MCP resource
+"wingfoil://session/developer/task:task-001-headless-pilot-check/c4fa2503508e9201fbc96cd34cd1f6655b95abf8" …`) and the
+MCP configuration the adapters' `mcp.template` renders (`{"mcpServers": {"wingfoil": {"command": "node", "args":
+["<this build>/dist/cli.js", "mcp"]}}}` for claude; `mcp_servers.wingfoil={command = "node", args = ["<this
+build>/dist/cli.js", "mcp"], enabled = true, required = true}` for codex; `agent execute` renders the absolute path of
+`node`, `/usr/local/bin/node` on this host, the hand runs the bare `node` on `PATH`, the same binary):
+- `claude -p "<bootstrap>" --mcp-config <file> --session-id <uuid>` → exit `0`, stderr empty. The reply opens "I loaded
+  the WingFoil context, but I couldn't record the handoff or commit anything: this session doesn't allow writing to
+  files", and its drafted handoff line names the Resource: "Context: loaded from
+  `wingfoil://session/developer/task:task-001-headless-pilot-check/c4fa250…` before any other action". It also names
+  the two earlier runs (`adhoc/1` Claude, `adhoc/2` Codex) from the run log, and says the edit of the task file and
+  `git add`/`git commit` were denied.
+- `codex exec -c 'mcp_servers.wingfoil={…}' "<bootstrap>"` → exit `0`. stderr: `mcp: wingfoil/read_mcp_resource
+  started` / `mcp: wingfoil/read_mcp_resource (completed)`, then the task file and the run log read; the edit refused by
+  the sandbox (`apply_patch verification failed: … bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted`).
+  stdout: "Blocked by the workspace's read-only sandbox: it rejects edits (including the required task-body handoff),
+  so I cannot create the required commit either."
+
+**Verdict on AC 9 (ruling (a)).** Part 1 holds for both built-ins as stated. Part 2 holds: each agent read the session
+Resource over the `wingfoil` server (claude names it in its reply, codex's transcript shows the `read_mcp_resource` call
+completed). Both refused writes, as the ruling foresaw: claude's `-p` with no permission posture, codex's read-only
+sandbox (on this host its sandbox helper also fails to set up the loopback interface, `bwrap: loopback: Failed
+RTM_NEWADDR`). That is evidence for `task-339`'s posture (`dl-223`), not a failure of this task.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
