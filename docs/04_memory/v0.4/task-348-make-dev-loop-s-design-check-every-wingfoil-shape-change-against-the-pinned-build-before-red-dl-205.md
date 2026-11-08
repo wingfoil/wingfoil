@@ -374,6 +374,23 @@ Against `code-review`, the ACs and the design as ruled:
 
 None.
 
+### review fixes (developer, 2026-11-08)
+
+The review (approved with fixes on `37777734e`) asked for one fix in the task (W0-R10): the `version:` comment of
+`.wingfoil/workflows/custom/dev-loop.yaml` (line 103), which this task rewrites, had one unclosed `(` (52 `(`, 51 `)`
+at `37777734e`; the candidate finding of `### self-review`). Where it opened: `git show <c>:.wingfoil/workflows/custom/dev-loop.yaml
+| grep '^version'` counted 11/11 at `17eb01f8f~1` and 23/22 at `17eb01f8f` (1.6, task-221), whose new `(prev 1.5`
+clause was never closed. A per-clause scan of the line split at each `(prev ` gave a balance of 0 inside every clause
+and -9 in the last one, which carries the closing run for ten `(prev ` openers: the missing `)` belongs to that run.
+**Fix commit `eaeb5c6ba`**: one `)` appended at the end of the line, nothing else (`git diff --stat` → 1 file, 1
+insertion, 1 deletion); a stack scan of the line afterwards → 52 `(`, 52 `)`, 0 unclosed, 0 unmatched. Comment only,
+same branch, so no second version bump (`doc-versioning`) and no re-review (W0-R9). `git rev-list --count HEAD..main`
+→ `0`, no merge. Invisible-character scan of the file → no output.
+
+Checks on `eaeb5c6ba`: `npx jest test/core/dev-loop-v2-4.test.ts test/core/dev-loop-v2-3.test.ts test/lint
+--maxWorkers=2` → `Test Suites: 16 passed, 16 total`, `Tests: 176 passed, 176 total`; pinned `npm run -s wingfoil --
+workflow list --format json` → exit `0`, stderr empty, 68 diagnostics, all 68 `W_WORKFLOW_UNBOUND_TOKEN` warnings.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
