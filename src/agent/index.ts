@@ -4,7 +4,7 @@
  * schema §2.2, the placeholder rules §2.3, discovery and loading at a revision §2.1, §3.2 step 5, and
  * the report of what under `.wingfoil/agents/` is not an adapter, `bug-290`), the run log (task-206),
  * `agent execute`'s pipeline up to the spawn (task-218, `./execute.ts`) and the launch (task-228,
- * `./launch.ts`). Its operations are registered under the `agent` `CoreModule` (`src/core/index.ts`).
+ * `./launch.ts`), interactive or headless with an optional time bound (task-335, `./duration.ts`). Its operations are registered under the `agent` `CoreModule` (`src/core/index.ts`).
  */
 export const MODULE_NAME = 'agent' as const;
 
@@ -59,9 +59,12 @@ export {
   renderLaunchArgv,
   runSummaryLine,
   SESSION_ID_NAMESPACE,
+  TIMEOUT_GRACE_MS,
   uuidV5,
 } from './launch';
-export type { LaunchHost, LaunchInput, LaunchValues, RecordedLaunch, SpawnAgent } from './launch';
+export type { LaunchHost, LaunchInput, LaunchKindRun, LaunchValues, RecordedLaunch, SpawnAgent } from './launch';
+export { MAX_TIMEOUT_MS, parseDuration } from './duration';
+export type { TimeBound } from './duration';
 export {
   agentCommandFound,
   attributionLine,
@@ -69,6 +72,7 @@ export {
   agentExecutePipeline,
   DEFAULT_ROLE,
   DEFAULT_ROLE_WARNING,
+  DRY_RUN_TERMINAL_WARNING,
   FRESH_MODE,
   handoffLine,
   launchPlan,
@@ -77,6 +81,7 @@ export {
   mcpPreflight,
   renderBootstrap,
   renderMcpTemplate,
+  resolveLaunchKind,
   runningBuildMcpServer,
   selectAgent,
   withRunFiles,

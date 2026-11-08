@@ -8,6 +8,7 @@
  *   instance (`spec-017` §3.3), at `HEAD`; a `spec-003` error in the registry is `VALIDATION` with every
  *   diagnostic in `details`, as `workflow next` refuses it (§3.7's second row).
  * - {@link selectFrontierStep}: `--step <key>` on that instance's frontier, else `NextResult.next`.
+ * - {@link refuseWaitingStep}: without `--element`, a step that only waits is refused (task-335, `dl-171` (c)).
  * - {@link stepTargetElement}: `--element`, else the step's scope element, else the instance's bound element.
  * - {@link resolveStepRole}: `--role`, else the step's role, which `dna.yaml` must define.
  *
@@ -20,7 +21,7 @@ import { isRoleDefined } from '../dna/roles';
 import type { DnaYaml } from '../dna/schema';
 import type { ExecutionContextElement } from '../core/context';
 import { coreErr, coreOk, type CoreResult } from '../core/types';
-import { workflowNextAtHead, type NextResult, type Step } from '../core/workflow-next';
+import { humanNeededLine, workflowNextAtHead, type NextResult, type Step } from '../core/workflow-next';
 import { DiagnosticsError, ValidationError } from '../validation';
 import type { Instance } from '../workflow/deduce';
 
@@ -70,6 +71,19 @@ export function selectFrontierStep(next: NextResult, key: string | undefined): C
     message: `step '${key}' is not on the frontier of ${instance}`,
     details: { step: key, instance, frontier: frontier.map((step) => step.key) },
   });
+}
+
+/**
+ * §3.2 step 1's waiting-step rule (task-335, `dl-171` (c), §3.7 `STEP_AWAITING`; approver ruling D8 (a)): a step
+ * whose `awaiting` is not `null` — an approval, an approval record, another party (`spec-017` §5.1, §5.4) — is
+ * `CONFLICT`, its message the line `workflow next` prints for it ({@link humanNeededLine}, `spec-017` §5.3), its
+ * `details` the step key, the instance and the kind awaited. A step that does not wait is returned unchanged. The
+ * pipeline asks it only of a step form without `--element`: with `--element` the step is an explicit target.
+ */
+export function refuseWaitingStep(step: Step): CoreResult<Step> {
+  const line = humanNeededLine(step);
+  if (step.awaiting === null || line === null) return coreOk(step);
+  return coreErr({ code: 'CONFLICT', message: line, details: { step: step.key, instance: step.instance, awaiting: step.awaiting.kind } });
 }
 
 /**

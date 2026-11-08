@@ -36,7 +36,10 @@ const InteractiveLaunch = z.strictObject({
   terminal: z.enum(['required', 'optional']).default('required'),
 });
 
-/** `launch.headless` — no terminal, a structured result; read from v1.0 (§3.5). */
+/**
+ * `launch.headless` — no terminal; read from v0.4 by the work run (§3.5, `dl-181`, task-335), whose stdout is
+ * captured and not parsed yet (`output` is read by `dl-182`/`dl-188`'s tasks), and by the v1.0 verification run.
+ */
 const HeadlessLaunch = z.strictObject({
   args: Argv,
   output: z.enum(['json', 'none']),

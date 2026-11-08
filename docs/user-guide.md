@@ -671,8 +671,15 @@ handed the terminal; its first prompt tells it to read its context from the MCP 
 `wingfoil://session/<role>/<type>:<id>/<commit>`, served by a WingFoil MCP server of the same build that
 `agent execute` registers for it. When the agent exits, the run is recorded as one line of
 `<paths.runs>/<element-id>.jsonl`, committed as `agent: record <run-id>`. `--dry-run` runs every check and
-prints the launch it would make; both built-in adapters need a terminal, so a dry run with stdin or
-stdout redirected fails with `error: interactive launch needs a terminal on stdin and stdout`.
+prints the launch it would make; both built-in adapters need a terminal for an interactive launch, so a dry
+run with stdin or stdout redirected still plans it, with a `warning:` line saying the real run is refused
+there.
+
+With `--headless` (or a phase declaring `launch: headless`), the agent runs as a work run, with no terminal:
+it does its work alone, its output is not shown, and `agent execute` prints `{"run": <record>}` on stdout
+when it ends. `--timeout 30m` (`<n>s`, `<n>m` or `<n>h`, at most `24h`) stops the agent if it runs longer;
+the run is still recorded. A step that only waits for an approval or another party is refused with the line
+`wingfoil workflow next` prints for it, unless `--element` names the target.
 
 ```bash
 wingfoil agent list            # the recorded runs, and the workflow steps waiting for an agent

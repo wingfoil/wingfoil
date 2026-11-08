@@ -46,7 +46,7 @@ import {
   type ScopeRef,
   type TrailEntry,
 } from '../workflow/deduce';
-import type { Phase, PhaseMode, Workflow } from '../workflow/schema';
+import type { LaunchKind, Phase, PhaseMode, Workflow } from '../workflow/schema';
 
 import { APPROVER_ROLE } from './approval-authority';
 import { resolveRoleDirectives } from './context';
@@ -158,6 +158,8 @@ export interface Step {
   readonly mode: 'fresh';
   readonly allowedModes: readonly PhaseMode[];
   readonly distinctFrom: readonly string[];
+  /** The phase's declared `launch` kind (`spec-003` Layer 2, task-335), or `null` when it declares none (§6.3). */
+  readonly launch: LaunchKind | null;
   /** A recurring cadence (§6.4), or `null` for `once`. */
   readonly cadence: CadenceView | null;
 }
@@ -484,6 +486,7 @@ export function buildStep(step: DeducedStep, inputs: NextInputs): Step {
     mode: 'fresh',
     allowedModes: allowedModes(phase.mode),
     distinctFrom: phase.distinct_from ?? [],
+    launch: phase.launch ?? null,
     cadence: phase.cadence === 'once' ? null : { recurring: phase.cadence.recurring, lastRun: 'not-recorded' },
   };
 }

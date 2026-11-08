@@ -39,6 +39,7 @@ const STEP: Step = {
   mode: 'fresh',
   allowedModes: ['fresh'],
   distinctFrom: [],
+  launch: null,
   cadence: null,
 };
 
