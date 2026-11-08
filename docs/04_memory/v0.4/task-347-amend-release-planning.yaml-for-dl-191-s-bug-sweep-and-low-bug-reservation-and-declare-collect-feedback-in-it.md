@@ -244,6 +244,83 @@ AGENTS.md §6, `.wingfoil/README.md` (no `version:` in those three). red (qa): n
   bullet. `--reason "Record that release-planning declares the collect-feedback read too (task-347, release-planning-rel-v0.4-plan R11): its read record, its ruling before define-scope, and how R6 reads a planning's ruling."`
 - `dl-016-release-planning-governance-reconcile` — one dated paragraph after §4's first paragraph. `--reason "Record that dl-191 (a) replaces section 4's re-offer rule for bugs: a triaged bug with no release is assigned or closed in release-planning's assign-bugs (task-347)."`
 
+### red (qa, 2026-11-08)
+
+**Base.** The task's PATH shim runs the code build: `wingfoil --version` and `node dist/cli.js --version` →
+`0.3.2 (b3be34f8f3ff00d74db6f2636a0a74e8618c2b81)`. `git rev-list --count HEAD..main` → `50`, so `main` was merged
+first (`git merge --no-edit main`, no conflict, trailers added by amend: merge commit `4b169d7d4`); after it
+`git rev-list --count HEAD..main` → `0`. The read record `docs/09_retrospectives/rl-v1/rel-v0.4-planning-feedback-triage.md`
+exists at HEAD (`ls docs/09_retrospectives/rl-v1/ | grep planning` → that file). The two decision-log amendments
+(`0e9939455`, `571f014e8`) were already committed: `git status --short` was empty before the red files.
+
+**Existing tests re-measured after the merge** (the design measured them before it). The design's 79 files
+(`grep -rlE "release-planning|AtHead\((ROOT|REPO_ROOT|repoRoot)|WORKFLOW\.md|bindings\.yaml|retrospective" test
+--include=*.test.ts` plus `test/lint/version-bump.test.ts`, 79 files after the merge as well), the red files set
+aside, the dl-170 wait-slot script returning at once: `npx jest <79 files> --maxWorkers=2` → `Test Suites: 79 passed,
+79 total`, `Tests: 1698 passed, 1698 total`. Nothing changed against the design's measure.
+
+**Files** (red commit `7708cf5ad26f33505910aed4e429476d9bf8f9fd`).
+- new `test/core/release-planning-v2-5.test.ts` (12 tests), read at HEAD through `loadWorkflowRegistryAtHead` and
+  `workflowShowAtHead`, descriptions flattened, `flat` / `versionLine` / `historyEntryOf` copied from
+  `test/core/workflow-patch-line-texts.test.ts`; its `phaseOf` asserts the phase name first, so a missing phase
+  fails as an assertion (`expect(names).toContain(name)`), not as a thrown error;
+- `test/core/workflow-repository-conformance.test.ts`: the nine `release-planning` rows shift, `phases[1]` → `[2]`,
+  `[3]` → `[5]`, `[4]` → `[6]`, `[5]` → `[7]`, `[6]` → `[8]`, `[7]` → `[9]`;
+- `test/core/define-scope-sweep.test.ts`: the `phases[1].` filter and its two rows → `phases[2].`;
+- `test/core/workflow-manual-prose-checks.test.ts`: the row `['release-planning', 'phases[1].checks.post[0]',
+  'feedback-notes.recorded']` after the `phases[0].checks.post[2]` row, `phases[4]`/`[5]`/`[6]` → `[6]`/`[7]`/`[8]`,
+  the title naming task-347; the 68-warning count is unchanged.
+- `test/docs/workflow-md.test.ts` is not edited: it passes on red (below) and goes red only with green's yaml, until
+  green's WORKFLOW.md.
+No command-output fixture (the design needs none); no new export, so no `.d.cts`.
+
+**Per AC.**
+- AC 1 (red-first, read per D1 (b)): "red-first: the phases, in order, with collect-feedback after
+  advance-pinned-build and assign-bugs after triage-bugs"; "red-first: assign-bugs selects every triaged bug with an
+  empty release; tech-lead, element.set_release, no approval"; "red-first: assign-bugs' description names dl-191 (a),
+  the wf(bug): assign commit, and the close by memory reject (triaged -> closed)"; "red-first: workflow show
+  release-planning at HEAD resolves assign-bugs' action to a manual binding"; "red-first: triage-bugs keeps its
+  selection of open bugs and names the follow-up in assign-bugs (dl-191 (a))".
+- AC 2 (red-first): "red-first: define-scope's description states at least 10 % of the task budget, rounded up, for
+  low-severity bugs, oldest first by bug number" (it also keeps `/20 %/`).
+- AC 3 (red-first): "red-first: collect-feedback is phase 1, with retrospective.collect-feedback's role,
+  agent.execute and no optional flag"; "red-first: its produces is the planning read record
+  rel-{release.version}-planning-feedback-triage.md"; "red-first: its checks.post equals
+  retrospective.collect-feedback's, bound manual by the project"; "red-first: its description restates the read: …";
+  and "the v0.4 planning's read record exists, which keeps minor-v0.4's iteration complete", which passes on the red
+  commit (the file is on `main` since `7e611f682`).
+- AC 4 (red-first, the version row): "red-first: version is 2.5 or later; its 2.5 entry names task-347 and dl-191 (a);
+  its 2.4 entry still names task-305". The pinned-build reads (`workflow list`, `workflow show release-planning`,
+  `workflow next sw-life-cycle-1-plan --format json`, `workflow status`, `npm run check:mcp`) are green's, by command.
+- AC 5 (characterization, three pins moved): the three edited suites fail on red because `HEAD` still holds 2.4 and
+  pass once green's yaml is `HEAD`; the other 75 of the 79 stay green (measure above).
+
+**Runs.**
+- `npx jest test/core/release-planning-v2-5.test.ts test/core/workflow-repository-conformance.test.ts
+  test/core/define-scope-sweep.test.ts test/core/workflow-manual-prose-checks.test.ts test/docs/workflow-md.test.ts
+  --maxWorkers=2` (before `phaseOf` gained its name assertion) → `Test Suites: 4 failed, 1 passed, 5 total`, `Tests:
+  14 failed, 79 passed, 93 total`; `test/docs/workflow-md.test.ts` passed.
+- After it: `npx jest test/core/release-planning-v2-5.test.ts --maxWorkers=2` → `Tests: 11 failed, 1 passed, 12 total`.
+- First failing assertion of each red test:
+  - phase order: `expect(received).toEqual(expected)`, `- "collect-feedback"`, `- "assign-bugs"` missing;
+  - assign-bugs selection, assign-bugs description: `expect(received).toContain(expected)`, `Expected value:
+    "assign-bugs"`, received the eight phases of 2.4;
+  - workflow show binding: `Expected: [["element.set_release", "manual"]]`, `Received: undefined`;
+  - triage-bugs: `Expected substring: "dl-191 (a)"`, received the 2.4 description ("Select in-scope `open` bugs …");
+  - define-scope: `Expected substring: "Inside that 20 %"`;
+  - collect-feedback index: `expect(received).toBe(expected)`, `Expected: 1`, `Received: -1`;
+  - collect-feedback produces, checks.post, description: `Expected value: "collect-feedback"`, received the eight
+    phases of 2.4;
+  - version: `expect(received).toBeGreaterThanOrEqual(expected)`, `Expected: >= 2.5`, `Received: 2.4`;
+  - conformance warning list: `- "phases[2].checks.post[0]"` / `+ "phases[1].checks.post[0]"` (`- Expected - 9`,
+    `+ Received + 9`);
+  - define-scope-sweep: `- Expected - 12`, `+ Received + 1` (no `phases[2].` diagnostic at HEAD);
+  - manual-prose rows: `- Expected - 8`, `+ Received + 3`, the `phases[1].checks.post[0]` /
+    `feedback-notes.recorded` row missing.
+- `npx tsc --noEmit -p tsconfig.json` → exit `0`, no output. `npx jest test/lint --maxWorkers=2` with the red files in
+  place → `Test Suites: 14 passed, 14 total`, `Tests: 158 passed, 158 total`.
+- The invisible-character grep over the four files → no hit (exit `1`).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
