@@ -51,3 +51,176 @@ pinned build before `red` and declares any break; Q2 (ii): a sentence in the `wi
 ## Execution Notes
 
 <!-- Filled by the dev-loop. -->
+
+### design (architect, 2026-11-08)
+
+**Inputs read.** `depends_on: []` (no `dl-015` gate); `bug: []` (no sync). Base: `main` `39018a498` + the start commit
+`f0d52a00e` (`git log --oneline main..HEAD` → one commit). Builds: the task's PATH shim runs the code build,
+`wingfoil --version` and `node dist/cli.js --version` → `0.3.2 (39018a49877bf3cc99e24b7049b3ea4bb7790ee9)`; the pinned
+build `node node_modules/wingfoil-released/dist/cli.js --version` → `0.3.2 (6de2e13c004bbf419acfa7dc4d98d5a7468cd693)`
+(`package.json` `"wingfoil-released": "npm:wingfoil@0.3.2"`). `dl-205` is `ready`: `npm run -s wingfoil -- memory
+history dl-205-…` shows the approve `80324b1ee` (2026-11-05), Reason "Ratifies Q1 (a) and Q2 (ii) … Q2 (iii) is weighed
+with dl-234 for v1.0". Its Action is the two changes of this task and nothing else: the `bug-414` clean-up it also lists
+belongs to the pin advance. Read: `dev-loop.yaml` 2.3, `workflows/bindings.yaml` 2.9, `wingfoil-cli` 1.5, the `w0`
+plan's rulings W0-R1…W0-R12 (W0-R3 records, W0-R11 "until `task-348` makes it a check"), and `task-335`'s `### design`
+(its `dl-205` check of the `launch:` key on a scratch clone, the procedure reused below).
+
+**No tech-spec and no amendment.** The ACs name none, and `dl-205`'s Action names only `dev-loop` and `wingfoil-cli`.
+`spec-003` Layer 3 already allows the `manual: true` check binding (`dl-172` (a), task-298; `src/workflow/bindings.ts`
+`CheckBindingSchema`: exactly one of `run` / `manual`), so nothing in the schema changes. No BDD scenario covers this
+repository's own `dev-loop` design phase (`grep -rln "pinned build\|pinned-build" docs/02_requirements/02_bdd/features`
+→ no output). The name-resolvability gate scans specs, ADRs and SARD only (`test/docs/name-resolvability.test.ts`
+header), and no spec changes, so no allowlist entry.
+
+**Criteria against the ratified rules (`acceptance-criteria.consistent`).** No AC contradicts an approved spec or a
+ready DL. Two points need the approver's reading (D1, D2 below): which binding kind `pinned-build.reads` takes under
+`task-303`'s rule ("manual only when no program can decide"), and who files the `pinned-build` bug `dl-205` Q2 (ii)
+assigns to "the design".
+
+**The design.**
+- *`.wingfoil/workflows/custom/dev-loop.yaml` (AC1, AC3).* `design.description` gains a fourth instruction after (3):
+  "(4) when the task changes the shape of a `.wingfoil/` file, or makes this repository's configuration use a form the
+  pinned build has not read before, loads the proposed files with the pinned build on a scratch copy (`npm run -s
+  wingfoil -- workflow list`, `dna show`, `directives list` as the file requires, and `npm run check:mcp`), records the
+  commands and their results in the Execution Notes, and declares any break before `red`: a `pinned-build` bug, its
+  `KNOWN_READ_FAILURES` entries and the `wingfoil-cli` §1 exception, removed at the pin advance that reads the form
+  (dl-205 Q1 (a), Q2 (ii))." The `agent.execute` comment "the three instructions above" becomes "the four". `design.
+  checks.post` appends, as its fifth entry (`phases[1].checks.post[4]`), the token `pinned-build.reads(a design that
+  changes the shape of a .wingfoil/ file loads the proposed files with the pinned build on a scratch copy before red
+  and declares any break: a pinned-build bug, its KNOWN_READ_FAILURES entries, the wingfoil-cli §1 exception; a no-op
+  for a task that changes no .wingfoil/ file)`; the trailing comment of that line adds "dl-205 Q1 (a) (task-348):
+  pinned-build.reads, bound manual: true". `version: 2.3` → `2.4`, history clause first: "2.4 task-348 (dl-205 Q1 (a),
+  Q2 (ii)): design's description gains a fourth instruction, and its checks.post pinned-build.reads, bound manual:
+  true in workflows/bindings.yaml …; no phase, step or action changes (prev 2.3 task-349 …)". No phase, step, action,
+  `produces`, `approval` or `fallback` changes.
+- *`.wingfoil/workflows/bindings.yaml` (AC1).* `pinned-build.reads: { manual: true }` under `checks:`, right after
+  `acceptance-criteria.consistent` (the other `dev-loop.design` manual check), with a comment giving the reason it is
+  manual (D1). `version: 2.9` → `3.0` (numeric: after x.9 comes (x+1).0), history clause "3.0 task-348 (dl-205 Q1 (a)):
+  pinned-build.reads, dev-loop.design's check that a .wingfoil/ shape change is loaded with the pinned build before
+  red, bound manual: true" appended after the 2.9 clause.
+- *`.wingfoil/directives/custom/wingfoil-cli.md` (AC2).* §2 "Verb or hand procedure" gains one last bullet: "**A form
+  the pinned build cannot read** is used at once, declared (`dl-205` Q2 (ii)): a task that gives a `.wingfoil/` file a
+  form the pinned build does not load, and uses it in this repository's configuration, declares the break at
+  `dev-loop`'s `design`, before `red` — a `pinned-build` bug filed through `bug-ingest`, the `KNOWN_READ_FAILURES`
+  entries of `scripts/check-mcp-registration.cjs` and the §1 exception — and the pin advance that reaches a build
+  reading the form removes all three." It names no bug id (`test/directives/wingfoil-cli.test.ts` §3 test:
+  `expect(TEXT).not.toMatch(/\bbug-\d+/)`). `version: "1.5"` → `"1.6"`, clause "1.6 §2: a form the pinned build cannot
+  read is used at once and declared before red (dl-205 Q2 (ii), task-348) (prev 1.5 …)"; `**Date:**` → the day of the
+  edit.
+- Nothing else. `.wingfoil/WORKFLOW.md` (its "The v0.3 gates" paragraph names `design`'s checks) and AGENTS.md belong
+  to `align-agent-docs` (`dl-025`), which reads the release's workflow changes; D3.
+
+**`dl-205` Q1 (a) on this task's own change** (the procedure the new check asks for; scratch clone of `main`
+`39018a498` outside the worktree, `node_modules` linked from the worktree, `dist/` the worktree's; the three files
+edited as above and committed in the clone as `f1ac8cf80`; nothing committed in the worktree):
+- `node node_modules/wingfoil-released/dist/cli.js workflow list --format json` → exit `0`, stderr empty, 68
+  diagnostics, all `W_WORKFLOW_UNBOUND_TOKEN` warnings — the same count as before (`pinned-build.reads` bound manual
+  raises none); the code build `node dist/cli.js workflow list --format json` → exit `0`, stderr empty.
+- `… workflow show dev-loop` (pinned, json and `--format console`, which prints indented JSON in 0.3.2 by `--help`'s
+  own words) → exit `0`, the design phase lists the token with `"binding": { "kind": "manual", "source": "project" }`.
+- `… directives list --format json` (pinned) → exit `0`, stderr empty, `wingfoil-cli` served at `version` `1.6`;
+  `npm run -s check:role-directives` in the clone → `role-directives: 8 roles checked, 0 with warnings`.
+- `node scripts/check-mcp-registration.cjs <clone>` → exit `0`: `.mcp.json "wingfoil" runs the pinned wingfoil 0.3.2,
+  advertising [prompts, resources, tools] (prompts: 8, resources: 4, tools: 0)` and `the build under development
+  (dist/cli.js) serves [prompts, resources, tools] (prompts: 8, resources: 4, tools: 0); every listed Resource read
+  and Prompt get answered`.
+
+So the pinned build reads the three changed files: no break to declare, no `KNOWN_READ_FAILURES` entry, no
+`wingfoil-cli` §1 exception, no `pinned-build` bug (Q2 does not arise). The green developer re-runs these reads on the
+committed change (`npm run -s wingfoil -- workflow list`, `workflow show dev-loop`, `directives list`, `npm run
+check:mcp`) and records them (AC4).
+
+**No owed step for the `w0` tasks already past design.** `workflow next sw-life-cycle-1-plan --format json`, pinned
+and code build, before and after the change, on three bases in the scratch clone: `main` (`39018a498`; `task-349`,
+`task-357`, `task-354` done and merged), `task-335`'s branch (`0fc7fa21a`) and `task-345`'s branch (`a1b95e4f6`), each
+with the change cherry-picked on top. Result (`node -e` comparing the two JSONs with `baseline` removed): on every base
+and both builds the before and after outputs are identical — 68 diagnostics, 49 step keys, no field differs. The
+`w0` frontier keys are, on `main`: `dev-loop.start@task:task-335…`, `…task-345…`, `…task-348…` (no step of
+`task-349`, `task-357`, `task-354`); on `task-335`'s branch `dev-loop.red@task:task-335…`; on `task-345`'s branch
+`dev-loop.red@task:task-345…`. Why: the deduction never reads `checks` (`grep -n "\.checks" src/core/workflow-deduction.ts
+src/workflow/deduce.ts` → no output; `src/core/workflow-next.ts` 467–468 only render them), and a step is recorded
+once, by its own `workflow finalize` (`git log --format='%h %s' origin/main | grep "finalize sw-life-cycle-1-plan
+dev-loop.design"` → the records of `task-349`, `task-357`, `task-354`; `task-335`'s `1c46a0010` and `task-345`'s
+`a1b7ffa30` on their branches). **A `manual: true` check needs no `workflow finalize` record of its own, for any
+task**: it is confirmed inside the design gate, whose record is the approver's (W0-R3). Nothing is owed on a done task.
+
+**Existing tests of the changed files** (worktree, before any change; the dl-170 wait-slot script returned at once with no
+output; one jest process): the 72 suites that read `dev-loop.yaml`, `bindings.yaml`, `wingfoil-cli` or the registry at
+`HEAD` (`grep -rlE "custom/dev-loop\.yaml|workflows/bindings\.yaml|wingfoil-cli|AtHead\((ROOT|REPO_ROOT|repoRoot)|check-mcp-registration|'dev-loop'"
+test --include=*.ts`, helpers removed, plus `test/lint/version-bump.test.ts`) → `npx jest <72 files> --maxWorkers=2`
+→ `Test Suites: 72 passed, 72 total`, `Tests: 1414 passed, 1414 total`.
+The same 72 suites in the scratch clone with the change committed (`f1ac8cf80`; `dist/` a copy of the worktree's;
+the dl-170 wait-slot script returned at once) → `Test Suites: 2 failed, 70 passed, 72 total`, `Tests: 2 failed, 1412 passed, 1414
+total`. The two failures are the two pins of the extended lists, and only them: `test/core/dev-loop-v1-6.test.ts`
+"`design.checks.post` keeps its three checks and adds `acceptance-criteria.consistent`" and
+`test/core/workflow-manual-prose-checks.test.ts` "the manual check occurrences at HEAD are exactly the 21 this task
+binds plus demo.rendered (task-298), in registry order". The warning count (68), the conformance warning list,
+`test/directives/wingfoil-cli.test.ts`, `test/core/dev-loop-v2-3.test.ts` (version ≥ 2.3, `prev 2.2` kept) and
+`test/lint/version-bump.test.ts` stay green.
+
+**Per-AC classification and what `qa` must pin.** Every registry read is the configuration **as `HEAD` holds it**
+(`loadWorkflowRegistryAtHead(ROOT)`, `workflowShowAtHead(ROOT, 'dev-loop')`, as `test/core/dev-loop-v2-3.test.ts`
+does): the red tests fail on the red commit and pass once green's commit is `HEAD`. Version pins are "≥" plus the
+history clause naming the task (`bug-314`).
+
+| AC | Class | What `qa` pins | Interface / test file |
+|----|-------|----------------|-----------------------|
+| 1 | red-first | (a) `design.checks.post` names, by `tokenName`, are exactly `['frontmatter.required', 'tech-spec.approved', 'depends_on.acknowledged', 'acceptance-criteria.consistent', 'pinned-build.reads']`; (b) the `pinned-build.reads` token text contains `pinned build`, `scratch copy`, `before red`, `KNOWN_READ_FAILURES` and `wingfoil-cli §1`; (c) no other `dev-loop` phase declares it, pre or post; (d) `design.description` contains `.wingfoil/`, `pinned build`, `scratch copy`, `npm run check:mcp` and `dl-205`; (e) `resolveToken(<the token>, 'check', bindings)` → `{ kind: 'manual', source: 'project' }`, and `bindings.checks['pinned-build.reads']` equals `{ manual: true }`; (f) `bindings.yaml` `version` ≥ 3.0 with a history clause naming `task-348` | `loadWorkflowRegistryAtHead`, `tokenName`, `resolveToken` (`src/workflow/bindings`); new `test/core/dev-loop-v2-4.test.ts` modelled on `test/core/dev-loop-v2-3.test.ts`. Two existing pins change in the red commit, because they enumerate what this AC extends: `test/core/dev-loop-v1-6.test.ts` "`design.checks.post` keeps its three checks…" (`toEqual` of the four names → the five), and `test/core/workflow-manual-prose-checks.test.ts` "the manual check occurrences at HEAD are exactly …" (a 23rd row `['dev-loop', 'phases[1].checks.post[4]', 'pinned-build.reads']` after `['dev-loop', 'phases[1].checks.post[3]', 'acceptance-criteria.consistent']`; the test title's wording updated to say task-348's row is included) |
+| 2 | red-first | §2 of `wingfoil-cli.md` (the text between `## 2.` and `## 3.`) contains `A form the pinned build cannot read`, `` `dl-205` Q2 (ii) ``, `before \`red\``, `` `pinned-build` bug ``, `KNOWN_READ_FAILURES` and `the pin advance`; the frontmatter `version` is `"1.6"` or later, its comment's first clause names `dl-205 Q2 (ii)` and `task-348` and keeps `prev 1.5`; the file still matches no `\bbug-\d+` | `readFileSync` of the working tree, as `test/directives/wingfoil-cli.test.ts` reads it (its `section(n)` helper is local: copy it); new `test/directives/wingfoil-cli-dl-205.test.ts` |
+| 3 | characterization, except the version row (corrected to red-first) | `dev-loop.yaml` `version` ≥ 2.4, its comment's first clause names `task-348` and keeps `prev 2.3`; phase names and order unchanged (`['start', 'design', 'red', 'green', 'refactor', 'review', 'done']`), no error diagnostic at `HEAD`; the registry still warns exactly 68 times, every warning `W_WORKFLOW_UNBOUND_TOKEN`, none naming `pinned-build.reads`. The suites the AC names stay green untouched: `test/directives/wingfoil-cli.test.ts`, `test/core/workflow-repository-conformance.test.ts` (its warning list does not change: a manual binding raises no warning), `test/lint/version-bump.test.ts` (the four files it gates are not touched) | in `test/core/dev-loop-v2-4.test.ts`. The version pin is red until green's commit (it reads `HEAD`), as `dev-loop-v2-3`'s version test was: the AC's "raises `version:` once" is new behaviour, so that row is red-first (this design's correction of the AC's label); the rest of the AC is characterization and passes on the red commit |
+| 4 | characterization | none in jest: the green developer runs `npm run -s wingfoil -- workflow show dev-loop` (and `--format console`) on the committed change and records exit `0` and the token with `"kind": "manual"`. The jest twin is AC1 (e) through `workflowShowAtHead` (`binding.kind` `manual`, `evaluated` `false`), which qa adds to `test/core/dev-loop-v2-4.test.ts` | `workflowShowAtHead` (`src/core/workflow-list-show`) |
+
+Fixtures: none — every test reads this repository's committed files; no command-output fixture is needed.
+
+**Files to touch.** green: `.wingfoil/workflows/custom/dev-loop.yaml` (2.3 → 2.4), `.wingfoil/workflows/bindings.yaml`
+(2.9 → 3.0), `.wingfoil/directives/custom/wingfoil-cli.md` (1.5 → 1.6, `**Date:**`). red (qa): new
+`test/core/dev-loop-v2-4.test.ts`, new `test/directives/wingfoil-cli-dl-205.test.ts`, edited
+`test/core/dev-loop-v1-6.test.ts` and `test/core/workflow-manual-prose-checks.test.ts`. None of the four files
+`test/lint/version-bump.test.ts` gates. No `src/`, no spec, no `docs/cli-reference.md` change.
+
+**For `task-347` and `task-351` (`dl-015`), which rely on this task.** Once this task is merged:
+- their design runs `pinned-build.reads`: on a scratch clone of their branch (outside the worktree, `node_modules`
+  linked), commit the proposed `.wingfoil/` files, then run with the pinned build `workflow list --format json`,
+  `workflow show <each changed workflow>`, `workflow next sw-life-cycle-1-plan --format json` (and `workflow status`),
+  `directives list` / `dna show` when those files change, and `node scripts/check-mcp-registration.cjs <clone>`; compare
+  each JSON with the same command before the change (drop `baseline`); a refusal (`E_VALIDATION`, a non-zero exit) is
+  a break, declared before red as `wingfoil-cli` §2's new bullet says;
+- `bindings.yaml` is at 3.0 and `dev-loop.yaml` at 2.4 on `main`: one bump each on their branch against that;
+- `test/core/workflow-manual-prose-checks.test.ts` holds 23 manual rows, `pinned-build.reads` at
+  `dev-loop phases[1].checks.post[4]`; a phase added to `release-planning` (`task-347`'s `collect-feedback`) shifts
+  that workflow's `phases[N]` paths in this list and in `test/core/workflow-repository-conformance.test.ts`.
+
+**Decisions for the approver.**
+- **D1 — the binding kind of `pinned-build.reads`.** (a) `manual: true`; (b) `run: [npm, run, "check:mcp"]` (the
+  command `mcp.registered` already binds). `task-303`'s D1 (a) makes a check manual only when no program can decide it.
+  Here the load is decidable, but the files it must load exist only on the design's scratch copy: at `design` the task
+  branch still holds the unchanged configuration, so (b), run by the v1.0 engine on the worktree, would pass for every
+  task and prove nothing; whether the task changes a `.wingfoil/` shape, and whether a break is declared, is the
+  architect's reading. Unbound is excluded by AC1 ("bound in `workflows/bindings.yaml`"). Recommendation: **(a)**; the
+  command half is already gated later by `test/cli/mcp-registration.test.ts` in the suite and `check:mcp` in
+  `e2e-smoke` and `release-planning`.
+- **D2 — who files the `pinned-build` bug.** `dl-205` Q2 (ii) says "the design files a `pinned-build` bug"; the w0
+  agents never create Memory elements (W0-R10: the orchestrator files through `bug-ingest`). Recommendation: the
+  directive sentence says the break is *declared* at design, the bug "filed through `bug-ingest`" — whoever runs
+  `bug-ingest` for that session — as written above; no DL amendment.
+- **D3 — `.wingfoil/WORKFLOW.md`.** Its dev-loop paragraph lists `design`'s checks (`dl-102` §4) and will not name the new
+  one. Recommendation: leave it to `align-agent-docs` at v0.4's `user-docs` (`dl-025`), which owns that file, rather
+  than widening this S task; `test/docs/workflow-md.test.ts` checks names of workflows and phases only and stays green.
+
+**Risks.** `task-335` and `task-345` (in red): neither branch touches `.wingfoil/workflows/` (`git diff --stat
+origin/main...<branch>` lists only specs, task/bug notes and the name-resolvability allowlist), so no textual conflict;
+the frontier of both is unchanged by this change (above). `task-347`, `task-351`, `task-358` (L2/L3): they edit
+`bindings.yaml`'s version line and may edit the same pinning suites (`workflow-manual-prose-checks`,
+`workflow-repository-conformance`): merged after this task, they re-bump against 3.0 and add their rows after
+`pinned-build.reads`'s. The `w0` orchestration reads `dev-loop.yaml`: the change adds no step, so no `workflow rekey`
+or record is owed.
+
+**Pending amendments (approver).** None.
+
+### Retrospective
+
+<!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
+     reconstructed afterwards. One line per item: what happened, the evidence (a command and what it
+     printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
+     Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
+     here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
