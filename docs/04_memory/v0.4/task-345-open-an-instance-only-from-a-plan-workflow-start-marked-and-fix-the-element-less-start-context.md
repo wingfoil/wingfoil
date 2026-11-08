@@ -830,6 +830,17 @@ Uncommitted (`git status --short` → the two bug files); the final gate run bel
   CHANGELOG line for the breaking selectWorkflowInstance signature is an item for align-user-docs, as the approver
   ruled D8 (a) at task-345's design gate."`
 
+### review fixes (developer, 2026-11-08)
+
+Notes-only fixes for the review that approved with fixes on `fe9f4e223` (`git rev-list --count HEAD..main` → `0`, no
+merge owed):
+- **For align-user-docs (minor-v0.4)** (D8 (a)): `CHANGELOG.md` owes a line for the breaking change of the `main` export
+  `selectWorkflowInstance`, which now takes `(deduction, snapshot, ref?)` with the snapshot mandatory (`bug-465`,
+  commit `bbe4f0933`); a caller passing `(deduction, ref, snapshot)` or omitting the snapshot no longer compiles.
+- **Correction** to `### Pending amendments (approver)` above: its "the final gate run below has them in the working
+  tree" refers to the run recorded above it, the last bullet of `### refactor` ("Final run, on head `de08d359f` with
+  these notes and the two pending amendments in the working tree", `567 passed`, `10530 passed`), not to a run below.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
