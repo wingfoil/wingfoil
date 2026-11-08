@@ -526,6 +526,121 @@ true`, the same subject); `git status --short` after both → only the two uncom
   `--reason "Declare the pre-marker rule of §3.2 transitory for task-345, as the approver ruled at its design gate: its removal condition (no open unmarked instance in any WingFoil repository, checked by zero W_INSTANCE_PRE_MARKER in workflow status of each), the workflow status warning W_INSTANCE_PRE_MARKER on every instance the rule keeps open (§1.3, §2, §7.4), and its removal by a follow-up element with a target release."`
 - `spec-008-cli-grammar`: no amendment (above).
 
+### red (qa, 2026-11-08)
+
+**Base.** `git rev-list --count HEAD..main` → `52`, so `main` was merged first: `git merge --no-edit main` conflicted only
+in the tail Revision notes of `spec-008-cli-grammar` and `spec-017-workflow-commands-and-state-deduction`; each was
+resolved by keeping both blocks, `task-354`'s Revision note first, then this task's, one blank line between, nothing
+else changed. Merge commit (AI trailers amended on) `a1b95e4f6`; `git show --remerge-diff HEAD --stat` → the two specs,
+`15 insertions(+), 19 deletions(-)` (the conflict markers removed, the two blocks reordered). PATH guard: `command -v
+wingfoil` → the task's PATH shim; `wingfoil --version` and `node dist/cli.js --version` → `0.3.2
+(f20c6f043b8c68dc78f4e6a4ba09688df3d0e406)`.
+
+**Red commit `482344750`** (`git log --oneline -1` → `482344750 test(workflow): task-345 — failing test: …`), test files
+only: `test/core/workflow-start-marker.test.ts` (new), `test/core/workflow-start-end.test.ts`,
+`test/cli/workflow-start-end.integration.test.ts`, `test/core/workflow-deduction.test.ts`, `test/workflow/deduce.test.ts`,
+`test/core/workflow-next-views.test.ts`, `test/core/workflow-start-end-arms.test.ts`,
+`test/core/workflow-deduction-provenance.test.ts`. No `.d.cts`: the one new export a red imports, `START_TRAILER`, is a
+TypeScript export of `src/workflow/deduce.ts`.
+
+**Run.** `npx jest --maxWorkers=2 test/core/workflow-start-marker.test.ts test/core/workflow-start-end.test.ts
+test/cli/workflow-start-end.integration.test.ts test/core/workflow-deduction.test.ts test/workflow/deduce.test.ts
+test/core/workflow-next-views.test.ts test/core/workflow-start-end-arms.test.ts
+test/core/workflow-deduction-provenance.test.ts` → `Test Suites: 8 failed, 8 total`, `Tests: 25 failed, 110 passed, 135
+total` (by `--json`: workflow-start-marker 12 failed / 15, workflow-start-end 6 / 30, workflow-start-end.integration
+1 / 14, workflow-deduction 2 / 25, deduce 1 / 16, workflow-next-views 1 / 8, workflow-start-end-arms 1 / 13,
+workflow-deduction-provenance 1 / 14). `npx tsc --noEmit -p tsconfig.json` → exactly the design's expected diagnostics:
+`test/core/workflow-deduction.test.ts` TS2345 (`Argument of type 'DeductionSnapshot' is not assignable to parameter of
+type 'string'`) at (240,54), (242,52), (244,54), (246,64), (251,48), (255,48), (259,48); TS2578 (`Unused
+'@ts-expect-error' directive`) at (267,7); `test/core/workflow-start-marker.test.ts(29,10)` TS2305 (`Module
+'"../../src/workflow/deduce"' has no exported member 'START_TRAILER'`). `npx jest test/lint --maxWorkers=2` → `Test
+Suites: 1 failed, 13 passed, 14 total`, `Tests: 1 failed, 157 passed, 158 total`: the one failure is
+`typecheck-clean.test.ts` ("tsconfig.json typechecks with zero diagnostics"), listing exactly those nine diagnostics;
+`lint.clean` passes. Invisible characters: the `grep -nP` of the changed files → exit `1` (none).
+
+**Per AC** (first failing assertion of each red test; the outputs quoted are the current code's, from that run):
+- **AC 1 (red-first)**, `test/core/workflow-start-marker.test.ts`:
+  - "the marker key is exported as START_TRAILER" → `Expected: "WingFoil-Start"`, `Received: undefined` (jest under
+    `isolatedModules` reads the missing export as `undefined`; tsc gives TS2305).
+  - "(a) the add commit carries `WingFoil-Start: <workflow>` …" → `expect(marker).toBeGreaterThanOrEqual(0)`, received
+    `-1`: the add commit's trailer paragraph has no `WingFoil-Start: checklist` line.
+  - "(a) the dry run … in-process and on the CLI" → `toContain('\n\nWingFoil-Start: checklist\nWingFoil-Version: ')`
+    on the in-process dry run (`runAsDryRun` of `workflowStart` `checklist`), received `"wf(plan): add
+    checklist-1-plan\n\nWingFoil-Version: 0.3.2 (unknown)"`; the CLI half (`workflow start checklist --dry-run --format
+    json` and `--format console`, exit 0, stderr `''`) asserts the same.
+  - "(b) a `memory add` plan … is no instance" → instances `["report-bug-x-plan", "checklist-1-plan"]` for
+    `["checklist-1-plan"]`.
+  - "(c) a plan committed by hand after a marked start" → `["b-1-plan", "checklist-1-plan"]` for `["checklist-1-plan"]`.
+  - "(e) a marked start whose plan is now `done` still counts" → `instances` holds `report-bug-x-plan` (`draft`,
+    active) for `[]`.
+  - "(f) the kept instance gets W_INSTANCE_PRE_MARKER …" → the `W_INSTANCE_PRE_MARKER` entries are `[]` for the one
+    entry `{ code, severity: 'warning', file: 'docs/plans/checklist/a-1-plan.md', path: '', message: 'instance a-1-plan
+    is kept by the pre-marker rule: restart it with workflow start' }`; the test then pins it last in `diagnostics`, and
+    the console line `    warning: kept by the pre-marker rule: restart it with workflow start` once, after `  a-1-plan
+    (checklist)` and only among that instance's indented lines, with the count line.
+  - "(g) with a <ref>" → the same `[]` for `workflow status a-1-plan`.
+  - "(i) on the CLI" → stdout lacks the line; the current `workflow status` stdout (exit 0, stderr `''`) is
+    `open workflows: 2`, `* report-bug-1-plan (report-bug) — active, complete`, `    element: (none)`, `    phases:
+    triage complete`, `  a-1-plan (checklist)`, `    element: (none)`, `    phases: tick current`, `    frontier:`,
+    `      - checklist.tick (developer; missing: record)`.
+  - passes on first run (the halves already true, kept green): "(d) control: a plan naming the sub `dev-loop` …",
+    "(h) status only: workflow next … raises no W_INSTANCE_PRE_MARKER".
+  - `test/core/workflow-deduction-provenance.test.ts` "two `git log` with trailers (the start lookup reads the start
+    marker …; the walk)" → `Expected length: 2`, `Received length: 1` (only the walk's `log` carries `%(trailers`);
+    argv length and subcommand order still equal to the baseline's.
+- **AC 2 (red-first)**:
+  - `workflow-start-marker.test.ts` "by hand, with no marked start …" → `instances` holds `ghost-1-plan` (workflow
+    `no-such-flow`, empty frontier, active) for `[]`; then `active` `null`, one `W_INSTANCE_WORKFLOW_UNKNOWN` with the
+    unchanged message, `workflow status` `open` `[]`, the same entry in `workflowList`'s `diagnostics`, and
+    `workflowNext` / `workflowEnd` `ghost-1-plan` → `NOT_FOUND` `workflow is not open: ghost-1-plan`.
+  - "by `memory add` after a marked start" → `["no-such-flow-x-plan", "checklist-1-plan"]` for `["checklist-1-plan"]`.
+  - "a marked plan whose workflow the registry stops loading" → `instances` holds `checklist-1-plan` for `[]`.
+  - `workflow-deduction.test.ts` "task-345 AC 2: an open plan naming no loaded workflow is no instance …" (was "lists an
+    open plan … with an empty frontier") → `not.toContain('ghost')`, received `["ghost"]`.
+  - `test/workflow/deduce.test.ts` (the synthetic snapshot of `p1`–`p4`) → `p4` (no `workflow`) still listed; the
+    expectation is `[p1, p2, p3]`, diagnostics codes unchanged `[W_INSTANCE_WORKFLOW_UNKNOWN, W_UNRESOLVED_TOKEN]`.
+  - `workflow-next-views.test.ts` (`ghost-1`) → `received value must be a non-null object`, `Received has value: null`:
+    `workflowNext ghost-1` answers ok (the "is not loaded" message) instead of `NOT_FOUND` `workflow is not open:
+    ghost-1`; the `old-1` half unchanged.
+  - `workflow-start-end-arms.test.ts` (`end ghost-1-plan`) → `CONFLICT` "… is not complete: workflow 'ghost' is not
+    loaded" for `NOT_FOUND` `workflow is not open: ghost-1-plan`; the abandoned half unchanged.
+- **AC 3 (characterization)**, `workflow-start-marker.test.ts` "two hand plans and one `memory add` plan are instances,
+  most recent first; a later marked start keeps them after it" → passes on first run (`[report-bug-c-plan, b-1-plan,
+  a-1-plan]`, then `release-cycle-minor-v1-plan` first and active). The live evidence on this repository is green's.
+- **AC 4 (red-first)**, `test/core/workflow-start-end.test.ts` (the refusal test at line 346 replaced):
+  - "`--element <type>:<id>` on a workflow that declares no element sets the context" and "… takes a short reference"
+    (`release:minor-v`) → `expected a start, got VALIDATION: workflow 'checklist' declares no element: --element is not
+    accepted`.
+  - "a context `--element` that does not exist at HEAD" (`release:nope`) → code `VALIDATION` and the same message for
+    `NOT_FOUND` `element not found: release:nope`.
+  - "`--element none` clears the context an active release-cycle would give" and "`--element none` on a workflow that
+    declares an element is refused as an absent element" (D6 (a)) → `UsageError: malformed element-ref "none":
+    expected <type>:<id>` thrown by the operation.
+  - "(bug-413 step 1) no `--element` while a self-bound element-less main is active records no context" → `context`
+    is `{ type: 'release', id: 'minor-v2' }` for `null`. Its fixture adds a self-creating main `intake`
+    (`memory.add(type: release)`), starts it, and binds it by a hand commit of `docs/releases/minor-v2.md` with
+    `WingFoil-Instance: intake-1-plan` / `WingFoil-Step: intake.capture` (the precondition, asserted, is that
+    `intake-1-plan` is bound to `release:minor-v2`): the design's reproduction of `bug-413` step 1 (an ingest bound to
+    `dl-214` active), which the design's own "start `checklist` first" case cannot show, since that instance has
+    neither element nor context today.
+  - passes on first run: "no `--element` while an element-less main is active records no context" (the design's
+    `checklist` then `report-bug` case: already `context: null` today, kept green).
+  - `test/cli/workflow-start-end.integration.test.ts` "`--element none` on an element-less main is accepted" →
+    `[status, stderr]` `[2, "{\"error\":\"malformed element-ref \\\"none\\\": expected <type>:<id>\"}\n"]` for `[0, '']`
+    (`workflow start report --element none --format json` after a `release-cycle` start). The usage row
+    `--element minor-1` → exit 2 is kept unchanged.
+- **AC 5 (red-first)**, `test/core/workflow-deduction.test.ts`: every call in the order `selectWorkflowInstance(deduction,
+  snapshot, ref?)` → jest `TypeError: Cannot read properties of undefined (reading 'flatMap')` in `instancePlanIds`
+  (the old signature takes the snapshot as `ref` and the ref as `snapshot`), tsc TS2345 ×7; "a call without the snapshot
+  does not compile" holds `// @ts-expect-error — the snapshot is mandatory (bug-465)` above
+  `selectWorkflowInstance(deduction)` in a function the test never calls → passes at run time, red by tsc TS2578 (the
+  observable is `npm run typecheck`).
+- **AC 6** — no test (design).
+
+**For green.** Tests not touched here that the design expects to pass unchanged (`workflow-next-spawn-count` (e),
+`provenance.test.ts:407`, `workflow-deduction-history`, `git-log-readers`) were not run at red; the full suite is
+green's. The code comment the design addendum names cites the follow-up element `bug-515`.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
