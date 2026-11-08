@@ -408,6 +408,110 @@ on; `test/lint/import-graph.test.ts` then gates the new imports. `task-345` (des
   the program agree (either the positive form registered, or §2 stating only `--no-interactive`). Suggested severity:
   low.
 
+### red (qa, 2026-11-08)
+
+**Merge of `main` first (W0-R3).** `git rev-list --count HEAD..main` → `52`; `git merge --no-edit main` conflicted only
+at the tail Revision notes of `spec-008-cli-grammar.md` and `spec-017-workflow-commands-and-state-deduction.md`; each
+kept both blocks, `task-354`'s first, this task's after one blank line, nothing else changed (`git show --remerge-diff
+HEAD --stat` → those two files, `15 insertions(+), 19 deletions(-)`, the conflict markers only). Merge commit
+`0fc7fa21a` (named by `git rev-parse HEAD` after the trailer amend). The task's PATH shim was checked first:
+`command -v wingfoil` → the shim; `wingfoil --version` and `node dist/cli.js --version` → both `0.3.2
+(b64c11db05fe164cf8d7806adb200e6becc57a9b)`.
+
+**Red commit `237055380`** (`git log --oneline -1` → `237055380 test(agent): task-335 — failing test: the headless
+work run, …`), test files only (`git show --stat HEAD` → 19 files under `test/`, nothing under `src/` or `scripts/`):
+- new suites: `test/core/workflow-launch-key.test.ts`, `test/agent/launch-kind.test.ts`, `test/agent/launch-headless.test.ts`,
+  `test/agent/launch-timeout.test.ts`, `test/agent/duration.test.ts`, `test/core/agent-execute-awaiting.test.ts`,
+  `test/storage/builtin-adapters-headless.test.ts`, `test/docs/x-cli-cmds-citations.test.ts`,
+  `test/cli/agent-execute-launch-kind.integration.test.ts`, `test/cli/agent-execute-headless.integration.test.ts`,
+  `test/cli/agent-execute-awaiting.integration.test.ts`, `test/cli/agent-execute-dry-run-terminal.integration.test.ts`;
+- new helpers: `test/agent/helpers/agent-execute-awaiting-fixture.ts` (the waiting workflows `gated` — `dev-loop`'s
+  `start`/`review`/`done`, the task moved to `in-review` by a `wf(task): start` and a `wf(task): submit` commit after
+  the instance's start —, `signoff` — an `approval:` phase no element carries —, `outreach` — an `awaits:` phase —, and
+  `seedLaunch(kind)`, the step fixture with `launch: <kind>` on `loop.implement`), `test/agent/helpers/fake-child.ts` (a
+  `FakeChild` with a drained `stdout` and a declared answer per signal), `test/cli/helpers/agent-execute-cli.ts` (the
+  step suite's `cli()` shape, shared);
+- edited: `test/core/workflow-next.test.ts` (`STEP_FIELDS` gains `'launch'`), `test/core/agent-execute.test.ts` (the
+  NO_TERMINAL test rewritten as the design asks — the refusal on a real run, the dry run planned with the warning — and
+  one new `describe`), `test/agent/helpers/launch-input.ts` (`kind: 'interactive'` on the hand-built `LaunchInput`, so
+  the existing launch suites type-check once `LaunchInput.kind` exists), `test/cli/helpers/spawn-cli.ts` (an optional
+  `input` for the child's stdin, AC 4's stdin case). No new fixture under `test/fixtures/agents/`: the adapter without
+  `launch.headless` is `fake.yaml` with that block removed, written into the fixture repository.
+- `test/core/workflow-next-render.test.ts` is untouched: its `Step` literal is green's (TS2741 once `Step` gains `launch`).
+
+**Per AC** (classification as the design's table; "passes in red" names the tests that pin behaviour already there).
+
+| AC | Class | Tests (file › test) | Fails for the right reason |
+|---|---|---|---|
+| 1 | red-first | `workflow-launch-key.test.ts`: `LAUNCH_KINDS`, `launch: 'batch'` path, the loader's `E_VALIDATION` at `phases[0].launch`, the three `E_PHASE_EXECUTOR_WITHOUT_ROLE` rows, `next.launch`/`more[].launch`, `null` without the key, `workflow show` phases; `workflow-next.test.ts` `STEP_FIELDS` | `Received: undefined` (`LAUNCH_KINDS`); `Received: true` (`safeParse` of `batch` succeeds, `Phase` is passthrough); `expected loadWorkflowsYaml to throw`; the diff lacks the `launch` row; `next.launch` `Received: undefined`; `toHaveProperty('launch', null)` path absent; `STEP_FIELDS` diff `+ "launch"`. Passes in red: the three "keeps its value" cases, "no default", "every declared kind on a phase with a role loads" (passthrough keeps the key today). |
+| 2 | red-first (approver clause: an existing rule pinned anew) | `agent-execute-launch-kind.integration.test.ts` (a) contradiction warnings, (b) both flags, (c) approver ×4, (d) `--no-interactive … --interactive`; `launch-kind.test.ts` (12 rows); `agent-execute.test.ts` › "AC 2: --headless with --interactive …" | CLI: `Received: "error: unknown option '--headless'"` / `'--interactive'`, or status `Received: 2`; unit: `TypeError: (0 , execute_1.resolveLaunchKind) is not a function`; in process: `Received promise resolved instead of rejected`. Passes in red: in process "AC 2: an approver run is refused whichever kind flag is given" (the flags are ignored today). |
+| 3 | red-first | `agent-execute-launch-kind.integration.test.ts` AC 3 (a) ×2, (b) ×3; `agent-execute.test.ts` › "AC 3: … NO_LAUNCH_KIND …"; the 12 rows of `launch-kind.test.ts` | status `Received: 2` (unknown option); `launch: any`/`headless` with no option: the warnings diff holds `warning: HEAD:.wingfoil/workflows/custom/loop.yaml: unknown field(s) ignored: phases[0].launch`; in process `Received has value: undefined` (the interactive dry run succeeds). |
+| 4 | red-first | `agent-execute-headless.integration.test.ts` (5); `launch-headless.test.ts` (8); `builtin-adapters-headless.test.ts` (3); `agent-execute.test.ts` › "AC 4: a real headless run …" | CLI status `Received: 2`; `renderLaunchArgv` diff (the interactive argv); spawn options diff (`stdio: "inherit"`); `SIGINT` `Received: []`; built-ins `launch.headless?.output` `Received: undefined`; in process `interactive launch needs a terminal on stdin and stdout`. Passes in red: the interactive argv and spawn options (unchanged), `SIGQUIT` ignored, `SIGTERM`/`SIGHUP` forwarded (today's interactive sets already do so), "ships claude-code and codex-cli". |
+| 5 | red-first | `launch-timeout.test.ts` (6); `duration.test.ts` (23); `agent-execute.test.ts` › "AC 5: --timeout …" ×3 and "under --dry-run a valid --timeout …"; `agent-execute-headless.integration.test.ts` AC 5 (5) | `TIMEOUT_GRACE_MS` `Received: undefined`; the recorded delays `[]` (no timer armed); `duration.test.ts`: `Cannot find module '../../src/agent/duration'` (suite fails to run); in process `Received promise resolved instead of rejected`; CLI `Received: "error: unknown option '--timeout'"` / status `2`. Passes in red: "under --dry-run a valid --timeout is checked and launches nothing" (the option is ignored today). The CLI run uses one real 1 s timer; nothing asserts a duration. |
+| 6 | red-first | `agent-execute-awaiting.integration.test.ts` (20); `agent-execute-awaiting.test.ts` (8) | CLI status `Received: 0` (today the waiting step launches) or `2` (`--headless`); unit `TypeError: (0 , step_1.refuseWaitingStep) is not a function`; in process `Received has type: string` (`'ok'`). Passes in red: the three fixture characterizations (`workflow next` prints the line) and both `--element` cases (an explicit target launches today). |
+| 7 | red-first | `agent-execute-dry-run-terminal.integration.test.ts` (4); `agent-execute.test.ts` › the rewritten NO_TERMINAL test and "AC 7: a headless dry run …" | CLI status `Received: 1` (the dry run refused) or `2`; in process `Received: "interactive launch needs a terminal on stdin and stdout"`. Passes in red: "without --dry-run: the NO_TERMINAL refusal, unchanged". |
+| 8 | characterization | `x-cli-cmds-citations.test.ts` (5) | passes on first run (the approver's amendments are recorded): both patterns print nothing in `spec-016`/`spec-017`; before them, at `b64c11db0`, `git show b64c11db0:<spec> \| grep -nE "X_cli-cmds\.md:[0-9]"` → `spec-016` l.29, 364, 376, 421, and the bug's wider pattern adds `spec-016` l.954 and `spec-017` l.1306. |
+| 9 | characterization | none (D7: the by-hand headless run of each built-in is the approver's) | — |
+| 10 | characterization | the parity suites on the amended tree | `npx jest --maxWorkers=2 test/docs/name-resolvability.test.ts test/docs/command-surface-specs.test.ts test/docs/exit-codes-parity.test.ts test/docs/dry-run-documented.test.ts test/cli/agent-execute-step.integration.test.ts test/cli/agent-execute.integration.test.ts` → `Test Suites: 6 passed`, `Tests: 71 passed` (the last two show the `spawn-cli.ts` change breaks nothing). |
+
+**Runs** (one jest process each, `--maxWorkers=2`; targeted, no heavy gate). `npx jest --maxWorkers=2 --json` over the
+twelve new suites plus `test/core/workflow-next.test.ts` and `test/core/agent-execute.test.ts` → `Test Suites: 13
+failed, 1 passed, 14 total`, `Tests: 90 failed, 75 passed, 165 total`. Per file (failed/passed): `workflow-launch-key`
+7/5, `workflow-next` 1/19, `launch-kind` 12/0, `launch-headless` 3/5, `launch-timeout` 6/0, `duration` suite fails to
+run (0/0), `agent-execute-awaiting` 7/1, `agent-execute` 8/33 (its 31 existing tests pass), `builtin-adapters-headless`
+2/1, `x-cli-cmds-citations` 0/5, `agent-execute-launch-kind.integration` 15/1, `agent-execute-headless.integration`
+10/0, `agent-execute-awaiting.integration` 16/4, `agent-execute-dry-run-terminal.integration` 3/1.
+The first in-process run also named `test/agent/launch-process.test.ts` and `test/agent/launch.test.ts` (the suites
+`launch-input.ts` serves): `Test Suites: 9 failed, 3 passed, 12 total`, the three passing being those two and
+`x-cli-cmds-citations`.
+
+**Expected tsc diagnostics** (`npx tsc --noEmit -p tsconfig.json` → 11 errors, all intended; `npx jest test/lint
+--maxWorkers=2` → `Tests: 1 failed, 157 passed`, the one failure `test/lint/typecheck-clean.test.ts` listing exactly
+these 11):
+- `TS2307` `test/agent/duration.test.ts(8,31)`: no module `../../src/agent/duration` (the new leaf module);
+- `TS2305` ×4: `resolveLaunchKind` (`src/agent/execute`), `TIMEOUT_GRACE_MS` (`src/agent/launch`), `refuseWaitingStep`
+  (`src/agent/step`), `LAUNCH_KINDS` (`src/workflow/schema`);
+- `TS2353` ×4: `kind` on `LaunchInput` (`launch-input.ts(57,7)`, `launch-headless.test.ts(38,37)`,
+  `launch-timeout.test.ts(62,49)`), `timer` on `LaunchHost` (`launch-timeout.test.ts(65,91)`);
+- `TS2554` ×2 `launch-headless.test.ts(73,47)`, `(77,47)`: `renderLaunchArgv`'s third argument `kind`.
+The design named TS2305/TS2353/TS2339; TS2307 (a new file, not a missing export) and TS2554 (a new parameter) are the
+same class. No `TS2339` arises: `Phase` is passthrough, so `phases[0].launch` already type-checks. Every other suite of
+`test/lint` passes (ESLint included). No `.d.cts` is owed: no red imports a `.cjs` script.
+
+**Fixtures and expected text copied from real runs** (this build, `node dist/cli.js`, in copies of the fixture
+repositories the helpers build, outside the worktree):
+- `workflow next` in `seedAwaiting('gated')` → `human needed: approve or reject task-202-explicit-override — routed to
+  WingFoil Test <wf-test@example.com>`; in `seedAwaiting('signoff')` → `human needed: finalize
+  signoff.review@release:minor-1 — routed to WingFoil Test <wf-test@example.com>`; in `seedAwaiting('outreach')` →
+  `waiting for the press office: press.ack (a phase record completes it: wingfoil workflow finalize outreach-1 --step
+  outreach.announce@release:minor-1)` (the suites also re-read each line from `workflow next` in their own fixture);
+  `agent execute --next --dry-run --format json` in each → exit `0` today, the plan of the waiting step;
+- in the step fixture with `adapter: fake-terminal`: `agent execute --element task:task-202-explicit-override --role
+  developer --dry-run [--format json]` → exit `1`, `error: interactive launch needs a terminal on stdin and stdout`
+  (`{"error":…}` under json), the same without `--dry-run`; `--role approver` → exit `1`, `error: role 'approver' is
+  never executed by an agent`;
+- an adapter with `command: wingfoil-no-such-agent-cli` → exit `1`, `error: agent command 'wingfoil-no-such-agent-cli'
+  not found (adapter 'gone-no-headless')`;
+- `workflow next --format json` in `seedLaunch('headless')` → stderr `{"warning":"HEAD:.wingfoil/workflows/custom/loop.yaml:
+  unknown field(s) ignored: phases[0].launch"}`, `next.launch` absent;
+- in a git repository without `.wingfoil/`: `agent execute` → exit `2`, `error: missing required argument: --next or
+  --element`; `agent execute --next` → exit `1`, the not-initialized refusal; outside any git repository every
+  `agent execute` (and `memory approve x --reason " "`) → exit `1`, `error: E_NO_GIT_ROOT: not inside a git repository`.
+The new messages and the warning are `spec-016` §3.1/§3.2/§3.3/§3.7's as amended at the design gate. The fake is the
+only agent launched; no real agent CLI ran.
+
+**Ambiguity for the approver (not reinterpreted silently).** The design's AC 2 (b) asks for the both-flags exit `2`
+"also outside a git repository". This CLI resolves the git root before any operation runs (the registrar's
+`resolveRoot()`), so every usage error decided in an operation — `missing required argument: --next or --element`,
+`--reason`'s blank-value refusal ("before anything is read or written", `spec-008` §2) — is `E_NO_GIT_ROOT`, exit `1`,
+outside a repository (the runs above), and the design's own implementation (the check in `agentExecuteFn`, "before the
+project is read") would print that too. The red pins "before the project is read" as the repository already reads it:
+in process with `root: '/nonexistent'` (as the existing missing-target test does), and on the CLI in a git repository
+with no `.wingfoil/` (exit `2`, not the not-initialized refusal); the same for `--timeout`. If the approver wants exit
+`2` outside a repository as well, that is a registrar change beyond this design, and a later red commit adds the pin.
+
+**Candidate findings (not filed).** None beyond the design's two.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
