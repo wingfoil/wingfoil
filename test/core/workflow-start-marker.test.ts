@@ -14,6 +14,9 @@
  * - AC 3 (characterization, green before and after): in a repository with no marked start, every open plan of a
  *   loaded startable main is an instance, in the same start order, and a later marked start keeps them.
  *
+ * task-346 (`bug-390`, `spec-017` §7.1 as amended): `start` writes the add commit alone, so (a) counts one commit;
+ * the plan is left `draft`, so (e) submits it before it is marked `done`.
+ *
  * Fixture: the `writeProject` repository of `test/core/workflow-start-end.test.ts` (`release-cycle` with
  * `element: release`, the element-less `report-bug` and `checklist`, the sub `dev-loop`; the `plan` type
  * `{workflow}-{phase}-plan` under `docs/plans/{scope}/`), plus a `roles.yaml` for the CLI.
@@ -238,10 +241,11 @@ describe('task-345 AC 1 — workflow start writes the start marker (spec-017 §3
     expect(START_TRAILER).toBe('WingFoil-Start');
   });
 
-  it('(a) the add commit carries `WingFoil-Start: <workflow>` in its one trailer paragraph, before WingFoil-Version:; the submit carries none', async () => {
+  it('(a) the add commit — the one commit start writes (task-346) — carries `WingFoil-Start: <workflow>` in its one trailer paragraph, before WingFoil-Version:', async () => {
     const value = await start(repo, 'checklist');
-    expect(value.commits).toHaveLength(2);
-    const [add, submitted] = value.commits as [string, string];
+    expect(value.commits).toHaveLength(1);
+    const [add] = value.commits as [string];
+    expect(add).toBe(out(repo, ['rev-parse', 'HEAD']));
 
     const message = out(repo, ['log', '-1', '--format=%B', add]);
     const [subject, ...rest] = message.split('\n\n');
@@ -255,7 +259,6 @@ describe('task-345 AC 1 — workflow start writes the start marker (spec-017 §3
     expect(version).toBeGreaterThan(marker);
 
     expect(startTrailerOf(repo, add)).toBe('checklist');
-    expect(startTrailerOf(repo, submitted)).toBe('');
   });
 
   it('(a) the dry run of the same start shows the marker in its message, in-process and on the CLI (--format json and console)', async () => {
@@ -323,6 +326,8 @@ describe('task-345 AC 1 — a plan added without the marker after a marked start
 
   it('(e) a marked start whose plan is now `done` still counts: a later `memory add` plan is no instance', async () => {
     await start(repo, 'checklist');
+    // task-346: the plan start left `draft` is submitted (`draft → active`) before it is finalized.
+    await submit(repo, 'checklist-1-plan');
     const path = join(repo, 'docs/plans/checklist/checklist-1-plan.md');
     writeFileSync(path, readFileSync(path, 'utf-8').replace(/^status: active$/m, 'status: done'), 'utf-8');
     commitAll(repo, 'wf(plan): finalize checklist-1-plan [active → done]');

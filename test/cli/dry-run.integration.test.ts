@@ -172,7 +172,10 @@ function buildFixture(): string {
 /** One mutating operation, with an invocation that succeeds on the fixture. */
 interface Row {
   readonly args: readonly string[];
-  /** An edit the operation needs on disk before it runs (`memory amend` records an uncommitted correction). */
+  /**
+   * An edit the operation needs on disk before it runs (`memory amend` records an uncommitted correction), or a
+   * committed fixture step it needs (`workflow end`'s plan submitted, task-346); it runs before the snapshot.
+   */
   readonly prepare?: (repo: string) => void;
   /**
    * An operation whose commit changes no file — `workflow finalize`'s phase record (task-226, `spec-017` §7.9),
@@ -188,8 +191,8 @@ interface Row {
    */
   readonly launch?: true;
   /**
-   * The commits the real run makes (default 1). `workflow start` (task-217) makes two, `add` then `submit`;
-   * its dry run stops at the first, so the plan is compared with that one (spec-008 §2).
+   * The commits the real run makes (default 1). `workflow start` makes one, its plan's `add` (task-346, `spec-017`
+   * §7.1 as amended; two, `add` then `submit`, until then).
    */
   readonly commits?: number;
 }
@@ -210,8 +213,17 @@ const ROWS: Readonly<Record<string, Row>> = {
   directiveCreate: { args: ['directive', 'create', '--name', 'dry-rule'] },
   directiveAssign: { args: ['directive', 'assign', '--directive', 'traceability', '--role', 'qa'] },
   directiveRemove: { args: ['directive', 'remove', 'remove-me'] },
-  workflowStart: { args: ['workflow', 'start', 'quick'], commits: 2 },
-  workflowEnd: { args: ['workflow', 'end', 'finished'] },
+  workflowStart: { args: ['workflow', 'start', 'quick'] },
+  // task-346: `workflow start` left the fixture's `finished` plan `draft`; its author writes a body line and submits
+  // it (a committed step, before the snapshot), so `end` has an `active` plan to finalize.
+  workflowEnd: {
+    args: ['workflow', 'end', 'finished'],
+    prepare: (repo) => {
+      const path = join(repo, 'docs/memory/plan/finished/finished-1-plan.md');
+      writeFileSync(path, `${readFileSync(path, 'utf-8')}\nThe plan of this run.\n`);
+      step(repo, 'memory', 'submit', 'finished-1-plan');
+    },
+  },
   workflowFinalize: { args: ['workflow', 'finalize', 'checkpoint-1-plan'], empty: { subject: 'workflow: finalize checkpoint-1-plan checkpoint.review-notes' } },
   workflowAdopt: {
     args: ['workflow', 'adopt', 'adoptable-1-plan', '--step', 'adoptable.seed', '--element', 'adr:adr-001-adopt-me', '--reason', 'Created before the engine.'],
