@@ -400,6 +400,8 @@ total`; pinned `workflow list --format json` → exit `0`, stderr empty, 68 diag
 `npm run -s check:governance -- --base origin/main` → `gated: 0 findings on 0 commits`, `history: 0 findings on 0
 commits`.
 
+Full suite on the merged head `14e870796` (after the dl-170 wait-slot script): `npm run -s build` → exit `0`; `npm test -- --maxWorkers=2` → exit `0`, `Test Suites: 569 passed, 569 total`, `Tests: 10554 passed, 10554 total`; `npm run -s typecheck` → exit `0`, no output.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
