@@ -274,6 +274,106 @@ is a guard that the new sentence keeps true. The other five §2 phrases and the 
 - The invisible-character scan (`grep -nP` of the C1, soft-hyphen, zero-width, bidi and BOM ranges) over the four
   files → no output.
 
+### green (developer, 2026-11-08)
+
+**Base.** Branch head `17b11f99a` (the red step's record); `git rev-list --count HEAD..main` → `0`, no merge of
+`main`. Builds through the task's PATH shim: `wingfoil --version` and `node dist/cli.js --version` → `0.3.2
+(52ba5c68076ead06701e653a930da8e543ce89c0)`; the pinned build `npm run -s wingfoil -- --version` → `0.3.2
+(6de2e13c004bbf419acfa7dc4d98d5a7468cd693)`.
+
+**Green commit: `a03d9be9f`** — the design's three edits, as its `### design` words them and as the approver ruled
+(D1 (a), D2 (a), D3 (a)); no `src/`, `scripts/`, spec or test file:
+- `.wingfoil/workflows/custom/dev-loop.yaml` `2.3` → `2.4`: `design.description` gains instruction (4) (load the
+  proposed `.wingfoil/` files with the pinned build on a scratch copy, `npm run check:mcp` included, record the
+  commands, declare any break before `red`); the `agent.execute` comment says "the four instructions above";
+  `design.checks.post` appends `pinned-build.reads(…)`, fifth; the line's trailing comment adds "dl-205 Q1 (a)
+  (task-348): pinned-build.reads, bound manual: true"; the version comment opens with the 2.4 clause and keeps
+  `(prev 2.3 …`. No phase, step, action, `produces`, `approval` or `fallback` changes.
+- `.wingfoil/workflows/bindings.yaml` `2.9` → `3.0`: `pinned-build.reads: { manual: true }` right after
+  `acceptance-criteria.consistent`, with a comment giving D1's reason; history clause `3.0 task-348 (dl-205 Q1 (a)) …`
+  appended after the 2.9 clause.
+- `.wingfoil/directives/custom/wingfoil-cli.md` `"1.5"` → `"1.6"`, `**Date:**` `2026-11-05` → `2026-11-08`: §2's
+  new last bullet "**A form the pinned build cannot read** is used at once, declared (`dl-205` Q2 (ii)) …", the
+  `pinned-build` bug "filed through `bug-ingest`" (D2 (a)); it names no bug id.
+
+The parentheses of each version comment keep their balance (count of `(` / `)` on the `version:` line, `git show
+HEAD~1:<file>` against the working tree): `wingfoil-cli.md` 14/14 → 17/17; `dev-loop.yaml` 47/46 → 52/51 (the
+one-paren deficit was already on the base, see candidate findings in `### self-review`).
+
+**Red → green.** `npx jest test/core/dev-loop-v2-4.test.ts test/directives/wingfoil-cli-dl-205.test.ts
+test/core/dev-loop-v1-6.test.ts test/core/workflow-manual-prose-checks.test.ts --maxWorkers=2`, before the commit
+(edits in the working tree; the registry tests read `HEAD`) → `Tests: 10 failed, 77 passed, 87 total` (the
+directive file is read from the working tree, so its 6 reds were already green); on `a03d9be9f`, the same four files
+plus `test/directives/wingfoil-cli.test.ts` and `test/core/dev-loop-v2-3.test.ts` → `Test Suites: 6 passed, 6
+total`, `Tests: 112 passed, 112 total` — the count red's reachability check predicted.
+
+**AC 4 and the `dl-205` reads on the committed change** (pinned build, worktree at `a03d9be9f`, clean tree):
+- `npm run -s wingfoil -- workflow show dev-loop --format json` → exit `0`, stderr empty; `--format console` → exit
+  `0`, stderr empty (0.3.2 prints indented JSON there too). In both outputs the only check whose token starts with
+  `pinned-build.reads` is on `design`, `"binding": {"kind":"manual","source":"project"}`, `"evaluated": false`;
+  68 diagnostics.
+- `npm run -s wingfoil -- workflow list --format json` → exit `0`, stderr empty, 68 diagnostics, all
+  `W_WORKFLOW_UNBOUND_TOKEN` / `warning`, none naming `pinned-build.reads` (counted with `node -e` over the JSON).
+- `npm run -s wingfoil -- directives list --format json` → exit `0`, stderr empty, `wingfoil-cli` served at
+  `version` `1.6`, `warnings` 0.
+- `npm run check:mcp` → `.mcp.json "wingfoil" runs the pinned wingfoil 0.3.2, advertising [prompts, resources,
+  tools] (prompts: 8, resources: 4, tools: 0)` and `the build under development (dist/cli.js) serves [prompts,
+  resources, tools] (prompts: 8, resources: 4, tools: 0); every listed Resource read and Prompt get answered`.
+- `workflow next sw-life-cycle-1-plan --format json`, before (`17b11f99a`, on a scratch clone outside the worktree,
+  `node_modules` linked, `dist/` copied; deleted afterwards) and after (the worktree at `a03d9be9f`), pinned build
+  (`node node_modules/wingfoil-released/dist/cli.js`) and code build (`node dist/cli.js`): every run exit `0`,
+  stderr empty; with `baseline` removed the before and after JSONs are identical on both builds (`node -e`
+  `JSON.stringify` comparison → `identical: true` twice), 68 diagnostics, this task's frontier key
+  `dev-loop.green@task:task-348…`. The architect's proof holds on this head: the new check owes no step.
+
+So the pinned build reads the three changed files: no break, no `KNOWN_READ_FAILURES` entry, no `wingfoil-cli` §1
+exception, no `pinned-build` bug.
+
+### refactor (developer, 2026-11-08)
+
+Nothing to refactor: three configuration files, no code. `git rev-list --count HEAD..main` → `0` at the start and
+at the end of the phase, so no merge of `main`. Gates on `a03d9be9f` (heavy ones after the dl-170 wait-slot script,
+`--maxWorkers=2`, foreground, through the npm scripts that take the heavy-gate lock):
+- `npm run -s build` → exit `0` (the wait-slot script returned at once).
+- `npm run -s test:coverage -- --maxWorkers=2` → exit `0`, `Test Suites: 568 passed, 568 total`, `Tests: 10529
+  passed, 10529 total`; `All files` Stmts `99.29`, Branch `97.27`, Funcs `98.75`, Lines `99.69` (no `src/` change).
+  The wait-slot script waited before returning: `ps -eo pid,etime,args` meanwhile showed the holder, task-345's
+  `jest --coverage --maxWorkers=2` (pid 50640, elapsed `02:34`).
+- `npm run -s typecheck` (both tsc configs) → exit `0`, no output.
+- `npm test -- --maxWorkers=2` → exit `0`, `Test Suites: 568 passed, 568 total`, `Tests: 10529 passed, 10529 total`.
+- `npm run -s lint` → exit `0`, no output. `npm run -s docs:api` → exit `0`, no output.
+- `docs.parity` (the ten suites `bindings.yaml` binds it to, `cli-reference` included) plus
+  `test/directives/wingfoil-cli.test.ts`, `test/core/workflow-repository-conformance.test.ts` and
+  `test/lint/version-bump.test.ts` (AC 3) → `npx jest <13 files> --maxWorkers=2` → `Test Suites: 13 passed, 13
+  total`, `Tests: 130 passed, 130 total`. No CLI or help change, so `docs/cli-reference.md` is untouched.
+
+### self-review (developer, 2026-11-08)
+
+Against `code-review`, the ACs and the design as ruled:
+- **AC 1** met: the description's instruction (4), the fifth `checks.post` token, its `manual: true` binding —
+  `test/core/dev-loop-v2-4.test.ts` AC 1 block green, `workflow show dev-loop` on the pinned build (green, above).
+- **AC 2** met: §2's bullet, one bump to `"1.6"`, no bug id — `test/directives/wingfoil-cli-dl-205.test.ts` 8/8.
+- **AC 3** met: `dev-loop.yaml` one bump to 2.4 (`git diff main...HEAD -- .wingfoil/workflows/custom/dev-loop.yaml |
+  grep -c '^+version:'` → `1`), phases unchanged, 68 warnings; the three named suites green, untouched by this branch.
+- **AC 4** met: pinned `workflow show dev-loop`, json and console (green, above).
+- **Scope:** `git diff main...HEAD --stat` lists the three configuration files, the task file and red's four test
+  files only. **T4:** `git log --first-parent --no-merges --format=%h 2274f8cbf..HEAD -- test/core/dev-loop-v1-6.test.ts
+  test/core/dev-loop-v2-4.test.ts test/core/workflow-manual-prose-checks.test.ts
+  test/directives/wingfoil-cli-dl-205.test.ts` → no output.
+- **doc-versioning:** each of the three files bumped once against `main` (2.3 → 2.4, 2.9 → 3.0, "1.5" → "1.6"); the
+  directive's `**Date:**` updated; none of the four files `test/lint/version-bump.test.ts` gates is touched.
+- Invisible-character scan (`grep -nP` of the C1, soft-hyphen, zero-width, bidi and BOM ranges) over the three
+  files before the commit → no output.
+- `.wingfoil/WORKFLOW.md` not touched (ruling D3 (a): `align-agent-docs`).
+- **Candidate finding (not fixed, not filed):** `dev-loop.yaml`'s `version:` comment has one more `(` than `)` on
+  `main` (`git show main:.wingfoil/workflows/custom/dev-loop.yaml | grep '^version' | tr -cd '(' | wc -c` → 47,
+  `tr -cd ')'` → 46): an older history clause left unclosed. This task's clause is balanced and keeps the deficit
+  as found; cosmetic, a comment only.
+
+### Pending amendments (approver)
+
+None.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -281,3 +381,6 @@ is a guard that the new sentence keeps true. The other five §2 phrases and the 
      printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
      Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
      here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+- The green phase spent most of its wall time waiting for the heavy-gate slot behind other worktrees' full runs,
+  for a change of three configuration files; the full suite ran twice (`npm test` and `npm run test:coverage`, the
+  same 568 suites). Proposal: for a task with no `src/` change, the coverage run could stand for `tests.passing`.
