@@ -6,7 +6,7 @@ status: open          # auto-set by wingfoil; memory.submit → open
 severity: "medium"           # REQUIRED — critical | high | medium | low
 release-origin: "v0.4"     # optional — release where the bug was FOUND (dl-016), e.g. "v0.1"
 release: ""            # optional — fix/implementation release, stamped by release-planning/build-backlog (dl-016)
-feature: "P4.3"            # optional — related feature ID, e.g. "P1.6"
+feature: "P4.10"            # optional — related feature ID, e.g. "P1.6"
 contributor: ""        # optional — who originated this contribution, if not the git author (dl-020); credited for AI-generated work derived from it
 credit: ""             # optional — free-text credit note (dl-020)
 reported_by: []        # optional — LIST of consumer feedback notes this element answers, as provenance only (dl-163 S3c), each "<service id>/F-<nnn>@<sha>": the full id of an active kind: repository service with a feedback_inbox, the note's id in that inbox, and the full sha of the consumer commit read; restate the note in this element, never copy it; a GitHub issue gets contributor + credit instead (COLLABORATION.md)
