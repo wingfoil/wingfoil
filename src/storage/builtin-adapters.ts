@@ -15,8 +15,11 @@
  * **What ships.** One manifest per `spec-016` §2.8 built-in, each its own task with its `verified_with`
  * pass by hand: every flag a manifest declares is read from that agent CLI's own `--help` output at the
  * version `verified_with` names, never from memory. Listed in name order (REQ-SYS-07):
- * - `claude-code` — Claude Code (task-236).
- * - `codex-cli` — Codex CLI (task-237).
+ * - `claude-code` — Claude Code (task-236; its headless block, task-335).
+ * - `codex-cli` — Codex CLI (task-237; its headless block, task-335).
+ *
+ * Each declares a `launch.headless` block for the work run (`spec-016` §2.8, §3.5; `dl-181` Q3 (c)), read
+ * from its CLI's help at `verified_with`, with `output: none`: nothing parses the agent's stdout yet.
  *
  * With an empty list, `init` reserves the directory with a `.gitkeep` (the seam's empty case).
  */
@@ -30,26 +33,32 @@ export interface BuiltinAdapterManifest {
 }
 
 /**
- * Claude Code, checked against `claude --help` of 2.1.296 (task-236). The prompt comes first in the
- * launch argv because `--mcp-config <configs...>` takes several values: placed after it, the bootstrap
- * would be read as a second MCP configuration. The `--session-id` option `session.assign_args` appends
- * closes that list. No command of this CLI prints a past session's model or token counts, so
- * `usage.from` is `none` and both are recorded `not-reported` (`spec-016` §2.6).
+ * Claude Code, checked against `claude --help` of 2.1.296 (task-236), and every flag re-read in the help of
+ * 2.1.310 when the headless block was added (task-335): `-p, --print` ("print response and exit") runs it
+ * without a terminal. The prompt comes first in both launch argvs because `--mcp-config <configs...>` takes
+ * several values: placed after it, the bootstrap would be read as a second MCP configuration. The
+ * `--session-id` option `session.assign_args` appends closes that list. No command of this CLI prints a past
+ * session's model or token counts, so `usage.from` is `none` and both are recorded `not-reported`
+ * (`spec-016` §2.6).
  */
 const CLAUDE_CODE: BuiltinAdapterManifest = {
   name: 'claude-code',
   content: `# Claude Code, a built-in adapter (spec-016 section 2.8). Every flag below is read from the
-# --help output of the version in verified_with, checked by hand (task-236).
+# --help output of the version in verified_with, checked by hand (task-236; headless, task-335).
 name: claude-code
 format: 1
 command: claude
-verified_with: "2.1.296 (Claude Code)"
+verified_with: "2.1.310 (Claude Code)"
 version_args: [ --version ]
 launch:
   interactive:
     # The prompt first: --mcp-config takes several values and would read a following prompt as one.
     args: [ "{bootstrap}", --mcp-config, "{mcp_config_file}" ]
     terminal: required
+  headless:
+    # -p (--print) prints the response and exits; the prompt first, for the reason above.
+    args: [ -p, "{bootstrap}", --mcp-config, "{mcp_config_file}" ]
+    output: none
 prompt:
   via: arg
 mcp:
@@ -68,7 +77,9 @@ usage:
 };
 
 /**
- * Codex CLI, checked against `codex --help` of `codex-cli 0.145.0` (task-237). Codex has no option that
+ * Codex CLI, checked against `codex --help` of `codex-cli 0.145.0` (task-237); its headless block against
+ * `codex exec --help` of the same version (task-335): `codex exec` runs non-interactively, takes the same `-c`
+ * override and the prompt as its positional. Codex has no option that
  * takes an MCP configuration file, only `-c <key=value>` overrides parsed as TOML, so the server is
  * registered with `mcp.via: config-arg`: the rendered template is one `-c` value, a whole argv element
  * (`spec-016` §2.3). `enabled` and `required` make a same-named server elsewhere, or a failed start,
@@ -78,7 +89,7 @@ usage:
 const CODEX_CLI: BuiltinAdapterManifest = {
   name: 'codex-cli',
   content: `# Codex CLI, a built-in adapter (spec-016 section 2.8). Every flag below is read from the
-# --help output of the version in verified_with, checked by hand (task-237).
+# --help output of the version in verified_with, checked by hand (task-237; headless, task-335).
 name: codex-cli
 format: 1
 command: codex
@@ -89,6 +100,10 @@ launch:
     # -c takes one key=value; the prompt comes last and nothing is appended after it.
     args: [ -c, "{mcp_config}", "{bootstrap}" ]
     terminal: required
+  headless:
+    # codex exec runs non-interactively; the same -c override, the prompt as its positional.
+    args: [ exec, -c, "{mcp_config}", "{bootstrap}" ]
+    output: none
 prompt:
   via: arg
 mcp:

@@ -1,15 +1,19 @@
 # Claude Code, a built-in adapter (spec-016 section 2.8). Every flag below is read from the
-# --help output of the version in verified_with, checked by hand (task-236).
+# --help output of the version in verified_with, checked by hand (task-236; headless, task-335).
 name: claude-code
 format: 1
 command: claude
-verified_with: "2.1.296 (Claude Code)"
+verified_with: "2.1.310 (Claude Code)"
 version_args: [ --version ]
 launch:
   interactive:
     # The prompt first: --mcp-config takes several values and would read a following prompt as one.
     args: [ "{bootstrap}", --mcp-config, "{mcp_config_file}" ]
     terminal: required
+  headless:
+    # -p (--print) prints the response and exits; the prompt first, for the reason above.
+    args: [ -p, "{bootstrap}", --mcp-config, "{mcp_config_file}" ]
+    output: none
 prompt:
   via: arg
 mcp:

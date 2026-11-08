@@ -1,3 +1,8 @@
+# Revised 2026-11-08 (task-335, spec-016 §3.1, §3.2 steps 1 and 7, §3.3 steps 4, 12, 14, 15 and 18, §3.5, §3.7;
+# dl-181, dl-183, dl-171, bug-392): the headless work run, the launch-kind flags, the waiting-step refusal, the
+# time bound and the dry run without a terminal are added. They are implemented by
+# test/cli/agent-execute-launch-kind, -headless, -awaiting and -dry-run-terminal.integration.test.ts. Earlier
+# scenarios are unchanged.
 # Revised 2026-10-10 (task-235, spec-016 §3.1, §3.2 steps 1 and 6, §3.7; ruling R16; dl-135 point 3): the
 # --workflow and --step scenarios, the recorded step and mode scenario, and the v0.4 --resume scenario
 # (tagged @v0.4: --resume is not registered in v0.3, so it is refused as an unknown option, exit 2) are added.
@@ -88,3 +93,46 @@ Feature: P5.3.1 (US-1-03) - wingfoil agent execute [--next]
     When I run "wingfoil agent execute --next --resume <run-id>"
     Then no agent is launched
     And the command exits with code 1 and says the phase does not allow mode "resume"
+
+  Scenario: The headless work run launches without a terminal
+    When I run "wingfoil agent execute --element task:202 --headless --format json"
+    Then the agent is launched with the adapter's headless arguments, its stdin not connected
+    And stdout is exactly one document {"run": <record>}, whose result is "n/a"
+    And the summary line is a notice on stderr
+
+  Scenario: A flag that contradicts the phase's launch kind prints a warning
+    Given the next step's phase declares "launch: interactive"
+    When I run "wingfoil agent execute --next --headless"
+    Then the agent is launched headless
+    And stderr has the line "warning: phase 'loop.implement' declares launch: interactive; launching headless (--headless)"
+
+  Scenario: Error - --headless with --interactive
+    When I run "wingfoil agent execute --next --headless --interactive"
+    Then no agent is launched
+    And the command exits with code 2 and message "invalid flag combination: --headless cannot be combined with --interactive"
+
+  Scenario: Error - an adapter without a headless launch
+    Given the agent's adapter declares no "launch.headless"
+    When I run "wingfoil agent execute --element task:202 --headless"
+    Then no agent is launched
+    And the command exits with code 1 and message "adapter 'fake-no-headless' declares no headless launch"
+
+  Scenario: Error - --next on a step that only waits for an approval
+    Given the active workflow's next step waits for the approver to approve or reject "task:202"
+    When I run "wingfoil agent execute --next"
+    Then no agent is launched
+    And the command exits with code 1 and the message is the line "wingfoil workflow next" prints for that step
+
+  Scenario: A run that outlives --timeout is stopped and still recorded
+    Given the agent waits until a signal ends it
+    When I run "wingfoil agent execute --element task:202 --headless --timeout 1s"
+    Then the agent receives SIGTERM
+    And the run is recorded with exit_status "signal:SIGTERM"
+    And the command exits with code 1 and message "agent timed out after 1s; run <run-id> recorded"
+
+  Scenario: A dry run needs no terminal
+    Given the agent's adapter requires a terminal and stdin and stdout are not terminals
+    When I run "wingfoil agent execute --element task:202 --dry-run"
+    Then no agent is launched and the launch plan is printed
+    And stderr has the line "warning: interactive launch needs a terminal on stdin and stdout: a run without --dry-run is refused here"
+    And the command exits with code 0

@@ -63,6 +63,11 @@ export interface SpawnCaptureOptions {
    * signal. Absent, the child runs to completion.
    */
   readonly timeout?: number;
+  /**
+   * Text written to the child's stdin, which is then closed (`spawnSync`'s `input`; task-335: a headless
+   * work run reads nothing of it). Absent, the child's stdin is an empty pipe, as before.
+   */
+  readonly input?: string;
 }
 
 /**
@@ -78,6 +83,7 @@ export function spawnCapture(command: string, args: readonly string[], options: 
     encoding: 'utf-8',
     env: options.env,
     timeout: options.timeout,
+    ...(options.input === undefined ? {} : { input: options.input }),
   });
   // A child killed by its `timeout` comes back with both an `ETIMEDOUT` error and the signal: it was
   // spawned and ended on that signal, so it throws as a signal does, saying why it was sent.
