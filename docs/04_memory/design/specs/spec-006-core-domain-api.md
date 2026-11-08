@@ -48,10 +48,11 @@ text / JSON-RPC response). `src/storage` (git-backed file I/O) and `src/memory`/
 and are never imported directly by `src/cli` or `src/mcp`.
 
 The few read primitives a surface still needs of its own — the project root of the `bin` entry point, the
-build stamp and the template names of `wingfoil init`'s help, and the raw reads of the MCP Memory Resources and
-role Prompts — reach it through `src/core/surface-reads.ts`, which re-exports them from `src/storage` and
-`src/memory` and is not part of the `src/core` barrel. No runtime import cycle exists in `src`, and a test
-over the sources enforces both rules (`bug-345`).
+build stamp of `--version`, the template names, the default template and the template lookup `wingfoil init`'s
+help, prompt and `--template` check use, and the raw reads of the MCP Memory Resources and role Prompts — reach
+it through `src/core/surface-reads.ts`, which re-exports them from `src/storage` and `src/memory` and is not
+part of the `src/core` barrel. No runtime import cycle exists in `src`, and a test over the sources enforces both
+rules (`bug-345`).
 
 ```
  wingfoil (CLI, src/cli)        MCP client (agent, src/mcp)
@@ -286,7 +287,7 @@ contract in `spec-016` (agent execution), whose §8 carries the same three rows)
   served on the production server in v0.3, at `wingfoil://workflows/-/next` and
   `wingfoil://workflows/-/status`, registered by `registerWorkflowStateResources`
   (`src/mcp/workflow-resource.ts`) next to `registerWorkflowResources` through
-  `registerReadOnlyResources` (`src/mcp/index.ts`), with the same read-only refusal. They extend
+  `registerReadOnlyResources` (`src/mcp/read-only-resources.ts`, re-exported by `src/mcp/index.ts`), with the same read-only refusal. They extend
   the already-shipping `wingfoil://workflows…` family (`src/mcp/workflow-resource.ts`) without
   colliding with `wingfoil://workflows/{name}`: their second segment is `-`, which no workflow name
   can be (`spec-003` § "Names", `[a-z][a-z0-9-]*`), and they have a third segment, which the
@@ -944,4 +945,6 @@ a supersede or a state change (`dl-047`), pending the approver's `memory amend`.
 `src/storage` and `src/memory` directly, against this section, and two runtime import cycles ran through `src`,
 one of them leaving `CORE_MODULES` operations without their function by load order (`bug-345`, `bug-470`,
 `bug-317`). The surfaces now import those reads from `src/core/surface-reads.ts`; the barrel's exports are
-unchanged. Edited in place without a supersede or a state change (`dl-047`), pending the approver's `memory amend`.
+unchanged. `registerReadOnlyResources` moved from `src/mcp/index.ts` to `src/mcp/read-only-resources.ts`, which §3's
+"MCP exposure of the v0.3 rows" now names, and §1 lists every
+`wingfoil init` read the door serves (the default template and the template lookup as well as the names). Edited in place without a supersede or a state change (`dl-047`), pending the approver's `memory amend`.
