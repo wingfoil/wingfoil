@@ -444,9 +444,9 @@ non-blank (`--reason` itself stays optional, `dl-027`).
       `plan-next-release-line` (closes this release-line to `done`, self-seeds the next one once
       every one of its releases is `released`).
         - `delivery` → `release-cycle` *(iterate_over: release, scoped to this release-line)*:
-            - `planning` → `release-planning` *(`advance-pinned-build` → `define-scope` → `triage-bugs` →
-              `reconcile-governance` → `record-adrs` (optional) → `identify-specs` → `build-backlog` →
-              `commit-backlog`)*;
+            - `planning` → `release-planning` *(`advance-pinned-build` → `collect-feedback` → `define-scope` →
+              `triage-bugs` → `assign-bugs` → `reconcile-governance` → `record-adrs` (optional) → `identify-specs` →
+              `build-backlog` → `commit-backlog`)*;
             - `implementation` → `wave` *(iterate_over: `element:waves`, the release's `waves:`)*: per wave,
               `tasks` → `dev-loop` *(iterate_over: task, where `release` and `wave` match)* → `wave-checks`
               (e2e smoke, examples, `docs.parity`; a failure opens a bug) → `re-sweep` → `re-plan`
