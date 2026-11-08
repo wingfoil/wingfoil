@@ -43,7 +43,7 @@ import { extraOperandsReason, missingOperandReason, type CoreModule, type CorePo
 // Direct module import, not the `../core` barrel — the same path `./registrar.ts` already uses for the
 // other two exit-code mappings (task-101; keeps this file out of the barrel's merge surface).
 import { classifyParseOutcome } from '../core/exit-code';
-import { readBuildStamp, TEMPLATE_NAMES } from '../storage';
+import { readBuildStamp, TEMPLATE_NAMES } from '../core/surface-reads';
 
 import { buildCliCommands, type BuildCommandsOptions, type CliCommand } from './registrar';
 import { runInit, createReadlinePrompt } from './init-command';

@@ -156,11 +156,18 @@ export function loadWorkflowRegistry(root: string): WorkflowsLoadResult {
  * @param overlay - Workflow files (the manifest, an included file) that replace the commit's own, keyed by
  *   repository-relative path, `null` for absent: the registry a commit about to be made would leave
  *   (`workflow create` / `remove`, task-211). `memory.yaml`, `dna.yaml` and the templates stay the commit's.
+ * @param label - How warnings and errors name the revision (`<label>:<path>`); `rev` as given by default. A caller
+ *   that resolved `HEAD` itself and passes the sha passes `'HEAD'` (task-354, `bug-317`).
  * @throws `RevisionError` for a malformed rev or one naming no commit; `DiagnosticsError`
  *   (`VALIDATION`) when the loader or a core check reports an error.
  */
-export function loadWorkflowRegistryAtRev(root: string, rev: string, overlay?: ReadonlyMap<string, string | null>): WorkflowsLoadResult {
-  return loadWorkflowRegistryAtCommit(root, resolveRevision(root, rev), overlay);
+export function loadWorkflowRegistryAtRev(
+  root: string,
+  rev: string,
+  overlay?: ReadonlyMap<string, string | null>,
+  label: string = rev,
+): WorkflowsLoadResult {
+  return loadWorkflowRegistryAtCommit(root, resolveRevision(root, rev), overlay, undefined, label);
 }
 
 /**
@@ -172,6 +179,9 @@ export function loadWorkflowRegistryAtRev(root: string, rev: string, overlay?: R
  * @param overlay - As {@link loadWorkflowRegistryAtRev}'s.
  * @param pillars - `memory.yaml` and `dna.yaml` as the caller already loads them at `sha`
  *   ({@link RegistryPillars}); absent, the checks load them at `sha` themselves.
+ * @param label - How warnings and errors name the revision (`<label>:<path>`), for the workflow files and the
+ *   pillars loaded here; `sha` by default. A caller that resolved `HEAD` to that sha passes `'HEAD'` (task-354,
+ *   `bug-317`).
  * @throws `DiagnosticsError` (`VALIDATION`) when the loader or a core check reports an error.
  */
 export function loadWorkflowRegistryAtCommit(
@@ -179,10 +189,11 @@ export function loadWorkflowRegistryAtCommit(
   sha: string,
   overlay?: ReadonlyMap<string, string | null>,
   pillars?: RegistryPillars,
+  label: string = sha,
 ): WorkflowsLoadResult {
-  return withCoreChecks(loadWorkflowsYamlAtCommit(root, sha, overlay), {
-    memoryYaml: pillars?.memoryYaml ?? (() => loadMemoryYamlAtCommit(root, sha)),
-    dnaYaml: pillars?.dnaYaml ?? (() => loadDnaYamlAtCommit(root, sha)),
+  return withCoreChecks(loadWorkflowsYamlAtCommit(root, sha, overlay, label), {
+    memoryYaml: pillars?.memoryYaml ?? (() => loadMemoryYamlAtCommit(root, sha, label)),
+    dnaYaml: pillars?.dnaYaml ?? (() => loadDnaYamlAtCommit(root, sha, label)),
     configFiles: (relatives) => {
       const paths = relatives.map(configPath);
       const inside = paths.filter((path): path is string => path !== null);

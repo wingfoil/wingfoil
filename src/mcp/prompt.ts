@@ -2,7 +2,7 @@
  * The role-scoped MCP **Prompts** channel — `{role}-session` prompts that embed the role's assigned
  * directives (task-039-mcp-prompts-role-based-infra, **REQ-INT-02**,
  * `spec-004-mcp-surface-contract` §3). This is the third and last channel type spec-004 §1 names,
- * alongside the Resources channel (`./index.ts`'s `registerReadOnlyResources`, task-011/task-030) and
+ * alongside the Resources channel (`registerReadOnlyResources`, `./read-only-resources.ts`, task-011/task-030) and
  * the still-unshipped Tools channel (P5.2.3, v0.4).
  *
  * **Wired into the production server by `task-058-mcp-prompts-role-based` (P5.2.2).** task-039
@@ -43,7 +43,7 @@ import {
 } from '../core';
 import type { CoreError, DirectiveFile, ExecutionContextElement } from '../core';
 import { errorDetails, type ErrorDetail } from '../core/error-details';
-import { readDocument, splitFrontmatter, WINGFOIL_DIR } from '../storage';
+import { readDocument, splitFrontmatter, WINGFOIL_DIR } from '../core/surface-reads';
 
 import { readRefusalError, warningDetails, withRefusalDetails, withWarnings } from './read-only';
 
@@ -158,7 +158,8 @@ export function buildSessionContext(root: string, role: string, element: Executi
     if (error instanceof RevisionError) throw promptRequestError(error.message);
     throw error;
   }
-  const result = assembleExecutionContext(root, { role, element, stateRef: sha });
+  // The warnings name the revision the client asked for, not the sha it resolved to (task-354, `bug-317`).
+  const result = assembleExecutionContext(root, { role, element, stateRef: sha, label: state });
   if (!result.ok) {
     const { error } = result;
     if (error.code === 'NOT_FOUND') {

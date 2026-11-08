@@ -371,8 +371,8 @@ export function workflowShowAtHead(root: string, ref: string): CoreResult<ShowRe
     memoryYaml: snapshot.memoryYaml,
     // The registry the snapshot loaded carries `bindings.yaml`: one registry load per call (task-216).
     bindings: snapshot.bindings ?? null,
-    rolesYaml: committed ? loadRolesYamlAtCommit(root, snapshot.commit) : null,
-    directiveFiles: committed ? loadDirectivesAtCommit(root, snapshot.commit) : [],
+    rolesYaml: committed ? loadRolesYamlAtCommit(root, snapshot.commit, 'HEAD') : null,
+    directiveFiles: committed ? loadDirectivesAtCommit(root, snapshot.commit, 'HEAD') : [],
   };
   return showWorkflow(inputs, deduction, ref);
 }

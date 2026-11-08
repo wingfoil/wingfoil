@@ -126,12 +126,14 @@ function duplicateIssues(entries: readonly AdapterEntry[], file: string): { read
  * can select; {@link adapterTreeDiagnosticsAtRev} reports the rest. Nothing is parsed.
  *
  * @param rev - A revision naming one commit; `HEAD` for the gating read.
+ * @param label - How the refusal names the revision (`<label>:<path>`); `rev` as given by default. A caller that
+ *   resolved `HEAD` itself and passes the sha passes `'HEAD'` (task-354, `bug-317`).
  * @throws `ValidationError` (`E_ADAPTER_DUPLICATE`) when a name is in both `built-in/` and `custom/`;
  *   `RevisionError` when `rev` names no commit.
  */
-export function listAdaptersAtRev(root: string, rev: string): AdapterEntry[] {
+export function listAdaptersAtRev(root: string, rev: string, label: string = rev): AdapterEntry[] {
   const entries = entriesAtCommit(root, resolveRevision(root, rev));
-  const duplicates = duplicateIssues(entries, `${rev}:${ADAPTERS_DIR_PATH}`);
+  const duplicates = duplicateIssues(entries, `${label}:${ADAPTERS_DIR_PATH}`);
   if (duplicates.length > 0) throw new ValidationError(duplicates.map(({ issue }) => issue));
   return entries;
 }
