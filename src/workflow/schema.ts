@@ -85,6 +85,16 @@ export const PHASE_MODES = ['fresh', 'resume', 'reference'] as const;
 /** One of {@link PHASE_MODES}. */
 export type PhaseMode = (typeof PHASE_MODES)[number];
 
+/**
+ * The launch kinds a phase may declare (spec-003 Layer 2 `launch`, `dl-183` Q1 (a), task-335): the kind
+ * `agent execute` launches the phase's agent with when no `--headless` / `--interactive` is given. An absent
+ * `launch` reads as `interactive` but stays absent in the parsed phase, as `mode` does; `any` lets the adapter's
+ * declared kinds decide, `interactive` first (`spec-016` §3.2 step 7).
+ */
+export const LAUNCH_KINDS = ['interactive', 'headless', 'any'] as const;
+/** One of {@link LAUNCH_KINDS}. */
+export type LaunchKind = (typeof LAUNCH_KINDS)[number];
+
 /** Roles whose phases judge independently, so `fresh` is mandatory there (`dl-135` point 3). */
 export const INDEPENDENT_ROLES: readonly string[] = ['reviewer', 'qa'];
 
@@ -205,7 +215,7 @@ export function producesPath(entry: Produces): string {
  * One `phases[]` entry of a Layer-2 workflow definition (spec-003) — a named step with its optional
  * `role`, `actions`, `include`, `iterate_over`/`where`, `produces`, `awaits` (task-175), `checks`,
  * `approval`, `fallback`, the executor attributes `mode` / `distinct_from` and the `cadence`
- * (task-185). `.passthrough()` per spec-009 §2, except the closed `cadence` union.
+ * (task-185), and the `launch` kind (task-335). `.passthrough()` per spec-009 §2, except the closed `cadence` union.
  */
 export const Phase = z
   .object({
@@ -230,6 +240,8 @@ export const Phase = z
     // task-185 (spec-003 § "Execution independence", § "Recurring phases"):
     mode: z.enum(PHASE_MODES).optional(),
     distinct_from: z.array(z.string()).optional(),
+    // task-335 (spec-003 Layer 2 `launch`, `dl-183` Q1 (a)): no default, so the raw declaration stays visible.
+    launch: z.enum(LAUNCH_KINDS).optional(),
     cadence: Cadence.default('once'),
   })
   .passthrough();

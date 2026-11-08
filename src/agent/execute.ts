@@ -12,12 +12,15 @@
  *    (task-330, `bug-339`). Then `dna.yaml` and
  *    `memory.yaml` at that `HEAD` (the stepless form resolves `HEAD` itself and reads no workflow file);
  *    the adapter tree listed, every entry that is not an adapter printed as a warning (`bug-290`).
- * 3. Resolution (§3.2 steps 1–5): the step ({@link selectFrontierStep}), its workflow and phase; the
+ * 3. Resolution (§3.2 steps 1–7): the step ({@link selectFrontierStep}), its workflow and phase, a step
+ *    that only waits refused without `--element` ({@link refuseWaitingStep}, task-335); the
  *    element (`--element`, else the step's, {@link stepTargetElement}) at `HEAD`; the role (`--role`, else
  *    the step's, {@link resolveStepRole}, else — stepless — the `developer` default with a warning,
  *    approver ruling R18); never `approver` (`REQ-SEC-03`); the agent ({@link selectAgent}); its adapter
- *    (`loadAdapter`, at `HEAD`).
- * 4. The adapter's `command` on `PATH` or at its repository path ({@link agentCommandFound}).
+ *    (`loadAdapter`, at `HEAD`); the launch kind ({@link resolveLaunchKind}, task-335): `--headless` /
+ *    `--interactive`, else the phase's `launch`, else `interactive`, with a warning on a contradiction.
+ * 4. The adapter declares that kind (`NO_LAUNCH_KIND`), then its `command` is on `PATH` or at its
+ *    repository path ({@link agentCommandFound}).
  * 5. The git identity (`requireGitIdentity`), since the record is committed.
  * 6. The run log declared and unmodified (`runLogPreflight`, task-206).
  * 7. The execution context assembled and validated at `state_ref` (`assembleExecutionContext`, task-176).
@@ -30,7 +33,8 @@
  * 10. The bootstrap (§2.4) and the temporary files (§2.3), in the OS temporary directory
  *    ({@link withRunFiles}), removed on every exit path.
  * 11. The MCP pre-flight against the running build ({@link mcpPreflight}, §2.5).
- * 12. The terminal check, last, so every earlier refusal is reachable without a terminal.
+ * 12. The terminal check, last, so every earlier refusal is reachable without a terminal; an interactive
+ *    launch only. A dry run, which spawns nothing, prints a warning there instead of refusing (`bug-392`).
  *
  * Then the caller's `launch` runs, with the temporary files still in place and the function that hands
  * the signals over from their cleanup to the launch (`withRunFiles`' `release`).
@@ -70,13 +74,18 @@ import { resolveRevision, RevisionError } from '../core/revision';
 import { coreErr, coreOk, type CoreResult } from '../core/types';
 
 import type { Step } from '../core/workflow-next';
+import type { LaunchKind } from '../workflow/schema';
 
-import type { LaunchHost } from './launch';
+import type { LaunchHost, LaunchKindRun } from './launch';
+import type { AdapterManifest } from './schema';
 import { adapterTreeDiagnosticsAtRev, duplicateAdapterRefusal, loadAdapter, type LoadedAdapter } from './discovery';
 import { ADHOC_PHASE, executionNotesSection, nextRunId, NO_WORKFLOW, recordSubject, runLogPreflight } from './run-log';
-import { readNextAtHead, resolveStepRole, selectFrontierStep, stepTargetElement, type StepSelector } from './step';
+import { readNextAtHead, refuseWaitingStep, resolveStepRole, selectFrontierStep, stepTargetElement, type StepSelector } from './step';
 
-/** The role of a run with no step and no `--role` (`X_cli-cmds.md:223`, approver ruling R18). */
+/**
+ * The role of a run with no step and no `--role` (`X_cli-cmds.md` § "Parameters for Agent Execution", the
+ * `--role` row; approver ruling R18).
+ */
 export const DEFAULT_ROLE = 'developer' as const;
 
 /** The warning that says the role was defaulted (§3.2 step 3). */
@@ -87,6 +96,35 @@ export const FRESH_MODE = 'fresh' as const;
 
 /** How long the MCP pre-flight may take, start-up included, before it counts as unreachable. */
 export const MCP_PREFLIGHT_TIMEOUT_MS = 30000;
+
+/** §3.3 step 12's dry-run warning (`bug-392`): a dry run spawns nothing, so it needs no terminal. */
+export const DRY_RUN_TERMINAL_WARNING = 'interactive launch needs a terminal on stdin and stdout: a run without --dry-run is refused here';
+
+/** The order `launch: any` tries the adapter's kinds in (`dl-183` Q3 (a)). */
+const ANY_LAUNCH_ORDER: readonly LaunchKindRun[] = ['interactive', 'headless'];
+
+/**
+ * §3.2 step 7 (task-335, `dl-183` Q1–Q3 (a)): the kind a run launches as — `option` (`--headless` /
+ * `--interactive`), else the phase's `declared` launch when it is `interactive` or `headless`, else
+ * `interactive`: for a stepless run (`declared` `null`), for a phase without `launch`, and for `launch: any`,
+ * which tries the adapter's declared kinds `interactive` first. `warning` is the clause, after `phase
+ * '<workflow>.<phase>' `, that the pipeline prints when the option names the other kind than the declared
+ * `interactive` or `headless`. Whether the adapter declares the kind is §3.3 step 4's check, not this one's.
+ */
+export function resolveLaunchKind(
+  declared: LaunchKind | null,
+  option: LaunchKindRun | undefined,
+  manifest: AdapterManifest,
+): { kind: LaunchKindRun; warning?: string } {
+  if (option !== undefined) {
+    const contradicted = (declared === 'interactive' || declared === 'headless') && declared !== option;
+    return contradicted ? { kind: option, warning: `declares launch: ${declared}; launching ${option} (--${option})` } : { kind: option };
+  }
+  if (declared === 'interactive' || declared === 'headless') return { kind: declared };
+  // `any`: the first kind the adapter declares, interactive first — interactive for every format-1 manifest (§2.2).
+  if (declared === 'any') return { kind: ANY_LAUNCH_ORDER.find((kind) => manifest.launch[kind] !== undefined) ?? 'interactive' };
+  return { kind: 'interactive' };
+}
 
 /** P5.4.3 sc. 3, verbatim (§3.7 `MCP_UNREACHABLE`). */
 export const MCP_UNREACHABLE_MESSAGE = 'context pre-load failed: MCP server unreachable';
@@ -380,6 +418,12 @@ export interface AgentExecuteRequest {
   readonly role?: string;
   /** `--agent`; absent → the first agent with an adapter that executes the role. */
   readonly agent?: string;
+  /** `--headless` / `--interactive` (task-335); absent → the step's phase `launch`, else interactive (§3.2 step 7). */
+  readonly launch?: LaunchKindRun;
+  /** `--timeout`, parsed (§3.1); absent → unbounded. */
+  readonly timeout?: { readonly ms: number; readonly label: string };
+  /** `--dry-run` is active: step 12 warns instead of refusing, since nothing is spawned (`bug-392`). */
+  readonly dryRun?: boolean;
 }
 
 /** The host facts the pipeline reads, each overridable by a caller (tests) and defaulted from the process. */
@@ -422,6 +466,10 @@ export interface PreparedLaunch {
   readonly files: Partial<Record<RunFileName, string>>;
   /** The rendered `mcp.template` under `mcp.via: config-arg` (§2.3 `{mcp_config}`); `undefined` otherwise. */
   readonly mcpConfig?: string | undefined;
+  /** The launch kind §3.2 step 7 resolved (task-335). */
+  readonly kind: LaunchKindRun;
+  /** `--timeout`'s bound, when given. */
+  readonly timeout?: { readonly ms: number; readonly label: string } | undefined;
 }
 
 /** The process's own terminals: stdin and stdout both. */
@@ -556,6 +604,11 @@ async function runPipeline<T>(
     if (!deduced.ok) return deduced;
     const selected = selectFrontierStep(deduced.value, request.step!.key);
     if (!selected.ok) return selected;
+    // A step that only waits is refused, unless `--element` makes it an explicit target (dl-171 (c), task-335).
+    if (request.element === undefined) {
+      const runnable = refuseWaitingStep(selected.value);
+      if (!runnable.ok) return runnable;
+    }
     step = selected.value;
   }
   // §3.2 step 2 — the element: `--element`, else the step's; it must exist at HEAD.
@@ -588,8 +641,15 @@ async function runPipeline<T>(
   const adapter = loadAdapter(root, agent.value.adapter!, sha, 'HEAD');
   if (!adapter.ok) return adapter;
   const manifest = adapter.value.manifest;
+  // §3.2 step 7 — the launch kind, after the approver rule above, which no option relaxes.
+  const launchKind = resolveLaunchKind(step?.launch ?? null, request.launch, manifest);
+  if (launchKind.warning !== undefined && step !== undefined) reportWarning(`phase '${step.workflow}.${step.phase}' ${launchKind.warning}`);
+  const kind = launchKind.kind;
 
-  // Step 4 — the agent CLI can be started.
+  // Step 4 — the adapter declares the kind (NO_LAUNCH_KIND, never a fallback to the other), and its CLI can be started.
+  if (kind === 'headless' && manifest.launch.headless === undefined) {
+    return coreErr({ code: 'VALIDATION', message: `adapter '${adapter.value.name}' declares no headless launch` });
+  }
   if (!agentCommandFound(root, manifest.command, host.searchPath ?? process.env.PATH)) {
     return coreErr({ code: 'IO', message: `agent command '${manifest.command}' not found (adapter '${adapter.value.name}')` });
   }
@@ -652,10 +712,11 @@ async function runPipeline<T>(
     });
     if (!preflight.ok) return preflight;
 
-    // Step 12 — the terminal check, last.
+    // Step 12 — the terminal check, last; an interactive launch only. A dry run spawns nothing: it warns (bug-392).
     const isTerminal = host.isTerminal ?? processHasTerminal;
-    if (manifest.launch.interactive.terminal === 'required' && !isTerminal()) {
-      return coreErr({ code: 'VALIDATION', message: 'interactive launch needs a terminal on stdin and stdout' });
+    if (kind === 'interactive' && manifest.launch.interactive.terminal === 'required' && !isTerminal()) {
+      if (request.dryRun !== true) return coreErr({ code: 'VALIDATION', message: 'interactive launch needs a terminal on stdin and stdout' });
+      reportWarning(DRY_RUN_TERMINAL_WARNING);
     }
 
     return launch({
@@ -676,6 +737,8 @@ async function runPipeline<T>(
       mcpServer,
       files: paths,
       mcpConfig,
+      kind,
+      timeout: request.timeout,
     }, releaseSignals);
   });
 }

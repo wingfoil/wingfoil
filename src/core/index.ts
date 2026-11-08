@@ -2667,13 +2667,23 @@ export const CORE_MODULES: readonly CoreModule[] = [
         mutates: true,
         description: 'launch an agent CLI through its adapter on one Memory element, with its context assembled and checked first',
         // task-235 (spec-016 §3.1, ruling R16): the step forms. `--workflow` and `--step` imply `--next`.
-        flags: [{ name: 'next', description: "take the workflow, phase, element and role from the active workflow's next step" }],
+        flags: [
+          { name: 'next', description: "take the workflow, phase, element and role from the active workflow's next step" },
+          // task-335 (spec-016 §3.1, dl-183 Q2 (a)): the launch kind, over the phase's `launch`; both together are exit 2.
+          { name: 'headless', description: "launch the agent without a terminal, as a work run; overrides the phase's launch" },
+          { name: 'interactive', description: "launch the agent in this terminal; overrides the phase's launch" },
+        ],
         options: [
           { name: 'workflow', valueName: 'ref', description: 'take the step from this workflow (its most recent open instance) or open instance id; implies --next' },
           { name: 'step', valueName: 'key', description: 'take this step of the frontier, e.g. dev-loop.red@task:task-042-login-form; implies --next' },
           { name: 'element', valueName: 'type:id', description: "the element the agent works on, e.g. task:task-042-login-form, or a short reference (e.g. task:task-42); with a step, it overrides the step's element" },
           { name: 'role', valueName: 'role', description: "the role the agent runs as, a dna.yaml team.roles name (default: the step's role; with no step, developer, with a warning)" },
           { name: 'agent', valueName: 'name', description: 'the team.agents entry to launch (default: the first with an adapter that executes the role)' },
+          {
+            name: 'timeout',
+            valueName: 'duration',
+            description: 'stop the agent after this long: <n>s, <n>m or <n>h, at most 24h (SIGTERM, then SIGKILL 10 s later)',
+          },
         ],
         example: 'wingfoil agent execute --next',
         fn: agentExecuteFn,
