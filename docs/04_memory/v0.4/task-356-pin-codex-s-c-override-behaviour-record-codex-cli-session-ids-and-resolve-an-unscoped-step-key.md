@@ -53,3 +53,231 @@ prints the id. `bug-468`: a step key without its instance scope is refused even 
 ## Execution Notes
 
 <!-- Filled by the dev-loop. -->
+
+### design (architect, 2026-11-08)
+
+**Inputs read.** Base `main` `b20ddf0a5` plus the start commit `9d35c19a3` and the three bug syncs `4c9ce43e5`
+(`bug-372`), `b8550c628` (`bug-375`), `113fc9bef` (`bug-468`): `git log --oneline -5` → those four on top of
+`b20ddf0a5`. The task's PATH shim was checked first: `command -v wingfoil` → the shim; `wingfoil --version` and
+`node dist/cli.js --version` → both `0.3.2 (b20ddf0a54bcb83b95fff481cac807b5e581287c)`. Read: the three bugs and
+`bug-340` (`closed`); `spec-016` §2.2–§2.8, §3.1–§3.7, §7, §8 and its Revision notes; `spec-017` §4.8–§4.9,
+§7.9–§7.11, §10; `spec-008` §7, §12 (all `approved`); `dl-149`, `dl-182`, `dl-223` (`ready`);
+`.wingfoil/workflows/custom/dev-loop.yaml`; the code of `src/agent/{step,launch,schema,manifest,placeholders}.ts`,
+`src/core/{memory-add-link,workflow-finalize,workflow-adopt}.ts`, `src/storage/builtin-adapters.ts`,
+`test/fixtures/agents/fake-agent.cjs` and the fixture manifests; the descriptions and criteria of `task-336`,
+`task-337`, `task-338`, `task-339` and `task-355`.
+
+**`dl-015` — `task-335`'s Execution Notes (merged, `b20ddf0a5`), read in full.** What constrains this task:
+the work run's stdout is piped and drained (`child.stdout?.resume()` in `runAgent`), stderr inherited (D6); the
+built-ins' headless blocks declare `output: none`, `codex-cli` `[exec, -c, "{mcp_config}", "{bootstrap}"]`
+(`src/storage/builtin-adapters.ts`); `task-335`'s list "What the tasks built on this one must read" says this task's
+`bug-372` observation covers both launch kinds, since the headless argv reuses the `-c` override. Its
+`### D7 evidence (orchestrator, 2026-11-08)`: the approver ran `codex-cli 0.145.0` headless through `agent execute`
+(exit `0`, record `session` `not-reported`, "the adapter declares `session.id: none`") and the adapter's argv by
+hand; Codex's stderr showed `mcp: wingfoil/read_mcp_resource started` / `(completed)` on the override's server.
+The orchestrator reports that Codex also printed its session id (`session id: <uuid>`) on stderr in that run; the
+D7 section does not quote that line (`grep -rn "session id:" docs/04_memory/v0.4/` → nothing), so this design
+does not rely on it.
+
+**What each bug needs (read, not run: agents launch no agent CLI, D7 of `task-335`).**
+- `bug-372`. The behaviour is already observed: step 4 of the bug (approver, 2026-10-15, `codex-cli 0.145.0`,
+  `codex mcp get probe` with and without a `-c` override) → **`-c` merges**: keys the override leaves out keep the
+  trusted project's values, the keys it sets win. The D7 run does not contradict it (the override's `command`/`args`
+  started the server). What is open is the fix. Setting "every key WingFoil relies on" cannot be complete under a
+  merge: a nested table the override sets (`env = {}`) would itself merge, so the project's `env` entries would
+  stay (unobserved, H1 (c) below), and any key a later Codex adds (`env_vars`, timeouts, a transport key) would leak
+  too. The refusal is robust to both, and the agent CLI decides what it loads (trust, user and project layers), so
+  the design asks the agent: an optional manifest argv `mcp.conflict_args`, run before the launch; exit `0` → the
+  agent's own configuration declares `wingfoil` → refused (`MCP_SERVER_DECLARED`). `codex-cli` declares
+  `[mcp, get, wingfoil]`. D1.
+- `bug-375`. No `codex-cli` option assigns a session id and no command prints a past one (`task-237` ruling D-3).
+  `codex exec --help` of `0.145.0` lists `--json  Print events to stdout as JSONL` (read in `task-335`'s design).
+  The work run already captures stdout, and `spec-016` §2.6 already has `session.id: output` (read from the headless
+  output; an interactive launch degrades to `not-reported`). So the design reads the session id from a work run's
+  stdout: `launch.headless.output` gains `jsonl`, `session.id: output` is implemented for `json` and `jsonl`, and the
+  `codex-cli` headless argv gains `--json`. The event key that carries the id at `0.145.0`, and that `codex resume`
+  accepts it, are not established in the repository: H2 below, before red. An interactive `codex-cli` run keeps
+  `not-reported`. D2.
+- Resume (`bug-375` second half). No `w0` task ships `spec-016` §7's `--resume` (`grep -ln "resume"
+  docs/04_memory/v0.4/*.md` → only `task-335`, `task-349`, `task-354` and this task, none shipping the option), so
+  per the Implementation Notes `resume.supported` stays `false` and the resume half is filed as a bug at review. D3.
+- `bug-468`. Today four sites match `--step` exactly, each with its own copy of the out-of-frontier refusal:
+  `selectFrontierStep` (`src/agent/step.ts`), `resolveAddLink` (`src/core/memory-add-link.ts`),
+  `workflowFinalizeAtHead` (`src/core/workflow-finalize.ts`) and `adoptOne` (`src/core/workflow-adopt.ts`)
+  (`grep -rn "is not on the frontier" src` → those four). No approved spec states the unscoped rule: `bug-340`
+  cites `spec-017` §4.9 and §7.10, which do not contain it, and `spec-008` §7 states "`--set` and `--step` stay
+  exact" (a contradiction the amendments resolve, D5). The AC's "keep the ambiguity refusal" names no existing
+  refusal for step keys; the nearest is §10's `no step of <instance> adds a <type> alone: give --step, one of: …`,
+  whose shape the new refusal copies. D4.
+
+**Per-AC classification and what qa must pin.**
+
+| AC | Class | What qa pins (observable · interface · fixtures · file) |
+|---|---|---|
+| 1 | red-first | (a) Manifest: `parseAdapterManifest` accepts `mcp.conflict_args: [<non-empty strings>]` and refuses an empty list or a `{…}` placeholder in it (`E_ADAPTER_PLACEHOLDER`), `test/agent/manifest-conflict-args.test.ts`. (b) Pipeline, through `agentExecute` in process (the pattern of `test/agent/execute-config-arg.test.ts`) with a new fixture manifest `test/fixtures/agents/config-arg/fake-conflict.yaml` (a copy of `fake-config-arg.yaml` plus `mcp.conflict_args: [test/fixtures/agents/fake-agent.cjs, --mcp-get, wingfoil]`) and a new fake invocation `--mcp-get <name>` whose exit is `WINGFOIL_FAKE_AGENT_MCP_GET` (`0`, `1`, `hang`; default `1`), recorded like every invocation: exit `0` → `CONFLICT`, message exactly `adapter 'fake-conflict': the agent's own configuration declares an MCP server named 'wingfoil', which it would merge into the server agent execute registers: remove or rename it`, `details` `{ adapter, argv }`, no launch recorded by the fake, no commit (`git rev-list --count HEAD` unchanged); exit `1` → the launch runs and is recorded; `hang` → one `warning:` naming the adapter and `timed out`, the launch runs (inject a short limit if the probe's 10 s is a parameter, as `timeoutMs` is for lookups); with `--dry-run` the probe runs and exit `0` refuses the same way (D1.2); the probe precedes the git-identity check (§3.3 step 4 vs 5). File `test/agent/execute-mcp-conflict.test.ts`. (c) The built-in: `parseAdapterManifest` of the shipped `codex-cli` has `mcp.conflict_args` `['mcp', 'get', 'wingfoil']`, `claude-code` none, file `test/storage/builtin-adapter-codex-cli.test.ts` (a new `it`). (d) The `spec-016` §2.5 sentence is AC 4's. |
+| 2 | red-first | (a) Schema: `launch.headless.output: jsonl` accepted, `test/agent/manifest.test.ts` (existing `'xml'` refusal stays). (b) Launch, in process with the injected spawn (`FakeChild` of `test/agent/helpers/fake-child.ts`, `test/agent/launch-headless.test.ts` pattern): a headless run of a manifest with `session.id: output`, `session.field: <H2 key>`, `output: jsonl`, whose child writes the event lines **copied from the approver's H2 output** (at least the line carrying the id, one line before it and one after; never invented) → record `session` = the id; the same lines with no id → `not-reported` and one warning `adapter '<name>': the headless output carries no session id: session recorded as not-reported`; `output: json` with one document `{"<field>": "s-1"}` → `s-1`; invalid JSON under `json` → `not-reported` + warning; an interactive launch of a `session.id: output` manifest → `not-reported`, no warning. New file `test/agent/launch-session-output.test.ts`. (c) End to end: a new fixture `test/fixtures/agents/custom/fake-session-output.yaml` (`session.id: output`, `field: session_id`, headless `output: json`) through `node dist/cli.js agent execute --element … --headless --format json` → stdout `{ "run": … }` with `session` the id the fake printed (`WINGFOIL_FAKE_AGENT_DOCUMENT`), `test/cli/agent-execute-session-output.integration.test.ts`. (d) The built-in `codex-cli`: `launch.headless.args` `['exec', '--json', '-c', '{mcp_config}', '{bootstrap}']`, `output: 'jsonl'`, `session.id: 'output'`, `session.field` the H2 key, `session.resume.supported: false`, in `test/storage/builtin-adapter-codex-cli.test.ts`. |
+| 3 | red-first | A pure helper `resolveFrontierKey<T extends { key: string; workflow: string; phase: string }>(frontier: readonly T[], key: string): { kind: 'one'; step: T } \| { kind: 'many'; steps: T[] } \| { kind: 'none' }` exported from a new `src/core/workflow-step-key.ts` (expected reds: `tsc` TS2307 for the missing module, jest `Cannot find module`): exact key first; else, for a key without `@`, the steps whose `workflow` + `.` + `phase` equals it, frontier order. Unit file `test/core/workflow-step-key.test.ts`. Then, on the multi-iteration fixture of `test/core/step-refusal-frontier.test.ts` (two frontier keys of one phase) and a single-scoped-step fixture (an instance whose one frontier step is `<wf>.<phase>@<type>:<id>`), for each of `resolveAddLink`, `workflowFinalizeAtHead`, `adoptOne` (through `workflowAdoptAtHead`) and `selectFrontierStep`: the unscoped key with one match → resolves to the full key (the add's `WingFoil-Step:` trailer, the finalize subject `workflow: finalize <instance> <full key>`, the adopt record's subject, `Step.key`); with two matches → `CONFLICT`, message exactly `step '<key>' names 2 steps of <instance>: give --step, one of: <k1>, <k2>`, `details` `{ step, instance, steps: [k1, k2] }`, nothing committed; no match → today's refusal, its `details` unchanged per site (the existing toEqual pins of `step-refusal-frontier.test.ts` stay green). A scoped key that is not on the frontier stays the out-of-frontier refusal even when its unscoped part matches. File `test/core/step-key-unscoped.test.ts`; one CLI pin of the message on stderr: `node dist/cli.js workflow finalize <instance> --step <unscoped>` → exit `1`, `error: step '…' names 2 steps of …`, in `test/cli/workflow-finalize.integration.test.ts` (a new `it`). |
+| 4 | characterization | No test: the prepared amendments below are approved at this gate and recorded with `memory amend` before red. `test/docs/name-resolvability.test.ts` passes with them (command and result under Tests run). |
+
+**The change (green), by file.**
+- `src/core/workflow-step-key.ts` (new): `resolveFrontierKey` (above) and `ambiguousStepKey(key, instance, steps)`
+  building the §10 `CONFLICT`. Imports `./types` only (no cycle: `test/lint/import-graph.test.ts`).
+- `src/agent/step.ts` `selectFrontierStep`, `src/core/memory-add-link.ts` `resolveAddLink`,
+  `src/core/workflow-finalize.ts` `workflowFinalizeAtHead`, `src/core/workflow-adopt.ts` `adoptOne`: replace the
+  exact `find`/`some` by `resolveFrontierKey`; `many` → `ambiguousStepKey`; `none` → each site's existing refusal,
+  unchanged. `resolveAddLink` resolves the key before its type filter.
+- `src/agent/schema.ts`: `HeadlessLaunch.output` `z.enum(['json', 'jsonl', 'none'])`; `mcp.conflict_args:
+  z.array(NonEmpty).nonempty().optional()`. `src/agent/placeholders.ts`: no placeholder legal in
+  `mcp.conflict_args` (the closed set's refusal). `src/agent/manifest.ts` unchanged unless the placeholder pass
+  lives there.
+- `src/agent/launch.ts`: `runAgent` keeps draining stdout but, for a headless run whose manifest has
+  `session.id: output`, collects it through a bounded line reader (stops collecting once the id is found under
+  `jsonl`; at most 1 MiB under `json`; the rest drained) and hands it to `postRunFacts`, which gains the `output`
+  branch. Interactive: untouched.
+- `src/agent/execute.ts`: §3.3 step 4's probe after `AGENT_NOT_FOUND`, through the lookup runner of `launch.ts`
+  (`runLookup` exported or a `runProbe` beside it), the refusal and the warning; dry run included (D1.2).
+- `src/storage/builtin-adapters.ts`: `codex-cli` gains `mcp.conflict_args`, `session.id: output`, `session.field`,
+  headless `--json` and `output: jsonl`, its TSDoc and YAML comments saying where each was read (H1, H2). This
+  repository installs only `claude-code.yaml` (`ls .wingfoil/agents/built-in` → `claude-code.yaml`), so no
+  installed copy changes and `.wingfoil/` is untouched.
+- Docs: `docs/cli-reference.md` (`agent execute`: the refusal, the session id of a headless `codex-cli` run;
+  `memory add --step`, `workflow finalize --step`, `workflow adopt --step`: the unscoped key and its refusal);
+  `docs/user-guide.md` (the "Codex CLI: do not declare a server named `wingfoil`" paragraph becomes what
+  `agent execute` now refuses); `docs/agents.md` (the same bullet, D6). No `version:` field in any of the three
+  (`grep -m1 "^version:"` → none in cli-reference and agents; the user guide's match is inside a code block).
+- `test/fixtures/agents/fake-agent.cjs` (qa): `--mcp-get <name>` and `WINGFOIL_FAKE_AGENT_MCP_GET`, its header
+  updated; the new fixture manifests above.
+
+**Files expected to change.** Code: `src/core/workflow-step-key.ts` (new), `src/agent/step.ts`,
+`src/core/memory-add-link.ts`, `src/core/workflow-finalize.ts`, `src/core/workflow-adopt.ts`, `src/agent/schema.ts`,
+`src/agent/placeholders.ts`, `src/agent/launch.ts`, `src/agent/execute.ts`, `src/storage/builtin-adapters.ts`.
+Docs: `docs/cli-reference.md`, `docs/user-guide.md`, `docs/agents.md`. Tests and fixtures (red): the files named in
+the table, `test/fixtures/agents/fake-agent.cjs`, `test/fixtures/agents/config-arg/fake-conflict.yaml`,
+`test/fixtures/agents/custom/fake-session-output.yaml`. Changed existing test (green, not red's):
+`test/storage/builtin-adapters-headless.test.ts` "`%s`: validates as a built-in, launch.headless.output is none"
+asserts `output` `none` for `codex-cli` too; it becomes `jsonl` for `codex-cli` (qa may instead change it in red,
+as a changed test whose new assertion fails). Uncommitted (approver): `spec-016`, `spec-017`, `spec-008`, and
+`test/docs/name-resolvability.allowlist.ts` if the amendments need entries.
+**Version bumps:** none. No `.wingfoil/` file changes (`git diff --stat main -- .wingfoil | wc -l` → `0`, and nothing in
+the design touches it), so no config `version:`, no `npm run check:mcp` and no pinned-build workflow read are owed
+(`dl-205` applies to a `.wingfoil/` shape change). The adapter manifest `format` stays 1: `mcp.conflict_args` and
+`jsonl` are additive (`dl-149` "Additive, optional fields do not bump it"); a 0.3.2 build reading the new shipped
+`codex-cli.yaml` refuses it (`.strict()`), which reaches only a project that runs `init` with this build and
+`agent execute` with an older one (D7).
+
+**Tests that pin behaviour this task changes** (`grep -rln "is not on the frontier" test`, `grep -rln codex test`,
+`grep -rln "output: none\|headless.output" test`): the out-of-frontier refusals in
+`test/core/step-refusal-frontier.test.ts`, `test/core/agent-execute-step.test.ts`,
+`test/core/memory-add-workflow-link.test.ts`, `test/core/workflow-finalize{,-bdd}.test.ts`,
+`test/core/workflow-adopt{,-review}.test.ts`, `test/cli/agent-execute-step.integration.test.ts`,
+`test/cli/agent-execute-diagnostics.integration.test.ts`, `test/cli/workflow-finalize.integration.test.ts` — each
+uses a key that is not an unscoped name of a frontier step, so each keeps passing (green re-runs them);
+`test/storage/builtin-adapters-headless.test.ts` (changes, above); `test/storage/builtin-adapter-codex-cli.test.ts`
+(the installed copy equals the shipped content: holds); `test/agent/manifest.test.ts` (the `'xml'` refusal holds);
+`test/agent/launch-headless.test.ts` ("stdout piped and drained": holds, the drain stays). No workflow file changes,
+so no phase/step list or count pin is affected.
+
+**By-hand checks owed by the approver before red (D7 of `task-335`: agents launch no agent CLI).** In a scratch
+directory outside the repository, with `codex --version` → expect `codex-cli 0.145.0`:
+- **H1 — the conflict probe** (`mcp.conflict_args`). (a) Untrusted directory with `.codex/config.toml` declaring
+  `[mcp_servers.wingfoil] command = "codex" args = ["mcp-server"] env = { PROBE_FROM = "project" }`:
+  `codex mcp get wingfoil; echo "exit=$?"`. (b) The same after trusting the directory. (c) Trusted, with the override:
+  `codex -c 'mcp_servers.wingfoil={command="codex",args=["mcp-server"],env={}}' mcp get wingfoil` (does `env = {}`
+  clear the project's `env`?). (d) No `wingfoil` table anywhere: `codex mcp get wingfoil; echo "exit=$?"`. Expected
+  for the design to hold: exit non-zero in (a) and (d), `0` in (b). Paste each command, its exit and its output.
+- **H2 — the session id of a headless run.** `codex exec --json -c 'mcp_servers.wingfoil={command = "node", args =
+  ["<a build>/dist/cli.js", "mcp"], enabled = true, required = true}' "Reply with the word ok." < /dev/null >
+  events.jsonl 2> events.err; echo "exit=$?"`, then `head -5 events.jsonl` and `grep -n "session id" events.err`;
+  then `codex exec resume <the id> "Reply with the word again." < /dev/null; echo "exit=$?"` (or `codex resume
+  --help` if `exec resume` does not exist). Wanted: the key of the first event that carries the id (the design's
+  `session.field`), that it equals the stderr `session id:` value, and that resume accepts it. qa copies the event
+  lines into the AC 2 fixture.
+
+**Tests run (design, this worktree).** the heavy-gate slot first (`dl-170`), then `npx jest --maxWorkers=2 test/agent
+test/storage/builtin-adapter test/core/agent-execute test/core/step-refusal-frontier
+test/core/memory-add-workflow-link test/core/workflow-adopt test/core/workflow-finalize
+test/core/init-builtin-adapters test/core/builtin-adapter-writers test/cli/agent-execute test/cli/workflow-finalize
+test/cli/workflow-adopt test/cli/memory-add` → `Test Suites: 54 passed, 54 total`, `Tests: 785 passed, 785 total` (157 s; the slot was held about 30 minutes by another worktree's suite before it ran, `ps -eo pid,etime,args` showing its jest and the slot script waiting).
+With the amendments in the working tree: `npx jest --maxWorkers=2 test/docs/name-resolvability.test.ts` → first 1 failed (`spec-016…|config|mcp.conflict_args` and `…|symbol|MCP_SERVER_DECLARED` unlisted), then, with the two allowlist entries (`PLANNED`, `plannedBy: ['task-356']`), `Tests: 11 passed, 11 total`; and the doc gates that read the specs, `npx jest --maxWorkers=2 test/docs/x-cli-cmds-citations test/docs/mcp-surface-parity test/docs/dry-run-documented test/docs/exit-codes-parity test/docs/enumeration-parity test/docs/memory-types-parity test/docs/commands-parity test/docs/name-resolvability` → `Test Suites: 8 passed`, `Tests: 35 passed, 35 total`.
+
+### Pending amendments (approver)
+
+Prepared in this worktree, uncommitted (`dl-047`); `git diff --stat` → `spec-008-cli-grammar.md`,
+`spec-016-agent-execution.md`, `spec-017-workflow-commands-and-state-deduction.md` and `test/docs/name-resolvability.allowlist.ts` (two `PLANNED` entries for `spec-016`'s `mcp.conflict_args` and `MCP_SERVER_DECLARED`, which name code not written yet). `spec-016` §2.8 carries
+the placeholder `<H2>` for `session.field`, replaced with H2's key before the approver records it.
+- `spec-016-agent-execution` — `--reason "Record that Codex's -c override merges with a same-named table and refuse
+  a launch while the agent's configuration declares a wingfoil server (bug-372); read a headless run's session id
+  from its stdout and record codex-cli's from codex exec --json (bug-375); resolve an unscoped --step key (bug-468);
+  sections 2.2, 2.5, 2.6, 2.8, 3.1, 3.2, 3.3, 3.5 and 3.7, task-356."`
+- `spec-017-workflow-commands-and-state-deduction` — `--reason "Resolve a --step key given without its scope to the
+  one frontier step of its workflow and phase and refuse several, listing them (bug-468); sections 4.9, 7.9, 7.10,
+  7.11 and 10, task-356."`
+- `spec-008-cli-grammar` — `--reason "Say that --step takes no prefix and drops a scope only by spec-017 section
+  4.9's unscoped-key rule (bug-468); sections 7 and 12, task-356."`
+
+### Decisions for the approver
+
+- **D1 — `bug-372`'s fix.** (a) Refuse: the optional manifest argv `mcp.conflict_args`, `codex-cli` `[mcp, get,
+  wingfoil]`, exit `0` → `MCP_SERVER_DECLARED` (prepared); (b) override every key WingFoil relies on (a new `{root}`
+  placeholder for `cwd`, `env = {}`), valid only if H1 (c) shows `env = {}` replaces, and blind to keys a later Codex
+  adds; (c) keep the v0.3 documentation warning only. **Recommend (a)**: Codex's own layering (trust, user and
+  project files) decides, no TOML parser enters WingFoil, and it is the bug's second Expected alternative. Its
+  cost: a user who registered `wingfoil` in `~/.codex/config.toml` is refused until it is renamed (whether a user-level table merges as a project table does is not observed;
+  H1 can add the case). **D1.2** — the probe runs in a dry run as well (a dry run reports what the real run meets;
+  the probe reads configuration and launches no model): recommend yes. **D1.3** — a probe that times out or cannot
+  start passes with a warning (lookups never fail a run, §2.6): recommend yes.
+- **D2 — `bug-375`'s source of the session id.** (a) A work run's stdout: `session.id: output` implemented for
+  `json`/`jsonl`, `codex-cli` headless with `--json` and `output: jsonl` (prepared); (b) Codex's rollout file under
+  `~/.codex/sessions/` matched by start time and working directory — both kinds, but a vendor-specific reader outside
+  the repository, ambiguous under concurrent runs; (c) move `bug-375` to `task-337`, which owns parsing the headless
+  output for usage. **Recommend (a)**, subject to H2: it uses the mechanism `spec-016` §2.6 already ratified, and
+  `task-337` then reuses the reader. It records the id of headless `codex-cli` runs only; the interactive half goes
+  into D3's follow-up bug. With `--json` the agent's stdout becomes events, not prose, which is what `task-336`
+  will forward.
+- **D3 — resume.** `resume.supported` stays `false` for `codex-cli` (no `w0` task ships `spec-016` §7's resume);
+  the resume half, and the interactive run's id, are filed as one bug at review, per the Implementation Notes.
+  Recommend as stated.
+- **D4 — the unscoped rule and its refusal.** (a) Exact key first; a key without `@` that equals no frontier key
+  matches the frontier steps of its workflow and phase; one resolves, several are `CONFLICT` `step '<key>' names <N>
+  steps of <instance>: give --step, one of: <k1>, <k2>` with `details.steps`; the no-match refusal and its per-site
+  `details` unchanged (prepared); (b) also disambiguate by `--type` in `memory add` before refusing. **Recommend
+  (a)**: one rule for four commands; (b) would make the same key mean different steps per command.
+- **D5 — scope beyond the ACs.** AC 3 names three commands and AC 4 only `spec-016`. The rule also reaches
+  `workflow adopt --step` (the fourth copy of the refusal, same class, W0-R10), and needs `spec-017` §4.9/§7.9–§7.11/
+  §10 and `spec-008` §7/§12, whose "`--step` stay[s] exact" it would otherwise contradict. **Recommend** including
+  `adopt` and approving all three amendments at this gate.
+- **D6 — `docs/agents.md`'s Codex bullet** (aligned by `user-docs` with the approver's confirmation, AGENTS.md §2)
+  becomes false once the refusal ships. (a) Corrected here with the user guide; (b) left to `user-docs`.
+  **Recommend (a)**, as `task-335` D10 ruled for the same file.
+- **D7 — older builds and the new shipped manifest.** The manifest `format` stays 1 (`dl-149` additive rule); a
+  0.3.x build refuses a `codex-cli.yaml` written by this build (unknown key). **Recommend** accepting it and saying so
+  in the CHANGELOG at `user-docs`; `task-339` adds `permissions` under the same rule.
+
+### Risks for the other open `w0` tasks
+- `task-355` (design gate pending): shares `src/agent/launch.ts` (`runAgent`: it changes the signal path, this task
+  the stdout collection) and `src/agent/execute.ts` (it changes `renderMcpTemplate` and `mcpPreflight`; this task
+  adds step 4's probe — different functions), and `spec-016` §2.5 (its AC 3 states the template escaping in §2.3/§2.5;
+  this task rewrites §2.5's last sentence). Whichever amendment the approver records second is made on the first's
+  text.
+- `task-339` (next L2): shares `src/agent/schema.ts` (`HeadlessLaunch`: it adds `permissions`, this task the `jsonl`
+  value), `src/storage/builtin-adapters.ts` (both edit the `codex-cli` headless block: its permissions fragment is
+  appended to the argv this task gives `--json`), and `spec-016` §2.2/§2.8. Merge order decides who rebases the
+  manifest text; the shipped content is pinned byte for byte only for `claude-code`.
+- `task-336` and `task-337` (L4): `task-336` replaces the stdout drain with line forwarding; this task's line reader
+  is where its forwarding attaches (`dl-182` Q1: forwarded and parsed from the same stream). `task-337` reuses the
+  `output` reading for `usage.from: output`; it should read this task's notes (`depends_on` append at its design).
+- `task-346` (green) and `task-345` (merged): `spec-017` — `task-346`'s amendment, if any, and this one touch
+  different sections (§7.1 vs §4.9/§7.9–§7.11/§10); `src/core/workflow-start-end.ts` is not touched here. The
+  unscoped key does not change the deduction, so no instance or frontier changes.
+- `task-347` (green): no shared file.
+
+**Candidate findings (not filed).** None beyond what the amendments resolve (`bug-340`'s citation of rules §4.9 and
+§7.10 never stated, D5).
+
+### Retrospective
+
+<!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
+     reconstructed afterwards. One line per item: what happened, the evidence (a command and what it
+     printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
+     Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
+     here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
