@@ -14,8 +14,9 @@
  * local branch, remote-tracking ref, `HEAD` and the working tree — which can only refuse more.
  *
  * **`start`** writes two commits through the Memory verbs, each scoped to the plan file: `wf(plan): add <id>`
- * (`memory add`, with the derived tokens and the `element` field) then `wf(plan): submit <id>` (`memory
- * submit`, `draft → active`). A refused second commit leaves the plan `draft`, the instance open, and the
+ * (`memory add`, with the derived tokens, the `element` field and the start marker `WingFoil-Start: <name>` in
+ * its trailer paragraph, `dl-217` (a), task-345 — only a marked start, or one no marked start precedes, opens an
+ * instance, §3.2) then `wf(plan): submit <id>` (`memory submit`, `draft → active`). A refused second commit leaves the plan `draft`, the instance open, and the
  * error names `wingfoil memory submit <id>`. Under `--dry-run` the plan of the first commit is printed (the
  * dry run stops at a command's first commit, `spec-008` §2).
  *
@@ -36,8 +37,8 @@ import { ambiguousReferenceError, resolveElementReference } from '../memory';
 import type { ElementReferenceResolution } from '../memory';
 import { commitFailureSummary, StorageError } from '../storage';
 import { generateId, patternTokens } from '../validation';
-import { deduceWorkflowState, PLAN_TYPE, resolveInstanceRef, type Baseline, type Deduction, type ElementRef, type Instance, type InstanceDeduction } from '../workflow/deduce';
-import { workflowFacts } from '../workflow/schema';
+import { deduceWorkflowState, PLAN_TYPE, resolveInstanceRef, START_TRAILER, type Baseline, type Deduction, type ElementRef, type Instance, type InstanceDeduction } from '../workflow/deduce';
+import { workflowFacts, type Workflow } from '../workflow/schema';
 
 import { parseElementRef } from './element-ref';
 import { requireGitIdentity } from './git-identity';
@@ -58,6 +59,9 @@ const MAX_PHASE_SUFFIX = 1000;
 
 /** `phase` with no bound and no context element (approver ruling R18). */
 const DEFAULT_PHASE = '1';
+
+/** The `--element` value that clears the context of an element-less main (`spec-017` §3.5, `bug-413` option (c)). */
+const NO_ELEMENT = 'none';
 
 /** `spec-017` §10's refusal of a project whose `memory.yaml` declares no `plan` type. */
 export const NO_PLAN_TYPE_MESSAGE = "memory type 'plan' is not declared in memory.yaml; workflow start records an instance as a plan element";
@@ -102,7 +106,10 @@ export interface EndResult {
  * checks, their commit subjects and their commit-scope post-conditions — and by no copy of them.
  */
 export interface StartVerbs {
-  /** `memoryAdd`: `options` as the CLI passes them, `fields` the frontmatter written as given (`element`). */
+  /**
+   * `memoryAdd`: `options` as the CLI passes them, `fields` the frontmatter written as given (`element`), `trailers`
+   * the lines added to the add commit's trailer paragraph (the start marker).
+   */
   readonly add: CoreFn<unknown, { id: string; path: string }>;
   readonly submit: CoreFn<unknown, unknown>;
 }
@@ -112,13 +119,18 @@ function single(value: string | readonly string[] | undefined): string | undefin
   return typeof value === 'string' || value === undefined ? value : value[value.length - 1];
 }
 
+/** `--element` as `start` reads it: `<type>:<id>`, `none` (§3.5), or absent (`null`). */
+type GivenElement = { type: string; id: string } | typeof NO_ELEMENT | null;
+
 /** The usage half of `start` (`spec-008` §1, §5, §7, §10): every spelling fault, exit 2, before any read. */
-function startUsage(params: WorkflowStartParams): { name: string; element: { type: string; id: string } | null; title?: string; set: Readonly<Record<string, string>> } {
+function startUsage(params: WorkflowStartParams): { name: string; element: GivenElement; title?: string; set: Readonly<Record<string, string>> } {
   const { positional: name, options } = params;
   if (name === undefined || name.trim() === '') throw new UsageError(missingOperandReason('name'));
   const elementOption = single(options?.['element']);
-  let element: { type: string; id: string } | null = null;
-  if (elementOption !== undefined) {
+  let element: GivenElement = null;
+  if (elementOption === NO_ELEMENT) {
+    element = NO_ELEMENT;
+  } else if (elementOption !== undefined) {
     const parsed = parseElementRef(elementOption);
     if (!parsed.ok) throw new UsageError(parsed.error.message);
     element = parsed.value;
@@ -142,32 +154,45 @@ interface StartPlan {
 /**
  * The bound element (§3.4) and the context element (§3.5) of a new instance of `workflow`, or the refusal.
  * A declared element comes from `--element` or, absent it, from the active instance when its bound element
- * is of the declared type; it must exist at `HEAD`. A workflow that declares none takes no `--element`, and
- * records the active instance's bound element, if any, as its context.
+ * is of the declared type; it must exist at `HEAD`; `--element none` is refused as an absent element is. A
+ * workflow that declares none (`bug-413` option (c), task-345) takes its context from `--element <type>:<id>`
+ * (it must exist at `HEAD`), records none for `--element none`, and otherwise takes the active instance's bound
+ * element only when the active instance's workflow declares `element:` — an element-less active instance, or
+ * none open, gives no context.
  */
 function resolveStartElement(
   name: string,
   declared: string | undefined,
-  given: { type: string; id: string } | null,
+  given: GivenElement,
   deduction: Deduction,
+  workflows: readonly Workflow[],
   resolve: (type: string, reference: string) => ElementReferenceResolution,
-): CoreResult<{ bound: ElementRef | { type: string; id: string } | null; context: ElementRef | null }> {
+): CoreResult<{ bound: ElementRef | { type: string; id: string } | null; context: ElementRef | { type: string; id: string } | null }> {
   const active = deduction.instances[0]?.instance ?? null;
+  // `--element <type>:<ref>` takes a short reference (task-332, `spec-008` §7): the plan records the element's full id.
+  const lookup = (element: { type: string; id: string }): CoreResult<{ type: string; id: string }> => {
+    const resolution = resolve(element.type, element.id);
+    if (resolution.kind === 'ambiguous') return coreErr(ambiguousReferenceError(element.id, resolution.candidates));
+    if (resolution.kind === 'missing') return coreErr({ code: 'NOT_FOUND', message: `element not found: ${element.type}:${element.id}`, details: { element: `${element.type}:${element.id}` } });
+    return coreOk({ type: element.type, id: String(resolution.document.frontmatter['id']) });
+  };
   if (declared === undefined) {
-    if (given !== null) return coreErr({ code: 'VALIDATION', message: `workflow '${name}' declares no element: --element is not accepted` });
-    return coreOk({ bound: null, context: active?.element ?? null });
+    if (given === NO_ELEMENT) return coreOk({ bound: null, context: null });
+    if (given !== null) {
+      const found = lookup(given);
+      return found.ok ? coreOk({ bound: null, context: found.value }) : found;
+    }
+    const activeDeclares = active !== null && workflows.find((workflow) => workflow.name === active.workflow)?.element !== undefined;
+    return coreOk({ bound: null, context: activeDeclares ? active.element : null });
   }
   const needs = coreErr({ code: 'VALIDATION', message: `workflow '${name}' needs a ${declared} element: give --element ${declared}:<id>` });
   if (given === null) {
     const inherited = active?.element ?? null;
     return inherited !== null && inherited.type === declared ? coreOk({ bound: inherited, context: null }) : needs;
   }
-  if (given.type !== declared) return needs;
-  // `--element <type>:<ref>` takes a short reference (task-332, `spec-008` §7): the plan binds the element's full id.
-  const resolution = resolve(given.type, given.id);
-  if (resolution.kind === 'ambiguous') return coreErr(ambiguousReferenceError(given.id, resolution.candidates));
-  if (resolution.kind === 'missing') return coreErr({ code: 'NOT_FOUND', message: `element not found: ${given.type}:${given.id}`, details: { element: `${given.type}:${given.id}` } });
-  return coreOk({ bound: { type: given.type, id: String(resolution.document.frontmatter['id']) }, context: null });
+  if (given === NO_ELEMENT || given.type !== declared) return needs;
+  const found = lookup(given);
+  return found.ok ? coreOk({ bound: found.value, context: null }) : found;
 }
 
 /**
@@ -247,7 +272,7 @@ export async function workflowStart(params: WorkflowStartParams, verbs: StartVer
   const deduction = deduceWorkflowState(snapshot);
   const resolve = (type: string, reference: string): ElementReferenceResolution =>
     resolveElementReference(snapshot.documents, planMemoryYaml, reference, { type });
-  const resolved = resolveStartElement(usage.name, workflow.element, usage.element, deduction, resolve);
+  const resolved = resolveStartElement(usage.name, workflow.element, usage.element, deduction, snapshot.workflows, resolve);
   if (!resolved.ok) return resolved;
   const recorded = resolved.value.bound ?? resolved.value.context;
   const base = recorded?.id ?? DEFAULT_PHASE;
@@ -256,10 +281,15 @@ export async function workflowStart(params: WorkflowStartParams, verbs: StartVer
   if (!plan.ok) return plan;
   const { title, tokens } = plan.value;
 
+  // The plan names its workflow (§3.1) even when the `id_pattern` and `path` hold no `{workflow}` token: a plan
+  // naming no loaded workflow is no instance (§3.2, task-345), so the start would not open one.
+  const fields = { ...(tokens['workflow'] === undefined ? { workflow: usage.name } : {}), ...(recorded === null ? {} : { element: recorded.id }) };
   const added = await verbs.add({
     root,
     options: { type: PLAN_TYPE, title, set: Object.keys(tokens).sort().map((key) => `${key}=${tokens[key]}`) },
-    ...(recorded === null ? {} : { fields: { element: recorded.id } }),
+    ...(Object.keys(fields).length === 0 ? {} : { fields }),
+    // The start marker (§3.1, `dl-217` (a)): only this commit carries it, so only `start` opens an instance.
+    trailers: [`${START_TRAILER}: ${usage.name}`],
   });
   if (!added.ok) return added;
   // A successful `memoryAdd` / `memorySubmit` always carries its commit (`coreOk(…, { sha, message })`).
@@ -292,12 +322,16 @@ function submitFailure(id: string, code: Parameters<typeof coreErr>[0]['code'], 
   };
 }
 
-/** Why an open instance whose deduction is not complete cannot end (§7.2): its current step, or why it has none. */
+/**
+ * Why an open instance whose deduction is not complete cannot end (§7.2): its current step, or — an empty
+ * frontier — its abandonment (§4.11). Every instance's workflow is loaded (§3.2, task-345), so an incomplete
+ * instance with no step is an abandoned one, whose bound element is set.
+ */
 function incompleteReason(selected: InstanceDeduction): string {
   const { instance, frontier } = selected;
   if (frontier.length > 0) return `current step ${frontier[0]!.key}`;
-  if (instance.abandoned && instance.element !== null) return `it is abandoned: its element ${instance.element.type}:${instance.element.id} is ${instance.element.status}`;
-  return `workflow '${instance.workflow}' is not loaded`;
+  const element = instance.element!;
+  return `it is abandoned: its element ${element.type}:${element.id} is ${element.status}`;
 }
 
 /**

@@ -16,6 +16,10 @@
  * approval and per ungated element, naming the action (`approve or reject`, or `finalize` for an approval record),
  * the element id(s) or the step key, and the routed members. An ungated element has no workflow to route it, so its
  * line names the holders of the `approver` role, the one role that may decide it (REQ-SEC-03).
+ *
+ * **The transitory pre-marker rule made visible** (§2, §3.2, task-345): each reported instance whose start commit
+ * carries no start marker gets `W_INSTANCE_PRE_MARKER`, last among the payload's diagnostics, and a console line
+ * under its own lines. No other command raises it.
  */
 import type { Diagnostic } from '../validation';
 import { deduceWorkflowState, resolveInstanceRef, type Baseline, type Deduction, type ElementRef, type Instance, type PhaseProgress, type TrailEntry } from '../workflow/deduce';
@@ -82,6 +86,20 @@ export interface StatusResult {
   readonly diagnostics: readonly Diagnostic[];
 }
 
+/**
+ * `W_INSTANCE_PRE_MARKER` (`spec-017` §2, transitory, §3.2; task-345): an open instance `workflow status` reports is
+ * kept only by the pre-marker rule — its start commit carries no start marker. Removed with the rule (`bug-515`).
+ */
+export const W_INSTANCE_PRE_MARKER = 'W_INSTANCE_PRE_MARKER';
+
+/** The message of the {@link W_INSTANCE_PRE_MARKER} entry of instance `id`. */
+function preMarkerMessage(id: string): string {
+  return `instance ${id} is kept by the pre-marker rule: restart it with workflow start`;
+}
+
+/** The console line under an instance kept by the pre-marker rule (§3.2). */
+const PRE_MARKER_LINE = '    warning: kept by the pre-marker rule: restart it with workflow start';
+
 /** `<type>:<id>`. */
 function keyOf(element: ElementRef): string {
   return `${element.type}:${element.id}`;
@@ -116,6 +134,13 @@ export function statusWorkflow(inputs: NextInputs, deduction: Deduction, ref?: s
   const carried = new Set(deduction.instances.flatMap((entry) => entry.frontier.flatMap((step) => (step.approval?.elements ?? []).map(keyOf))));
   const ungated = deduction.gated.filter((element) => !carried.has(keyOf(element)));
 
+  // The instances the transitory pre-marker rule keeps open (the classification in `./workflow-deduction`'s
+  // `startMarker`, removed by `bug-515`; `spec-017` §3.2), in the order of `open`.
+  const shownIds = new Set(shown.map((entry) => entry.instance.id));
+  const preMarker = (deduction.preMarker ?? [])
+    .filter((entry) => shownIds.has(entry.instance))
+    .map((entry): Diagnostic => ({ code: W_INSTANCE_PRE_MARKER, severity: 'warning', file: entry.file, path: '', message: preMarkerMessage(entry.instance) }));
+
   // BDD P4.5 sc. 3: the message says no instance is open; the ungated elements are listed after it.
   const nothing = deduction.instances.length === 0;
   return coreOk({
@@ -126,7 +151,7 @@ export function statusWorkflow(inputs: NextInputs, deduction: Deduction, ref?: s
     ungated,
     ungatedRoutedTo: membersHoldingRole(inputs.dnaYaml, APPROVER_ROLE),
     ...(nothing ? { message: NO_OPEN_WORKFLOWS } : {}),
-    diagnostics: [...deduction.diagnostics, ...approvalDiagnostics(steps, inputs.dnaYaml)],
+    diagnostics: [...deduction.diagnostics, ...approvalDiagnostics(steps, inputs.dnaYaml), ...preMarker],
   });
 }
 
@@ -159,8 +184,8 @@ function describePhase(progress: PhaseProgress): string {
   return `${progress.phase} ${progress.state}${detail.length === 0 ? '' : ` (${detail.join(', ')})`}`;
 }
 
-/** The console lines of one open instance. */
-function instanceLines(entry: StatusEntry): string[] {
+/** The console lines of one open instance; `preMarker`: it is kept by the pre-marker rule (§3.2). */
+function instanceLines(entry: StatusEntry, preMarker: boolean): string[] {
   const { instance } = entry;
   const flags = [instance.active ? 'active' : null, entry.complete ? 'complete' : null, instance.abandoned ? 'abandoned' : null].filter((flag): flag is string => flag !== null);
   const lines = [`${instance.active ? '*' : ' '} ${instance.id} (${instance.workflow})${flags.length === 0 ? '' : ` — ${flags.join(', ')}`}`];
@@ -175,6 +200,7 @@ function instanceLines(entry: StatusEntry): string[] {
     if (step.awaiting?.kind === 'party') lines.push(`        ${humanNeededLine(step)!}`);
   }
   if (entry.late.length > 0) lines.push(`    late: ${entry.late.map((late) => `${late.type}:${late.id} (${late.status})`).join(', ')}`);
+  if (preMarker) lines.push(PRE_MARKER_LINE);
   return lines;
 }
 
@@ -183,7 +209,9 @@ export function renderStatusConsole(result: StatusResult): string {
   const lines: string[] = [];
   if (result.message !== undefined) lines.push(result.message);
   else lines.push(`open workflows: ${result.open.length}`); // no message: some instance is open
-  for (const entry of result.open) lines.push(...instanceLines(entry));
+  // Derived from the payload's entries, so a hand-built result renders as its diagnostics say.
+  const kept = new Set(result.diagnostics.filter((diagnostic) => diagnostic.code === W_INSTANCE_PRE_MARKER).map((diagnostic) => diagnostic.message));
+  for (const entry of result.open) lines.push(...instanceLines(entry, kept.has(preMarkerMessage(entry.instance.id))));
   if (result.pendingApprovals.length > 0) {
     lines.push(`pending approvals: ${result.pendingApprovals.length}`);
     for (const approval of result.pendingApprovals) lines.push(`  ${approvalLine(approval.awaiting, approval.step!)} (${approval.instance}, ${approval.step})`);

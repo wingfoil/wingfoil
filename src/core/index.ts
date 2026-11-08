@@ -891,6 +891,12 @@ export interface MemoryAddParams {
    * token. The CLI and MCP never populate it, so no command line can.
    */
   readonly fields?: Readonly<Record<string, string>>;
+  /**
+   * Trailer lines added to the add commit's trailer paragraph, after the step linkage's and before
+   * `WingFoil-Version:` — for a core caller only: `workflow start` writes the start marker `WingFoil-Start: <name>`
+   * through it (task-345, `spec-017` §3.1). The CLI and MCP never populate it, so `memory add` never writes the marker.
+   */
+  readonly trailers?: readonly string[];
 }
 
 /** A single-valued option of {@link MemoryAddParams.options}: a repeated occurrence keeps the last. */
@@ -948,7 +954,7 @@ function singleOption(options: MemoryAddParams['options'], name: string): string
  * only exit-2 path and are thrown before this try.
  */
 const memoryAddFn: CoreFn<unknown, { id: string; path: string }> = async (params) => {
-  const { root, options, fields: extraFields } = params as MemoryAddParams;
+  const { root, options, fields: extraFields, trailers: extraTrailers } = params as MemoryAddParams;
 
   const type = singleOption(options, 'type');
   if (type === undefined) throw new UsageError('missing required argument: --type');
@@ -993,7 +999,7 @@ const memoryAddFn: CoreFn<unknown, { id: string; path: string }> = async (params
       if (!linked.ok) return linked;
       link = linked.value;
     }
-    const trailers = link === undefined ? [] : addLinkTrailers(link);
+    const trailers = [...(link === undefined ? [] : addLinkTrailers(link)), ...(extraTrailers ?? [])];
 
     // spec-001's order: {date} → {author} → field/context tokens → {slug} → {n}, so the counter sees
     // the materialized prefix. {date} is read ONCE, from the author date git records for this add's
@@ -3026,7 +3032,12 @@ export const CORE_MODULES: readonly CoreModule[] = [
         description: 'start a workflow: record it as an active plan element and print its first step',
         positional: { name: 'name', required: true, description: 'the startable workflow to start' },
         options: [
-          { name: 'element', valueName: 'type:id', description: 'the element the workflow runs on, when it declares one, the id may be a short reference (default: the active workflow\'s element of that type)' },
+          {
+            name: 'element',
+            valueName: 'type:id',
+            description:
+              "the element the workflow runs on, when it declares one, or its context element, when it declares none; the id may be a short reference; none records no context (default: the active workflow's element, of that type or, for a workflow that declares none, when the active workflow declares one)",
+          },
           { name: 'title', valueName: 'title', description: "the plan's title (default: '<workflow> — <phase>')" },
           {
             name: 'set',
