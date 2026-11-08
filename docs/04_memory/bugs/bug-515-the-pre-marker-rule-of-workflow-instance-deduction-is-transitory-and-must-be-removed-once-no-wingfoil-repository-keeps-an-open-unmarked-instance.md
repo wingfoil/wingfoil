@@ -46,11 +46,11 @@ The rule is in force by design from `task-345` on, with nothing but this element
   - The ingest plans close at once with `workflow end`, or `memory deprecate` for one that is not complete.
   - Each `sw-life-cycle-1-plan` restarts with `workflow start` when it costs least. That is at the start of a
     release: after the previous one is `released` and before its `release-planning`, so between `minor-v0.4`
-    `released` and `minor-v0.5`'s planning in this repository.
+    `released` and `minor-v1.0`'s planning in this repository (`rl-v1` has no v0.5).
   - Check that the iterations of the releases already `released` still deduce as complete without rewriting their
     records.
-- The removal belongs to the release after the restart in every repository. The target release is set at triage
-  (proposed `v0.5`).
+- The removal belongs to the planning that follows the restart in every repository: `minor-v1.0`'s here, where the
+  release is stamped. The target release is set at triage (proposed `v1.0`).
 - Ruling source: the approver's design gate of `task-345` (D1 (a) transitory, 2026-11-08).
 
 ## Triage & Execution Notes
