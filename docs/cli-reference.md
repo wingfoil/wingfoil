@@ -1405,6 +1405,11 @@ reports who is asked: a routed member without the `approver` role is flagged
 Last, the **ungated elements**: elements sitting in a gate state of their type that no pending approval of an open
 workflow carries, routed to the holders of the `approver` role.
 
+An instance opened before `workflow start` wrote its `WingFoil-Start:` trailer (see `workflow start`) stays open
+for now, and status warns about it (new in 0.4): the line `    warning: kept by the pre-marker rule: restart it
+with workflow start` under that instance, and a `W_INSTANCE_PRE_MARKER` entry in `diagnostics`, the last ones. End
+it and start it again with `workflow start` to clear the warning.
+
 Each pending approval and ungated element prints a **"human needed"** line naming the action
 (`approve or reject`, or `finalize` for a phase record), the element ids or the step key, and the members it is
 routed to. In v0.3 this output is the notification channel; hook delivery comes later. `workflow next` prints the
@@ -1459,8 +1464,7 @@ alone), `mode`, `allowedModes` and `distinctFrom`, `cadence`, the kinds of evide
 another workflow, that workflow resolved the same way under `sub`. The payload is
 `{"baseline": {…}, "workflow": {…}, "diagnostics": […]}`, the diagnostics as `workflow list` reports them.
 
-- **Errors:** a name no workflow at `HEAD` has and no open instance holds → `unknown workflow: <name>` —
-  `<ref>` itself, or, for an open instance whose workflow is not loaded, that workflow's name — exit `1`; an error in the workflow files → exit `1`, as `workflow list`; no `<ref>`, or more than one → exit `2`.
+- **Errors:** a name no workflow at `HEAD` has and no open instance holds → `unknown workflow: <ref>`, exit `1`; an error in the workflow files → exit `1`, as `workflow list`; no `<ref>`, or more than one → exit `2`.
 - **Commit:** none.
 
 ### `wingfoil workflow start`
@@ -1473,7 +1477,7 @@ wingfoil workflow start <name> [--element <type>:<id>] [--title <title>] [--set 
 
 | Option | Description |
 |---|---|
-| `--element <type>:<id>` | The element the workflow runs on, when the workflow declares one (`element:`); `<id>` may be a short reference (new in 0.3.2, see [Short element references](#short-element-references)) and the plan binds the full id. Without it, the active workflow's element is used if it has that type. |
+| `--element <type>:<id>` | The element the workflow runs on, when the workflow declares one (`element:`), or — for a workflow that declares none — the element recorded as its context (new in 0.4); `<id>` may be a short reference (new in 0.3.2, see [Short element references](#short-element-references)) and the plan records the full id. `--element none` records no context (new in 0.4). Without it, the active workflow's element is used: if it has that type, or, for a workflow that declares none, if the active workflow declares an element. |
 | `--title <title>` | The plan's title. Default: `<workflow> — <phase>`. |
 | `--set phase=<v>` | The plan's `phase` token. Default: the element's id, else `1`. |
 | `--set scope=<v>` | The plan's `scope` token, the folder its file goes in. Default: the workflow name. |
@@ -1483,11 +1487,19 @@ workflows. A started workflow is an **instance**, recorded as a Memory document 
 `workflow` names the workflow and whose `element` holds the element it runs on. The new instance becomes
 the active one; the others stay open (`wingfoil workflow end` closes one).
 
+Only `workflow start` opens an instance (new in 0.4): its `wf(plan): add <id>` commit carries the trailer
+`WingFoil-Start: <name>`, which `wingfoil memory add` never writes. A plan added without it — by
+`memory add --type plan` or by hand — after a started one is in its history is no instance, whatever it names;
+a plan naming a workflow that is not loaded is no instance either, and `workflow list`, `status` and `next`
+report it as a warning. Plans opened before any start wrote the trailer stay open, and `workflow status` warns
+about each of them (`kept by the pre-marker rule: restart it with workflow start`).
+
 - A workflow that declares `element: <type>` needs one: `--element`, or the active workflow's element of
-  that type. It must be committed at `HEAD`.
-- A workflow that declares no element takes no `--element`. Started while the active workflow has an
-  element, it records that element in its plan as the context (a bug reported during a release names the
-  release).
+  that type. It must be committed at `HEAD`; `--element none` is refused as a missing element.
+- A workflow that declares no element records a context in its plan (new in 0.4): the element that
+  `--element <type>:<id>` names (committed at `HEAD`), none with `--element none`, and otherwise the active workflow's
+  element when the active workflow declares one (a bug reported during a release names the release). Started
+  while the active workflow declares no element — another ingest, or the lifecycle — it records none.
 - The plan's id comes from the `plan` type's `id_pattern` (`{workflow}-{phase}-plan` here). When the
   derived id is already taken on any branch, `-2`, `-3`, … is added to the phase; an id taken by a
   `--set phase=` is refused instead.
@@ -1509,9 +1521,9 @@ A project's `memory.yaml` must declare a `plan` type; `wingfoil init` declares o
 
 - **Errors (exit `1`):** `unknown workflow: <name>`; `cannot start a sub workflow directly: <name>`;
   `memory type 'plan' is not declared in memory.yaml; workflow start records an instance as a plan element`;
-  `workflow '<name>' needs a <type> element: give --element <type>:<id>`; `workflow '<name>' declares no
-  element: --element is not accepted`; `element not found: <type>:<id>`; `plan id already exists: <id>`.
-- **Errors (exit `2`):** no `<name>`, more than one positional, a malformed `--element`
+  `workflow '<name>' needs a <type> element: give --element <type>:<id>` (also for `--element none`);
+  `element not found: <type>:<id>`; `plan id already exists: <id>`.
+- **Errors (exit `2`):** no `<name>`, more than one positional, a malformed `--element` other than `none`
   (`malformed element-ref "<ref>": expected <type>:<id>`), a `--set` other than `phase=` / `scope=`, or a
   `--set` value refused as `memory add` refuses it (`--set scope holds a '.' or '..' path segment:
   "../../etc"`); nothing is written.
