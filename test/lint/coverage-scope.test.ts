@@ -6,7 +6,7 @@
  * `jest.config.js` used to exclude `!src/**\/index.ts` wholesale. The glob meant to skip barrels, and
  * it also hid `src/core/index.ts` (every registered operation's `fn` body) and `src/mcp/index.ts`
  * (`registerReadOnlyResources` then; task-354 moved it to `src/mcp/read-only-resources.ts`, and the index, a
- * barrel since, is still measured because no exclusion lists it). Barrels stay excluded for a measured reason: a CommonJS re-export
+ * re-export barrel since, is now one of the listed exclusions). Barrels stay excluded for a measured reason: a CommonJS re-export
  * compiles to a getter thunk per name, which counts as an uncalled function and drags the
  * `functions` total down without saying anything about the code (`bug-021`'s Notes).
  *
@@ -16,7 +16,7 @@
  *    read the list, and a new `index.ts` that nobody adds to it is MEASURED rather than hidden;
  * 2. every such path exists and is a barrel by {@link barrelViolations}'s rule;
  * 3. `src/core/index.ts`, the one `index.ts` that holds logic, is matched by an include entry and by no
- *    exclusion.
+ *    exclusion (`src/mcp/index.ts`, a re-export barrel since task-354, is excluded under item 2's rule).
  *
  * Deterministic by construction: a fixed file list, a pure AST walk of each file, and Node's own glob
  * matcher — no clock, no network, no subprocess.
@@ -33,7 +33,7 @@ const jestConfig = require(join(REPO_ROOT, 'jest.config.js')) as { collectCovera
 /**
  * The `index.ts` files that hold logic. `bug-021` found two; `src/mcp/index.ts` left the list when task-354
  * (`bug-345`) moved `registerReadOnlyResources` to `src/mcp/read-only-resources.ts`, which made it a re-export
- * barrel. It stays measured all the same, since `jest.config.js` does not list it.
+ * barrel, and `jest.config.js` now excludes it like the other barrels (the barrel check below holds it to that).
  */
 const LOGIC_INDEX_FILES = ['src/core/index.ts'];
 
