@@ -35,8 +35,8 @@
  * Then the caller's `launch` runs, with the temporary files still in place and the function that hands
  * the signals over from their cleanup to the launch (`withRunFiles`' `release`).
  *
- * Each distinct warning is printed once, and a label naming the resolved commit reads `HEAD:`
- * (`withDistinctWarnings`; task-218's review F5).
+ * Each distinct warning is printed once (`withDistinctWarnings`; task-218's review F5). Every read at the resolved
+ * commit names its files `HEAD:` itself, since that commit is `HEAD`'s (task-354, `bug-317`).
  *
  * **Baseline.** Every gating read is at the one `HEAD` commit resolved at step 2 (`dl-080` (B), the
  * `command-baseline` directive), which is also `state_ref`. Nothing is written to the repository: the
@@ -437,9 +437,9 @@ function validationRefusal(error: ValidationError): CoreResult<never> {
 /** The committed pillar files the pipeline reads, or the refusal of an absent or invalid one. */
 function loadCommittedConfig(root: string, sha: string): CoreResult<{ dna: DnaYaml; memoryYaml: MemoryYaml }> {
   try {
-    const dna = loadDnaYamlAtRev(root, sha);
+    const dna = loadDnaYamlAtRev(root, sha, 'HEAD');
     if (dna === null) return coreErr({ code: 'NOT_FOUND', message: `${DNA_YAML_PATH} is not committed at HEAD, which agent execute reads: commit it first` });
-    const memoryYaml = loadMemoryYamlAtRev(root, sha);
+    const memoryYaml = loadMemoryYamlAtRev(root, sha, 'HEAD');
     if (memoryYaml === null) return coreErr({ code: 'NOT_FOUND', message: `${MEMORY_YAML_PATH} is not committed at HEAD, which agent execute reads: commit it first` });
     return coreOk({ dna, memoryYaml });
   } catch (error) {
@@ -514,22 +514,17 @@ export async function agentExecutePipeline<T>(
   launch: (prepared: PreparedLaunch, releaseSignals: () => void) => Promise<CoreResult<T>>,
 ): Promise<CoreResult<T>> {
   // Each distinct warning is printed once — the pipeline and the context builder both load dna.yaml
-  // (task-218's review F5) — and a label naming the resolved commit reads `HEAD:`, the baseline every
-  // read of the run is at (spec-008 §11).
-  let sha: string | undefined;
-  return withDistinctWarnings(
-    () => runPipeline(root, request, host, launch, (resolved) => (sha = resolved)),
-    (text) => (sha === undefined ? text : text.split(`${sha}:`).join('HEAD:')),
-  );
+  // (task-218's review F5). The reads name the resolved commit `HEAD:` themselves, the baseline every read of
+  // the run is at (spec-008 §6, task-354): no warning is rewritten after the fact.
+  return withDistinctWarnings(() => runPipeline(root, request, host, launch));
 }
 
-/** {@link agentExecutePipeline}'s body; `onHead` learns the commit step 2 resolved. */
+/** {@link agentExecutePipeline}'s body. */
 async function runPipeline<T>(
   root: string,
   request: AgentExecuteRequest,
   host: AgentExecuteHost,
   launch: (prepared: PreparedLaunch, releaseSignals: () => void) => Promise<CoreResult<T>>,
-  onHead: (sha: string) => void,
 ): Promise<CoreResult<T>> {
   // Step 2 — one HEAD, every gating read at it. A step form reads the deduction first, so the HEAD it was
   // deduced at is the one every later read takes (task-235); a registry error refuses here.
@@ -543,7 +538,6 @@ async function runPipeline<T>(
     if (error instanceof RevisionError) return coreErr(error.toCoreError());
     throw error;
   }
-  onHead(sha);
   // The deduction's diagnostics, as `workflow next` lists them, one `warning:` line each (§3.3 step 2, bug-339).
   if (deduced?.ok === true) for (const diagnostic of deduced.value.diagnostics) reportWarning(diagnosticWarning(diagnostic));
   const config = loadCommittedConfig(root, sha);
@@ -611,7 +605,7 @@ async function runPipeline<T>(
   if (!logPath.ok) return logPath;
 
   // Step 7 — the context, assembled and validated at state_ref.
-  const assembled = assembleExecutionContext(root, { role, element: target, stateRef: sha });
+  const assembled = assembleExecutionContext(root, { role, element: target, stateRef: sha, label: 'HEAD' });
   // The element was found at this same commit (step 3), so the builder's NOT_FOUND with
   // `details.unreadable` cannot arise here; its refusals pass through as they are.
   if (!assembled.ok) return assembled;

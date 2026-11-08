@@ -8,7 +8,7 @@
  * It wires the real `commander` program built by `./cli/program.ts` (`buildProgram`, task-006) onto
  * a real process invocation, exactly like `test/cli/fixtures/cli-harness.cjs` drives it against a
  * fixture root in tests — the difference here is `resolveRoot` resolves the *real* project root via
- * git-root detection (`./storage/git-root.ts`, spec-011-storage-layout) instead of a fixed fixture
+ * git-root detection (`resolveProjectRoot`, spec-011-storage-layout, through `./core/surface-reads.ts`) instead of a fixed fixture
  * path, and the real `process.argv` is parsed instead of a synthetic one.
  *
  * `resolveRoot` is only invoked lazily, once per dispatched command (see `./cli/registrar.ts`'s
@@ -21,7 +21,7 @@
 import { exitWith } from './cli/exit';
 import { buildProgram } from './cli/program';
 import { CORE_MODULES } from './core';
-import { resolveProjectRoot } from './storage/git-root';
+import { resolveProjectRoot } from './core/surface-reads';
 
 buildProgram(CORE_MODULES, {
   resolveRoot: () => resolveProjectRoot(process.cwd()),

@@ -5,7 +5,7 @@
  * (mirrors `test/storage/helpers/git-fixture.ts`'s own convention).
  *
  * Connects a real MCP `Client`/`McpServer` pair, over the SDK's in-memory transport, wired with
- * every Resource `src/mcp/index.ts`'s `registerReadOnlyResources` registers; attempts every
+ * every Resource `registerReadOnlyResources` (`src/mcp/read-only-resources.ts`) registers; attempts every
  * write-shaped request the Resources channel can receive; and provides a before/after snapshot
  * comparison so a caller can assert nothing persisted after every refused attempt (spec-004 §2.3's
  * "the refusal persists nothing") over a committed git fixture: the listed files' bytes, the

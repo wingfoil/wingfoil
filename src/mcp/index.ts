@@ -14,12 +14,11 @@
  * `registerWorkflowResources` (`wingfoil://workflows`, `wingfoil://workflows/{name}`; task-239 adds
  * `registerWorkflowStateResources`, `wingfoil://workflows/-/next` and `-/status`), and
  * `registerWriteRefusalHandler` (the structural `resources/write` refusal, spec-004 §2.3).
- * `registerReadOnlyResources` wires all five together — the one call `createMcpServer` (the
+ * `registerReadOnlyResources` (`./read-only-resources.ts`) wires all five together — the one call `createMcpServer` (the
  * `wingfoil mcp` server) makes for the Resources; it does not call
  * `registerCoreModules`. See `./read-only.ts` for the shared write-refusal/not-found conventions every one of
  * these Resources follows.
  */
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
 /** This module's `dna.yaml` name (`mcp-server`) — the stable identifier surfaces and tests key it by. */
 export const MODULE_NAME = 'mcp-server' as const;
@@ -69,30 +68,10 @@ export type { RegisterRolePromptsOptions } from './prompt';
 export { registerSessionContextResource, SESSION_CONTEXT_URI_TEMPLATE } from './session-resource';
 export type { RegisterSessionContextResourceOptions } from './session-resource';
 
-import { registerDnaResources } from './dna-resource';
-import { registerMemoryResources } from './memory-resource';
-import { registerWriteRefusalHandler } from './read-only';
-import { registerWorkflowResources, registerWorkflowStateResources } from './workflow-resource';
-
-/** Options for {@link registerReadOnlyResources}. */
-export interface RegisterReadOnlyResourcesOptions {
-  /** Resolves the project root each Resource read is served from (an ambient concern, not a request parameter). */
-  readonly resolveRoot: () => string;
-}
-
-/**
- * Wire the full spec-004 §2 read-only Resources channel onto `server` in one call: the Memory, DNA,
- * and Workflow Resources — the two workflow-state Resources `wingfoil://workflows/-/next` and `-/status`
- * included (task-239, `spec-017` §9) — plus the structural `resources/write` refusal. Deliberately does not touch
- * `registerCoreModules`/`CORE_MODULES`; `createMcpServer` does not call it either (see `./registrar.ts`).
- */
-export function registerReadOnlyResources(server: McpServer, options: RegisterReadOnlyResourcesOptions): void {
-  registerWriteRefusalHandler(server);
-  registerMemoryResources(server, options);
-  registerDnaResources(server, options);
-  registerWorkflowResources(server, options);
-  registerWorkflowStateResources(server, options);
-}
+// task-354 (bug-345): `registerReadOnlyResources` lives in `./read-only-resources.ts`, so `./server.ts` imports it
+// from that leaf rather than from this barrel, which re-exports `./server.ts` (the import cycle Q07 counted).
+export { registerReadOnlyResources } from './read-only-resources';
+export type { RegisterReadOnlyResourcesOptions } from './read-only-resources';
 
 // The production stdio entry point (task-030-implement-mcp-resources, spec-014-mcp-server-entry-point):
 // `createMcpServer` builds a real `McpServer` with the read-only Resources and Prompts channels above wired on,
