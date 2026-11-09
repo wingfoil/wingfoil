@@ -329,6 +329,81 @@ owes no bump for this edit).
 - From this task's merge, phase reports must carry the claims block; until the agents' instructions say so, the check
   fails with exit `2`, so the instructions change before the first checked report.
 
+### red (qa, 2026-11-09)
+
+**Start.** The PATH guard ran first through the task's PATH shim (`command -v wingfoil` → the shim; `wingfoil --version`
+and `node dist/cli.js --version` → `0.3.2 (d69286802…)`). `main` had moved: `git rev-list --count HEAD..main` → `41`;
+`git merge --no-edit main` merged without a conflict and was amended with the §7 trailers → `bddc04cc1`
+(`git rev-list --count HEAD..main` → `0` after it). The design's existing-tests measure, re-run after the merge (load
+`14,55 14,65 10,96` by `uptime`): `npx jest test/cli/check-governance --maxWorkers=2` → `Test Suites: 6 passed`,
+`Tests: 117 passed` — unchanged; `npx jest test/cli/config-version-raise.integration.test.ts test/cli/git-hooks.test.ts
+test/cli/workflow-rekey.integration.test.ts test/lint/git-log-readers.test.ts --maxWorkers=2` → `Tests: 1 failed, 45
+passed, 46 total`, the one failure being this red's own edit of `git-log-readers.test.ts` (below) — otherwise unchanged
+from the design's `46 passed`.
+
+**Files (red commit `2d1e7904e`).**
+- `test/cli/check-phase-report.test.ts` (new, 53 tests: 49 `it` + one `it.each` of 5 rows).
+- `scripts/check-phase-report.d.cts` (new): the declaration of the design, verbatim in shape (`MISMATCH_KINDS`,
+  `GateClaim`, `PhaseReport`, `ReportFormatError`, `Mismatch`, `parseReport`, `checkReport`, `checkPlanParents`, `main`).
+- `scripts/check-governance.d.cts`: one declaration, `trailerKeysOutsideFinalParagraph(body: string): string[]` (D4).
+- `test/lint/git-log-readers.test.ts`: `'scripts/check-phase-report.cjs'` added to the enumerated readers, after
+  `scripts/check-governance.cjs`.
+
+**Fixtures.** Every repository is a `makeTempGitRepo()` scratch repository (`test/storage/helpers/git-fixture.ts`, no
+global or system git config) holding a `cpSync` copy of this repository's `.wingfoil/`; every trace and report file is
+in a separate `mkdtemp` directory, so neither shows in the scratch worktree's status. The clean phase: base = the seed
+commit (which also holds the stale plan `release-submit-rel-v0.3-plan`, the D6 case); on `task/task-9-x` the approver's
+record (`deb70aa9b`'s message, not listed), one hand commit (`d69286802`'s message) changing `docs/notes.md`, one
+`git merge --no-edit side` amended with `--trailer` (the side branch changes `docs/side.md`, which the merge resolves
+nothing of); `docs/pending.md` left untracked. Commit messages copied from `git log -1 --format=%B <sha>` of
+`d69286802`, `a95314a0a` (`trailer-identity`), `f1d926922` (+ the two trailers, `trailer-forbidden`), `deb70aa9b`;
+the `bug-236` shape is `a95314a0a`'s body with the right identity as a separate paragraph. Trace lines copied from
+`grep -E '"pid":(2772503|2662661|2298330|2672278)' /tmp/wingfoil-heavy-gate-$(id -u)/heavy-gate.trace.jsonl` (the
+`test` pair of `task-355`, status 0; the `coverage` pair of `task-357`; the `test` pair of `task-354`, status 1; the
+`build` pair of this task's start build) and re-keyed to the scratch worktree (`realpathSync`). Two are derived, not
+copied: the `status: null` release (the `build` release with `status` set to `null`, the shape `heavy-gate.cjs` writes
+for a signal — `grep -c '"status":null'` on the trace → `0`, none to copy) and the cut last line `{"v":1,"event":"acq`.
+The `gate-open` case is `task-355`'s `acquire` without its `release` (released since the design: the trace now holds
+both). Plan frontmatter copied from `git show 5ffc8f27c:<path>` of the four `bug-474` plans and from `HEAD` of
+`release-submit-rel-v0.3.2-plan`; embedded, not read from git at test time, so a shallow clone runs the suite.
+A dry run of the fixture's git mechanics in a scratch directory outside the worktree printed, for the merge,
+`git diff-tree -r --name-only` and `git diff-tree --cc --name-only` both empty, for the hand commit `docs/notes.md`, and
+`git status --porcelain -uall` → `?? docs/pending.md` only.
+
+**Per AC.**
+
+| AC | Class | Tests (`test/cli/check-phase-report.test.ts` unless named) |
+|---|---|---|
+| 1 | red-first | `MISMATCH_KINDS` (the 17 kinds in order); `parseReport` (header fields and each keyword, prose after the blank line ignored, the full task id; five `ReportFormatError` rows with their line: bad header → 1, no `head=` → 1, unknown keyword → 3, `gate test` → 2, `exit=green` → 2); clean (`checkReport` → `[]`; full id + duplicated claims + `exit=1` against a status-1 hold → `[]`; `main` → `0`, one summary line, no stderr); one case per kind, each asserting exactly `[kind]` and the offending sha / path / gate in `detail`: `task`, `head`, `commit-unknown`, `commit-outside`, `commit-unlisted`, `trailer-missing`, `trailer-identity`, `trailer-forbidden`, `trailer-paragraph`, `file-unclaimed`, `file-unchanged` (twice: an unchanged path; a path only the merged side branch changed), `uncommitted-unclaimed`, `uncommitted-missing`, `gate-missing` (no hold; another worktree's hold; a hold before `since`; two claims, one hold; an absent trace → one per claim, naming the path), `gate-status` (status `1`; status `null`), `gate-open`, `plan-parent` in a range; `main` → `1` with `head`, `commit-unknown`, `file-unchanged`, `uncommitted-missing`, `gate-missing` in that order from a report listing them scrambled, then a summary; `main` → `2` with one `check-phase-report: ` stderr line for a bad header, an unknown keyword (naming `3`), `gate test`, a missing `--base`, an unknown subcommand (naming it), a `--base` naming no commit (naming it). |
+| 2 | red-first | the four `bug-474` plans → four `plan-parent`, sorted by path, each `detail` exactly `<id> (<path>): parent "<value>" names no phase of release-cycle (<phases>)`, the phases read from `.wingfoil/workflows/custom/release-cycle.yaml`; `--rev HEAD~1` (before them) → none; `paths` limits the check; `no-such-workflow.x` → `… names no workflow` (exact), `release-cycle` (no `.`) → `… names no phase`, `""` → none; `main plans` → `1` with four lines + summary, `0` on the clean plan only and at `--rev HEAD~1`; D6 in `report` (the stale plan of the base → no mismatch, while `checkPlanParents` at `HEAD` flags it). |
+| 3 | red-first + characterization | the suite above; characterization: no `package.json` script, `.github/workflows/*.yml` or `bindings.yaml` names `check-phase-report`, with positive controls `scripts/check-governance.cjs` in a `package.json` script, `check-governance` in `governance.yml`, `scripts/e2e-smoke.cjs` in `bindings.yaml`. Facts today: `grep -l "check-phase-report" package.json .github/workflows/*.yml .wingfoil/workflows/bindings.yaml` → none (exit 1); `grep -l check-governance .github/workflows/*.yml` → `governance.yml`. |
+| 4 | characterization (module-doc half, D5 (a)) | the example between the lines `BEGIN EXAMPLE REPORT` and `END EXAMPLE REPORT` of the script's leading `/** … */` comment (each line stripped of ` * ` and trimmed) reads with `parseReport`, one `commit`, `file`, `uncommitted` and `gate` line each; every `MISMATCH_KINDS` entry appears in that comment as a whole token. The plan half is the review's, on `design/dev_loop_v0.4`. |
+| D4 | red-first | `trailerKeysOutsideFinalParagraph` of `scripts/check-governance.cjs`: the `bug-236` shape → `['WingFoil-Version']`; `a95314a0a`'s and `deb70aa9b`'s bodies → `[]`. |
+| — | red-first | `test/lint/git-log-readers.test.ts` "enumerates the readers it guards": the new script is a `git log` reader. |
+
+**Runs and the first failing line.**
+- `npx jest test/cli/check-phase-report.test.ts --maxWorkers=2` → `Test Suites: 1 failed`, `Tests: 0 total`:
+  `Cannot find module '../../scripts/check-phase-report.cjs' from 'test/cli/check-phase-report.test.ts'` — every test of
+  the file fails on it, the design's expected red. Once the script exists, the D4 block fails until the export is added:
+  `node -e "console.log(typeof require('./scripts/check-governance.cjs').trailerKeysOutsideFinalParagraph)"` → `undefined`
+  (a runtime TypeError under ts-jest `isolatedModules`).
+- `npx jest test/lint --maxWorkers=2` with the red files in place → `Test Suites: 1 failed, 14 passed, 15 total`,
+  `Tests: 1 failed, 160 passed, 161 total`; the one failure is the intended red,
+  `git-log-readers.test.ts` › "enumerates the readers it guards": `-   "scripts/check-phase-report.cjs",` (Expected − 1,
+  Received + 0).
+- `npx tsc --noEmit -p tsconfig.json` → exit `0` (the `.d.cts` declarations make the red jest's alone).
+
+**Choices the design left open (the tests fix them; green follows).**
+- AC 4's two marker lines are named by the test: `BEGIN EXAMPLE REPORT` and `END EXAMPLE REPORT`, each alone on its
+  comment line.
+- The usage errors' stderr line names the offending token where there is one: the line number of a malformed report, the
+  unknown subcommand, `--base` when it is missing, the `--base` value naming no commit.
+- AC 3's workflow positive control is `governance.yml`, not `ci.yml`: `grep -l check-governance .github/workflows/*.yml`
+  → `governance.yml` only (the design's "`ci.yml` or `package.json`"; `package.json` is the other control).
+- `trailer-forbidden` lists the approve commit in the report (a listed commit), so the case does not depend on whether
+  unlisted range commits are read for trailers; `commit-outside` lists the base commit, which carries the §7 paragraph,
+  so it raises no trailer mismatch either.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
