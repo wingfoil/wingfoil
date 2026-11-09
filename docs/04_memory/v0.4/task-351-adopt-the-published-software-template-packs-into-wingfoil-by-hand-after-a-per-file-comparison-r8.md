@@ -338,6 +338,117 @@ failed, 3 passed (the three characterization tests, on first run); the conforman
 --maxWorkers=2` with the files in place → exit `0`, `Test Suites: 15 passed, 15 total`, `Tests: 161 passed, 161 total`.
 The invisible-character scan (`grep -nP` over the two test files) → no hit.
 
+### green (developer, 2026-11-09)
+
+**Start.** Through the task's PATH shim: `command -v wingfoil` printed the shim; `wingfoil --version` and `node
+dist/cli.js --version` printed `0.3.2 (2b8759ac5c6d6f94a1e0f0134bac92e5c23a3cf4)`. Branch head `daf5c48c4`;
+`git rev-list --count HEAD..main` printed `0`, so no merge. Red read: commit `4d49ddce3`, files
+`test/core/workflow-pack-adoption.test.ts` (new) and `test/core/workflow-repository-conformance.test.ts` (two pins).
+
+**Commits, one per adopted file (AC 2).** Each raises the file's `version:` once on the branch with a comment in the
+repository's `(prev …)` form: the newest clause names task-351, the old history kept inside `(prev <old> …)`.
+`adr-ingest.yaml` had no version comment; it now reads `… (prev 1.0)`.
+- `d176c3d45` `decision-log-ingest.yaml` 1.1 → 1.2 (row 15, base@2.0.1): `capture.produces` is
+  `{ type: decision-log, path: "docs/04_memory/design/dls/{id}.md" }`.
+- `f73c74da1` `adr-ingest.yaml` 1.0 → 1.1 (row 32, software@1.0.0): `{ type: adr, path: "docs/04_memory/design/adrs/{id}.md" }`.
+- `f35e37c68` `bug-ingest.yaml` 1.2 → 1.3 (row 33, software@1.0.0): `{ type: bug, path: "docs/04_memory/bugs/{id}.md" }`.
+- `7e4220dbe` `end-of-life.yaml` 1.1 → 1.2 (row 34, software@1.0.0, D4) with `.wingfoil/WORKFLOW.md`: `announce` loses
+  its `approval:`, its `memory.add` gains `tags: [end-of-life]`, it declares
+  `produces: { type: decision-log, path: "docs/04_memory/design/dls/{id}.md" }`, and its description says to pass
+  `--tags end-of-life` (the pack's instruction; `node dist/cli.js memory add --help` lists `--tags <t1,t2>`); a new
+  phase `approve` after it, the pack's (role `approver`, `where: { type: decision-log, status: [in-discussion], tags:
+  [end-of-life] }`, `memory.approve`, `approval: { by_role: approver }`, `fallback: { step: announce }`); the workflow
+  `description` names `approve`; `deprecate` and `archive` unchanged. `WORKFLOW.md`: Phase 7's diagram (`announce`
+  without the gate, a bold `approve` node, the reject edge back to `announce`), and — a same-class instance — the
+  Phase Keys table's `produces` row, which enumerates where the object form is used, now lists the three ingest
+  `capture` phases and `end-of-life` (`announce`) (`grep -rn "object form" --include=*.md .` outside Memory and plans:
+  that row is the only enumeration).
+No type, state, workflow, phase or check token is renamed. Before each commit the invisible-character `grep -nP` over
+the committed files printed nothing (exit `1`).
+
+**red → green.** `npx jest test/core/workflow-pack-adoption.test.ts test/core/workflow-repository-conformance.test.ts
+test/docs/workflow-md.test.ts --maxWorkers=2` → exit `0`, `Test Suites: 3 passed, 3 total`, `Tests: 40 passed, 40
+total` (red, the first two files: 17 failed, 17 passed of 34).
+
+**AC 3 — the frontier, before green's first commit (`daf5c48c4`) and after its last (`7e4220dbe`).** Pinned build
+(`npm run -s wingfoil -- …`) in the worktree: `workflow next sw-life-cycle-1-plan --format json`, `workflow status
+--format json`, `workflow list --format json`, `workflow list --format console`, `workflow status --format console`
+→ every run exit `0`, stderr empty (0 bytes), `workflow list` 68 diagnostics, all `W_WORKFLOW_UNBOUND_TOKEN`, before
+and after. Fingerprint per open instance (the design's `node` script: phase states, sorted frontier keys, `late`
+count) → identical before and after (`JSON.stringify` equality `true`): `sw-life-cycle-1-plan` `release-line-cycle`
+current, `sunset` pending, 19 frontier keys, `late` 197; `decision-log-ingest-rel-v0.4-planning-feedback-plan`,
+`decision-log-ingest-rel-v0.4-planning-inputs-plan` and `bug-ingest-rel-v0.4-planning-feedback-plan` complete;
+`service-ingest-rel-v0.3-listings-plan` at `capture`, 1 frontier key. (The design measured 20 keys and `late` 196 on
+an older `main`; the live frontier moved with the merges since, which is why AC 3 compares before and after on the
+same base.) The full JSONs with `baseline` removed differ in one line each for `next`, `status` and `list`: the
+diagnostic path of `end-of-life`'s unbound `deprecated content excluded …` check, `phases[1].checks.post[0]` →
+`phases[2].checks.post[0]` (`diff` of the two pretty-printed outputs), the shift of the added phase, as the design
+measured. Pinned `workflow show <name> --format json` and `--format console` for `end-of-life`, `decision-log-ingest`,
+`adr-ingest`, `bug-ingest` → exit `0`, stderr empty, no error diagnostic; phases `announce, approve, deprecate,
+archive` with only `approve` gated; each typed entry shown as `{ pattern: "…/{id}.md", owner: <type>, evidence: false
+}`. `npm run -s check:mcp` → exit `0`, `.mcp.json "wingfoil" runs the pinned wingfoil 0.3.2, advertising [prompts,
+resources, tools] (prompts: 8, resources: 4, tools: 0)` and `the build under development (dist/cli.js) serves …; every
+listed Resource read and Prompt get answered`.
+
+### refactor (developer, 2026-11-09)
+
+No restructuring: the change is four configuration files and one document, each committed alone (or, for
+`WORKFLOW.md`, with `end-of-life.yaml`). Gates in the task's worktree, each heavy one after `waitslot.sh` (exit `0`,
+no wait printed) and through its npm script, `--maxWorkers=2`, foreground or a tracked background command:
+- `npm run -s build` → exit `0`; then `npm test -- --maxWorkers=2` → exit `0`, `Test Suites: 588 passed, 588 total`,
+  `Tests: 10825 passed, 10825 total` (the workflow conformance suite, `test/docs/` parity and `test/lint` among them:
+  AC 4).
+- `npm run -s test:coverage -- --maxWorkers=2` → exit `0`, `All files | 99.24 | 97.14 | 98.64 | 99.65` (statements,
+  branches, functions, lines), the same 588 suites and 10825 tests.
+- `npm run -s lint` → exit `0`, no output; `npm run -s docs:api` → exit `0`, no output; `npm run -s typecheck` (both
+  tsc configs) → exit `0`, no output.
+- No CLI, help or `docs/cli-reference.md` change, so `test/docs/cli-reference.test.ts` ran only inside the full suite.
+
+**Sync with `main`.** `git rev-list --count HEAD..main` printed `0` at the start of green and `4` after the gates:
+`git merge --no-edit main` (no conflict), amended with the AI trailers → `c0c0c1d75`. `git diff --name-only
+HEAD^1 HEAD` lists one file, the new `dl-235` decision-log (the D5 (a) follow-up of this task's design); nothing under
+`.wingfoil/` or `test/`. After the merge: `npx jest test/docs test/lint test/core/workflow-pack-adoption.test.ts
+test/core/workflow-repository-conformance.test.ts --maxWorkers=2` → `Test Suites: 48 passed, 48 total`, `Tests: 534
+passed, 534 total`; the AC 3 measure re-run → every command exit `0`, stderr empty, 68 diagnostics all
+`W_WORKFLOW_UNBOUND_TOKEN`; the fingerprint equals the post-green one except `sw-life-cycle-1-plan`'s `late` count,
+197 → 198 (same 19 frontier keys), which comes from `main`'s own `dl-235` commits, not from a `.wingfoil/` change.
+
+### self-review (developer, 2026-11-09)
+
+- AC 1: the design's table, unchanged; sampled row 34 again: `diff <pack workflows/end-of-life.yaml>
+  .wingfoil/workflows/custom/end-of-life.yaml` (the pack file as the design extracted it with `git archive` from the
+  `software@1.0.0` tag commit) now differs only in WingFoil-specific detail kept by D2: the header, the descriptions'
+  wording, the title argument, the `checks`, `deprecate`'s `release-line` filter and `archive`'s `git.commit`;
+  `announce`'s `tags: [end-of-life]` and typed `produces` (with WingFoil's path value) and the `approve` phase's role,
+  `where`, action, `approval` and `fallback` match the pack's lines.
+- AC 2: met by the four commits under green; the pins of `test/core/workflow-pack-adoption.test.ts` and the two moved
+  pins of the conformance suite pass. `git diff --stat main...HEAD -- .wingfoil` → the four workflow files and
+  `WORKFLOW.md` only; `workflows.yaml`, `bindings.yaml`, `memory.yaml`, `dna.yaml`, `roles.yaml`, directives, templates
+  untouched, so none of the four files `test/lint/version-bump.test.ts` gates.
+- AC 3: met (green's measure: same phase states, same frontier keys, same `late` count before and after green's
+  commits). Absence claim with its positive case: the only difference in the three JSONs is the diagnostic path that
+  the added phase shifts, which `diff` shows; the fingerprint script does see a change when one exists (the `late`
+  197 → 198 after the merge).
+- AC 4: met by the full `npm test` under refactor.
+- T4: `git log --first-parent --no-merges --format=%h 4d49ddce3..HEAD -- test/core/workflow-pack-adoption.test.ts
+  test/core/workflow-repository-conformance.test.ts` printed nothing.
+- Scope: `git diff --name-only main...HEAD` → the four workflow files, `.wingfoil/WORKFLOW.md`, the two red test files
+  and this task file. No `src/`, spec or user-doc change.
+- Same-class instances in the files touched: the Phase Keys table row of `WORKFLOW.md` (fixed, above); the Ingest
+  Mains table's `Produces` column still names the same `{id}` paths, so it stays true. `.wingfoil/README.md` line 125
+  (`sunset → end-of-life (→ decision-log)`) stays true.
+- Outside the design's files, so not edited (decision for the approver): `spec-017` (approved) names
+  `end-of-life.announce` as an approval phase twice — §5.1's "created elements" row (`end-of-life.announce`: a
+  decision-log `in-discussion`) and the enumeration "The other 15 approval phases are carried by Memory: …
+  `end-of-life.announce` …" (`grep -n "end-of-life.announce" docs/04_memory/design/specs/spec-017-*.md` → lines 556
+  and 1172). After this task the gate is `end-of-life.approve`, carried by a selection (the decision-log tagged
+  `end-of-life`), and the count stays 15.
+
+### Pending amendments (approver)
+
+None in the worktree (`git status --short` → empty). The `spec-017` wording above is a decision for the approver: a
+`memory amend` of `spec-017` (it is outside the design's files, so not prepared here).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -345,3 +456,12 @@ The invisible-character scan (`grep -nP` over the two test files) → no hit.
      printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
      Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
      here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+
+- The design's frontier numbers (20 keys, `late` 196) were measured on an older `main`; by green they were 19 and 197
+  (`workflow status --format json` on the pinned build, the design's fingerprint script), and a merge of `main` that
+  brought only a decision-log moved `late` to 198. A live frontier is only comparable before and after on one base;
+  AC 3 was measured that way. Proposal: an AC on "the frontier unchanged" names that rule.
+- The adopted gate moved from `end-of-life.announce` to `end-of-life.approve`, and approved `spec-017` names the old
+  phase in two places (§5.1 and §12); the design checked AGENTS.md, README and the user docs but not the specs that
+  enumerate this repository's phases. Proposal: a design touching `.wingfoil/workflows/` greps the specs for each
+  changed phase key (`grep -rn "<workflow>.<phase>" docs/04_memory/design/specs`).
