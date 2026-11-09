@@ -63,12 +63,55 @@ describe('handoffLine (§2.4) — chosen by the type template’s `## Execution 
 describe('renderMcpTemplate (§2.3) — {mcp_command} and {mcp_args} in mcp.template', () => {
   it('fills the command as JSON string content and the args as a JSON array', () => {
     const template = '{"mcpServers": {"wingfoil": {"command": "{mcp_command}", "args": {mcp_args}}}}\n';
-    const text = renderMcpTemplate(template, { command: '/opt/node "v22"/bin/node', args: ['/a\\b/cli.js', 'mcp'] });
-    expect(JSON.parse(text)).toEqual({ mcpServers: { wingfoil: { command: '/opt/node "v22"/bin/node', args: ['/a\\b/cli.js', 'mcp'] } } });
+    const rendered = renderMcpTemplate(template, { command: '/opt/node "v22"/bin/node', args: ['/a\\b/cli.js', 'mcp'] });
+    expect(rendered.ok).toBe(true);
+    if (!rendered.ok) return;
+    expect(JSON.parse(rendered.value)).toEqual({ mcpServers: { wingfoil: { command: '/opt/node "v22"/bin/node', args: ['/a\\b/cli.js', 'mcp'] } } });
   });
 
   it('leaves braces that are not a placeholder alone', () => {
-    expect(renderMcpTemplate('{"a": {}} {mcp_command}', { command: 'node', args: [] })).toBe('{"a": {}} node');
+    expect(renderMcpTemplate('{"a": {}} {mcp_command}', { command: 'node', args: [] })).toEqual({ ok: true, value: '{"a": {}} node' });
+  });
+});
+
+describe('task-355 AC 3 — renderMcpTemplate escapes U+007F and refuses an unpaired surrogate (bug-371, spec-016 §2.3, §3.7)', () => {
+  const DEL = String.fromCharCode(0x7f);
+
+  it('U+007F in the command is written as the escape \\u007f, never raw', () => {
+    const rendered = renderMcpTemplate('x="{mcp_command}"', { command: '/a\u007fb/node', args: [] });
+    expect(rendered).toEqual({ ok: true, value: 'x="/a\\u007fb/node"' });
+    expect(JSON.stringify(rendered).includes(DEL)).toBe(false);
+  });
+
+  it('U+007F in an argument is written as the escape \\u007f, never raw', () => {
+    const rendered = renderMcpTemplate('{mcp_args}', { command: 'node', args: ['/a\u007fb', 'mcp'] });
+    expect(rendered).toEqual({ ok: true, value: '["/a\\u007fb","mcp"]' });
+    expect(JSON.stringify(rendered).includes(DEL)).toBe(false);
+  });
+
+  it("an unpaired high surrogate in the command: VALIDATION naming the command and the code point", () => {
+    expect(renderMcpTemplate('x="{mcp_command}"', { command: '/a\ud800b', args: [] })).toEqual({
+      ok: false,
+      error: { code: 'VALIDATION', message: "mcp.template cannot carry the MCP server's command: it holds an unpaired surrogate (U+D800)" },
+    });
+  });
+
+  it('an unpaired low surrogate in an argument: VALIDATION naming the argument, from 1', () => {
+    expect(renderMcpTemplate('{mcp_args}', { command: 'node', args: ['/x\udc00', 'mcp'] })).toEqual({
+      ok: false,
+      error: { code: 'VALIDATION', message: "mcp.template cannot carry the MCP server's argument 1: it holds an unpaired surrogate (U+DC00)" },
+    });
+  });
+
+  it('a low surrogate before a high one pairs with nothing: the first is named', () => {
+    expect(renderMcpTemplate('x="{mcp_command}"', { command: '\udc00\ud800', args: [] })).toEqual({
+      ok: false,
+      error: { code: 'VALIDATION', message: "mcp.template cannot carry the MCP server's command: it holds an unpaired surrogate (U+DC00)" },
+    });
+  });
+
+  it('a paired surrogate (U+1F600) is accepted and written raw', () => {
+    expect(renderMcpTemplate('x="{mcp_command}"', { command: '/a\u{1F600}b', args: [] })).toEqual({ ok: true, value: 'x="/a\u{1F600}b"' });
   });
 });
 
@@ -238,11 +281,11 @@ function runningBuildFromDist(): { command: string; args: string[] } {
   return { command: process.execPath, args: [CLI_ENTRY, 'mcp'] };
 }
 
-describe('mcpPreflight — a server that answers the Prompt with no text is unreachable (§3.3 step 11)', () => {
-  it('an empty messages list: MCP_UNREACHABLE naming the empty prompt', async () => {
+describe('mcpPreflight — a server that answers the session Resource with no text is unreachable (§3.3 step 11)', () => {
+  it('task-355 AC 4 — an empty contents list: MCP_UNREACHABLE naming the empty session resource', async () => {
     const root = makeTempGitRepo();
     try {
-      // A minimal stdio MCP server: initialize, then an empty prompt for any prompts/get.
+      // A minimal stdio MCP server: initialize, then an empty contents list for any resources/read.
       writeFixtureFile(
         root,
         'stub-server.cjs',
@@ -251,8 +294,8 @@ describe('mcpPreflight — a server that answers the Prompt with no text is unre
           "const send = (m) => process.stdout.write(JSON.stringify({ jsonrpc: '2.0', ...m }) + '\\n');",
           "rl.on('line', (line) => {",
           '  const m = JSON.parse(line);',
-          "  if (m.method === 'initialize') send({ id: m.id, result: { protocolVersion: m.params.protocolVersion, capabilities: { prompts: {} }, serverInfo: { name: 'stub', version: '1' } } });",
-          "  else if (m.method === 'prompts/get') send({ id: m.id, result: { messages: [] } });",
+          "  if (m.method === 'initialize') send({ id: m.id, result: { protocolVersion: m.params.protocolVersion, capabilities: { resources: {} }, serverInfo: { name: 'stub', version: '1' } } });",
+          "  else if (m.method === 'resources/read') send({ id: m.id, result: { contents: [] } });",
           '});',
           '',
         ].join('\n'),
@@ -268,7 +311,49 @@ describe('mcpPreflight — a server that answers the Prompt with no text is unre
       expect(result.ok).toBe(false);
       if (result.ok) return;
       expect(result.error.message).toBe('context pre-load failed: MCP server unreachable');
-      expect(result.error.details?.['cause']).toBe('the developer-session prompt returned no context text');
+      expect(result.error.details?.['cause']).toBe(`the session resource wingfoil://session/developer/task:task-001-a/${SHA} returned no context text`);
+    } finally {
+      removeTempDir(root);
+    }
+  }, 30000);
+});
+
+describe('task-355 AC 4 — the pre-flight reads only the session Resource the bootstrap names (bug-376, spec-016 §3.3 step 11)', () => {
+  it('a server that serves the Resource and refuses prompts/get: ok, and prompts/get is never asked', async () => {
+    const root = makeTempGitRepo();
+    try {
+      // A stdio MCP server that answers initialize and resources/read, refuses prompts/get with -32601, and
+      // appends the method of every message it receives to methods.log.
+      writeFixtureFile(
+        root,
+        'resource-server.cjs',
+        [
+          "const { appendFileSync } = require('fs');",
+          "const log = require('path').join(__dirname, 'methods.log');",
+          "const rl = require('readline').createInterface({ input: process.stdin });",
+          "const send = (m) => process.stdout.write(JSON.stringify({ jsonrpc: '2.0', ...m }) + '\\n');",
+          "rl.on('line', (line) => {",
+          '  const m = JSON.parse(line);',
+          "  appendFileSync(log, m.method + '\\n');",
+          "  if (m.method === 'initialize') send({ id: m.id, result: { protocolVersion: m.params.protocolVersion, capabilities: { resources: {} }, serverInfo: { name: 'resource-only', version: '1' } } });",
+          "  else if (m.method === 'resources/read') send({ id: m.id, result: { contents: [{ uri: m.params.uri, mimeType: 'text/markdown', text: 'context' }] } });",
+          "  else if (m.method === 'prompts/get') send({ id: m.id, error: { code: -32601, message: 'Method not found' } });",
+          '});',
+          '',
+        ].join('\n'),
+      );
+      const result = await mcpPreflight({
+        root,
+        server: { command: process.execPath, args: [join(root, 'resource-server.cjs')] },
+        role: 'developer',
+        element: 'task:task-001-a',
+        stateRef: SHA,
+        timeoutMs: 20000,
+      });
+      expect(result).toEqual({ ok: true, value: undefined });
+      const methods = readFileSync(join(root, 'methods.log'), 'utf-8').split('\n').filter((line) => line !== '');
+      expect(methods).not.toContain('prompts/get');
+      expect(methods).toContain('resources/read');
     } finally {
       removeTempDir(root);
     }
@@ -276,10 +361,10 @@ describe('mcpPreflight — a server that answers the Prompt with no text is unre
 });
 
 describe('task-228 — the B3 handovers on the pre-launch half', () => {
-  it('the MCP pre-flight has one deadline: initialize and the Prompt fetch share it (REQ-PERF-01)', async () => {
+  it('the MCP pre-flight has one deadline: initialize and the session Resource read share it (REQ-PERF-01; task-355 AC 4)', async () => {
     const root = makeTempGitRepo();
     try {
-      // A stub that takes 1.5 s to answer initialize and 1.5 s to answer the Prompt: each answer is
+      // A stub that takes 1.5 s to answer initialize and 1.5 s to answer the Resource read: each answer is
       // within a 2.5 s limit, both together are not.
       writeFixtureFile(
         root,
@@ -290,8 +375,8 @@ describe('task-228 — the B3 handovers on the pre-launch half', () => {
           "const later = (f) => setTimeout(f, 1500);",
           "rl.on('line', (line) => {",
           '  const m = JSON.parse(line);',
-          "  if (m.method === 'initialize') later(() => send({ id: m.id, result: { protocolVersion: m.params.protocolVersion, capabilities: { prompts: {} }, serverInfo: { name: 'slow', version: '1' } } }));",
-          "  else if (m.method === 'prompts/get') later(() => send({ id: m.id, result: { messages: [{ role: 'user', content: { type: 'text', text: 'context' } }] } }));",
+          "  if (m.method === 'initialize') later(() => send({ id: m.id, result: { protocolVersion: m.params.protocolVersion, capabilities: { resources: {} }, serverInfo: { name: 'slow', version: '1' } } }));",
+          "  else if (m.method === 'resources/read') later(() => send({ id: m.id, result: { contents: [{ uri: m.params.uri, mimeType: 'text/markdown', text: 'context' }] } }));",
           '});',
           '',
         ].join('\n'),
