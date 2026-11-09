@@ -266,6 +266,78 @@ instance frontier is unchanged, so no step is owed by any task, and the `w0` orc
 
 **Pending amendments (approver).** None.
 
+### red (qa, 2026-11-09)
+
+**Base.** `git merge --no-edit main` brought 41 commits (`git rev-list --count HEAD..main` → `41` before it), no
+conflict, amended with the AI trailers → merge commit `2b8759ac5`; `git diff --stat c1f96653b 2b8759ac5 -- .wingfoil
+test/core/workflow-repository-conformance.test.ts` → empty, so the merge changed none of the files the design adopts or
+the pins it moves, and the registry at `HEAD` still holds the 27 workflow names the design counts (the AC 2 (d) test
+below passes). Builds through the task's PATH shim: `wingfoil --version` and `node dist/cli.js --version` → `0.3.2
+(80ddb7f2d…)`. The design's existing-tests measure re-run after the merge, with the red edit of the conformance suite
+set aside (`git stash push -- test/core/workflow-repository-conformance.test.ts`, popped after; the new file is not in
+the list): the same `grep -rlE …` plus `test/docs/*.test.ts`, 127 paths, after the dl-170 wait-slot script returned exit
+`0` → `npx jest <those files> --maxWorkers=2` → exit `0`, `Test Suites: 126 passed, 126 total`, `Tests: 2364 passed,
+2364 total` — unchanged from the design's count.
+
+**Files.** New `test/core/workflow-pack-adoption.test.ts`; edited `test/core/workflow-repository-conformance.test.ts`
+(exactly the two pins the design names, no other). No fixture, helper or `.d.cts`: every test reads this repository's
+committed configuration at `HEAD` (`loadWorkflowRegistryAtHead`, `workflowShowAtHead`, `loadMemoryYamlAtHead`, `git show
+HEAD:`), no new export is imported. Red commit: `4d49ddce3`.
+
+**Per-AC mapping.**
+- AC 1 (characterization, done at design): nothing in jest, as the design states.
+- AC 2 (red-first):
+  - (a) `red-first: <name>.capture produces [{ type: <type>, path: <path> }], its phase names unchanged` × 3
+    (`decision-log-ingest` `{id}` under `design/dls/`, `adr-ingest` under `design/adrs/`, `bug-ingest` under `bugs/`;
+    phase names `capture, approve` / `capture, approve` / `capture, triage`), and `red-first: workflow show <name> at
+    HEAD reports no error, and capture still adds a <type>` × 3 (no error diagnostic, actions `memory.add`,
+    `memory.submit`, the typed produces with an `{id}.md` path);
+  - (b) `red-first: the phases are announce, approve, deprecate, archive — one added, none renamed`; `red-first:
+    announce has no approval, tags the decision-log it adds end-of-life and declares it as produces` (actions exactly
+    the design's two strings, produces `[{ type: 'decision-log', path: 'docs/04_memory/design/dls/{id}.md' }]`);
+    `red-first: approve is the approver's gate …` (role `approver`, `approval` `{ by_role: 'approver' }`, `fallback`
+    `{ step: 'announce' }`, `where` `{ type: 'decision-log', status: ['in-discussion'], tags: ['end-of-life'] }`,
+    actions `['memory.approve']`); `red-first: approve is the only end-of-life phase that records an approval`;
+    `red-first: workflow show end-of-life at HEAD reports no error and lists the four phases`; `characterization:
+    deprecate and archive are unchanged …` (the two phase objects as the loader returns them today);
+  - (c) the four tests "red-first: <name> version: is <min> or later, its newest clause names task-351, keeping prev <old>"
+    (≥ 1.2 / 1.1 / 1.3 / 1.2; the comment's text before its first `(prev ` contains `task-351`, the comment contains
+    `prev 1.1` / `prev 1.0` / `prev 1.2` / `prev 1.1`, as the design's row (c) states; a line with no comment reads as
+    an empty one, so the pin fails on an assertion);
+  - (d) `characterization: the registry at HEAD holds the same 27 workflow names` and `characterization: memory.yaml
+    at HEAD declares the same ten types, each with the same sequence` (the literal values read at `HEAD` with
+    `loadMemoryYamlAtHead` through `node -e` on `dist/` before writing the test);
+  - the two moved pins of `test/core/workflow-repository-conformance.test.ts`: "the thirteen typed produces name the
+    element type the phase creates (dl-104 D3; nine until task-351 …)" — the three ingest rows first, then the nine,
+    then `end-of-life.announce`; and the unbound-token list's `["end-of-life", "phases[2].checks.post[0]", "deprecated
+    content excluded from agent context and default search"]`, with a comment naming task-351.
+- AC 3 (characterization): nothing in jest, as the design states (the live frontier is measured by green and review).
+- AC 4 (characterization): nothing new; the full `npm test` at refactor.
+
+**Run.** `npx jest test/core/workflow-pack-adoption.test.ts test/core/workflow-repository-conformance.test.ts
+--maxWorkers=2` → exit `1`, `Test Suites: 2 failed, 2 total`, `Tests: 17 failed, 17 passed, 34 total`: the new file 15
+failed, 3 passed (the three characterization tests, on first run); the conformance suite 2 failed (the two moved pins),
+14 passed. Every failure is an assertion (first failing line of each):
+- (a) produces × 3: `expect(phase(name, 'capture')?.produces).toEqual([{ type, path }])` — received the plain string
+  path (e.g. `"docs/04_memory/design/dls/{id}.md"`);
+- (a) workflow show × 3: `expect(phase(name, 'capture')?.produces).toEqual([{ type, path: expect.stringMatching(/\{id\}\.md$/) }])`
+  — the same plain string; the no-error and actions assertions before it pass;
+- (b) phases: `expect(workflow('end-of-life').phases.map((p) => p.name)).toEqual(['announce', 'approve', 'deprecate',
+  'archive'])` — received three names;
+- (b) announce: `expect(announce?.approval).toBeUndefined()` — received `{"by_role": "approver"}`;
+- (b) approve: `expect(approve).toBeDefined()` — received `undefined`;
+- (b) only approval: `….filter((p) => p.approval !== undefined).map((p) => p.name)).toEqual(['approve'])` — received
+  `['announce']`;
+- (b) workflow show: `expect(shown.value.workflow.phases.map((p) => p.name)).toEqual([…four…])` — received three;
+- (c) × 4: `expect(version).toBeGreaterThanOrEqual(min)` — received `1.1`, `1`, `1.2`, `1.1`;
+- conformance, typed produces: `expect(owners).toEqual([` — the four new rows missing (`- Expected - 4`);
+- conformance, unbound list: `expect(rows(diagnostics)).toEqual([` — `phases[2].checks.post[0]` expected, `phases[1]`
+  received.
+
+**Gates before the red commit.** `npx tsc --noEmit -p tsconfig.json` → exit `0`, no output; `npx jest test/lint
+--maxWorkers=2` with the files in place → exit `0`, `Test Suites: 15 passed, 15 total`, `Tests: 161 passed, 161 total`.
+The invisible-character scan (`grep -nP` over the two test files) → no hit.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
