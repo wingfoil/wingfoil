@@ -1807,8 +1807,8 @@ in this release starts a fresh agent session, whatever the phase allows (`--resu
 planned, and refused as unknown options); a phase's `distinct_from` is not checked. The step's refusals
 come first, each exit `1`: `error: no next step to execute` (no open workflow, or none of its steps is
 ready), `error: unknown workflow: <name>`, `error: workflow is not open: <ref>`,
-`error: step '<key>' is not on the frontier of <instance>`, `error: step '<key>' names <N> steps of
-<instance>: give --step, one of: <key>, <key>` (a key without its scope, new in 0.4), `error: step '<key>' has no element: give
+`error: step '<key>' is not on the frontier of <instance>`, `error: step '<key>' names <N> steps
+of <instance>: give --step, one of: <key>, <key>` (a key without its scope, new in 0.4), `error: step '<key>' has no element: give
 --element <type>:<id>`, `error: step '<key>' declares no role: give --role <role>`. A step that only waits
 (new in 0.4) is refused too, exit `1`, with the line `wingfoil workflow next` prints for it —
 `error: human needed: approve or reject <id> — routed to <members>`,
