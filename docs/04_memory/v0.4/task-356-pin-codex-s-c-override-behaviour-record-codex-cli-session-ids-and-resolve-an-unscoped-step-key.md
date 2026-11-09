@@ -603,6 +603,45 @@ Against `code-review`, per AC:
 None: no element past its first state is edited (`git status --short` → only the task file before submit). The bugs
 get their status syncs only; their `### Retrospective` subsections are owed when they close, not here.
 
+### review fix round (developer, 2026-11-09)
+
+The review's verdict: approve with fixes, two should-fix-in-task findings and one optional nit. Start: head `884f06367`,
+`git rev-list --count HEAD..main` → `0` (no merge).
+- **(1) Stale text.** `src/storage/builtin-adapters.ts`'s module TSDoc said every built-in's headless block declares
+  `output: none` and that nothing parses the agent's stdout. It now says `claude-code`'s declares `none` and
+  `codex-cli`'s `jsonl`, read for the session id only. The same claim in `spec-016` §2.8's paragraph before the
+  headless table is fixed in the worktree, LEFT UNCOMMITTED, with a Revision entry (see Pending amendments below).
+  The sweep `grep -rn "output: none\|nothing parses" src docs/*.md docs/04_memory/design/specs` found those two
+  claims plus two correct lines: `builtin-adapters.ts:61` (`claude-code`'s own `output: none`) and spec-016's
+  `claude-code` row. After the fix the same grep finds no claim that the built-ins all read nothing.
+- **(2) The drain bound.** `test/agent/helpers/fake-child.ts` is not one of this task's red files
+  (`git log --format=%h 606a69e09^..606a69e09 -- test/agent/helpers/fake-child.ts` → empty). It gains
+  `exitKeepingStdout(code)`, additive: the child emits `exit` and leaves stdout open. My own
+  `test/agent/launch-session-output-bounds.test.ts` gains two tests:
+  - (a) an id written after the exit, then the stream ended → recorded (`t-after-exit`, no warning);
+  - (b) a stream that never ends, `lookupTimeoutMs: 300` → the run settles `not-reported` with the no-id warning, at
+    least 250 ms after the exit. Only a lower bound is asserted, so no budget can flake under load.
+- **(3) G2's nit.** `grep -rn "launching without it" test` → nothing, so the probe's warning now ends `going on
+  without it` (`src/agent/execute.ts`), true for a dry run too. The `### green` and `### self-review` sections above
+  still quote the old words, since notes are only added to.
+- Commit `d79cd8abf` (`fix(agent,storage): task-356 — review fixes: …`).
+- Runs: `npx tsc --noEmit -p tsconfig.json` → exit `0`. `npm run -s lint` → exit `0`. Targeted, the spec amendment in
+  the working tree: `npx jest --maxWorkers=2 test/agent/launch-session-output-bounds.test.ts
+  test/agent/launch-session-output.test.ts test/agent/execute-mcp-conflict.test.ts test/storage
+  test/agent/launch-headless.test.ts test/agent/launch-process.test.ts` → `Test Suites: 45 passed, 45 total`,
+  `Tests: 539 passed, 539 total`.
+- The full `npm test -- --maxWorkers=2` after the slot script did not run. The slot script still holds it back on the
+  load check: `/proc/loadavg` → `73.75 65.67 47.14`, while `ps -eo stat,args | awk '$1 ~ /D/' | grep -c kec_query` →
+  `72` kernel workers sit in uninterruptible sleep and their count grows. The load is not CPU work: in
+  `ps -eo pid,etime,pcpu,args --sort=-pcpu` the top process runs at 12.5 %. Another worktree's build
+  (`node scripts/heavy-gate.cjs build`, `21:53` elapsed) waits the same way. The waiter stays queued.
+
+### Pending amendments (approver)
+
+- `spec-016-agent-execution` — §2.8's paragraph before the headless table, and a Revision entry (2026-11-09, review).
+  `git status --short` → ` M docs/04_memory/design/specs/spec-016-agent-execution.md`. `--reason "Say that codex-cli's
+  headless block declares output jsonl for its session id while claude-code's stays none (section 2.8, task-356)."`
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -617,3 +656,6 @@ get their status syncs only; their `### Retrospective` subsections are owed when
 - green (developer): the refactor gate chain was lost once to a network error of the agent session after `build exit 0`
   and re-run from `npm test`; the slot waits that followed (load over 14, then other worktrees' full suites) took most
   of the phase's wall time.
+- review fix round (developer): the full suite of the fix round could not take the heavy-gate slot. `/proc/loadavg`
+  stayed above the slot's 14 (`73.75`), raised by 72 kernel workers in D state (`kec_query`) rather than by gates.
+  Proposal: the slot's load check could discount uninterruptible-sleep tasks, or read the CPU's busy time instead.
