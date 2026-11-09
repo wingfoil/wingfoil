@@ -1822,7 +1822,10 @@ the element exists; the role is defined and is not `approver` (whichever of `--h
 launch kind (see below; for a headless launch without `launch.headless`, `error: adapter '<name>' declares no
 headless launch`); its `command` is on `PATH` (or at its path in the project); your git identity is
 set; `dna.yaml` declares `paths.runs` and the element's run log has no uncommitted changes; the
-execution context (DNA, the role's directives, the relevant Memory) assembles and validates; the
+execution context (DNA, the role's directives, the relevant Memory) assembles and validates; the adapter's
+`mcp.template` can carry the MCP server's command and arguments (one holding an unpaired surrogate, which
+neither JSON nor TOML can write, gives `error: mcp.template cannot carry the MCP server's argument <n>: it holds
+an unpaired surrogate (U+<XXXX>)`, or `… command: …`; new in 0.4); the
 WingFoil MCP server of this same build starts and serves that context (your project's `.mcp.json` is
 neither read nor changed); and, for an interactive launch of an adapter that needs one, stdin and stdout are a
 terminal.
@@ -1846,8 +1849,8 @@ tells it where to load its context (the Resource `wingfoil://session/<role>/<typ
 `wingfoil` MCP server registered for it), and tells it to end every commit it writes, except an approve or reject commit, with
 `Co-Authored-By: <agent name> <<agent email>>` and `AI-Model: <its model>` — added to a commit `wingfoil`
 writes with `git commit --amend --no-edit --trailer`, never as a paragraph of their own. While the agent runs,
-Ctrl-C and Ctrl-\ reach the agent and do not stop `agent execute`; `SIGTERM` and `SIGHUP` sent to
-`agent execute` are passed on to the agent. When the agent exits, it asks the adapter's declared
+Ctrl-C, Ctrl-\ and a hang-up of the terminal reach the agent and do not stop `agent execute`; `SIGTERM` sent to
+`agent execute` is passed on to the agent, and a `SIGHUP` sent to `agent execute` alone is not. When the agent exits, it asks the adapter's declared
 commands for the agent's version, session, model and token counts (each within 10 seconds; one that
 fails is recorded as `not-reported`, with a `warning:` line), appends one record to the element's run
 log (`<paths.runs>/<element-id>.jsonl`) and commits it alone, then prints
@@ -1872,7 +1875,9 @@ kind prints `warning: phase '<workflow>.<phase>' declares launch: <declared>; la
 **The headless work run** (new in 0.4). The agent starts with no terminal: its stdin is not connected, its
 stdout is captured and not shown, its stderr is `agent execute`'s, and on Linux and macOS it runs in a process
 group of its own. Ctrl-C, `SIGTERM` and `SIGHUP` sent to `agent execute` are passed on to it; Ctrl-\ is
-ignored. Both built-in adapters declare a headless launch (`claude -p …`, `codex exec …`). The record's
+ignored. On Linux and macOS a passed-on signal and the `--timeout` signals reach the processes the agent
+started too, and once an agent a signal reached has exited, what is left of them is killed: nothing of a
+signalled or timed-out headless run outlives `agent execute`. Both built-in adapters declare a headless launch (`claude -p …`, `codex exec …`). The record's
 `result` is `n/a`, as for an interactive run. On success stdout carries `{"run": <record>}` (indented under
 `--format console`), and the summary line is a notice on stderr. A timed-out run, interactive or headless, is
 still recorded and exits `1` with `error: agent timed out after <duration>; run <run-id> recorded`, whatever

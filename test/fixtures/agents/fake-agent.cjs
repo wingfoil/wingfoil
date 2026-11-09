@@ -38,6 +38,15 @@
  * - `WINGFOIL_FAKE_AGENT_LOOKUP=fail|hang` — `--lookup`, after recording, exits `1` with nothing on
  *   stdout (`fail`), or waits until a signal kills it (`hang`): a post-run lookup that fails or times
  *   out while the launch succeeded (`spec-016` §2.6).
+ * - `WINGFOIL_FAKE_AGENT_SIGNALS` — a file; on a launch, before its record line, the fake installs
+ *   listeners that append one line `<NAME>` to it per delivery of `SIGHUP` and `SIGINT` (it keeps
+ *   running) and of `SIGTERM` (it then exits `0`): how many times each signal reached the agent
+ *   (task-355, `bug-318`; `spec-016` §3.3 step 15).
+ * - `WINGFOIL_FAKE_AGENT_CHILD` — a file; on a launch, before its record line, the fake starts a child
+ *   `node -e` process that only waits (stdio ignored, not detached, so it stays in the fake's process
+ *   group) and writes the child's pid to the file: a process the agent started, which no signal of a
+ *   timed-out or signalled run may leave running (task-355, `bug-516`).
+ * - `WINGFOIL_FAKE_AGENT_CHILD_TRAP=1` — that child ignores `SIGTERM`, so only a `SIGKILL` ends it.
  *
  * `EXIT` and `WAIT` apply to a launch only. `agent execute` passes its environment to every child it
  * starts (§2.2), so the post-run `--version` and `--lookup` (§3.3 step 16) see the same variables, and
@@ -48,7 +57,7 @@
 'use strict';
 
 const { spawn } = require('child_process');
-const { appendFileSync, readFileSync } = require('fs');
+const { appendFileSync, readFileSync, writeFileSync } = require('fs');
 
 /** What `--version` prints, and what the manifests' `verified_with` names. */
 const VERSION = 'fake-agent 1.0.0';
@@ -199,6 +208,33 @@ function fetchResource(source, uri) {
   });
 }
 
+/**
+ * `WINGFOIL_FAKE_AGENT_SIGNALS`: one line per delivery of `SIGHUP`, `SIGINT` and `SIGTERM`; the first two
+ * keep the fake running, `SIGTERM` then ends it with exit `0`.
+ */
+function trackSignals() {
+  const file = process.env.WINGFOIL_FAKE_AGENT_SIGNALS;
+  if (file === undefined || file === '') return;
+  for (const name of ['SIGHUP', 'SIGINT']) process.on(name, () => appendFileSync(file, `${name}\n`));
+  process.on('SIGTERM', () => {
+    appendFileSync(file, 'SIGTERM\n');
+    process.exit(0);
+  });
+}
+
+/**
+ * `WINGFOIL_FAKE_AGENT_CHILD`: start a child that only waits, in the fake's process group, and write its pid;
+ * with `WINGFOIL_FAKE_AGENT_CHILD_TRAP=1` the child ignores `SIGTERM`. The fake does not wait for it.
+ */
+function startChild() {
+  const file = process.env.WINGFOIL_FAKE_AGENT_CHILD;
+  if (file === undefined || file === '') return;
+  const trap = process.env.WINGFOIL_FAKE_AGENT_CHILD_TRAP === '1' ? "process.on('SIGTERM', () => undefined); " : '';
+  const child = spawn(process.execPath, ['-e', `${trap}setInterval(() => undefined, 60000)`], { stdio: 'ignore' });
+  child.unref();
+  writeFileSync(file, `${child.pid}\n`);
+}
+
 /** One launch: record, optionally connect, then print the headless document. Returns the exit code. */
 async function launch(argv, stdin) {
   const bootstrapFile = option(argv, '--prompt-file');
@@ -206,6 +242,8 @@ async function launch(argv, stdin) {
   const sessionId = option(argv, '--session-id') ?? option(argv, '--resume') ?? null;
   let mcp = null;
   let failure = null;
+  trackSignals();
+  startChild();
   if (process.env.WINGFOIL_FAKE_AGENT_CONNECT === '1') {
     const instruction = bootstrap === undefined || bootstrap === null ? null : CONTEXT_INSTRUCTION_RE.exec(bootstrap);
     const configFile = option(argv, '--mcp-config');
