@@ -449,6 +449,26 @@ passed, 534 total`; the AC 3 measure re-run → every command exit `0`, stderr e
 None in the worktree (`git status --short` → empty). The `spec-017` wording above is a decision for the approver: a
 `memory amend` of `spec-017` (it is outside the design's files, so not prepared here).
 
+Added at the review fix round (below), left uncommitted in the worktree; `npx jest test/docs` ran with it in place.
+- `docs/04_memory/design/specs/spec-017-workflow-commands-and-state-deduction.md` (approved): §5.1's carrier table,
+  §12's list of the approval phases carried by Memory, and a Revision entry at the tail. `--reason`: Record
+  end-of-life's adopted approve phase (task-351, software@1.0.0 row 34): the approval moves from announce's created
+  decision-log to approve's selection of the decision-log tagged end-of-life; the count of Memory-carried approval
+  phases stays 15.
+
+### review fix round (developer, 2026-11-09)
+
+Independent review: APPROVE WITH FIXES, one should-fix-in-task finding: `spec-017` still named `end-of-life.announce`
+as an approval phase. Fixed as a pending amendment (above): `sed -n 553,557p` and `sed -n 1168,1174p` of the spec,
+read before the edit, showed the selection row, the created-elements row ending with `end-of-life.announce`: a
+decision-log `in-discussion`, and §12's `end-of-life.announce`; after the edit the selection row ends with
+`end-of-life.approve`: the decision-log tagged `end-of-life`, `in-discussion`, the created-elements row with
+`tech-spec`/`adr` `pending`, and §12 names `end-of-life.approve` (its selection, since `task-351`), the count 15
+unchanged; a Revision entry in the file's own form closes the file. No version bump: the spec's frontmatter declares
+no `version:` (`sed -n 1,12p` of the file), so git versions it (`doc-versioning`). Invisible-character `grep -nP` on
+the spec → no hit. `npx jest test/docs --maxWorkers=2` with the edit in place → `Test Suites: 31 passed, 31 total`,
+`Tests: 339 passed, 339 total`.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
