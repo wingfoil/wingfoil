@@ -395,7 +395,7 @@ describe('task-344 AC 1 — parseReport reads the header and the claims block, a
   });
 
   it('accepts the full task id in the header', () => {
-    expect(parseReport('REPORT task-344-check-a-delegated-phase-report head=bddc04c\n').task).toBe('task-344-check-a-delegated-phase-report');
+    expect(parseReport('REPORT task-344-check-a-delegated-phase-report red head=bddc04c\n').task).toBe('task-344-check-a-delegated-phase-report');
   });
 
   it.each([
