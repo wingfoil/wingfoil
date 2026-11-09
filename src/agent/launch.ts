@@ -35,6 +35,7 @@
  * values that never reach the context (`spec-016` Consequences). `duration_ms` is wall-clock by design:
  * a record of what happened, never part of a context (`dl-114` Q2).
  */
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { execFile, spawn, type ChildProcess, type SpawnOptions } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { isAbsolute, resolve } from 'node:path';
@@ -183,7 +184,8 @@ interface SignalTakeover {
   send(signal: NodeJS.Signals): void;
   /**
    * After the agent has exited: when a signal was delivered to its process group, send what is left of the
-   * group one `SIGKILL` (task-355, `bug-516`, approver ruling D2 (a)); otherwise nothing.
+   * group one `SIGKILL` (task-355, `bug-516`, approver ruling D2 (a)); otherwise nothing. A delivery that
+   * fails is a `warning:` line, never an error: the run's outcome is already decided.
    */
   sweep(): void;
   /** Remove every listener installed. */
@@ -204,6 +206,17 @@ function takeOverSignals(kind: LaunchKindRun, signalGroup: (pgid: number, signal
   let child: ChildProcess | undefined;
   let pending: NodeJS.Signals | undefined;
   let signalled = false;
+  // A group delivery that fails (`EPERM`, say) neither throws out of a signal listener or a timer nor replaces
+  // the run's outcome: §3.3 step 18 decides that from the agent's exit, the bound and the record alone.
+  // The launch's context, so the warning reaches the operation's sink from a signal listener too.
+  const inLaunch = AsyncLocalStorage.snapshot();
+  const deliver = (pgid: number, signal: NodeJS.Signals): void => {
+    try {
+      signalGroup(pgid, signal);
+    } catch (error) {
+      inLaunch(reportWarning, `could not send ${signal} to the agent's process group ${pgid}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
   const groupOf = (agent: ChildProcess): number | undefined => (kind === 'headless' && !WINDOWS && typeof agent.pid === 'number' ? agent.pid : undefined);
   const send = (signal: NodeJS.Signals): void => {
     if (child === undefined) {
@@ -217,7 +230,7 @@ function takeOverSignals(kind: LaunchKindRun, signalGroup: (pgid: number, signal
       return;
     }
     signalled = true;
-    signalGroup(pgid, signal);
+    deliver(pgid, signal);
   };
   const { ignored, forwarded } = TAKEN_OVER[kind];
   const installed: [NodeJS.Signals, () => void][] = [
@@ -234,7 +247,7 @@ function takeOverSignals(kind: LaunchKindRun, signalGroup: (pgid: number, signal
     sweep() {
       if (!signalled || child === undefined || (child.exitCode === null && child.signalCode === null)) return;
       const pgid = groupOf(child);
-      if (pgid !== undefined) signalGroup(pgid, 'SIGKILL');
+      if (pgid !== undefined) deliver(pgid, 'SIGKILL');
     },
     restore() {
       for (const [signal, listener] of installed) process.removeListener(signal, listener);
@@ -419,7 +432,8 @@ export interface LaunchHost {
    * Sends `signal` to the process group `pgid` (§3.3 step 15, task-355, `bug-516`): how a headless agent on
    * POSIX, which leads a process group of its own, and the processes it started receive a forwarded signal,
    * the time bound's signals and the sweep's `SIGKILL`. `process.kill(-pgid, signal)` by default, an empty
-   * group (`ESRCH`) ignored. A test injects a recorder, so no real process group is signalled.
+   * group (`ESRCH`) ignored; any other error it throws is reported as a `warning:` line and changes nothing of
+   * the run. A test injects a recorder, so no real process group is signalled.
    */
   readonly signalGroup?: (pgid: number, signal: NodeJS.Signals) => void;
 }
