@@ -199,11 +199,21 @@ commits and the records of W0-R3, launches the phase agents with the Agent tool 
    branch deleted after `git merge-base --is-ancestor`. Post-checks: the `### Retrospective` of the task and of each
    closed bug; the engine frontier (W0-R3).
 
+**Acceptance of a phase report (C-19, `task-344`).** From `task-344`'s merge, a phase report is accepted only when
+`node scripts/check-phase-report.cjs report --worktree <task worktree> --report <report file> --base <head at launch>
+--since <launch time, UTC>`, run from the checkout detached at `main`, exits `0`; exit `1` is a report git contradicts
+(W0-R10), exit `2` a malformed report the agent re-emits. The report opens with the header
+`REPORT <task> <phase> head=<sha>`, followed, up to the first blank line, by one line per claim — `commit <sha>`,
+`file <path>`, `uncommitted <path>`, `gate <test|coverage|build|typecheck> exit=<n>` — as the script's module doc
+declares; prose follows the blank line. This replaces the fixed list of W0-R6 for every report; the records of
+`design`, `red`, `green` and `refactor` are written after an exit `0`.
+
 #### W0.2 — `wave-checks` · qa (supervision, W0-R12)
 
 In this plan's worktree after the merges: `npm run build`, `node scripts/e2e-smoke.cjs --candidate --report
-docs/07_gates/rl-v1/rel-v0.4-w0-e2e-smoke.md`, the full suite, the `docs.parity` suites, each
-`docs/examples/*/run.sh`. A failure opens a bug through `bug-ingest` and is a stop-the-line.
+docs/07_gates/rl-v1/rel-v0.4-w0-e2e-smoke.md`, the full suite, the latency pass (`npm run test:latency`, alone, on an
+idle machine: after `task-357` the REQ-PERF budgets run only there, and no dev-loop gate runs it), the `docs.parity`
+suites, each `docs/examples/*/run.sh`. A failure opens a bug through `bug-ingest` and is a stop-the-line.
 
 #### W0.3 — `re-sweep` · tech-lead · approver gate
 
