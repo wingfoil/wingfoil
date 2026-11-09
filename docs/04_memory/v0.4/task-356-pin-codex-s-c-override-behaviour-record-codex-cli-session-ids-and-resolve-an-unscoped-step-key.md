@@ -438,6 +438,171 @@ find module '../../src/core/workflow-step-key' …`, the red the design names. `
 `Tests: 1 failed, 160 passed, 161 total`; the one failure is `typecheck.clean`, whose output is that same TS2307 line
 and nothing else; it passes once green adds the module. The invisible-character grep over the changed files → no hit.
 
+### green (developer, 2026-11-09)
+
+**Start.** The task's PATH shim was checked first: `command -v wingfoil` → the shim; `wingfoil --version` and
+`node dist/cli.js --version` → both `0.3.2 (32f916f366c17ed7ce607b4647f512c48ede4874)`. `git rev-list --count HEAD..main`
+→ `0` at the start (head `1cefc8030`).
+
+**Commits.** `3094f1f6f5b52c861764c9fca72a87327dfc7527` `fix(agent,core): task-356 — refuse a declared wingfoil server,
+read a headless run's session id from stdout, resolve an unscoped step key (bug-372, bug-375, bug-468)` (the design's
+code and doc files, plus the allowlist below); `f9f48666a2779f76af606face41d0b608ad580bd` `test(agent): task-356 — the
+bounds of the headless session-id reader (bug-375)` (a new suite of my own,
+`test/agent/launch-session-output-bounds.test.ts`, 9 tests).
+
+**The change, by file** (the design's "Files expected to change", no other source file):
+- `src/core/workflow-step-key.ts` (new): `resolveFrontierKey(frontier, key)` — the exact key first; else, for a key
+  without `@`, the frontier steps whose `<workflow>.<phase>` equals it (`one` / `many`, frontier order); else `none` —
+  and `ambiguousStepKey(key, instance, steps)`, `spec-017` §10's `CONFLICT` with `details { step, instance, steps }`.
+  It imports `./types` only.
+- `src/agent/step.ts` `selectFrontierStep`, `src/core/memory-add-link.ts` `resolveAddLink` (the key resolved before its
+  type filter), `src/core/workflow-finalize.ts` `workflowFinalizeAtHead`, `src/core/workflow-adopt.ts` `adoptOne`: the
+  exact `find`/`some` replaced by `resolveFrontierKey`; `many` → `ambiguousStepKey`; `none` → each site's existing
+  refusal, its message and `details` unchanged. Every site writes and prints the resolved step's full key.
+- `src/agent/schema.ts`: `launch.headless.output` `json | jsonl | none`; `mcp.conflict_args` an optional non-empty list
+  of non-empty strings. `src/agent/placeholders.ts`: `mcp.conflict_args` checked with the empty legal set, so every
+  placeholder in it is `E_ADAPTER_PLACEHOLDER` (`spec-016` §2.2 "no placeholder").
+- `src/agent/launch.ts`: `runConflictProbe` (the argv run through the post-run lookup runner, `runLookup`, which now
+  also returns the exit code; exit `0` → `declared`, another exit → `none`, timeout / signal / no start → `failed` with
+  the reason); `sessionOutputReader` (`json`: the whole stdout up to 1 MiB, one document, the id at `session.field`;
+  `jsonl`: lines in order, each parsed alone, a line over 1 MiB passed over, the first non-empty string at
+  `session.field` wins, the rest of the stream drained unread); `runAgent` hands a headless run's stdout to the reader
+  when the manifest has `session.id: output` and `output` `json`/`jsonl`, and after the exit waits for the stream's end
+  (bounded, below); `postRunFacts` takes the reader's answer: the id, or `not-reported` and one warning
+  `adapter '<name>': <cause>: session recorded as not-reported`. An interactive launch, and `output: none`, read nothing
+  and warn nothing.
+- `src/agent/execute.ts`: `mcpConflictCheck`, run at the end of §3.3 step 4 (after `AGENT_NOT_FOUND`, before the git
+  identity of step 5), a dry run included (D1.2): exit `0` → `CONFLICT` with §3.7's `MCP_SERVER_DECLARED` message and
+  `details { adapter, argv }`, `argv` the declared `mcp.conflict_args` (red's accepted departure (2)); a failed probe →
+  one `warning:` `adapter '<name>': the MCP server conflict check (mcp.conflict_args) <reason>: launching without it`
+  (D1.3). The probe's limit is `LaunchHost.lookupTimeoutMs`, else `LOOKUP_TIMEOUT_MS` (10 s; departure (3)).
+- `src/storage/builtin-adapters.ts`: `codex-cli` gains `mcp.conflict_args: [ mcp, get, wingfoil ]`, `session.id: output`,
+  `session.field: thread_id`, headless `[ exec, --json, -c, "{mcp_config}", "{bootstrap}" ]` with `output: jsonl`; its
+  TSDoc and YAML comments say where each was read (the design addendum's H1 and H2). `resume.supported` stays `false`
+  (D3). `claude-code` unchanged.
+- Docs: `docs/cli-reference.md` (`memory add --step`, `workflow finalize --step`, `workflow adopt --step`,
+  `agent execute --step`: the unscoped key and its refusal; `agent execute`'s check list gains the conflict check;
+  the headless work run's session id), `docs/user-guide.md` (the Codex paragraph now says what `agent execute`
+  refuses, and the headless session id), `docs/agents.md` (the Codex bullet, D6). None declares a `version:`
+  (`grep -m1 -n '^version:'` → nothing in `cli-reference.md` and `agents.md`; the user guide's line 467 is inside a
+  code block).
+- `test/docs/name-resolvability.allowlist.ts` (not a red file): the three entries the design added
+  (`spec-016…|config|mcp.conflict_args`, `…|symbol|MCP_SERVER_DECLARED`, `…|config|thread.started`) became resolvable
+  with green: `npx jest --maxWorkers=2 test/docs/name-resolvability.test.ts` listed them as `stale` (`… 91 stale
+  allowlist entries …`); removed, the same run → `Tests: 11 passed, 11 total`, `27 untriaged first-run finding(s), 88
+  stale allowlist entries` (the 27 unchanged, the three gone).
+
+**Red → green.** The red run of `### red` (11 suites, `Tests: 33 failed, 175 passed, 208 total` plus the module that
+did not load) re-run on the green tree: `npx jest --maxWorkers=2 test/core/workflow-step-key.test.ts
+test/core/step-key-unscoped.test.ts test/agent/manifest-conflict-args.test.ts test/agent/execute-mcp-conflict.test.ts
+test/agent/launch-session-output.test.ts test/agent/manifest.test.ts test/agent/fake-agent.test.ts
+test/storage/builtin-adapter-codex-cli.test.ts test/storage/builtin-adapters-headless.test.ts
+test/cli/agent-execute-session-output.integration.test.ts test/cli/workflow-finalize.integration.test.ts` →
+`Test Suites: 11 passed, 11 total`, `Tests: 217 passed, 217 total` (208 + the 9 of `workflow-step-key.test.ts`).
+`npx tsc --noEmit -p tsconfig.json` → no output (the TS2307 is gone). No fake child left:
+`ps -eo pid,args | grep fake-agent | grep -v grep` → nothing.
+
+**The design's existing-tests measure** (the slot first), plus the new suites: `npx jest --maxWorkers=2 test/agent
+test/storage/builtin-adapter test/core/agent-execute test/core/step-refusal-frontier test/core/memory-add-workflow-link
+test/core/workflow-adopt test/core/workflow-finalize test/core/init-builtin-adapters test/core/builtin-adapter-writers
+test/cli/agent-execute test/cli/workflow-finalize test/cli/workflow-adopt test/cli/memory-add
+test/core/step-key-unscoped test/core/workflow-step-key` → `Test Suites: 64 passed, 64 total`, `Tests: 870 passed, 870
+total` (red: 57 / 807, plus red's six new suites and mine). Every pin of the out-of-frontier refusal the design listed
+stays green. `npx jest --maxWorkers=2 test/agent/launch-session-output-bounds.test.ts test/docs/cli-reference.test.ts`
+→ `Tests: 13 passed, 13 total`.
+
+**Merge of `main`.** `git rev-list --count HEAD..main` → `4` after green (`dl-235`'s ingest); `git merge --no-edit main`,
+no conflict (one new DL file), trailers added: `0710cfd1da5ccb52e9dfa4c2267572e810d46b03` (`git rev-parse HEAD` after the
+amend).
+`c90a3d413e26f2ddedb0e461357575c16ebfef67` `docs(cli): task-356 — rewrap the agent execute refusal list so no line starts
+with <instance> (bug-468)`: found by the full suite below.
+
+### refactor (developer, 2026-11-09)
+
+No code restructuring beyond green's (`resolveFrontierKey` already holds the one rule the four sites share). Gates on
+head `0710cfd1d` (green + the merge of `main`), each heavy one after the slot script, `--maxWorkers=2`, foreground in one
+chain; the chain of the first attempt was lost to a network error after `npm run -s build` → `build exit 0`, and was
+re-run from `npm test`. The waits: the slot script's queue and `/proc/loadavg` `35.97 28.13 18.46` (over its 14), then
+`ps -eo pid,etime,args` showing other worktrees' `jest --coverage` and `run-tests.cjs` holding it (`08:33`, `08:14`).
+- `npm test -- --maxWorkers=2` → `Test Suites: 1 failed, 593 passed, 594 total`, `Tests: 1 failed, 10887 passed, 10888
+  total`. The one failure was mine: `test/docs/pages-render.test.ts` › "no page of docs/site.yaml has a paragraph line
+  beginning with `<` and a letter" received `docs/cli-reference.md:1811: <instance>: give --step, one of: …` (my wrap
+  of the new refusal). Rewrapped (`c90a3d413`); the targeted doc-parity run after it, `npx jest --maxWorkers=2
+  test/docs/pages-render.test.ts test/docs/cli-reference.test.ts test/docs/name-resolvability.test.ts
+  test/docs/dry-run-documented test/docs/exit-codes-parity test/docs/enumeration-parity test/docs/commands-parity
+  test/docs/mcp-surface-parity test/docs/x-cli-cmds-citations test/docs/memory-types-parity test/docs/llms-txt` →
+  `Test Suites: 11 passed, 11 total`, `Tests: 68 passed, 68 total` (`docs.parity`, `cli-reference` included).
+- `npm run test:coverage -- --maxWorkers=2`, started after the rewrap was in the working tree (the full suite again) →
+  `Test Suites: 594 passed, 594 total`, `Tests: 10888 passed, 10888 total`; `All files | 99.25 | 97.15 | 98.65 | 99.66`
+  (statements, branches, functions, lines), all > 80 %. The files changed: `workflow-step-key.ts`, `memory-add-link.ts`,
+  `workflow-finalize.ts`, `placeholders.ts`, `src/agent/schema.ts`, `builtin-adapters.ts` 100 in every column;
+  `launch.ts` `98.74 | 94.44 | 98.38 | 98.87` (uncovered `608-611`); `execute.ts` `96.38 | 90 | 96.07 | 98.46`;
+  `step.ts` `97.95 | 97.22 | 100 | 97.29`; `workflow-adopt.ts` `100 | 98.31 | 100 | 100`. So `npm test` was not re-run
+  in full after `c90a3d413`: the coverage run is that full run, on the same tree.
+- `npm run lint` → exit `0`; `npm run docs:api` → exit `0`; `npm run typecheck` (both tsc configs, through the heavy-gate
+  lock) → exit `0`.
+- No fake child left after the chain: `ps -eo pid,args | grep fake-agent | grep -v grep` → nothing.
+- `git rev-list --count HEAD..main` → `0` at the end of refactor (no second merge).
+- BDD: `P5.3.1-agent-execute.feature` and `P4.13-state-deduction.feature` keep their out-of-frontier scenarios, whose
+  keys are scoped and stay that refusal (`grep -n "not on the frontier\|--step"` on both); the ACs ask for no new
+  scenario, so none is added.
+
+### self-review (developer, 2026-11-09)
+
+Against `code-review`, per AC:
+- **AC 1** — met for the refusal half of `bug-372`'s Expected. The observation is in `spec-016` §2.5 (recorded at the
+  design gate, `9c6178f52`), with `codex-cli 0.145.0`. Pinned by `manifest-conflict-args.test.ts` (7),
+  `execute-mcp-conflict.test.ts` (5: exit 0 refuses with the §3.7 message and `details { adapter, argv }`, nothing
+  launched or committed; exit 1 launches; `hang` warns once with `timed out` and launches; dry run refused; before
+  the git identity) and `builtin-adapter-codex-cli.test.ts` (`[mcp, get, wingfoil]`; `claude-code` none). All green
+  in the runs above.
+- **AC 2** — met for the session id; the resume half stays unsupported (D3). `launch-session-output.test.ts` (H2's four
+  events → `01a1bf53-dcb5-7902-b518-2286ea29c38c`; a non-JSON line passed over; no first event → `not-reported` + the
+  warning; `json` → `s-1`; invalid JSON → warning; interactive → silent), the integration suite (record `session`
+  `s-356-from-stdout`), the built-in pins (`--json`, `jsonl`, `output`, `thread_id`, `resume.supported: false`), and my
+  own bounds suite (9). D3's bug for the resume half and the interactive id is the reviewer's to file.
+- **AC 3** — met at all four sites (D5 adds `adopt`): `workflow-step-key.test.ts` (9), `step-key-unscoped.test.ts`
+  (18), the CLI pin in `workflow-finalize.integration.test.ts`; every existing out-of-frontier pin green (the 64-suite
+  measure). A scoped key off the frontier stays that refusal (pinned).
+- **AC 4** — the three amendments are recorded (`9c6178f52`, `509015214`, `f24e366d3`); green implements their text.
+  Spec to code, read side by side: §2.2 (`conflict_args` optional, no placeholder; `jsonl`), §2.6 (`json` whole stdout
+  ≤ 1 MiB; `jsonl` first non-empty string, a line over 1 MiB passed over; one warning naming the adapter and cause;
+  interactive silent), §3.3 step 4 (after `AGENT_NOT_FOUND`, the command, no shell, the root, WingFoil's environment,
+  10 s; non-zero passes; timeout or no start → one warning), §3.7 (`MCP_SERVER_DECLARED`'s message and `details`),
+  `spec-017` §4.9/§10 (exact first; unscoped one/many/none; the full key written). No gap found.
+- Absence claims with their positive case: no placeholder legal in `mcp.conflict_args` — `{bootstrap}`,
+  `{mcp_config_file}`, `{session_id}`, `{mcp_command}` each refused (red's `it.each`), and the absent field still
+  validates; an interactive launch reads nothing — its stdout is `inherit`, so `child.stdout` is null and no reader is
+  built (`input.kind === 'headless'` guards it), pinned silent by red's characterization case, while the headless case
+  of the same manifest reads the id.
+- Same class in files I touched: the four copies of the frontier lookup all go through `resolveFrontierKey`
+  (`grep -rn "is not on the frontier" src` → 5 lines: the four sites, each now after the resolver, and `resolveAddLink`'s TSDoc). The allowlist's three
+  planned entries removed once real (above).
+- Determinism: the reader is a function of the bytes in order; the probe's exit status only is read; no clock enters a
+  context. The one wall-clock bound added is the wait for a headless stdout to end after the agent's exit (below).
+- T4: `git log --first-parent --no-merges --format=%h 606a69e09..HEAD -- <red's 14 files>` → empty (no line).
+- Invisible characters: the grep of the prompt over every changed file → no hit, before each commit.
+
+**Decisions for the approver.**
+- **G1 — the stdout drain bound.** Under `session.id: output` with `json`, or `jsonl` before the id is seen, the launch
+  waits after the agent's exit for its stdout to end, at most `LaunchHost.lookupTimeoutMs` (10 s by default): a process
+  the agent left behind holding the pipe would otherwise hold the run open. The spec says the id is read "after the
+  agent exits" and names no bound; I reused the lookup limit. Accept, or name another.
+- **G2 — the probe's warning text.** `adapter '<name>': the MCP server conflict check (mcp.conflict_args) <reason>:
+  launching without it`, `<reason>` the lookup runner's (`timed out after <n> ms`, `could not start: <code>`, `ended by
+  <signal>`). §3.3 step 4 fixes only "naming the adapter and the cause".
+- **G3 — `mcpConflictCheck` and `runConflictProbe` are exported from their modules** (`src/agent/execute.ts`,
+  `src/agent/launch.ts`) but not re-exported from `src/agent/index.ts`, where `mcpPreflight` is
+  (`grep -n "mcpPreflight\|mcpConflictCheck\|runConflictProbe" src/agent/index.ts` → only `81:  mcpPreflight,`);
+  nothing outside `src/agent` calls them. `npm run docs:api` exit `0`. Re-export them if the API surface should list them.
+
+**Candidate findings (not filed).** None.
+
+### Pending amendments (approver)
+
+None: no element past its first state is edited (`git status --short` → only the task file before submit). The bugs
+get their status syncs only; their `### Retrospective` subsections are owed when they close, not here.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -445,3 +610,10 @@ and nothing else; it passes once green adds the module. The invisible-character 
      printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
      Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
      here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+- green (developer): a wrapped line of `docs/cli-reference.md` that began with `<instance>` passed every targeted doc
+  suite I ran at green (`test/docs/cli-reference.test.ts` among them) and failed only `test/docs/pages-render.test.ts`
+  in the full `npm test` (`1 failed, 10887 passed`); fixed in `c90a3d413`. Proposal: list `pages-render` among the
+  `docs.parity` suites a task that edits a site page runs before the full suite.
+- green (developer): the refactor gate chain was lost once to a network error of the agent session after `build exit 0`
+  and re-run from `npm test`; the slot waits that followed (load over 14, then other worktrees' full suites) took most
+  of the phase's wall time.
