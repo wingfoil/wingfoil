@@ -53,3 +53,223 @@ state, workflow and phase names stay fixed (ids immutable); the automated adopti
 ## Execution Notes
 
 <!-- Filled by the dev-loop. -->
+
+### design (architect, 2026-11-09)
+
+**Inputs read.** Base: `main` `ec65503ff` + the start commit `80ddb7f2d` (`git log --oneline main..HEAD` → one
+commit). `bug: []`, so no bug sync. Builds through the task's PATH shim: `wingfoil --version` and
+`node dist/cli.js --version` → `0.3.2 (ec65503ff6ab800936c0bd4d2549b561c91daf15)`; the pinned build `npm run -s
+wingfoil -- --version` → `0.3.2 (6de2e13c004bbf419acfa7dc4d98d5a7468cd693)`. Read: the `w0` plan's rulings W0-R1…W0-R12,
+`release-planning-rel-v0.4-plan` R8, `dl-186` (`ready`; S2-a, S3, S5, Q3 and its 2026-10-26 Revision), `dl-138`
+(`ready`), `dl-202` (`ready`), `dl-164` (`in-discussion`), `dl-155` (`ready`), `dl-118` (option (B), as the
+`traceability` directive states it), `dev-loop.yaml` 2.4, and `task-348`'s Execution Notes in full (`depends_on`,
+`dl-015`): its `pinned-build.reads` check (`design.checks.post[4]`, bound `manual: true`) is the procedure applied
+below — the proposed `.wingfoil/` files committed on a scratch clone outside the worktree (`node_modules` linked,
+`dist/` copied), then the pinned and code builds run against it and compared with the same commands before the
+change. No AC names a tech-spec or a spec amendment, and no spec changes, so no name-resolvability allowlist entry.
+
+**Where the packs come from — not npm (D1).** The packs are not npm packages: `npm view @wingfoil/base`,
+`npm view wingfoil-templates`, `npm view @wingfoil-templates/base`, `npm view @wingfoil/templates`,
+`npm view wingfoil-pack-base` → each `E404 Not Found`; `npm search wingfoil` lists `wingfoil`, `wingfoil-ui` and two
+unrelated `@wingfoil/*` packages, none a pack; the templates repository's `package.json` says `"private": true`.
+They are published as git tags of `https://github.com/wingfoil/wingfoil-templates` (`svc-018`), each version
+listed in its `catalog.yaml` with a commit and a digest (its spec-001 §13). Read from a fresh clone of that public
+repository outside the worktree (not from a sibling checkout; catalog read at its `main` `3181032e`):
+`git ls-remote --tags https://github.com/wingfoil/wingfoil-templates` → `base@2.0.1^{}` `abc36c063de3…`,
+`software@1.0.0^{}` `8d4adb3038c4…`, `methodology/scrum@1.0.0^{}` `63732824a689…`, each equal to its
+`catalog.yaml` `commit:`. Each pack extracted with `git archive <commit> packs/<id> | tar -x` and its digest
+recomputed as §13 defines it (a `sha256  <path>` line per file, paths in byte order, then the sha256 of that
+listing) → `sha256:8e3e91d4be754f686daa346311d53dd0e4dccb7bd916b8f868c852105ff3961c` (base, 18 files),
+`sha256:364a8ac72c7060b9af27a33a5135251e6aac202a38f350f6bf269c9d9c8c6f4f` (software, 22 files),
+`sha256:532f103ba59ce39afb2db8b7d6a98d57ee92581d012d78eacd18f8341838534f` (scrum, 12 files): all three equal to the
+catalog's `digest:`. So the integrity read is the tag commit plus the recomputed digest, not an npm `integrity`.
+
+**AC 1 — the per-file comparison (characterization, done here).** `<tpl>` is that clone; every row's diff command is
+`git -C <tpl> show <tag>:<pack path> | diff - <WingFoil file>` (the count is `grep -c '^[<>]'` of its output), and
+for the YAML rows the structural comparison loaded both files with `js-yaml` and compared, per phase or per type,
+`role`, `approval`, `fallback`, `include`, `iterate_over`, `where`, `optional`, `actions`, `produces` (workflows) or
+`id_pattern`, `amendable`, `states.{sequence,gates,waiting,returns,limits}` and `template.frontmatter.required`
+(Memory types). No file is byte-identical. Classes: **identical** (the names and shapes the pack fixes are the same,
+WingFoil's file adding only its own detail), **WingFoil-specific** (WingFoil's file stays as it is, or there is no
+counterpart and none is wanted), **to adopt** (the change below lands in this task), with the reason for every
+refusal.
+
+| # | Pack file (version) | WingFoil counterpart | Diff / comparison | Class and reason |
+|---|---|---|---|---|
+| 1 | `base` `pack.yaml` (2.0.1) | — | pack manifest | WingFoil-specific: pack metadata, not installed. Its parameters' defaults read against WingFoil: `plan_id` `{workflow}-{phase}-plan` = `memory.yaml` `plan.id_pattern`; the paths and the approver/agent names are WingFoil's values (S2-a: an existing adopter sets its current values) |
+| 2 | `base` `README.md` (2.0.1) | — | documentation | WingFoil-specific: pack documentation, not installed |
+| 3 | `base` `CHANGELOG.md` (2.0.1) | — | documentation | WingFoil-specific: not installed. Its 2.0.0 entry (`plan_id` default with `{workflow}`/`{phase}`) is already WingFoil's pattern |
+| 4 | `base` `agents/section.md` (2.0.1) | `AGENTS.md` | composed section vs hand-written file | WingFoil-specific: the generated region of `AGENTS.md` belongs to the future export (`dl-137`); the section names `governance-evolution` and `retrospective-periodic`, which WingFoil does not run (rows 17, 18) |
+| 5 | `base` `directives/claim-sources.md` (2.0.1) | `directives/custom/claim-evidence.md` | no file of that id | WingFoil-specific: `claim-evidence` is the tightening the pack's own third bullet invites (the exact command for a claim about code); its "unchecked" rule is `claim-evidence`'s "mark it unverified". Adding `claim-sources` to `global` would serve two rules for one concern |
+| 6 | `base` `directives/doc-versioning.md` (2.0.1) | `directives/custom/doc-versioning.md` | diff: 61 lines | WingFoil-specific: same id, WingFoil's custom text contains the pack's three rules (bump once on first edit after commit; no re-bump in the same change; an unversioned document is versioned by git) and adds the integration-branch baseline and the amend rule |
+| 7 | `base` `directives/security-secrets.md` (2.0.1) | `directives/custom/security-secrets.md` | diff: 84 lines | WingFoil-specific; two pack clauses are absent from WingFoil's text ("revoked first, then removed"; no personal email or postal address) — a rule for all future work, so a decision-log first (`dl-118` rule 3), D5 |
+| 8 | `base` `directives/traceability.md` (2.0.1) | `directives/custom/traceability.md` | diff: 115 lines | WingFoil-specific; one pack clause is absent ("a rule taken from another project's element cites that element's id"), D5 |
+| 9 | `base` `fragments/dna.yaml` (2.0.1) | `dna.yaml` | roles, members, agents | WingFoil-specific: the three roles are WingFoil's (8 roles); the agent's `executes_as` there includes `product-owner`, which `dl-202` item 1 keeps human-only — refused |
+| 10 | `base` `fragments/memory.yaml` (2.0.1) | `memory.yaml` | structural | identical: `defaults.states` the same; `decision-log`, `task`, `plan` have the same `id_pattern` (plan with WingFoil's `plan_id` value), `amendable`, `sequence`, `gates`, `returns`; WingFoil adds `waiting` on `task` (`[backlog, approved]`) and its own required fields (`task`: `release`, `kind`) |
+| 11 | `base` `fragments/roles.yaml` (2.0.1) | `roles.yaml` | assignments | identical except `claim-sources` (row 5): `facilitator: [traceability]` and `global` `doc-versioning`, `security-secrets` are WingFoil's bindings |
+| 12 | `base` `memory-templates/decision-log.md` (2.0.1) | `memory/templates/decision-log.md` | diff: 37 lines | WingFoil-specific: WingFoil's template carries its fields (`context`, `release`, `contributor`, `credit`, `reported_by`) and sections |
+| 13 | `base` `memory-templates/plan.md` (2.0.1) | `memory/templates/plan.md` | diff: 45 lines | WingFoil-specific: same required `workflow`, `phase`, `element`, `parent`; WingFoil adds its fields and sections |
+| 14 | `base` `memory-templates/task.md` (2.0.1) | `memory/templates/task.md` | diff: 55 lines | WingFoil-specific: WingFoil's task carries `release`, `kind`, `bug`, `wave`, `depends_on` and `### Retrospective` |
+| 15 | `base` `workflows/decision-log-ingest.yaml` (2.0.1) | `workflows/custom/decision-log-ingest.yaml` | diff: 25 lines; phases `capture, approve` both | **to adopt**: `capture.produces` takes the pack's typed form `{ type: decision-log, path: "docs/04_memory/design/dls/{id}.md" }` (the pack's line with WingFoil's `decision_log_path`). Description and `checks` stay WingFoil's |
+| 16 | `base` `workflows/retrospective.yaml` (2.0.1) | `workflows/custom/retrospective.yaml` | diff: 135 lines; pack `explore, additional-points, capture, approve`, WingFoil adds `collect-feedback` | identical in names (every pack phase exists, same order); WingFoil-specific detail kept: `element: release`, the `retro-{release.version}` id and an `approve` bound to the decision-log `capture` created (`decision-log.set_state(ready)`, `dl-104`), where the pack, with no element, selects by the `retrospective` tag |
+| 17 | `base` `workflows/governance-evolution.yaml` (2.0.1) | — | no counterpart | WingFoil-specific for now, deferred: a new startable main for a governance change is what `dl-164` (`in-discussion`) decides; D6 |
+| 18 | `base` `workflows/retrospective-periodic.yaml` (2.0.1) | — | no counterpart | WingFoil-specific: refused; WingFoil's delivery includes `retrospective` once per release (`release-cycle`), the case the pack's comment says needs no periodic main |
+| 19 | `software` `pack.yaml` (1.0.0) | — | pack manifest | WingFoil-specific: metadata. `release_line_id` `rl-{version}` = WingFoil's; `release_id` is WingFoil's `{kind}-{version}` (`dl-092`), paths WingFoil's values |
+| 20 | `software` `README.md` (1.0.0) | — | documentation | WingFoil-specific: not installed |
+| 21 | `software` `CHANGELOG.md` (1.0.0) | — | documentation | WingFoil-specific: not installed |
+| 22 | `software` `agents/section.md` (1.0.0) | `AGENTS.md` §4, §6 | composed section vs hand-written | WingFoil-specific (row 4); it describes the pack's `sw-life-cycle`, not WingFoil's |
+| 23 | `software` `directives/determinism.md` (1.0.0) | `directives/custom/determinism.md` | diff: 40 lines | WingFoil-specific; pack clauses absent from WingFoil's text: sort what is written out, pin what the build reads, a test that passes or fails without a change is never retried, the reviewer checks these rules. The third contradicts this repository's practice of re-running a wall-clock assertion alone before calling a failure real; D5 |
+| 24 | `software` `fragments/dna.yaml` (1.0.0) | `dna.yaml` | roles, agents | identical: the five roles are WingFoil's; the agent's `executes_as` `[developer, reviewer, qa, architect]` is contained in WingFoil's (which adds `facilitator`, `dl-202` item 3) |
+| 25 | `software` `fragments/memory.yaml` (1.0.0) | `memory.yaml` | structural | identical: `adr`, `tech-spec`, `bug`, `release-line`, `release` have the same `sequence`, `gates`, `returns`, `amendable` and `waiting` where the pack declares one (`adr` `[accepted]`, `tech-spec` `[approved]`); WingFoil adds `waiting` on `bug`, `release-line`, `release`, its required fields, and its `release` id pattern (`{kind}-{version}`, a pack parameter) |
+| 26 | `software` `fragments/roles.yaml` (1.0.0) | `roles.yaml` | assignments | identical: `developer`, `reviewer`, `architect` each hold `determinism` in WingFoil |
+| 27 | `software` `memory-templates/adr.md` (1.0.0) | `memory/templates/adr.md` | diff: 38 lines | WingFoil-specific (WingFoil requires `sard_ref`) |
+| 28 | `software` `memory-templates/bug.md` (1.0.0) | `memory/templates/bug.md` | diff: 60 lines | WingFoil-specific (`severity`, `release-origin`, …) |
+| 29 | `software` `memory-templates/release-line.md` (1.0.0) | `memory/templates/release-line.md` | diff: 38 lines | WingFoil-specific; same required `title`, `version` |
+| 30 | `software` `memory-templates/release.md` (1.0.0) | `memory/templates/release.md` | diff: 65 lines | WingFoil-specific (`kind`, `pillar`, `features`, `requirements`, `waves`) |
+| 31 | `software` `memory-templates/tech-spec.md` (1.0.0) | `memory/templates/tech-spec.md` | diff: 37 lines | WingFoil-specific (`scope`) |
+| 32 | `software` `workflows/adr-ingest.yaml` (1.0.0) | `workflows/custom/adr-ingest.yaml` | diff: 26 lines; phases `capture, approve` both | **to adopt**: `capture.produces` → `{ type: adr, path: "docs/04_memory/design/adrs/{id}.md" }` |
+| 33 | `software` `workflows/bug-ingest.yaml` (1.0.0) | `workflows/custom/bug-ingest.yaml` | diff: 27 lines; phases `capture, triage` both | **to adopt**: `capture.produces` → `{ type: bug, path: "docs/04_memory/bugs/{id}.md" }` |
+| 34 | `software` `workflows/end-of-life.yaml` (1.0.0) | `workflows/custom/end-of-life.yaml` | diff: 51 lines; pack `announce, approve, deprecate, archive`, WingFoil `announce, deprecate, archive` | **to adopt**, partly: `announce` loses its `approval:`, its `memory.add` gains `tags: [end-of-life]`, it declares `produces: { type: decision-log, path: "docs/04_memory/design/dls/{id}.md" }`; a new phase `approve` after it, as the pack's (role `approver`, `where: { type: decision-log, status: [in-discussion], tags: [end-of-life] }`, `memory.approve`, `approval`, `fallback: { step: announce }`) — no phase renamed, one added (D4). WingFoil-specific detail kept: the title argument, `deprecate`'s `release-line` filter (approver ruling 2026-10-07), `archive`'s `git.commit` |
+| 35 | `software` `workflows/release-publishing.yaml` (1.0.0) | `workflows/custom/release-publishing.yaml` | diff: 158 lines; pack 5 phases, WingFoil the same 5 + `merge-forward` | identical in names, order and approvals; WingFoil-specific detail kept (concrete actions, produces, checks, `merge-forward`) |
+| 36 | `software` `workflows/release-submit.yaml` (1.0.0) | `workflows/custom/release-submit.yaml` | diff: 45 lines; phases the same 3 | identical in names, roles, approval and fallback; WingFoil-specific actions, produces and checks kept |
+| 37 | `software` `workflows/sw-life-cycle.yaml` (1.0.0) | `workflows/custom/sw-life-cycle.yaml` | diff: 63 lines; pack `inception, specification, delivery, end-of-life`, WingFoil `inception, specification, init, seed-first-release-line, release-line-cycle, sunset` | WingFoil-specific: **refused**. Adopting it removes and renames phases of the workflow the open instance `sw-life-cycle-1-plan` runs (ids immutable, `dl-186` S2-a); it is a restructure, not a rename, so no `workflow rekey` maps it (WingFoil's `release-line-cycle` and `sunset` are what S2-a calls the `delivery` slot plus `custom/` workflows) |
+| 38 | `software` `workflows/inception.yaml` (1.0.0) | — (WingFoil's `inception` phase includes `lean-inception`) | no file | WingFoil-specific: refused; a slot default nothing would include |
+| 39 | `software` `workflows/specification.yaml` (1.0.0) | — (`specification` includes `specification-downcast`) | no file | WingFoil-specific: refused, as row 38 |
+| 40 | `software` `workflows/release.yaml` (1.0.0) | — (`release-cycle` includes `release-submit` and `release-publishing`) | no file | WingFoil-specific: refused, as row 38 |
+| 41 | `methodology/scrum` `pack.yaml` (1.0.0) | — | pack manifest | WingFoil-specific: metadata; WingFoil runs no Scrum |
+| 42 | `methodology/scrum` `README.md` (1.0.0) | — | documentation | WingFoil-specific |
+| 43 | `methodology/scrum` `CHANGELOG.md` (1.0.0) | — | documentation | WingFoil-specific |
+| 44 | `methodology/scrum` `agents/section.md` (1.0.0) | — | no counterpart | WingFoil-specific: refused |
+| 45 | `methodology/scrum` `directives/scrum.md` (1.0.0) | — | no counterpart | WingFoil-specific: refused; WingFoil's delivery is releases and waves, not Sprints |
+| 46 | `methodology/scrum` `directives/definition-of-done.md` (1.0.0) | the `dev-loop` checks, `code-review`, `testing` | no file | WingFoil-specific: refused; WingFoil's done is `dev-loop`'s gates |
+| 47 | `methodology/scrum` `fragments/memory.yaml` (1.0.0) | `memory.yaml` | adds `sprint`, requires `sprint` on `task` and `release` | WingFoil-specific: **refused**; requiring `sprint` would fail the next `memory submit` and `memory amend` of every task and release |
+| 48 | `methodology/scrum` `fragments/roles.yaml` (1.0.0) | `roles.yaml` | binds `scrum`, `definition-of-done` | WingFoil-specific: refused with rows 45, 46 |
+| 49 | `methodology/scrum` `memory-templates/sprint.md` (1.0.0) | — | no counterpart | WingFoil-specific: refused with row 47 |
+| 50 | `methodology/scrum` `workflows/backlog-item.yaml` (1.0.0) | `workflows/custom/dev-loop.yaml` | different workflow (its header keeps `dev-loop`'s name for the project's own) | WingFoil-specific: refused |
+| 51 | `methodology/scrum` `workflows/delivery.yaml` (1.0.0) | `release-line-cycle` / `release-cycle` | no file | WingFoil-specific: refused (row 37) |
+| 52 | `methodology/scrum` `workflows/sprint.yaml` (1.0.0) | `wave.yaml` | no file | WingFoil-specific: refused |
+
+Every WingFoil file with no pack counterpart (the other 23 `custom/` workflows, the ten other directives,
+`change-proposal` and `service` templates, `bindings.yaml`, `agents/`, `workflows.yaml`) is WingFoil-specific. No row
+renames a Memory type, a state, a workflow, a phase or a check token, so no `workflow rekey` is proposed; the one
+added phase (`end-of-life.approve`) is a new step key in a phase the instance has not reached.
+
+**The adoption (AC 2) and the frontier (AC 3), measured before red.** On a scratch clone of this branch outside
+the worktree (`node_modules` linked, `dist/` copied), the five edits of the "to adopt" rows plus `.wingfoil/WORKFLOW.md`
+committed, then on the clone before and after, pinned build (`node node_modules/wingfoil-released/dist/cli.js`) and
+code build (`node dist/cli.js`): `workflow next sw-life-cycle-1-plan --format json`, `workflow status --format json`,
+`workflow list --format json` — every run exit `0`, stderr empty, 68 diagnostics, all `W_WORKFLOW_UNBOUND_TOKEN`.
+Compared with `node -e` (the JSON with `baseline` removed, `JSON.stringify` equality): `workflow next` identical on
+both builds; `workflow status` identical except one diagnostic path — `end-of-life.yaml` `phases[1].checks.post[0]`
+(the unbound `deprecated content excluded from agent context and default search`) becomes `phases[2]`, the shift of
+the added phase. The fingerprint per open instance (phase states, sorted frontier keys, `late` count) is identical:
+`sw-life-cycle-1-plan` `release-line-cycle` current, 20 frontier keys (this task's own key
+`dev-loop.design@task:task-351-…`), `late` 196; the two `decision-log-ingest` instances and the `bug-ingest` one
+complete, `service-ingest-rel-v0.3-listings-plan` at `capture`. The clone's base was first checked equal to the
+worktree (same fingerprint). Why the typed form changes nothing for the three complete ingest runs: a `{ type, path }`
+entry is not evidence of its own, it belongs to `created` (`src/workflow/deduce.ts` 1363–1404), and each run's
+element was added with `--workflow … --step …`, so `capture` stays complete by `created`. Also on the clone, pinned:
+`workflow show end-of-life` (`--format json` and `--format console`) → exit `0`, phases `announce, approve, deprecate,
+archive`, `approve` the only one with `approval`; `workflow show decision-log-ingest` / `adr-ingest` / `bug-ingest`
+(json and console) → exit `0`, `capture.produces` `{ pattern: …/{id}.md, owner: <type>, evidence: false }`;
+`workflow list --format console` and `workflow status --format console` → exit `0`; `node
+scripts/check-mcp-registration.cjs <clone>` → exit `0`, `.mcp.json "wingfoil" runs the pinned wingfoil 0.3.2,
+advertising [prompts, resources, tools] (prompts: 8, resources: 4, tools: 0)` and `the build under development
+(dist/cli.js) serves … every listed Resource read and Prompt get answered`. So no break to declare
+(`pinned-build.reads`): no `KNOWN_READ_FAILURES` entry, no `wingfoil-cli` §1 exception, no `pinned-build` bug. No row
+changes the frontier, so no row is proposed for after `w0`.
+
+The path token: `{id}` resolves against the innermost element frame, the created element (`resolveTokens`,
+`src/workflow/deduce.ts` 667–706), so `{id}` and `{decision-log.id}` deduce the same; both were measured, with the
+same result. `{id}` is the pack's line composed with WingFoil's parameter value, and leaves `.wingfoil/WORKFLOW.md`'s
+Ingest Mains table true (D3).
+
+**Existing tests of the changed files** (one jest process at a time, each after the dl-170 wait-slot script, which
+first waited behind `task-355`'s `jest --maxWorkers=2` — `ps -eo pid,etime,args` showed pid 2772511 at `07:01` —
+then returned exit `0`). The suites that read the changed files or the registry at `HEAD` (`grep -rlE
+"decision-log-ingest|adr-ingest|bug-ingest|end-of-life|determinism\.md|security-secrets|traceability\.md|custom/determinism|'determinism'|'traceability'|'security-secrets'|AtHead\((ROOT|REPO_ROOT|repoRoot)|loadWorkflowRegistry|workflowShowAtHead|directives list|check-mcp-registration|version-bump"
+test --include=*.ts`, helpers removed, plus every `test/docs/*.test.ts`, 127 paths, of which jest runs 126 suites):
+- worktree, before any change: `npx jest <those files> --maxWorkers=2` → exit `0`, `Test Suites: 126 passed, 126
+  total`, `Tests: 2364 passed, 2364 total`;
+- the scratch clone with the five edits committed (`dist/` rebuilt there by the jest global setup) → `Test Suites: 1
+  failed, 125 passed, 126 total`, `Tests: 2 failed, 2362 passed, 2364 total`. The two failures are the two pins of
+  `test/core/workflow-repository-conformance.test.ts` that enumerate what AC 2 changes, and only them: "the nine
+  implicit-owner produces …" (received four more rows: `bug-ingest.capture`, `decision-log-ingest.capture`,
+  `adr-ingest.capture` before the nine, `end-of-life.announce` after them) and "zero errors; the only warnings left
+  are unbound checks …" (`end-of-life` `phases[1].checks.post[0]` → `phases[2].checks.post[0]`).
+  `test/docs/workflow-md.test.ts` passes with the `WORKFLOW.md` edit; the checkpoint list (18) and the
+  finalize-approval list (8) of the same suite do not change (`end-of-life.approve` selects; `announce` adds).
+
+**Per-AC classification and what `qa` must pin.** Registry reads are of the configuration **as `HEAD` holds it**
+(`loadWorkflowRegistryAtHead(ROOT)`, `workflowShowAtHead(ROOT, '<name>')`, as `test/core/dev-loop-v2-4.test.ts`
+does): red on the red commit, green once green's commits are `HEAD`. Version pins are "≥" plus the history clause
+naming `task-351` (`bug-314`).
+
+| AC | Class | What `qa` pins | Interface / test file |
+|----|-------|----------------|-----------------------|
+| 1 | characterization, done at design | none in jest: the table above is the record; the reviewer re-runs a sample of its rows | — |
+| 2 | red-first | (a) `decision-log-ingest`, `adr-ingest`, `bug-ingest`: `phases[0].produces` `toEqual([{ type: 'decision-log', path: 'docs/04_memory/design/dls/{id}.md' }])`, `[{ type: 'adr', path: 'docs/04_memory/design/adrs/{id}.md' }]`, `[{ type: 'bug', path: 'docs/04_memory/bugs/{id}.md' }]`; their phase names unchanged (`['capture', 'approve']`, `['capture', 'approve']`, `['capture', 'triage']`); (b) `end-of-life` phase names `['announce', 'approve', 'deprecate', 'archive']`; `announce`: no `approval`, actions `['memory.add(type: decision-log, title: "End-of-life plan", tags: [end-of-life])', 'memory.submit']`, `produces` `[{ type: 'decision-log', path: 'docs/04_memory/design/dls/{id}.md' }]`; `approve`: `role` `approver`, `approval` `{ by_role: 'approver' }`, `fallback` `{ step: 'announce' }`, `where` `{ type: 'decision-log', status: ['in-discussion'], tags: ['end-of-life'] }`, actions `['memory.approve']`; `deprecate` and `archive` unchanged (its `where` keeps `release-line: '{release-line.version}'`); (c) `version` ≥ 1.2 (`decision-log-ingest`), ≥ 1.1 (`adr-ingest`), ≥ 1.3 (`bug-ingest`), ≥ 1.2 (`end-of-life`), each comment's first clause naming `task-351` and keeping `prev <old>`; (d) the names kept: the registry's workflow names at `HEAD` equal the 27 at `main` today (`test/cli/e2e-smoke-workflow-reads.test.ts` lists them), and `memory.yaml` types and their `sequence` unchanged (read at `HEAD`). Two existing pins change in the red commit, because they enumerate what this AC extends: `test/core/workflow-repository-conformance.test.ts` "the nine implicit-owner produces …" (13 rows, registry order: `bug-ingest.capture bug docs/04_memory/bugs/{id}.md`, `decision-log-ingest.capture decision-log docs/04_memory/design/dls/{id}.md`, `adr-ingest.capture adr docs/04_memory/design/adrs/{id}.md` first, then the nine, then `end-of-life.announce decision-log docs/04_memory/design/dls/{id}.md`; title "thirteen", naming task-351) and its unbound-token list (`["end-of-life", "phases[2].checks.post[0]", "deprecated content excluded from agent context and default search"]`) | `loadWorkflowRegistryAtHead`, `tokenName` (`src/workflow/bindings`), `workflowShowAtHead`; new `test/core/workflow-pack-adoption.test.ts`. Expected red: assertion failures only (no new export, no TS error) |
+| 3 | characterization | none in jest (the live frontier moves with every merge): the green developer and the reviewer run, before and after green's commits, `npm run -s wingfoil -- workflow list --format json`, `workflow status --format json` and `workflow next sw-life-cycle-1-plan --format json` (exit `0`, stderr empty), and compare per open instance the phase states, the sorted frontier keys and the `late` count (`node -e` over the two JSONs), plus the `--format console` runs (exit `0`) and `npm run check:mcp` | — |
+| 4 | characterization | none new: the conformance suite (with AC 2's two edited pins), `test/docs/workflow-md.test.ts` (fails if `end-of-life.approve` is not documented in its section, so green updates `.wingfoil/WORKFLOW.md` in the same commit) and the `test/docs/` parity suites, green on the full `npm test` at refactor | — |
+
+Fixtures: none; every test reads this repository's committed configuration.
+
+**Files to touch.** green, one commit per adopted file (AC 2): `.wingfoil/workflows/custom/decision-log-ingest.yaml`
+(1.1 → 1.2), `.wingfoil/workflows/custom/adr-ingest.yaml` (1.0 → 1.1), `.wingfoil/workflows/custom/bug-ingest.yaml`
+(1.2 → 1.3), `.wingfoil/workflows/custom/end-of-life.yaml` (1.1 → 1.2) with `.wingfoil/WORKFLOW.md` in the same
+commit (Phase 7's diagram: `announce` loses the approval gate, a bold `**approve** *(approver)*` node between it and
+`deprecate`; `WORKFLOW.md` declares no version). red (qa): new `test/core/workflow-pack-adoption.test.ts`, edited
+`test/core/workflow-repository-conformance.test.ts`. Untouched: `workflows.yaml` (no workflow added), `bindings.yaml`
+(no token changes), `memory.yaml`, `dna.yaml`, `roles.yaml`, the directives, the templates — so none of the four files
+`test/lint/version-bump.test.ts` gates. `.wingfoil/README.md` (its line `sunset → end-of-life (→ decision-log)` stays
+true) and `AGENTS.md` (§3 and §6 name no `end-of-life` phase, `grep -n "end-of-life" AGENTS.md` → line 471 only, `` `sunset` → `end-of-life` ``)
+need no change. No `src/`, no spec, no `docs/cli-reference.md` change.
+
+**For `task-358` (bindings), which runs after this task.** No check or action token is added, removed or renamed:
+the new phase uses `memory.approve` (built-in); `end-of-life.announce` keeps `frontmatter.required` at
+`phases[0].checks.post[0]`; the unbound `deprecated content excluded from agent context and default search` moves from
+`end-of-life` `phases[1]` to `phases[2]` — a path in the conformance suite's unbound list, which both tasks edit.
+
+**Decisions for the approver.**
+- **D1 — the packs' source.** The task's Implementation Notes say "the published npm packages … `npm view`/`npm pack`";
+  the packs are not on npm (above) but git tags with a catalog commit and digest. (a) Accept the tags with the
+  recomputed digests as the published source, recorded above; (b) stop until the packs are on npm. Recommendation:
+  **(a)** — it is the provenance `dl-138` Q1 (a)'s lock records (a source URL and an exact commit), and the digests
+  match the catalog.
+- **D2 — the adoption set.** Rows 15, 32, 33, 34 adopted; every other row WingFoil-specific, the refusals with their
+  reasons (37: the open instance's structure; 47: the `sprint` requirement; 9: `dl-202`). Recommendation: **as the
+  table says.**
+- **D3 — the typed path's token.** (a) `{id}`, the pack's line with WingFoil's parameter value, `WORKFLOW.md`'s table
+  unchanged; (b) `{<type>.id}`, the form of the nine typed entries already in this repository. Both deduce the same
+  (measured). Recommendation: **(a)**.
+- **D4 — `end-of-life.approve` now or after `w0`.** It adds a phase to the sub-workflow of `sunset`, which the open
+  instance has not reached; measured, it changes no frontier key and no `late` count, only a diagnostic path.
+  Recommendation: **adopt now**; the overrides' rule (defer what changes the frontier) does not apply.
+- **D5 — the pack directive clauses WingFoil's custom directives lack** (rows 7, 8, 23). Writing them into the custom
+  directives is a rule for all future work, which `traceability`'s filing rule 3 (`dl-118` (B)) sends through a
+  decision-log first, and the `determinism` "never retry" clause contradicts this repository's practice. (a) A
+  decision-log (filed through `decision-log-ingest`) proposing which clauses the custom directives take; (b) leave them
+  to the pack installation (S5), where WingFoil's same-id custom directives shadow the pack's. Recommendation: **(a)**,
+  so that a custom directive never shadows a pack rule WingFoil has not weighed.
+- **D6 — `governance-evolution`** (row 17). Recommendation: **defer** until `dl-164` is ruled; a `governance-change`
+  type or workflow is its question.
+- **D7 — `dl-186` S5's premise.** S5 says the packs adopted by hand "already match the packs, so the three-way merge
+  has a trivial base". After this comparison no WingFoil file is byte-equal to a pack file, and `sw-life-cycle` differs
+  in structure (row 37). Recommendation: a candidate finding for the `w3` planning (P4.18–P4.20), where the move to the
+  lock is designed — not an amendment in this task.
+
+**Risks for the other open `w0` tasks.** `task-355`, `task-344`, `task-339`: no shared file (`.wingfoil/workflows/`
+other than `dev-loop.yaml` is not theirs; `task-339` edits `.wingfoil/agents/`). `task-356` (design gate of `spec-016`,
+`spec-017`, `spec-008`): the typed form relies on `spec-017` §4.3 (`{ type, path }` belongs to `created`); an amendment
+there that changed it would change rows 15, 32–34. `task-358`: the conformance suite's unbound list (above). The
+instance frontier is unchanged, so no step is owed by any task, and the `w0` orchestration reads no changed workflow.
+
+**Pending amendments (approver).** None.
+
+### Retrospective
+
+<!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
+     reconstructed afterwards. One line per item: what happened, the evidence (a command and what it
+     printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
+     Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
+     here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
