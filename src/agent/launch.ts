@@ -11,10 +11,13 @@
  *     work run, §3.5, task-335) reads the null device, its stdout is piped and drained, its stderr is
  *     `agent execute`'s, and on POSIX it runs in a session and process group of its own (approver ruling
  *     D6 (a)). This is REQ-PERF-01's "agent ready".
- * 15. The wait. From the spawn until the record is committed, for an interactive launch `SIGINT` and
- *     `SIGQUIT` are ignored (the terminal delivers them to the agent itself, in the same foreground
- *     process group) and `SIGTERM` and `SIGHUP` are forwarded to the agent while it runs; a headless
- *     agent has no terminal, so `SIGINT` is forwarded too and only `SIGQUIT` is ignored. A run ended by a
+ * 15. The wait. From the spawn until the record is committed, for an interactive launch `SIGINT`,
+ *     `SIGQUIT` and `SIGHUP` are ignored (the terminal delivers them to the agent itself, in the same
+ *     foreground process group: a forwarded `SIGHUP` reached it twice, task-355, `bug-318`) and only
+ *     `SIGTERM` is forwarded to the agent while it runs; a headless agent has no terminal, so `SIGINT`,
+ *     `SIGTERM` and `SIGHUP` are forwarded and only `SIGQUIT` is ignored. On POSIX a headless delivery goes
+ *     to the agent's whole process group, and once an agent a signal reached has exited, what is left of
+ *     the group is sent `SIGKILL` before the launch returns (task-355, `bug-516`). A run ended by a
  *     signal is still recorded as `signal:<NAME>`. With `--timeout` the bound runs from the spawn: at
  *     expiry `SIGTERM` through the same forwarding, then `SIGKILL` {@link TIMEOUT_GRACE_MS} later if the
  *     agent still runs; both timers stop when it exits.
@@ -158,12 +161,13 @@ const WINDOWS = process.platform === 'win32';
 
 /**
  * The signals `agent execute` takes over while the agent runs (§3.3 step 15), per launch kind: an interactive
- * agent shares the terminal's foreground process group, so the keyboard's signals reach it directly and are
- * ignored here; a headless agent has no terminal, so `SIGINT` is forwarded to it as well (task-335, D6 (a)).
- * Windows has only the subsets that exist there.
+ * agent shares the terminal's foreground process group, so the keyboard's signals and the terminal's hang-up
+ * reach it directly and are ignored here — `SIGHUP` included, which `agent execute` cannot tell from one sent
+ * to it alone (task-355, `bug-318`, approver ruling D1 (a)); a headless agent has no terminal, so `SIGINT` and
+ * `SIGHUP` are forwarded to it as well (task-335, D6 (a)). Windows has only the subsets that exist there.
  */
 const TAKEN_OVER: Readonly<Record<LaunchKindRun, { readonly ignored: readonly NodeJS.Signals[]; readonly forwarded: readonly NodeJS.Signals[] }>> = {
-  interactive: { ignored: WINDOWS ? ['SIGINT'] : ['SIGINT', 'SIGQUIT'], forwarded: WINDOWS ? ['SIGTERM'] : ['SIGTERM', 'SIGHUP'] },
+  interactive: { ignored: WINDOWS ? ['SIGINT'] : ['SIGINT', 'SIGQUIT', 'SIGHUP'], forwarded: ['SIGTERM'] },
   headless: { ignored: WINDOWS ? [] : ['SIGQUIT'], forwarded: WINDOWS ? ['SIGINT', 'SIGTERM'] : ['SIGINT', 'SIGTERM', 'SIGHUP'] },
 };
 
@@ -173,9 +177,15 @@ interface SignalTakeover {
   attach(child: ChildProcess): void;
   /**
    * The one forwarding path, which a received signal and the time bound both take: `signal` is sent to the
-   * agent while it runs, remembered until it is attached, and dropped once it has exited.
+   * agent while it runs — on POSIX, for a headless agent with a pid, to its whole process group — remembered
+   * until it is attached, and dropped once it has exited.
    */
   send(signal: NodeJS.Signals): void;
+  /**
+   * After the agent has exited: when a signal was delivered to its process group, send what is left of the
+   * group one `SIGKILL` (task-355, `bug-516`, approver ruling D2 (a)); otherwise nothing.
+   */
+  sweep(): void;
   /** Remove every listener installed. */
   restore(): void;
 }
@@ -185,14 +195,29 @@ interface SignalTakeover {
  * pre-launch cleanup's release and the spawn must neither kill `agent execute` nor orphan the agent):
  * the `kind`'s ignored signals ignored, its forwarded ones forwarded to the agent while it runs. One that
  * arrives before the agent exists is remembered and sent as soon as it is attached; once the agent has
- * exited they are ignored, until the record is committed.
+ * exited they are ignored, until the record is committed. A headless agent on POSIX runs in a process group
+ * of its own (its pid is the group id), so each delivery goes to the group through `signalGroup`, and the
+ * processes the agent started receive it too; the interactive kind, Windows and a child with no pid keep
+ * `child.kill` (task-355, `bug-516`).
  */
-function takeOverSignals(kind: LaunchKindRun): SignalTakeover {
+function takeOverSignals(kind: LaunchKindRun, signalGroup: (pgid: number, signal: NodeJS.Signals) => void): SignalTakeover {
   let child: ChildProcess | undefined;
   let pending: NodeJS.Signals | undefined;
+  let signalled = false;
+  const groupOf = (agent: ChildProcess): number | undefined => (kind === 'headless' && !WINDOWS && typeof agent.pid === 'number' ? agent.pid : undefined);
   const send = (signal: NodeJS.Signals): void => {
-    if (child === undefined) pending = signal;
-    else if (child.exitCode === null && child.signalCode === null) child.kill(signal);
+    if (child === undefined) {
+      pending = signal;
+      return;
+    }
+    if (child.exitCode !== null || child.signalCode !== null) return;
+    const pgid = groupOf(child);
+    if (pgid === undefined) {
+      child.kill(signal);
+      return;
+    }
+    signalled = true;
+    signalGroup(pgid, signal);
   };
   const { ignored, forwarded } = TAKEN_OVER[kind];
   const installed: [NodeJS.Signals, () => void][] = [
@@ -206,6 +231,11 @@ function takeOverSignals(kind: LaunchKindRun): SignalTakeover {
       if (pending !== undefined) send(pending);
     },
     send,
+    sweep() {
+      if (!signalled || child === undefined || (child.exitCode === null && child.signalCode === null)) return;
+      const pgid = groupOf(child);
+      if (pgid !== undefined) signalGroup(pgid, 'SIGKILL');
+    },
     restore() {
       for (const [signal, listener] of installed) process.removeListener(signal, listener);
     },
@@ -385,6 +415,22 @@ export interface LaunchHost {
    * §3.3 step 15); `setTimeout` / `clearTimeout` by default. A test injects a recorder, so no wall clock runs.
    */
   readonly timer?: (delayMs: number, fire: () => void) => () => void;
+  /**
+   * Sends `signal` to the process group `pgid` (§3.3 step 15, task-355, `bug-516`): how a headless agent on
+   * POSIX, which leads a process group of its own, and the processes it started receive a forwarded signal,
+   * the time bound's signals and the sweep's `SIGKILL`. `process.kill(-pgid, signal)` by default, an empty
+   * group (`ESRCH`) ignored. A test injects a recorder, so no real process group is signalled.
+   */
+  readonly signalGroup?: (pgid: number, signal: NodeJS.Signals) => void;
+}
+
+/** {@link LaunchHost.signalGroup}'s default: the signal to every process of the group, none left being no error. */
+function killGroup(pgid: number, signal: NodeJS.Signals): void {
+  try {
+    process.kill(-pgid, signal);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
+  }
 }
 
 /** {@link LaunchHost.timer}'s default: a real timer. */
@@ -465,7 +511,7 @@ export async function launchAgent(root: string, input: LaunchInput, host: Launch
   // Step 13 — the banner; step 14 — the spawn; step 15 — the wait, with the signals taken over.
   reportNotice(launchBanner(input));
   // The launch's listeners go in before the pre-launch cleanup's come out: no signal finds neither.
-  const signals = takeOverSignals(input.kind);
+  const signals = takeOverSignals(input.kind, host.signalGroup ?? killGroup);
   releaseSignals();
   // The time bound (step 15): from the spawn, SIGTERM at expiry, SIGKILL after the grace; both stop at the exit.
   const timer = host.timer ?? realTimer;
@@ -559,6 +605,8 @@ export async function launchAgent(root: string, input: LaunchInput, host: Launch
     return coreOk({ run: record, sha: recorded.value.sha });
   } finally {
     stopBound();
+    // What is left of a signalled headless agent's process group does not outlive the run (bug-516).
+    signals.sweep();
     signals.restore();
   }
 }
