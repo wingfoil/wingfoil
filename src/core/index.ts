@@ -888,7 +888,8 @@ export interface MemoryAddParams {
   /**
    * Frontmatter fields written as given, after the `--set` ones and sorted by name — for a core caller only:
    * `workflow start` records the plan's `element` through it (task-217, `spec-017` §7.1), a field that is no
-   * token. The CLI and MCP never populate it, so no command line can.
+   * token, and its `workflow` and `phase` when the plan type's patterns hold no token for them (task-345,
+   * task-346). The CLI and MCP never populate it, so no command line can.
    */
   readonly fields?: Readonly<Record<string, string>>;
   /**
@@ -2584,8 +2585,8 @@ const workflowRekeyFn: CoreFn<unknown, RekeyResult> = async (params) => {
 
 /**
  * `workflowStart` / `workflowEnd` `CoreOperation.fn`s (P4.2, P4.3; `spec-017` §7.1–§7.2; task-217): the two
- * operations of `./workflow-start-end`, with `start` writing through this registry's own `memoryAdd` and
- * `memorySubmit`. A `spec-003` error at `HEAD` (or a token value outside the id class) is `VALIDATION`,
+ * operations of `./workflow-start-end`, with `start` writing through this registry's own `memoryAdd` (its plan is
+ * left `draft`, for its author's `memory submit`, task-346). A `spec-003` error at `HEAD` (or a token value outside the id class) is `VALIDATION`,
  * exit 1, as every workflow operation maps it ({@link coreErrorOf}).
  */
 async function refusalOf<T>(run: () => Promise<CoreResult<T>>): Promise<CoreResult<T>> {
@@ -2599,7 +2600,7 @@ async function refusalOf<T>(run: () => Promise<CoreResult<T>>): Promise<CoreResu
 }
 
 const workflowStartFn: CoreFn<unknown, StartResult> = (params) =>
-  refusalOf(() => workflowStart(params as WorkflowStartParams, { add: memoryAddFn, submit: memorySubmitFn }));
+  refusalOf(() => workflowStart(params as WorkflowStartParams, { add: memoryAddFn }));
 
 const workflowEndFn: CoreFn<unknown, EndResult> = (params) => refusalOf(() => workflowEnd(params as WorkflowEndParams));
 
@@ -3023,13 +3024,14 @@ export const CORE_MODULES: readonly CoreModule[] = [
         renderConsole: renderNextConsole as (value: unknown) => string,
       },
       // task-217 (`spec-017` §7.1–§7.2): both decide at `HEAD` (§1.1 item 1, gating). `start` records the
-      // instance as a `plan` element in two commits (`wf(plan): add`, `wf(plan): submit`); `end` closes it
+      // instance as a `plan` element in one commit (`wf(plan): add`), the plan left `draft` for its author's
+      // `memory submit` (task-346); `end` closes it
       // with `wf(plan): finalize <id> [active → done]`. The MCP Tools `workflow.start` / `workflow.end` are
       // v0.4 (P5.2.3); the production server serves no Tool.
       workflowStart: {
         name: 'workflowStart',
         mutates: true,
-        description: 'start a workflow: record it as an active plan element and print its first step',
+        description: 'start a workflow: record it as a draft plan element and print its first step',
         positional: { name: 'name', required: true, description: 'the startable workflow to start' },
         options: [
           {

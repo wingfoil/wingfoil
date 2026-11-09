@@ -109,7 +109,7 @@ document). Stdout is the same with or without warnings, so a script parsing it i
 ### Git side effects
 
 Every command that changes the project writes **exactly one git commit**, authored by your git identity
-(`workflow start` writes two, an `add` and a `submit` of its plan).
+(new in 0.4: `workflow start` too, the `add` of its plan, which it leaves `draft` for you to submit).
 Read-only commands never commit. New in 0.3: if git refuses that commit — a `pre-commit` hook
 that fails, a full disk, another git command holding the index lock — the command puts back every file
 it wrote (removing the files and folders it created), and the index, as they were, and
@@ -1171,8 +1171,8 @@ wingfoil workflow end [<ref>]
 open instance; without it, the active instance. It decides at `HEAD`, as `workflow next` does: the plan,
 the workflow files and the deduction of the instance's steps.
 
-It refuses an instance that is not finished: one whose plan is still `draft` (a `workflow start` whose
-second commit failed), and one whose steps are not all complete — the error names the current step, and a
+It refuses an instance that is not finished: one whose plan is still `draft` (run
+`wingfoil memory submit <id>` once its body is written), and one whose steps are not all complete — the error names the current step, and a
 `hint:` line says that `wingfoil memory deprecate <id>` abandons the instance instead. Otherwise it moves
 the plan `active → done` and prints the ended instance and the one now active (`active: none` when none is
 left open); `--format json|yaml` prints `{"baseline": {…}, "ended": {…}, "active": {…} | null, "commit": "<sha>"}`.
@@ -1469,7 +1469,7 @@ another workflow, that workflow resolved the same way under `sub`. The payload i
 
 ### `wingfoil workflow start`
 
-Start a workflow: record it as an active plan element and print its first step.
+Start a workflow: record it as a draft plan element and print its first step.
 
 ```
 wingfoil workflow start <name> [--element <type>:<id>] [--title <title>] [--set phase=<v>] [--set scope=<v>]
@@ -1479,7 +1479,7 @@ wingfoil workflow start <name> [--element <type>:<id>] [--title <title>] [--set 
 |---|---|
 | `--element <type>:<id>` | The element the workflow runs on, when the workflow declares one (`element:`), or — for a workflow that declares none — the element recorded as its context (new in 0.4); `<id>` may be a short reference (new in 0.3.2, see [Short element references](#short-element-references)) and the plan records the full id. `--element none` records no context (new in 0.4). Without it, the active workflow's element is used: if it has that type, or, for a workflow that declares none, if the active workflow declares an element. |
 | `--title <title>` | The plan's title. Default: `<workflow> — <phase>`. |
-| `--set phase=<v>` | The plan's `phase` token. Default: the element's id, else `1`. |
+| `--set phase=<v>` | The plan's `phase`. Default: the element's id, else `1`. New in 0.4: accepted, and the plan's `workflow` and `phase` written, whether or not the `plan` type's `id_pattern` or `path` holds a `{phase}` token. |
 | `--set scope=<v>` | The plan's `scope` token, the folder its file goes in. Default: the workflow name. |
 
 It decides at `HEAD`: the workflow files, `memory.yaml`, the element and the open
@@ -1504,15 +1504,18 @@ about each of them (`kept by the pre-marker rule: restart it with workflow start
   derived id is already taken on any branch, `-2`, `-3`, … is added to the phase; an id taken by a
   `--set phase=` is refused instead.
 
-It writes **two commits**, each touching only the plan file: `wf(plan): add <id>` then
-`wf(plan): submit <id>` (`draft → active`). If the second one fails, the plan stays `draft` and the error
-says to run `wingfoil memory submit <id>`. With `--dry-run` it prints the first commit's plan only. The
-output names the instance and its first step, as `workflow next` prints it; `--format json|yaml` prints
-`{"baseline": {…}, "instance": {…}, "next": {…} | null, "commits": ["<add sha>", "<submit sha>"]}`.
+New in 0.4: it writes **one commit**, touching only the plan file: `wf(plan): add <id>`. The plan is
+left `draft`, for you to write: fill its body, then run `wingfoil memory submit <id>` (`draft → active`),
+which checks the `plan` type's required fields; no approver is needed. The instance is open from the start,
+and `wingfoil workflow end` refuses it until the plan is submitted. With `--dry-run` it prints that commit's
+plan. The output names the instance, the submit its plan owes and its first step, as `workflow next` prints
+it; `--format json|yaml` prints `{"baseline": {…}, "instance": {…}, "next": {…} | null, "commits": ["<add sha>"],
+"submit": "wingfoil memory submit <id>"}`.
 
 ```console
 $ wingfoil workflow start release-cycle --element release:minor-v1
 started release-cycle as release-cycle-minor-v1-plan (active)
+plan release-cycle-minor-v1-plan is draft: write its body, then run wingfoil memory submit release-cycle-minor-v1-plan
 next step: release-cycle.ship@release:minor-v1
   …
 ```
@@ -1527,7 +1530,7 @@ A project's `memory.yaml` must declare a `plan` type; `wingfoil init` declares o
   (`malformed element-ref "<ref>": expected <type>:<id>`), a `--set` other than `phase=` / `scope=`, or a
   `--set` value refused as `memory add` refuses it (`--set scope holds a '.' or '..' path segment:
   "../../etc"`); nothing is written.
-- **Commit:** `wf(plan): add <id>`, then `wf(plan): submit <id>`.
+- **Commit:** `wf(plan): add <id>` (new in 0.4: one commit; the plan's `wf(plan): submit <id>` is yours).
 
 ### `wingfoil workflow create`
 
@@ -1819,7 +1822,10 @@ the element exists; the role is defined and is not `approver` (whichever of `--h
 launch kind (see below; for a headless launch without `launch.headless`, `error: adapter '<name>' declares no
 headless launch`); its `command` is on `PATH` (or at its path in the project); your git identity is
 set; `dna.yaml` declares `paths.runs` and the element's run log has no uncommitted changes; the
-execution context (DNA, the role's directives, the relevant Memory) assembles and validates; the
+execution context (DNA, the role's directives, the relevant Memory) assembles and validates; the adapter's
+`mcp.template` can carry the MCP server's command and arguments (one holding an unpaired surrogate, which
+neither JSON nor TOML can write, gives `error: mcp.template cannot carry the MCP server's argument <n>: it holds
+an unpaired surrogate (U+<XXXX>)`, or `… command: …`; new in 0.4); the
 WingFoil MCP server of this same build starts and serves that context (your project's `.mcp.json` is
 neither read nor changed); and, for an interactive launch of an adapter that needs one, stdin and stdout are a
 terminal.
@@ -1843,8 +1849,8 @@ tells it where to load its context (the Resource `wingfoil://session/<role>/<typ
 `wingfoil` MCP server registered for it), and tells it to end every commit it writes, except an approve or reject commit, with
 `Co-Authored-By: <agent name> <<agent email>>` and `AI-Model: <its model>` — added to a commit `wingfoil`
 writes with `git commit --amend --no-edit --trailer`, never as a paragraph of their own. While the agent runs,
-Ctrl-C and Ctrl-\ reach the agent and do not stop `agent execute`; `SIGTERM` and `SIGHUP` sent to
-`agent execute` are passed on to the agent. When the agent exits, it asks the adapter's declared
+Ctrl-C, Ctrl-\ and a hang-up of the terminal reach the agent and do not stop `agent execute`; `SIGTERM` sent to
+`agent execute` is passed on to the agent, and a `SIGHUP` sent to `agent execute` alone is not. When the agent exits, it asks the adapter's declared
 commands for the agent's version, session, model and token counts (each within 10 seconds; one that
 fails is recorded as `not-reported`, with a `warning:` line), appends one record to the element's run
 log (`<paths.runs>/<element-id>.jsonl`) and commits it alone, then prints
@@ -1869,7 +1875,9 @@ kind prints `warning: phase '<workflow>.<phase>' declares launch: <declared>; la
 **The headless work run** (new in 0.4). The agent starts with no terminal: its stdin is not connected, its
 stdout is captured and not shown, its stderr is `agent execute`'s, and on Linux and macOS it runs in a process
 group of its own. Ctrl-C, `SIGTERM` and `SIGHUP` sent to `agent execute` are passed on to it; Ctrl-\ is
-ignored. Both built-in adapters declare a headless launch (`claude -p …`, `codex exec …`). The record's
+ignored. On Linux and macOS a passed-on signal and the `--timeout` signals reach the processes the agent
+started too, and once an agent a signal reached has exited, what is left of them is killed: nothing of a
+signalled or timed-out headless run outlives `agent execute`. Both built-in adapters declare a headless launch (`claude -p …`, `codex exec …`). The record's
 `result` is `n/a`, as for an interactive run. On success stdout carries `{"run": <record>}` (indented under
 `--format console`), and the summary line is a notice on stderr. A timed-out run, interactive or headless, is
 still recorded and exits `1` with `error: agent timed out after <duration>; run <run-id> recorded`, whatever

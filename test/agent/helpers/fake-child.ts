@@ -6,6 +6,9 @@
  * exits with (it traps the signal). A signal is raised with `process.emit`, which runs the listeners only: the
  * Jest process is never signalled.
  *
+ * task-355 (`bug-516`): an optional `pid`, so a headless launch on POSIX takes the process-group path
+ * (`LaunchHost.signalGroup`); a child built without one has no `pid`, and the launch signals it with `kill`.
+ *
  * {@link settle} ends a child still running, so a test that fails before its child exits does not leave
  * `launchAgent` waiting, with its signal listeners installed, for the rest of the worker.
  */
@@ -23,8 +26,14 @@ export class FakeChild extends EventEmitter {
   signalCode: NodeJS.Signals | null = null;
   readonly killed: NodeJS.Signals[] = [];
   readonly stdout = new PassThrough();
-  constructor(private readonly answers: Partial<Record<NodeJS.Signals, SignalAnswer>> = {}) {
+  /** The process id the launch reads for the process-group path (task-355); absent, as a `ChildProcess` that failed to spawn. */
+  readonly pid: number | undefined;
+  constructor(
+    private readonly answers: Partial<Record<NodeJS.Signals, SignalAnswer>> = {},
+    pid?: number,
+  ) {
     super();
+    this.pid = pid;
     setImmediate(() => this.emit('spawn'));
   }
   /** Whether it is still running. */

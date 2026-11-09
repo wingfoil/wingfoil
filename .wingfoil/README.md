@@ -98,9 +98,10 @@ sw-life-cycle (main)
 │                              │                        scoped to this release-line — reusable per major version)
 │                              ├── delivery            → release-cycle  (iterate_over: release,
 │                              │                        scoped where release-line = this one)
-│                              │     ├── release-planning  (advance-pinned-build → define-scope → triage-bugs
-│                              │     │                      → reconcile-governance → record-adrs → identify-specs
-│                              │     │                      → build-backlog → commit-backlog)
+│                              │     ├── release-planning  (advance-pinned-build → collect-feedback → define-scope
+│                              │     │                      → triage-bugs → assign-bugs → reconcile-governance
+│                              │     │                      → record-adrs → identify-specs → build-backlog
+│                              │     │                      → commit-backlog)
 │                              │     ├── wave  (iterate_over: element:waves — one per entry of the release's waves:, all
 │                              │     │     │      listed waves at once; re-plan appends the next — dl-100)
 │                              │     │     ├── dev-loop  (design gate + TDD — red is qa's — iterate_over: task where release =

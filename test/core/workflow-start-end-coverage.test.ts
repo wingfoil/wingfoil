@@ -1,17 +1,20 @@
 /**
  * task-217 review F2 — the arms of `workflow start` / `workflow end` that only the compiled CLI reached
- * (uninstrumented): the usage errors, a thrown non-storage failure, `end`'s transition refusals, the console
- * rendering of a real first step, the `-<n>` safeguard, `refusalOf`'s rethrow in `CORE_MODULES`, and
- * `resolveWaitingTarget` on a machine with no `waiting` edge. Characterization: the behaviour exists.
+ * (uninstrumented): the usage errors, `end`'s transition refusals, the console rendering of a real first step,
+ * the `-<n>` safeguard, `refusalOf`'s rethrow in `CORE_MODULES`, and `resolveWaitingTarget` on a machine with no
+ * `waiting` edge. Characterization: the behaviour exists.
+ *
+ * task-346 (`spec-017` §7.1 as amended, `bug-390`): `start` leaves its plan `draft` and writes no submit, so the
+ * case of a throwing submit is gone (D4), the console of a real start names `wingfoil memory submit <id>`, and the
+ * `end` cases submit the plan first so that they reach the transition preamble they pin.
  */
-import { mkdirSync, rmSync, unlinkSync, writeFileSync } from 'fs';
+import { appendFileSync, mkdirSync, rmSync, unlinkSync, writeFileSync } from 'fs';
 import { join } from 'path';
 
 import { CORE_MODULES, enumerateOperations, NO_ACTIVE_WORKFLOW_MESSAGE, NO_PLAN_TYPE_MESSAGE, renderStartConsole, type StartResult } from '../../src/core';
 import type { CoreFn } from '../../src/core/registry';
 import type { CoreResult } from '../../src/core/types';
 import { UsageError } from '../../src/core/usage-error';
-import { workflowStart } from '../../src/core/workflow-start-end';
 import { MemoryYaml } from '../../src/memory/schema';
 import { resolveWaitingTarget } from '../../src/memory/state-machine';
 import { commitAll, git, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
@@ -59,11 +62,17 @@ function writeProject(root: string): void {
   commitAll(root, 'fixture');
 }
 
-function operation(name: string): CoreFn<unknown, unknown> {
-  return enumerateOperations(CORE_MODULES).find((entry) => entry.module.name === 'workflow' && entry.operation.name === name)!.operation.fn;
+function operation(name: string, module = 'workflow'): CoreFn<unknown, unknown> {
+  return enumerateOperations(CORE_MODULES).find((entry) => entry.module.name === module && entry.operation.name === name)!.operation.fn;
 }
 
 const PLAN = 'docs/plans/tidy/tidy-1-plan.md';
+
+/** task-346: the author's body line and `memory submit` of the plan `start` left `draft` — what `end` needs first. */
+async function writeAndSubmit(root: string): Promise<boolean> {
+  appendFileSync(join(root, PLAN), '\nThe plan of this run.\n');
+  return ((await operation('memorySubmit', 'memory')({ root, positional: 'tidy-1-plan' })) as CoreResult<unknown>).ok;
+}
 
 describe('workflow start — usage errors, in process (task-217 review F2)', () => {
   it.each([
@@ -85,24 +94,20 @@ describe('workflow start / end — refusals and rendering past the acceptance ca
   });
   afterEach(() => removeTempDir(repo));
 
-  it('a submit that throws something other than a storage failure propagates', async () => {
-    const add = enumerateOperations(CORE_MODULES).find((entry) => entry.operation.name === 'memoryAdd')!.operation.fn;
-    await expect(
-      workflowStart({ root: repo, positional: 'tidy', options: {} }, { add: add as never, submit: async () => { throw new Error('boom'); } }),
-    ).rejects.toThrow('boom');
-  });
-
   it('the console rendering of a real start names the instance and its first step', async () => {
     const result = (await operation('workflowStart')({ root: repo, positional: 'tidy', options: {} })) as CoreResult<StartResult>;
     if (!result.ok) throw new Error(result.error.message);
     // `tidy` completes from README.md at once, so its first step is none: the complete line is printed.
-    expect(renderStartConsole(result.value)).toBe("started tidy as tidy-1-plan (active)\nno next step: workflow 'tidy' is complete\n");
+    expect(renderStartConsole(result.value)).toBe(
+      "started tidy as tidy-1-plan (active)\nplan tidy-1-plan is draft: write its body, then run wingfoil memory submit tidy-1-plan\nno next step: workflow 'tidy' is complete\n",
+    );
     const step = { ...result.value, next: { key: 'tidy.check', trail: [{ workflow: 'tidy', phase: 'check', scope: null }], scope: null, role: 'developer', agentRole: false, members: [], directives: [], actions: [], evidence: { kinds: [], missing: [], finalizable: false }, reentered: false, reentryCommit: null, awaiting: null } } as unknown as StartResult;
-    expect(renderStartConsole(step)).toMatch(/^started tidy as tidy-1-plan \(active\)\nnext step: tidy\.check\n/);
+    expect(renderStartConsole(step)).toMatch(/^started tidy as tidy-1-plan \(active\)\nplan tidy-1-plan is draft: write its body, then run wingfoil memory submit tidy-1-plan\nnext step: tidy\.check\n/);
   });
 
   it('end: a plan deleted in the working tree is refused by the transition preamble', async () => {
     expect((await operation('workflowStart')({ root: repo, positional: 'tidy', options: {} })).ok).toBe(true);
+    expect(await writeAndSubmit(repo)).toBe(true);
     unlinkSync(join(repo, PLAN));
     const result = await operation('workflowEnd')({ root: repo });
     expect(result.ok ? null : result.error.message).toMatch(/held by HEAD but deleted in the working tree/);
@@ -110,6 +115,7 @@ describe('workflow start / end — refusals and rendering past the acceptance ca
 
   it('end: a plan modified in the working tree is refused before the commit', async () => {
     expect((await operation('workflowStart')({ root: repo, positional: 'tidy', options: {} })).ok).toBe(true);
+    expect(await writeAndSubmit(repo)).toBe(true);
     writeFileSync(join(repo, PLAN), `${git(repo, ['show', `HEAD:${PLAN}`])}\nAn uncommitted line.\n`);
     const head = git(repo, ['rev-parse', 'HEAD']).trim();
     const result = await operation('workflowEnd')({ root: repo });

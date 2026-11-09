@@ -190,7 +190,7 @@ and its proposals are disposed of by the next minor's retrospective (dl-167).
 
 ```mermaid
 flowchart TD
-    RP["**planning** → `release-planning`\nadvance-pinned-build → define-scope → triage-bugs → reconcile-governance\n→ record-adrs (opt.) → identify-specs → build-backlog → commit-backlog\n✔ P4.12 per step (see sub-diagram below)\n🔑 Approval gates — *approver*\nrelease: draft → planning → in-development"]
+    RP["**planning** → `release-planning`\nadvance-pinned-build → collect-feedback → define-scope → triage-bugs → assign-bugs\n→ reconcile-governance → record-adrs (opt.) → identify-specs → build-backlog → commit-backlog\n✔ P4.12 per step (see sub-diagram below)\n🔑 Approval gates — *approver*\nrelease: draft → planning → in-development"]
 
     DL["**implementation** → `wave` *(iterate_over: element:waves)*\none wave per entry of the release's waves: (all listed waves open at once)\ntasks → wave-checks → re-sweep → re-plan\n(see sub-diagram below)"]
 
@@ -308,22 +308,30 @@ implementing the task (detail not predictable at planning time).
 
 ### Release Planning — `release-planning`
 
-Eight steps in sequence; `record-adrs` is optional. `advance-pinned-build` moves the pinned
+Ten steps in sequence; `record-adrs` is optional. `advance-pinned-build` moves the pinned
 published build forward first (dl-095) and re-checks the `wingfoil-cli` directive against the new
 pin (dl-163 S3e). The pin is per line: a patch's switch is committed on `release/X.Y` and pins only a
 published `X.Y.z`, a minor's on `main`; run `npm ci` in the release worktree before the pre-check (`bug-429`).
-After the switch the phase updates `AGENTS.md` §1's status sentence, and only it, in its own commit. For a
+After the switch the phase updates `AGENTS.md` §1's status sentence, and only it, in its own commit.
+`collect-feedback` then makes the read `retrospective`'s `collect-feedback` makes (`dl-163` S3d), at every planning
+because a patch has no retrospective (`release-planning-rel-v0.4-plan` R11, `task-347`): every `active` service of
+kind `repository` with a `feedback_inbox`, read at the consumer's `main`, the commit read recorded for each, one row
+per note in `rel-<version>-planning-feedback-triage.md`, every row ruled by the approver before `define-scope`. For a
 `kind: patch`, `define-scope` and `triage-bugs` admit an element only if
 `git log --no-merges release/X.Y..main -- <file>` prints nothing; any other is captured again on the line first
-(`dl-206`, `git-conventions` §1). `triage-bugs` and `reconcile-governance` sweep in-scope
+(`dl-206`, `git-conventions` §1). By the same test `assign-bugs` gives a bug the patch release, and any other bug a
+later release. `triage-bugs` and `reconcile-governance` sweep in-scope
 `open` bugs and not-ready decision-logs/ADRs into their gated states (dl-016), selecting only
-elements whose `release` is empty or this release; `reconcile-governance` also selects `ready`
+elements whose `release` is empty or this release; `assign-bugs`, right after `triage-bugs`, gives every `triaged`
+bug with no release this release or a later one (a `wf(bug): assign` commit), or the approver closes it with
+`memory reject`, so no bug stays unassigned past a planning (`dl-191` (a)); `reconcile-governance` also selects `ready`
 decision-logs, for a coverage check only: each one of this release must be named by a task's `ref:`
 (approver ruling 2026-10-12). Before it approves anything, `reconcile-governance`'s pre-check
 `role-directives.clean` (`npm run check:role-directives`, `dl-050` option 1, `task-215`) runs `directives list
 --role` for every `dna.yaml` role and fails on any warning: a role with no directives, a dangling binding, a
 shadowed id. `define-scope` states the 20 % reserved for fixes and governance debt
-(`dl-100` §4 (b)) and sweeps the `scheduled` change-proposals whose `release` is this release into the
+(`dl-100` §4 (b)), inside it at least 10 % of the task budget, rounded up, for `low`-severity bugs, the oldest first
+by bug number (`dl-191` (a)), and sweeps the `scheduled` change-proposals whose `release` is this release into the
 release's `features:` (`dl-132` element 4, `task-277`): a `memory amend` by the approver of a release already past `draft`,
 one predating dl-092 with no `kind:` included (bug-342, `task-279`); `build-backlog` checks every criterion against the bound directives and ratified
 specs (`dl-102` §2) and gives each task its `wave:`; `commit-backlog` fixes `backlog_committed` and
@@ -336,15 +344,17 @@ which `memory submit` and `memory amend` read and the check restates (bug-342).
 ```mermaid
 flowchart TD
     AB["**advance-pinned-build** *(tech-lead)*\nnpm.pin_advance(package: wingfoil-released)\nforward only, published builds only, per line\n✔ check:lockfile · check:mcp · wingfoil-cli re-check\n→ AGENTS.md §1 status"]
-    DS["**define-scope** *(product-owner)*\nmemory.submit\nrelease: draft → planning\n✔ P4.12: [title, kind, version, pillar, features, requirements, release-line]\n(kind exempt for minor-v0.1 … minor-v1.0)\n20 % reserved for fixes and debt (dl-100 §4 (b))\nsweeps the scheduled change-proposals of the release\ninto its features: (dl-132 element 4; ✔ change-proposals.swept)\npast draft: memory amend by the approver\n(no kind: too, bug-342)"]
+    CF["**collect-feedback** *(facilitator)*\nagent.execute: read every active repository service's feedback_inbox\nat the consumer's main, the commit read recorded (dl-163 S3d)\n✔ feedback-notes.recorded (manual)\nrows ruled by the approver before define-scope\n`docs/09_retrospectives/rl-{release-line}/rel-{version}-planning-feedback-triage.md`"]
+    DS["**define-scope** *(product-owner)*\nmemory.submit\nrelease: draft → planning\n✔ P4.12: [title, kind, version, pillar, features, requirements, release-line]\n(kind exempt for minor-v0.1 … minor-v1.0)\n20 % reserved for fixes and debt (dl-100 §4 (b))\n≥ 10 % of the task budget for low-severity bugs, oldest first (dl-191 (a))\nsweeps the scheduled change-proposals of the release\ninto its features: (dl-132 element 4; ✔ change-proposals.swept)\npast draft: memory amend by the approver\n(no kind: too, bug-342)"]
     TB["**triage-bugs** *(tech-lead)*\nmemory.approve: bug open → triaged\n🔑 Approval gate — *approver*\n↩ REJECT → closed"]
+    AS["**assign-bugs** *(tech-lead)*\nselection: triaged bugs with an empty release\nelement.set_release: this release or a later one (wf(bug): assign)\nor memory reject by the approver: triaged → closed\n(dl-191 (a))"]
     RG["**reconcile-governance** *(product-owner)*\nmemory.approve: decision-log in-discussion → ready\nadr pending → accepted\nready decision-logs: coverage check only (a task ref: names each)\n✔ pre: role-directives.clean (check:role-directives)\n🔑 Approval gate — *approver*\n↩ REJECT → draft"]
     RA["**record-adrs** *(architect)* · **OPTIONAL**\nmemory.add(type: adr) → memory.submit → memory.approve\n✔ spec-review.passed · P4.12: [title, sard_ref]\n🔑 Approval gate — *approver*\n`{ type: adr, path: docs/04_memory/design/adrs/{adr.id}.md }`"]
     IS["**identify-specs** *(architect)*\nagent.execute: survey → memory.add(type: tech-spec) → memory.submit\n✔ P4.12: [title, scope]\n🔑 Approval gate — *approver*\n`{ type: tech-spec, path: docs/04_memory/design/specs/{tech-spec.id}.md }`"]
     BB["**build-backlog** *(product-owner)*\nselection: in-scope ready decision-logs + triaged bugs\nmemory.add(type: task) → memory.submit\nper selected DL / bug: memory.add(type: task, dl: {decision-log.id} / bug: {bug.id}) → memory.submit\n→ bug.set_state(planned) · element.set_release · wave:\n✔ P4.12: [title, release, kind] · acceptance-criteria.consistent (dl-102)\n✔ each task's wave is one of the release's waves\n`{ type: task, path: docs/04_memory/{task.release}/{task.id}.md }`"]
     CB["**commit-backlog** *(tech-lead)*\n✔ pre: backlog_committed fixed · waves: a non-empty list\ntask.set_state(backlog) · release.set_state(in-development)\n🔑 Approval gate — *approver*"]
 
-    AB --> DS --> TB --> RG --> RA --> IS --> BB --> CB
+    AB --> CF --> DS --> TB --> AS --> RG --> RA --> IS --> BB --> CB
     RG --> IS
 
     style RA fill:#f9f9f9,stroke:#bbb,stroke-dasharray:5 5

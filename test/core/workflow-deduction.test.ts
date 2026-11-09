@@ -14,6 +14,9 @@
  * - AC 7: BDD P4.11 — the deduction reuses `validateFrontmatterState` (characterization).
  * - task-301 AC 1 (`bug-389`): this repository's six v0.1 plans carry their `plan` frontmatter, so no
  *   `W_MEMORY_UNREADABLE` is left; AC 2: the real specification sub-workflows complete by `produces`.
+ * - task-346 AC 3 (`bug-434`, design D5): the six are no instance plan a `<ref>` can name (`instancePlanIds`, which
+ *   reads `parent`), an assertion that can fail — the same documents with one `parent` blanked make it hold that id.
+ *   (`deduction.instances` cannot: the five workflows the six name are sub workflows, §3.2 (ii).)
  * - task-345 AC 5 (`bug-465`): `selectWorkflowInstance(deduction, snapshot, ref?)`, the snapshot mandatory; AC 2:
  *   an open plan naming no loaded workflow is no instance and stays `W_INSTANCE_WORKFLOW_UNKNOWN`.
  */
@@ -600,11 +603,20 @@ describe('task-198 review F3, task-301 AC 1 — this repository: the six pre-dl-
   ];
   const stem = (path: string): string => path.replace(/^.*\//, '').replace(/\.md$/, '');
 
-  it('reports no W_MEMORY_UNREADABLE at all, and none of the six ids is a deduced instance', () => {
+  it('reports no W_MEMORY_UNREADABLE at all, and none of the six ids is an instance plan a <ref> can name (task-346 AC 3, bug-434)', () => {
     const deduction = deduceWorkflowStateAtHead(root);
     expect(deduction.diagnostics.filter((d) => d.code === 'W_MEMORY_UNREADABLE').map((d) => [d.file, d.message])).toEqual([]);
-    const ids = deduction.instances.map((entry) => entry.instance.id);
+    const { documents } = readDeductionSnapshotAtHead(root);
+    const ids = instancePlanIds(documents);
     for (const [path] of SIX) expect(ids).not.toContain(stem(path));
+
+    // The mutation that shows the assertion above can fail (design D5): one of the six with its `parent` blanked
+    // is an instance plan. Its `status` alone cannot do it — `parent` is what keeps it a phase plan.
+    const target = stem(SIX[1]![0]);
+    const mutated = documents.map((document) =>
+      document.frontmatter['id'] === target ? { ...document, frontmatter: { ...document.frontmatter, parent: '' } } : document,
+    );
+    expect(instancePlanIds(mutated)).toContain(target);
   });
 
   it('each of the six carries, at HEAD, the plan frontmatter of the design table (type plan, status done, a title)', () => {

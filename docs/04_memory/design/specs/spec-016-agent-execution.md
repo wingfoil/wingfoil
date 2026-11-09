@@ -168,6 +168,13 @@ error (`dl-090` Q3 (a): "argv, no shell. … Interpolation fills whole arguments
 | `{mcp_args}` | the MCP server's argv; expands to **several** elements in `args`, to a JSON array in `mcp.template` | same as `{mcp_command}` |
 | `{session_id}` | the assigned or recorded session id | `session.assign_args`, `session.resume.args`; `session.lookup_args` and `usage.lookup_args` only when `session.id: assign` (under `lookup` or `output` the id is not known before the lookup, and using it there is a manifest validation error) |
 
+In `mcp.template`, `{mcp_command}` renders as JSON string content (the template quotes it) and `{mcp_args}` as a
+JSON array of strings, with every U+007F written as the escape `\u007f`: the rendered text is valid JSON (for
+`config-file`) and valid TOML (for `config-arg`, which a TOML-reading agent CLI such as Codex parses), whatever the
+command and arguments hold. A command or argument holding an unpaired surrogate (a code unit U+D800–U+DFFF that is
+not half of a pair, which a Windows path can hold) has no representation in either, so it is refused at §3.3
+step 10, before anything is spawned (§3.7; `task-355`, `bug-371`).
+
 Some placeholders are also **required**, so that a manifest that validates can launch. A missing one
 is a manifest validation error naming the field:
 
@@ -320,7 +327,10 @@ that the path tests exercise is the one every project adapter takes:
     fetch with `element` and `state`);
   - optionally calls the headless result Tool (v1.0);
   - prints a declared JSON document (session id, model, usage) for `output`/`lookup`;
-  - exits with a declared code, or waits to be killed by a signal.
+  - exits with a declared code, or waits to be killed by a signal;
+  - optionally records each signal it receives, so a test can count the deliveries of one signal
+    (§3.3 step 15, `task-355`), and starts a long-running process of its own, whose pid it records, so a
+    test can see whether a child of the agent outlives the run.
 - `test/fixtures/agents/custom/fake.yaml`, declaring that script with every manifest field
   exercised and `launch.interactive.terminal: optional`. Jest and CI give the child no terminal on
   stdin and stdout, so this is what lets the interactive success path (spawn, wait, lookups, record,
@@ -537,19 +547,22 @@ repository.
 8. Print `ExecutionContext.warnings` on stderr, in `spec-012` §5.1 order (`dl-050` option 4), then the
    documents the builder could not read (`W_MEMORY_UNREADABLE`, `spec-012` §3). The builder's notes
    (the DNA note, P5.3.3 sc. 3's `no relevant Memory found for task`) are not warnings: they reach the
-   agent inside the `{role}-session` Prompt's `warnings` (`spec-004` §3.2), not stderr.
+   agent inside the session context's `warnings` (`spec-004` §3.2: the session Resource the bootstrap
+   names, and the `{role}-session` Prompt, serve the same text), not stderr.
    The deduction's diagnostics of step 2 are printed before these, and before any refusal.
 9. Compute the run id (§4.3).
-10. Render `{bootstrap}` / `{bootstrap_file}` and `{mcp_config_file}`.
-11. **MCP pre-flight**: spawn `{mcp_command} {mcp_args}`, complete MCP `initialize`, get the
-    `{role}-session` Prompt with `element` and `state` = `state_ref`, then read the session Resource the
-    bootstrap names (§2.4, `task-236`), close. Any failure → `MCP_UNREACHABLE` (P5.4.3 sc. 3).
+10. Render `{bootstrap}` / `{bootstrap_file}`, and `{mcp_config_file}` or `{mcp_config}` from `mcp.template`
+    (§2.3): an MCP server command or argument holding an unpaired surrogate is refused here (§3.7).
+11. **MCP pre-flight**: spawn `{mcp_command} {mcp_args}`, complete MCP `initialize`, read the session
+    Resource the bootstrap names (§2.4, `task-236`), the one carrier the agent reads, close. The
+    `{role}-session` Prompt, which serves the same text from the same builder, is not fetched: one
+    assembly of the context per pre-flight (`task-355`, `bug-376`). Any failure → `MCP_UNREACHABLE` (P5.4.3 sc. 3).
     One deadline covers the whole exchange, start-up included (30 s, REQ-PERF-01's budget), not one per
     request.
     **Declared exception to the `HEAD` baseline:** the server is `wingfoil mcp`, whose own start-up
     check reads the working tree's `dna.yaml` role set (`spec-014` §1). An uncommitted change there —
     a deleted or invalid `dna.yaml` — refuses the pre-flight even though every gating read of steps 2–7
-    passed at `HEAD`. The Prompt it serves still resolves at `state` (§2.4).
+    passed at `HEAD`. The Resource it serves still resolves at `state` (§2.4).
 12. **Terminal check**, the last check before the spawn, for an interactive launch only: when the
     adapter's `launch.interactive.terminal` is `required` (the default), stdin and stdout must both be
     terminals → else `NO_TERMINAL`. With `optional`, the check is skipped (§2.2, §2.7). Placing it
@@ -568,13 +581,25 @@ repository.
     outside the budget (`adr-012` Consequences).
 15. Wait for the agent to exit. **Signals.** Interactive launch: the agent runs in `agent execute`'s
     foreground process group, so the terminal delivers keyboard signals to both processes directly.
-    While the agent runs, `agent execute` therefore **ignores** `SIGINT` and `SIGQUIT` (it neither
+    While the agent runs, `agent execute` therefore **ignores** `SIGINT`, `SIGQUIT` and `SIGHUP` (it neither
     dies nor forwards them, as a shell does for a foreground job; a forwarded copy would reach the
-    agent twice, and how an agent CLI treats a repeated `SIGINT` is its own behaviour, which WingFoil
+    agent twice, and how an agent CLI treats a repeated signal is its own behaviour, which WingFoil
     does not control) and
-    **forwards** only `SIGTERM` and `SIGHUP`, which do not come from the keyboard. Headless launch
+    **forwards** only `SIGTERM`, which does not come from the terminal. `SIGHUP` is the terminal's hang-up,
+    which the kernel delivers to the whole foreground process group, the agent included (and a shell
+    that is hung up sends it to each of its jobs' process groups); `agent execute` cannot tell it from a
+    `SIGHUP` sent to it alone, so it does not forward it (`task-355`, `bug-318`): a `SIGHUP` sent to
+    `agent execute` alone does not reach the agent, and `SIGTERM` is the signal that stops an interactive
+    run from outside. Headless launch
     (v0.4, §3.5): the agent has no terminal and its own process group, so no signal reaches it twice:
-    `SIGINT`, `SIGTERM` and `SIGHUP` are all forwarded, and `SIGQUIT` is ignored.
+    `SIGINT`, `SIGTERM` and `SIGHUP` are all forwarded, and `SIGQUIT` is ignored. On POSIX a headless
+    run's forwarded signal, and both signals of the time bound, are sent to the agent's whole process
+    group, so the processes the agent started (the `wingfoil` MCP server it registered, its tools'
+    subprocesses) receive them too; once an agent that such a signal reached has exited, whatever is left
+    of its process group is sent `SIGKILL` before `agent execute` returns, so no process of a signalled
+    or timed-out headless run outlives it (`task-355`, `bug-516`). An interactive agent shares
+    `agent execute`'s process group, so its signal goes to the agent alone; on Windows, to the agent alone
+    in both kinds.
     **The time bound** (`--timeout <duration>`, `dl-181` Q4 (a)): it runs from the spawn. At expiry,
     while the agent runs, `agent execute` sends it `SIGTERM` through the same forwarding as a received
     signal; if the agent has not exited 10 s later, `SIGKILL`. Both timers stop when the agent exits.
@@ -582,10 +607,10 @@ repository.
     an agent that handled `SIGTERM` and exited — and step 18 reports the expiry.
     In every case `agent execute` then continues at step 16, so a run ended by a signal is still
     recorded (`exit_status: "signal:<NAME>"`). The handling holds until the record is committed: once
-    the agent has exited, a `SIGTERM` or `SIGHUP` has no agent to reach and is ignored like `SIGINT`,
+    the agent has exited, a signal of the forwarded set has no agent to reach and is ignored like `SIGQUIT`,
     so steps 16–17 (bounded by the lookups' limits) cannot be cut short and lose the run. The handling is
-    installed **before** the spawn, and before the pre-launch handling below is removed: a `SIGTERM` or
-    `SIGHUP` that arrives while the agent is being spawned is remembered and forwarded as soon as the
+    installed **before** the spawn, and before the pre-launch handling below is removed: a signal of the
+    forwarded set that arrives while the agent is being spawned is remembered and forwarded as soon as the
     agent exists, so no signal can end `agent execute` without a record or leave the agent orphaned. If
     the spawn then fails, there is no agent to forward it to: `agent execute` exits `1` with §3.7's
     `could not be started` refusal and writes nothing, the signal having ended nothing.
@@ -694,6 +719,7 @@ in what ends them (`dl-181`):
 | `NO_RUN_LOG` | `VALIDATION` | `1` | `dna.yaml declares no run log (paths.runs)` |
 | run-log file modified | `CONFLICT` | `1` | `run log <path> has uncommitted changes` |
 | `INVALID_CONTEXT` | `VALIDATION` | `1` | `invalid execution context: missing '<section>' section` (P5.4.4 sc. 3) |
+| the MCP server's command or an argument holds an unpaired surrogate (step 10, §2.3) | `VALIDATION` | `1` | `mcp.template cannot carry the MCP server's command: it holds an unpaired surrogate (U+<XXXX>)` / `… the MCP server's argument <n>: …`, `<n>` counted from 1, `<XXXX>` the first unpaired code unit in upper-case hex (`task-355`, `bug-371`) |
 | `MCP_UNREACHABLE` | `IO` | `1` | `context pre-load failed: MCP server unreachable` (P5.4.3 sc. 3, verbatim) |
 | `NO_TERMINAL` (step 12, an interactive launch that is not a dry run; a dry run prints it as a warning, §3.3) | `VALIDATION` | `1` | `interactive launch needs a terminal on stdin and stdout` |
 | the agent's command cannot be started at step 14 (it vanished from `PATH` after step 4, the OS refuses it) | `IO` | `1` | `agent command '<command>' could not be started (adapter '<name>'): <cause>` — no run, no record (§0) |
@@ -1304,6 +1330,18 @@ refuses a step that only waits (`dl-171` (c), §3.2 step 1, `STEP_AWAITING`). A 
 (`bug-392`): it warns and prints its plan. The bare line citations of `docs/01_vision/X_cli-cmds.md` (Context, §3.1,
 §3.2 step 3, Consequences), which its version 1.7 had moved, cite its section headings and rows instead (`bug-380`,
 `dl-075`). Edited in place without a supersede or a state change (`dl-047`), pending the approver's `memory amend`.
+
+**Revision (2026-11-08, `task-355-fix-agent-execute-s-sighup-forwarding-run-log-line-endings-template-escaping-and-double-context-assembly`)
+— §2.3, §2.7, §3.3 steps 8, 10, 11 and 15, and §3.7.** An interactive launch no longer forwards `SIGHUP`: the
+terminal's hang-up reaches the agent in the foreground process group already, and a forwarded copy delivered it
+twice (`bug-318`, observed again on `main` at `b20ddf0a5` before this change); `SIGTERM` stays forwarded. A headless
+run's forwarded signals and its time bound reach the agent's whole process group on POSIX, and what is left of a
+signalled agent's group is sent `SIGKILL` once the agent has exited, so no child of the agent outlives the run
+(`bug-516`, absorbed by approver ruling of 2026-11-08). `mcp.template`'s rendering escapes U+007F and refuses an
+unpaired surrogate at step 10, a new §3.7 row, so a rendered value is valid TOML and valid JSON (`bug-371`). The MCP
+pre-flight reads only the session Resource, no longer the Prompt first, and
+step 8 names the session context rather than the Prompt alone (`bug-376`). §2.7's fake records the signals it receives and can start a child of its own. No manifest field, placeholder, record key or exit code changes.
+Edited in place without a supersede or a state change (`dl-047`), pending the approver's `memory amend`.
 
 **Revision (2026-11-08, `task-356-pin-codex-s-c-override-behaviour-record-codex-cli-session-ids-and-resolve-an-unscoped-step-key`)
 — §2.2, §2.5, §2.6, §2.8, §3.1, §3.2, §3.3, §3.5 and §3.7.** (1) `bug-372`: §2.5 records that Codex's `-c`
