@@ -94,3 +94,34 @@ describe('AC 1 (e) — wingfoil init (no seam) installs claude-code and codex-cl
     expect(loadAdapter(repo, NAME)).toMatchObject({ ok: true, value: { name: NAME, kind: 'built-in' } });
   });
 });
+
+/**
+ * task-356 (red-first; `spec-016` §2.2, §2.5, §2.8 as amended at the design gate; approver rulings D1 (a), D2 (a),
+ * D3) — what the by-hand checks H1 and H2 of 2026-11-09 (`codex-cli 0.145.0`, the task's design addendum) put in
+ * the shipped `codex-cli`: the conflict probe `codex mcp get wingfoil` (exit 0 exactly when Codex would load a
+ * `wingfoil` table), and the session id of a headless run, the `thread_id` of `codex exec --json`'s first event.
+ * Resume stays unsupported (D3). Fields this task adds to the schema are read through a record, so the suite
+ * type-checks before they exist.
+ */
+describe('task-356 — codex-cli probes for a declared wingfoil server and records a headless run’s session id', () => {
+  const parsed = (name: string): ReturnType<typeof parseAdapterManifest> =>
+    parseAdapterManifest(shipped(name).content, { name, kind: 'built-in', file: `${BUILTIN_ADAPTERS_DIR}/${name}.yaml` });
+
+  it('AC 1 (c): codex-cli declares mcp.conflict_args [mcp, get, wingfoil]; claude-code declares none', () => {
+    expect((parsed(NAME).mcp as Record<string, unknown>)['conflict_args']).toEqual(['mcp', 'get', 'wingfoil']);
+    expect((parsed('claude-code').mcp as Record<string, unknown>)['conflict_args']).toBeUndefined();
+  });
+
+  it('AC 2 (d): the headless argv gains --json after exec, its output is jsonl', () => {
+    const headless = parsed(NAME).launch.headless;
+    expect(headless?.args).toEqual(['exec', '--json', '-c', '{mcp_config}', '{bootstrap}']);
+    expect(headless?.output).toBe('jsonl');
+  });
+
+  it('AC 2 (d): session.id output at thread_id; resume still unsupported', () => {
+    const { session } = parsed(NAME);
+    expect(session.id).toBe('output');
+    expect(session.field).toBe('thread_id');
+    expect(session.resume.supported).toBe(false);
+  });
+});

@@ -1,0 +1,28 @@
+# The fake adapter under `mcp.via: config-arg` with the conflict probe (task-356, `bug-372`; spec-016 §2.2
+# `mcp.conflict_args`, §3.3 step 4, §3.7 `MCP_SERVER_DECLARED`, as amended at the design gate; approver ruling
+# D1 (a)): `fake-config-arg.yaml` plus `mcp.conflict_args`, the argv `agent execute` runs before the launch to ask
+# the agent whether its own configuration declares an MCP server named `wingfoil`. The fake answers
+# `--mcp-get <name>` with the exit `WINGFOIL_FAKE_AGENT_MCP_GET` declares (test/fixtures/agents/fake-agent.cjs),
+# the shape of `codex mcp get wingfoil` (exit 0 when a table is loaded, 1 when none is).
+# Kept OUT of custom/, as fake-config-arg.yaml is.
+name: fake-conflict
+format: 1
+command: node
+verified_with: fake-agent 1.0.0
+version_args: [ test/fixtures/agents/fake-agent.cjs, --version ]
+launch:
+  interactive:
+    args: [ test/fixtures/agents/fake-agent.cjs, --mcp-config-json, "{mcp_config}", --prompt, "{bootstrap}" ]
+    terminal: optional
+prompt:
+  via: arg
+mcp:
+  via: config-arg
+  template: '{"mcpServers": {"wingfoil": {"command": "{mcp_command}", "args": {mcp_args}}}}'
+  conflict_args: [ test/fixtures/agents/fake-agent.cjs, --mcp-get, wingfoil ]
+session:
+  id: none
+  resume:
+    supported: false
+usage:
+  from: none
