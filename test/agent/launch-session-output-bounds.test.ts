@@ -7,7 +7,10 @@
  *   value at `session.field`, or a value that is not a non-empty string → `not-reported` and the no-id warning;
  * - `output: jsonl`: a line over 1 MiB is passed over, and a later line still gives the id; the id on a last line with
  *   no newline is read; an id split across two chunks is read whole;
- * - `output: none`, or `session.id: output` with nothing to read, records `not-reported` silently.
+ * - `output: none`, or `session.id: output` with nothing to read, records `not-reported` silently;
+ * - after the agent's exit the launch waits for its stdout to end, at most `LaunchHost.lookupTimeoutMs` (a process
+ *   the agent left behind may hold the pipe): an id written after the exit is still read; a stream that never ends
+ *   settles the run after the bound, `not-reported` with the no-id warning.
  *
  * In process, with `LaunchHost.spawn` injected (`FakeChild`), as red's suite does.
  */
@@ -108,5 +111,52 @@ describe('task-356 — the bounds of the headless session-id reader (spec-016 §
     const { session, warnings } = await run('none', 'thread_id', ['{"thread_id":"ignored"}\n']);
     expect(session).toBe('not-reported');
     expect(warnings).toEqual([]);
+  }, 60000);
+});
+
+/** A headless `jsonl` launch whose child exits without ending stdout; `after` runs once the exit is emitted. */
+async function runOpenStdout(lookupTimeoutMs: number, after: (child: FakeChild) => Promise<void>): Promise<{ session: unknown; warnings: string[]; settledMs: number }> {
+  const { root, input } = launchFixture(sessionFromOutput('jsonl', 'thread_id'));
+  repos.push(root);
+  const child = new FakeChild();
+  const { spawn } = spawnInto(child);
+  const warnings: string[] = [];
+  const launched: Promise<CoreResult<unknown>> = withNoticeSink(
+    () => undefined,
+    () =>
+      withWarningSink(
+        (warning) => warnings.push(warning),
+        () => launchAgent(root, { ...input, kind: 'headless' } as LaunchInput, { spawn, lookupTimeoutMs }, () => undefined),
+      ),
+  );
+  await tick();
+  child.stdout.write('{"type":"turn.started"}\n');
+  await tick();
+  const exited = Date.now();
+  child.exitKeepingStdout(0);
+  await after(child);
+  const outcome = await launched;
+  const settledMs = Date.now() - exited;
+  child.stdout.end();
+  if (!outcome.ok) throw new Error(outcome.error.message);
+  return { session: (outcome.value as { run: { session: unknown } }).run.session, warnings, settledMs };
+}
+
+describe('task-356 — the wait for a headless stdout after the agent exits (G1, spec-016 §2.6)', () => {
+  it('an id written after the exit, before the stream ends, is recorded', async () => {
+    const { session, warnings } = await runOpenStdout(5000, async (child) => {
+      await tick();
+      child.stdout.write('{"thread_id":"t-after-exit"}\n');
+      child.stdout.end();
+    });
+    expect(session).toBe('t-after-exit');
+    expect(warnings).toEqual([]);
+  }, 60000);
+
+  it('a stream that never ends settles the run after lookupTimeoutMs: not-reported, the no-id warning', async () => {
+    const { session, warnings, settledMs } = await runOpenStdout(300, async () => undefined);
+    expect(session).toBe('not-reported');
+    expect(warnings).toEqual([NO_ID]);
+    expect(settledMs).toBeGreaterThanOrEqual(250);
   }, 60000);
 });

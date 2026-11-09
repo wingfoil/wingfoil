@@ -594,7 +594,7 @@ export async function mcpConflictCheck(root: string, adapter: string, manifest: 
   const argv = manifest.mcp.conflict_args;
   if (argv === undefined) return coreOk(undefined);
   const probe = await runConflictProbe(root, manifest.command, argv, timeoutMs);
-  if (probe.kind === 'failed') reportWarning(`adapter '${adapter}': the MCP server conflict check (mcp.conflict_args) ${probe.reason}: launching without it`);
+  if (probe.kind === 'failed') reportWarning(`adapter '${adapter}': the MCP server conflict check (mcp.conflict_args) ${probe.reason}: going on without it`);
   if (probe.kind !== 'declared') return coreOk(undefined);
   return coreErr({
     code: 'CONFLICT',

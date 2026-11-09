@@ -19,7 +19,8 @@
  * - `codex-cli` — Codex CLI (task-237; its headless block, task-335; its conflict check and session id, task-356).
  *
  * Each declares a `launch.headless` block for the work run (`spec-016` §2.8, §3.5; `dl-181` Q3 (c)), read
- * from its CLI's help at `verified_with`, with `output: none`: nothing parses the agent's stdout yet.
+ * from its CLI's help at `verified_with`: `claude-code`'s with `output: none` (its stdout is not read), `codex-cli`'s
+ * with `output: jsonl`, its stdout read for the session id only (`session.id: output`, task-356).
  *
  * With an empty list, `init` reserves the directory with a `.gitkeep` (the seam's empty case).
  */
