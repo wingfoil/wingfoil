@@ -526,7 +526,14 @@ phase, deduction descends into the sub for each eligible or entered candidate, i
 instance to the step and `scope` is the step's element or collection entry. A step's **key** is
 `<workflow>.<phase>`, followed by `@<type>:<id>` or `@<collection>#<key>` when it has a scope (e.g.
 `dev-loop.red@task:task-130`); within one instance a key names one step. Several steps are ready at
-once when several iterations are in flight (parallel `dev-loop`s, `dl-014`). An instance is
+once when several iterations are in flight (parallel `dev-loop`s, `dl-014`).
+**A key given to a command** (`--step <key>` of `finalize`, `adopt`, `memory add --workflow` and `agent execute`)
+names the frontier step whose key equals it. A key without a scope (`<workflow>.<phase>`, no `@`) that equals no
+frontier key names the frontier steps of that workflow and phase whatever their scope: exactly one is the step it
+names (a key copied before a binding resolved, `bug-ingest.capture` for `bug-ingest.capture@bug:<id>`, `bug-468`);
+two or more are refused, listing their keys (§10); none is the out-of-frontier refusal (§10). A key with a scope
+is matched exactly, and so is every key everywhere else (records, trailers, `rekey`'s `--from` and `--to`).
+Whatever the key given, the step's full key is what the command writes and prints. An instance is
 **complete** when its frontier is empty, except an abandoned instance (§4.11): its frontier is empty because
 nothing can be deduced, and it is reported `complete: false`. Every instance's workflow is loaded (§3.2), so no
 other instance has an empty frontier it cannot deduce.
@@ -804,9 +811,9 @@ writing and refuses on any `spec-003` error (`VALIDATION`): removing the last st
 
 **7.9 `finalize`** (ruling R11; `dl-104` D1 (b)–(c)). Records a phase's completion where the phase
 has no Memory or file evidence to deduce it from.
-- Resolves the instance (§3.3) and the step: `--step <key>` (§4.9), else the instance's next step.
-  The step must be on the frontier at `HEAD`: `step '<key>' is not on the frontier of <instance>`
-  (`CONFLICT`).
+- Resolves the instance (§3.3) and the step: `--step <key>` (§4.9, an unscoped key included), else the
+  instance's next step. The step must be on the frontier at `HEAD`: `step '<key>' is not on the frontier of
+  <instance>` (`CONFLICT`); an unscoped key naming several frontier steps is §10's ambiguity refusal.
 - The step's missing evidence must be `record` alone — a checkpoint (§4.3), an approval no element
   carries (§5.1), an `awaits` (§5.4), or `created` evidence of a step that created nothing (§4.3).
   Otherwise: `phase '<workflow>.<phase>' completes from its evidence: <missing kinds>` (`CONFLICT`) —
@@ -832,8 +839,8 @@ has no Memory or file evidence to deduce it from.
 **7.10 What this spec requires of `memory add`** (`spec-008` owns the grammar; Consequences;
 approver ruling R16, 2026-09-30, `release-planning-rel-v0.3-plan`). `wingfoil memory add … --workflow <ref> [--step <key>]` links the
 element it adds to a step (§4.8), which is explicit and survives concurrent instances:
-- `<ref>` resolves to an open instance (§3.3); `--step` selects a frontier step whose phase declares
-  `memory.add(type: T)` for the `--type` given; without `--step`, the one such frontier step of the
+- `<ref>` resolves to an open instance (§3.3); `--step` selects a frontier step (§4.9, an unscoped key included)
+  whose phase declares `memory.add(type: T)` for the `--type` given; without `--step`, the one such frontier step of the
   instance. None: `no step of <instance> adds a <type>` (`CONFLICT`); several: the same refusal
   listing their keys, asking for `--step`. A `--step` that is not on the instance's frontier is refused as
   `finalize` refuses it (§10); `--step` without `--workflow` is a usage error (`spec-008` §12).
@@ -846,7 +853,7 @@ element it adds to a step (§4.8), which is explicit and survives concurrent ins
 **7.11 `adopt`** (P4.21, `dl-187` rules 1–7, REQ-STATE-11; from `patch-v0.3.1`). Records which step an existing
 element counts as created by, without changing the element or rewriting history.
 - **Single form** (`--step`, `--element`, `--reason`; at least one of `--step` and `--element`, else a usage error,
-  `spec-008` §12). Resolves the instance (§3.3) and the step: `--step <key>`, which must be on the frontier at `HEAD`
+  `spec-008` §12). Resolves the instance (§3.3) and the step: `--step <key>` (§4.9, an unscoped key included), which must be on the frontier at `HEAD`
   (as `finalize` requires, §7.9), else the one frontier step whose phase adds the `--element`'s type (as
   `memory add --workflow` chooses, §7.10). The step's phase must add a type (`memory.add(type: T)` or a
   `{ type: T, path }` produces entry, `dl-187` rule 2) and its `created` evidence must be missing: the step created no
@@ -1064,6 +1071,7 @@ with P5.2.3 (v0.4); the production server serves no Tool today.
 | plan in `draft` at `end` | `workflow '<name>' was not submitted: run wingfoil memory submit <id>` | `INVALID_TRANSITION` | 1 |
 | incomplete at `end` | `workflow '<name>' is not complete: current step <key>` — with an empty frontier, `…: it is abandoned: its element <type>:<id> is <status>`; the hint `wingfoil memory deprecate <id> abandons it` | `CONFLICT` | 1 |
 | step not on the frontier (`finalize`, `memory add --step`, `adopt --step`, `agent execute --step`) | `step '<key>' is not on the frontier of <instance>`; `details.frontier` holds the frontier's keys in frontier order (`task-330`, `bug-340`) | `CONFLICT` | 1 |
+| an unscoped `--step` key names several frontier steps (`finalize`, `memory add --step`, `adopt --step`, `agent execute --step`; §4.9, `bug-468`) | `step '<key>' names <N> steps of <instance>: give --step, one of: <key>, <key>` (the keys in frontier order, also in `details.steps`) | `CONFLICT` | 1 |
 | no frontier step adds the type (`memory add --workflow`, §7.10; `adopt` without `--step`, §7.11) | `no step of <instance> adds a <type>` | `CONFLICT` | 1 |
 | several frontier steps add the type, no `--step` (`memory add --workflow`, `adopt`) | `no step of <instance> adds a <type> alone: give --step, one of: <key>, <key>` (the keys in frontier order, also in `details.steps`) | `CONFLICT` | 1 |
 | step has deducible evidence (`finalize`) | `phase '<workflow>.<phase>' completes from its evidence: <kinds>` | `CONFLICT` | 1 |
@@ -1768,3 +1776,11 @@ from the step it resolves (`spec-016` §3.2 step 7, `dl-183` Q4 (a)); the consol
 Consequences bullet on `docs/01_vision/X_cli-cmds.md` cited its lines `:163-170` and `:169`, which the file's version
 1.7 had moved: it cites its section and rows instead (`bug-380`, `dl-075`). Edited in place without a supersede or a
 state change (`dl-047`), pending the approver's `memory amend`.
+
+**Revision (2026-11-08, `task-356-pin-codex-s-c-override-behaviour-record-codex-cli-session-ids-and-resolve-an-unscoped-step-key`)
+— §4.9, §7.9, §7.10, §7.11 and §10: an unscoped step key.** A `--step` key without a scope that equals no frontier
+key names the frontier steps of its workflow and phase: one resolves to it, several are a new `CONFLICT` row of §10
+listing their keys, none keeps the out-of-frontier refusal with `details.frontier` (`bug-468`, the half of `bug-340`'s
+Expected Behavior that release-planning ruling R8 of `patch-v0.3.2` deferred). `bug-340` cited §4.9 and §7.10 for the
+rule, which neither stated. A scoped key, and every key outside `--step`, stays exact. Edited in place without a
+supersede or a state change (`dl-047`), pending the approver's `memory amend`.
