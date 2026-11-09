@@ -8,7 +8,7 @@ kind: "fix"   # REQUIRED — feature | fix (dl-133 Q1 (b)): `fix` when the task 
 priority: "low"   # optional — high | medium | low
 tags: ["v0.4","w0","agent-execute"]               # optional — additional labels, e.g. [architecture, backend]
 ref: ""   # optional — backlog item ID, e.g. "TASK-001"
-bug: [bug-318, bug-371, bug-376]   # optional — LIST of bug ids this task closes (dl-045). Two cases: a fix task derived from a bug
+bug: [bug-318, bug-371, bug-376, bug-516]   # optional — LIST of bug ids this task closes (dl-045). Two cases: a fix task derived from a bug
                        # by release-planning, and a bug ABSORBED into an existing task's Acceptance Criteria because that
                        # task already owns the ground. `bug.sync_state` iterates this list; a bug with no task naming it
                        # here never advances past `triaged` (only a reject to `closed`, dl-123). A single string is still accepted for documents predating dl-045.
@@ -35,10 +35,14 @@ reading the session Prompt and then the Resource.
    stated in `spec-016` §2.3/§2.5 (`bug-371`).
 4. (red-first) The pre-flight reads only the session Resource the bootstrap names, and the `execute.test.ts` stubs
    answer `resources/read` (`bug-376` Expected).
+5. (red-first) A headless run's forwarded signals and `--timeout`'s signals reach the agent's whole process group on
+   POSIX, and what is left of the group of an agent a signal reached is sent `SIGKILL` once the agent has exited: no
+   child of a timed-out or signalled headless agent survives `agent execute`; a fake agent that starts a child pins it
+   (`bug-516` Expected, absorbed by the approver's triage ruling of 2026-11-08; `spec-016` §3.3 step 15).
 
 ## Implementation Notes
 
-- **wave:** w0 · Size: S. **Bugs:** `bug-318`, `bug-371`, `bug-376`.
+- **wave:** w0 · Size: S. **Bugs:** `bug-318`, `bug-371`, `bug-376`, `bug-516` (absorbed at design, 2026-11-08).
 - **Files** (read at `ddadc1251`): `src/agent/launch.ts` (`takeOverSignals`, `runAgent`), `src/agent/execute.ts`
   (`renderMcpTemplate`, `mcpPreflight`), `.gitattributes` (new: `ls .gitattributes` finds none at `ddadc1251`),
   `test/agent/execute.test.ts`.
