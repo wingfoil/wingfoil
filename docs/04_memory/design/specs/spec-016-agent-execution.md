@@ -132,10 +132,11 @@ without its MCP registration.
 | `launch.interactive.args` | string[] | yes | Argv template for the interactive launch (§2.3). |
 | `launch.interactive.terminal` | `required` \| `optional` | no (default `required`) | Whether the interactive launch needs a terminal on stdin and stdout (§3.3 step 12, `NO_TERMINAL`). `required` for every agent CLI that owns a terminal session, and for every built-in. `optional` declares an executable that runs to completion on inherited, non-terminal stdio; the fake adapter declares it, which is how the interactive success path runs under Jest and CI with no pseudo-terminal (§2.7). |
 | `launch.headless.args` | string[] | no | Argv template for the headless launch (§2.3). Read from v0.4 by the work run (§3.5, `dl-181`); an adapter without it cannot launch headless (§3.7 `NO_LAUNCH_KIND`, `dl-183` Q3 (a)). |
-| `launch.headless.output` | `json` \| `none` | with `headless` | How stdout is read after a headless run: `json`, one JSON document; `none`, not read. The v0.4 work run captures the agent's stdout and reads nothing from it yet (§3.5). |
+| `launch.headless.output` | `json` \| `jsonl` \| `none` | with `headless` | How stdout is read after a headless run: `json`, one JSON document; `jsonl`, one JSON value per line; `none`, not read. The v0.4 work run reads from it only the session id under `session.id: output` (§2.6, §3.5). |
 | `prompt.via` | `arg` \| `stdin` \| `file` | yes | How the bootstrap (§2.4) reaches the agent: as the `{bootstrap}` argument, on stdin, or as a file whose path is `{bootstrap_file}`. `stdin` is legal only for `headless`, because an interactive agent owns stdin. Every format-1 manifest declares `launch.interactive`, so a format-1 manifest declaring `stdin` is refused; the value is kept so that v1.0 can make `launch.interactive` optional for a headless-only adapter (§3.5) without changing this enum. |
 | `mcp.via` | `config-file` \| `config-arg` \| `args` | yes | How the `wingfoil` MCP server is registered for the launched process (§2.5): a file, one argument holding the rendered `mcp.template`, or the server's command and argv as arguments. There is no `none`: an adapter that cannot register the server is refused (`adr-012` Consequences). |
 | `mcp.template` | string | `config-file`, `config-arg`: yes | The registration, with placeholders (§2.3). Under `config-file` it is rendered to a file outside the repository and its path passed as `{mcp_config_file}`; under `config-arg` the rendered text itself is passed as the one argument `{mcp_config}` (for an agent CLI that has no option taking a configuration file's path, task-237). |
+| `mcp.conflict_args` | string[] | no | Argv that exits `0` when the agent's own configuration already declares an MCP server named `wingfoil`, which the agent would merge into the server WingFoil registers (§2.5). Run before the launch as a post-run lookup runs (§2.6), no placeholder; exit `0` refuses the launch (§3.3 step 4, `MCP_SERVER_DECLARED`). Absent: no check. |
 | `session.id` | `assign` \| `output` \| `lookup` \| `none` | yes | How the session id is obtained (§2.6). |
 | `session.assign_args` | string[] | `assign`: yes | Argv fragment carrying `{session_id}`, appended to the launch argv. |
 | `session.lookup_args` | string[] | `lookup`: yes | Argv run after the agent exits. Its stdout is one JSON value. |
@@ -258,8 +259,19 @@ component (`dl-131`).
   0.145.0` the pass found that, with a same-named server in the project's `.codex/config.toml` loaded (the scratch
   directory was trusted before the checked run), the server Codex started has the command and args of the adapter's
   `-c mcp_servers.wingfoil=…` override: the session Resource, which only the build under test serves, was read
-  (`task-237`, 2026-10-14). Whether the override replaces the project's table or merges into it (a merge would keep
-  keys such as `cwd` or `env` the project sets) was not observed.
+  (`task-237`, 2026-10-14). **The override merges** (`codex-cli 0.145.0`, observed by hand on 2026-10-15, `bug-372`):
+  the keys of a same-named table in a trusted project's `.codex/config.toml` that the override does not set (`env`,
+  `cwd`, …) are kept, the keys it sets win, and a nested table it sets merges as well: `env = {}` in the override
+  leaves the project's `env` entries in place (observed by hand on 2026-11-09 with `codex -c
+  'mcp_servers.wingfoil={command="codex",args=["mcp-server"],env={}}' mcp get wingfoil`); the project's layer loads
+  only once the directory is trusted. So a
+  project's `wingfoil` table can reach the server WingFoil registers, and a `cwd` can make it serve another
+  repository's context. An adapter whose agent merges declares `mcp.conflict_args` (§2.2), and `agent execute`
+  refuses to launch while the agent's configuration declares a server named `wingfoil` (§3.3 step 4,
+  `MCP_SERVER_DECLARED`); `codex-cli` declares `[mcp, get, wingfoil]` (§2.8), whose exit status the agent CLI's own
+  layering decides, trust included: `0` with a trusted project's `wingfoil` table, `1` (`No MCP server named
+  'wingfoil' found.`) for an untrusted one or none (2026-11-09). Whether a user-level `wingfoil` table merges the
+  same way was not observed.
 
 #### 2.6 Session id, usage, model
 
@@ -269,8 +281,13 @@ component (`dl-131`).
   `wingfoil:spec-016:session` in RFC 4122's URL namespace: `a432dcd6-576d-5991-9503-2b23aa4139db`. The
   id is unique per clone and run and derived, not random. The run id stays the identifier WingFoil
   relies on (`dl-135` Q3 (a)).
-- **`output`**: read from the headless JSON output (v1.0 only; for an interactive launch it
-  degrades to `not-reported`, because stdout belongs to the agent).
+- **`output`**: read from the stdout of a headless run (the v0.4 work run, §3.5), after the agent exits: under
+  `launch.headless.output: json` the whole stdout is one JSON document and the id is at `session.field`; under
+  `jsonl` each line is one JSON value, and the id is the first non-empty string found at `session.field`, lines
+  in order (a line that is not JSON, or has no such value, is passed over). At most 1 MiB of stdout is kept for
+  `json`, and a line over 1 MiB is passed over for `jsonl`. No id found, invalid JSON under `json`, or more than
+  1 MiB yield `not-reported` and one `warning:` line naming the adapter and the cause; the run never fails for
+  it. For an interactive launch it degrades to `not-reported` silently, because stdout belongs to the agent.
 - **`lookup`**: run `session.lookup_args` after the agent exits, with a 10 s time limit; any
   failure yields `not-reported` and a `warning:` line on stderr (§3.4). The lookup never fails the
   run.
@@ -332,7 +349,7 @@ needs:
 | `name` (file basename) | Agent CLI | `command`, `launch.interactive.args`, `prompt.via`, `mcp.*`, `session.*`, `usage.*` | `verified_with` |
 |---|---|---|---|
 | `claude-code` | Claude Code | `command: claude`; `launch.interactive.args: ["{bootstrap}", --mcp-config, "{mcp_config_file}"]`; `prompt.via: arg`; `mcp.via: config-file`; `session.id: assign` with `[--session-id, "{session_id}"]`, resume `[--resume, "{session_id}"]`; `usage.from: none` (`task-236`; launch, MCP and session id checked by hand on 2026-10-14 with 2.1.296, resume from `--help` only) | `2.1.296 (Claude Code)` |
-| `codex-cli` | Codex CLI | `command: codex`; `launch.interactive.args: [-c, "{mcp_config}", "{bootstrap}"]`; `prompt.via: arg`; `mcp.via: config-arg` with the template `mcp_servers.wingfoil={command = "{mcp_command}", args = {mcp_args}, enabled = true, required = true}`; `session.id: none`, resume not supported; `usage.from: none` (`task-237`; from `codex --help` of `codex-cli 0.145.0`; checked by hand on 2026-10-14 with codex-cli 0.145.0 (ChatGPT sign-in)) | `codex-cli 0.145.0` |
+| `codex-cli` | Codex CLI | `command: codex`; `launch.interactive.args: [-c, "{mcp_config}", "{bootstrap}"]`; `prompt.via: arg`; `mcp.via: config-arg` with the template `mcp_servers.wingfoil={command = "{mcp_command}", args = {mcp_args}, enabled = true, required = true}` and `mcp.conflict_args: [mcp, get, wingfoil]` (`task-356`, §2.5); `session.id: output` with `session.field: thread_id`, read from the headless launch's `--json` events (the first event, `thread.started`, carries it; `codex exec resume <id>` accepts it) (§2.6; an interactive run records `not-reported`), resume not supported until §7's resume ships; `usage.from: none` (`task-237`; from `codex --help` of `codex-cli 0.145.0`; checked by hand on 2026-10-14 with codex-cli 0.145.0 (ChatGPT sign-in); the conflict check and the session field by hand with `codex-cli 0.145.0`, `task-356`) | `codex-cli 0.145.0` |
 
 Each built-in declares `launch.interactive.terminal: required` (§2.2) and carries `verified_with`,
 the agent CLI version whose own help output and documentation its declarations were checked against by
@@ -356,7 +373,7 @@ from stdout (§2.2):
 | `name` | `launch.headless` | Read from | `verified_with` |
 |---|---|---|---|
 | `claude-code` | `args: [-p, "{bootstrap}", --mcp-config, "{mcp_config_file}"]`, `output: none` (`-p`/`--print`, "print response and exit"; the prompt before `--mcp-config` for the reason of the interactive launch; `session.assign_args` still closes the list) | `claude --help` of `2.1.310 (Claude Code)`, which still lists every flag of the interactive launch, `--session-id` and `--resume` | `2.1.310 (Claude Code)` |
-| `codex-cli` | `args: [exec, -c, "{mcp_config}", "{bootstrap}"]`, `output: none` (`codex exec`, "run Codex non-interactively", which takes `-c` and the prompt as its positional) | `codex exec --help` of `codex-cli 0.145.0` | `codex-cli 0.145.0` |
+| `codex-cli` | `args: [exec, --json, -c, "{mcp_config}", "{bootstrap}"]`, `output: jsonl` (`codex exec`, "run Codex non-interactively", which takes `-c` and the prompt as its positional; `--json` prints its events to stdout as JSONL, the source of the session id, `task-356`) | `codex exec --help` of `codex-cli 0.145.0` | `codex-cli 0.145.0` |
 
 The by-hand pass of a headless launch, as `task-236` and `task-237` made for the interactive one (the agent starts
 with no terminal, registers the `wingfoil` server, reads the session Resource and exits), is recorded in
@@ -377,7 +394,7 @@ wingfoil agent execute [--next] [--workflow <ref>] [--step <key>] [--element <ty
 |---|---|---|
 | `--next` | P5.3.1, BDD sc. 1 | Resolve workflow, phase, element and role from the next step of the active instance (`spec-017` §3.3, §7.3; `REQ-STATE-03`). |
 | `--workflow <ref>` | `spec-017` §3.3 (the shared selector), `REQ-STATE-03` | Selects the instance whose next step is taken: `<ref>` is a workflow name (its most recently started open instance) or an open instance id, exactly as `spec-017` §3.3 resolves the positional `<ref>` of `workflow next`. It implies `--next`, so the `agent` binding's argv `wingfoil agent execute --workflow <instance-id> --step <key>` (`spec-017` §6.1) is complete as written; giving `--next` as well changes nothing. `agent execute` has no positional to spare, so the selector is an option here; there is no `--name` spelling (`spec-017` OQ-2). |
-| `--step <key>` | approver ruling R16, 2026-09-30, `release-planning-rel-v0.3-plan`; `spec-017` §4.9, §6.1 | Selects the step: a `spec-017` §4.9 step key, which must be on the frontier of the instance `--workflow` selects, else of the active instance. It implies `--next`. Without it the step is `NextResult.next`. It is what lets each frontier step's `agent` binding launch on its own step when the frontier holds several (parallel `dev-loop`s, `dl-014`), mirroring `memory add --workflow <ref> --step <key>` (`spec-017` §7.10) and `workflow finalize --step <key>` (`spec-017` §7.9). |
+| `--step <key>` | approver ruling R16, 2026-09-30, `release-planning-rel-v0.3-plan`; `spec-017` §4.9, §6.1 | Selects the step: a `spec-017` §4.9 step key, which must be on the frontier of the instance `--workflow` selects, else of the active instance; a key without its scope names the one frontier step of that workflow and phase (`spec-017` §4.9, `bug-468`). It implies `--next`. Without it the step is `NextResult.next`. It is what lets each frontier step's `agent` binding launch on its own step when the frontier holds several (parallel `dev-loop`s, `dl-014`), mirroring `memory add --workflow <ref> --step <key>` (`spec-017` §7.10) and `workflow finalize --step <key>` (`spec-017` §7.9). |
 | `--element <type>:<id>` | P5.3.1, BDD sc. 2; element-ref per `spec-008` §7 | The target element. With `--next`, it overrides the step's element and keeps its phase and role. |
 | `--role <role>` | `X_cli-cmds.md` § "Agent Execution Commands" (the `wingfoil agent execute` row) and § "Parameters for Agent Execution" (the `--role` row) | Overrides the role. It must be a `dna.yaml` `team.roles` name (P5.4.1). |
 | `--agent <name>` | **new**; not in the BDD or in `X_cli-cmds` | Picks a `team.agents` entry. Default: the first entry, in declared order, whose `executes_as` contains the role and that declares an `adapter`. |
@@ -430,7 +447,9 @@ In this order, each a gating read at `HEAD` (`spec-006` §6):
 1. **Step** (only with `--next`, `--workflow` or `--step`): `spec-017`'s `workflow next` deduction
    for the instance `--workflow <ref>` selects, else the active instance (`spec-017` §3.3). The step
    is the frontier step `--step <key>` names, which must be on that instance's frontier, else
-   `spec-017` §10's `step '<key>' is not on the frontier of <instance>` (`CONFLICT`); without
+   `spec-017` §10's `step '<key>' is not on the frontier of <instance>` (`CONFLICT`); a key without its scope
+   names the one frontier step of its workflow and phase, and several are `spec-017` §10's ambiguity refusal
+   (`spec-017` §4.9); without
    `--step`, it is `NextResult.next`, the first frontier step in `spec-017` §1.3's order (§7.3); it gives
    `workflow`, `phase`, `scope`, `role`, `allowedModes`, `distinctFrom` and `launch` (`spec-017` §6.3, §8).
    A `<ref>` that resolves to no open instance is `spec-017` §10's refusal (`unknown workflow:
@@ -505,7 +524,10 @@ repository.
 3. Resolve (§3.2).
 4. The adapter declares the launch kind §3.2 step 7 resolved (`launch.headless` for `headless`) → else
    `NO_LAUNCH_KIND` (`dl-183` Q3 (a): refused, never a fallback to the other kind); then the `command` of the
-   adapter found on `PATH` (or at its repository path) → else `AGENT_NOT_FOUND`.
+   adapter found on `PATH` (or at its repository path) → else `AGENT_NOT_FOUND`; then, when the adapter declares
+   `mcp.conflict_args`, that argv run as a post-run lookup runs (§2.6: the `command`, no shell, the project root,
+   WingFoil's environment, 10 s) → exit `0` is `MCP_SERVER_DECLARED`; a non-zero exit passes; a probe that
+   times out or cannot be started passes with one `warning:` line naming the adapter and the cause.
 5. Git identity present (`REQ-SEC-01`), since step 17 commits → else the shared pre-flight error
    (`requireGitIdentity`, `task-014`).
 6. Run log declared (§4.1) → else `NO_RUN_LOG`; the element's run-log file unmodified against
@@ -570,7 +592,8 @@ repository.
     **Before the spawn**, from step 10 on — its listeners installed before the temporary directory is
     created — a `SIGINT`, `SIGTERM` or `SIGHUP` removes the temporary files and then ends `agent execute`
     by that same signal, so an interrupted pre-flight leaves nothing behind (§2.3).
-16. Post-run lookups (§2.6), `agent_version` (§2.2), `notes` (§4.2).
+16. Post-run lookups (§2.6), the session id of a headless run's stdout under `session.id: output` (§2.6),
+    `agent_version` (§2.2), `notes` (§4.2).
 17. Append the record and commit it (§4.4).
 18. Exit: `0` if the agent exited `0`, the time bound did not expire, and step 17 succeeded; otherwise `1`
     (§3.7). An expired bound is reported as `agent timed out after <duration>; run <run-id> recorded`,
@@ -618,7 +641,8 @@ in what ends them (`dl-181`):
   and its signals step 15's; `--timeout` bounds it. On success stdout carries `{ "run": <record> }` as the
   `spec-005` §2 payload, and the §3.4 summary line is printed on stderr as a notice, so the record commit's
   sha is still shown; a failure is §3.4's `error` with the summary as its `details` line. The agent's own
-  stdout is captured and not echoed; where it goes, and what is parsed from it, is `dl-182`'s.
+  stdout is captured and not echoed; where it goes is `dl-182`'s. Under `session.id: output` the session id is
+  read from it (§2.6); nothing else is parsed from it yet.
 - **The verification run** (v1.0, P4.12, unchanged; specified now so that the adapter shape does not change,
   `adr-012` point 4): selected only by the workflow engine, for a check that binds an agent, always headless
   and `fresh` (§3.2 step 7).
@@ -648,6 +672,7 @@ in what ends them (`dl-181`):
 | `--workflow` names no workflow | `NOT_FOUND` | `1` | `unknown workflow: <name>` (`spec-017` §10) |
 | `--workflow` names no open instance | `NOT_FOUND` | `1` | `workflow is not open: <ref>` (`spec-017` §10) |
 | `--step` names no step on the instance's frontier | `CONFLICT` | `1` | `step '<key>' is not on the frontier of <instance>` (`spec-017` §10); `details` holds `step`, `instance` and `frontier`, the frontier's keys in frontier order (`task-330`, `bug-340`) |
+| `--step` without its scope names several frontier steps (`spec-017` §4.9, `bug-468`) | `CONFLICT` | `1` | `step '<key>' names <N> steps of <instance>: give --step, one of: <key>, <key>` (`spec-017` §10); `details` holds `step`, `instance` and `steps`, their keys in frontier order |
 | `NO_NEXT_STEP` | `NOT_FOUND` | `1` | `no next step to execute` (P5.3.1 sc. 3, verbatim) |
 | `STEP_AWAITING` (a step form without `--element`, on a step whose `awaiting` is not `null`; `dl-171` (c)) | `CONFLICT` | `1` | the step's line of `spec-017` §5.3, as `workflow next` prints it (§3.2 step 1); `details` holds `step`, `instance` and `awaiting` (`approval` or `party`) |
 | `NO_STEP_ELEMENT` | `VALIDATION` | `1` | `step '<key>' has no element: give --element <type>:<id>` |
@@ -664,6 +689,7 @@ in what ends them (`dl-181`):
 | manifest invalid | `VALIDATION` | `1` | `adapter '<name>': <zod issue>` (`dl-055` detail lines) |
 | `NO_LAUNCH_KIND` (step 4: the adapter declares no `launch.headless` for a headless launch; `dl-183` Q3 (a)) | `VALIDATION` | `1` | `adapter '<name>' declares no headless launch` — and its interactive counterpart, `adapter '<name>' declares no interactive launch`, once a format makes `launch.interactive` optional |
 | `AGENT_NOT_FOUND` | `IO` | `1` | `agent command '<command>' not found (adapter '<name>')` |
+| `MCP_SERVER_DECLARED` (step 4: `mcp.conflict_args` exited `0`; §2.5, `bug-372`) | `CONFLICT` | `1` | `adapter '<name>': the agent's own configuration declares an MCP server named 'wingfoil', which it would merge into the server agent execute registers: remove or rename it`; `details` holds `adapter` and `argv` |
 | git identity missing | as `requireGitIdentity` | `1` | as `requireGitIdentity` |
 | `NO_RUN_LOG` | `VALIDATION` | `1` | `dna.yaml declares no run log (paths.runs)` |
 | run-log file modified | `CONFLICT` | `1` | `run log <path> has uncommitted changes` |
@@ -1278,3 +1304,17 @@ refuses a step that only waits (`dl-171` (c), §3.2 step 1, `STEP_AWAITING`). A 
 (`bug-392`): it warns and prints its plan. The bare line citations of `docs/01_vision/X_cli-cmds.md` (Context, §3.1,
 §3.2 step 3, Consequences), which its version 1.7 had moved, cite its section headings and rows instead (`bug-380`,
 `dl-075`). Edited in place without a supersede or a state change (`dl-047`), pending the approver's `memory amend`.
+
+**Revision (2026-11-08, `task-356-pin-codex-s-c-override-behaviour-record-codex-cli-session-ids-and-resolve-an-unscoped-step-key`)
+— §2.2, §2.5, §2.6, §2.8, §3.1, §3.2, §3.3, §3.5 and §3.7.** (1) `bug-372`: §2.5 records that Codex's `-c`
+override merges with a same-named table, a nested `env = {}` included (`codex-cli 0.145.0`, the approver's by-hand
+observations of 2026-10-15 and 2026-11-09),
+which the approver's headless run of 2026-11-08 (`task-335`, the override honoured, the session Resource read)
+does not contradict; §2.2 gains the optional `mcp.conflict_args`, and §3.3 step 4 refuses a launch while the
+agent's own configuration declares a server named `wingfoil` (§3.7 `MCP_SERVER_DECLARED`); the manifest `format`
+stays 1, an additive optional field (`dl-149`). (2) `bug-375`: `session.id: output` is read from a work run's stdout
+from v0.4 (§2.6, §3.5), `launch.headless.output` gains `jsonl`, and `codex-cli` records the session id of a headless
+run from `codex exec --json`, the `thread_id` of its first event (§2.8, observed by hand on 2026-11-09); an interactive `codex-cli` run still records `not-reported`, and resume stays
+unsupported until §7's resume ships. (3) `bug-468`: `--step` without its scope resolves per `spec-017` §4.9 (§3.1,
+§3.2 step 1, §3.7). Edited in place without a supersede or a state change (`dl-047`), pending the approver's
+`memory amend`.
