@@ -356,7 +356,7 @@ function checkReport(options) {
     const outside = [...trailerKeysOutsideFinalParagraph(commit.body)];
     for (const line of before) {
       const key = AI_TRAILER_RE.exec(line)?.[1];
-      if (key !== undefined && !outside.some((seen) => seen.toLowerCase() === key.toLowerCase())) outside.push(line.slice(0, key.length));
+      if (key !== undefined && !outside.some((seen) => seen.toLowerCase() === key.toLowerCase())) outside.push(key);
     }
     if (outside.length > 0) add('trailer-paragraph', `${at}: ${outside.map((key) => `${key}:`).join(', ')} outside the final paragraph (git-conventions §8)`);
   }
