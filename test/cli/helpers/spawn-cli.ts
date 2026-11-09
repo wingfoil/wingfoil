@@ -17,6 +17,7 @@
  *     `node_modules/wingfoil-released/dist/cli.js`;
  * (ii) a live child: the async `spawn` of `cli/agent-execute-launch.integration.test.ts`, which
  *     signals the running command — {@link spawnCapture} is synchronous;
+ *     a suite that signals a running command otherwise takes {@link spawnCliLive} (task-355);
  * (iii) the CLI inside a shell pipeline (`cli/piped-output-drain.integration.test.ts`, `bash -c …`
  *     with `CLI_ENTRY` as `$0`);
  * (iv) JavaScript fixtures, which cannot import a `.ts` module (`test/fixtures/smoke/wingfoil-proxy.cjs`,
@@ -24,7 +25,7 @@
  *
  * `dist/` is built once by jest's `globalSetup` (`bug-003-cli-integration-dist-race`) — never here.
  */
-import { spawnSync } from 'child_process';
+import { spawn, spawnSync, type ChildProcess } from 'child_process';
 import { join } from 'path';
 
 const REPO_ROOT = join(__dirname, '..', '..', '..');
@@ -104,4 +105,38 @@ export function runCliHarness(root: string, args: readonly string[]): SpawnedRun
 /** Run the published entry point {@link CLI_ENTRY} from `cwd`, the way a user's shell does. */
 export function runCliEntry(cwd: string, args: readonly string[]): SpawnedRun {
   return spawnCapture('node', [CLI_ENTRY, ...args], { cwd });
+}
+
+/** How a live child of the CLI ended, and everything it wrote to each stream. */
+export interface LiveCliOutcome {
+  readonly code: number | null;
+  readonly signal: NodeJS.Signals | null;
+  readonly stdout: string;
+  readonly stderr: string;
+}
+
+/** A running child of {@link CLI_ENTRY}, and the promise of its end. */
+export interface LiveCliRun {
+  readonly child: ChildProcess;
+  readonly closed: Promise<LiveCliOutcome>;
+}
+
+/**
+ * Start {@link CLI_ENTRY} `args…` from `cwd` and hand back the running child, so a suite can signal it
+ * (task-355): stdin is the null device, both streams are captured to the end. `detached` puts the child in
+ * a process group of its own (POSIX), standing for a terminal's foreground job a hang-up reaches as a whole.
+ * Unlike {@link spawnCapture}, a signal ending the child is reported in `closed`, not thrown: the caller
+ * asserts on it.
+ */
+export function spawnCliLive(cwd: string, args: readonly string[], options: { readonly env?: NodeJS.ProcessEnv; readonly detached?: boolean } = {}): LiveCliRun {
+  const child = spawn(process.execPath, [CLI_ENTRY, ...args], { cwd, env: options.env, detached: options.detached === true, stdio: ['ignore', 'pipe', 'pipe'] });
+  let stdout = '';
+  let stderr = '';
+  child.stdout?.setEncoding('utf-8').on('data', (chunk: string) => (stdout += chunk));
+  child.stderr?.setEncoding('utf-8').on('data', (chunk: string) => (stderr += chunk));
+  const closed = new Promise<LiveCliOutcome>((resolve, reject) => {
+    child.on('error', reject);
+    child.on('close', (code, signal) => resolve({ code, signal, stdout, stderr }));
+  });
+  return { child, closed };
 }
