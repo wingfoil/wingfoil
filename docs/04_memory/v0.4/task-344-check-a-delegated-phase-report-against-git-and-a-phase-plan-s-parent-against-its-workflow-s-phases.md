@@ -414,6 +414,116 @@ the red changed. After it, with green's uncommitted script in the worktree: `npx
 `0`; `npx jest test/cli/check-phase-report.test.ts --maxWorkers=2` → `Test Suites: 1 passed, 1 total`,
 `Tests: 54 passed, 54 total` (the count of 53 above was one short; jest counts 54).
 
+### green (developer, 2026-11-09)
+
+**Start.** The PATH guard ran first through the task's PATH shim (`command -v wingfoil` → the shim; `wingfoil --version`
+and `node dist/cli.js --version` → `0.3.2 (bddc04cc1…)`); `git rev-list --count HEAD..main` → `0` at the start (head
+`0183d56f1`), so no merge was owed then.
+
+**Files.** New `scripts/check-phase-report.cjs` (the design's subcommands `report` and `plans`, exit `0`/`1`/`2`; its
+leading module doc declares the usage, the report format, the example report between the `BEGIN EXAMPLE REPORT` and
+`END EXAMPLE REPORT` lines, and every kind of `MISMATCH_KINDS` with its rule). `scripts/check-governance.cjs`: the one
+change is `trailerKeysOutsideFinalParagraph` added to `module.exports` (D4), which the new script requires instead of a
+copy (`git diff 0183d56f1 HEAD -- scripts/check-governance.cjs` → one line changed). The script reads `dist/` of its
+own checkout (`loadMemoryYamlAtRev`, `loadMemoryDocumentsAtRev`, `loadWorkflowRegistryAtRev`, `loadDnaYamlAtRev`),
+`gateDir`/`gateTracePath` from `scripts/heavy-gate.cjs`, and git through `git -C <worktree> -c core.quotePath=false`:
+its two `git log` readers are written `'log', '--no-show-signature'` and it runs no `show`; it writes nothing.
+
+**T4 stop and the red correction.** With the strict header rule of the design, one red test failed:
+`npx jest test/cli/check-phase-report.test.ts test/lint/git-log-readers.test.ts --maxWorkers=2` →
+`Tests: 1 failed, 56 passed, 57 total`, the failure being "accepts the full task id in the header" on a header with no
+`<phase>` token (`ReportFormatError: line 1: the header does not read as …`). Green stopped and reported it; the
+qa corrected the test (`6d00b50ff`, the header now carries `red`), and the strict rule stays.
+
+**red → green.** After `6d00b50ff`, with the script in place: `npx jest test/cli/check-phase-report.test.ts test/lint
+test/cli/check-governance --maxWorkers=2` → `Test Suites: 22 passed, 22 total`, `Tests: 332 passed, 332 total` (the 54
+tests of the new suite, `git-log-readers` "enumerates the readers it guards" now green, the governance suites unchanged).
+Green commit `93c7156ee`.
+
+**Two rules the design left to green, each stated in the module doc** (listed for the review gate below):
+- `file-unclaimed` / `file-unchanged` read the paths of the phase's commits: the range's first-parent commits less the
+  unlisted ones whose body has an `Approver:` line (the approver's acts, which `commit-unlisted` already exempts).
+- `trailer-paragraph` names the `WingFoil-*` keys `trailerKeysOutsideFinalParagraph` returns, plus any
+  `Co-Authored-By:` or `AI-Model:` line outside the final paragraph, as the design's table asks; the governance
+  function itself covers only `WingFoil-*`.
+
+**Run on this repository** (the code build's `dist/`, after the merge below): `node scripts/check-phase-report.cjs plans`
+→ `plans at HEAD: no mismatch`, exit `0`; `node scripts/check-phase-report.cjs plans --rev 5ffc8f27c` → four
+`plan-parent:` lines (`release-publishing-rel-v0.3.1-plan`, `release-submit-rel-v0.3.1-plan`,
+`release-publishing-rel-v0.3-plan`, `release-submit-rel-v0.3-plan`, each "names no phase of release-cycle (planning,
+implementation, user-docs, e2e-smoke, submit, publishing, release-health, retrospective)") and
+`plans at 5ffc8f27c: 4 mismatches`, exit `1` — the design's prototype result; `node scripts/check-phase-report.cjs repor`
+→ `check-phase-report: unknown subcommand repor (report or plans)`, exit `2`.
+
+### refactor (developer, 2026-11-09)
+
+**Change.** `6c5b4777d`: the `trailer-paragraph` loop pushes the matched key as the regex read it (no behaviour change;
+`npx jest test/cli/check-phase-report.test.ts --maxWorkers=2` → `Tests: 54 passed, 54 total`).
+
+**Gates** (heavy ones after `waitslot.sh`, `--maxWorkers=2`, foreground in this session's shell; times UTC from `date -u`
+around each command):
+- `npm run -s lint` → exit `0`, no output.
+- `npm run -s docs:api` → exit `0`.
+- `npm run -s typecheck` (both tsc configs) → exit `0` (slot wait 13:25:16 → 13:42:40, then the run).
+- `npm run -s build` → exit `0` (slot wait 13:43:10 → 14:18:58).
+- `npm test -- --maxWorkers=2` → `Test Suites: 588 passed, 588 total`, `Tests: 10861 passed, 10861 total`, exit `0`
+  (slot wait 14:46:43 → 15:13:21, run until 15:28:17). A first run started at 14:21:03 was cut by a session restart
+  before it printed a summary; it was re-run, not counted.
+- `npm run test:coverage -- --maxWorkers=2` → `Tests: 10861 passed, 10861 total`; `All files | 99.24 | 97.14 | 98.64 |
+  99.65` (statements, branches, functions, lines), exit `0` (slot wait 15:28:17 → 15:46:40, run until 16:03:26). The
+  coverage report covers `src/` only (`jest.config.js`), so the new script is measured by its suite, not by this table.
+- `docs.parity`: the `test/docs/` suites run inside `npm test` above (all passed). No CLI, help or `docs/` change
+  (`git diff --stat 0183d56f1 HEAD -- src docs/cli-reference.md docs/user-guide.md` → empty), so
+  `test/docs/cli-reference.test.ts` is owed nothing beyond that run.
+- AC 3's absence, re-read: `grep -l "check-phase-report" package.json .github/workflows/*.yml
+  .wingfoil/workflows/bindings.yaml` → no file, exit `1` (the suite's positive controls find `check-governance` and
+  `scripts/e2e-smoke.cjs` there).
+
+**Merge.** At the end of refactor `git rev-list --count HEAD..main` → `4` (the `dl-235` filing, one new decision-log
+file); `git merge --no-edit main` merged without a conflict, amended with the §7 trailers → `527e377ab`
+(`git rev-list --count HEAD..main` → `0`). The merge adds only
+`docs/04_memory/design/dls/dl-235-…` (`git diff --stat 6c5b4777d 527e377ab` → one file), which no gate above reads
+differently, so the gates were not re-run after it.
+
+### self-review (developer, 2026-11-09)
+
+- **AC 1** met: `report` checks the head sha, the branch, the listed commits against `git rev-list --first-parent
+  <base>..HEAD`, the §7–§8 trailers, the changed and uncommitted paths and the trace holds; one test per kind and the
+  clean case (`test/cli/check-phase-report.test.ts`, 54 passed above); exit `1` naming each mismatch, `0` clean, `2`
+  usage.
+- **AC 2** met: `plans` and the in-range rule (D6); the repository run above flags the four `bug-474` values at
+  `5ffc8f27c` and none at `HEAD`.
+- **AC 3** met: the suite is the unit tests (happy and error path of each kind); no CI gate or binding names the script
+  (grep above, with the suite's positive controls).
+- **AC 4**: the module-doc half is pinned by the example-extraction test (passed). The plan half is on
+  `design/dev_loop_v0.4`: `git show design/dev_loop_v0.4:docs/05_plans/rl-v1/rel-v0.4/dev-loop-rel-v0.4-plan.md | grep
+  -n "check-phase-report"` → line 203 (`node scripts/check-phase-report.cjs report --worktree <task worktree> …`); the
+  review reads it there.
+- **T4:** `git log --first-parent --no-merges --format=%h 6d00b50ff..HEAD -- scripts/check-phase-report.d.cts
+  scripts/check-governance.d.cts test/cli/check-phase-report.test.ts test/lint/git-log-readers.test.ts` → empty;
+  `git log --first-parent --no-merges --format='%h %s' 2d1e7904e..6d00b50ff -- <the same files>` → only
+  `6d00b50ff test(cli): task-344 — red correction: the full-id header carries its phase`, the qa's correction.
+- `code-quality`: one implementation of the §8 `WingFoil-*` rule (the export, D4); `determinism`: output sorted by
+  `MISMATCH_KINDS`, then report order, then code-unit path order; no wall clock (the window is `--since` or the base's
+  committer date); `security`: the script reads only, writes nothing, and prints no secret (trace records hold none).
+- Invisible characters: the prescribed `grep -nP` over the changed files → no hit (exit `1`) before each commit.
+- **Version bumps:** none — no file with a `version:` changed (`git diff --stat 0183d56f1 HEAD -- .wingfoil` → empty).
+
+### Decisions for the approver (review gate)
+
+- **R1 — the paths of the approver's commits.** `file-unclaimed`/`file-unchanged` leave out the paths of unlisted range
+  commits with an `Approver:` line (an amend the approver records during the phase would otherwise stop every report).
+  The design's table said "the range's first-parent commits", its report format "the phase's commits"; green reads the
+  latter, stated in the module doc.
+- **R2 — `trailer-paragraph` beyond `WingFoil-*`.** The reused governance function returns `WingFoil-*` keys only; the
+  script adds `Co-Authored-By:`/`AI-Model:` lines outside the final paragraph, as the design's table lists, with its
+  own two-line check rather than a change to `check-governance.cjs`.
+
+### Pending amendments (approver)
+
+- None from green or refactor. The design's pending amendment of `dev-loop-rel-v0.4-plan` stands as written above (the
+  plan holds the paragraph at line 203 of `design/dev_loop_v0.4`).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -421,3 +531,6 @@ the red changed. After it, with green's uncommitted script in the worktree: `npx
      printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
      Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
      here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+
+- T4 stop at green: a red test parsed a header without the `<phase>` token the ruled format requires; caught by the first targeted run (`Tests: 1 failed, 56 passed, 57 total`), fixed by the qa in `6d00b50ff`. Proposal: qa runs each parse fixture of a declared format against the format's grammar before the red commit.
+- A full-suite run was cut by a session restart (started 14:21:03 UTC, no summary printed) and re-run from the slot: about 25 minutes of slot time lost. Proposal: none beyond recording it.
