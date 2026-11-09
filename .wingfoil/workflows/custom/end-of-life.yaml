@@ -3,20 +3,30 @@
 name: end-of-life
 kind: sub
 description: >-
-  Retire the product (or a major line) at end of life: announce, deprecate active Memory and
+  Retire the product (or a major line) at end of life: announce, approve, deprecate active Memory and
   releases, and archive. Documents remain in the repo (agents ignore deprecated content).
-version: 1.1                     # 1.1 spec-003 alignment (task-199): deprecate acts on a selection — the closing release-line's unreleased releases (W_PHASE_ACTION_UNTARGETED; approver ruling 2026-10-07), git.commit takes a key: value argument
+version: 1.2                     # 1.2 task-351 (dl-186 Q3, software@1.0.0 adopted by hand, approver rulings D2, D3 (a), D4): announce adds the decision-log tagged end-of-life without an approval and declares it as produces { type: decision-log, path }; a new phase approve, the pack's, rules it (approver, fallback announce); no phase renamed, deprecate and archive unchanged (prev 1.1 spec-003 alignment (task-199): deprecate acts on a selection — the closing release-line's unreleased releases (W_PHASE_ACTION_UNTARGETED; approver ruling 2026-10-07), git.commit takes a key: value argument)
 
 phases:
   - name: announce
-    description: "Record the end-of-life decision and timeline."
+    description: "Record the end-of-life decision and timeline as a decision-log tagged end-of-life, submitted for discussion: pass --tags end-of-life to memory add, since the approve phase selects the decision-log by that tag."
     role: product-owner
     actions:
-      - 'memory.add(type: decision-log, title: "End-of-life plan")'
+      - 'memory.add(type: decision-log, title: "End-of-life plan", tags: [end-of-life])'
       - memory.submit
+    produces:
+      - { type: decision-log, path: "docs/04_memory/design/dls/{id}.md" }
     checks:
       post: ["frontmatter.required: [title]"]   # title always set by action above
+
+  - name: approve
+    description: "The approver rules the announcement; a reject goes back to announce."
+    role: approver
+    where: { type: decision-log, status: [in-discussion], tags: [end-of-life] }
+    actions:
+      - memory.approve                          # decision-log: in-discussion -> ready
     approval: { by_role: approver }
+    fallback: { step: announce }
 
   - name: deprecate
     description: "Deprecate the releases of the release-line being closed that are not yet released."
