@@ -404,6 +404,16 @@ A dry run of the fixture's git mechanics in a scratch directory outside the work
   unlisted range commits are read for trailers; `commit-outside` lists the base commit, which carries the §7 paragraph,
   so it raises no trailer mismatch either.
 
+#### red correction (qa, 2026-11-09)
+
+Green stopped on T4: the test "accepts the full task id in the header" parsed `REPORT task-344-check-a-delegated-phase-report
+head=bddc04c`, a header without the `<phase>` token, which the ruled format `REPORT <task> <phase> head=<sha>` makes a
+format error. Correction (orchestrator ruling (a)), commit `6d00b50ff`: the header now carries a phase,
+`REPORT task-344-check-a-delegated-phase-report red head=bddc04c`; the assertion on `.task` is unchanged. Nothing else in
+the red changed. After it, with green's uncommitted script in the worktree: `npx tsc --noEmit -p tsconfig.json` → exit
+`0`; `npx jest test/cli/check-phase-report.test.ts --maxWorkers=2` → `Test Suites: 1 passed, 1 total`,
+`Tests: 54 passed, 54 total` (the count of 53 above was one short; jest counts 54).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
