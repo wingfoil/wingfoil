@@ -274,6 +274,99 @@ the placeholder `<H2>` for `session.field`, replaced with H2's key before the ap
 **Candidate findings (not filed).** None beyond what the amendments resolve (`bug-340`'s citation of rules §4.9 and
 §7.10 never stated, D5).
 
+### design addendum (architect, 2026-11-09)
+
+**Rulings (approver, 2026-11-09), in effect when the design gate is recorded:** D1 (a), with D1.2 yes and D1.3 yes;
+D2 (a); D3 as stated; D4 (a); D5 yes; D6 yes; D7 accepted. Each is the recommendation of `### design`.
+
+**H1 and H2, run by the approver by hand** (agents launch no agent CLI). The raw outputs stay outside the repository;
+the commands and outputs below are as the approver reported them. `codex --version` → `codex-cli 0.145.0`.
+
+*H1 — the conflict probe.* A scratch project (`git init`) whose `.codex/config.toml` declares
+`[mcp_servers.wingfoil] command = "codex" args = ["mcp-server"] env = { PROBE_FROM = "project" }`. Each case ran with an
+isolated, empty `CODEX_HOME`.
+- (a) Untrusted: `codex mcp get wingfoil` → `Error: No MCP server named 'wingfoil' found.`, exit `1`.
+- (b) Trusted (`[projects."<project>"] trust_level = "trusted"` written into the isolated home's `config.toml`):
+  `codex mcp get wingfoil` → exit `0`, printing:
+  ```
+  wingfoil
+    enabled: true
+    transport: stdio
+    command: codex
+    args: mcp-server
+    cwd: -
+    env: PROBE_FROM=*****
+    remove: codex mcp remove wingfoil
+  ```
+- (c) Trusted, with an override: `codex -c 'mcp_servers.wingfoil={command="codex",args=["mcp-server"],env={}}' mcp get
+  wingfoil` → exit `0` and the same output, `env: PROBE_FROM=*****` included. A nested table the override sets merges
+  too: `env = {}` does not clear the project's `env`. D1 (b) could not have held.
+- (d) An empty directory with an empty isolated home → `Error: No MCP server named 'wingfoil' found.`, exit `1`.
+- (e) An empty directory under the approver's real home, read-only → the same error, exit `1`. Whether a user-level
+  `wingfoil` table in `~/.codex/config.toml` merges the same way is still not observed: that home declares none.
+
+So `[mcp, get, wingfoil]` exits `0` exactly when Codex would load a `wingfoil` table, and `1` otherwise. The probe
+needs neither the override nor any output parsing. Only the exit status is read, never stdout, which prints the
+names of `env` keys, masked.
+
+*H2 — the session id of a headless run.* Two earlier attempts failed for reasons outside the design. In a directory
+that is not a git repository: stderr `Not inside a trusted directory and --skip-git-repo-check was not specified.`,
+exit `1`, no events. In a git repository without `.wingfoil/`: `required MCP servers failed to initialize: wingfoil:
+handshaking with MCP server failed: connection closed: initialize response`, because `wingfoil mcp` exits
+`error: WingFoil not initialized` there; `required = true` in the adapter's template then stopped the run, as intended.
+The run that counts used a fresh `git init` plus `wingfoil init --template Scrum`: `codex exec --json -c
+'mcp_servers.wingfoil={command = "node", args = ["<a build>/dist/cli.js", "mcp"], enabled = true, required = true}'
+"Reply with the word ok." < /dev/null > events.jsonl 2> events.err` → exit `0`. `events.jsonl`, all four lines verbatim:
+```
+{"type":"thread.started","thread_id":"01a1bf53-dcb5-7902-b518-2286ea29c38c"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"ok"}}
+{"type":"turn.completed","usage":{"input_tokens":14803,"cached_input_tokens":0,"cache_write_input_tokens":0,"output_tokens":5,"reasoning_output_tokens":0}}
+```
+`events.err` holds only `Reading additional input from stdin...` and one Codex-internal `ERROR
+codex_models_manager::cache: failed to load models cache: missing field` line about `base_instructions`. With `--json`
+there is **no** `session id:` line on stderr. Then `codex exec resume 01a1bf53-dcb5-7902-b518-2286ea29c38c "Reply with
+the word again." < /dev/null` → exit `0`, stdout `again`, and stderr containing `session id:
+01a1bf53-dcb5-7902-b518-2286ea29c38c`: resume accepts the id.
+
+**Consequences.**
+- `session.field` for `codex-cli` is `thread_id`. It is a top-level key of the first event (`type`
+  `thread.started`). `readJsonPath` (`src/agent/launch.ts`, dotted path over plain objects) reads a top-level key as it
+  is, so the `jsonl` reader of `### design` is enough as specified: lines in order, each parsed alone, and the first
+  line whose value carries a non-empty string at `session.field` gives the id. Lines that are not JSON or lack the
+  field are passed over. Nothing needs to filter on `type`.
+- With `--json`, stderr carries no session id, so stdout is the only source. That confirms D2 (a) over a stderr pattern.
+- Resume works by id (`codex exec resume <id>`), but `resume.supported` stays `false` for `codex-cli` (D3: no `w0` task
+  ships `spec-016` §7's `--resume`). The bug filed at review for the resume half can cite this run: its args would be
+  `[exec, resume, "{session_id}"]` for a headless resume, read from this run only.
+- For `task-337`, as a pointer and outside this task's scope: at `0.145.0` the `turn.completed` event carries `usage`
+  with `input_tokens`, `cached_input_tokens`, `cache_write_input_tokens`, `output_tokens` and `reasoning_output_tokens`.
+  No event carries the model.
+- No AC changes and no ruling changes: H1 confirms D1 (a)'s probe semantics and rules out (b); H2 gives D2 (a) its key.
+  AC 2's red pins use `thread_id` wherever `### design` wrote "the H2 key".
+
+**AC 2 fixture source for red.** The four `events.jsonl` lines above, copied verbatim, are the stdout the injected child
+writes in `test/agent/launch-session-output.test.ts`. Expected record `session`:
+`01a1bf53-dcb5-7902-b518-2286ea29c38c`. For the "no id" case, the same lines without the first one → `not-reported` and
+the warning. The built-in pin: `session.field` `'thread_id'`.
+
+**The amendments, updated** (still uncommitted). `spec-016` §2.8 has `session.field: thread_id` (the placeholder is
+gone; `grep -c "<H2>"` on the spec → `0`). §2.5 records the 2026-11-09 observations: the nested `env = {}` merges, the
+probe exits `0` for a trusted table and `1` otherwise, and the user-level case is not observed. Its Revision note
+names both observation dates and the `thread_id` key. `test/docs/name-resolvability.allowlist.ts` gains a third entry,
+`thread.started` (config class, an external Codex event type quoted as observed). The `--reason` texts of
+`### Pending amendments (approver)` are unchanged except `spec-016`'s, which now reads: `--reason "Record that Codex's
+-c override merges with a same-named table, a nested env table included, and refuse a launch while the agent's
+configuration declares a wingfoil server (bug-372); read a headless run's session id from its stdout and record
+codex-cli's from the thread_id of codex exec --json (bug-375); resolve an unscoped --step key (bug-468); sections 2.2,
+2.5, 2.6, 2.8, 3.1, 3.2, 3.3, 3.5 and 3.7, task-356."`
+
+**Gates re-run with the amendments in the working tree** (targeted, a few doc files: no slot):
+`npx jest --maxWorkers=2 test/docs/x-cli-cmds-citations test/docs/mcp-surface-parity test/docs/dry-run-documented
+test/docs/exit-codes-parity test/docs/enumeration-parity test/docs/memory-types-parity test/docs/commands-parity
+test/docs/name-resolvability`. The first run failed once: `spec-016…|config|thread.started` was unlisted. After the
+entry, and its move into sorted order: `Test Suites: 8 passed, 8 total`, `Tests: 35 passed, 35 total`.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
