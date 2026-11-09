@@ -28,11 +28,14 @@
  *    warnings, in their order), then the documents the builder could not read (`W_MEMORY_UNREADABLE`,
  *    task-171's handover) — through the warning sink, so the CLI renders each one at once, before the
  *    pre-flight. The builder's `notes` (`spec-012` §3: the DNA note, P5.3.3 sc. 3's "no relevant
- *    Memory") are not warnings and are not printed: they reach the agent with the Prompt (task-195).
+ *    Memory") are not warnings and are not printed: they reach the agent inside the session context, the
+ *    session Resource (task-195, task-355).
  * 9. The run id (§4.3, `nextRunId`).
- * 10. The bootstrap (§2.4) and the temporary files (§2.3), in the OS temporary directory
- *    ({@link withRunFiles}), removed on every exit path.
- * 11. The MCP pre-flight against the running build ({@link mcpPreflight}, §2.5).
+ * 10. The bootstrap (§2.4), `mcp.template` rendered once ({@link renderMcpTemplate}: a command or argument
+ *    with an unpaired surrogate refused, a dry run included, task-355) and the temporary files (§2.3), in
+ *    the OS temporary directory ({@link withRunFiles}), removed on every exit path.
+ * 11. The MCP pre-flight against the running build ({@link mcpPreflight}, §2.5): `initialize`, then the
+ *    session Resource the bootstrap names, the one carrier read (task-355, `bug-376`).
  * 12. The terminal check, last, so every earlier refusal is reachable without a terminal; an interactive
  *    launch only. A dry run, which spawns nothing, prints a warning there instead of refusing (`bug-392`).
  *
@@ -212,17 +215,53 @@ export function runningBuildMcpServer(): McpServerCommand {
 /** `mcp.template`'s placeholder tokens: the narrow class, so JSON braces are left alone (§2.3). */
 const TEMPLATE_TOKEN_RE = /\{([a-z][a-z0-9_]*)\}/g;
 
+/** The first code unit of `text` that is half of no surrogate pair, or `undefined` when there is none. */
+function firstUnpairedSurrogate(text: string): number | undefined {
+  for (let i = 0; i < text.length; i += 1) {
+    const unit = text.charCodeAt(i);
+    if (unit >= 0xd800 && unit <= 0xdbff) {
+      const next = i + 1 < text.length ? text.charCodeAt(i + 1) : 0;
+      if (next >= 0xdc00 && next <= 0xdfff) i += 1;
+      else return unit;
+    } else if (unit >= 0xdc00 && unit <= 0xdfff) {
+      return unit;
+    }
+  }
+  return undefined;
+}
+
+/** JSON text with every U+007F written as `\u007f`: TOML's basic string forbids it raw, JSON leaves it so (§2.3). */
+function jsonForTemplate(value: string | readonly string[]): string {
+  return JSON.stringify(value).replace(/\u007f/g, '\\u007f');
+}
+
 /**
  * Render `mcp.template` (§2.3): `{mcp_command}` becomes the executable as JSON string content (the
  * template quotes it; a quote or a backslash in the path stays valid), `{mcp_args}` the argv as a JSON
- * array. The manifest validator admits no other placeholder there, so any other token is left as is.
+ * array, every U+007F written as the escape `\u007f` in both, so the text is valid JSON and valid TOML
+ * (task-355, `bug-371`). The manifest validator admits no other placeholder there, so any other token is
+ * left as is.
+ *
+ * @returns The rendered text, or `VALIDATION` when the command or an argument holds an unpaired surrogate,
+ *   which neither JSON nor TOML can carry (§3.7): `mcp.template cannot carry the MCP server's command: it
+ *   holds an unpaired surrogate (U+D800)`, or `… the MCP server's argument <n>: …` with `<n>` from 1.
  */
-export function renderMcpTemplate(template: string, server: McpServerCommand): string {
-  return template.replace(TEMPLATE_TOKEN_RE, (token: string, name: string) => {
-    if (name === 'mcp_command') return JSON.stringify(server.command).slice(1, -1);
-    if (name === 'mcp_args') return JSON.stringify(server.args);
-    return token;
-  });
+export function renderMcpTemplate(template: string, server: McpServerCommand): CoreResult<string> {
+  const carried: [string, string][] = [['command', server.command], ...server.args.map((arg, index): [string, string] => [`argument ${index + 1}`, arg])];
+  for (const [what, value] of carried) {
+    const unit = firstUnpairedSurrogate(value);
+    if (unit !== undefined) {
+      const hex = unit.toString(16).toUpperCase().padStart(4, '0');
+      return coreErr({ code: 'VALIDATION', message: `mcp.template cannot carry the MCP server's ${what}: it holds an unpaired surrogate (U+${hex})` });
+    }
+  }
+  return coreOk(
+    template.replace(TEMPLATE_TOKEN_RE, (token: string, name: string) => {
+      if (name === 'mcp_command') return jsonForTemplate(server.command).slice(1, -1);
+      if (name === 'mcp_args') return jsonForTemplate(server.args);
+      return token;
+    }),
+  );
 }
 
 /** The temporary files a launch may need (§2.3), by the placeholder that names each one's path. */
@@ -348,14 +387,15 @@ export interface McpPreflightInput {
 }
 
 /**
- * §3.3 step 11: start the server, complete MCP `initialize`, get the `{role}-session` Prompt with
- * `element` and `state`, read the session Resource the bootstrap names (§2.4, task-236), and close. The
- * project's own registration (`.mcp.json`) is not read (§2.5). Any failure — the server does not start,
- * exits, refuses the Prompt or the Resource, returns no text, or exceeds `timeoutMs` — is `IO` with
- * P5.4.3 sc. 3's message verbatim, its cause as a `dl-055` detail line with the project root removed.
+ * §3.3 step 11: start the server, complete MCP `initialize`, read the session Resource the bootstrap names
+ * (§2.4, task-236), and close. The project's own registration (`.mcp.json`) is not read (§2.5). Any
+ * failure — the server does not start, exits, refuses the Resource, returns no text, or exceeds
+ * `timeoutMs` — is `IO` with P5.4.3 sc. 3's message verbatim, its cause as a `dl-055` detail line with the
+ * project root removed.
  *
- * Both carriers are checked, the Prompt first: the agent reads the Resource, and the Prompt serves the same
- * text to a client that gets Prompts; one deadline covers the whole exchange.
+ * The Resource is the one carrier checked, the one the agent reads: the `{role}-session` Prompt serves the
+ * same text from the same builder and is not fetched, so the context is assembled once per pre-flight
+ * (task-355, `bug-376`). One deadline covers the whole exchange.
  */
 export async function mcpPreflight(input: McpPreflightInput): Promise<CoreResult<undefined>> {
   const env = Object.fromEntries(Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined));
@@ -373,14 +413,6 @@ export async function mcpPreflight(input: McpPreflightInput): Promise<CoreResult
   });
   const exchange = async (): Promise<void> => {
     await client.connect(transport, { timeout: input.timeoutMs });
-    const prompt = await client.getPrompt(
-      { name: `${input.role}-session`, arguments: { element: input.element, state: input.stateRef } },
-      { timeout: input.timeoutMs },
-    );
-    const content = prompt.messages[0]?.content;
-    if (content === undefined || content.type !== 'text' || content.text === '') {
-      throw new Error(`the ${input.role}-session prompt returned no context text`);
-    }
     // task-236: the Resource the bootstrap names — what the agent will actually read.
     const uri = sessionContextUri(input.role, input.element, input.stateRef);
     const resource = await client.readResource({ uri }, { timeout: input.timeoutMs });
@@ -671,7 +703,7 @@ async function runPipeline<T>(
   // `details.unreadable` cannot arise here; its refusals pass through as they are.
   if (!assembled.ok) return assembled;
 
-  // Step 8 — its warnings, before the pre-flight (dl-050 option 4); the notes reach the agent with the Prompt.
+  // Step 8 — its warnings, before the pre-flight (dl-050 option 4); the notes reach the agent inside the session Resource.
   for (const warning of [...assembled.value.context.warnings, ...(assembled.warnings ?? [])]) {
     reportWarning(warning);
   }
@@ -694,12 +726,20 @@ async function runPipeline<T>(
     agent: { name: agent.value.name, email: agent.value.email ?? '' },
   });
   const mcpServer = host.mcpServer ?? runningBuildMcpServer();
+  // `mcp.template` rendered once, before anything is written or spawned: a command or argument it cannot carry
+  // is refused here, a dry run included (§3.3 step 10, §3.7; task-355, bug-371).
+  let rendered: string | undefined;
+  if (manifest.mcp.via === 'config-file' || manifest.mcp.via === 'config-arg') {
+    const template = renderMcpTemplate(manifest.mcp.template!, mcpServer);
+    if (!template.ok) return template;
+    rendered = template.value;
+  }
   const files: Partial<Record<RunFileName, string>> = {
     ...(manifest.prompt.via === 'file' ? { bootstrap_file: bootstrap } : {}),
-    ...(manifest.mcp.via === 'config-file' ? { mcp_config_file: renderMcpTemplate(manifest.mcp.template!, mcpServer) } : {}),
+    ...(manifest.mcp.via === 'config-file' && rendered !== undefined ? { mcp_config_file: rendered } : {}),
   };
   // Under `config-arg` the rendered template is not a file but one whole argv element (§2.3 `{mcp_config}`).
-  const mcpConfig = manifest.mcp.via === 'config-arg' ? renderMcpTemplate(manifest.mcp.template!, mcpServer) : undefined;
+  const mcpConfig = manifest.mcp.via === 'config-arg' ? rendered : undefined;
 
   return withRunFiles(files, async (paths, releaseSignals) => {
     // Step 11 — the MCP pre-flight.

@@ -9,8 +9,14 @@
  * - the spawn options: headless → stdin the null device, stdout piped (and drained), stderr inherited, the child
  *   in a session and process group of its own on POSIX (`detached`); interactive → stdio inherited, as before;
  * - the signals: headless forwards `SIGINT`, `SIGTERM` and `SIGHUP` and ignores `SIGQUIT`; the interactive sets
- *   stay `launch-process.test.ts`'s (`SIGINT`/`SIGQUIT` ignored, `SIGTERM`/`SIGHUP` forwarded);
+ *   are `launch-process.test.ts`'s (`SIGINT`/`SIGQUIT`/`SIGHUP` ignored, `SIGTERM` forwarded: task-355, `bug-318`);
  * - the record: `result: 'n/a'`, `exit_status: 0` (`dl-181` Q1 (a)).
+ *
+ * task-355 AC 5 (red-first, `bug-516`; `spec-016` §3.3 step 15; approver ruling D2 (a)) — on POSIX a headless
+ * agent with a pid is signalled through `LaunchHost.signalGroup(pid, signal)`, its whole process group, and once
+ * it has exited after a signal reached it, the group gets one `SIGKILL` (the sweep); an agent that exits by
+ * itself gets no call, and the interactive kind keeps `child.kill`. The recorder below stands in for
+ * `process.kill(-pgid, signal)`: it records each call and passes the signal to the `FakeChild` while it runs.
  */
 import { launchAgent, renderLaunchArgv, type AdapterManifest, type LaunchInput, type LaunchValues } from '../../src/agent';
 import type { CoreResult } from '../../src/core/types';
@@ -132,5 +138,89 @@ describe('task-335 AC 4 — a headless run forwards SIGINT, SIGTERM and SIGHUP a
     const outcome = await settle(child, run);
     expect(killed).toEqual([signal]);
     expect(outcome.ok ? 'ok' : outcome.error.message).toBe(`agent exited signal:${signal}; run ${input.runId} recorded`);
+  }, 60000);
+});
+
+/** One armed timer of the time bound: its delay and the callback the test fires (`launch-timeout.test.ts`'s recorder). */
+interface Armed {
+  readonly delayMs: number;
+  readonly fire: () => void;
+}
+
+/** A headless or interactive launch of `child` (pid 4242), with `signalGroup` and the timers recorded. */
+function grouped(kind: 'interactive' | 'headless', child: FakeChild, timeout?: { ms: number; label: string }) {
+  const { root, input } = fixture(kind);
+  const { spawn } = spawnInto(child);
+  const calls: [number, NodeJS.Signals][] = [];
+  const signalGroup = (pgid: number, signal: NodeJS.Signals): void => {
+    calls.push([pgid, signal]);
+    if (child.running) child.kill(signal);
+  };
+  const armed: Armed[] = [];
+  const timer = (delayMs: number, fire: () => void): (() => void) => {
+    armed.push({ delayMs, fire });
+    return () => undefined;
+  };
+  const launchInput: LaunchInput = { ...input, ...(timeout === undefined ? {} : { timeout }) };
+  const run: Promise<CoreResult<unknown>> = withNoticeSink(
+    () => undefined,
+    () => withWarningSink(() => undefined, () => launchAgent(root, launchInput, { spawn, timer, signalGroup }, () => undefined)),
+  );
+  return { input: launchInput, calls, armed, run };
+}
+
+describe('task-355 AC 5 — a headless run signals the agent\'s process group, and sweeps it after a signalled exit (bug-516, spec-016 §3.3 step 15)', () => {
+  (POSIX ? it : it.skip)('a forwarded SIGTERM goes to the group, then one SIGKILL to what is left of it once the agent has exited', async () => {
+    const child = new FakeChild({}, 4242);
+    const { input, calls, run } = grouped('headless', child);
+    await tick();
+    process.emit('SIGTERM', 'SIGTERM');
+    await tick();
+    const outcome = await settle(child, run);
+    expect(calls).toEqual([
+      [4242, 'SIGTERM'],
+      [4242, 'SIGKILL'],
+    ]);
+    expect(child.killed).toEqual(['SIGTERM']);
+    expect(outcome.ok ? 'ok' : outcome.error.message).toBe(`agent exited signal:SIGTERM; run ${input.runId} recorded`);
+  }, 60000);
+
+  (POSIX ? it : it.skip)("the time bound's SIGTERM and grace SIGKILL go to the group, then the sweep's SIGKILL", async () => {
+    const child = new FakeChild({ SIGTERM: 'ignore' }, 4242);
+    const { input, calls, armed, run } = grouped('headless', child, { ms: 300000, label: '5m' });
+    await tick();
+    armed[0]?.fire();
+    await tick();
+    armed[1]?.fire();
+    await tick();
+    const outcome = await settle(child, run);
+    expect(calls).toEqual([
+      [4242, 'SIGTERM'],
+      [4242, 'SIGKILL'],
+      [4242, 'SIGKILL'],
+    ]);
+    expect(outcome.ok ? 'ok' : outcome.error.message).toBe(`agent timed out after 5m; run ${input.runId} recorded`);
+  }, 60000);
+
+  (POSIX ? it : it.skip)('an agent that exits by itself: no group signal, no sweep', async () => {
+    const child = new FakeChild({}, 4242);
+    const { calls, run } = grouped('headless', child);
+    await tick();
+    child.finish(0);
+    const outcome = await run;
+    expect(calls).toEqual([]);
+    expect(outcome.ok).toBe(true);
+  }, 60000);
+
+  (POSIX ? it : it.skip)('interactive, with a pid: no group signal, the agent itself gets the SIGTERM (characterization)', async () => {
+    const child = new FakeChild({}, 4242);
+    const { input, calls, run } = grouped('interactive', child);
+    await tick();
+    process.emit('SIGTERM', 'SIGTERM');
+    await tick();
+    const outcome = await settle(child, run);
+    expect(calls).toEqual([]);
+    expect(child.killed).toEqual(['SIGTERM']);
+    expect(outcome.ok ? 'ok' : outcome.error.message).toBe(`agent exited signal:SIGTERM; run ${input.runId} recorded`);
   }, 60000);
 });

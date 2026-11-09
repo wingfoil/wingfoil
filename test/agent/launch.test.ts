@@ -115,7 +115,7 @@ describe('task-237 (h) — {mcp_config} renders as exactly ONE argv element (mcp
 
   it('renderMcpTemplate fills a TOML template as it fills JSON: {mcp_command} as string content, {mcp_args} as an array (characterization)', () => {
     const rendered = renderMcpTemplate('x={command = "{mcp_command}", args = {mcp_args}}', { command: '/a b/node', args: ['/c"d/cli.js', 'mcp'] });
-    expect(rendered).toBe('x={command = "/a b/node", args = ["/c\\"d/cli.js","mcp"]}');
+    expect(rendered).toEqual({ ok: true, value: 'x={command = "/a b/node", args = ["/c\\"d/cli.js","mcp"]}' });
   });
 });
 
