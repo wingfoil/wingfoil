@@ -5,7 +5,7 @@
 name: decision-log-ingest
 kind: main
 description: Capture a single product/process decision (decision-log) into Memory.
-version: 1.1                     # 1.1 capture points at the traceability directive's filing rule (dl-118 (B), task-197)
+version: 1.2                     # 1.2 task-351 (dl-186 Q3, base@2.0.1 adopted by hand, approver rulings D2, D3 (a)): capture declares its produces in the pack's typed form { type: decision-log, path }, the {id} token; no phase, step or action changes (prev 1.1 capture points at the traceability directive's filing rule (dl-118 (B), task-197))
 # No fixed `element:` — started standalone this main creates a top-level decision-log. When invoked
 # while another workflow with an active `element` context is running, the created Memory file inherits
 # that element (e.g. a decision-log recorded during a release inherits the active `release`).
@@ -17,7 +17,7 @@ phases:
       - 'memory.add(type: decision-log)'
       - memory.submit
     produces:
-      - "docs/04_memory/design/dls/{id}.md"
+      - { type: decision-log, path: "docs/04_memory/design/dls/{id}.md" }
     checks:
       post: ["frontmatter.required: [title]"]
 
