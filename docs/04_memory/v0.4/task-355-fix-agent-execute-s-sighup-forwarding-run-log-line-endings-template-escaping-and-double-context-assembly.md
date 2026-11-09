@@ -394,6 +394,15 @@ each time; the heavy-gate lock printed no wait line).
   configs) → exit `0`, no output.
 - Invisible characters: the scan of the changed files for the C1/format range and a raw U+007F → no hit.
 
+**Merges of `main` (W0-R3).** After the notes commit `d8c5cbf08`, `git rev-list --count HEAD..main` → `47`:
+`git merge --no-edit main` → `926787ba9`, no conflict (`task-346`, `task-347` and their follow-ups; `git diff
+--name-only d8c5cbf08 926787ba9` → 35 files, none under `src/agent/`). Then, after `bash waitslot.sh` (rc `0`,
+nothing printed), `npm run -s build` → exit `0` and `npm test -- --maxWorkers=2` (09:46–10:08) → `Test Suites: 587
+passed, 587 total`, `Tests: 10804 passed, 10804 total`; `ps -eo pid,args | grep setInterval | grep -v grep` → no
+output. `main` had moved again (`11`, the bug filings `bug-519`, `bug-520`, `bug-521` only: `git diff --name-only
+HEAD...main` → three files under `docs/04_memory/bugs/`): `git merge --no-edit main` → `fe9ca7427`, no conflict,
+no gate re-run (no code, test or document a gate reads changed).
+
 **T4.** `git log --first-parent --no-merges --format=%h 2c7cb668b..HEAD -- $(git show --name-only --format=
 2c7cb668b)` → empty: no file the red commit added or changed was touched.
 
