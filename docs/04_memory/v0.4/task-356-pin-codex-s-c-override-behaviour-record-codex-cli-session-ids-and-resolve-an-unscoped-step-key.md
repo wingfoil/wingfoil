@@ -367,6 +367,77 @@ test/docs/exit-codes-parity test/docs/enumeration-parity test/docs/memory-types-
 test/docs/name-resolvability`. The first run failed once: `spec-016…|config|thread.started` was unlisted. After the
 entry, and its move into sorted order: `Test Suites: 8 passed, 8 total`, `Tests: 35 passed, 35 total`.
 
+### red (qa, 2026-11-09)
+
+**Start.** The task's PATH shim was checked first: `command -v wingfoil` → the shim; `wingfoil --version` and
+`node dist/cli.js --version` → both `0.3.2 (5ac199b9b4a66d4ac3eacb66a37601513c07f609)`. `git rev-list --count HEAD..main`
+→ `99`, so `git merge --no-edit main` first: it conflicted only in the tail Revision lists of `spec-008`, `spec-016`
+and `spec-017` (`task-346`'s and `task-355`'s entries against this task's), resolved by keeping every entry, main's
+first; no spec body conflicted. Merge commit `32f916f366c17ed7ce607b4647f512c48ede4874` (`git rev-parse HEAD` after the
+trailer amend). The design's existing-tests measure re-run after the merge, the heavy-gate slot first (`dl-170`):
+`npx jest --maxWorkers=2 test/agent test/storage/builtin-adapter test/core/agent-execute test/core/step-refusal-frontier
+test/core/memory-add-workflow-link test/core/workflow-adopt test/core/workflow-finalize test/core/init-builtin-adapters
+test/core/builtin-adapter-writers test/cli/agent-execute test/cli/workflow-finalize test/cli/workflow-adopt
+test/cli/memory-add` → `Test Suites: 57 passed, 57 total`, `Tests: 807 passed, 807 total` (design: 54 / 785). Nothing
+fails; the three more suites are `task-355`'s, merged from main (`test/agent/launch-group-errors.test.ts`,
+`test/cli/agent-execute-process-group.integration.test.ts`, `test/cli/agent-execute-signals.integration.test.ts`).
+
+**Red commit:** `606a69e0965b09d9a96268fc861444cc0b886ac2` (tests, fixtures and the fake agent only; `git show --stat`
+→ 14 files under `test/`).
+
+**Files.** New: `test/core/workflow-step-key.test.ts`, `test/core/step-key-unscoped.test.ts`,
+`test/agent/manifest-conflict-args.test.ts`, `test/agent/execute-mcp-conflict.test.ts`,
+`test/agent/launch-session-output.test.ts`, `test/cli/agent-execute-session-output.integration.test.ts`,
+`test/fixtures/agents/config-arg/fake-conflict.yaml`, `test/fixtures/agents/custom/fake-session-output.yaml`. Changed:
+`test/fixtures/agents/fake-agent.cjs` (`--mcp-get <name>`, `WINGFOIL_FAKE_AGENT_MCP_GET=0|1|hang`, default `1`; exit 1
+prints `Error: No MCP server named '<name>' found.`, H1's text), `test/agent/manifest.test.ts`,
+`test/storage/builtin-adapter-codex-cli.test.ts`, `test/cli/workflow-finalize.integration.test.ts` (one `describe`
+added each), and two changed assertions:
+- `test/storage/builtin-adapters-headless.test.ts`: the per-adapter `output` is now `none` for `claude-code` and
+  `jsonl` for `codex-cli` (the design allowed qa to make this change in red);
+- `test/agent/fake-agent.test.ts`: the schema walk counts 27 leaves (`mcp.conflict_args`), and `custom/fake.yaml` is
+  not required to declare `mcp.conflict_args`. Not named in the design: declared in `fake.yaml`, the probe would run
+  before every fake launch and add a record line ahead of the launch's, which every suite that reads `fake[0]` as the
+  launch relies on; `config-arg/fake-conflict.yaml` declares it instead.
+
+**Per AC.**
+
+| AC | Class | Tests (file › test) | Red evidence (first failing assertion) |
+|---|---|---|---|
+| 1 (a) | red-first | `manifest-conflict-args.test.ts`: accepted and parsed; empty list refused at `mcp.conflict_args`; `{bootstrap}`, `{mcp_config_file}`, `{session_id}`, `{mcp_command}` each `E_ADAPTER_PLACEHOLDER` at `mcp.conflict_args.2`; an unknown placeholder refused. "absent → none" passes (characterization) | `expect(issuesOf(manifest)).toEqual([])` receives `E_VALIDATION` `Unrecognized key: "conflict_args"` at `mcp`; the placeholder cases receive `{ code: E_VALIDATION, path: mcp }` |
+| 1 (b) | red-first | `execute-mcp-conflict.test.ts`: probe exit 0 → `CONFLICT` + the §3.7 message, `details.adapter`, probe recorded once, nothing launched or committed; exit 1 → launched; `hang` → one warning with the adapter and `timed out`, launched; dry run refused the same way; no git identity + exit 0 → the conflict | every case: `expect(result).toEqual(…)` receives `VALIDATION` `mcp: Unrecognized key: "conflict_args"` (the adapter is refused at load) |
+| 1 (c) | red-first | `builtin-adapter-codex-cli.test.ts` › `AC 1 (c): codex-cli declares mcp.conflict_args [mcp, get, wingfoil]; claude-code declares none` | `Expected: ["mcp", "get", "wingfoil"]`, `Received: undefined` |
+| 2 (a) | red-first | `manifest.test.ts` › `jsonl is accepted, beside json and none` | `expect(issuesOf(manifest)).toEqual([])` receives the enum issue at `launch.headless.output` |
+| 2 (b) | red-first | `launch-session-output.test.ts`: H2 events → `01a1bf53-dcb5-7902-b518-2286ea29c38c`; a non-JSON line first, passed over; without the first event → `not-reported` + the warning; `json` document → `s-1`; invalid JSON → `not-reported` + a warning. Interactive → `not-reported`, no warning: passes (characterization) | `Expected: "01a1bf53-dcb5-7902-b518-2286ea29c38c"`, `Received: "not-reported"`; the warning cases `Expected [ "adapter 'hand': the headless output carries no session id: session recorded as not-reported" ]`, `Received []` |
+| 2 (c) | red-first | `agent-execute-session-output.integration.test.ts` › `stdout is { "run": <record> } … whose session is the id the agent printed`; "exits 0, no --session-id" passes | `expect(committed).toEqual([objectContaining({ session: 's-356-from-stdout' … })])` receives `"session": "not-reported"` |
+| 2 (d) | red-first | `builtin-adapter-codex-cli.test.ts`: headless argv `[exec, --json, -c, {mcp_config}, {bootstrap}]` and `output: jsonl`; `session.id: output`, `field: thread_id`, `resume.supported: false`; `builtin-adapters-headless.test.ts` › `codex-cli … output is jsonl` | `toEqual` of the argv receives it without `--json`; `Expected: "output"`, `Received: "none"`; `Expected: "jsonl"`, `Received: "none"` |
+| 3 | red-first | `workflow-step-key.test.ts` (9 tests: exact first, one, collection scope, many in frontier order, exact over unscoped, none, scoped off-frontier, empty, prefixes); `step-key-unscoped.test.ts`: one match at `resolveAddLink` (and `addLinkTrailers`), `selectFrontierStep`, `workflowFinalizeAtHead`, `workflowAdoptAtHead` → the full key; two matches → `step '<key>' names 2 steps of <instance>: give --step, one of: …`, `details { step, instance, steps }`, no commit; no match (`loop.review`, `gate.review`) and a scoped off-frontier key → each site's refusal with its `details` (these 8 and the two fixture checks pass: characterization); `workflow-finalize.integration.test.ts` › `exit 1, the CONFLICT line naming both steps` | `Cannot find module '../../src/core/workflow-step-key' from 'test/core/workflow-step-key.test.ts'` (tsc: TS2307); the one-match cases receive `step 'loop.implement' is not on the frontier of delivery-1` (`gate.confirm` … `checks-1`); the two-match cases receive the out-of-frontier message and `details.frontier`; CLI stderr `error: step 'gate.confirm' is not on the frontier of ck-1` |
+| 4 | characterization | no test (the amendments were recorded at the design gate) | — |
+
+The AC 3 fixtures are `seedStep` with a registry of their own (`delivery`/`loop`, whose `implement` adds a `bug`,
+and `checks`/`gate`, a checkpoint), two `backlog` tasks for the two-match case and the sibling in `draft` for the
+one-match case; the frontier keys are read back by the first test of each `describe`, and by
+`workflow next ck-1 --format json` on the compiled CLI in the integration test (both pass). The AC 2 (b) stdout is
+the four `events.jsonl` lines of the design addendum's H2 (the approver's `codex exec --json …` run of 2026-11-09,
+`codex-cli 0.145.0`), copied verbatim; its non-JSON line is H2's stderr line `Reading additional input from stdin...`,
+placed on stdout and said so in the test. The AC 1 (b) probe limit is set through `LaunchHost.lookupTimeoutMs`
+(1 s), the parameter the post-run lookups take; if the probe takes its 10 s from elsewhere the test still passes,
+only slower. `details.argv` of the refusal is pinned by containment (`--mcp-get`, `wingfoil`), since the design names
+`{ adapter, argv }` but not whether `argv` is the declared list or the command plus it.
+
+**Runs.** `npx jest --maxWorkers=2 test/core/workflow-step-key.test.ts test/core/step-key-unscoped.test.ts
+test/agent/manifest-conflict-args.test.ts test/agent/execute-mcp-conflict.test.ts test/agent/launch-session-output.test.ts
+test/agent/manifest.test.ts test/agent/fake-agent.test.ts test/storage/builtin-adapter-codex-cli.test.ts
+test/storage/builtin-adapters-headless.test.ts test/cli/agent-execute-session-output.integration.test.ts
+test/cli/workflow-finalize.integration.test.ts` → `Test Suites: 11 failed, 11 total`, `Tests: 33 failed, 175 passed,
+208 total`, plus `workflow-step-key.test.ts` failing to run (`Cannot find module`). Per file, failed: step-key-unscoped
+8, execute-mcp-conflict 5, manifest-conflict-args 7, launch-session-output 5, builtin-adapter-codex-cli 3, and 1 each
+in manifest, fake-agent, builtin-adapters-headless, agent-execute-session-output, workflow-finalize.integration.
+`npx tsc --noEmit -p tsconfig.json` → the one line `test/core/workflow-step-key.test.ts(16,36): error TS2307: Cannot
+find module '../../src/core/workflow-step-key' …`, the red the design names. `npx jest test/lint --maxWorkers=2` →
+`Tests: 1 failed, 160 passed, 161 total`; the one failure is `typecheck.clean`, whose output is that same TS2307 line
+and nothing else; it passes once green adds the module. The invisible-character grep over the changed files → no hit.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
