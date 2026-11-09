@@ -245,6 +245,79 @@ on each → `0`; `spec-016` has none, a tech-spec revises by its dated note); no
   (`paths.runs`), the second half of `bug-318` outside this repository. Expected: `init` adds `*.jsonl text eol=lf`,
   or the user guide says why not. Suggested severity: low.
 
+### red (qa, 2026-11-09)
+
+**Base.** Branch head `b4fb4bfa5` (`git rev-list --count HEAD..main` → `0`: no merge of `main`). The task's PATH shim
+checked first (`command -v wingfoil` → the shim; `wingfoil --version` and `node dist/cli.js --version` → `0.3.2
+(b4fb4bfa5…)`). Red commit: `2c7cb668b` (tests, fixtures and helpers only; `git show --stat 2c7cb668b` → eleven files
+under `test/`, none under `src/`, `scripts/` or the repository root).
+
+**Files.** Modified: `test/fixtures/agents/fake-agent.cjs` (`WINGFOIL_FAKE_AGENT_SIGNALS`, `WINGFOIL_FAKE_AGENT_CHILD`,
+`WINGFOIL_FAKE_AGENT_CHILD_TRAP` and the header list), `test/agent/helpers/fake-child.ts` (an optional `pid`, second
+constructor argument), `test/agent/launch-process.test.ts`, `test/agent/launch-headless.test.ts`,
+`test/agent/execute.test.ts`, `test/agent/launch.test.ts`, `test/agent/execute-config-arg.test.ts`. New:
+`test/cli/agent-execute-signals.integration.test.ts`, `test/cli/agent-execute-process-group.integration.test.ts`,
+`test/lint/gitattributes.test.ts`. **One file outside the design's red list:** `test/cli/helpers/spawn-cli.ts` gains
+`spawnCliLive(cwd, args, { env, detached })` (a running child of `dist/cli.js`, both streams captured, the end in a
+`closed` promise). The two new integration suites must signal a running `agent execute`, and
+`test/lint/cli-spawn-helper.test.ts` allows a local async `spawn(process.execPath, [CLI_ENTRY, …])` in
+`cli/agent-execute-launch.integration.test.ts` only; the helper file is the one place that gate exempts, so the live
+spawn goes there rather than weakening the gate or hiding the entry in a variable. No production file is touched:
+`.gitattributes` is not created.
+
+**Per-AC mapping** (the design's "Per-AC classification and what qa pins" table, row by row).
+
+| AC | Class | Tests | First failing assertion today |
+|----|-------|-------|-------------------------------|
+| 1 (a) | red-first | `launch-process.test.ts` "task-355 AC 1 — SIGINT, SIGQUIT and SIGHUP are ignored, SIGTERM forwarded, while an interactive agent runs (bug-318)" (rewrite of "SIGINT and SIGQUIT are ignored, SIGHUP forwarded, while the agent runs") | `expect(afterIgnored).toEqual([])` → `Received: ["SIGHUP"]` |
+| 1 (b) | red-first | `agent-execute-signals.integration.test.ts` "interactive: the group SIGHUP reaches the agent once, agent execute does not forward it; SIGTERM is forwarded" | `expect(run.signals).toEqual(['SIGHUP', 'SIGTERM'])` → received `SIGHUP`, `SIGHUP`, `SIGTERM` (three runs, each the same) |
+| 1 (b) | characterization | same file, "headless: SIGHUP and SIGTERM reach the agent once each, through agent execute (characterization)" | passes on first run |
+| 2 | red-first | `gitattributes.test.ts` ".gitattributes declares the line *.jsonl text eol=lf"; "git resolves text: set and eol: lf for a run record path" | `ENOENT: no such file or directory, open '<worktree>/.gitattributes'`; `git check-attr` → `docs/06_runs/probe.jsonl: text: unspecified` / `eol: unspecified` |
+| 2 | characterization | same file, "every committed *.jsonl is LF in the index (characterization)" | passes on first run (`git ls-files --eol -- '*.jsonl'` → one entry, `i/lf w/lf`) |
+| 3 | red-first | `execute.test.ts` describe `renderMcpTemplate (§2.3)`: the two existing cases re-read as a `CoreResult`; new describe "task-355 AC 3 — renderMcpTemplate escapes U+007F and refuses an unpaired surrogate": U+007F in the command, in an argument; unpaired high surrogate in the command, low in argument 1, `\udc00\ud800` (U+DC00 named); paired U+1F600 raw. `launch.test.ts` "renderMcpTemplate fills a TOML template …" and `execute-config-arg.test.ts` "hands the launch the rendered template as mcpConfig …" compare with `{ ok: true, value }`. `execute-config-arg.test.ts` new describe "task-355 AC 3 — an MCP server argument mcp.template cannot carry is refused at step 10": `config-arg` and `config-file`, each with and without `dryRun`, the server `args: ['/x\ud800/cli.js', 'mcp']` → `VALIDATION` "… argument 1: it holds an unpaired surrogate (U+D800)", the launch callback never reached | `renderMcpTemplate`: `expect(rendered.ok).toBe(true)` → `Received: undefined`; the others `Expected: {"ok": true, "value": …}` / `{"ok": false, "error": {…}}`, `Received:` the bare string (U+007F raw, the surrogates as `\ud800` / `\udc00` escapes); the pipeline: `Received` `code: "IO"`, `message: "context pre-load failed: MCP server unreachable"`, cause `MCP error -32000: Connection closed (server: Node.js v22.21.0)` |
+| 4 | red-first | `execute.test.ts` new describe "task-355 AC 4 — the pre-flight reads only the session Resource the bootstrap names": a stub answering `initialize` (capabilities `{ resources: {} }`) and `resources/read` (`text: 'context'`), refusing `prompts/get` with `-32601`, logging each method to `methods.log` → `{ ok: true, value: undefined }`, no `prompts/get` in the log | `expect(result).toEqual({ ok: true, value: undefined })` → `Received` `ok: false`, cause `MCP error -32601: Method not found` |
+| 4 | see below | the two stubs that answered only `prompts/get` now answer `resources/read` instead: "task-355 AC 4 — an empty contents list: MCP_UNREACHABLE naming the empty session resource" (`contents: []`) and "the MCP pre-flight has one deadline: initialize and the session Resource read share it" (1.5 s per answer, 2.5 s deadline) | the empty one fails today: `Expected: "the session resource wingfoil://session/developer/task:task-001-a/<SHA> returned no context text"`, `Received: "no answer within 20000 ms"` (today's pre-flight asks `prompts/get` first, which this stub no longer answers); the slow one passes on first run |
+| 5 (a) | red-first | `launch-headless.test.ts` new describe "task-355 AC 5 — a headless run signals the agent's process group, and sweeps it after a signalled exit" (POSIX only; `FakeChild` pid `4242`; `LaunchHost.signalGroup` a recorder that pushes `[pgid, signal]` and passes the signal to the child while it runs): forwarded `SIGTERM` → `[[4242,'SIGTERM'],[4242,'SIGKILL']]`; the time bound, `SIGTERM` ignored → `[[4242,'SIGTERM'],[4242,'SIGKILL'],[4242,'SIGKILL']]`; an agent that exits by itself → `[]`; interactive with a pid → `[]`, `child.killed` `['SIGTERM']` | the first two: `expect(calls).toEqual([...])` → `Received: []`; the last two pass on first run (characterizations inside the AC) |
+| 5 (b) | red-first | `agent-execute-process-group.integration.test.ts` (POSIX only): `--headless --timeout 1s` (`WAIT=signal`, `CHILD`); the same with `CHILD_TRAP=1`; `--headless` spawned detached, `SIGTERM` to `agent execute` once the record line (after the pid file) exists | exit status and the `error:` line already match (`agent timed out after 1s; run task-202-explicit-override/adhoc/1 recorded`, `agent exited signal:SIGTERM; run … recorded`); then `expect(dead).toBe(true)` → `Received: false` in all three (the child still running 5 s after `agent execute` exited) |
+
+**Departure from the design's classification, stated (AC 4).** The design calls both rewritten stubs
+characterizations. With the stub answering `resources/read` *instead of* `prompts/get`, as the design states, the
+empty-contents case cannot pass today: the current pre-flight sends `prompts/get` first and waits for it until the
+deadline. It is therefore red-first, failing for AC 4's own reason (the pre-flight still asks for the Prompt); after
+green it answers at once. The slow stub is a characterization as designed. Keeping a `prompts/get` answer in that
+stub would have made it a characterization, but it would no longer be the stub the design describes.
+
+**Expected compile reds.** `npx tsc --noEmit -p tsconfig.json` → exactly four diagnostics, nothing else:
+- `test/agent/execute.test.ts(67,21): error TS2339: Property 'ok' does not exist on type 'string'.`
+- `test/agent/execute.test.ts(68,19): error TS2339: Property 'ok' does not exist on type 'string'.`
+- `test/agent/execute.test.ts(69,32): error TS2551: Property 'value' does not exist on type 'string'. Did you mean 'valueOf'?`
+- `test/agent/launch-headless.test.ts(167,97): error TS2353: Object literal may only specify known properties, and 'signalGroup' does not exist in type 'LaunchHost'.`
+
+The `value` diagnostic is TS2551, TS2339's "did you mean" variant (`valueOf` is a member of `string`), not the TS2339
+the design names; it is the same missing-property red. Under ts-jest (`isolatedModules`) these are runtime
+assertion failures (`Received: undefined`, `Received: []`), listed above.
+
+**Runs.**
+- `npx jest --maxWorkers=2 <the eight test files above>` → `Tests: 25 failed, 62 passed, 87 total`; per file
+  (failed/passed): `launch-process` 1/14, `launch-headless` 2/10, `execute` 10/24, `launch` 1/11, `execute-config-arg`
+  5/1, `gitattributes` 2/1, `agent-execute-signals` 1/1, `agent-execute-process-group` 3/0. After each integration
+  run, `ps -eo pid,pgid,stat,args | grep setInterval` → no process left.
+- `npx jest test/lint --maxWorkers=2` with the files in place → `Test Suites: 2 failed, 13 passed, 15 total`, `Tests: 3
+  failed, 158 passed, 161 total`: `gitattributes.test.ts` (the two reds) and `typecheck-clean.test.ts` "tsconfig.json
+  typechecks with zero diagnostics" (the four diagnostics above) only. With the files staged,
+  `npx jest --maxWorkers=2 test/lint/control-characters test/lint/cli-spawn-helper test/lint/no-fabricated-stderr
+  test/lint/no-signal-as-exit test/lint/lint-clean` → `Tests: 60 passed`.
+- The design's module set, after `bash waitslot.sh` (it returned at once, printing nothing): `npx jest --maxWorkers=2
+  test/agent test/cli/agent-execute test/core/agent-execute test/cli/e2e-smoke-fake-read` → `Test Suites: 7 failed, 27
+  passed, 34 total`, `Tests: 23 failed, 571 passed, 594 total` — the 23 reds above (the lint suite is outside that
+  set); every test that passed at design (574) still passes.
+- Invisible characters: the scan of the changed files for the C1/format range, and for a raw U+007F → no hit; the
+  surrogates and U+007F are written as escapes (`\ud800`, `\udc00`, `\u007f`, `\u{1F600}`).
+
+**For green.** The integration suites read the fake's new variables only on a launch; the child the fake starts is
+`unref`'d, so a launch that is not signalled still exits (only the tests with `WAIT=signal` use it). `spawnCliLive`
+reports a signal in `closed` rather than throwing.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
