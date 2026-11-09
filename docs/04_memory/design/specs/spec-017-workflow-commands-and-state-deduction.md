@@ -704,19 +704,26 @@ with `--set` (`spec-008` §10, whose invalid-value errors apply unchanged):
   refused (`CONFLICT`) as a `--set phase=` one is. An `id_pattern` with a `{n}` counter, and a `path` with no
   `{id}`, are not checked here: the counter makes the id unique, and `memory add` refuses an occupied path.
 - `scope` = the workflow's name (ruling R18).
-- `title` = `--title`, else `<workflow> — <phase>`.
+- `title` = `--title`, else `<workflow> — <phase>`, with the `phase` the plan records.
+
+`workflow` and `phase` are written to the plan's frontmatter whatever the plan type's `id_pattern` and `path`
+declare (`task-346`, `bug-491`): a token the patterns hold is handed to `memory add` as a token, and a value they do
+not hold is written as a field. So `--set phase=` is accepted whether or not `{phase}` is a token; `--set scope=`
+stays a token only, refused as `spec-008` §10 refuses a `--set` naming no token when the patterns hold no `{scope}`.
 
 No `--set` is therefore ever mandatory. A project that nests its plans otherwise, as this repository
-does (`docs/05_plans/rl-v1/rel-v0.3/…`, `phase: "rel-v0.3"`), keeps its layout by passing `--set`. `start` then writes **two commits**, each touching only the
+does (`docs/05_plans/rl-v1/rel-v0.3/…`, `phase: "rel-v0.3"`), keeps its layout by passing `--set`. `start` then writes **one commit**, touching only the
 plan file (`verifyCommittedScope`, `spec-006` §6 item 2): `wf(plan): add <id>` through `memoryAdd`
 (fields `workflow`, `phase`, `element`, `title`, `status: draft`, the template body), its final trailer paragraph
-carrying the start marker `WingFoil-Start: <name>` before `WingFoil-Version:` (§3.1), then
-`wf(plan): submit <id>` (`draft → active`; the template's `required: [title, workflow, phase]` are all
-filled, `.wingfoil/memory.yaml:206-207`). If the second commit fails, the plan stays `draft`, the
-instance is open, and the error names `wingfoil memory submit <id>` as the way on. The new instance
-becomes active (P4.2 sc. 2; the others stay open). The output is the instance and its first frontier
-step ("its first step is initialized", P4.2 sc. 1). A project whose `memory.yaml` declares no `plan`
-type is refused (§10).
+carrying the start marker `WingFoil-Start: <name>` before `WingFoil-Version:` (§3.1). The plan is left `draft`, to
+be written (`task-346`, `bug-390`): its author writes the body and runs `wingfoil memory submit <id>` (`draft →
+active`, the template's `required` fields checked then), as for every element `memory add` creates — no approver's
+`memory amend` is needed to give the plan a body. The instance is open from the add, since the marker rides that
+commit and §3.2 admits a `draft` plan; `end` refuses it until it is submitted (§7.2). The new instance becomes active
+(P4.2 sc. 2; the others stay open). The output is the instance, its first frontier step ("its first step is
+initialized", P4.2 sc. 1) and the command that submits the plan, `wingfoil memory submit <id>` (§8 `submit`; on the
+console, the line `plan <id> is draft: write its body, then run wingfoil memory submit <id>` after the `started`
+line). A project whose `memory.yaml` declares no `plan` type is refused (§10).
 
 **7.2 `end`** (P4.3). Resolves the instance (§3.3); with none open: `no active workflow to end`
 (P4.3 sc. 3). A plan still in `draft` is refused with `workflow '<name>' was not submitted: run
@@ -965,7 +972,8 @@ interface StatusResult { baseline: Baseline; active: string | null;
                                  late: ElementRef[] }[];
                          pendingApprovals: PendingApproval[]; ungated: ElementRef[]; ungatedRoutedTo: Member[];
                          message?: string; diagnostics: Diagnostic[] }
-interface StartResult    { baseline: Baseline; instance: Instance; next: Step | null; commits: string[] }
+interface StartResult    { baseline: Baseline; instance: Instance; next: Step | null; commits: string[];   // the add commit
+                           submit: string }                     // "wingfoil memory submit <id>" (§7.1)
 interface EndResult      { baseline: Baseline; ended: Instance; active: Instance | null; commit: string }
 interface FinalizeResult { baseline: Baseline; instance: Instance; finalized: Step; next: Step | null; commit: string }
 interface CreateResult   { baseline: Baseline; name: string; file: string; startable: boolean; includable: boolean; commit: string }
@@ -1058,7 +1066,6 @@ with P5.2.3 (v0.4); the production server serves no Tool today.
 | element not found at `HEAD` | `element not found: <type>:<id>` | `NOT_FOUND` | 1 |
 | `--element` short reference matching several elements (`start`, `adopt`) | `ambiguous reference: <id> matches <N> elements` (`spec-008` §6; every full id in `details`, id order) | `CONFLICT` | 1 |
 | `--set phase=` collides (`start`) | `plan id already exists: <id>` | `CONFLICT` | 1 |
-| second `start` commit failed | `plan <id> was added but not submitted: run wingfoil memory submit <id>` | as the failure | 1 |
 | no open instance (`end`) | `no active workflow to end` | `NOT_FOUND` | 1 |
 | `<ref>` names a loaded workflow with no open instance, or an instance plan (`plan`, `parent` empty) at `HEAD` that is no open instance (§3.2: closed, added without the start marker after a marked start, or naming a workflow the registry does not load) — `next`, `status`, `finalize`, `end` and `memory add --workflow <ref>` alike | `workflow is not open: <ref>` | `NOT_FOUND` | 1 |
 | plan in `draft` at `end` | `workflow '<name>' was not submitted: run wingfoil memory submit <id>` | `INVALID_TRANSITION` | 1 |
@@ -1094,7 +1101,7 @@ error or an unresolvable `<ref>`/name (`spec-005` §1's read-only rule).
 
 | Operation | Gating reads (at `HEAD`) | Reads on the filesystem | Writes (guarded by `requireUnmodifiedTarget`) |
 |---|---|---|---|
-| `start` | registry, `memory.yaml`, `dna.yaml`, the element, existing plans (id collision, `dl-101`) | — | the new plan file (two commits) |
+| `start` | registry, `memory.yaml`, `dna.yaml`, the element, existing plans (id collision, `dl-101`) | — | the new plan file (one commit) |
 | `end` | registry, the plan, deduction | — | the plan file |
 | `finalize` | registry, deduction, `dna.yaml` (authority) | — | nothing (an empty commit) |
 | `create` | registry (name uniqueness) | target file existence (`dl-086`) | the new file, `workflows.yaml` |
@@ -1279,7 +1286,8 @@ their command. The checkpoint phases stay 17. `test/core/workflow-repository-con
 
 **Settled at this revision** (review recommendation or approver ruling):
 - *OQ-1, where an open main is recorded:* a `plan` element with a new optional `parent` field (§3.1),
-  together with §3.4's binding and §7.1's add-then-submit, which make every started instance endable.
+  together with §3.4's binding and §7.1's add, whose `draft` plan its author submits, which make every started
+  instance endable (the add-then-submit in one call until `task-346`).
 - *OQ-2, positional names:* positional `<ref>` on every workflow command, no `--name` alias (§7);
   BDD and REQ-STATE-03 amended (Consequences).
 - *OQ-3, recording a checkpoint:* `workflow finalize` (ruling R11, §7.9).
@@ -1768,3 +1776,13 @@ from the step it resolves (`spec-016` §3.2 step 7, `dl-183` Q4 (a)); the consol
 Consequences bullet on `docs/01_vision/X_cli-cmds.md` cited its lines `:163-170` and `:169`, which the file's version
 1.7 had moved: it cites its section and rows instead (`bug-380`, `dl-075`). Edited in place without a supersede or a
 state change (`dl-047`), pending the approver's `memory amend`.
+
+**Revision (2026-11-08, `task-346-fix-workflow-start-s-plan-leave-it-to-be-written-fill-workflow-and-phase-always-and-make-the-dead-test-fail`)
+— §7.1, §8, §10, §11 and §13 (OQ-1).** `bug-390`: `start` writes only the plan's `add` and leaves the plan `draft`, to be written
+by its author and submitted with `wingfoil memory submit <id>`, which the output names (§8 `StartResult.submit`, a
+console line); the `submit` commit and §10's row for a failed second commit are gone, and §11 counts one commit. The
+instance is open from the add (the start marker rides it, §3.1, and §3.2 admits a `draft` plan), and `end` keeps
+refusing a `draft` plan (§7.2). `bug-491`: `workflow` and `phase` are written whatever the plan type's `id_pattern`
+and `path` declare, a value the patterns hold no token for as a field, so `--set phase=` is accepted on any plan type;
+the default `title` uses the `phase` the plan records. Edited in place without a supersede or a state change
+(`dl-047`), pending the approver's `memory amend` at `task-346`'s design gate.

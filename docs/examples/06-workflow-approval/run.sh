@@ -41,11 +41,22 @@ phases:
 YAML
 git commit --quiet -am "chore(wingfoil): the deliver workflow's phases"
 
-# Start it: the workflow is recorded as a plan document (two commits) and becomes the active one.
+# Start it: the workflow is recorded as a plan document (one commit, the plan left draft) and becomes the
+# active one.
 mark_head
 expect_exit 0 workflow start deliver
-expect_head "wf(plan): submit deliver-1-plan" 2
-assert_eq "$(git log -1 --skip=1 --format=%s)" "wf(plan): add deliver-1-plan" "the plan's add commit"
+expect_head "wf(plan): add deliver-1-plan"
+case "$LAST_OUTPUT" in
+  *"plan deliver-1-plan is draft: write its body, then run wingfoil memory submit deliver-1-plan"*) ;;
+  *) fail "workflow start did not name the plan's submit" ;;
+esac
+
+# The plan is yours to write: its body, then its submit (draft -> active); no approver is needed.
+PLAN_FILE=$(git show --name-only --format= HEAD)
+printf '\nDeliver the login form, approved by the approver role.\n' >> "$PLAN_FILE"
+mark_head
+expect_exit 0 memory submit deliver-1-plan
+expect_head "wf(plan): submit deliver-1-plan"
 
 # The next step names its role, the role's directives (api-style included) and the commands of its actions.
 expect_exit 0 workflow next --format json

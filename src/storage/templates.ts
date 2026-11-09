@@ -194,8 +194,8 @@ const wf = (relative: string): string => `${WINGFOIL_DIR}/${relative}`;
 
 /**
  * The Memory element types spec-011 requires a template scaffold for, in fixed order — plus `plan`, the
- * record of a started workflow (`spec-017` §3.1, task-217): `wingfoil workflow start` adds and submits one,
- * so a project `init` creates can start a workflow with no edit.
+ * record of a started workflow (`spec-017` §3.1, task-217): `wingfoil workflow start` adds one, `draft`, for its
+ * author to write and submit (task-346), so a project `init` creates can start a workflow with no edit.
  */
 const MEMORY_TYPES = ['adr', 'bug', 'decision-log', 'plan', 'release', 'release-line', 'task', 'tech-spec'] as const;
 
@@ -379,8 +379,8 @@ const BUG_STATES_EXAMPLE = `
  * The scaffolded `plan` type (`spec-017` §3.1, task-217): the record `wingfoil workflow start` writes for a
  * started workflow. Its `id_pattern` and `path` take the tokens `workflow start` derives (`{workflow}`,
  * `{phase}`, `{scope}`, ruling R18); its own machine is `draft → active → done`, with `active` a `waiting`
- * state: `workflow start` submits the plan (`draft → active`) and `workflow end` takes the `waiting` edge
- * (`active → done`), which no verb drives.
+ * state: `workflow start` adds the plan `draft`, its author's `memory submit` moves it `draft → active` (task-346),
+ * and `workflow end` takes the `waiting` edge (`active → done`), which no verb drives.
  */
 const PLAN_TYPE_YAML = `  plan:
     path: docs/memory/plan/{scope}/{id}.md
@@ -390,7 +390,7 @@ const PLAN_TYPE_YAML = `  plan:
       file: memory/templates/plan.md
       frontmatter:
         required: [id, type, title, status, workflow, phase]
-    # A started workflow: \`wingfoil workflow start\` adds and submits it, \`wingfoil workflow end\` closes it.
+    # A started workflow: \`wingfoil workflow start\` adds it as draft, its author submits it, \`wingfoil workflow end\` closes it.
     states:
       sequence: [ draft, active, done ]
       waiting: [ active ]`;
