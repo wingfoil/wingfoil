@@ -318,6 +318,115 @@ assertion failures (`Received: undefined`, `Received: []`), listed above.
 `unref`'d, so a launch that is not signalled still exits (only the tests with `WAIT=signal` use it). `spawnCliLive`
 reports a signal in `closed` rather than throwing.
 
+### green (developer, 2026-11-09)
+
+**Base.** Branch head `c0e5e9b27` (red recorded); `git rev-list --count HEAD..main` → `0` (no merge of `main`).
+The task's PATH shim checked first (`command -v wingfoil` → the shim; `wingfoil --version` and `node dist/cli.js
+--version` → `0.3.2 (b4fb4bfa5…)`). Green commit: `03782007f` (`git show --stat 03782007f` → `.gitattributes`,
+`docs/cli-reference.md`, `src/agent/execute.ts`, `src/agent/launch.ts`: the design's green list, nothing else).
+
+**What changed.**
+- `src/agent/launch.ts` (AC 1, AC 5): `TAKEN_OVER` interactive POSIX → `ignored: ['SIGINT', 'SIGQUIT', 'SIGHUP']`,
+  `forwarded: ['SIGTERM']` (D1 (a)). `takeOverSignals(kind, signalGroup)`: `send` delivers to
+  `signalGroup(child.pid, signal)` when the kind is headless, the platform POSIX and `child.pid` a number, and sets
+  `signalled`; otherwise `child.kill(signal)`. New `SignalTakeover.sweep()`: one `SIGKILL` to the group when
+  `signalled` and the agent has exited, called in `launchAgent`'s `finally` before `restore()` (D2 (a)).
+  `LaunchHost.signalGroup` (TSDoc), default `killGroup` = `process.kill(-pgid, signal)`, `ESRCH` swallowed. Header
+  comment step 15 rewritten.
+- `src/agent/execute.ts` (AC 3, AC 4): `renderMcpTemplate(template, server): CoreResult<string>` — the command,
+  then each argument, scanned for the first unpaired surrogate → `VALIDATION` with `spec-016` §3.7's message;
+  otherwise JSON rendering with every U+007F written as the six characters `\u007f` (D3 (a)). `executeAgent` step 10
+  renders once for `config-file` and `config-arg`, before `withRunFiles`, and returns the refusal (a dry run
+  included). `mcpPreflight`: the `getPrompt` call and its check removed — `initialize`, then the session Resource
+  only; its doc comment and the header's steps 10–11 follow. Same class in this file: the header's step 8 and the
+  step-8 comment said the notes reach the agent "with the Prompt"; both now name the session Resource.
+- `.gitattributes` (AC 2): a comment line naming `spec-016` §4.1 and `*.jsonl text eol=lf`.
+- `docs/cli-reference.md`: the interactive sentence (a terminal hang-up reaches the agent, only `SIGTERM` is
+  passed on, a `SIGHUP` sent to `agent execute` alone is not), the headless paragraph (on Linux and macOS the
+  signals reach the processes the agent started; nothing of a signalled or timed-out run outlives `agent
+  execute`), and in the ordered check list the `mcp.template` unpaired-surrogate refusal (one sentence beyond the
+  design's Documents bullet, accepted by the orchestrator as the same class).
+
+**Red → green.**
+- `npx jest --maxWorkers=2 test/agent/launch-process.test.ts test/agent/launch-headless.test.ts
+  test/agent/execute.test.ts test/agent/launch.test.ts test/agent/execute-config-arg.test.ts
+  test/lint/gitattributes.test.ts test/cli/agent-execute-signals.integration.test.ts
+  test/cli/agent-execute-process-group.integration.test.ts` → `Test Suites: 8 passed, 8 total`, `Tests: 87 passed,
+  87 total` (red: `25 failed, 62 passed`).
+- `npx tsc --noEmit -p tsconfig.json` → no output (red's four diagnostics gone).
+- After `bash waitslot.sh` (rc `0`, it printed nothing): `npx jest --maxWorkers=2 test/agent test/cli/agent-execute
+  test/core/agent-execute test/cli/e2e-smoke-fake-read test/docs/cli-reference test/lint` → `Test Suites: 50
+  passed, 50 total`, `Tests: 759 passed, 759 total`.
+- After each integration run, `ps -eo pid,args | grep setInterval | grep -v grep` → no output (no survivor).
+
+### refactor (developer, 2026-11-09)
+
+**A failed group delivery never replaces the outcome** (raised at green: `killGroup` rethrows an error other than
+`ESRCH`, which in `finally` would replace the run's outcome, and in a signal listener or a timer would be thrown
+out of it). `spec-016` §3.3 as amended at `650a0f041` does not name this case: step 15 says what is left of the
+group "is sent `SIGKILL` before `agent execute` returns", and also "no signal can end `agent execute` without a
+record"; step 18 decides the exit from the agent's exit, the time bound and step 17 alone. So a delivery failure
+cannot be allowed to change the outcome. Commit `02b5fc424`: `takeOverSignals`' `deliver` wraps every
+`signalGroup` call (the forwarded signals, the time bound's, the sweep's) and reports a failure as one warning
+line, `could not send <SIGNAL> to the agent's process group <pgid>: <message>`, in the launch's
+`AsyncLocalStorage` context (`AsyncLocalStorage.snapshot()`), so it reaches the operation's warning sink from a
+signal listener too; `LaunchHost.signalGroup`'s TSDoc says so. No spec amendment: the warning is the code's
+reading of steps 15 and 18 (a decision for the reviewer, under self-review). New test of my own,
+`test/agent/launch-group-errors.test.ts` (POSIX only): `EPERM` on the sweep's `SIGKILL` → calls
+`[[4242,'SIGTERM'],[4242,'SIGKILL']]`, that one warning, outcome `agent exited signal:SIGTERM; run <id> recorded`;
+`EPERM` on the forwarded `SIGTERM` → `process.emit` does not throw, one warning, the agent exits `3` by itself,
+outcome `agent exited 3; run <id> recorded`. `npx jest --maxWorkers=2 test/agent/launch-group-errors.test.ts
+test/agent/launch-headless.test.ts test/agent/launch-process.test.ts test/agent/launch-timeout` → `Tests: 36
+passed, 36 total`.
+
+**Gates** (worktree at `02b5fc424`, each heavy one after `bash waitslot.sh`, which returned rc `0` printing nothing
+each time; the heavy-gate lock printed no wait line).
+- `npm run -s build` → exit `0` (09:13–09:14).
+- `npm run test:coverage -- --maxWorkers=2` (09:14–09:43) → `Test Suites: 586 passed, 586 total`, `Tests: 10776
+  passed, 10776 total`; `All files | 99.24 | 97.14 | 98.64 | 99.65` (statements, branches, functions, lines);
+  `execute.ts | 96.22 | 89.54 | 96 | 98.4`, `launch.ts | 98.29 | 93.03 | 97.82 | 98.44` (uncovered `443-446`:
+  `killGroup`, the default no in-process test runs; the two integration suites exercise it in a child process).
+  The suite includes `test/docs/` (the `docs.parity` suites, `cli-reference.test.ts`) and `test/lint/`. After it,
+  `ps -eo pid,args | grep setInterval | grep -v grep` → no output.
+- `npm test` not run separately: `package.json` → `"test": "node scripts/run-tests.cjs"`, `"test:coverage": "node
+  scripts/run-tests.cjs --coverage"` — the same runner and suite set, the coverage run above is that suite.
+- `npm run -s lint` → exit `0`, no output. `npm run -s docs:api` → exit `0`. `npm run -s typecheck` (both tsc
+  configs) → exit `0`, no output.
+- Invisible characters: the scan of the changed files for the C1/format range and a raw U+007F → no hit.
+
+**T4.** `git log --first-parent --no-merges --format=%h 2c7cb668b..HEAD -- $(git show --name-only --format=
+2c7cb668b)` → empty: no file the red commit added or changed was touched.
+
+### self-review (developer, 2026-11-09)
+
+Against `code-review`, `git diff c0e5e9b27..HEAD -- src .gitattributes docs/cli-reference.md test/agent/launch-group-errors.test.ts`:
+- AC 1 — met: `launch-process.test.ts` AC 1 (a) and `agent-execute-signals.integration.test.ts` "interactive …"
+  (the signals file exactly `SIGHUP`, `SIGTERM`) pass in the 87-test run; positive case: the headless
+  characterization of the same file still gets `SIGHUP` forwarded once.
+- AC 2 — met: `gitattributes.test.ts` 3/3 (`git check-attr` → `text: set`, `eol: lf`).
+- AC 3 — met: `execute.test.ts` AC 3 describe and `execute-config-arg.test.ts` AC 3 describe (both forms, with and
+  without `dryRun`, the launch never reached); positive case: the paired U+1F600 rendered raw.
+- AC 4 — met: the stub's method log has no `prompts/get`, and `grep -n "getPrompt" src/agent/execute.ts` → no
+  match; positive case: the empty-contents stub names the session resource.
+- AC 5 — met: `launch-headless.test.ts` AC 5 (4 tests) and `agent-execute-process-group.integration.test.ts` (3
+  tests, the child dead within 5 s); positive case: an agent that exits by itself gets no group call.
+- `spec-016` §2.3, §2.7, §3.3 steps 8, 10, 11, 15, §3.7 read against the code: no gap found; the one case it does
+  not name is below.
+- Determinism: no clock, randomness or unordered iteration added (the surrogate scan and the argument numbering
+  are positional).
+- **Decision for the reviewer — a failed group delivery.** Spec text read (§3.3 step 15): "once an agent that such
+  a signal reached has exited, whatever is left of its process group is sent `SIGKILL` before `agent execute`
+  returns"; step 18: "Exit: `0` if the agent exited `0`, the time bound did not expire, and step 17 succeeded;
+  otherwise `1`". Neither says what happens when `process.kill(-pgid, …)` fails with an error other than `ESRCH`.
+  Chosen: a warning line, the outcome unchanged (`02b5fc424`). Alternative: amend `spec-016` §3.3 step 15 to state
+  it; not prepared, since the spec's outcome rule already excludes the sweep.
+- `signalled` is set when a group delivery is attempted, so a sweep also follows a failed delivery (the second
+  test of `launch-group-errors.test.ts` pins it); harmless, since the sweep targets only the agent's own group.
+
+### Pending amendments (approver)
+
+None.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -325,3 +434,8 @@ reports a signal in `closed` rather than throwing.
      printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
      Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
      here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+
+- The sweep's error path was not in the design: `killGroup` rethrowing a non-`ESRCH` error from the launch's
+  `finally` or a signal listener would have replaced the run's outcome; raised at green, fixed at refactor
+  (`02b5fc424`, a warning line). Proposal: a design that adds a side effect after the record names its failure
+  mode.
