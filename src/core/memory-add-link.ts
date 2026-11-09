@@ -17,6 +17,7 @@ import { deduceWorkflowState, resolveInstanceRef, type DeducedStep } from '../wo
 import { coreErr, coreOk, type CoreResult } from './types';
 import { instancePlanIds, readDeductionSnapshotAtHead } from './workflow-deduction';
 import { unresolvedRef } from './workflow-next';
+import { ambiguousStepKey, resolveFrontierKey } from './workflow-step-key';
 
 /** The step an added element is linked to: the values of its two trailers. */
 export interface AddLink {
@@ -43,6 +44,8 @@ function addsType(step: DeducedStep, type: string): boolean {
  * - `<ref>` names no open instance: `workflow is not open: <ref>` when it is a loaded workflow's name or an
  *   instance plan's id, else `unknown workflow: <ref>` (`NOT_FOUND`) — `unresolvedRef`, the one answer `workflow
  *   next`, `status`, `finalize` and `end` give for the same `<ref>` (task-281, `bug-326`);
+ * - `--step <key>` names several frontier steps (a key without its scope, `spec-017` §4.9, task-356, `bug-468`):
+ *   `step '<key>' names <N> steps of <instance>: give --step, one of: …` (`CONFLICT`, `details.steps`);
  * - `--step <key>` is not on the instance's frontier: `step '<key>' is not on the frontier of <instance>`
  *   (`CONFLICT`), as `workflow finalize` refuses it; `details.frontier` lists the frontier's keys in frontier order
  *   (task-330, `bug-340`);
@@ -60,14 +63,20 @@ export function resolveAddLink(root: string, ref: string, stepKey: string | unde
     return unresolvedRef({ workflows: snapshot.workflows, plans: instancePlanIds(snapshot.documents) }, ref);
   }
   const instance = selected.instance.id;
-  if (stepKey !== undefined && !selected.frontier.some((step) => step.key === stepKey)) {
-    return coreErr({
-      code: 'CONFLICT',
-      message: `step '${stepKey}' is not on the frontier of ${instance}`,
-      details: { instance, step: stepKey, frontier: selected.frontier.map((step) => step.key) },
-    });
+  let named: DeducedStep | undefined;
+  if (stepKey !== undefined) {
+    const resolved = resolveFrontierKey(selected.frontier, stepKey);
+    if (resolved.kind === 'many') return ambiguousStepKey(stepKey, instance, resolved.steps);
+    if (resolved.kind === 'none') {
+      return coreErr({
+        code: 'CONFLICT',
+        message: `step '${stepKey}' is not on the frontier of ${instance}`,
+        details: { instance, step: stepKey, frontier: selected.frontier.map((step) => step.key) },
+      });
+    }
+    named = resolved.step;
   }
-  const candidates = selected.frontier.filter((step) => (stepKey === undefined || step.key === stepKey) && addsType(step, type));
+  const candidates = (named === undefined ? selected.frontier : [named]).filter((step) => addsType(step, type));
   const none = `no step of ${instance} adds a ${type}`;
   if (candidates.length === 0) return coreErr({ code: 'CONFLICT', message: none, details: { instance, type, steps: [] } });
   if (candidates.length > 1) {

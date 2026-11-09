@@ -515,7 +515,7 @@ $ wingfoil memory add --type task --title "My first task" --tags demo,quickstart
 | `--tags <t1,t2>` | Comma-separated tags, written as the `tags` list. |
 | `--set <name>=<value>` | New in 0.2.2. Repeatable. Gives the `id_pattern` or `path` token `{name}` its value and writes the frontmatter field `name`, so the id and the field agree. |
 | `--workflow <ref>` | New in 0.3. Links the document to a step of an open workflow instance: `<ref>` is the instance id, or a workflow name (its most recently started open instance). |
-| `--step <key>` | New in 0.3. The step to link to, by its key, when several ready steps of the instance add this type. Needs `--workflow`. |
+| `--step <key>` | New in 0.3. The step to link to, by its key, when several ready steps of the instance add this type. Needs `--workflow`. A key without its scope (`bug-ingest.capture` for `bug-ingest.capture@bug:<id>`) names the one ready step of that workflow and phase (new in 0.4). |
 
 The id comes from the type's `id_pattern`. For `task-{n}-{slug}` that is a per-type counter plus a
 slug of the title. The slug keeps a `.` between two letters or digits (`v0.2` stays `v0.2`); every
@@ -582,7 +582,9 @@ Without `--workflow`, `memory add` links nothing and its commit is unchanged.
     refuses it with the same `E_VALIDATION` issue.
   - Exit `1`, with `--workflow`: a `<ref>` that names no open instance (`workflow is not open: <ref>`, or
     `unknown workflow: <ref>`, as `workflow next` answers it); a `--step` that is not a ready step of the instance
-    (`step '<key>' is not on the frontier of <instance>`); no ready step that adds this type
+    (`step '<key>' is not on the frontier of <instance>`); a `--step` given without its scope (`<workflow>.<phase>`)
+    that names several ready steps (`step '<key>' names <N> steps of <instance>: give --step, one of: <key>, <key>`,
+    new in 0.4); no ready step that adds this type
     (`no step of <instance> adds a <type>`); several, and no `--step`
     (`no step of <instance> adds a <type> alone: give --step, one of: <key>, <key>`). Nothing is written.
 
@@ -1326,7 +1328,7 @@ wingfoil workflow finalize [<ref>] [--step <key>] [--reason <text>]
 
 | Option | Description |
 |---|---|
-| `--step <key>` | The frontier step to record, by the key `workflow next` prints (e.g. `dev-loop.red@task:task-130`). Default: the instance's next step. |
+| `--step <key>` | The frontier step to record, by the key `workflow next` prints (e.g. `dev-loop.red@task:task-130`); without its scope (`dev-loop.red`), the one frontier step of that workflow and phase (new in 0.4). Default: the instance's next step. |
 | `--reason <text>` | Why. Required on a phase that declares `approval:`, where it is recorded with an `Approver:` line as `memory approve` records it; optional elsewhere. Same shape rules as every `--reason`. |
 
 Some phases have nothing in the repository to show they are done: a checkpoint (a
@@ -1366,6 +1368,8 @@ next step: dev-loop.green@task:task-130
 `finalized` and `next` as `workflow next` reports a step.
 
 - **Errors, exit `1`:** a step not on the frontier → `step '<key>' is not on the frontier of <instance>`;
+  a key without its scope naming several frontier steps → `step '<key>' names <N> steps of <instance>: give
+  --step, one of: <key>, <key>` (new in 0.4);
   a step whose phase completes from evidence the repository can show → `phase '<workflow>.<phase>' completes from its evidence: <kinds>`;
   an instance with no next step → `workflow next`'s message (`no next step: workflow '<name>' is complete`);
   no open instance and no `<ref>` → `no active workflow to finalize`; a `<ref>` that selects no open
@@ -1616,7 +1620,7 @@ instance, as for `workflow next`.
 
 | Option | Description |
 |---|---|
-| `--step <key>` | The frontier step the element counts as created by, by the key `workflow next` prints. Default: the one frontier step that adds the element's type. |
+| `--step <key>` | The frontier step the element counts as created by, by the key `workflow next` prints; without its scope, the one frontier step of that workflow and phase (new in 0.4). Default: the one frontier step that adds the element's type. |
 | `--element <type:id>` | The existing element to adopt, e.g. `release-line:rl-v1`; `<id>` may be a short reference (new in 0.3.2, see [Short element references](#short-element-references)), the record names the full id. Default: the step's one candidate. |
 | `--plan` | Propose the adoptions and write nothing. Takes no `--step` or `--element`. |
 | `--apply` | With `--plan`: write the proposed adoptions, one commit per step. Needs the `approver` role. |
@@ -1678,7 +1682,9 @@ for the single form, and `{"baseline", "instance", "steps": [{"step", "type", "c
 [{"commit", "key", "element"}], "applied": [{"step", "element", "commit"}]}` for `--plan` (`applied` is empty
 without `--apply`).
 
-- **Errors, exit `1`:** a step not on the frontier → `step '<key>' is not on the frontier of <instance>`; no
+- **Errors, exit `1`:** a step not on the frontier → `step '<key>' is not on the frontier of <instance>`; a key
+  without its scope naming several frontier steps → `step '<key>' names <N> steps of <instance>: give --step, one
+  of: <key>, <key>` (new in 0.4); no
   `--step` and no frontier step adding the type → `no step of <instance> adds a <type>` (several →
   `… adds a <type> alone: give --step, one of: <key>, …`); a step that adds nothing → `<key> adds no element to adopt`;
   an element of another type → `<key> adds a <T>, not a <type>`; a step that already created one →
@@ -1786,7 +1792,7 @@ At least one of `--next`, `--workflow`, `--step` and `--element` is required.
 |---|---|
 | `--next` | Take the workflow, phase, element and role from the next step of the active workflow (the open workflow started most recently): the step [`wingfoil workflow next`](#wingfoil-workflow-next) prints first. |
 | `--workflow <ref>` | Take the step from this workflow instead: a workflow name (its most recently started open instance) or an open instance id. Implies `--next`. |
-| `--step <key>` | Take this step, which must be on the frontier of the selected workflow (`--workflow`, else the active one), e.g. `dev-loop.red@task:task-042-login-form`: when several steps are ready at once, it is how each one's agent launches on its own step. Implies `--next`. `wingfoil workflow next` prints each `agent` step as `wingfoil agent execute --workflow <instance> --step <key>`, which runs as written. |
+| `--step <key>` | Take this step, which must be on the frontier of the selected workflow (`--workflow`, else the active one), e.g. `dev-loop.red@task:task-042-login-form`; without its scope (`dev-loop.red`), the one frontier step of that workflow and phase (new in 0.4): when several steps are ready at once, it is how each one's agent launches on its own step. Implies `--next`. `wingfoil workflow next` prints each `agent` step as `wingfoil agent execute --workflow <instance> --step <key>`, which runs as written. |
 | `--element <type:id>` | The element the agent works on, as `<type>:<id>`, e.g. `task:task-042-login-form`; `<id>` may be a short reference (new in 0.3.2, see [Short element references](#short-element-references)) and the run records the full id. With a step, it replaces the step's element and keeps its phase and role. |
 | `--role <role>` | The role the agent runs as: a `team.roles` name in `dna.yaml`. Without it the role is the step's; with no step, it is `developer`, and a `warning:` line says so. `approver` is refused: an agent never runs as the role that approves. |
 | `--agent <name>` | The `team.agents` entry to launch. Without it, the first entry, in `dna.yaml` order, that declares an `adapter` and lists the role in `executes_as`. |
@@ -1801,7 +1807,8 @@ in this release starts a fresh agent session, whatever the phase allows (`--resu
 planned, and refused as unknown options); a phase's `distinct_from` is not checked. The step's refusals
 come first, each exit `1`: `error: no next step to execute` (no open workflow, or none of its steps is
 ready), `error: unknown workflow: <name>`, `error: workflow is not open: <ref>`,
-`error: step '<key>' is not on the frontier of <instance>`, `error: step '<key>' has no element: give
+`error: step '<key>' is not on the frontier of <instance>`, `error: step '<key>' names <N> steps of
+<instance>: give --step, one of: <key>, <key>` (a key without its scope, new in 0.4), `error: step '<key>' has no element: give
 --element <type>:<id>`, `error: step '<key>' declares no role: give --role <role>`. A step that only waits
 (new in 0.4) is refused too, exit `1`, with the line `wingfoil workflow next` prints for it —
 `error: human needed: approve or reject <id> — routed to <members>`,
@@ -1820,7 +1827,12 @@ starts, so an uncommitted change there can refuse the pre-flight. In order, it c
 the element exists; the role is defined and is not `approver` (whichever of `--headless` and
 `--interactive` is given); an agent with an adapter runs the role; the adapter is valid; it declares the
 launch kind (see below; for a headless launch without `launch.headless`, `error: adapter '<name>' declares no
-headless launch`); its `command` is on `PATH` (or at its path in the project); your git identity is
+headless launch`); its `command` is on `PATH` (or at its path in the project); when the adapter declares
+`mcp.conflict_args` (`codex-cli`: `codex mcp get wingfoil`), the agent's own configuration declares no MCP server
+named `wingfoil` that it would merge into the one WingFoil registers (exit `0` of that command gives `error:
+adapter '<name>': the agent's own configuration declares an MCP server named 'wingfoil', which it would merge into
+the server agent execute registers: remove or rename it`; a check that times out or cannot start prints a
+`warning:` line and passes; new in 0.4); your git identity is
 set; `dna.yaml` declares `paths.runs` and the element's run log has no uncommitted changes; the
 execution context (DNA, the role's directives, the relevant Memory) assembles and validates; the adapter's
 `mcp.template` can carry the MCP server's command and arguments (one holding an unpaired surrogate, which
@@ -1877,7 +1889,10 @@ stdout is captured and not shown, its stderr is `agent execute`'s, and on Linux 
 group of its own. Ctrl-C, `SIGTERM` and `SIGHUP` sent to `agent execute` are passed on to it; Ctrl-\ is
 ignored. On Linux and macOS a passed-on signal and the `--timeout` signals reach the processes the agent
 started too, and once an agent a signal reached has exited, what is left of them is killed: nothing of a
-signalled or timed-out headless run outlives `agent execute`. Both built-in adapters declare a headless launch (`claude -p …`, `codex exec …`). The record's
+signalled or timed-out headless run outlives `agent execute`. Both built-in adapters declare a headless launch (`claude -p …`, `codex exec --json …`). An
+adapter whose `session.id` is `output` has its session id read from the run's stdout (`launch.headless.output`:
+`json`, one document; `jsonl`, the first line carrying it): `codex-cli` records the `thread_id` of the first
+`codex exec --json` event; a stdout that carries none records `not-reported`, with a `warning:` line. The record's
 `result` is `n/a`, as for an interactive run. On success stdout carries `{"run": <record>}` (indented under
 `--format console`), and the summary line is a notice on stderr. A timed-out run, interactive or headless, is
 still recorded and exits `1` with `error: agent timed out after <duration>; run <run-id> recorded`, whatever
