@@ -104,6 +104,12 @@ State advancement (triage/approve) and **assignment** (`release=`) are decoupled
 **only in `build-backlog`**, when the element actually enters the release backlog. An approved but
 not-included element keeps `release` empty and is re-offered at the next planning.
 
+*(Amended 2026-11-08, with `task-347`.)* For bugs, `dl-191` (a) (`ready`, 2026-11-05) replaces the last
+sentence: a `triaged` bug whose `release` is empty is given one at every planning, by `release-planning`'s
+`assign-bugs` phase after `triage-bugs` — this release, a later one the approver names, or a close through the
+`triaged` gate's reject — so no bug stays unassigned past a planning. Decision-logs, ADRs and tech-specs keep the
+rule above: they are assigned only in `build-backlog`.
+
 **Scope boundary:** the sweep covers **decision-log** and **bug** (the consume-without-produce gap);
 **tech-spec** stays in `identify-specs` (already its reconciliation, and it needs the scope survey);
 **adr** is approved for the release in `record-adrs`, and accumulated `pending` ADRs may optionally be

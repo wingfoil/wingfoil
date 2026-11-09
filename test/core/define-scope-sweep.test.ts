@@ -100,11 +100,11 @@ describe('task-277 AC 3 — at HEAD: zero errors, the state evidence kept, the n
     const loaded = loadWorkflowRegistryAtHead(ROOT);
     expect(loaded.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
     const own = loaded.diagnostics
-      .filter((d) => d.file === 'workflows/custom/release-planning.yaml' && d.path.startsWith('phases[1].'))
+      .filter((d) => d.file === 'workflows/custom/release-planning.yaml' && d.path.startsWith('phases[2].'))
       .map((d) => [d.code, d.path, /token '([a-z.-]+)/.exec(d.message)?.[1]]);
     expect(own).toEqual([
-      ['W_WORKFLOW_UNBOUND_TOKEN', 'phases[1].checks.post[0]', 'frontmatter.required'],
-      ['W_WORKFLOW_UNBOUND_TOKEN', 'phases[1].checks.post[1]', 'change-proposals.swept'],
+      ['W_WORKFLOW_UNBOUND_TOKEN', 'phases[2].checks.post[0]', 'frontmatter.required'],
+      ['W_WORKFLOW_UNBOUND_TOKEN', 'phases[2].checks.post[1]', 'change-proposals.swept'],
     ]);
   });
 

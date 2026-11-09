@@ -253,6 +253,14 @@ in the batches given (the coordinator updates `dev-loop-rel-v0.3-plan`'s W3 tabl
   - **The ruling.** The approver rules in `additional-points`. The decision, the elements and the target release
     go into `retro-{version}`'s Dispositions (or a `## Consumer feedback` section), and `capture` runs the
     ingests.
+  - *(Amended 2026-11-08, with `task-347`.)* `release-planning.yaml` declares the same read as its own
+    `collect-feedback` phase, after `advance-pinned-build`: a patch has no retrospective, so without it the
+    inboxes went unread between two minors' retrospectives (`release-planning-rel-v0.4-plan` R11, approver ruling
+    of 2026-11-05). Its read record is
+    `docs/09_retrospectives/rl-{release.release-line}/rel-{release.version}-planning-feedback-triage.md`, with the
+    rows, outcomes and limits above, and the approver rules each row before `define-scope`. A ruling that puts a
+    note into the release being planned is that planning's scope decision, the step after a retrospective R6
+    names; R6 still governs a triage made while a release is in delivery.
 - **S3d-a — `dl-115` amendment** (coordinator). `dl-115` is `ready`, so it gets a dated amendment that extends
   its four outcomes with `declined` and `needs-info` for consumer notes.
 - **S3d-b — `task-213` handover** (coordinator). Its `additional-points` `checks.pre` must accept the six
