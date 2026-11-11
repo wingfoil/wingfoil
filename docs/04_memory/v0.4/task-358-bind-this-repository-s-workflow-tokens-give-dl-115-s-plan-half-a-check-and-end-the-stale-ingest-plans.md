@@ -453,6 +453,28 @@ files → no match.
   is the template (as the design says), so a closed bug's entry under that heading counts. The pure predicate is pinned
   `false` only for a heading under `## Description`.
 
+### red correction (qa, 2026-11-11)
+
+**Correction commit `7eeb69d3d`** (`7eeb69d3d07db37bc407bfe3796e8d8372ba05aa`), a new qa commit on top of green's `5f15b7d40`;
+it touches `test/core/release-planning-v2-5.test.ts` only. Why: the red asks for `retrospective.collect-feedback`'s
+`checks.post` to be split into `feedback-notes.recorded(…)` and `feedback-notes.restated(…)` (`bug-435` item 4). But
+`release-planning-v2-5` (task-347) pins `release-planning.collect-feedback`'s `checks.post` equal to retrospective's
+with `toHaveLength(1)`, and `release-planning.yaml` declares its check "the token of retrospective.collect-feedback,
+character for character". The two pins cannot both hold. The orchestrator's ruling (W0-R10, a same-class defect this task
+introduces, fixed in the task): release-planning takes the same split, and `release-planning.yaml` moves 2.5 → 2.6 in green.
+
+**The edit.** The collect-feedback test keeps "equals retrospective.collect-feedback's", replaces `toHaveLength(1)` with
+`post.map(tokenName)` `toEqual(['feedback-notes.recorded', 'feedback-notes.restated'])`, and resolves each token `{ kind:
+'manual', source: 'project' }`. A new test checks that `release-planning.yaml` at `HEAD` is ≥ 2.6, with a 2.6 history
+entry naming task-358 (`historyEntryOf`, as the file's 2.5 pin does).
+
+**Run.** `npx jest --maxWorkers=2 test/core/release-planning-v2-5.test.ts` → exit `1`, `Tests: 2 failed, 11 passed, 13 total`.
+First failing lines: `expect(post).toEqual(phaseOf(workflow('retrospective'), 'collect-feedback').checks?.post)` →
+`Expected - 2 / Received + 1` (release-planning still holds the one unsplit `feedback-notes.recorded(…)`, retrospective the
+two halves); the version test → `Expected: >= 2.6, Received: 2.5`. `npx tsc --noEmit -p tsconfig.json` → exit `0`;
+`npx jest test/lint --maxWorkers=2` → `Test Suites: 15 passed, 15 total`, `Tests: 161 passed, 161 total`; the
+invisible-character scan → no match.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
