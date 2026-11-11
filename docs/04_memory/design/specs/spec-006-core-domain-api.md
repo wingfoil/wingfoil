@@ -438,7 +438,13 @@ the single write, so "the state is unchanged" holds on every refusal by construc
    must still be recordable) →
    `UsageError`, exit `2`. They read nothing, so a malformed invocation exits `2` whether or not git
    has an identity (`task-125`, `bug-172`).
-2. **Identity** (REQ-SEC-01) → exit `1` when no name or no email resolves.
+2. **Identity** (REQ-SEC-01) → exit `1` when no name or no email resolves. Then, in this order:
+   - **Membership** (`dl-220` Q2 (b)) → exit `1` when the identity is not a team member: see
+     "Membership" below.
+   - **Agent context** — `resolveAgentContext` (`src/core/agent-context.ts`, `spec-018` §2.6) reads the
+     agent markers of the invocation once and hands the result on, never re-read. An approver-gated
+     operation (`spec-018` §0) calls it in its gated form: it computes the markers only, reads no
+     `team.agents` entry, and neither refuses nor warns here; the refusal is step 4's.
 3. **Transition legality** — the document located, its type and state resolved against the
    `memory.yaml` committed at `HEAD` (§6), the verb's edge resolved (`dl-032`, `dl-053`) → exit `1`.
    When the target state declares a WIP limit (`spec-001` `limits`) that the documents of the type
@@ -449,7 +455,10 @@ the single write, so "the state is unchanged" holds on every refusal by construc
    `task-180`), except `reject` and `park`, which return the element along a reject or `returns`
    edge and take no slot check (`dl-156` Q2 (i), `task-274`).
 4. **Authority** (REQ-SEC-03), on `approve` and `reject` → exit `1`,
-   `user not authorized to approve type '<type>'`, read from the `dna.yaml` committed at `HEAD`.
+   `user not authorized to approve type '<type>'`, read from the `dna.yaml` committed at `HEAD`. Its first
+   step, before `dna.yaml` is read, is `refuseAgentContext` (`spec-018` §3.1): with any agent marker present
+   the operation is refused with `E_AGENT_CONTEXT` (`spec-018` §3.2), so the session is refused before its
+   identity is judged.
 5. **Write** — one commit, scoped to the document. An `approve` that fires the `supersedes:` trigger
    (`spec-001`) also resolves the superseded element at step 3's commit and refuses it before any
    write. It then makes a second commit, scoped to that element (`spec-008` §2, `finalize`).
@@ -490,6 +499,30 @@ body, so either could make the recorded author or the `Approver:` line differ fr
 authorized. The check is `requireGitIdentity` (`src/core/git-identity.ts`), shared by every mutating
 operation, not only the transition verbs. The committer is otherwise git's own and is not pinned: the
 audit record (`memory history`, REQ-SEC-02) reads the author.
+
+**Membership** (`dl-220` Q2 (b), the `command-baseline` read half). Every mutating operation but `init` —
+the `mutates: true` operations of `CORE_MODULES`, `agent execute` included — runs, right after
+`requireGitIdentity`, `requireTeamMembership` (`src/core/team-membership.ts`): the identity step 2
+resolved must be a `team.members` entry of the `dna.yaml` committed at `HEAD` (`loadDnaYamlAtHead`, the
+read `requireApproverAuthority` makes), matched on the email, case-insensitively, as `resolveMemberRoles`
+matches it. Otherwise the operation stops at exit `1`, `VALIDATION`, before anything past step 2 is read
+and before anything is written:
+
+```
+error: E_NOT_A_MEMBER: the git identity <name> <email> is not a team member: no team.members entry of the dna.yaml committed at HEAD has the email <email>, and only a member changes this project (dl-220)
+hint: a member adds you with 'wingfoil dna add team.members --value "<name>" --entry-email <email> --entry-roles <role>', or run the command as a member's git identity
+```
+
+Two cases are not refused, because there is no team to be outside of: no `dna.yaml` committed at `HEAD`
+(a repository before its first configuration commit), and a committed `team.members` that is empty (the
+`init` scaffold, `members: []`, until the first member is added). A committed `dna.yaml` that does not parse
+or validate is refused, fail-closed, as the authority check refuses it: `cannot resolve team membership:
+the committed '.wingfoil/dna.yaml' (at HEAD) is not readable as DNA: <error>. Membership is read from the
+committed configuration, so the committed file must be valid; fix it and commit the fix, then retry.` The
+working tree's `dna.yaml` never decides membership: a member added and not committed is not yet a member.
+`init` takes no membership step, because it writes the first `dna.yaml`. A non-member asking for an
+approval gate is therefore told `E_NOT_A_MEMBER`, not REQ-SEC-03's `user not authorized …`, which stays the
+refusal of a member without the `approver` role; both exit `1` and write nothing.
 
 ## Consequences
 
@@ -948,3 +981,12 @@ one of them leaving `CORE_MODULES` operations without their function by load ord
 unchanged. `registerReadOnlyResources` moved from `src/mcp/index.ts` to `src/mcp/read-only-resources.ts`, which §3's
 "MCP exposure of the v0.3 rows" now names, and §1 lists every
 `wingfoil init` read the door serves (the default template and the template lookup as well as the names). Edited in place without a supersede or a state change (`dl-047`), pending the approver's `memory amend`.
+
+**Revision (2026-11-11, `task-333-refuse-approver-gated-verbs-in-an-agent-context-and-mutating-verbs-for-non-members-l0-spec-018`)
+— §7 gains the membership step, the agent-context resolution and the agent refusal of step 4.** `dl-220` Q2 (b)
+(`ready`) makes every mutating operation but `init` refuse an identity outside `team.members`; `spec-018` (`approved`)
+places `resolveAgentContext` after step 2 and `refuseAgentContext` as the first step of the authority check, and asks
+this section to cite both (`spec-018` Consequences). Step 2 lists the two sub-steps; step 4 gains one sentence; a
+"Membership" paragraph fixes the message `E_NOT_A_MEMBER`, the baseline (`HEAD`), the two cases that are not refused
+(no committed `dna.yaml`, an empty `team.members`) and the fail-closed reading of an invalid committed file. No other
+step moves. Edited in place without a supersede or a state change (`dl-047`), pending the approver's `memory amend`.
