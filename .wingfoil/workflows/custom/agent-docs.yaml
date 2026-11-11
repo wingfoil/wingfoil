@@ -18,7 +18,7 @@ kind: sub
 description: >-
   Verify and align the agent-facing entry point (AGENTS.md, with CLAUDE.md as its pointer, .wingfoil/README.md,
   .wingfoil/WORKFLOW.md) against the configuration it projects, so an agent's first contact describes the tool as it is.
-version: 1.1                     # 1.0 dl-025 (task-199): align-agent-docs moved here from user-docs 1.2, unchanged, so release-line-cycle can include the same phase; 1.1 dl-137 (task-252): the agent file is AGENTS.md, CLAUDE.md its pointer — produces and the four checks name AGENTS.md, a fifth check reads the pointer; 1.2 task-358 (bug-435 item 2, bug-469, dl-116): the five AGENTS.md / CLAUDE.md prose checks become agents-md.current, bound run to test/docs/agents-md.test.ts, their conditions moved into the description; no phase, step or produces changes
+version: 1.2                     # 1.0 dl-025 (task-199): align-agent-docs moved here from user-docs 1.2, unchanged, so release-line-cycle can include the same phase; 1.1 dl-137 (task-252): the agent file is AGENTS.md, CLAUDE.md its pointer — produces and the four checks name AGENTS.md, a fifth check reads the pointer; 1.2 task-358 (bug-435 item 2, bug-469, dl-116): the five AGENTS.md / CLAUDE.md prose checks become agents-md.current, bound run to test/docs/agents-md.test.ts, their conditions moved into the description; no phase, step or produces changes
 
 phases:
   - name: align-agent-docs                   # [SPEC] dl-025 — agent-facing docs gate (shape B)
