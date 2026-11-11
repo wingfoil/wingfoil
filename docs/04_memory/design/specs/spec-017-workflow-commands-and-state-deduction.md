@@ -552,8 +552,8 @@ approval on every element its actions move through a `gates` state — its **car
 | Carrier | Awaiting while |
 |---|---|
 | the bound element | it sits in a gate state the phase's actions pass through: the state an approve edge leaves (`memory.approve`, or a `set_state` to a gate's approve target — `release-line-cycle.approve`, release-line `planning`, `.wingfoil/memory.yaml:89`), or the gate state a `memory.submit` enters (`dev-loop.review`, task `in-review`) |
-| the selection (`spec-003` § "Selections") | each selected element sits in a gate state of its type (`release-planning.triage-bugs`: bugs `open`; `reconcile-governance`: decision-logs `in-discussion`, ADRs `pending`) |
-| the created elements | each element the step created sits in a gate state the phase's later actions pass through (`identify-specs`, `record-adrs`, `dev-loop.design`: `tech-spec`/`adr` `pending`; `end-of-life.announce`: a decision-log `in-discussion`) |
+| the selection (`spec-003` § "Selections") | each selected element sits in a gate state of its type (`release-planning.triage-bugs`: bugs `open`; `reconcile-governance`: decision-logs `in-discussion`, ADRs `pending`; `end-of-life.approve`: the decision-log tagged `end-of-life`, `in-discussion`) |
+| the created elements | each element the step created sits in a gate state the phase's later actions pass through (`identify-specs`, `record-adrs`, `dev-loop.design`: `tech-spec`/`adr` `pending`) |
 | the run elements of a typed `<T>.set_state(s)` | each targeted element (§4.2) sits in the gate whose approve target is `s` (`release-planning.commit-backlog`: tasks `pending → backlog`) |
 
 The approval is given when no carried element awaits any more — by `memory approve` (or a `reject`,
@@ -1169,7 +1169,7 @@ list --format json` with the pinned build 0.2.2 loads the same 23 workflows and 
   listed in §5.1 (7 before `task-199`, when `retrospective.approve` was one). The other 15 approval phases
   are carried by Memory: `bug-ingest.triage`, the three ingest `approve` phases, `release-line-cycle.approve`,
   `release-planning.triage-bugs|reconcile-governance|record-adrs|identify-specs|commit-backlog`,
-  `dev-loop.design|review`, `retrospective.approve` (its decision-log), `end-of-life.announce`, and
+  `dev-loop.design|review`, `retrospective.approve` (its decision-log), `end-of-life.approve` (its selection, the decision-log tagged `end-of-life`, since `task-351`), and
   `vision-change.impact-analysis` (`task-212`).
 - *Implicit owners:* `{id}` in a phase that adds an element is ambiguous until the entry takes
   `dl-104` D3's `{ type, path }` form. Until the alignment task rewrote the nine entries (`task-199`,
@@ -1786,3 +1786,10 @@ refusing a `draft` plan (§7.2). `bug-491`: `workflow` and `phase` are written w
 and `path` declare, a value the patterns hold no token for as a field, so `--set phase=` is accepted on any plan type;
 the default `title` uses the `phase` the plan records. Edited in place without a supersede or a state change
 (`dl-047`), pending the approver's `memory amend` at `task-346`'s design gate.
+
+**Revision (2026-11-09, `task-351-adopt-the-published-software-template-packs-into-wingfoil-by-hand-after-a-per-file-comparison-r8`)
+— §5.1 and §12.** `end-of-life` adopts the `software@1.0.0` pack's phases (`end-of-life.yaml` 1.2): `announce` adds the
+decision-log tagged `end-of-life` with no approval, and a new phase `approve` selects it `in-discussion`. §5.1's
+example of a created-elements carrier (`end-of-life.announce`) becomes an example of a selection carrier
+(`end-of-life.approve`), and §12's list of the approval phases carried by Memory names `end-of-life.approve`; the count
+stays 15. Edited in place without a supersede or a state change (`dl-047`), pending the approver's `memory amend`.

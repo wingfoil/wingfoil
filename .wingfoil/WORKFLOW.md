@@ -498,11 +498,13 @@ content, REQ-STATE-06).
 
 ```mermaid
 flowchart TD
-    AN["**announce** *(product-owner)*\nmemory.add(type: decision-log) 'End-of-life plan'\n✔ P4.12: [title]\n🔑 Approval gate — *approver*"]
+    AN["**announce** *(product-owner)*\nmemory.add(type: decision-log, tags: [end-of-life]) 'End-of-life plan'\nmemory.submit\n✔ P4.12: [title]\ndraft → in-discussion"]
+    AP["**approve** *(approver)*\nselection: the in-discussion decision-log tagged end-of-life\nmemory.approve\n🔑 Approval gate — reject → announce\nin-discussion → ready"]
     DE["**deprecate** *(tech-lead)*\nselection: the closing release-line's releases not yet released\nmemory.deprecate on each selected release\n✔ deprecated content excluded from agent context"]
     AR["**archive** *(tech-lead)*\ngit.commit(message: 'end-of-life: archive')\nfreeze the repository line"]
 
-    AN --> DE --> AR
+    AN --> AP --> DE --> AR
+    AP -. reject .-> AN
 ```
 
 ---
@@ -599,7 +601,7 @@ above use these keys (`spec-003` § Phase; `workflow next` and `workflow show` s
 | Key | Meaning | Used here |
 |-----|---------|-----------|
 | `iterate_over` / `where` | Run the included workflow once per matching element of a type, or once per entry of a collection in versioned configuration (`element:waves`, `dl-104` D2 (b)); `where` filters the candidates | `release-line-cycle`, `release-cycle`, `wave` |
-| `produces` | The artifacts that deduce the phase's completion. A string is owned by the workflow's `element`; an object `{ type, path }` is owned by the elements of type `type` the phase creates (`dl-104` D3) | the object form in `initial-design` (`seed-releases`, `seed-adrs`, `seed-dls`, `seed-specs`), `release-line-cycle` (`plan-next-release-line`), `release-planning` (`record-adrs`, `identify-specs`, `build-backlog`) and `dev-loop` (`design`) |
+| `produces` | The artifacts that deduce the phase's completion. A string is owned by the workflow's `element`; an object `{ type, path }` is owned by the elements of type `type` the phase creates (`dl-104` D3) | the object form in `initial-design` (`seed-releases`, `seed-adrs`, `seed-dls`, `seed-specs`), `release-line-cycle` (`plan-next-release-line`), `release-planning` (`record-adrs`, `identify-specs`, `build-backlog`), `dev-loop` (`design`), the `capture` of `bug-ingest`, `decision-log-ingest` and `adr-ingest`, and `end-of-life` (`announce`) |
 | `awaits` | `{ party, evidence }`: the phase waits on an actor outside the project (the npm registry, a GitHub environment reviewer), `evidence` a check token that observes the outcome (`dl-104` D4); distinct from `approval:`, which names a project role. In v0.3 such a phase completes by a `workflow finalize` record | declared by no phase today |
 | `mode` | Which non-fresh execution mode the phase's agent run may use: `fresh` (default), `resume`, `reference` (`dl-134` §4 (a), `dl-135`); every v0.3 run is `fresh` | `dev-loop`'s `refactor` (`resume`) |
 | `distinct_from` | Phases of the same workflow whose runs this phase's run never shares an agent session with, whatever `mode` says (`dl-134` §4 (b)) | `dev-loop`'s `green` (`[red]`) and `review` (`[red, green, refactor]`) |
