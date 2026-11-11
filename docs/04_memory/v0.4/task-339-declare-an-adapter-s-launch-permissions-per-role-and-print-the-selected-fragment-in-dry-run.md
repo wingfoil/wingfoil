@@ -544,7 +544,43 @@ first state was changed (`git status --short` → empty before submit).
 
 ### by-hand pass H2 (approver)
 
-To be filled by the orchestrator from the approver's runs.
+Run by the approver on 2026-11-11 and 2026-11-12 with this task's build (`node dist/cli.js --version` →
+`0.3.2 (e71aa206d…)`), in a scratch project outside any repository: `git init`, `wingfoil init --template Kanban`,
+one member (the approver), two agents `Claude` (adapter `claude-code`) and `Codex` (adapter `codex-cli`) executing
+`developer`, `qa`, `reviewer`, `architect` and `tech-lead` (no map entry: `default`), a bare repository as `origin`, and
+one task whose body asks the agent to read the session Resource, append `probe <role>` to the task file and commit it,
+run `git log -1`, run `git push origin HEAD`, and report what was refused. Per agent and role: `wingfoil agent execute
+--element task:task-001-permission-probe --role <role> --agent <agent> --headless --dry-run --format json`, then the same
+without `--dry-run`, `--timeout 15m < /dev/null`. The adapters' headless output is `none`, so the agents' replies are
+not kept; the evidence is the exit status, the run record and the git state.
+
+**Dry runs** (all 10 exit `0`): `launch.permissions` is the role's entry of spec-016 §2.8, `default`'s for `tech-lead`
+(Claude: `[--permission-mode, dontAsk, --allowedTools, Read, Glob, Grep]`; Codex: `[--sandbox, read-only]`).
+
+**Claude** (`claude --version` → `2.1.322 (Claude Code)`; a first pass on 2026-11-11 exited `1` in about 3 s on all five
+roles, and the same argv run by hand without any permission fragment printed `Failed to authenticate: OAuth session
+expired and could not be refreshed`: the CLI's sign-in, not the fragment; the pass below is the rerun after signing in):
+
+| Role | Exit | Duration | Commits after the run (`git log <before>..HEAD`) | `origin` head |
+|---|---|---|---|---|
+| developer | 0 | 72.1 s | `probe developer` (the task file, 1 line), the run record | unchanged (`scratch: …`) |
+| qa | 0 | 52.2 s | `probe qa`, the run record | unchanged |
+| architect | 0 | 37.8 s | `probe architect`, the run record | unchanged |
+| reviewer | 0 | 51.9 s | the run record only | unchanged |
+| tech-lead (`default`) | 0 | 39.6 s | the run record only | unchanged |
+
+The write roles edited and committed and did not push; the reviewer and `default` made no edit and no commit; no run
+waited on a prompt (each ended well inside its 15-minute bound); the working tree was clean after each run
+(`git status --short` → nothing).
+
+**Codex** (`codex --version` → `codex-cli 0.145.0`): all five runs exit `0` (67–129 s); no run made a commit and
+`origin` is unchanged. Every edit failed in the host's sandbox, not in the posture: the run's stderr shows
+`apply_patch verification failed: … fs sandbox helper failed with status exit status: 1: bwrap: loopback: Failed
+RTM_NEWADDR: Operation not permitted`. This is a host limitation (D12): on this machine the `workspace-write` and
+`read-only` entries cannot be told apart by a run, and no sandbox bypass is shipped.
+
+**`verified_with`.** H1 read `2.1.310 (Claude Code)`; the CLI updated itself to `2.1.322` before the Claude pass. See
+the approver's ruling recorded with the review.
 
 ### Retrospective
 
