@@ -184,6 +184,8 @@ function refuseAgentTrailerOnApproval(message: string, trailers: readonly string
  * A mutating operation commits through {@link writeAndCommit}, which writes, commits and undoes a
  * refused commit in one place; during a dry run this function throws instead of committing (task-210).
  *
+ * @throws {@link ApprovalTrailerError} (`E_AGENT_TRAILER_ON_APPROVAL`) first, before `git add`, for an approval
+ *   commit that would carry an agent trailer (`spec-018` §3.3).
  * @throws whatever `git` raises (via `execFileSync`) — e.g. nothing staged to commit, or `root` is
  *   not a git repository. Callers that must translate those into a `CoreResult` do so at their layer
  *   (see `src/core/init.ts`); this primitive stays a thin, throwing mechanism by design.
@@ -247,6 +249,8 @@ export function stagedPaths(root: string, options: CommitOptions = {}): string[]
  * - **Dry run** (`dl-106` W2): inside `captureDryRun` nothing is committed; the plan is the subject, the
  *   full message, no paths and no diff.
  *
+ * @throws {@link ApprovalTrailerError} (`E_AGENT_TRAILER_ON_APPROVAL`) first, before a dry run's plan, for an
+ *   approval commit that would carry an agent trailer (`spec-018` §3.3).
  * @throws {@link CommitFailure} (`E_COMMIT_FAILED`) when git does not make the commit (a refusing hook);
  *   nothing was written, so there is nothing to put back.
  */
@@ -313,6 +317,10 @@ function repoRelative(root: string, path: string): string {
  *   relative and quoting git's explanation with the project root removed — and, if the index could not
  *   be put back, saying so. A filesystem failure is rethrown as it was raised (the index is untouched by
  *   then).
+ *
+ * - **No agent trailer on an approval** (`spec-018` §3.3, task-333). Before the dry run's plan and before any
+ *   write, a message with an `Approver:` line and a `Co-Authored-By:` or `AI-Model:` line throws
+ *   {@link ApprovalTrailerError}: nothing is written or staged.
  *
  * Callers run their confinement and dirty-target guards before calling: this primitive writes where it
  * is told.
