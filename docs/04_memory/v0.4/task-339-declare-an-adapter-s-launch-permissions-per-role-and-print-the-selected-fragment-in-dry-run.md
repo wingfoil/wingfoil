@@ -419,6 +419,23 @@ arguments, but got 4` — the design's expected reds; no other error.
 dry-run terminal file are T4's (`tests.unchanged(since: red)` from `47f1fdcf5`). AC 3's by-hand pass (H2) is the
 approver's, after green (D8); this suite pins only the maps' invariants.
 
+### red correction (qa, 2026-11-11)
+
+**Why.** Green (`2fea344ef`) adds the leaves `launch.interactive.permissions` and `launch.headless.permissions` to
+`AdapterManifest`. `test/agent/fake-agent.test.ts` ("AC 1 — custom/fake.yaml declares every §2.2 field") then fails:
+`npx jest --maxWorkers=2 test/agent/fake-agent.test.ts` on `2fea344ef` → `Tests: 3 failed, 53 passed, 56 total`. The
+three failures are the leaf-count guard (27) and "declares `launch.interactive.permissions`" / "declares
+`launch.headless.permissions`". The design did not list this pin. D10 keeps `fake.yaml` without `permissions`.
+
+**Change** (commit `2a02f8eed`, `test/agent/fake-agent.test.ts` only). The leaf count goes 27 → 29, with a comment
+naming task-339. The per-path check leaves out the two `permissions` paths beside `mcp.conflict_args`, with a comment
+in the pattern task-356 used: the fixture leaves them out on purpose, and the `perm` adapter of the permissions
+suites is derived inline.
+
+**Runs.** `npx jest --maxWorkers=2 test/agent/fake-agent.test.ts` → `Tests: 54 passed, 54 total`.
+`npx jest test/lint --maxWorkers=2` → `Test Suites: 15 passed, 15 total`, `Tests: 161 passed, 161 total`. The
+invisible-character `grep -nP` on the file → no hit.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
