@@ -188,7 +188,8 @@ Only register a human as `approver`, and only when that human asks you to. Never
 - `memory search` excludes `deprecated` documents unless you pass `--status deprecated`.
 - Subcommand `--help` is a reminder: it describes the command, its argument and its options, with
   one example; for anything more, trust the [CLI reference](cli-reference.md).
-- **Codex CLI:** if you run through the `codex-cli` adapter, the project's trusted `.codex/config.toml`
-  must not declare an MCP server named `wingfoil`. Codex merges that table into the server `agent
-  execute` registers, so its extra keys (`env`, `cwd`, …) reach WingFoil's server, and a `cwd` can make it
-  serve another repository's context. If you find one, tell the human; do not edit it yourself.
+- **Codex CLI:** if you run through the `codex-cli` adapter, `agent execute` refuses the launch while Codex's
+  own configuration (a trusted project's `.codex/config.toml`) declares an MCP server named `wingfoil`:
+  `error: adapter 'codex-cli': the agent's own configuration declares an MCP server named 'wingfoil', …`.
+  Codex would merge that table into the server `agent execute` registers, so its extra keys (`env`, `cwd`, …)
+  would reach WingFoil's server. If you meet the refusal, tell the human; do not edit that file yourself.

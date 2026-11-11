@@ -113,8 +113,8 @@ function argvIssues(
 /**
  * Every §2.3 violation in `manifest`, in field order: an unknown placeholder, a placeholder concatenated
  * inside an argv element, and a placeholder used outside the fields — or under the conditions — §2.3
- * lists. Fields §2.3 does not list (`command`, `verified_with`, `version_args`, `session.field`,
- * `usage.fields`, `summary.export_args`) hold no placeholder at all.
+ * lists. Fields §2.3 does not list (`command`, `verified_with`, `version_args`, `mcp.conflict_args`,
+ * `session.field`, `usage.fields`, `summary.export_args`) hold no placeholder at all.
  *
  * @param manifest - A manifest Pass 1 has accepted.
  * @param file - The label every issue carries (`<rev>:<path>`).
@@ -143,6 +143,7 @@ export function placeholderIssues(manifest: ManifestInput, file: string): Valida
     ...argvIssues(manifest.launch.interactive.args, 'launch.interactive.args', file, launch),
     ...argvIssues(manifest.launch.headless?.args, 'launch.headless.args', file, launch),
     ...(manifest.mcp.template === undefined ? [] : fieldIssues(manifest.mcp.template, 'mcp.template', file, template, false, true)),
+    ...argvIssues(manifest.mcp.conflict_args, 'mcp.conflict_args', file, none),
     ...argvIssues(manifest.session.assign_args, 'session.assign_args', file, sessionId),
     ...argvIssues(manifest.session.lookup_args, 'session.lookup_args', file, lookup),
     ...(manifest.session.field === undefined ? [] : fieldIssues(manifest.session.field, 'session.field', file, none, false)),

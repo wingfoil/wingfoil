@@ -14,6 +14,10 @@
  * - `--lookup <session-id>` — prints the declared JSON document for that session (`session.lookup_args`,
  *   `usage.lookup_args`).
  * - `--summary` — prints a one-line summary (`summary.export_args`).
+ * - `--mcp-get <name>` — the conflict probe (`mcp.conflict_args`, task-356, `bug-372`): answers whether the
+ *   agent's own configuration declares an MCP server named `<name>`, by its exit status only, the shape of
+ *   `codex mcp get wingfoil` (exit `0` printing the server's name when a table is loaded; exit `1` and
+ *   `Error: No MCP server named '<name>' found.` on stderr otherwise — the design addendum's H1 of task-356).
  * - anything else is a launch: `[--headless] (--mcp-config <file> | --mcp-config-json <text>)
  *   (--prompt <text> | --prompt-file <file>) [--session-id <id>] [--resume <id>]`. `--mcp-config-json`
  *   carries the same JSON body as the file, as ONE argument: the shape of `mcp.via: config-arg`'s
@@ -47,6 +51,8 @@
  *   group) and writes the child's pid to the file: a process the agent started, which no signal of a
  *   timed-out or signalled run may leave running (task-355, `bug-516`).
  * - `WINGFOIL_FAKE_AGENT_CHILD_TRAP=1` — that child ignores `SIGTERM`, so only a `SIGKILL` ends it.
+ * - `WINGFOIL_FAKE_AGENT_MCP_GET=0|1|hang` — `--mcp-get`, after recording: exit `0` (a server of that name is
+ *   declared), exit `1` (none is, the default), or wait until a signal kills it (`hang`, a probe that times out).
  *
  * `EXIT` and `WAIT` apply to a launch only. `agent execute` passes its environment to every child it
  * starts (§2.2), so the post-run `--version` and `--lookup` (§3.3 step 16) see the same variables, and
@@ -284,6 +290,17 @@ async function main() {
       return;
     }
     process.stdout.write(`${JSON.stringify(documentFor(option(argv, '--lookup') ?? null))}\n`);
+  } else if (argv.includes('--mcp-get')) {
+    record({ argv, stdin, env: Object.keys(process.env).sort(), mcp: null });
+    const name = option(argv, '--mcp-get') ?? '';
+    const answer = process.env.WINGFOIL_FAKE_AGENT_MCP_GET ?? '1';
+    if (answer === 'hang') return waitForSignal();
+    if (answer === '0') {
+      process.stdout.write(`${name}\n`);
+      return;
+    }
+    process.stderr.write(`Error: No MCP server named '${name}' found.\n`);
+    process.exitCode = 1;
   } else if (argv.includes('--summary')) {
     record({ argv, stdin, env: Object.keys(process.env).sort(), mcp: null });
     process.stdout.write('fake-agent: session summary\n');

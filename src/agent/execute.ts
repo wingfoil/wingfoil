@@ -20,7 +20,9 @@
  *    (`loadAdapter`, at `HEAD`); the launch kind ({@link resolveLaunchKind}, task-335): `--headless` /
  *    `--interactive`, else the phase's `launch`, else `interactive`, with a warning on a contradiction.
  * 4. The adapter declares that kind (`NO_LAUNCH_KIND`), then its `command` is on `PATH` or at its
- *    repository path ({@link agentCommandFound}).
+ *    repository path ({@link agentCommandFound}), then, when it declares `mcp.conflict_args`, the agent's own
+ *    configuration declares no MCP server named `wingfoil` ({@link mcpConflictCheck}, task-356, `MCP_SERVER_DECLARED`;
+ *    a dry run included).
  * 5. The git identity (`requireGitIdentity`), since the record is committed.
  * 6. The run log declared and unmodified (`runLogPreflight`, task-206).
  * 7. The execution context assembled and validated at `state_ref` (`assembleExecutionContext`, task-176).
@@ -80,7 +82,7 @@ import type { Step } from '../core/workflow-next';
 import type { LaunchKind } from '../workflow/schema';
 
 import type { TimeBound } from './duration';
-import type { LaunchHost, LaunchKindRun } from './launch';
+import { LOOKUP_TIMEOUT_MS, runConflictProbe, type LaunchHost, type LaunchKindRun } from './launch';
 import type { AdapterManifest } from './schema';
 import { adapterTreeDiagnosticsAtRev, duplicateAdapterRefusal, loadAdapter, type LoadedAdapter } from './discovery';
 import { ADHOC_PHASE, executionNotesSection, nextRunId, NO_WORKFLOW, recordSubject, runLogPreflight } from './run-log';
@@ -582,6 +584,26 @@ function templateHasExecutionNotes(root: string, sha: string, templatePath: stri
 }
 
 /**
+ * §3.3 step 4's conflict check (task-356, `bug-372`; §2.5, §3.7 `MCP_SERVER_DECLARED`): when the adapter declares
+ * `mcp.conflict_args`, that argv is run ({@link runConflictProbe}); exit `0` means the agent's own configuration
+ * declares an MCP server named `wingfoil`, which the agent would merge into the server `agent execute` registers,
+ * and refuses the launch (`CONFLICT`, `details` the adapter and the argv). A non-zero exit passes; a probe that times
+ * out or cannot be started passes with one `warning:` line naming the adapter and the cause (approver ruling D1.3).
+ */
+export async function mcpConflictCheck(root: string, adapter: string, manifest: AdapterManifest, timeoutMs: number): Promise<CoreResult<undefined>> {
+  const argv = manifest.mcp.conflict_args;
+  if (argv === undefined) return coreOk(undefined);
+  const probe = await runConflictProbe(root, manifest.command, argv, timeoutMs);
+  if (probe.kind === 'failed') reportWarning(`adapter '${adapter}': the MCP server conflict check (mcp.conflict_args) ${probe.reason}: going on without it`);
+  if (probe.kind !== 'declared') return coreOk(undefined);
+  return coreErr({
+    code: 'CONFLICT',
+    message: `adapter '${adapter}': the agent's own configuration declares an MCP server named 'wingfoil', which it would merge into the server agent execute registers: remove or rename it`,
+    details: { adapter, argv: [...argv] },
+  });
+}
+
+/**
  * Run `agent execute`'s pipeline up to the spawn (§3.3 steps 2–12, see the module doc), then
  * `launch` with the prepared launch, while its temporary files exist. Warnings go through the warning
  * sink as they arise. Returns the first refusal, or what `launch` returns.
@@ -686,6 +708,10 @@ async function runPipeline<T>(
   if (!agentCommandFound(root, manifest.command, host.searchPath ?? process.env.PATH)) {
     return coreErr({ code: 'IO', message: `agent command '${manifest.command}' not found (adapter '${adapter.value.name}')` });
   }
+  // Step 4, last — the agent's own configuration declares no server named `wingfoil` it would merge into ours
+  // (§2.5, task-356, bug-372); a dry run asks too, since the probe launches no model (approver ruling D1.2).
+  const conflict = await mcpConflictCheck(root, adapter.value.name, manifest, host.lookupTimeoutMs ?? LOOKUP_TIMEOUT_MS);
+  if (!conflict.ok) return conflict;
 
   // Step 5 — the identity the record commit (step 17) needs.
   const identity = requireGitIdentity(root);

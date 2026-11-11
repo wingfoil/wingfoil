@@ -686,11 +686,19 @@ wingfoil agent list            # the recorded runs, and the workflow steps waiti
 wingfoil agent show task-001-my-first-task/adhoc/1
 ```
 
-**Codex CLI: do not declare a server named `wingfoil` in a trusted project's `.codex/config.toml`.** The
-`codex-cli` adapter registers WingFoil's MCP server with Codex's `-c mcp_servers.wingfoil=…` override, and
-Codex merges that override with a same-named table of a trusted project's `.codex/config.toml`: the
-keys the project sets and the override does not (`env`, `cwd`, …) reach WingFoil's server, and a `cwd`
-can make it serve another repository's context.
+**Codex CLI: a server named `wingfoil` in Codex's own configuration stops the run.** The `codex-cli` adapter
+registers WingFoil's MCP server with Codex's `-c mcp_servers.wingfoil=…` override, and Codex merges that override
+with a same-named table of a trusted project's `.codex/config.toml`, a nested `env` table included: the keys the
+project sets and the override does not (`env`, `cwd`, …) would reach WingFoil's server, and a `cwd` could make it
+serve another repository's context. So, before the launch (and in a dry run), `agent execute` asks Codex with
+`codex mcp get wingfoil`; when Codex would load such a table it refuses with exit `1`, `error: adapter 'codex-cli':
+the agent's own configuration declares an MCP server named 'wingfoil', which it would merge into the server agent
+execute registers: remove or rename it`. Rename or remove that table. A check that times out or cannot start
+prints a `warning:` line and the run goes on (new in 0.4).
+
+A headless `codex-cli` run (`--headless`) records its session id: `codex exec --json` prints its events on stdout,
+and the first one carries the id, which `codex exec resume <id>` accepts. An interactive run records
+`not-reported` (new in 0.4).
 
 ## 10. CI and scripting
 

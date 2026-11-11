@@ -38,11 +38,13 @@ const InteractiveLaunch = z.strictObject({
 
 /**
  * `launch.headless` — no terminal; read from v0.4 by the work run (§3.5, `dl-181`, task-335), whose stdout is
- * captured and not parsed yet (`output` is read by `dl-182`/`dl-188`'s tasks), and by the v1.0 verification run.
+ * captured: `output` says how it is read — `json`, one JSON document; `jsonl`, one JSON value per line; `none`, not
+ * read. The v0.4 work run reads from it only the session id under `session.id: output` (§2.6, task-356); the rest is
+ * `dl-182`/`dl-188`'s tasks, and the v1.0 verification run.
  */
 const HeadlessLaunch = z.strictObject({
   args: Argv,
-  output: z.enum(['json', 'none']),
+  output: z.enum(['json', 'jsonl', 'none']),
 });
 
 /** The JSON paths `usage.fields` may declare (§2.2); an undeclared one yields `not-reported`. */
@@ -76,6 +78,12 @@ export const AdapterManifest = z.strictObject({
     // No `none`: an adapter that cannot register the `wingfoil` MCP server is refused (`adr-012`).
     via: z.enum(['config-file', 'config-arg', 'args']),
     template: NonEmpty.optional(),
+    /**
+     * An argv that exits `0` when the agent's own configuration already declares an MCP server named `wingfoil`,
+     * which the agent would merge into the server `agent execute` registers (§2.5, task-356, `bug-372`): run before
+     * the launch, no placeholder; exit `0` refuses it (§3.3 step 4, `MCP_SERVER_DECLARED`). Absent: no check.
+     */
+    conflict_args: z.array(NonEmpty).nonempty('must not be empty').optional(),
   }),
   session: z.strictObject({
     id: z.enum(['assign', 'output', 'lookup', 'none']),

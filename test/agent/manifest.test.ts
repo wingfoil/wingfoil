@@ -615,3 +615,13 @@ describe('task-237 (g) — {mcp_config}: required under config-arg, legal only t
     expectIssue(issues, 'launch.interactive.args.4', /placeholder \{mcp_args\} is not legal here/);
   });
 });
+
+describe('task-356 AC 2 (a) — launch.headless.output: jsonl (spec-016 §2.2, bug-375)', () => {
+  it('jsonl is accepted, beside json and none (the `xml` refusal above stays)', () => {
+    const manifest = fake();
+    manifest.launch.headless.output = 'jsonl';
+    expect(issuesOf(manifest)).toEqual([]);
+    const parsed = parseAdapterManifest(dump(manifest), { name: 'fake', kind: 'custom', file: 'f.yaml' });
+    expect(parsed.launch.headless?.output).toBe('jsonl');
+  });
+});

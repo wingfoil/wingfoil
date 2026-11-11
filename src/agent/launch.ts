@@ -8,7 +8,8 @@
  *     `session.id: assign`), every placeholder filling whole argv elements ({@link renderLaunchArgv}),
  *     no shell, its working directory the project root, the environment passed through unchanged
  *     (`adr-012` point 1). An interactive agent inherits stdin, stdout and stderr; a headless one (the
- *     work run, §3.5, task-335) reads the null device, its stdout is piped and drained, its stderr is
+ *     work run, §3.5, task-335) reads the null device, its stdout is piped and drained (and read for the
+ *     session id under `session.id: output`, step 16), its stderr is
  *     `agent execute`'s, and on POSIX it runs in a session and process group of its own (approver ruling
  *     D6 (a)). This is REQ-PERF-01's "agent ready".
  * 15. The wait. From the spawn until the record is committed, for an interactive launch `SIGINT`,
@@ -21,7 +22,10 @@
  *     signal is still recorded as `signal:<NAME>`. With `--timeout` the bound runs from the spawn: at
  *     expiry `SIGTERM` through the same forwarding, then `SIGKILL` {@link TIMEOUT_GRACE_MS} later if the
  *     agent still runs; both timers stop when it exits.
- * 16. The post-run lookups (§2.6): `version_args`, `session.lookup_args`, `usage.lookup_args`, each run as
+ * 16. The session id a headless run's stdout carried, under `session.id: output` (§2.6, task-356: one JSON
+ *     document under `launch.headless.output: json`, the first line carrying it under `jsonl`; none found is
+ *     `not-reported` and a `warning:` line). The post-run lookups (§2.6): `version_args`, `session.lookup_args`,
+ *     `usage.lookup_args`, each run as
  *     `command` + argv with a time limit ({@link LOOKUP_TIMEOUT_MS}); one argv declared twice runs once.
  *     A lookup that fails, times out or prints no JSON, and a value of the wrong type, yield
  *     `not-reported` and a `warning:` line; the lookup never fails the run.
@@ -257,7 +261,7 @@ function takeOverSignals(kind: LaunchKindRun, signalGroup: (pgid: number, signal
 
 /**
  * The spawn options of each launch kind (§3.3 step 14). Headless: stdin the null device, stdout piped (and
- * drained by {@link runAgent}), stderr inherited, and on POSIX a session and process group of its own, so the
+ * drained by {@link runAgent}, which hands it to the session-id reader under `session.id: output`), stderr inherited, and on POSIX a session and process group of its own, so the
  * agent has no controlling terminal to open and gets each signal once (approver ruling D6 (a)).
  */
 function spawnOptions(kind: LaunchKindRun, root: string): SpawnOptions {
@@ -265,7 +269,23 @@ function spawnOptions(kind: LaunchKindRun, root: string): SpawnOptions {
   return { cwd: root, stdio: ['ignore', 'pipe', 'inherit'], env: process.env, detached: !WINDOWS };
 }
 
-/** Spawn the agent and wait for it: its exit status and the wall-clock duration, or why it could not start. */
+/**
+ * Where a headless run's stdout goes besides being drained (§2.6 `session.id: output`, task-356): each chunk, in
+ * order, and how long to wait after the agent exits for the rest of it, unless `satisfied` says nothing more is
+ * needed.
+ */
+interface StdoutSink {
+  readonly write: (chunk: Buffer) => void;
+  readonly satisfied: () => boolean;
+  readonly drainMs: number;
+}
+
+/**
+ * Spawn the agent and wait for it: its exit status and the wall-clock duration, or why it could not start. With
+ * `stdout`, a headless agent's stdout is handed to it chunk by chunk, and the wait goes on after the exit until the
+ * stream ends, `stdout.satisfied()` holds, or `stdout.drainMs` passes (a process the agent left behind may hold the
+ * pipe open); the duration is still measured to the exit.
+ */
 function runAgent(
   spawnAgent: SpawnAgent,
   command: string,
@@ -273,6 +293,7 @@ function runAgent(
   options: SpawnOptions,
   onSpawn: (child: ChildProcess) => void,
   onExit: () => void,
+  stdout?: StdoutSink,
 ): Promise<{ ok: true; exitStatus: ExitStatus; durationMs: number } | { ok: false; reason: string }> {
   return new Promise((settle) => {
     let child: ChildProcess;
@@ -284,8 +305,17 @@ function runAgent(
       return;
     }
     // A headless agent's stdout is captured and not echoed (§3.5): read to its end, written nowhere, so a
-    // full pipe never blocks the agent. Nothing parses it yet (`dl-182`, `dl-188`).
-    child.stdout?.resume();
+    // full pipe never blocks the agent. Only the session id is read from it, under `session.id: output` (§2.6).
+    const piped = child.stdout ?? null;
+    let ended: Promise<void> = Promise.resolve();
+    if (piped !== null && stdout !== undefined) {
+      ended = new Promise((resolve) => {
+        for (const event of ['end', 'close', 'error'] as const) piped.once(event, () => resolve());
+      });
+      piped.on('data', (chunk: Buffer | string) => stdout.write(typeof chunk === 'string' ? Buffer.from(chunk) : chunk));
+    } else {
+      piped?.resume();
+    }
     onSpawn(child);
     let spawned = false;
     child.once('spawn', () => {
@@ -297,13 +327,22 @@ function runAgent(
     child.once('exit', (code, signal) => {
       onExit();
       const durationMs = Math.max(0, Math.round(performance.now() - start));
-      settle({ ok: true, exitStatus: signal !== null ? `signal:${signal}` : (code ?? 0), durationMs });
+      const result = { ok: true as const, exitStatus: signal !== null ? `signal:${signal}` : (code ?? 0), durationMs };
+      if (stdout === undefined || stdout.satisfied()) return settle(result);
+      let handle: NodeJS.Timeout | undefined;
+      const bound = new Promise<void>((resolve) => {
+        handle = setTimeout(resolve, stdout.drainMs);
+      });
+      void Promise.race([ended, bound]).then(() => {
+        clearTimeout(handle);
+        settle(result);
+      });
     });
   });
 }
 
 /** One lookup's outcome: its stdout, or why it failed (one line, for a warning). */
-type LookupOutcome = { ok: true; stdout: string } | { ok: false; reason: string };
+type LookupOutcome = { ok: true; stdout: string } | { ok: false; reason: string; exitCode?: number };
 
 /** Run `command` + `args` with the time limit, no shell, in the root; stdout captured. */
 function runLookup(command: string, args: readonly string[], root: string, timeoutMs: number): Promise<LookupOutcome> {
@@ -313,11 +352,27 @@ function runLookup(command: string, args: readonly string[], root: string, timeo
       const failed = error as NodeJS.ErrnoException & { killed?: boolean; code?: number | string; signal?: string | null };
       if (failed.killed === true) return settle({ ok: false, reason: `timed out after ${timeoutMs} ms` });
       if (failed.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER') return settle({ ok: false, reason: `printed more than ${LOOKUP_MAX_BYTES / 1024 / 1024} MiB on stdout or stderr` });
-      if (typeof failed.code === 'number') return settle({ ok: false, reason: `exited ${failed.code}` });
+      if (typeof failed.code === 'number') return settle({ ok: false, reason: `exited ${failed.code}`, exitCode: failed.code });
       if (failed.signal) return settle({ ok: false, reason: `ended by ${failed.signal}` });
       return settle({ ok: false, reason: failed.code !== undefined ? `could not start: ${failed.code}` : failed.message });
     });
   });
+}
+
+/** What the conflict probe answered (§3.3 step 4): a server named `wingfoil` declared, none, or no answer. */
+export type ConflictProbe = { readonly kind: 'declared' } | { readonly kind: 'none' } | { readonly kind: 'failed'; readonly reason: string };
+
+/**
+ * §3.3 step 4's conflict probe (task-356, `bug-372`; §2.5): the adapter's `mcp.conflict_args` run as a post-run
+ * lookup runs (§2.6: the `command`, no shell, the project root, WingFoil's environment, `timeoutMs`). Only the exit
+ * status is read, never the output: `0` is `declared`, another exit `none`, and a probe that timed out, was ended by
+ * a signal or could not be started is `failed`, with the reason.
+ */
+export async function runConflictProbe(root: string, command: string, args: readonly string[], timeoutMs: number): Promise<ConflictProbe> {
+  const outcome = await runLookup(commandToSpawn(root, command), args, root, timeoutMs);
+  if (outcome.ok) return { kind: 'declared' };
+  if (outcome.exitCode !== undefined) return { kind: 'none' };
+  return { kind: 'failed', reason: outcome.reason };
 }
 
 /** The first JSON value a lookup printed, or why there is none. */
@@ -328,6 +383,110 @@ function parseLookup(outcome: LookupOutcome): { ok: true; document: unknown } | 
   } catch {
     return { ok: false, reason: 'printed no JSON' };
   }
+}
+
+/**
+ * How much of a headless run's stdout the session id is read from (§2.6 `session.id: output`): the whole document
+ * under `launch.headless.output: json`, one line under `jsonl`; past it, `json` yields `not-reported` and a `jsonl`
+ * line is passed over.
+ */
+const OUTPUT_MAX_BYTES = 1024 * 1024;
+
+/** The session id a headless run's stdout carried, or why there is none (one phrase, for a warning). */
+type OutputSession = { ok: true; id: string } | { ok: false; reason: string };
+
+/** A reader of a headless run's stdout for the session id: fed chunk by chunk, asked once the stream is over. */
+interface SessionOutputReader {
+  readonly write: (chunk: Buffer) => void;
+  /** Whether the id is known already, so the rest of the stream is not needed (`jsonl` only). */
+  readonly found: () => boolean;
+  readonly end: () => OutputSession;
+}
+
+/** The non-empty string at `field` of the JSON `text`, else `undefined` (not JSON, no such value, another type). */
+function sessionIdIn(text: string, field: string): string | undefined {
+  let document: unknown;
+  try {
+    document = JSON.parse(text) as unknown;
+  } catch {
+    return undefined;
+  }
+  const value = readJsonPath(document, field);
+  return typeof value === 'string' && value !== '' ? value : undefined;
+}
+
+const NO_SESSION_ID = 'the headless output carries no session id';
+
+/**
+ * §2.6 `session.id: output` (task-356, `bug-375`): under `jsonl` each line is one JSON value, read in order, and the
+ * first non-empty string at `field` is the id (a line that is not JSON, has no such value or is over
+ * {@link OUTPUT_MAX_BYTES} is passed over); under `json` the whole stdout, at most {@link OUTPUT_MAX_BYTES}, is one
+ * document and the id is at `field`. A pure function of the bytes written, in their order.
+ */
+function sessionOutputReader(output: 'json' | 'jsonl', field: string): SessionOutputReader {
+  if (output === 'json') {
+    const chunks: Buffer[] = [];
+    let size = 0;
+    return {
+      write: (chunk) => {
+        size += chunk.length;
+        if (size <= OUTPUT_MAX_BYTES) chunks.push(chunk);
+        else chunks.length = 0;
+      },
+      found: () => false,
+      end: () => {
+        if (size > OUTPUT_MAX_BYTES) return { ok: false, reason: `the headless output is over ${OUTPUT_MAX_BYTES / 1024 / 1024} MiB` };
+        const text = Buffer.concat(chunks).toString('utf-8');
+        try {
+          JSON.parse(text);
+        } catch {
+          return { ok: false, reason: 'the headless output is not one JSON document' };
+        }
+        const id = sessionIdIn(text, field);
+        return id === undefined ? { ok: false, reason: NO_SESSION_ID } : { ok: true, id };
+      },
+    };
+  }
+  let id: string | undefined;
+  let line: Buffer[] = [];
+  let lineSize = 0;
+  let skipping = false;
+  const append = (piece: Buffer): void => {
+    if (skipping || piece.length === 0) return;
+    lineSize += piece.length;
+    if (lineSize > OUTPUT_MAX_BYTES) {
+      skipping = true;
+      line = [];
+    } else {
+      line.push(piece);
+    }
+  };
+  const close = (): void => {
+    if (!skipping && lineSize > 0) id = sessionIdIn(Buffer.concat(line).toString('utf-8'), field);
+    line = [];
+    lineSize = 0;
+    skipping = false;
+  };
+  return {
+    write: (chunk) => {
+      let from = 0;
+      while (id === undefined) {
+        const newline = chunk.indexOf(0x0a, from);
+        if (newline === -1) {
+          append(chunk.subarray(from));
+          return;
+        }
+        append(chunk.subarray(from, newline));
+        close();
+        from = newline + 1;
+      }
+    },
+    found: () => id !== undefined,
+    end: () => {
+      if (id === undefined) close();
+      return id === undefined ? { ok: false, reason: NO_SESSION_ID } : { ok: true, id };
+    },
+  };
 }
 
 /** The facts §3.3 step 16 reads after the agent exited. */
@@ -353,6 +512,8 @@ interface PostRunInput {
   readonly assigned: string | undefined;
   readonly values: LaunchValues;
   readonly timeoutMs: number;
+  /** What the headless run's stdout carried under `session.id: output` (§2.6); `undefined` when it was not read. */
+  readonly output: OutputSession | undefined;
 }
 
 /**
@@ -381,6 +542,10 @@ async function postRunFacts(input: PostRunInput): Promise<PostRunFacts> {
   }
 
   let session: string = input.assigned ?? NOT_REPORTED;
+  if (input.output !== undefined) {
+    if (input.output.ok) session = input.output.id;
+    else warn(`${input.output.reason}: session recorded as not-reported`);
+  }
   if (manifest.session.id === 'lookup' && manifest.session.lookup_args !== undefined && manifest.session.field !== undefined) {
     const parsed = parseLookup(await lookup(manifest.session.lookup_args));
     if (!parsed.ok) warn(`the session lookup failed (${parsed.reason}): session recorded as not-reported`);
@@ -545,6 +710,14 @@ export async function launchAgent(root: string, input: LaunchInput, host: Launch
   const stopBound = (): void => {
     for (const cancel of cancels.splice(0)) cancel();
   };
+  // §2.6 `session.id: output`: a headless run's stdout carries the session id (task-356); an interactive one's
+  // belongs to the agent, and its session is `not-reported` silently.
+  const headlessOutput = input.kind === 'headless' ? manifest.launch.headless?.output : undefined;
+  const reader =
+    manifest.session.id === 'output' && manifest.session.field !== undefined && (headlessOutput === 'json' || headlessOutput === 'jsonl')
+      ? sessionOutputReader(headlessOutput, manifest.session.field)
+      : undefined;
+  const lookupTimeoutMs = host.lookupTimeoutMs ?? LOOKUP_TIMEOUT_MS;
   try {
     const ran = await runAgent(
       host.spawn ?? spawn,
@@ -556,6 +729,7 @@ export async function launchAgent(root: string, input: LaunchInput, host: Launch
         armBound();
       },
       stopBound,
+      reader === undefined ? undefined : { write: reader.write, satisfied: reader.found, drainMs: lookupTimeoutMs },
     );
     if (!ran.ok) {
       return coreErr({ code: 'IO', message: `agent command '${manifest.command}' could not be started (adapter '${input.adapter.name}'): ${ran.reason}` });
@@ -568,7 +742,8 @@ export async function launchAgent(root: string, input: LaunchInput, host: Launch
       manifest,
       assigned,
       values,
-      timeoutMs: host.lookupTimeoutMs ?? LOOKUP_TIMEOUT_MS,
+      timeoutMs: lookupTimeoutMs,
+      output: reader?.end(),
     });
     const elementId = input.element.slice(input.element.indexOf(':') + 1);
     const record: RunRecord = {

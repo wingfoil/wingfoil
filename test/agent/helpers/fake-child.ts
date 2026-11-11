@@ -48,6 +48,15 @@ export class FakeChild extends EventEmitter {
     this.emit('exit', code, null);
     this.emit('close', code, null);
   }
+  /**
+   * Exit with `code` and leave stdout open (task-356): a process the agent started still holds the pipe, so the
+   * stream ends only when the test ends it, or never.
+   */
+  exitKeepingStdout(code: number): void {
+    if (!this.running) return;
+    this.exitCode = code;
+    this.emit('exit', code, null);
+  }
   kill(signal: NodeJS.Signals = 'SIGTERM'): boolean {
     this.killed.push(signal);
     const answer = this.answers[signal] ?? 'exit';
