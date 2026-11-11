@@ -582,6 +582,47 @@ RTM_NEWADDR: Operation not permitted`. This is a host limitation (D12): on this 
 **`verified_with`.** H1 read `2.1.310 (Claude Code)`; the CLI updated itself to `2.1.322` before the Claude pass. See
 the approver's ruling recorded with the review.
 
+### fix round (developer, 2026-11-12)
+
+**Why.** The by-hand pass H2 above ran Claude Code `2.1.322` (the CLI updated itself after H1 read `2.1.310`) and
+passed; the approver ruled on 2026-11-12 that the `claude-code` adapter's `verified_with` moves to `"2.1.322 (Claude
+Code)"`, and that `codex-cli` stays `codex-cli 0.145.0`.
+
+**Base.** The task's PATH shim checked first (`command -v wingfoil` → the shim). `git rev-list --count HEAD..main` →
+`5`, so `git merge --no-edit main` (no conflict; the merge commit `f7ccb787d`, the trailers amended in); after it →
+`0`.
+
+**Change** (commit `af9f4cd07`): `src/storage/builtin-adapters.ts`, the `claude-code` constant's `verified_with`, and its
+TSDoc (the role map is read from the help of `2.1.310` and its by-hand pass ran on `2.1.322`, the version
+`verified_with` names); `.wingfoil/agents/built-in/claude-code.yaml` written from the constant, byte for byte. The
+manifest's header comment names no version, so it is unchanged. `spec-016` §2.8's headless table is a pending
+amendment (below).
+
+**Who pins the old string.** `grep -rn "2\.1\.310" src test docs .wingfoil` outside `docs/04_memory/` → three lines
+after the change: `src/storage/builtin-adapters.ts:43` (task-335's help read, history), `:48` (the role map's help read,
+still `2.1.310`), and `test/docs/name-resolvability.allowlist.ts:198` (the `dontAsk` entry's reason, which cites the help
+read). None pins `verified_with`; no red file names the version.
+
+**Runs** (after the heavy-gate slot script, which printed nothing and returned `0`): `npx jest --maxWorkers=2
+test/storage/builtin-adapter test/storage/builtin-template-sources test/core/builtin-adapter-writers
+test/core/init-builtin-adapters test/core/builtin-integrity test/agent/fake-agent test/docs test/lint` → `Test Suites:
+55 passed, 55 total`, `Tests: 632 passed, 632 total` (with the `spec-016` amendment in the working tree; the installed
+copy's byte equality is `test/storage/builtin-adapter-claude-code.test.ts`'s). `npm run -s check:mcp` → exit `0`:
+`.mcp.json "wingfoil" runs the pinned wingfoil 0.3.2, advertising [prompts, resources, tools] (prompts: 8, resources:
+4, tools: 0)` and `the build under development (dist/cli.js) serves [prompts, resources, tools] (prompts: 8, resources:
+4, tools: 0); every listed Resource read and Prompt get answered`. The invisible-character `grep -nP` on the three
+changed files → no hit. T4: `git log --first-parent --no-merges --format=%h 47f1fdcf5..HEAD --` on red's five files and
+`2a02f8eed..HEAD -- test/agent/fake-agent.test.ts` → nothing.
+
+**Pending amendment (approver)**, left uncommitted (`git status --short` → ` M
+docs/04_memory/design/specs/spec-016-agent-execution.md`):
+- `spec-016-agent-execution` — §2.8's headless table, the `claude-code` row's `verified_with` cell `2.1.322 (Claude
+  Code)`, and a Revision entry dated 2026-11-12. `--reason "Record the claude-code adapter's verified_with as 2.1.322,
+  the version the by-hand H2 pass of task-339 ran, while its flags stay those read from the help of 2.1.310 (approver
+  ruling 2026-11-12)."` The interactive table's `claude-code` row (§2.8, its `verified_with` column) still says
+  `2.1.296`, the version of `task-236`'s pass; it has differed from the manifest's value since `task-335` and is left
+  as is.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
