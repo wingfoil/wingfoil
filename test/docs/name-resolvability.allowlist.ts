@@ -75,6 +75,7 @@ export const NAME_ALLOWLIST: readonly AllowlistEntry[] = [
   { document: 'docs/04_memory/design/specs/spec-003-workflows-yaml-schema.md', nameClass: 'path', name: '.wingfoil/workflows/bindings.yaml', reason: PLANNED, plannedBy: ['task-175', 'task-199'] },
   { document: 'docs/04_memory/design/specs/spec-003-workflows-yaml-schema.md', nameClass: 'path', name: 'bindings.yaml', reason: PLANNED, plannedBy: ['task-175', 'task-199', 'task-221', 'task-222'] },
   { document: 'docs/04_memory/design/specs/spec-003-workflows-yaml-schema.md', nameClass: 'path', name: 'docs/self/', reason: 'historical: the pre-task-111 location, named where the document records that task-111 moved it (a dated Revision or Process note, or a "moved from" clause)' },
+  { document: 'docs/04_memory/design/specs/spec-003-workflows-yaml-schema.md', nameClass: 'path', name: 'scripts/check-retrospective.cjs', reason: PLANNED, plannedBy: ['task-358'] },
   { document: 'docs/04_memory/design/specs/spec-003-workflows-yaml-schema.md', nameClass: 'symbol', name: 'ActionBinding.manual', reason: UNTRIAGED },
   { document: 'docs/04_memory/design/specs/spec-003-workflows-yaml-schema.md', nameClass: 'symbol', name: 'ActionBinding.run', reason: UNTRIAGED },
   { document: 'docs/04_memory/design/specs/spec-003-workflows-yaml-schema.md', nameClass: 'symbol', name: 'CheckBinding.run', reason: UNTRIAGED },
