@@ -29,6 +29,11 @@
  * directory. The setup takes no heavy-gate lock (`dl-170`, `scripts/heavy-gate.cjs`): inside `npm test` its build is
  * nested in run-tests' hold, and a targeted run is not a heavy gate.
  *
+ * Agent markers (`spec-018` §1, §6 preamble; task-333 AC 7, design D8): the same main process drops the environment
+ * markers of `test/agent-markers.cjs` (`WINGFOIL_AGENT`, `CLAUDE_CODE_CHILD_SESSION`, `CODEX_SANDBOX`) before any
+ * worker is forked, so a suite that runs an approver-gated verb, in-process or in a child, is not refused because the
+ * run itself was started by an agent; a case that wants a marker sets it in the environment it builds.
+ *
  * Deterministic by construction: a fresh output directory, `tsc`, then the build record (which carries
  * no timestamp), no wall-clock or ordering dependence in what is built.
  */
@@ -38,6 +43,7 @@ const { join } = require('node:path');
 
 const { computeBuildInfo, serializeBuildInfo } = require('../scripts/write-build-info.cjs');
 const { prepareDist } = require('./dist-lock.cjs');
+const { AGENT_ENV_MARKERS } = require('./agent-markers.cjs');
 const { isolatedGitEnv, prepareGitIsolation } = require('./git-isolation.cjs');
 
 // Tag this run's fixture directories (bug-064, task-152). Set here, in jest's main process before
@@ -57,7 +63,13 @@ function applyGitIsolation() {
   Object.assign(process.env, env, { WF_GIT_ISOLATION_DIR: isolation.dir });
 }
 
+/** Drop the `spec-018` §1 environment markers from this process, so the workers forked after it start unmarked. */
+function removeAgentMarkers() {
+  for (const key of AGENT_ENV_MARKERS) delete process.env[key];
+}
+
 module.exports = async () => {
+  removeAgentMarkers();
   applyGitIsolation();
   const repoRoot = join(__dirname, '..');
   await prepareDist({
@@ -77,3 +89,4 @@ module.exports = async () => {
   });
 };
 module.exports.applyGitIsolation = applyGitIsolation;
+module.exports.removeAgentMarkers = removeAgentMarkers;
