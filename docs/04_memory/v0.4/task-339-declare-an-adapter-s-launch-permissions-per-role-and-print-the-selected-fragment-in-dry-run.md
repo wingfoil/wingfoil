@@ -55,3 +55,303 @@ per-agent mapping table (amendment `spec-016` § 2.2 schema, § 2.8 built-ins, `
 ## Execution Notes
 
 <!-- Filled by the dev-loop. -->
+
+### design (architect, 2026-11-11)
+
+**Inputs read.** Base `main` `3a93d7ac3` plus the start commit `24c11fc57` (`git log --oneline -2`); `bug: []`, so no
+bug syncs. The task's PATH shim was checked first: `command -v wingfoil` → the shim; `wingfoil --version` and `node
+dist/cli.js --version` → both `0.3.2 (3a93d7ac359f29d087c57e4cd9970d6ae08a1bc2)`. Read: `dl-223`, `dl-181` (its
+approve `c74c7ae30`, whose `Reason:` ratifies Q2 (a) "never wider than the step's role"), `dl-205`, `dl-210` (all
+`ready`); `spec-016` §2.1–§3.7 and `spec-008` §2's `--dry-run` row (both `approved`); `.wingfoil/workflows/custom/
+dev-loop.yaml` 2.4; the code of `src/agent/{schema,manifest,placeholders,launch,execute,index}.ts`,
+`src/core/agent-execute.ts`, the `agentExecute` entry of `src/core/index.ts`, `src/storage/builtin-adapters.ts`,
+`.wingfoil/agents/built-in/claude-code.yaml`, `test/fixtures/agents/`.
+
+**`depends_on` (`dl-015`).** `task-335` (`done`, merged `b20ddf0a5`): its Execution Notes read in full. What binds this
+task: `renderLaunchArgv(manifest, values, kind)` is where the fragment is appended (its "What the tasks built on this
+one must read"); D9 left the dry-run plan's keys unchanged and named this task as the one that adds the fragment "where
+a `launch` key can join it"; D7's evidence (the approver's headless runs of 2026-11-08) shows the posture gap this task
+closes — `claude -p` with no posture had the edit and `git commit` denied, `codex exec` stopped on its read-only
+sandbox, and on this host Codex's sandbox helper also failed (`bwrap: loopback: Failed RTM_NEWADDR`). Also read:
+`task-356` (`done`, merged `5b19dd086`), whose D7 accepted that a 0.3.x build refuses a manifest written by a newer
+build ("`task-339` adds `permissions` under the same rule"), and `task-355` (`done`, merged `8dae515d7`), whose risk
+note puts this task's edits in `launchPlan` and `renderLaunchArgv`, other functions than its own.
+
+**The Implementation Notes' files, re-read at `HEAD`** (`git log --oneline ddadc1251..HEAD -- <the six files>` → 8 commits, of
+`task-354`, `task-335`, `task-355` and `task-356`):
+- `src/agent/schema.ts`: `HeadlessLaunch` is `{ args, output: json | jsonl | none }` (`jsonl`, `task-356`); `mcp`
+  gained `conflict_args`. Both launch objects are `z.strictObject`, so `permissions` is today an unknown key.
+- `src/agent/manifest.ts`: `crossFieldIssues` unchanged in shape; the place for the map's `default` rule.
+- `src/agent/launch.ts`: `renderLaunchArgv(manifest, values, kind = 'interactive')` renders `launch.<kind>.args` then
+  `session.assign_args` (l.134–138); `LaunchInput` carries `role` and `kind`; process groups and the signal sweep
+  (`task-355`) and the stdout session reader (`task-356`) are elsewhere in the file.
+- `src/agent/execute.ts`: `AgentLaunchPlan` / `launchPlan` (l.813–855) unchanged since `task-218`; step 4 gained the
+  conflict probe (`task-356`).
+- `src/storage/builtin-adapters.ts`: `claude-code` headless `[-p, "{bootstrap}", --mcp-config, "{mcp_config_file}"]`,
+  `output: none`, `verified_with: "2.1.310 (Claude Code)"`; `codex-cli` headless `[exec, --json, -c, "{mcp_config}",
+  "{bootstrap}"]`, `output: jsonl`, `conflict_args: [mcp, get, wingfoil]`, `verified_with: "codex-cli 0.145.0"`.
+  `grep -c permissions src/storage/builtin-adapters.ts` → `0`; `grep -c headless` → `11` (the positive case).
+- `.wingfoil/agents/built-in/claude-code.yaml` is byte-equal to the shipped `claude-code` (`test/storage/
+  builtin-adapter-claude-code.test.ts`); this repository installs no `codex-cli.yaml` (`ls .wingfoil/agents/built-in`).
+- Not in the task's list, also changed: `src/agent/placeholders.ts` (the fragment holds no placeholder) and
+  `src/agent/index.ts` (the new export).
+
+**Where the dry-run plan is rendered and pinned.** `src/core/agent-execute.ts` l.102 returns `launchPlan(prepared)`
+as the stdout payload; `agentExecute` declares no `renderConsole`, so `--format console` prints it as indented JSON
+(scratch run below). Tests that pin its shape: `test/cli/agent-execute-dry-run-terminal.integration.test.ts` l.37
+(`Object.keys(plan)` equals `['dryRun', 'subject', 'paths', 'run', 'bootstrap']`, the one exact pin); `toMatchObject`
+only, unaffected by an added key: `test/cli/agent-execute.integration.test.ts` l.362, `test/core/agent-execute.test.ts`
+l.167, `test/cli/agent-execute-launch-kind.integration.test.ts` l.139 (`grep -rn "Object.keys(plan\|dryRun: true"
+test/agent test/cli test/core`). The plan as it is today, from a scratch clone of this branch (outside the worktree,
+`node_modules` and `dist/` linked): `node dist/cli.js agent execute --element task:<this task> --role reviewer
+--headless --dry-run --format json` → exit `0`, stderr empty, keys `dryRun, subject, paths, run, bootstrap`; the same
+with `--format console` → exit `0`, stderr empty, the same document indented.
+
+**Tests pinning the argv that changes.** `renderLaunchArgv`: `test/agent/launch.test.ts` l.71–113 and
+`test/agent/launch-headless.test.ts` l.57–84 (manifests without `permissions`: unchanged by an absent field); the
+fake's recorded argv: `test/cli/agent-execute-launch.integration.test.ts` l.180 and `test/agent/fake-agent.test.ts`
+l.305/l.433 (`fake.yaml` keeps no `permissions`, D10, so unchanged). Built-ins: `test/storage/builtin-adapter-{claude-
+code,codex-cli}.test.ts` deliberately pin no argv (their header, l.8–9); `test/storage/builtin-adapters-headless.test.ts`
+pins `output` and `prompt.via` only. No workflow file changes, so no phase list, step list or count is affected.
+
+**`dl-205` Q1 (a) — the proposed manifests against the pinned build 0.3.2.** In the scratch clone,
+`.wingfoil/agents/built-in/claude-code.yaml` given the `claude-code` map of D6 and a `codex-cli.yaml` installed with the
+map of D7 (this repository installs no `codex-cli`; added to the clone only to load both shapes), committed as
+`ef66900e7` in the clone. `node node_modules/wingfoil-released/dist/cli.js --version` → `0.3.2 (6de2e13c004bbf419acf
+a7dc4d98d5a7468cd693)`; each read below with `--format json`:
+- `agent list` → exit `0`, stderr the 68 `W_WORKFLOW_UNBOUND_TOKEN` lines only; its stdout equals the same command's
+  at the clone's parent commit except the `baseline.commit` sha (`cmp` after replacing the two shas → equal);
+- `agent show task-236-ship-verify-hand-builtin-claude-code-adapter-point/adhoc/1`, `workflow list`, `workflow show
+  dev-loop`, `dna show`, `directives list` → each exit `0`, stderr empty;
+- `npm run -s check:mcp` in the clone → exit `0`: `.mcp.json "wingfoil" runs the pinned wingfoil 0.3.2, advertising
+  [prompts, resources, tools] (prompts: 8, resources: 4, tools: 0)` and `the build under development (dist/cli.js)
+  serves [...]; every listed Resource read and Prompt get answered`; `npm run -s wingfoil -- workflow list` and
+  `workflow show dev-loop` → exit `0`, no line but the unbound-token warnings;
+- `agent execute --element task:<this task> --role reviewer --dry-run --format json` on the pinned build → exit `1`,
+  `{"error":"adapter 'claude-code': launch.headless: Unrecognized key: \"permissions\"", …}` (and the same on this
+  branch's code build, which does not read the field yet).
+
+Why: in the pinned build only `agent execute` parses a manifest (`grep -rn "loadAdapter\|parseAdapterManifest("
+node_modules/wingfoil-released/dist --include=*.js` → `agent/execute.js` l.497 and `core/builtin-integrity.js` l.98,
+the latter `init`'s check of the package's own built-ins). So no pinned **read** breaks and no `KNOWN_READ_FAILURES`
+entry or `wingfoil-cli` §1 exception is owed; what breaks is `agent execute` on the pinned build against a manifest
+that declares `permissions`, which this repository runs on the code build (W0-R1's pilot) — D9.
+
+**Existing tests of the files this task changes**, on a clean tree, before any pin (after the heavy-gate slot script, slot granted
+15:39:38 UTC; one jest process): `npx jest --maxWorkers=2 test/agent test/storage/builtin-adapter
+test/storage/builtin-template-sources test/core/builtin-adapter-writers test/core/init-builtin-adapters
+test/core/agent-execute test/core/element-short-reference test/cli/agent-execute test/cli/dry-run.integration
+test/docs/cli-reference test/docs/dry-run-documented test/docs/name-resolvability test/docs/user-guide-scaffold
+test/docs/pages-render test/docs/llms-txt` → `Test Suites: 53 passed, 53 total`, `Tests: 790 passed, 790 total` (127.2 s).
+
+**Design.**
+- *The schema (AC 1).* `src/agent/schema.ts`: `const Permissions = z.union([Argv, z.record(z.string(), Argv)])`, and
+  `permissions: Permissions.optional()` in both `InteractiveLaunch` and `HeadlessLaunch`; exported type
+  `LaunchPermissions = z.infer<typeof Permissions>`. A scalar, `null`, a list holding a non-string, or a map value that
+  is not a list of strings is a Pass-1 `E_VALIDATION` at `launch.<kind>.permissions` (or below it). Pass 2,
+  `src/agent/manifest.ts` `crossFieldIssues`: a map without `default` → `E_ADAPTER_MANIFEST` at
+  `launch.<kind>.permissions`, message `a role map must declare a default entry, the fragment of every role it does
+  not name (spec-016 §2.2)`. `src/agent/placeholders.ts` `placeholderIssues`: every element of the fragment, or of each
+  map entry, is checked with the empty legal set (paths `launch.<kind>.permissions.<i>` and
+  `launch.<kind>.permissions.<role>.<i>`), so a placeholder there is today's `not legal here` / `unknown placeholder`
+  `E_ADAPTER_PLACEHOLDER`. Keys are not checked against `team.roles` (D1); `format` stays `1` (`dl-149`: an additive
+  optional field).
+- *The selection and the argv (AC 2).* `src/agent/launch.ts`: `export function launchPermissions(manifest:
+  AdapterManifest, kind: LaunchKindRun, role: string): readonly string[]` — `launch.<kind>.permissions` absent → `[]`;
+  a list → itself; a map → `map[role] ?? map.default`. `renderLaunchArgv(manifest, values, kind = 'interactive', role?:
+  string)` returns `[...rendered launch.<kind>.args, ...launchPermissions(manifest, kind, role ?? 'default'), ...rendered
+  session.assign_args]` (D2); `launchAgent` passes `input.role`. Exported from `src/agent/index.ts`.
+- *The plan (AC 2).* `src/agent/execute.ts`: `AgentLaunchPlan` gains `readonly launch: { readonly kind: LaunchKindRun;
+  readonly permissions: readonly string[] }` between `run` and `bootstrap`; `launchPlan` sets it from
+  `prepared.kind` and `launchPermissions(prepared.adapter.manifest, prepared.kind, prepared.role)` (D3). The run
+  record does not change (D4).
+- *The built-ins (AC 3).* `src/storage/builtin-adapters.ts` and, byte for byte, `.wingfoil/agents/built-in/
+  claude-code.yaml`: each `launch.headless` gains the map of D6/D7 after `output`, with a header comment saying where
+  the flags were read; no `launch.interactive.permissions` (D5); `verified_with` moves to the version of the by-hand
+  pass if it differs (D8). The TSDoc of each constant names `dl-223` and the help lines read.
+- *Documents (green).* `docs/cli-reference.md` l.1901–1903 (the plan's keys gain `"launch": {kind, permissions}`) and
+  its `agent execute` entry's headless paragraph (a sentence on `launch.headless.permissions`); `docs/user-guide.md`
+  l.678's headless paragraph (the same sentence); the BDD `P5.3.1-agent-execute.feature` gains one scenario, "A
+  headless launch takes the posture of its role", under a dated revision comment, implemented by AC 2's integration
+  file (D11). `CHANGELOG.md` is `user-docs`'s (the 0.3.x refusal, D9).
+- *Import graph.* `launchPermissions` lives in `launch.ts`, which `execute.ts` already imports
+  (`grep -n "from './launch'" src/agent/execute.ts`): no new edge.
+
+**AC classification and what qa must pin.** Expected reds at the red commit: `npx tsc --noEmit -p tsconfig.json` —
+`TS2305` for `launchPermissions` (and `LaunchPermissions` if imported), `TS2554` for `renderLaunchArgv`'s fourth
+argument, `TS2339` for `plan.launch` / `manifest.launch.headless.permissions` where read through the types (read them
+through a record, as `test/agent/manifest-conflict-args.test.ts` does, to keep the suite compiling); jest fails on
+assertions and on the runtime `TypeError` of the missing export (`isolatedModules`). Fixtures: the custom fakes of
+`test/fixtures/agents/` derived inline (`manifest('perm', edit)` of `test/agent/helpers/agent-execute-fixture.ts`,
+`DNA_YAML.replace('adapter: fake', 'adapter: perm')`), never a real CLI; `fake.yaml` itself is not changed (D10). A
+fragment must avoid the argv words the fake acts on (`--version`, `--lookup`, `--summary`, `--mcp-get`, `--headless`,
+`--prompt`, `--prompt-file`, `--mcp-config`, `--mcp-config-json`, `--session-id`, `--resume`): use e.g. `R = ['--allow',
+'read']`, `D = ['--allow', 'none']`, `W = ['--allow', 'write', '--deny', 'push']`. Every expected CLI line is copied
+from a real run, the producing command in the notes.
+
+| AC | Class | What qa pins (observable · interface · fixture · file) |
+|---|---|---|
+| 1 | red-first | `parseAdapterManifest` of `fake.yaml` edited, for each kind `interactive` and `headless`: (a) accepted and parsed as declared — a fragment `W`; an empty fragment `[]`; a fragment holding `""`; a map `{ default: D, reviewer: R, 'tech-lead': [] }`; absent → `undefined`. (b) refused with a `ValidationError` holding an issue whose `path` is `launch.<kind>.permissions` or starts with `launch.<kind>.permissions.` (today the path is `launch.<kind>`, the unknown key, so each fails in red): the string `'--allow read'`, the number `1`, `null`, `['--allow', 1]`, `{ default: '--allow' }`, `{ default: ['--allow', 1] }`. (c) a map without `default` (`{ reviewer: R }`) → exactly `[{ code: E_ADAPTER_MANIFEST, path: 'launch.<kind>.permissions' }]`, message `a role map must declare a default entry, the fragment of every role it does not name (spec-016 §2.2)`. (d) `['--allow', '{bootstrap}']` → `[{ code: E_ADAPTER_PLACEHOLDER, path: 'launch.<kind>.permissions.1' }]`, message matching `placeholder {bootstrap} is not legal here`; in a map `{ default: D, developer: ['{session_id}'] }` → path `launch.<kind>.permissions.developer.0`; `['{role}']` → `unknown placeholder {role}`. New file `test/agent/manifest-permissions.test.ts`, modelled on `test/agent/manifest-conflict-args.test.ts` (its `fake()`/`parse()`/`issuesOf()`/`located()` helpers). |
+| 2 | red-first | Unit, `test/agent/launch-permissions.test.ts` (manifests from `parseAdapterManifest`, `LaunchValues` as in `test/agent/launch-headless.test.ts`): `launchPermissions(m, kind, role)` — map `{ default: D, reviewer: R }`: `reviewer` → `R`, `qa` → `D`; a list `W` → `W` for every role; absent → `[]`; `interactive` reads `launch.interactive.permissions`, never the headless one. `renderLaunchArgv(m, values, 'headless', 'reviewer')` → `[...headless args rendered, ...R, '--session-id', values.sessionId]` (the fragment between the args and `session.assign_args`); with no `permissions` the argv equals today's (`renderLaunchArgv(m, values, 'headless')`). CLI, new `test/cli/agent-execute-permissions.integration.test.ts` (fixture `seed()` with the `perm` adapter, headless map `{ default: D, reviewer: R }`, interactive fragment `W`): (i) `--element <task> --role reviewer --headless --dry-run --format json` → exit `0`, stderr `''`, `Object.keys(plan)` = `['dryRun', 'subject', 'paths', 'run', 'launch', 'bootstrap']`, `plan.launch` = `{ kind: 'headless', permissions: R }`; (ii) the same with `--format console` → exit `0`, the same stderr, stdout parses to the same document; (iii) `--role developer` → `permissions: D` (the `default`); (iv) `--role developer --dry-run` without `--headless` → `{ kind: 'interactive', permissions: W }`; (v) a real headless run, `--role reviewer` → exit `0`, the fake's recorded argv `['--headless', '--mcp-config', <any>, '--prompt', <bootstrap>, ...R, '--session-id', <session>]`; (vi) the unchanged `fake` adapter, `--dry-run` → `launch: { kind: 'interactive', permissions: [] }`. In the red commit, `test/cli/agent-execute-dry-run-terminal.integration.test.ts` l.37's key list gains `'launch'` after `'run'`. |
+| 3 | red-first (structure) + by hand | Unit, new `test/storage/builtin-adapters-permissions.test.ts`, for each `BUILTIN_ADAPTERS` entry parsed as a built-in: `launch.headless.permissions` is a map (not a list) whose keys include `default`, `developer`, `qa`, `reviewer`, `architect`; `launch.interactive.permissions` is `undefined` (D5); no fragment holds `--dangerously-skip-permissions`, `--allow-dangerously-skip-permissions`, `bypassPermissions`, `--dangerously-bypass-approvals-and-sandbox` or `danger-full-access`; `claude-code`: every entry begins `['--permission-mode', 'dontAsk']`, and neither `default`'s nor `reviewer`'s holds `Edit` or `Write`; `codex-cli`: `default` is `['--sandbox', 'read-only']`. The exact flag lists are not pinned (as the built-in suites pin no argv, their l.8–9): they are the by-hand pass's (D8), recorded in these notes with the CLI version read. The installed copy's byte equality is the existing `test/storage/builtin-adapter-claude-code.test.ts` test, unchanged. |
+| 4 | characterization | The two amendments below, recorded by the approver's `memory amend` before red; qa runs `npx jest --maxWorkers=2 test/docs/name-resolvability.test.ts test/docs/dry-run-documented.test.ts test/docs/command-surface-specs.test.ts test/docs/exit-codes-parity.test.ts` on the amended tree. |
+
+**Files the task changes** (green unless marked red): `src/agent/schema.ts`, `src/agent/manifest.ts`,
+`src/agent/placeholders.ts`, `src/agent/launch.ts`, `src/agent/execute.ts`, `src/agent/index.ts`,
+`src/storage/builtin-adapters.ts`, `.wingfoil/agents/built-in/claude-code.yaml`, `docs/cli-reference.md`,
+`docs/user-guide.md`, `docs/02_requirements/02_bdd/features/p5-interaction/P5.3.1-agent-execute.feature`; red: the
+three new test files above and `test/cli/agent-execute-dry-run-terminal.integration.test.ts` (l.37). The pending
+amendments: `spec-016`, `spec-008`, and `test/docs/name-resolvability.allowlist.ts` if the gate asks (below). Not
+touched: `fake.yaml` and every other fixture under `test/fixtures/agents/`.
+
+**Version bumps.** None. No `.wingfoil/*.yaml` configuration file changes (`dna.yaml`, `memory.yaml`, `workflows.yaml`,
+`roles.yaml` untouched; the adapter manifest has no `version:` and its `format` stays `1`); no workflow file changes;
+the specs carry no `version:` (each change is its Revision note); `docs/cli-reference.md`, `docs/user-guide.md` and the
+BDD feature carry no `version:` field (`grep -n "^version:\|\*\*Version" docs/cli-reference.md docs/user-guide.md
+<feature>` → nothing).
+
+**The by-hand pass (AC 3), prepared for the approver; agents launch no agent CLI.** The help text this design read is
+the one `task-335`'s design saved (`claude --help` of `2.1.310 (Claude Code)`, `codex exec --help` of `codex-cli
+0.145.0`); no `claude` or `codex` command was run by this design. Lines read there: `--permission-mode <mode>` with the
+choices `acceptEdits`, `auto`, `bypassPermissions`, `manual`, `dontAsk`, `plan`; `--allowedTools, --allowed-tools
+<tools...>` and `--disallowedTools, --disallowed-tools <tools...>`, "Comma or space-separated list of tool names to
+allow (e.g. "Bash(git *) Edit")"; `-s, --sandbox <SANDBOX_MODE>` with `read-only`, `workspace-write`,
+`danger-full-access`; `--dangerously-bypass-approvals-and-sandbox`. To run, in this order:
+- **H1 — versions and parse probes (before red; each launches no model and writes nothing to a project),** in an empty
+  scratch directory outside any repository:
+  1. `claude --version` and `codex --version` → the versions the pass runs (`verified_with` moves to them if they
+     differ from `2.1.310 (Claude Code)` / `codex-cli 0.145.0`).
+  2. `claude --help | grep -n -A4 "permission-mode\|allowedTools\|disallowedTools"` and `codex exec --help | grep -n
+     -A3 "sandbox"` → the lines above still present.
+  3. `claude -p "Reply with the word ok." --mcp-config /dev/null --permission-mode no-such-mode --no-session-persistence;
+     echo $?` → an invalid-choice error naming `--permission-mode` and a non-zero exit: an option placed after the
+     prompt and after the variadic `--mcp-config` is read as an option, the position step 14 gives the fragment.
+  4. `codex exec --json -c 'x=1' "Reply with the word ok." --sandbox no-such-mode; echo $?` → `invalid value
+     'no-such-mode' for '--sandbox <SANDBOX_MODE>'` and exit `2`: an option after the positional prompt is parsed.
+- **H2 — one headless run per role and adapter (after green, before review; as `task-335` D7),** in a fresh scratch
+  project (`git init`; `wingfoil init` with this task's green build; `team.roles` holding `developer`, `qa`,
+  `reviewer`, `architect` and one role no map names, e.g. `tech-lead`; `team.agents` `Claude` (adapter `claude-code`)
+  and `Codex` (adapter `codex-cli`) executing all five; a bare repository added as `origin`; one task whose body asks
+  the agent to read the session Resource, append the line `probe <role>` to its Execution Notes and commit it, run
+  `git log -1` and `git push origin HEAD`, and report what was refused). Per role and agent: first `wingfoil agent
+  execute --element task:<id> --role <role> --agent <Claude|Codex> --headless --dry-run --format json` → the plan's
+  `launch.permissions` is the entry of that role (`default`'s for `tech-lead`); then the same without `--dry-run`,
+  `--timeout 15m < /dev/null > run.json 2> run.err`. What each must show:
+  - `developer`, `qa`, `architect`: the Resource read; the edit and the commit made (`git log -1` in the project shows
+    it); the push refused (Claude: `--disallowedTools`; Codex: a write outside the workspace);
+  - `reviewer`: the Resource read; `git log -1` run; the edit refused (Claude: `Edit` not allowed; Codex: allowed by
+    `workspace-write`, D7, so the run shows what a Codex reviewer could change); the push refused;
+  - `tech-lead` (`default`): the Resource read; the edit, the commit and every shell command refused (Codex runs
+    read-only commands in its read-only sandbox);
+  - every run exits within its bound, without waiting on a prompt.
+  The orchestrator pastes each command, exit status and the relevant lines under a heading of these notes; a fragment
+  the pass shows too wide or too narrow is changed by green/refactor in the shipped text and in `spec-016` §2.8's
+  table (a further amendment), never left as a note.
+
+### Pending amendments (approver)
+
+Prepared in the worktree, uncommitted (`git status --short` → ` M docs/04_memory/design/specs/spec-008-cli-grammar.md`, ` M docs/04_memory/design/specs/spec-016-agent-execution.md`, ` M test/docs/name-resolvability.allowlist.ts`), to be recorded before red:
+- `spec-016-agent-execution` — §2.1 (what a permissions map's role keys are), §2.2 (two rows,
+  `launch.interactive.permissions` and `launch.headless.permissions`), §2.8 (the built-ins' posture table, replacing
+  the sentence that left the posture to `dl-223`), §3.3 step 14 (the fragment between the args and
+  `session.assign_args`) and the `--dry-run` paragraph (the plan's `launch: {kind, permissions}`), and a Revision
+  entry. `--reason "Record task-339's design-gate amendment of spec-016: sections 2.2 and 2.1 let launch.interactive.permissions and launch.headless.permissions be an argv fragment or a role map with a default entry, section 3.3 appends the run's fragment at step 14 and prints it in the dry-run plan, and section 2.8 gives each built-in's headless launch its role map (dl-223 (b), Action 3; dl-181 Q2 (a))."`
+- `spec-008-cli-grammar` — §2's `--dry-run` row (the `agent execute` plan gains `launch`) and a Revision entry.
+  `--reason "Record task-339's design-gate amendment of spec-008: the dry-run plan of agent execute gains launch, the launch kind and the permission fragment of the run's role (section 2; dl-223 Action 3)."`
+
+Name-resolvability (`a23c91413` lesson): with the two amendments in the working tree, `npx jest --maxWorkers=2
+test/docs/name-resolvability.test.ts` failed on three unlisted findings of `spec-016`: `config|launch.headless.permissions`,
+`config|launch.interactive.permissions` (code not written yet; both names occur literally in this task file, so
+`PLANNED`, `plannedBy: ['task-339']`) and `symbol|dontAsk` (a value of Claude Code's `--permission-mode`, an external
+name, with that reason). The three entries are added, in sorted order, to `test/docs/name-resolvability.allowlist.ts`
+in the same uncommitted change; it is a test file outside Memory, committed with the amendments' record or by red.
+Then `npx jest --maxWorkers=2 test/docs/name-resolvability.test.ts test/docs/dry-run-documented
+test/docs/command-surface-specs test/docs/exit-codes-parity test/docs/x-cli-cmds-citations test/docs/commands-parity
+test/lint/control-characters` → `Test Suites: 7 passed, 7 total`, `Tests: 76 passed, 76 total`.
+
+### Decisions for the approver
+
+Each with a recommendation; the prepared amendments follow the recommendations.
+- **D1 — the map's semantics.** (a) A list is the fragment of every role; a map's keys are role names, not checked
+  against `team.roles` (a built-in ships to projects with any role set), `default` required and used for every role
+  the map does not name; absent = nothing appended (prepared); (b) keys checked against `dna.yaml` at `agent execute`,
+  a warning per unknown key. **Recommend (a)**: the manifest parse reads no DNA today, and an unknown key can only
+  pick nothing.
+- **D2 — where the fragment goes in the argv.** (a) After `launch.<kind>.args`, before `session.assign_args`
+  (prepared): `dl-181` Q2 (a) says "appended to `launch.headless.args`", and `claude-code`'s variadic `--mcp-config`
+  and `--allowedTools` are each closed by the next `--` option; H1 steps 3–4 check that both CLIs read an option
+  placed after the prompt; (b) a new placeholder `{permissions}`. **Recommend (a)**: no placeholder is added to §2.3's
+  closed set.
+- **D3 — the plan's shape.** (a) `launch: {kind, permissions}` between `run` and `bootstrap`, amending `spec-016` §3.3
+  and `spec-008` §2's row, which states the plan's keys (prepared; `spec-008` is beyond the sections AC 4 names, as
+  `task-356` D5 was); (b) a top-level `permissions` only. **Recommend (a)**: the fragment depends on the kind, which
+  the plan does not print today, and `task-335` D9 reserved a `launch` key for it.
+- **D4 — the run record.** The fragment is not recorded (prepared): it is a function of the manifest at the record's
+  `state_ref` and its `role`; a record key is `task-337`'s record work if wanted. **Recommend as stated.**
+- **D5 — the built-ins' interactive launch.** (a) No `launch.interactive.permissions` (prepared): at a terminal a person
+  answers the CLI's prompts, and `dl-181` Q2 concerns what a headless agent may do without asking; (b) a map there too.
+  **Recommend (a).** AC 3's "the built-in adapters that declare a launch kind declare a map" is read as the headless
+  kind; if the approver reads it as both, the interactive maps would mirror D6/D7 and need their own H2 runs.
+- **D6 — `claude-code`'s map** (prepared, `spec-016` §2.8): every entry `--permission-mode dontAsk` (a tool no rule
+  allows is denied, never asked); `default` allows `Read`, `Glob`, `Grep`; `developer`, `qa`, `architect` add `Edit`,
+  `Write`, `Bash(git *)`, `Bash(npm *)`, `Bash(npx *)`, `Bash(node *)` and deny `Bash(git push *)`, `Bash(npm publish
+  *)`; `reviewer` adds `Bash(git log *)`, `Bash(git show *)`, `Bash(git diff *)`, `Bash(git status *)`, `Bash(npm test
+  *)`, `Bash(npm run *)`, `Bash(npx jest *)`. **Recommend as prepared**, confirmed by H2. Stated limits: a write role
+  that may run `npm` and `node` runs any code it writes, so the shell rules narrow what is asked, not what is possible;
+  whether `dontAsk` lets the model read the MCP Resource, and how a rule's prefix matches, are the CLI's and only H2
+  settles them.
+- **D7 — `codex-cli`'s map** (prepared): `default` `[--sandbox, read-only]`; `developer`, `qa`, `architect`
+  `[--sandbox, workspace-write]`; `reviewer` (a) `workspace-write` (prepared), the narrowest sandbox the test suite can
+  run in (it writes the build), at the price of allowing edits, which the review's diff check sees; (b) `read-only`,
+  stricter, but a Codex reviewer then cannot run the suite. **Recommend (a).**
+- **D8 — who runs AC 3's pass and when.** H1 by the approver before red (minutes, no model); H2 by the approver after
+  green, before review, through `agent execute --headless` with the green build, its output pasted into these notes by
+  the orchestrator (as `task-335` D7). qa pins the maps' invariants only (AC 3 row), not their exact flags.
+  **Recommend as stated.**
+- **D9 — `dl-205`.** No pinned read breaks (above); the pinned build's `agent execute` refuses a manifest declaring
+  `permissions`, as it already refuses `codex-cli`'s `conflict_args` and `jsonl` (`task-356` D7, accepted).
+  **Recommend**: no `pinned-build` bug, no `KNOWN_READ_FAILURES` entry or `wingfoil-cli` exception; the 0.3.x refusal
+  is said in the CHANGELOG at `user-docs`.
+- **D10 — the fake fixture.** `fake.yaml` stays without `permissions` (prepared): every argv pin above keeps its value;
+  the tests derive a `perm` adapter inline, as `task-356` kept `conflict_args` in `config-arg/fake-conflict.yaml`.
+  **Recommend as stated.**
+- **D11 — documents.** `docs/cli-reference.md`, `docs/user-guide.md` and one BDD scenario in this task (green), the
+  CHANGELOG at `user-docs`. **Recommend as stated.**
+- **D12 — this host and Codex's sandbox.** `task-335` D7's run found Codex's sandbox helper failing here (`bwrap:
+  loopback: Failed RTM_NEWADDR`). If H2 shows `workspace-write` failing the same way, the only posture that works on
+  this host is `--dangerously-bypass-approvals-and-sandbox`, wider than any role. **Recommend**: never ship it; record
+  the host limitation in these notes and let a project that needs it declare a custom adapter.
+
+### Risks for the other open `w0` tasks
+
+- `task-344` (re-review): its branch changes `scripts/check-phase-report.cjs`, `scripts/check-governance.cjs` (+ `.d.cts`),
+  `test/cli/check-phase-report*.test.ts`, `test/lint/git-log-readers.test.ts` and its task file (`git diff --stat
+  main...task/task-344-…`): no file in common with this task.
+- `task-355` and `task-356` are `done` and merged (`grep -n "^status:" docs/04_memory/v0.4/task-35[56]-*.md` →
+  `done`); their changes are this task's base.
+- `task-336` (output forwarding), `task-337` (the record), `task-338` (the launching build, `WINGFOIL_AGENT` at the
+  spawn), `task-353` (the launch directory): all edit `src/agent/launch.ts` and `spec-016` §3.3 step 14 or the plan;
+  this task changes `renderLaunchArgv`, `launchAgent`'s argv line and `launchPlan` — near their edits, not the same
+  functions except step 14's sentence, which whichever amendment the approver records second rebases. `task-337`'s
+  record work is where D4's record key would go. `task-340` (human-only roles): a map key may name a human-only role,
+  harmlessly (D1).
+
+### Candidate findings (not filed)
+
+- `.wingfoil/workflows/custom/dev-loop.yaml` l.196–199: the `review` phase (role `reviewer`) declares the actions
+  `memory.submit` and `bug.sync_state`, both writes, while the v0.4 plan's W0.1 step 4 has the developer run `memory
+  submit` and the syncs at the end of refactor, and step 5 calls the reviewer "read-only" (`sed -n 188,207p
+  .wingfoil/workflows/custom/dev-loop.yaml`). Under this task's reviewer posture a headless reviewer cannot run them.
+  Expected: the actions sit in the phase whose role performs them. Suggested severity: low.
+- `spec-016` §2.7 says `test/fixtures/agents/custom/fake.yaml` covers "every §2.2 field", and the fixture's header says
+  "It declares every §2.2 field", but it declares no `mcp.conflict_args` (`grep -c conflict_args
+  test/fixtures/agents/custom/fake.yaml` → `0`; the field is in `test/fixtures/agents/config-arg/fake-conflict.yaml`).
+  Expected: the sentence speaks of the fixture set, or the fixture declares the field. Suggested severity: low.
+
+### Retrospective
+
+<!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
+     reconstructed afterwards. One line per item: what happened, the evidence (a command and what it
+     printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
+     Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
+     here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
