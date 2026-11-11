@@ -6,7 +6,7 @@
 name: adr-ingest
 kind: main
 description: Capture a single Architectural Decision Record (ADR) into Memory.
-version: 1.0
+version: 1.1                     # 1.1 task-351 (dl-186 Q3, software@1.0.0 adopted by hand, approver rulings D2, D3 (a)): capture declares its produces in the pack's typed form { type: adr, path }, the {id} token; no phase, step or action changes (prev 1.0)
 # No fixed `element:` — started standalone this main creates a top-level ADR. When invoked while
 # another workflow with an active `element` context is running, the created Memory file inherits that
 # element (e.g. an ADR recorded during dev-loop inherits the active `task`).
@@ -18,7 +18,7 @@ phases:
       - 'memory.add(type: adr)'
       - memory.submit
     produces:
-      - "docs/04_memory/design/adrs/{id}.md"
+      - { type: adr, path: "docs/04_memory/design/adrs/{id}.md" }
     checks:
       post: ["frontmatter.required: [title, sard_ref]"]
 

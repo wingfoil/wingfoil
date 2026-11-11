@@ -156,7 +156,8 @@ describe('AC 1 / AC 2 — every workflow loads at HEAD with zero errors and only
       ["release-health", "phases[2].checks.post[0]", "every finding is tracked by an element or carries an RH proposal in the report's Proposals section"],
       ["retrospective", "phases[3].checks.post[0]", "frontmatter.required"],
       ["end-of-life", "phases[0].checks.post[0]", "frontmatter.required"],
-      ["end-of-life", "phases[1].checks.post[0]", "deprecated content excluded from agent context and default search"],
+      // task-351 (dl-186 Q3, row 34): end-of-life's new approve phase follows announce, so deprecate's check is phases[2].
+      ["end-of-life", "phases[2].checks.post[0]", "deprecated content excluded from agent context and default search"],
     ]);
   });
 
@@ -337,7 +338,7 @@ describe('AC 4 — spec-017 §12\'s deduction consequences, re-measured', () => 
     ]);
   });
 
-  it('the nine implicit-owner produces name the element type the phase creates (dl-104 D3)', () => {
+  it('the thirteen typed produces name the element type the phase creates (dl-104 D3; nine until task-351 adopted the packs\' typed capture of bug-ingest, decision-log-ingest, adr-ingest and end-of-life.announce, dl-186 Q3)', () => {
     const owners: string[] = [];
     for (const workflow of registry().workflows) {
       for (const phase of workflow.phases) {
@@ -347,6 +348,9 @@ describe('AC 4 — spec-017 §12\'s deduction consequences, re-measured', () => 
       }
     }
     expect(owners).toEqual([
+      'bug-ingest.capture bug docs/04_memory/bugs/{id}.md',
+      'decision-log-ingest.capture decision-log docs/04_memory/design/dls/{id}.md',
+      'adr-ingest.capture adr docs/04_memory/design/adrs/{id}.md',
       'initial-design.seed-releases release docs/04_memory/planning/rl-{release-line.version}/{release.id}.md',
       'initial-design.seed-adrs adr docs/04_memory/design/adrs/{adr.id}.md',
       'initial-design.seed-dls decision-log docs/04_memory/design/dls/{decision-log.id}.md',
@@ -356,6 +360,7 @@ describe('AC 4 — spec-017 §12\'s deduction consequences, re-measured', () => 
       'release-planning.identify-specs tech-spec docs/04_memory/design/specs/{tech-spec.id}.md',
       'release-planning.build-backlog task docs/04_memory/{task.release}/{task.id}.md',
       'dev-loop.design tech-spec docs/04_memory/design/specs/{tech-spec.id}.md',
+      'end-of-life.announce decision-log docs/04_memory/design/dls/{id}.md',
     ]);
   });
 
