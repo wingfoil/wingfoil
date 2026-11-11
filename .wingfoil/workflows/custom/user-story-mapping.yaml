@@ -6,7 +6,7 @@ kind: sub
 description: >-
   Explode the macro-flows of Lean Inception into atomic, value-oriented user stories;
   build the backbone (horizontal axis), vertically explode functionalities, apply the MVP cut.
-version: 1.1                     # 1.1 bug-389 (task-301): every phase produces its module's output directory, so it completes by produces evidence instead of a workflow finalize
+version: 1.1                     # 1.1 bug-389 (task-301): every phase produces its module's output directory, so it completes by produces evidence instead of a workflow finalize; 1.2 task-358 (bug-435 item 4, bug-469): mvp-cut's check split into its inclusion half, a command could decide it (manual until a command), and its edge-case half, a reader's judgement (manual on purpose); no phase or step changes
 
 phases:
   - name: backbone
@@ -25,4 +25,4 @@ phases:
     produces:
       - "docs/02_requirements/01_user_story_map/"
     checks:
-      post: ["100% of MVP Canvas features included; edge-case stories generated"]
+      post: ["100% of MVP Canvas features included", "edge-case stories generated"]   # split by task-358 (bug-435 item 4): the inclusion half compares the canvas's feature ids with the story map's, which a command could decide; the edge-case half is a reader's judgement
