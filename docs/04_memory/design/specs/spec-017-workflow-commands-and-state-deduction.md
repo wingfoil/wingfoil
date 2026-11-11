@@ -1083,6 +1083,7 @@ with P5.2.3 (v0.4); the production server serves no Tool today.
 | several frontier steps add the type, no `--step` (`memory add --workflow`, `adopt`) | `no step of <instance> adds a <type> alone: give --step, one of: <key>, <key>` (the keys in frontier order, also in `details.steps`) | `CONFLICT` | 1 |
 | step has deducible evidence (`finalize`) | `phase '<workflow>.<phase>' completes from its evidence: <kinds>` | `CONFLICT` | 1 |
 | approval phase without authority (`finalize`) | the message `memory approve` gives (REQ-SEC-03) | as today | 1 |
+| approval phase run in an agent's session (`finalize`; `spec-018` §1 markers) | `E_AGENT_CONTEXT: 'workflow finalize' needs the approver and does not run in an agent's session (<markers>): …` (`spec-018` §3.2, with its `hint:`), before the authority check | `VALIDATION` | 1 |
 | approval phase without `--reason`, or a blank or malformed one (`finalize`) | `spec-008` / `dl-067` reason messages | — | 2 |
 | duplicate name (`create`) | `workflow already exists: <name>` | `CONFLICT` | 1 |
 | built-in (`remove`) | `built-in workflows cannot be removed` | `VALIDATION` | 1 |
@@ -1097,9 +1098,11 @@ with P5.2.3 (v0.4); the production server serves no Tool today.
 | no candidate, no `--element` (`adopt`) | `no candidate for <key>; name one with --element` | `CONFLICT` | 1 |
 | `--plan --apply` without approver authority | `user not authorized to apply adoptions in bulk` | as `memory approve`'s refusal | 1 |
 | `rekey` without approver authority | `user not authorized to rekey` | as `memory approve`'s refusal | 1 |
+| `--plan --apply` in an agent's session (`spec-018` §1 markers) | `E_AGENT_CONTEXT: 'workflow adopt --plan --apply' needs the approver and does not run in an agent's session (<markers>): …` (`spec-018` §3.2, with its `hint:`), before the authority check | `VALIDATION` | 1 |
+| `rekey` in an agent's session (`spec-018` §1 markers) | `E_AGENT_CONTEXT: 'workflow rekey' needs the approver and does not run in an agent's session (<markers>): …` (`spec-018` §3.2, with its `hint:`), before the authority check | `VALIDATION` | 1 |
 | `--from` still declared, or named by no record of the instance; `--to` not declared (`rekey`) | `cannot rekey <from>: it is still declared` / `no record of <instance> names <from>` / `unknown step: <to>` | `CONFLICT` | 1 |
 | `--to` is not a step of the instance's workflow or of a workflow it includes, directly or indirectly (`rekey`) | `<to> is not a step of <workflow> or of a workflow it includes` | `CONFLICT` | 1 |
-| dirty write target, missing git identity | the existing messages of `write-guard.ts` and REQ-SEC-01 | as today | 1 |
+| dirty write target, missing git identity, an identity outside `team.members` (`start`, `end`, `finalize`, `adopt` but `--plan` alone, `rekey`, `create`, `remove`) | the existing messages of `write-guard.ts` and REQ-SEC-01; `E_NOT_A_MEMBER: …` (`spec-006` §7, "Membership") | as today; `VALIDATION` | 1 |
 | missing `<name>`; malformed `--element` (`spec-008` §7); a `--set` name other than `phase` / `scope` on `start`; invalid `<name>` syntax; `--kind` with `--startable`/`--includable`; `create` with neither; unknown flag; on `adopt`, `--apply` without `--plan`, `--plan` with `--step` or `--element`, a missing or blank `--reason` (`dl-067`) where one is required; on `rekey`, a missing `--from`, `--to` or `--reason` | `spec-008` §2/§5/§12 messages | — | 2 |
 
 `next`, `status`, `list` and `show` exit `0` for every deduced outcome and `1` only for a `spec-003`
@@ -1809,3 +1812,11 @@ listing their keys, none keeps the out-of-frontier refusal with `details.frontie
 Expected Behavior that release-planning ruling R8 of `patch-v0.3.2` deferred). `bug-340` cited §4.9 and §7.10 for the
 rule, which neither stated. A scoped key, and every key outside `--step`, stays exact. Edited in place without a
 supersede or a state change (`dl-047`), pending the approver's `memory amend`.
+
+**Revision (2026-11-11, `task-333-refuse-approver-gated-verbs-in-an-agent-context-and-mutating-verbs-for-non-members-l0-spec-018`)
+— §10 gains the `E_AGENT_CONTEXT` rows and the membership refusal.** `spec-018` Consequences asks for an
+`E_AGENT_CONTEXT` row beside each authority row of §10 (`finalize` on an `approval:` phase, `--plan --apply`,
+`rekey`); `dl-220` Q2 (b) adds the membership refusal of `spec-006` §7 to every workflow command that writes, cited
+on the row of the other pre-flight refusals. The §7.9 sentences `spec-018` also asks for (the agent refusal on an
+`approval:` phase, the agent trailers on a phase without one) land with the attribution half, `task-334`. No other row
+changes. Edited in place without a supersede or a state change (`dl-047`), pending the approver's `memory amend`.
