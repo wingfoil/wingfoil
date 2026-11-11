@@ -105,3 +105,330 @@ decided in w1 with P5.2.3.
 ## Execution Notes
 
 <!-- Filled by the dev-loop. -->
+
+### design (architect, 2026-11-11)
+
+**Base and inputs.** Branch head `2f4041ce2` = `main` `06dec7a70` + `wf(task): start` (`91b24fb26`) + the `bug-395` sync
+(`git log --oneline main..HEAD` → two commits). PATH guard: the task's PATH shim, `wingfoil --version` and
+`node dist/cli.js --version` both `0.3.2 (06dec7a709a1a819e6181964d650b74433608c29)`. `depends_on: []`: no dl-015 gate.
+Ratified sources, status read with `grep -m1 '^status'`: `spec-018` approved, `spec-006` approved, `spec-017` approved,
+`dl-212` ready, `dl-220` ready, `dl-117` ready, `dl-063` ready. The session runs under an agent marker
+(`env | grep -c '^CLAUDE_CODE_CHILD_SESSION='` → `1`; `CLAUDECODE` likewise `1`), which is what makes AC 7 bite.
+
+#### Per-AC classification and what red (qa) must pin
+
+Every CLI case runs `node dist/cli.js` in a child process whose environment is `process.env` minus every `spec-018` §1
+environment marker (the helper of AC 7), then adds what the case names. Fixture (`spec-018` §6): a repository whose
+committed `dna.yaml` makes the git identity a `team.members` entry with `approver`, and declares two agents, `Claude`
+(`adapter: claude-code`, `email: noreply@anthropic.com`) and `Other` (`email: other@example.invalid`); a task at
+`pending`. Build it as the existing `test/cli/approval-authority-baseline.integration.test.ts` and
+`test/core/helpers/adopt-fixture.ts` / `test/core/helpers/rekey-fixture.ts` do. `E_AGENT_CONTEXT` lines are compared
+whole (`toBe`), never by `toContain`.
+
+| AC | Class | What qa pins (observable · interface · fixture · file) |
+|----|-------|----------------------------------------------------------|
+| 1 | red-first | `memory approve <id> --reason r` under `WINGFOIL_AGENT=Claude`, `WINGFOIL_AGENT=` (empty), `--co-author Claude`, `CLAUDE_CODE_CHILD_SESSION=1`, `CODEX_SANDBOX=seatbelt` (T-1…T-5), and `WINGFOIL_AGENT=Claude CODEX_SANDBOX=1 memory reject` (T-8): exit `1`; stdout empty; stderr exactly the two lines `error: E_AGENT_CONTEXT: 'memory approve' needs the approver and does not run in an agent's session (<markers>): an approval is recorded only from the approver's own session, never from an agent's (dl-212)` and `hint: run 'memory approve' yourself, from a terminal no agent started — not through an agent's shell`, `<markers>` the §3.2 phrases `, `-joined in §1 order (T-8: `WINGFOIL_AGENT is set, CODEX_SANDBOX is set`); a marker value (`WINGFOIL_AGENT=marker-value-xyz`) never in stderr; `--format json` gives `{"error": "<same reason without error: >", "hint": "<same hint>"}`; `git rev-parse HEAD`, `git status --porcelain` and `git diff --cached --name-only` equal before and after. T-6: `CLAUDECODE=1` only → exit `0`, the commit body has no line matching `/^(co-authored-by\|ai-model):/im`. Unit: `AGENT_MARKERS` (from `src/core/agent-context.ts`) is frozen (`Object.isFrozen`) and its ids are exactly `['WINGFOIL_AGENT', '--co-author', 'CLAUDE_CODE_CHILD_SESSION', 'CODEX_SANDBOX']`. Files: new `test/cli/agent-context-refusal.integration.test.ts`, new `test/core/agent-context.test.ts`. Expected reds: `tsc` TS2307 (module `src/core/agent-context` absent) and jest "Cannot find module"; the CLI cases fail on exit `0` (T-3 on exit `2`, `unknown option '--co-author'`). |
+| 2 | red-first | One `it.each` over the six commands under `WINGFOIL_AGENT=Claude`: `memory reject`, `memory amend` (an uncommitted body edit on an approved, amendable element), `workflow finalize` on a frontier step of an `approval:` phase, `workflow adopt <ref> --plan --apply --reason r`, `workflow rekey <ref> --from <a> --to <b> --reason r` — and `memory approve` — each exit `1`, the `E_AGENT_CONTEXT` line naming that `<command>` (`memory amend`, `workflow finalize`, `workflow adopt --plan --apply`, `workflow rekey`), tree/index/HEAD unchanged. The list is asserted equal to the call sites: the test reads `src/**/*.ts`, collects `requireApproverAuthority(` / `requireApprovalAuthority(` outside `src/core/approval-authority.ts` (today six: `src/core/index.ts` ×3 — approve, reject, amend —, `src/core/workflow-finalize.ts`, `src/core/workflow-adopt.ts`, `src/core/workflow-rekey.ts`; `grep -rn "requireApproverAuthority(\|requireApprovalAuthority(" src \| grep -v '^src/core/approval-authority.ts:' \| wc -l` → `6`) and maps each `file + enclosing function` to its command, so a seventh caller without a case fails. Fixtures: `test/cli/workflow-finalize.integration.test.ts`, `test/cli/workflow-adopt.integration.test.ts`, `test/cli/workflow-rekey.integration.test.ts`. File: same `test/cli/agent-context-refusal.integration.test.ts`. |
+| 3 | red-first | T-7: `WINGFOIL_AGENT=Nobody memory approve …`, and `CLAUDE_CODE_CHILD_SESSION=1 memory approve …` on a fixture with `team.agents: []`: exit `1`, stderr is exactly the two §3.2 lines — no `unknown team.agents entry`, no `Claude`/`Other`/`Nobody`, no `W_NO_AGENT_ENTRY`, no `W_AGENT_ENTRY_GUESSED`. T-20 first half: T-1 with `--dry-run` → identical exit, stderr and unchanged tree. Unit: `resolveAgentContext(root, { env: { WINGFOIL_AGENT: 'Nobody' }, gated: true })` → `ok`, `value.markers` ids `['WINGFOIL_AGENT']`, `value.attribution === null` (it reads no `team.agents`: pass a `root` whose `dna.yaml` is not committed and it still succeeds). File: the two above. |
+| 4 | red-first | (a) T-19, unit on the primitive: `writeAndCommit(root, [{ path, content }], 'wf(task): approve t [pending → backlog]\n\nApprover: A <a@example.invalid> (approver)\nReason: r\n\nAI-Model: m-1')`, `commitEmpty` and `commitPaths` likewise, each throws an error with `code === 'E_AGENT_TRAILER_ON_APPROVAL'` and message exactly `E_AGENT_TRAILER_ON_APPROVAL: the commit 'wf(task): approve t [pending → backlog]' records an approval and would carry an agent trailer (AI-Model:), which an approval never carries (dl-212, git-conventions §7); nothing was written`; the file is not written, nothing staged, `HEAD` unchanged; under `runAsDryRun` it throws before any plan. A message with `Co-Authored-By:` and no `Approver:` line commits normally. File: new `test/storage/approval-trailer-backstop.test.ts`. (b) T-18: `memory approve <id> --reason $'Fine.\nCo-Authored-By: X <x@example.invalid>\nDone.'`, no marker → exit `2`, `error: invalid flag value: --reason must not contain a line starting with "Co-Authored-By:" or "AI-Model:" on an approval`; the same reason on `memory deprecate` and `memory park` is accepted (exit `0`); and on `reject`, `amend`, an `approval:` `finalize`, `adopt --plan --apply`, `rekey` refused the same way. Unit: `reasonRefusalMessage(reason, { approval: true })` returns that message, `reasonRefusalMessage(reason)` returns `null`. Files: `test/core/reason-trailer-verbs.test.ts` is existing — put the new cases in new `test/core/approval-reason-agent-keys.test.ts`. |
+| 5 | red-first | A git identity whose email matches no `team.members` entry of the `dna.yaml` committed at `HEAD` (the fixture has one member, the approver; the case sets `GIT_AUTHOR_EMAIL`/`GIT_COMMITTER_EMAIL` to `stranger@example.invalid`): every `mutates: true` operation of `CORE_MODULES` but none excluded — the list is derived from the registry, not typed — exits `1` with stderr exactly `error: E_NOT_A_MEMBER: the git identity <name> <stranger@example.invalid> is not a team member: no team.members entry of the dna.yaml committed at HEAD has the email stranger@example.invalid, and only a member changes this project (dl-220)` and the `hint:` line of the `spec-006` §7 amendment, nothing written. Positive cases: the same command as the member passes the step (exit as today); an uncommitted `dna.yaml` adding the stranger does not admit them; `team.members: []` committed → not refused; no committed `dna.yaml` → not refused; `init` never takes the step. Structural: the call sites of `requireTeamMembership(` equal the call sites of `requireGitIdentity(` minus `src/core/init.ts` (16 today, listed below). Files: new `test/core/team-membership.test.ts` (unit, `requireTeamMembership(root, identity)`), new `test/cli/team-membership.integration.test.ts`. Expected reds: TS2307 for `src/core/team-membership` and exit `0` on the CLI cases. |
+| 6 | red-first | In `test/cli/check-governance-enforcement.test.ts`'s fixture style (existing file; red edits it, D6): the `CHECKS` pin gains `'approval-agent-trailer': 'governance-check:approval-agent-trailer'` and loses `approval-ai-trailer`; T-23: after the check's introduction an `approve`, an `amend` and a `workflow: rekey` record, each with `Co-Authored-By:` in the body, give one finding each, `check: 'approval-agent-trailer'`, naming the key; the same three before the introduction are reported with `gated: false`; a `wf(task): start` with the trailers gives none. New file `test/cli/check-governance-approval-agent-trailer.test.ts` for T-23, the existing `describe('no AI co-author trailer on approve and reject (bug-307 …)')` rewritten to the new check name. |
+| 7 | characterization | After the change, `npm test` passes in this session, which carries `CLAUDE_CODE_CHILD_SESSION` (the measure below names the suites it would break otherwise). Pin: a test that `process.env` seen by a jest worker has none of the `AGENT_MARKERS` environment ids, and that the helper's list equals `AGENT_MARKERS`' environment ids (parity, so a marker added to `src` is scrubbed). File: new `test/lint/agent-markers-scrubbed.test.ts`. Characterization: it passes the moment the helper exists, before `src` refuses anything. |
+| 8 | characterization, checked at design | `grep -n "E_AGENT_CONTEXT"` over REQ-SEC-03's file and the three BDD files: no output on the base (run at design, exit `1` each), one line each with the prepared edits (below). Pin in red: new `test/docs/l0-traceability.test.ts` asserting REQ-SEC-03's text holds `from a session no agent marker marks`, `` `amend` `` in its Description and Fit Criterion and `E_AGENT_CONTEXT`, and each of the three features a scenario title containing `agent's session`. |
+| 9 | red-first | The `memory amend` entry of `docs/cli-reference.md` (the text between ``### `wingfoil memory amend` `` and the next `###`) contains `approve`, `reject` and `amend` share one authority check and one message — exact sentence below. Same file `test/docs/l0-traceability.test.ts`. |
+| 10 | red-first | AGENTS.md contains each of the four sentences quoted below, verbatim, and no longer contains `Agents may execute \`memory.approve\`` nor `Agents may execute \`memory.reject\`` nor `run only on the approver's instruction`. Same file. |
+| 11 | characterization | `git log -1 --format=%s -- <spec>` for `spec-006` and `spec-017` shows `wf(tech-spec): amend …` after the gate; the qa agent checks it before red (no test). |
+
+#### Design
+
+- **`src/core/agent-context.ts` (new).** `type AgentMarkerId = 'WINGFOIL_AGENT' | '--co-author' |
+  'CLAUDE_CODE_CHILD_SESSION' | 'CODEX_SANDBOX'`; `interface AgentMarker { id; kind: 'environment' | 'option'; phrase }`
+  (`phrase` = `WINGFOIL_AGENT is set`, `--co-author was given`, …); `AGENT_MARKERS: readonly AgentMarker[]`, frozen, §1
+  order — the one place a marker variable is spelled (`task-338` imports it). `interface AgentContext { markers:
+  readonly AgentMarker[]; attribution: Attribution | null }`, `interface Attribution { name; email; model }` declared
+  now so `task-334` fills it without changing the shape. `resolveAgentContext(root, { env, coAuthor?, aiModel?, gated
+  }): CoreResult<AgentContext>` — pure over its inputs; here it computes `markers` and returns `attribution: null`
+  for every operation (the ungated half is `task-334`'s, and returns its §2.5 refusals through the same
+  `CoreResult`). `refuseAgentContext(context, command): CoreResult<void>` — the §3.2 error, `code: 'VALIDATION'`,
+  `message` `E_AGENT_CONTEXT: '<command>' …`, `hint` the §3.2 hint, `details: { markers: [ids] }` (the CLI renders no
+  `details` line for it: `errorDetails` reads only `issues`/`diagnostics`, `src/core/error-details.ts:34-50`).
+  `E_AGENT_CONTEXT` exported. The invocation reaches the core through an `AsyncLocalStorage` (the pattern of
+  `src/storage/dry-run.ts:48` and `src/validation/warning.ts:31`): `withAgentInvocation({ env, coAuthor }, fn)` set by
+  the CLI registrar around `operation.fn`, `currentAgentInvocation()` returning `{ env: process.env }` when no
+  registrar set one — so an in-process caller is fail-closed (D5).
+- **`src/core/approval-authority.ts`.** `requireApproverAuthority(root, identity, refusal, agent: AgentContext, command:
+  string)` and `requireApprovalAuthority(root, typeName, identity, agent, command)`: required parameters, no default;
+  the first statement is `refuseAgentContext(agent, command)`. The module comment's "no code-level signal" paragraph
+  (`:18-23`) is rewritten to say the session's markers are that signal (`spec-018` §1). The six callers each call
+  `resolveAgentContext(root, { ...currentAgentInvocation(), gated: true })` at the point they call the check —
+  `workflow finalize` inside its `if (phase.approval !== undefined)` branch (`src/core/workflow-finalize.ts:146-150`),
+  the gated form being known only there (D11).
+- **`src/core/team-membership.ts` (new).** `requireTeamMembership(root, identity): CoreResult<void>` reading
+  `loadDnaYamlAtHead(root)` (`src/core/loaders.ts:407`; "committed at `HEAD`" is read today only by
+  `requireApproverAuthority` (`src/core/approval-authority.ts:131`) and `directive assign`
+  (`src/core/directive-assign.ts:171`), `grep -rn "loadDnaYamlAtHead(" src`), matching the email as
+  `resolveMemberRoles` does (`src/core/approval-authority.ts:52-57`); `null` or empty `members` → `ok`; a
+  `ValidationError` → the fail-closed refusal of the amendment. Called right after `requireGitIdentity` at the 16
+  mutating call sites (`grep -rn "requireGitIdentity(" src \| grep -v "^src/core/git-identity.ts"`, the two of
+  `src/core/init.ts` excluded): `src/core/index.ts` 619 (`runDnaMutation`: dna set/add/update/remove), 972
+  (`memoryAddFn`), 2072 (`directiveCreateFn`), 2172 (`directiveAssignFn`), 2369 (`directiveRemoveFn`);
+  `src/core/memory-transition.ts:705` (`beginMemoryTransition`: submit, approve, reject, deprecate, park, amend, and
+  `workflow end`'s plan finalize at `src/core/workflow-start-end.ts:386`); `src/core/workflow-start-end.ts` 279
+  (`workflowStart`), 361 (`workflowEnd`); `src/core/workflow-create-remove.ts` 165, 235; `src/core/workflow-finalize.ts:116`;
+  `src/core/workflow-rekey.ts:124`; `src/core/workflow-adopt.ts` 241 (single), 248 (`--plan --apply`);
+  `src/agent/execute.ts:717` (`agent execute`, D3). `workflow adopt --plan` alone writes nothing and reads no identity,
+  so it takes no step. The 22 `mutates: true` operations (`node -e` over `CORE_MODULES`, printed at design) all reach
+  one of these sites.
+- **`src/storage/commit.ts`.** One private `approvalTrailerRefusal(message, trailers)` run first in `commitPaths`
+  (before `git add`), `commitEmpty` (before `stopWithPlan`) and `writeAndCommit` (before `stopWithPlan` and before any
+  write): when the stamped message has a line `/^approver:/im` and a line `/^(co-authored-by|ai-model):/im`, throw
+  `new ApprovalTrailerError(subject, key)` — a `StorageError` subclass, code `E_AGENT_TRAILER_ON_APPROVAL` (D7).
+- **`src/memory/commit-message.ts`, `src/core/require-reason.ts`.** A defect `'agent-trailer-on-approval'` with the
+  §3.3 message, judged only when the caller says the reason goes under an `Approver:` line:
+  `reasonRefusalMessage(reason, { approval?: boolean })`, `requireReason(options, { approval?: boolean })`. Passed
+  `approval: true` at `src/core/index.ts` 1557 (approve), 1718 (reject), 1973 (amend), `workflow-finalize.ts:147`,
+  `workflow-adopt.ts:234` when `plan && apply`, `workflow-rekey.ts:119`.
+- **`src/cli/registrar.ts`, `src/core/registry.ts`.** `--co-author <name>` derived like `--dry-run`
+  (`src/cli/registrar.ts:100-102`) for every `mutates: true` operation that does not declare the new
+  `CoreOperation.agentAttribution: false` (set on `agentExecute` only, `spec-018` §1.1 — no operation name in the
+  registrar, `spec-006` §4.2); stripped from the options `buildParams` sees, as `withoutDryRun` strips `--dry-run`;
+  a blank value → exit `2`, `invalid flag value: --co-author must not be blank`, before `resolveRoot()`; the call is
+  wrapped in `withAgentInvocation({ env: process.env, coAuthor })` (D4).
+- **`scripts/check-governance.cjs`.** `approval-ai-trailer` is replaced by `approval-agent-trailer` (`spec-018` §4):
+  marker `governance-check:approval-agent-trailer` in `CHECKS`, run over every non-merge commit of the range (not only
+  `memoryCommits`), keyed on a line `/^approver:/im`, one finding per `/^(co-authored-by|ai-model):/im` line, message
+  naming the key; the module comment's bullet rewritten (D6).
+- **Tests' environment (AC 7).** New `test/agent-markers.cjs` exporting `AGENT_ENV_MARKERS` and
+  `withoutAgentMarkers(env)`; `test/global-setup.cjs` deletes them from `process.env` before any worker is forked, as
+  it applies `isolatedGitEnv` (`test/git-isolation.cjs:12-21`), so every suite, in-process or child, starts clean;
+  `scripts/e2e-smoke.cjs` applies the same helper to its base environment (`runSmoke`'s `env`, `:931`), D14.
+- **Docs.** `docs/cli-reference.md`: the `memory amend` errors line (AC 9), the Global Options row for `--co-author`,
+  and the `--reason` rules' new bullet; `docs/01_vision/X_cli-cmds.md`: a Global Options row for `--co-author`
+  (`test/docs/x-cli-cmds.test.ts:178-183` requires every registered option in each command row unless exempted as
+  `--dry-run` is; the exemption extends to `--co-author`, an edit of a test red does not touch, D4);
+  `.wingfoil/directives/custom/git-conventions.md` §9's sentence on `bug-307` (D6); AGENTS.md §5.1 (AC 10).
+
+**AC 10 — the exact AGENTS.md text** (by hand, `dl-137` R3/R4; `docs/agents.md` is not touched):
+- §5.1 `memory.approve`, step 5 (`AGENTS.md:370-371`) becomes: "5. Agents never run `memory approve`, `memory reject`
+  or `memory amend`: the approver runs them from their own terminal, and the verbs refuse an agent's session with
+  `E_AGENT_CONTEXT`, whatever its git identity (`dl-212` D1, `spec-018` §3; §4, §8)."
+- §5.1 `memory.reject`, step 3 (`AGENTS.md:392-393`) becomes: "3. Agents never run `memory reject`, nor `approve` or
+  `amend`: the approver runs them from their own terminal, and the verbs refuse an agent's session (`E_AGENT_CONTEXT`,
+  `spec-018` §3). A task with linked bugs: see the two-commit exception above."
+- The `Reason:` block section gains, after the bullet "No line of a reason may begin with `Approver:`, `Reason:` or
+  `WingFoil-Version:`" (`AGENTS.md:291-295`), the bullet: "- **On an approval — an operation that writes an
+  `Approver:` line — no line may begin with `Co-Authored-By:` or `AI-Model:` either**, in any letter case: an
+  approval never carries an agent trailer (`spec-018` §3.3), so the CLI refuses such a reason at exit `2`."
+- Same class, in §5.1's closing note (`AGENTS.md:273-274`): "Approvals, rejections and amendments run only on the
+  approver's instruction, whether by verb or by hand (§8)." becomes "Approvals, rejections and amendments are the
+  approver's own, run from the approver's terminal: the verbs refuse an agent's session, and an agent never writes
+  one by hand (§8, `spec-018` §3)." (D12)
+
+**AC 9 — the `memory amend` entry** (`docs/cli-reference.md:901-902`): "not an approver → exit `1` (`error: user not
+authorized to approve type 'tech-spec'`)." becomes "not an approver → exit `1` (`error: user not authorized to approve
+type 'tech-spec'`): the message names `approve` because `approve`, `reject` and `amend` share one authority check and
+one message (REQ-SEC-03, `dl-063` clause B); run in an agent's session → exit `1` (`error: E_AGENT_CONTEXT: 'memory
+amend' needs the approver …`)."
+
+#### Measures asked by the orchestrator
+
+- **(a) Suites that run an approver verb under the session's marker.** Measured on a probe, not on this branch: a
+  `git clone --shared` of this branch into the design scratch directory, with a two-line stand-in for the refusal in
+  `requireApproverAuthority` (refuse when `WINGFOIL_AGENT`, `CLAUDE_CODE_CHILD_SESSION` or `CODEX_SANDBOX` is in
+  `process.env`) and a stand-in for membership in `requireGitIdentity`, then `npm test -- --maxWorkers=2` under the
+  heavy-gate slot in this session (`CLAUDE_CODE_CHILD_SESSION` set). Result: `Test Suites: 88 failed, 509 passed, 597 total`, `Tests: 456 failed, 10523 passed, 10979 total` (18:29 UTC, after `waitslot.sh`). Attribution, by the stand-in's message in each failure and, for the 17 suites whose failures print neither message, by re-running them with one stand-in disabled: **50 suites fail on the agent stand-in** — 13 that spawn the CLI (`approval-authority-baseline.integration.test.ts`, `dirty-document-refusal.integration.test.ts`, `dry-run.integration.test.ts`, `e2e-smoke.test.ts`, `fresh-init-transitions.test.ts`, `history-scaffold-phantom.integration.test.ts`, `init-scaffold-workflows.integration.test.ts`, `program.integration.test.ts`, `publish-staging.test.ts`, `workflow-adopt.integration.test.ts`, `workflow-console-dry-run.integration.test.ts`, `workflow-finalize.integration.test.ts`, `workflow-rekey.integration.test.ts`) and 37 that call the core in-process (`test/core/…`, `test/memory/element-schema-park-limits.test.ts`), which fail because the core reads the session's environment, not only a child's; **39 fail on the membership stand-in** (below); 2 on both (`test/cli/program.integration.test.ts`, `test/core/memory-reject.test.ts`); 1 (`test/lint/lint-clean.test.ts`) on the stand-in's own lint, which is the probe's, not a finding. So AC 7's helper must reach in-process suites too — the reason for D8 (applied in `test/global-setup.cjs`, not per suite). Re-run of those 50 with `CLAUDE_CODE_CHILD_SESSION` removed from jest's own environment (`env -u`) and the membership stand-in off: `Test Suites: 50 passed`, `Tests: 868 passed` — a scrub at the jest process is enough.
+- **(b) The non-gated commands the orchestrator and the phase agents run with the code build** — `memory add`,
+  `memory submit` (a task, a plan), `workflow start`, `workflow end`, `workflow finalize` of `red`, `green` and
+  `refactor`, `memory park`, `memory deprecate`, single `workflow adopt`, and the hand `wf()` commits: none reaches the
+  shared check. `memory add` and `submit` call `beginMemoryTransition` / `memoryAddFn` and no authority check (the six
+  call sites above are the whole list); `workflow finalize` calls it only inside `if (phase.approval !== undefined)`
+  (`src/core/workflow-finalize.ts:146`), and in `.wingfoil/workflows/custom/dev-loop.yaml` only `design` (`:147`) and
+  `review` (`:207`) declare `approval:` (`grep -n "approval:" .wingfoil/workflows/custom/dev-loop.yaml`), whose
+  records are the approver's; hand commits run no `wingfoil` code. Membership does not stop them either: the session's
+  identity `robypomper@gmail.com` (`git config user.email`; no `GIT_AUTHOR_EMAIL` set) is the one `team.members`
+  entry (`npm run -s wingfoil -- dna show team --format json`). No STOP.
+- **(c) `approval-agent-trailer` against `origin/main..main`.** A scan of each non-merge commit's message for a line
+  `^approver:` and a line `^(co-authored-by|ai-model):`, both any case (`git log --no-merges --format=%B <range>`, filtered per
+  commit): `origin/main..main` (399 commits, `git rev-list --count`) → one commit, `89432fb24`
+  (`fix(scripts): task-344 — …`), whose body prose wraps so that lines begin `Approver: <name> …` and
+  `Co-Authored-By: or AI-Model: …`, beside its own trailers — a false positive of a rule keyed on a line start, newly
+  reported, not gated (it predates the check's introduction). `approval-ai-trailer` does not report it today (not a
+  `wf()` operation). The whole history of `HEAD` → 530 commits (100 `wf(tech-spec): amend`, 100 `wf(task): approve`,
+  71 `wf(task): amend`, 69 `wf(bug): amend`, 45 `wf(bug): approve`, 40 `wf(plan): amend`, 39 `wf(decision-log): amend`,
+  21 `wf(decision-log): approve`, 14 `wf(task): reject`, 12 `wf(plan): finalize`, the rest under 6), all history under
+  starting mode, none gated. CI passes `--base origin/main` (`git-conventions` §9), so the pushed range reports one.
+
+#### AC 8, by command
+
+`grep -n "E_AGENT_CONTEXT"` on the base (no edit): `docs/02_requirements/03_sard/05_security-compliance.md`,
+`docs/02_requirements/02_bdd/features/p1-memory/P1.7-memory-approve.feature`, `…/P1.8-memory-reject.feature`,
+`…/p4-workflow/P4.14-approval-routing.feature` → no output for each. Not a STOP: the edits are prepared at design, left
+uncommitted (D9), and with them the same command prints one line per file (`:43`, `:62`, `:39`, `:46`). REQ-SEC-03 takes
+`spec-018` Consequences' description word for word, the `E_AGENT_CONTEXT` fit criterion, `amend` beside `approve` and
+`reject` (`bug-395`) and the trace to `spec-018`; P1.7 gains a Scenario Outline over the four markers and the
+`CLAUDECODE` scenario, P1.8 and P4.14 one refusal scenario each. The P1.3/P1.6/P1.2/P5.3.1 scenarios of `spec-018`
+Consequences are the trailer half's (`task-334`, `task-338`).
+
+#### Files to touch and `version:` bumps
+
+- New: `src/core/agent-context.ts`, `src/core/team-membership.ts`, `test/agent-markers.cjs` (+ the red files above).
+- Changed: `src/core/approval-authority.ts`, `src/core/index.ts`, `src/core/memory-transition.ts`,
+  `src/core/workflow-finalize.ts`, `src/core/workflow-adopt.ts`, `src/core/workflow-rekey.ts`,
+  `src/core/workflow-start-end.ts`, `src/core/workflow-create-remove.ts`, `src/core/require-reason.ts`,
+  `src/core/registry.ts`, `src/core/index.ts` barrel exports, `src/agent/execute.ts` (one call), `src/memory/commit-message.ts`,
+  `src/storage/commit.ts`, `src/cli/registrar.ts`, `scripts/check-governance.cjs`, `scripts/e2e-smoke.cjs`,
+  `test/global-setup.cjs`, `test/docs/x-cli-cmds.test.ts` (exemption), `docs/cli-reference.md`,
+  `docs/01_vision/X_cli-cmds.md` (**Version 2.0 → 2.1**, Date), `.wingfoil/directives/custom/git-conventions.md`
+  (**2.6 → 2.7**, §9; then `npm run check:mcp` and `npm run -s wingfoil -- directives list --role reviewer` on the pinned
+  build, dl-205), `AGENTS.md` (no `version:` field). Design-prepared, uncommitted: the two spec amendments, REQ-SEC-03,
+  the three `.feature` files, `test/docs/name-resolvability.allowlist.ts`. No `.wingfoil/*.yaml` and no workflow
+  changes: no phase/step list or workflow count changes (`git diff --stat main -- .wingfoil` → empty at design).
+
+#### Tests run at design (this worktree, current code, no slot: targeted)
+
+- `npx jest test/core/approval-authority-approver.test.ts test/core/approval-authority-baseline.test.ts
+  test/core/approval-authority.test.ts test/core/approver-identity-single-read.test.ts
+  test/core/git-identity-config-failure.test.ts test/core/git-identity-spawn-failure.test.ts test/core/git-identity.test.ts
+  test/core/identity-preflight-committer.test.ts test/core/require-reason.test.ts test/core/reason-trailer-verbs.test.ts
+  test/storage/commit-empty.test.ts test/storage/commit.test.ts test/storage/write-and-commit.test.ts
+  test/memory/commit-message.test.ts test/memory/reason-trailer.test.ts --maxWorkers=2` → `Test Suites: 15 passed`,
+  `Tests: 231 passed`.
+- `npx jest test/cli/check-governance-enforcement.test.ts test/cli/check-governance-parent-state.test.ts
+  test/cli/check-governance-provenance.test.ts test/cli/check-governance-show-signature.test.ts
+  test/cli/check-governance.test.ts test/cli/check-governance-workflow-records.test.ts test/cli/registrar.test.ts
+  test/cli/registrar-dry-run.test.ts test/cli/program.test.ts test/docs/cli-reference.test.ts
+  test/directives/git-conventions.test.ts --maxWorkers=2` → `Test Suites: 11 passed`, `Tests: 254 passed`.
+- With the prepared amendments in the tree: `npx jest test/docs/name-resolvability.test.ts
+  test/core/workflow-finalize-bdd.test.ts test/docs/req-sec-06-confinement-text.test.ts --maxWorkers=2` → 27 passed,
+  1 failed: `workflow-finalize-bdd.test.ts` "P4.14 keeps the uncarried-approval case as sc. 4" pins
+  `toHaveLength(4)`; the new P4.14 scenario makes it 5 — **red updates that pin** to 5 (sc. 4 unchanged). Before the
+  allowlist entries the name-resolvability gate listed 8 unlisted names (spec-006: `src/core/agent-context.ts`,
+  `src/core/team-membership.ts`, `E_AGENT_CONTEXT`, `E_NOT_A_MEMBER`, `refuseAgentContext`, `requireTeamMembership`,
+  `resolveAgentContext`; spec-017: `E_AGENT_CONTEXT`); with them it passes.
+- `npm run check:mcp` (baseline, no `.wingfoil/` change) → both lines printed, `tools: 0`, every Resource read and
+  Prompt get answered.
+
+**Existing pins that change** (red or green must expect them): `test/cli/check-governance-enforcement.test.ts:331-339`
+(the `CHECKS` `toEqual`) and its `describe('no AI co-author trailer on approve and reject …')` (`:387-424`);
+`test/core/workflow-finalize-bdd.test.ts:51-55` (P4.14 count); `test/cli/registrar.test.ts:333` (`add.options`) if
+`--co-author` is appended to `CliCommand.options` — keep it out of `operation.options` and derive it as `--dry-run` is
+derived into `flags`; `test/docs/x-cli-cmds.test.ts:178-183` and its `--dry-run` row test (`:126-138`); every test that
+expects `user not authorized to approve` for an identity outside `team.members` while `members` is non-empty (now
+`E_NOT_A_MEMBER`, D2) — the 39 suites of the membership measure, listed under Risks.
+
+### Pending amendments (approver)
+
+- `spec-006-core-domain-api` — `memory amend spec-006-core-domain-api --reason "Add the membership step, the
+  agent-context resolution and the agent refusal of step 4 to section 7, as dl-220 Q2 (b) and spec-018 ask: the
+  E_NOT_A_MEMBER message, its HEAD baseline and the two cases not refused, resolveAgentContext after step 2 and
+  refuseAgentContext first in the authority check (task-333)."`
+- `spec-017-workflow-commands-and-state-deduction` — `memory amend spec-017-workflow-commands-and-state-deduction
+  --reason "Add the E_AGENT_CONTEXT rows beside the three approver-authority rows of section 10 and the membership
+  refusal on the pre-flight row, as spec-018 and dl-220 Q2 (b) ask (task-333)."`
+- Not Memory, also left uncommitted for the gate (D9): REQ-SEC-03 in
+  `docs/02_requirements/03_sard/05_security-compliance.md`; the scenarios added to `P1.7-memory-approve.feature`,
+  `P1.8-memory-reject.feature`, `P4.14-approval-routing.feature`; eight `PLANNED` entries in
+  `test/docs/name-resolvability.allowlist.ts` (plannedBy `task-333`, `resolveAgentContext` and `src/core/agent-context.ts`
+  with `task-334`).
+
+#### Decisions for the approver
+
+- **D1 — membership's bootstrap and baseline.** Not refused when no `dna.yaml` is committed at `HEAD` or its
+  `team.members` is empty (an `init` scaffold has `members: []`, `src/storage/templates.ts:321`, so the first `dna add
+  team.members` must pass, and the e2e smoke's refused-then-accepted approve relies on it); refused fail-closed when
+  the committed file does not validate; the working tree never decides. *Recommend:* as drafted in the `spec-006`
+  amendment. Alternative: refuse also an empty team (breaks every fresh project's first `dna add`).
+- **D2 — membership before legality and authority, on every mutating verb.** A non-member running `approve` then
+  gets `E_NOT_A_MEMBER`, not REQ-SEC-03's `user not authorized …` (which stays the refusal of a member without
+  `approver`). *Recommend* this order (AC 5: "in the shared pre-flight"; one place). Alternative: skip membership on
+  the six approver-gated commands, whose authority check already implies it.
+- **D3 — `agent execute` takes the membership step** (`mutates: true`, `spec-016` step 5 identity check,
+  `src/agent/execute.ts:717`). *Recommend:* yes, `dl-220` Q2 (b) says every mutating verb.
+- **D4 — `--co-author` is registered by this task**, because AC 1 tests it as a marker on `approve` and Commander
+  refuses an unknown option at exit `2`. Derived by the registrar for every `mutates: true` operation but the one
+  declaring `agentAttribution: false` (`agent execute`), as `--dry-run` is; on an ungated command it is accepted and
+  writes nothing more until `task-334` (same wave, merge order 333 → 334); the Global Options rows of
+  `docs/cli-reference.md` and `docs/01_vision/X_cli-cmds.md` land here; the `spec-008` §2 row stays with `task-334`'s
+  AC 8. *Recommend* (a) this. Alternative (b): register it on the six gated commands only, or (c) move T-3 to
+  `task-334`.
+- **D5 — how the environment and `--co-author` reach the core:** an `AsyncLocalStorage` set by the CLI registrar
+  (`withAgentInvocation`), defaulting to `process.env` for an in-process caller (fail-closed; the MCP server registers
+  no mutating Tool, `spec-018` §1.2). *Recommend:* accept.
+- **D6 — AC 6: replace, do not keep both.** `approval-ai-trailer` (approve/reject only, `memoryCommits` only) is
+  removed and `approval-agent-trailer` (any non-merge commit with an `Approver:` line) takes its place with a new
+  marker, so its own introduction is the merge of this task and the widened scope starts there; keeping both would
+  report every later approve/reject twice. Keyed on a bare line start as `spec-018` §0/§4 define it, so prose that wraps
+  onto a line beginning `Approver:` counts (`89432fb24`, measure (c)). `git-conventions` §9's `bug-307` sentence is
+  rewritten in the same task (2.6 → 2.7). *Recommend:* replace, key as specified.
+- **D7 — the primitive's backstop is a thrown `StorageError` subclass** (`E_AGENT_TRAILER_ON_APPROVAL`), as every
+  failure of `src/storage/commit.ts` is ("a thin, throwing mechanism by design", `:131-134`); it reaches the CLI as the
+  `error:` line, exit `1` (`exitCodeForThrow`, `src/core/exit-code.ts:195-204`). `spec-018` §3.3's "CoreError
+  `VALIDATION`" is read as its exit-1 class. *Recommend:* accept; the alternative maps it to a `CoreError` in each of
+  the writers' callers.
+- **D8 — AC 7's one helper is applied once, in `test/global-setup.cjs`**, as the git isolation is, so no suite has to
+  remember it; `test/agent-markers.cjs` also exports `withoutAgentMarkers(env)` for the cases that build an
+  environment, with a parity test against `AGENT_MARKERS`. *Recommend:* accept.
+- **D9 — the SARD and BDD edits (AC 8) and the allowlist entries are not Memory**, so `memory amend` does not commit
+  them. *Recommend:* after the gate, one commit before red by the orchestrator, right after the two `memory amend`s —
+  `docs(requirements): task-333 — REQ-SEC-03 and the agent-session refusal scenarios (spec-018)` with the §7 trailers —
+  since `name-resolvability` fails between the amend of `spec-006` and the allowlist entries.
+- **D10 — `spec-017` §10 also gains the membership refusal** on its pre-flight row, beyond AC 11's three
+  `E_AGENT_CONTEXT` rows. *Recommend:* accept (else the workflow commands' new refusal is undocumented).
+- **D11 — `workflow finalize` knows whether it is gated only after deduction**, so its `resolveAgentContext` call sits
+  in the `approval:` branch, not "right after `requireGitIdentity`" (`spec-018` §2.6). Unobservable here (both refuse
+  before writing); `task-334` must place its ungated call the same way and say it in `spec-017` §7.9. *Recommend:*
+  accept; a `spec-018` revision is not needed for this task.
+- **D12 — AGENTS.md's closing note of §5.1** ("run only on the approver's instruction") is the same class as steps 5
+  and 3 and is rewritten too. *Recommend:* accept.
+- **D13 — CLAUDECODE**: an approver's IDE terminal sets it and is not refused (T-6); nothing else in the approver's
+  terminal is a marker. No ruling needed unless the approver works inside an agent's shell, which L0 refuses by design.
+- **D14 — the e2e smoke scrubs the markers from its base environment** with AC 7's helper, so `wave-checks` and the
+  `e2e-smoke` phase still pass when an agent runs them; the smoke's throwaway repository plays the approver on purpose.
+  *Recommend:* in this task (same class as AC 7). Alternative: the smoke runs only from the approver's terminal.
+- **D15 — who fixes the 39 membership-broken suites.** They fail on correct new behaviour (fixtures committing a team without their own identity). *Recommend:* the developer, in green, in the fixtures (files red does not touch, so T4 holds), each fix recorded; red pins only the new behaviour. Alternative: red adjusts them as part of the red commit.
+
+#### What the dependent tasks must read from this task (dl-015)
+
+- **`task-334`**: `AGENT_MARKERS`, `AgentContext`/`Attribution` and `resolveAgentContext`'s `CoreResult` shape are
+  fixed here; it fills `attribution` for ungated operations and adds `--ai-model` beside the registrar-derived
+  `--co-author` (`CoreOperation.agentAttribution: false` excludes `agent execute`); `withAgentInvocation` is the one
+  way the CLI hands `env` and the options to the core; `workflow finalize` resolves its gated form only after the
+  phase is known (D11), which its §7.9 sentence must say; the commit primitive's backstop already refuses an
+  `attribution` reaching an approval commit; `spec-008` §2/§6 rows stay its AC 8 (D4), the `--co-author` row
+  included; `git-conventions` is at 2.7 after this task (§9), so its bump is 2.8.
+- **`task-338`**: imports `AGENT_MARKERS` (`id === 'WINGFOIL_AGENT'`), never spells the name; `agent execute` takes
+  the membership step (D3) and, with `agentAttribution: false`, no `--co-author`.
+- **`task-343`**: the refusal is `E_AGENT_CONTEXT` on `memory approve|reject|amend`, `workflow finalize` (approval
+  phase), `workflow adopt --plan --apply`, `workflow rekey`; its directive cites `spec-018` §3 and AGENTS.md §5.1's new
+  step 5; a standing rule's command runs from the approver's terminal.
+- **`task-352`**: `approval-agent-trailer` replaces `approval-ai-trailer` in `scripts/check-governance.cjs` (D6), over
+  every non-merge commit; its new `Co-Authored-By:` rule must not double-report an approval commit this rule already
+  reports, and its marker goes in `CHECKS` beside the new one (the `CHECKS` pin of
+  `test/cli/check-governance-enforcement.test.ts` changes in both tasks: merge order 333 → 334 → 352).
+
+#### Risks
+
+- **This repository's approvals (W0-R5).** From the merge, the code build refuses every approve, reject, amend, the
+  `design` and `review` records (`approval:` phases), `adopt --plan --apply` and `rekey` in any shell an agent started.
+  The approver runs the queue from a terminal of their own; an IDE terminal that sets only `CLAUDECODE` is not refused
+  (T-6).
+- **The e2e smoke and the examples** drive `memory approve`/`reject` (`scripts/e2e-smoke.cjs:186-209`,
+  `docs/examples/01-first-project/run.sh`, `02-custom-memory-type`, `06-workflow-approval`) with `process.env`
+  (`:931`, `:721-726`): run by an agent at `wave-checks` they fail after the merge unless the smoke scrubs (D14).
+- **Membership and fixtures**: the probe's membership stand-in fails 39 suites (17 under `test/cli/`): `test/agent/agent-execute-full-context.test.ts`, `test/agent/execute-config-arg.test.ts`, `test/agent/execute-mcp-conflict.test.ts`, `test/cli/agent-execute-awaiting.integration.test.ts`, `test/cli/agent-execute-config-arg.integration.test.ts`, `test/cli/agent-execute-diagnostics.integration.test.ts`, `test/cli/agent-execute-dry-run-terminal.integration.test.ts`, `test/cli/agent-execute-headless.integration.test.ts`, `test/cli/agent-execute.integration.test.ts`, `test/cli/agent-execute-launch.integration.test.ts`, `test/cli/agent-execute-launch-kind.integration.test.ts`, `test/cli/agent-execute-process-group.integration.test.ts`, `test/cli/agent-execute-session-output.integration.test.ts`, `test/cli/agent-execute-signals.integration.test.ts`, `test/cli/agent-execute-step.integration.test.ts`, `test/cli/head-label.integration.test.ts`, `test/cli/head-label-memory-verb.integration.test.ts`, `test/cli/program.integration.test.ts`, `test/cli/workflow-start-end.integration.test.ts`, `test/cli/workflow-start-plan-patterns.integration.test.ts`, `test/core/agent-execute-awaiting.test.ts`, `test/core/agent-execute-diagnostics.test.ts`, `test/core/agent-execute-step.test.ts`, `test/core/agent-execute.test.ts`, `test/core/agent-role-definition.test.ts`, `test/core/context-shipped-templates.test.ts`, `test/core/dna-agent-adapter-runs.test.ts`, `test/core/dna-mutation-surface.test.ts`, `test/core/dna-quoted-path-segments.test.ts`, `test/core/dna-set-comment-preservation.test.ts`, `test/core/dna-set-tab-before-comment.test.ts`, `test/core/dna-set.test.ts`, `test/core/dna-whole-file-rewrite.test.ts`, `test/core/element-short-reference.test.ts`, `test/core/memory-reject.test.ts`, `test/core/paths-extra-category.test.ts`, `test/core/step-key-unscoped.test.ts`, `test/core/step-refusal-frontier.test.ts`, `test/dna/agent-identity.test.ts`. Most are `agent execute` and `dna` fixtures that commit a `team.members` list without the test's git identity. They are fixed in green, in the fixtures (the identity added as a member, through the suite's own fixture builder or one shared one), not by weakening the check (D15). The e2e smoke is not among them: its repository has `members: []` until it binds its approver (D1).
+- **Other open `w0` tasks.** `task-355` (agent execute refactor) and `task-339` (per-role permissions) edit
+  `src/agent/execute.ts`, where this task adds one call after `requireGitIdentity` (`:717`): a textual conflict at most.
+  `task-356` (design gate of `spec-016`/`spec-017`/`spec-008`) may hold its own uncommitted `spec-017` amendment: two
+  pending amends of one spec in two worktrees — whichever `memory amend` lands second needs `git merge --no-edit main`
+  first. `task-344`'s report check is unaffected (`scripts/check-phase-report.cjs` is not touched); its commit
+  `89432fb24` is the one false positive of (c).
+
+### Retrospective
+
+<!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
+     reconstructed afterwards. One line per item: what happened, the evidence (a command and what it
+     printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
+     Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
+     here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+
+- design: measuring which suites an agent marker breaks needed a full-suite run on a probe clone (17:52 → 18:29 UTC under the heavy-gate slot); no cheaper source names the in-process suites that read the session environment.
