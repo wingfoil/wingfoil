@@ -60,3 +60,298 @@ adoption (`task-351`), which may rename tokens.
 ## Execution Notes
 
 <!-- Filled by the dev-loop. -->
+
+### design (architect, 2026-11-11)
+
+**Inputs read.** Base: `main` `06dec7a70` + the start commit `d4040948b` and the four bug syncs `[planned →
+in-progress]` (`git log --oneline main..HEAD` → five commits). Builds through the task's PATH shim: `wingfoil
+--version` and `node dist/cli.js --version` → `0.3.2 (06dec7a709a1a819e6181964d650b74433608c29)`; the pinned build
+`npm run -s wingfoil -- --version` → `0.3.2 (6de2e13c004bbf419acfa7dc4d98d5a7468cd693)`. Read: the `w0` plan's rulings
+W0-R1…W0-R12; `dev-loop.yaml` 2.4; `bindings.yaml` 3.0; `spec-003` Layer 3 and § "Check expressions" (`approved`);
+`spec-017` §3.2–§3.3 and §7.2 (`approved`); `dl-090` (`ready`), `dl-172` (`ready`, Q1 (a)), `dl-115` (`ready`, Q1 (A),
+Q2 (a), Action 3); the four bugs; `task-303`'s classification table and design-gate rulings (D1 (a): a check a command
+could decide stays unbound; D2 (a): `phase-branch-merged-to-integration-branch` stays unbound; D5: the prose is the
+binding key); `task-351`'s Execution Notes in full (`depends_on`, `dl-015`): its paragraph "For `task-358`" — no token
+added, removed or renamed by the pack adoption; `end-of-life`'s unbound `deprecated content excluded …` moved from
+`phases[1]` to `phases[2]`, a row of the conformance suite's unbound list, which `task-351` left at
+`["end-of-life", "phases[2].checks.post[0]", …]` and this task empties.
+
+**The count before (AC 1).** On this worktree, pinned build and code build alike:
+`workflow next sw-life-cycle-1-plan --format json` → exit `0`, stderr empty, `diagnostics` 68 entries, all
+`W_WORKFLOW_UNBOUND_TOKEN` (counted with `node -e` over the JSON; 65 when `bug-469` was filed, 68 since `task-349`
+added `gate.slot-free` three times); `workflow status --format json` → 68 `W_WORKFLOW_UNBOUND_TOKEN` (the code build adds
+5 `W_INSTANCE_PRE_MARKER`, expected); the console `workflow next` ends with `68 diagnostic(s): --format json lists
+them`. Every one is a **check**; no action token is unbound. Grouped by `tokenName`: 45 distinct names, the largest
+`frontmatter.required` (19 occurrences), `gate.slot-free` (3), `tests.unchanged`, `exit-code-zero` and `all tasks where
+tags=[{release.version}] are status` (2 each), every other name once.
+
+**The frontier before (risk check).** `workflow next sw-life-cycle-1-plan --format json` (pinned): 16 frontier keys
+(`dev-loop.start@task:` for task-333, 334, 336–343, 350, 352, 353, 359; `dev-loop.design@task:task-358-…`;
+`release-planning.advance-pinned-build@release:minor-v1.0`); `workflow status --format json`: five open instances —
+`decision-log-ingest-rel-v0.4-planning-feedback-plan` (active, complete), `bug-ingest-rel-v0.4-planning-feedback-plan`
+(complete), `sw-life-cycle-1-plan` (`release-line-cycle` current, 16 frontier keys, `late` 204),
+`decision-log-ingest-rel-v0.4-planning-inputs-plan` (complete), `service-ingest-rel-v0.3-listings-plan` (at `capture`).
+
+**The proposed configuration, measured on a scratch clone (`dl-205`, `pinned-build.reads`).** A clone of this branch
+outside the worktree (`node_modules` linked, `dist/` copied) was first checked equal to the worktree: the same
+fingerprint (sorted frontier keys, per-instance phase states, frontier and `late` count) on both builds. The edits
+below were then committed there (one probe commit), and read with the pinned build
+(`node node_modules/wingfoil-released/dist/cli.js`) and the code build (`node dist/cli.js`):
+- `workflow list --format json` → exit `0`, `diagnostics` `[]` (pinned); `workflow next sw-life-cycle-1-plan` and
+  `workflow status`, `--format json` and `--format console`, both builds → exit `0`, stderr empty; `next` diagnostics
+  `{}`, status `{}` (pinned) and `{ W_INSTANCE_PRE_MARKER: 5 }` (code); the console `workflow next` prints no
+  `diagnostic(s)` line;
+- the fingerprint is identical to the clone's before, on both builds, except the diagnostics: the same 16 frontier
+  keys, the same five instances with the same phase states, frontier and `late` 204. No step key changes, no phase
+  is added, no deduced step becomes pending or complete: checks are not evidence (`spec-017` §4), and bindings feed
+  only diagnostics. So no `workflow rekey` is proposed, and no edit is deferred to after `w0`;
+- `workflow show dev-loop|e2e-smoke|agent-docs|retrospective|specification-downcast`, `--format json` and console →
+  exit `0`, stderr empty; `dev-loop`'s `done` check shows `{ kind: run, source: project, argv: [node,
+  scripts/check-retrospective.cjs, "{element.path}"], severity: reject }`: the pinned build accepts the new
+  placeholder (its loader checks only that a placeholder is a whole `run` element, `isWholeInterpolation`,
+  `src/workflow/bindings.ts`; `workflow next` fills only `{<key>}` token arguments, `interpolateRun`,
+  `src/core/workflow-next.ts`), so no `pinned-build` bug, no `KNOWN_READ_FAILURES` entry and no `wingfoil-cli` §1
+  exception;
+- `node scripts/check-mcp-registration.cjs <clone>` → exit `0`: `.mcp.json "wingfoil" runs the pinned wingfoil 0.3.2,
+  advertising [prompts, resources, tools] (prompts: 8, resources: 4, tools: 0)` and `the build under development
+  (dist/cli.js) serves … every listed Resource read and Prompt get answered`.
+
+**AC 4 — the stale ingest plans, read before any change.** The seven `decision-log-ingest` plans `bug-324` names are
+already `done`: `grep -l '^workflow: "\?decision-log-ingest' -r docs/05_plans | xargs grep -H '^status:'` → 24 plans,
+22 `done`, 2 `active` (both of `rel-v0.4`); `npm run -s wingfoil -- memory history <id>` of each of the seven shows a
+hand `wf(plan): finalize <id> [active → done]`: `…-parallel-release-lines-plan` `f7954110d` (2026-10-16),
+`…-agents-md-plan` `d4b0dc7ed`, `…-docs-showcase-plan` `548701975`, `…-file-format-key-plan` `d4c9cd4fe`,
+`…-benchmark-cost-finding-plan` `2eb604142`, `…-consumer-feedback-loop-plan` `b2cb90f9b` (2026-10-21, each `Reason:`
+naming the approver's instruction of 2026-10-21 and "the bug-324 class"), `…-market-decisions-plan` `a02480998`
+(2026-11-05). So none of the seven is an open instance: `npm run -s wingfoil -- workflow status` → `open workflows: 5`,
+none of them. What `bug-324` describes is left in four instances (`workflow status`, both builds):
+- `decision-log-ingest-rel-v0.4-planning-feedback-plan` (active, **complete**), `bug-ingest-rel-v0.4-planning-feedback-plan`
+  (**complete**), `decision-log-ingest-rel-v0.4-planning-inputs-plan` (**complete**): complete but not ended, so the
+  active instance is a finished ingest (`npm run -s wingfoil -- workflow next` → `workflow: decision-log-ingest
+  (decision-log-ingest-rel-v0.4-planning-feedback-plan)`, `no next step: workflow 'decision-log-ingest' is complete`).
+  `node dist/cli.js workflow end <id> --dry-run` of each → exit `0`, subject `wf(plan): finalize <id> [active → done]`,
+  paths the plan file only; each plan holds a `### Retrospective` with an entry (`- None yet.` ×2; the planning-inputs
+  plan one item);
+- `service-ingest-rel-v0.3-listings-plan` (at `capture`): `npm run -s wingfoil -- workflow next service-ingest` →
+  `next step: service-ingest.capture`, `evidence missing: produces`, although the plan filed `svc-010` … `svc-013` by
+  hand (its Execution Notes) — the same stale capture, in a `service-ingest`. `node dist/cli.js workflow end
+  service-ingest-rel-v0.3-listings-plan --dry-run` → exit `1`, `workflow 'service-ingest' is not complete: current
+  step service-ingest.capture`; `node dist/cli.js workflow adopt service-ingest-rel-v0.3-listings-plan --plan` → `step
+  service-ingest.capture: 21 candidates service:svc-001-… … service:svc-022-…` (writes nothing). Its completion
+  criterion is open (`svc-012` stays `pending` until mcp.so publishes the listing).
+None of these commands was run except the dry runs and `--plan` above, which write nothing (`git status --short` → clean
+after them). D5 and D6 propose the rest.
+
+**The classification (AC 1, AC 3; D1 decides the rule).** `bug-469`'s Expected, as the approver ruled it on
+2026-11-01: each token "bound (kind `run`, when a command decides it) or declared `manual: true` (when a human confirms
+it)", with no change to the tool. That contradicts two earlier rulings for the checks a command *could* decide but
+none does: `task-303`'s design gate D1 (a) (2026-10-26: such a check "stays unbound, even when that command does not
+exist yet") and `bug-435`'s Expected ("a part a command can decide, left unbound until a command exists so the gap
+stays visible"). Under AC 1 every one of them needs either a command written in this task or a `manual: true`. D1
+weighs the two; the table below is the recommended (B): a `run` binding where a command decides the check today or this
+task writes a small one, `manual: true` for the rest.
+
+| # | Check (`tokenName`) | Occurrences | Binding (recommended) | Command / reason |
+|---|---|---|---|---|
+| R1 | `retrospective.present` | dev-loop.done post | **run** `[node, scripts/check-retrospective.cjs, "{element.path}"]` | new script (AC 2), new placeholder (AC 5, `spec-003` amendment) |
+| R2 | `agents-md.current` (new; replaces the five `AGENTS.md …` / `CLAUDE.md …` prose checks) | agent-docs.align-agent-docs post | **run** `[npm, test, --, test/docs/agents-md.test.ts]` | new parity suite (AC 3, as `workflow-md.complete`, `bug-170`) |
+| R3 | `e2e-smoke.scenario` (new; replaces `exit-code-zero` + the round-trip check of fresh-init and drive-cli's three checks) | e2e-smoke.fresh-init, .drive-cli post | **run** `[node, scripts/e2e-smoke.cjs, --candidate]` | `scripts/e2e-smoke.cjs` asserts each as part of its scenario (the phases' descriptions); D3 |
+| R4 | `mcp.registered` (existing binding; replaces `exit-code-zero` + the two prose checks) | e2e-smoke.mcp-registration post | **run** `[npm, run, "check:mcp"]` (unchanged) | `bug-435` item 1 |
+| M1 | `frontmatter.required` | 19 (the `task-303` list) | manual, until a command | the verbs refuse a missing required field at `memory submit`; a check over the phase's created elements needs the engine's created set, which no placeholder carries |
+| M2 | `secret-scan.clean` | service-ingest.capture | manual, until a command | `spec-007` `scanText` has no command over one element |
+| M3 | `change-proposal.target_release is not empty`, `change-proposals.swept`, `ready-decision-logs.covered`, `task.wave.declared`, `waves.declared`, `tech-spec.approved`, `all releases where release-line={release-line.version} are status`, `all tasks where tags=[{release.version}] are status`, `all bugs where tags=[{release.version}] are status`, `deprecated content excluded from agent context and default search` | 11 | manual, until a command | Memory queries: `memory search` exits `0` whatever it finds; they need a query command with an exit status (`bug-435` Notes) |
+| M4 | `stop-the-line.clear`, `growth.clear` | dev-loop.start pre | manual, until a command | arithmetic over `memory.yaml` and the tasks' frontmatter, which the orchestrator applies by hand (the plan's start pre-checks) |
+| M5 | `depends_on.acknowledged` | dev-loop.design post | manual, until a command | `dl-090` Q6: a command reading the acknowledgement from the Execution Notes; its text also names the `ref:` decision-logs (AC 2) |
+| M6 | `tests.exist`, `tests.failing`, `tests.unchanged` | dev-loop.red / .green / .refactor | manual, until a command | the red commit's sha is in no placeholder; the T4 command (`git log --first-parent --no-merges <red>..HEAD -- <files>`) is run by the developer and the reviewer |
+| M7 | `gate.slot-free` | dev-loop.green / .refactor / .review pre | manual, until a command | `scripts/heavy-gate.cjs` takes the lock inside the npm scripts; it has no probe mode |
+| M8 | `valid JSON; no duplicate IDs; no circular dependencies`, `valid JSON parse`, `no duplicate IDs`, `no circular dependencies` | specification-downcast.backlog-export, backlog-export.validate | manual, until a command | a JSON/graph check of `backlog.json`, no script yet |
+| M9 | the three `advance-pinned-build` comparisons | release-planning.advance-pinned-build | manual, until a command | output vs `package.json`, semver + `npm view`, `git diff --name-only` |
+| M10 | `docs.examples.passing` | wave.wave-checks post | manual, until a command | no single command runs `docs/examples/*/run.sh` (`measure.cjs` Q11 runs them as a metric) |
+| M11 | `phase-branch-merged-to-integration-branch` | release-publishing.tag pre | manual, until a command | `task-288` D3 / `task-303` D2 (a) left it unbound: which phase branches is declared nowhere; D4 |
+| M12 | `staged version approved on npm, …` | release-publishing.publish post | manual, until a command | `npm view`, `gh release view`, the registry API; `scripts/wait-npm-version.cjs` polls only the first |
+| M13 | the three `release-health` checks | release-health.measure/.compare/.propose post | manual, until a command | no command reads a report against `docs/08_health/metrics.yaml`; `bug-435` item 3's comment fix |
+| M14 | `100% of MVP Canvas features covered` (split), `100% of MVP Canvas features included` (split, same class) | specification-downcast.user-story-mapping, user-story-mapping.mvp-cut | manual, until a command | the feature ids of the canvas vs the story map's |
+| M15 | `feedback-notes.recorded` (kept, its restating clause moved out), `proposals.disposed` (kept) | retrospective.collect-feedback post, .additional-points pre | manual, until a command | the mechanical half (`bug-435` item 4): one row/outcome per item from the closed list, each citing an id or a command |
+| P1 | `edge-case stories present`, `edge-case stories generated` (splits) | as M14 | manual, on purpose | whether the edge cases a story map needs are present is a reader's judgement (`task-303` row 4) |
+| P2 | `feedback-notes.restated(each note's content restated in WingFoil's words; no row holds a consumer's configuration, paths or prose)` (split) | retrospective.collect-feedback post | manual, on purpose | a reading (`dl-163` S3d) |
+| P3 | `proposals.outcome-chosen(each outcome is the approver's disposition of its item, read against it; a proposal is never read as a finding)` (split) | retrospective.additional-points pre | manual, on purpose | the approver's disposition (`dl-115` Q3 (x)) |
+
+The 19 manual names at `HEAD` (`task-298`, `task-303`, `task-348`) stay manual on purpose, except `feedback-notes.recorded`
+and `proposals.disposed` (M15) and the two mixed keys the splits replace (`"100% of MVP Canvas features covered; edge-case stories present"`, `"100% of MVP Canvas features
+included; edge-case stories generated"`), which leave `bindings.yaml`. In `bindings.yaml` the manual entries keep two
+groups under two comments: "manual on purpose" (a judgement, stays manual at v1.0) and "manual until a command" (a
+command could decide it; each row names the command owed; a `run` binding replaces the row when the command exists).
+Result, measured on the scratch clone: **0 diagnostics** (68 → 0).
+
+**`bug-435`'s four items (AC 3).** (1) `e2e-smoke.mcp-registration` `checks.post` → `["mcp.registered"]`, its
+description unchanged (it already says what `check:mcp` asserts). (2) `agent-docs` → `["agents-md.current",
+"workflow-md.complete"]`, the five readings moved into the description and into `test/docs/agents-md.test.ts`, which
+asserts against the configuration at `HEAD`: §1's command list equals `CORE_MODULES`' commands (as
+`test/docs/commands-parity.test.ts` reads them); §5's type table names exactly `memory.yaml`'s types, each row's chain
+the type's `sequence`; §6 names every startable workflow of `workflows.yaml`; §7's role table equals `roles.yaml`
+`assignments` and `global`; `CLAUDE.md` is `@AGENTS.md` plus one sentence. Run on this base it must pass: a mismatch
+found while writing it is fixed in `AGENTS.md` in the same commit (`AGENTS.md` is `agent-docs`' output, not a Memory
+element). It cites `dl-025`, `dl-137` and `dl-116`, so it joins the `docs.parity` vector
+(`test/core/dev-loop-v1-6.test.ts` checks that every `test/docs` suite citing `dl-116` is listed). (3) The
+`release-health.yaml` comment states the real reason: no command reads a report against the catalogue —
+`scripts/release-health/` holds `catalogue`, `compare` and `measure`, none with a report-check mode, and `task-231` and
+`task-241` were never to ship one — so the check is `manual: true` until such a command exists. (4) The reason on
+`proposals.disposed` / `feedback-notes.recorded` is rewritten to say what a command could decide (completeness and the
+closed outcome set) and the splits P2, P3 carry the judgement; `specification-downcast`'s line 17 is split (M14/P1),
+and so is `user-story-mapping`'s `mvp-cut` check, the same mixed form in a key of `bindings.yaml`, the file this task
+edits (`W0-R10`, same class).
+
+**AC 2 — the path placeholder, the plan half and the absorbed decision-log.**
+- **Placeholder.** `{element.path}` / `{<type>.path}`: the repository-relative path of the scope element's file (the
+  file the deduction read it from under its type's `memory.yaml` `path`), a whole `run` element, valid in a binding
+  only (not in `where`, `produces` or an action argument, where the type's pattern is the path itself). `path` is no
+  template field (`grep -l "^path:" .wingfoil/memory/templates/*.md` → none), so it shadows nothing. No `src/` change:
+  v0.4 runs no binding, the loader accepts the element (`isWholeInterpolation`) and `workflow next`/`show` display it
+  verbatim (measured above); the v1.0 engine fills it. This is the `spec-003` Layer 3 amendment (below).
+- **`scripts/check-retrospective.cjs <path>`** (with `scripts/check-retrospective.d.cts`, as the other scripts have):
+  reads the Memory document at `<path>` (repository-relative, confined to the repository root) and checks that its
+  `## Execution Notes` holds a `### Retrospective` subsection with at least one line outside HTML comments (`None` is an
+  entry; the template's comment alone is not); for a `task`, also every bug of its `bug:` list whose `status` is
+  `closed`, each found at the path `memory.yaml`'s `bug.path` gives. Exit `0` all present; `1` one or more missing, one
+  stdout line per file `<path>: no ### Retrospective entry`; `2` a path that is not a Memory document of this
+  repository, a `bug:` id with no file, or no argument (`spec-003` exit table). Deterministic: files in the order
+  given, then the bugs in `bug:` order. D2 (b) asks whether the template comment alone counts.
+- **The plan half** (`dl-115` Q2 (a): "the same existence check … when a plan reaches `done`"). No workflow phase
+  finalizes a plan; `workflow end` does (`spec-017` §7.2) and hand `wf(plan): finalize` commits did. D2 recommends a later
+  check of `scripts/check-governance.cjs`, `plan-retrospective`: a `wf(plan): finalize <id> [active → done]` commit
+  whose plan, at that commit, fails `check-retrospective.cjs`'s test is a finding, gated from its introduction like the
+  other later checks (`--base origin/main` on push, `governance.yml` in CI), sharing the function the script exports.
+  The three ingest plans AC 4 ends already pass it (above).
+- **The absorbed decision-log.** `dev-loop.design`'s instruction (2) becomes "reads the Execution Notes of every
+  `depends_on` task and the Decision and Actions of every decision-log the task's `ref:` names (`dl-015`, `bug-320`)",
+  and `depends_on.acknowledged`'s text names both. `ref:` already carries them (`task-358` `ref: "dl-115"`, `task-351`
+  `ref: "dl-186, dl-138"`); no new field (D2 (c)).
+
+**Per-AC classification and what `qa` pins.** Every registry read is of the configuration **as `HEAD` holds it**
+(`loadWorkflowRegistryAtHead(ROOT)`, `workflowShowAtHead(ROOT, '<name>')`, `resolveToken`, `tokenName` from
+`src/workflow/bindings`, as `test/core/workflow-manual-prose-checks.test.ts` does): red on the red commit, green once
+green's commits are `HEAD`. Version pins are "≥" plus the history clause naming `task-358` (`bug-314`). Fixtures mirror
+this repository's shapes; command output fixtures are copied from a real run. Expected red: assertion failures,
+and for the new scripts a missing file (`spawnSync` exit `1` with `Cannot find module`, and a `require` that throws
+under jest). No `src/` export is added, so no TS2305; the scripts' `.d.cts` files are green's, so the red tests load a
+script with `require(SCRIPT) as { … }` against a local interface instead of a typed `import` (which would be TS2307
+before green), and `npx tsc --noEmit -p tsconfig.json` stays clean at red.
+
+| AC | Class | What `qa` pins | Interface / test file |
+|----|-------|----------------|-----------------------|
+| 1 | red-first | (a) `loadWorkflowRegistryAtHead(ROOT).diagnostics` → `toEqual([])`; (b) every check occurrence of every workflow (pre and post, registry order) resolves to a kind other than `unbound`, and every action too; (c) the `run` set: these `tokenName`s resolve `{ kind: 'run', source: 'project', argv, severity: 'reject' }` with exactly: `retrospective.present` → `['node', 'scripts/check-retrospective.cjs', '{element.path}']`, `agents-md.current` → `['npm', 'test', '--', 'test/docs/agents-md.test.ts']`, `e2e-smoke.scenario` → `['node', 'scripts/e2e-smoke.cjs', '--candidate']`, `mcp.registered` → `['npm', 'run', 'check:mcp']`; (d) the "manual until a command" names (the M1–M15 rows, 36 names: the 44 of `task-303`'s ii list minus the 13 now bound `run` (`retrospective.present`, `exit-code-zero`, the six e2e-smoke prose checks, the five agent-docs ones), plus `gate.slot-free` (`task-349`), the two `100% …` halves, `feedback-notes.recorded`, `proposals.disposed`) and the "manual on purpose" names (the 19 at `HEAD` today minus the two mixed keys and `feedback-notes.recorded`, `proposals.disposed`, which move to the other group, plus `edge-case stories present`, `edge-case stories generated`, `feedback-notes.restated`, `proposals.outcome-chosen`) each resolve `{ kind: 'manual', source: 'project' }`, the two lists disjoint, and `bindings.yaml`'s text places each list under its own group comment (`/manual until a command/`, `/manual on purpose/`) — exact lists in the design's table; (e) the CLI: `node dist/cli.js workflow next --format json` and `workflow status --format json`, spawned with `cwd: ROOT` (`test/cli/helpers/spawn-cli.ts`), exit `0`, `diagnostics.filter((d) => d.code === 'W_WORKFLOW_UNBOUND_TOKEN')` → `[]` (`W_INSTANCE_PRE_MARKER` is expected on `status`, not asserted); the console forms: stdout + stderr contain no `W_WORKFLOW_UNBOUND_TOKEN`, and `workflow next`'s stdout no line matching `/^\d+ diagnostic\(s\)/m`; (f) `.wingfoil/workflows/bindings.yaml` `version` ≥ 3.1, a `;` history segment naming `task-358`. Existing pins edited in the red commit (they enumerate what AC 1 removes): `test/core/workflow-repository-conformance.test.ts` (the 68-row unbound list → `[]`, its title; the `new Set(codes)` in "the alignment codes are gone" → empty), `test/core/workflow-manual-prose-checks.test.ts` (rewritten to (c)–(d): the `UNBOUND_NAMES` list and the "65" count go), `test/core/dev-loop-v1-6.test.ts` (`start:stop-the-line.clear` → `manual`, `done:retrospective.present` → `run`; docblock), `test/core/dev-loop-v2-3.test.ts` (the three `gate.slot-free` → `manual`), `test/core/dev-loop-v2-4.test.ts` ("warns 68 times" → zero diagnostics), `test/core/workflow-integration-branch.test.ts` ("only warnings are the 68 unbound checks" → none), `test/core/define-scope-sweep.test.ts` (task-277 AC 3: the two `release-planning` `phases[2]` rows → none, each resolving `manual`), `test/core/vision-change-workflow.test.ts` (its two rows → `[]`) | new `test/core/workflow-bindings-complete.test.ts` (a)–(d), (f); new `test/cli/workflow-unbound-none.integration.test.ts` (e) |
+| 2 | red-first | (a) `workflowShowAtHead(ROOT, 'dev-loop')`: `done` check `retrospective.present` binding `run` with argv `[…, '{element.path}']` (also in AC 1 (c)); `design`'s description matches `/every decision-log the task's `ref:` names/` and its post check `depends_on.acknowledged(` names `ref:`; `dev-loop.yaml` `version` ≥ 2.5 with a segment naming `task-358`; (b) the script, by `spawnSync(process.execPath, [SCRIPT, path], { cwd: <tmp repo> })` over a temporary git-less directory holding `.wingfoil/memory.yaml` (copied from this repository's) and Memory files copied from this repository's templates (`.wingfoil/memory/templates/task.md`, `bug.md`, `plan.md`) with their placeholders filled: a task whose `### Retrospective` holds `None.` and whose `bug:` names one `closed` bug with an entry → exit `0`, stdout empty; the same task with the template's comment only → exit `1`, stdout `<path>: no ### Retrospective entry`; the task with an entry and its `closed` bug without the subsection → exit `1` naming the bug's path only; a `bug:` bug still `in-review` without the subsection → exit `0` (only closed bugs count); a plan with an entry → `0`, without → `1`; a path outside the root, a missing file, a non-Memory file and no argument → exit `2` with a stderr reason; the module also exports the pure predicate `hasRetrospectiveEntry(markdown: string): boolean` (`true` for `None.`, `false` for the comment alone or no heading, `false` when the heading is outside `## Execution Notes`); (c) the plan half (D2 (a)): `scripts/check-governance.cjs` on a scratch repository, built as `test/cli/check-governance-*.test.ts` build theirs: a `wf(plan): finalize <id> [active → done]` commit after the check's introduction whose plan has no `### Retrospective` entry → exit `1`, a finding naming rule `plan-retrospective` and the plan id; with an entry → `0`; the same commit before the introduction → reported, exit `0` | new `test/cli/check-retrospective.test.ts` (b); new `test/cli/check-governance-plan-retrospective.test.ts` (c); (a) in `test/core/workflow-bindings-complete.test.ts` |
+| 3 | red-first | (a) `e2e-smoke` (`workflowShowAtHead` or the registry at `HEAD`): `mcp-registration` `checks.post` `toEqual(['mcp.registered'])`, `fresh-init` and `drive-cli` `checks.post` `toEqual(['e2e-smoke.scenario'])`, phase names unchanged (`['fresh-init', 'drive-cli', 'mcp-registration', 'gate']`), `version` ≥ 2.0; (b) `agent-docs` `align-agent-docs` `checks.post` `toEqual(['agents-md.current', 'workflow-md.complete'])`, `version` ≥ 1.2; `test/docs/agents-md.test.ts` exists, cites `dl-025`, `dl-137` and `dl-116`, and `docs.parity`'s argv lists it; (c) `release-health.yaml`'s text (read at `HEAD` with `git show HEAD:…`) has no `Unbound until scripts/release-health/ ships`, and the comment above `measure`'s check names that no command reads a report against the catalogue; `version` ≥ 1.3; (d) the splits: `specification-downcast` `phases[0].checks.post` `toEqual(['100% of MVP Canvas features covered', 'edge-case stories present'])` (≥ 1.1), `user-story-mapping` `mvp-cut` `toEqual(['100% of MVP Canvas features included', 'edge-case stories generated'])` (≥ 1.2), `retrospective` `collect-feedback` post `[/^feedback-notes\.recorded\(/, /^feedback-notes\.restated\(/]` with `recorded`'s text no longer holding `WingFoil's words`, `additional-points` pre `[/^proposals\.disposed\(/, /^proposals\.outcome-chosen\(/]` (≥ 1.9); the comments above both say which half a command could decide. Existing pins edited in red: `test/core/retrospective-notes.test.ts` (`additional-points` pre length 1 → 2), `test/core/retrospective-patch-health.test.ts` rows 90–91, `test/core/retrospective-collect-feedback.test.ts` line 100, `test/cli/mcp-registration.test.ts` (unchanged: it pins the action only — qa confirms) | `test/core/workflow-bindings-complete.test.ts` |
+| 4 | characterization, checked by command | none in jest (the instances move with every merge): the reviewer runs, after the orchestrator's `workflow end` of the three complete ingest plans (D5), `npm run -s wingfoil -- workflow status --format json` (no open `decision-log-ingest` / `bug-ingest` instance whose phases are all complete), `workflow next decision-log-ingest` (no stale `capture` step: `no active workflow` or a step of a live instance) and the `grep … '^status:'` of the seven `bug-324` plans (`done`), and pastes the output | — |
+| 5 | characterization | none new: `test/workflow/bindings.test.ts`, `test/workflow/bindings-check-severity.test.ts` and the conformance suite stay green with `{element.path}` in a `run` (the loader accepts it, measured); `test/docs/name-resolvability.test.ts` stays green with the amendment and its allowlist line | — |
+
+**Files to touch.** green (one commit per concern): `.wingfoil/workflows/bindings.yaml` (3.0 → 3.1: the run entries, the
+two manual groups, the header's "Deliberately unbound" paragraph rewritten, the `proposals.disposed` / `release-health`
+reasons); `.wingfoil/workflows/custom/dev-loop.yaml` (2.4 → 2.5: design's instruction (2), `depends_on.acknowledged`'s
+text, `done`'s comment, the header lines 89–92); `e2e-smoke.yaml` (1.9 → 2.0); `agent-docs.yaml` (1.1 → 1.2);
+`release-health.yaml` (1.2 → 1.3, comment); `retrospective.yaml` (1.8 → 1.9); `specification-downcast.yaml` (1.0 → 1.1);
+`user-story-mapping.yaml` (1.1 → 1.2); new `scripts/check-retrospective.cjs` + `.d.cts`; `scripts/check-governance.cjs`
++ `.d.cts` (the `plan-retrospective` later check, D2 (a)); new `test/docs/agents-md.test.ts` (green's own file: the
+binding's command) and `AGENTS.md` if it finds a mismatch, plus its §3 bindings row ("unbound prose checks stay
+`W_WORKFLOW_UNBOUND_TOKEN` warnings" → none in this repository); `.wingfoil/WORKFLOW.md` (the Stop-Check node at line 66,
+`collect-feedback` at 347, `mcp-registration` at 417, the bindings paragraph at 615–630; no `version`). Untouched:
+`workflows.yaml` (no workflow added), `memory.yaml`, `dna.yaml`, `roles.yaml` (none of the four `test/lint/version-bump.test.ts`
+gates), the templates, `src/` (no code change), `docs/cli-reference.md`. Uncommitted (approver): the `spec-003`
+amendment and its `test/docs/name-resolvability.allowlist.ts` line. red (qa): the new and edited tests above.
+
+**Decisions for the approver.**
+- **D1 — the checks a command could decide but none does (32 names, 54 occurrences, plus the two split halves and the two mechanical halves of M15).**
+  (A) write each command in this task (a Memory query command with an exit status, a frontmatter check over a phase's
+  created elements, a JSON/graph check, the pin comparisons, a report check, …): a CLI feature with its own spec for the
+  first, well beyond an M task; (B) bind them `manual: true` in a group of their own, "manual until a command", each row
+  naming the command owed, pinned by name in the conformance suite, and record that use of `manual: true` in `spec-003`
+  (amendment below); (C) leave them unbound, which fails AC 1 unless the approver narrows it. (B) supersedes
+  `task-303`'s D1 (a) and `bug-435`'s "left unbound until a command exists" for these rows; the gap stays visible in
+  `bindings.yaml` and in a test instead of in 68 warnings, and from v1.0 such a check waits for a human instead of
+  failing closed — what happens by hand today (`dev-loop.yaml`'s header: "until then the role named on the phase
+  applies it"). `dl-172` (a) names `manual: true` for a check "manual on purpose"; (B) widens its use, so the amendment
+  says so. **Recommendation: (B)**, with a follow-up element for the commands owed (candidate finding F1).
+- **D2 — `retrospective.present` and the plan half.** (a) Where the plan half runs: (i) a later check of
+  `scripts/check-governance.cjs`, `plan-retrospective`, on every `wf(plan): finalize … [active → done]` after its
+  introduction (push and CI); (ii) `workflow end` refuses a plan with no entry (`src/core`, a `spec-017` §7.2 amendment,
+  visible to every adopter, whose plan template may have no such subsection); (iii) the reviewer's reading, as
+  `dl-115` Action 3's interim. **Recommendation: (i)**: repository-only, enforced, the same predicate as the script.
+  (b) What counts as an entry: **at least one line outside HTML comments** (recommended; `dl-115` Q1 (A): "None" is a
+  valid entry, the template comment is not one), or the heading alone. (c) The field naming an absorbed
+  decision-log: **`ref:`** (recommended; it already carries them), or a new template field (a template change and
+  `tmpl_version` for every task type user).
+- **D3 — `e2e-smoke`'s fresh-init and drive-cli checks.** (a) One token `e2e-smoke.scenario` bound to
+  `node scripts/e2e-smoke.cjs --candidate` (the packed checkout, as the gate, without the report), the prose kept in the
+  descriptions; (b) keep the five prose keys, each bound to that command. **Recommendation: (a)**, the form `bug-435`
+  item 1 asks for `mcp-registration`; `exit-code-zero` disappears (no other workflow uses it:
+  `grep -rn exit-code-zero .wingfoil/workflows` → `e2e-smoke.yaml` only).
+- **D4 — `phase-branch-merged-to-integration-branch`.** `task-288` D3 and `task-303` D2 (a) left it unbound because no
+  plan declares its phase branches. Under D1 (B) it joins "manual until a command" (recommended), the command owed being
+  `git merge-base --is-ancestor <phase branch> HEAD` once a plan declares its branches.
+- **D5 — the three complete ingest plans** (`bug-324`'s class, AC 4). The orchestrator ends each with the code build of
+  `main`, on `main`'s side (`release-planning-rel-v0.4-plan` R1), before this task's review so the reviewer's AC 4
+  commands see it: `WINGFOIL="node $(pwd)/dist/cli.js"`; `$WINGFOIL workflow end decision-log-ingest-rel-v0.4-planning-feedback-plan`;
+  `$WINGFOIL workflow end bug-ingest-rel-v0.4-planning-feedback-plan`; `$WINGFOIL workflow end
+  decision-log-ingest-rel-v0.4-planning-inputs-plan` (each `wf(plan): finalize <id> [active → done]`, the §7 trailers
+  added with `git commit --amend --no-edit --trailer …`). No approval step is among them (`workflow status`: no pending
+  approval carried by them). **Recommendation: end the three now**; the seven plans `bug-324` names need nothing more.
+- **D6 — `service-ingest-rel-v0.3-listings-plan`** (the same stale capture, outside AC 4's `decision-log-ingest`
+  wording). (a) The approver links `svc-012` to the capture step: `node dist/cli.js workflow adopt
+  service-ingest-rel-v0.3-listings-plan --step service-ingest.capture --element service:svc-012-mcp.so-listing-wingfoil
+  --reason "Link the mcp.so listing the plan filed by hand to its capture step, so workflow next names its approve step instead of a capture that happened (bug-324)."`
+  (`--dry-run` → exit `0`, subject `workflow: adopt service-ingest-rel-v0.3-listings-plan service-ingest.capture
+  service:svc-012-mcp.so-listing-wingfoil`, no paths); its `approve` then waits for `svc-012`'s mcp.so listing, the
+  plan's open criterion; (b) leave it, out of scope. **Recommendation: (a)**, by the approver (`adopt` is never an
+  agent's or the orchestrator's).
+- **D7 — the `spec-003` amendment** (AC 2, AC 5, and D1 (B)): approved at this gate, before red (below).
+
+**Pending amendments (approver).**
+- `spec-003-workflows-yaml-schema` (uncommitted in this worktree, with its `test/docs/name-resolvability.allowlist.ts`
+  line for `scripts/check-retrospective.cjs`, `PLANNED` by `task-358`): Layer 3's placeholder paragraph gains
+  `{element.path}` / `{<type>.path}`; the "This repository's file" paragraph and § "Unbound tokens in v0.3" record the
+  "manual until a command" group; a Revision note. Proposed reason: `--reason "Record the element-path placeholder a
+  binding's run may carry and the manual binding of a check no command decides yet, both approved at task-358's design
+  gate (bug-320, bug-469)."`
+
+**Risks for the other open `w0` tasks.** No frontier change (measured), so no in-flight task's step moves.
+`task-333` and `task-352` edit `scripts/check-governance.cjs` (`approval-ai-trailer`, the `Co-Authored-By` rule): D2 (i)
+adds a later check to the same file — a textual merge in its rule list and docblock, merge order whichever lands
+first, the second merging `main`. `task-339` adds lines to `test/docs/name-resolvability.allowlist.ts` (its branch, `git
+diff --stat main...task/task-339-…` → `+3`): a sorted-list merge. `bug-527` (triaged, no release, no task) names
+`dev-loop.yaml`'s `review` phase, which this task does not touch beyond the header comment. `task-355`, `task-356`,
+`task-344` are `done`. `task-359` (`backlog`, L4) binds two new `vision-change` checks in `bindings.yaml` and edits `test/core/vision-change-workflow.test.ts`, both files this task changes (`bindings.yaml` 3.1, the two `vision-change` rows of that suite → `[]`): whichever merges second takes the next `bindings.yaml` version and re-reads the suite; once this task's zero-diagnostics pin is on `main`, a check `task-359` adds unbound fails it, so `task-359`'s design binds each new check `run` or `manual: true` in the right group.
+
+**Existing tests of the changed files** (one jest process, after the dl-170 wait-slot script, which waited behind two
+other waiters and `task-333`'s scratch `jest --maxWorkers=2` — `ps -eo pid,etime,args` showed pid 2209981 at `37:09` —
+then printed `waitslot=0`): the suites that read the configuration this task changes at `HEAD`, the binding schema and
+the governance check — `test/core/workflow-repository-conformance.test.ts`, `workflow-manual-prose-checks`,
+`workflow-manual-check`, `dev-loop-v1-6`, `dev-loop-v2-3`, `dev-loop-v2-4`, `workflow-integration-branch`,
+`define-scope-sweep`, `vision-change-workflow`, `retrospective-notes`, `retrospective-patch-health`,
+`retrospective-collect-feedback`, `workflow-pack-adoption` (all `test/core/`), `test/cli/mcp-registration.test.ts`, the six
+`test/cli/check-governance*.test.ts`, `test/docs/workflow-md.test.ts`, `test/docs/name-resolvability.test.ts`,
+`test/lint/version-bump.test.ts`, `test/workflow/bindings.test.ts`, `test/workflow/bindings-check-severity.test.ts`,
+`test/release-health/bindings-and-deps.test.ts`, `test/directives/wingfoil-cli-dl-205.test.ts`:
+`npx jest <those 27 files> --maxWorkers=2` → exit `0`, `Test Suites: 27 passed, 27 total`, `Tests: 441 passed, 441 total`.
+With the `spec-003` amendment in the working tree: `npx jest test/docs/name-resolvability.test.ts --maxWorkers=2` →
+`Tests: 11 passed, 11 total`; without its allowlist line (stashed) → `1 failed, 10 passed`, the unlisted finding
+`docs/04_memory/design/specs/spec-003-workflows-yaml-schema.md|path|scripts/check-retrospective.cjs`, so the line is
+needed. The pins the change moves are listed per AC above (`grep -rn "W_WORKFLOW_UNBOUND_TOKEN\|'unbound'" test` over
+the suites that read `HEAD`); `test/cli/e2e-smoke-workflow-reads.test.ts`'s "65" is a fixture of a report, not a read of
+`HEAD`, and does not move.
+
+**Candidate findings (not filed).**
+- F1 (if D1 (B)): the commands the 36 "manual until a command" checks owe — first a Memory query command with an exit
+  status (M3, `bug-435` Notes), then a check over a phase's created elements (M1), the `backlog.json` check (M8), the
+  pin comparisons (M9), a report check for `release-health` (M13). Suggested: one follow-up decision-log or feature
+  task at the next planning, severity n/a (feature), so each `manual` row is replaced by a `run` row.
+- F2: `bug-324`'s Steps to Reproduce no longer reproduce — the seven plans were finalized by hand on 2026-10-16,
+  2026-10-21 and 2026-11-05 (above), with no element recording it on the bug; the class persists in the three complete
+  v0.4 ingest plans and the service-ingest plan (D5, D6). Information for the bug's close, not a defect.
+
+### Retrospective
+
+<!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
+     reconstructed afterwards. One line per item: what happened, the evidence (a command and what it
+     printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
+     Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
+     here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
