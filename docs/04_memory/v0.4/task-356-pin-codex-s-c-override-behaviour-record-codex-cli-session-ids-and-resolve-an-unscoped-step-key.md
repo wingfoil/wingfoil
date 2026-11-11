@@ -636,6 +636,21 @@ The review's verdict: approve with fixes, two should-fix-in-task findings and on
   `ps -eo pid,etime,pcpu,args --sort=-pcpu` the top process runs at 12.5 %. Another worktree's build
   (`node scripts/heavy-gate.cjs build`, `21:53` elapsed) waits the same way. The waiter stays queued.
 
+- **The full suite, after the machine's reboot (2026-11-11).** First run:
+  `bash <slot script> && npm run -s build && npm test -- --maxWorkers=2`, with the `spec-016` edit in the working
+  tree → `Test Suites: 1 failed, 593 passed, 594 total`, `Tests: 2 failed, 10888 passed, 10890 total`.
+  - Both failures were `test/core/latency-budget-placement.test.ts` on my fix-round test, which read `Date.now`
+    (rule 1: no wall-clock reading of its own; rule 6: no budget in the parallel pass).
+  - Fixed in `8391a74f0`: the never-ending-stdout case asserts `not-reported` and the no-id warning only. It settles
+    at all only through the bound, since without it the launch would wait on a stream that never ends.
+  - Then `npx jest --maxWorkers=2 test/agent/launch-session-output-bounds.test.ts
+    test/core/latency-budget-placement.test.ts` → `Tests: 1990 passed, 1990 total`; `npx tsc --noEmit -p
+    tsconfig.json` → exit `0`; `npm run -s lint` → exit `0`.
+  - Second run, the same command (slot granted after task-344's `run-tests.cjs`, which `ps -eo pid,etime,args`
+    showed at `27:58`) → `Test Suites: 594 passed, 594 total`, `Tests: 10890 passed, 10890 total`, `test exit 0`.
+    No fake child left: `ps -eo pid,args | grep fake-agent | grep -v grep` → nothing. `git rev-list --count
+    HEAD..main` → `0`.
+
 ### Pending amendments (approver)
 
 - `spec-016-agent-execution` — §2.8's paragraph before the headless table, and a Revision entry (2026-11-09, review).
