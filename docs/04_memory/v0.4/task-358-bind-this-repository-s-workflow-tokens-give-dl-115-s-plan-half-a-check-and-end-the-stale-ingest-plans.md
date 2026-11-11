@@ -348,6 +348,111 @@ the suites that read `HEAD`); `test/cli/e2e-smoke-workflow-reads.test.ts`'s "65"
   2026-10-21 and 2026-11-05 (above), with no element recording it on the bug; the class persists in the three complete
   v0.4 ingest plans and the service-ingest plan (D5, D6). Information for the bug's close, not a defect.
 
+### red (qa, 2026-11-11)
+
+**Red commit `d08149fc0`** (`d08149fc0fb9825f34b10846642736d352fe47d6`), test files only. Base: the design gate
+`c399bad20` (`git rev-list --count HEAD..main` → `0`, so no merge of `main`). Builds through the task's PATH shim:
+`wingfoil --version` and `node dist/cli.js --version` → `0.3.2 (5d93bb194539a0f73448eb09528f7b1786e48797)`. Contract:
+the design's per-AC table, the approver's design record `c399bad20` (D1 (B), D2 (a) (i)/(b)/(c), D3 (a), D4, D5,
+D6 (a), D7) and the `spec-003` amendment `2528d9543`. Every registry read is the configuration at `HEAD`.
+
+**Files.** New: `test/core/workflow-bindings-complete.test.ts` (AC 1 (a)–(d), (f); AC 2 (a); AC 3 (a)–(d)),
+`test/core/helpers/manual-binding-groups.ts` (the four `run` bindings, the 36 "manual until a command" names and the 19
+"manual on purpose" names, shared with `workflow-manual-prose-checks`), `test/cli/workflow-unbound-none.integration.test.ts`
+(AC 1 (e)), `test/cli/check-retrospective.test.ts` (AC 2 (b)), `test/cli/check-governance-plan-retrospective.test.ts`
+(AC 2 (c)). Existing pins moved to the designed values: `test/core/workflow-repository-conformance.test.ts` (the 68-row
+list → `[]`, the code set → empty), `workflow-manual-prose-checks` (rewritten: task-303's 44 unbound names are now
+manual (31), `run` (`retrospective.present`) or used by no workflow (the 12 prose checks `e2e-smoke.scenario`,
+`mcp.registered` and `agents-md.current` replace); its 15 surviving manual names stay manual, the two mixed keys occur
+in no workflow; the manual occurrences carry exactly the 55 names of the two groups; no diagnostic), `dev-loop-v1-6`
+(`stop-the-line.clear` → `manual`, `retrospective.present` → `run`), `dev-loop-v2-3` (three `gate.slot-free` →
+`manual`), `dev-loop-v2-4` and `workflow-integration-branch` (68 warnings → none), `define-scope-sweep` (the two
+`phases[2]` rows → none, each resolving `manual`), `vision-change-workflow` (its two rows → `[]`),
+`retrospective-notes` (`additional-points` pre length 1 → 2), `retrospective-patch-health` (the two split rows),
+`retrospective-collect-feedback` (`collect-feedback` post `[recorded, restated]`), and one pin the design did not list:
+`test/cli/check-governance-enforcement.test.ts`'s exact `CHECKS` pin gains `'plan-retrospective':
+'governance-check:plan-retrospective'` (the marker spelling follows the convention of the seven existing ones; without
+it green's new check would fail that pin, which green may not edit). `test/cli/mcp-registration.test.ts` is unchanged:
+it pins `mcp-registration`'s action and `advance-pinned-build`'s pre check, not the phase's post checks (confirmed by
+reading it; it passes, 29/29).
+
+**Per-AC mapping** (all red-first except AC 4, AC 5):
+- AC 1 — `workflow-bindings-complete` (a) `diagnostics` `toEqual([])`; (b) no action and no check occurrence resolves
+  `unbound`; (c) the four `run` bindings exactly (`mcp.registered` passes at red: its binding exists); (d) each of the 55
+  names resolves `{ kind: 'manual', source: 'project' }`, the lists disjoint (36 / 19), each key of `bindings.yaml`'s
+  `checks:` under the last group comment above it matching `/manual until a command/i` or `/manual on purpose/i`; (f)
+  `version` ≥ 3.1 with a `;` segment naming task-358 numbered ≥ 3.1. (e) `workflow-unbound-none.integration`: the
+  compiled CLI spawned with this repository as `cwd`, `workflow next` / `workflow status` `--format json` exit `0` and
+  no `W_WORKFLOW_UNBOUND_TOKEN` diagnostic; the console `workflow next` prints no `N diagnostic(s)` line; neither console
+  form contains the code (the console forms never print it, so those two assertions pass at red; the
+  `diagnostic(s)` line is what fails).
+- AC 2 (a) — `workflow-bindings-complete`: `workflow show dev-loop`'s `done` view of `retrospective.present` is
+  `{ kind: 'run', source: 'project', argv: [node, scripts/check-retrospective.cjs, '{element.path}'], severity: 'reject' }`,
+  `evaluated: false`; `design`'s description matches `` /every decision-log the task's `ref:` names/ `` and
+  `depends_on.acknowledged(` contains `ref:`; `dev-loop.yaml` ≥ 2.5, its version line naming task-358. (b)
+  `check-retrospective`: the script spawned (`spawnCapture(process.execPath, [SCRIPT, path], { cwd })`) in a git-less
+  temporary root holding this repository's `memory.yaml` and files built from its `task`, `bug` and `plan` templates
+  (read at `HEAD`): a task with `- None.` and a closed bug with an entry → `0`, stdout empty; template comment only →
+  `1`, `<path>: no ### Retrospective entry`; entry on the task, closed bug without the subsection → `1` naming the bug
+  only; neither → both lines, task first; an `in-review` bug without it → `0`; a plan with / without → `0` / `1`; a path
+  outside the root, a missing file, a file with no frontmatter, no argument, and a `bug:` id with no file → `2`, stdout
+  empty, a non-empty stderr; the pure `hasRetrospectiveEntry` (true for `None.` and the template plus an entry; false
+  for the comment alone, no heading, a heading under `## Description`). The script is loaded with `require(SCRIPT) as
+  { hasRetrospectiveEntry(markdown: string): boolean }`, so `tsc` is clean; its `.d.cts` is green's. (c)
+  `check-governance-plan-retrospective`: a scratch repository with this repository's `memory.yaml` and a plan built from
+  its template, moved `wf(plan): add` → `submit` (`Carries content:`) → `finalize [active → done]` with the trailer
+  paragraphs of real plan commits (`git show -s --format=%B 397f66042` / `a02480998` on `main`): no entry → one gated
+  `plan-retrospective` finding on the finalize, its message naming the plan id, `exitCodeFor` `1`; with `- None.` → no
+  finding, no gated finding, `0` (passes at red: it proves the fixture raises nothing else); before the marker entered
+  the script → reported, `gated: false`, exit `0`; after it → `gated: true`. The check's rule (`body`, `state`, …) is
+  not pinned: the design names the check, not the rule.
+- AC 3 — `workflow-bindings-complete`: (a) `e2e-smoke` phases unchanged, `fresh-init` / `drive-cli` post
+  `['e2e-smoke.scenario']`, `mcp-registration` post `['mcp.registered']`, ≥ 2.0; (b) `align-agent-docs` post
+  `['agents-md.current', 'workflow-md.complete']`, ≥ 1.2, `test/docs/agents-md.test.ts` at `HEAD` citing `dl-025`, `dl-137`,
+  `dl-116`, and `docs.parity`'s argv listing it; (c) `release-health.yaml` at `HEAD` without `Unbound until
+  scripts/release-health/ ships`, a comment in the `measure` phase matching `no command reads a report against the
+  catalogue` (or `` `docs/08_health/metrics.yaml` ``), ≥ 1.3; (d) the four splits, ≥ 1.1 / 1.2 / 1.9, `recorded`'s text
+  without `WingFoil's words`. Each version pin also requires the version line to name task-358. The design's "the
+  comments above both say which half a command could decide" (retrospective) is not pinned: it is a reading for the
+  reviewer.
+- AC 4 — none in jest (the design: checked by command at review). AC 5 — none new: the conformance suite and
+  `test/workflow/bindings*.test.ts` are unchanged by this red apart from the conformance edits above.
+
+**Run.** `npx jest <the 17 files above> --maxWorkers=2` → exit `1`, `Test Suites: 16 failed, 1 passed`, `Tests: 144
+failed, 210 passed, 354 total`; per file (failed/passed): `workflow-bindings-complete` 63/20,
+`workflow-unbound-none.integration` 3/1, `check-retrospective` 16/0, `check-governance-plan-retrospective` 2/1,
+`check-governance-enforcement` 1/26, `workflow-repository-conformance` 2/14, `workflow-manual-prose-checks` 47/3,
+`dev-loop-v1-6` 2/19, `dev-loop-v2-3` 1/7, `dev-loop-v2-4` 1/9, `workflow-integration-branch` 1/30,
+`define-scope-sweep` 1/10, `vision-change-workflow` 1/9, `retrospective-notes` 1/12, `retrospective-patch-health` 1/10,
+`retrospective-collect-feedback` 1/10, `mcp-registration` 0/29. First failing lines (all assertions, none a crash of a
+file the red could have created): registry `diagnostics` `toEqual([])` → received 68 entries (`Received + 478` lines);
+(b) 70 lines of unbound occurrences; (c) `retrospective.present` / `agents-md.current` / `e2e-smoke.scenario` received
+`{ kind: 'unbound', source: 'none' }`; (d) each new manual name `Expected manual / Received unbound`; the group test
+277 misplaced lines; (f) `Expected: >= 3.1, Received: 3`; dev-loop `>= 2.5 / 2.4`, the description pattern not found;
+`e2e-smoke` `>= 2 / 1.9`, `agent-docs` `>= 1.2 / 1.1`, `release-health` `>= 1.3 / 1.2`, `agents-md.test.ts` at `HEAD`
+`Received: null`; the CLI JSON tests 68 unbound diagnostics, the console `workflow next` line `68 diagnostic(s): --format
+json lists them`; `dev-loop-v1-6` `Expected "manual" / "run", Received "unbound"`; `retrospective-notes` `Expected
+length: 2, Received length: 1`; the `CHECKS` pin missing `plan-retrospective`; `check-governance-plan-retrospective`
+no `plan-retrospective` finding (`Received []`); `check-retrospective` the spawned script exits `1` with `Cannot find
+module …/scripts/check-retrospective.cjs` (so every status/stdout assertion fails), and the five predicate tests fail on
+the `require` with the same message.
+
+**Gates before the red commit.** `npx tsc --noEmit -p tsconfig.json` → exit `0` (no `src/` export is imported; the new
+script is `require`d against a local interface; `check-governance.cjs`'s new check is compared as a string). `npx jest
+test/lint --maxWorkers=2` → first run `1 failed` (`lint-clean`: `@typescript-eslint/no-require-imports` on the
+`require(SCRIPT)`), fixed with the same `eslint-disable-next-line` comment `test/release-health/compare.test.ts` uses;
+second run `Test Suites: 15 passed, 15 total`, `Tests: 161 passed, 161 total`. Invisible-character scan of the changed
+files → no match.
+
+**Readings to settle (for green and the reviewer, not departures).**
+- `bug:` holds short ids in every task of this repository (`grep -rhoE "^bug: \[?bug-[0-9]+…" docs/04_memory/` → 47
+  short, 0 full), while a bug's file is `bug-<n>-<slug>.md`. The design says each bug is "found at the path memory.yaml's
+  `bug.path` gives"; the red fixture mirrors the real shape (`bug: [bug-902]`, file `bug-902-fixture-closed-bug.md`), so
+  the script must resolve the short reference to the file, as `resolveElementReference` does in `src/memory/reference.ts`.
+- The bug template's `### Retrospective` sits under `## Triage & Execution Notes`, not `## Execution Notes`; the fixture
+  is the template (as the design says), so a closed bug's entry under that heading counts. The pure predicate is pinned
+  `false` only for a heading under `## Description`.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
