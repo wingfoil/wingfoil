@@ -1106,7 +1106,7 @@ function main(argv) {
   }
 }
 
-module.exports = { CHECKS, checkGovernance, exitCodeFor, formatReport };
+module.exports = { CHECKS, checkGovernance, exitCodeFor, formatReport, trailerKeysOutsideFinalParagraph };
 
 if (require.main === module) {
   process.exitCode = main(process.argv.slice(2));

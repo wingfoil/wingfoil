@@ -86,3 +86,9 @@ export function exitCodeFor(report: GovernanceReport): 0 | 1;
 
 /** The report as the lines the command prints. */
 export function formatReport(report: GovernanceReport): string;
+
+/**
+ * The `WingFoil-*` keys a commit body writes outside its final (last blank-line-separated) paragraph, each once, as
+ * first written (`git-conventions` §8, `bug-391`); exported for `scripts/check-phase-report.cjs` (task-344 D4).
+ */
+export function trailerKeysOutsideFinalParagraph(body: string): string[];
