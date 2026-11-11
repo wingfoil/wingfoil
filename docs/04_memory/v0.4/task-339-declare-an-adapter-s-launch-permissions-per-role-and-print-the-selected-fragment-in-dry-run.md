@@ -436,6 +436,116 @@ suites is derived inline.
 `npx jest test/lint --maxWorkers=2` → `Test Suites: 15 passed, 15 total`, `Tests: 161 passed, 161 total`. The
 invisible-character `grep -nP` on the file → no hit.
 
+### green (developer, 2026-11-11)
+
+**Base.** The task's PATH shim checked first: `command -v wingfoil` → the shim; `wingfoil --version` and `node
+dist/cli.js --version` → both `0.3.2 (6f5abc95241697e3e994692891c4dd8e673b8ae7)`. `git rev-list --count HEAD..main` →
+`0` at the start of green and again at the start of refactor: no merge. Contract read: the design above, the
+approver's design record `230e994b0` (D1–D12), the amends `1f7135552` (`spec-016`) and `c0550f63c` (`spec-008`), the
+red commit `47f1fdcf5`. No agent CLI was launched.
+
+**Implementation** (commit `2fea344ef`, `feat(agent): task-339 — …`):
+- `src/agent/schema.ts`: `Permissions = z.union([Argv, z.record(z.string(), Argv)])`, optional on `InteractiveLaunch`
+  and `HeadlessLaunch`; exported type `LaunchPermissions`. `format` stays `1` (`dl-149`, an additive optional field).
+- `src/agent/manifest.ts` `crossFieldIssues`: a role map without an own `default` key → `E_ADAPTER_MANIFEST` at
+  `launch.<kind>.permissions` with the design's message.
+- `src/agent/placeholders.ts`: `permissionsIssues` checks every fragment element with the empty legal set
+  (`launch.<kind>.permissions.<i>`, `launch.<kind>.permissions.<role>.<i>`); the TSDoc's list of fields that hold no
+  placeholder names `launch.*.permissions`.
+- `src/agent/launch.ts`: `launchPermissions(manifest, kind, role)` — absent → `[]`, a list → itself, a map → the
+  role's own entry (`Object.hasOwn`, so a role named like an `Object.prototype` member picks `default`), else
+  `default`; `renderLaunchArgv(manifest, values, kind = 'interactive', role = 'default')` → args, fragment,
+  `session.assign_args` (D2 (a)); `launchAgent` passes `input.role`. Exported from `src/agent/index.ts`.
+- `src/agent/execute.ts`: `AgentLaunchPlan.launch: {kind, permissions}` between `run` and `bootstrap` (D3 (a)); the
+  run record is unchanged (D4).
+- `src/storage/builtin-adapters.ts`: each `launch.headless` gains `spec-016` §2.8's map after `output`, with a comment;
+  no `launch.interactive.permissions` (D5); the TSDoc names the help lines read. `.wingfoil/agents/built-in/
+  claude-code.yaml` is the shipped `claude-code` content written byte for byte. `verified_with` is unchanged: the
+  approver's by-hand H1, 2026-11-11, read `2.1.310 (Claude Code)` and `codex-cli 0.145.0`, the versions already
+  declared (D8).
+- Documents (D11): `docs/cli-reference.md` (a "launch's permissions" paragraph in `agent execute`, and the plan's
+  `launch` key), `docs/user-guide.md` (one paragraph in the headless section), the P5.3.1 feature (the scenario "A
+  headless launch takes the posture of its role", under a dated revision comment naming its integration file).
+
+**red → green.** `npx jest --maxWorkers=2 test/agent/manifest-permissions.test.ts test/agent/launch-permissions.test.ts
+test/storage/builtin-adapters-permissions.test.ts test/cli/agent-execute-dry-run-terminal.integration.test.ts
+test/cli/agent-execute-permissions.integration.test.ts` → `Test Suites: 5 passed, 5 total`, `Tests: 59 passed, 59
+total` (red: 50 failed, 9 passed). `npx tsc --noEmit -p tsconfig.json` → no output, exit `0` (red: the four diagnostics).
+
+**Stop and its resolution.** The wider run after green (`npx jest --maxWorkers=2 test/agent test/storage/builtin-adapter
+… test/docs test/lint`, after the heavy-gate slot script) → `Test Suites: 1 failed, 96 passed, 97 total`, `Tests: 3
+failed, 1283 passed, 1286 total`: the three failures were `test/agent/fake-agent.test.ts`'s schema walk (27 leaves, and
+"declares `launch.interactive.permissions`" / "declares `launch.headless.permissions`"), a pin the design did not list,
+while D10 keeps `fake.yaml` without the field. The fix was outside the design's files, so green stopped and reported
+it with option (a); the qa made it as a red correction: `2a02f8eed` (`test/agent/fake-agent.test.ts`, the two paths
+left out beside `mcp.conflict_args`, 27 → 29) and its notes `a37f07e88` (`### red correction (qa, 2026-11-11)` above).
+That file is T4's from `2a02f8eed`.
+
+**The built-in maps against `spec-016` §2.8's table.** A Python check of the two manifests in
+`src/storage/builtin-adapters.ts` (YAML parsed, each `launch.headless.permissions` compared with the table's lists
+written out) → `claude-code True`, `codex-cli True`, no interactive `permissions` on either; the installed
+`claude-code.yaml` equal to the shipped content → `True`.
+
+**Dry run on this repository** (the code build of this branch, built by the suite's global setup on a clean tree):
+`node dist/cli.js agent execute --element task:<this task> --role reviewer --headless --dry-run --format json` →
+exit `0`, stderr empty, keys `dryRun,subject,paths,run,launch,bootstrap`, `launch` `{"kind":"headless","permissions":
+["--permission-mode","dontAsk","--allowedTools","Read","Glob","Grep","Bash(git log *)", …,"Bash(npx jest *)"]}`; the
+same with `--role developer` → exit `0`, stderr empty, the write roles' fragment ending `--disallowedTools`, `"Bash(git
+push *)"`, `"Bash(npm publish *)"`; the reviewer run with `--format console` → exit `0`, stderr empty, stdout parsing to
+the same document (`same true`). `--role tech-lead` → exit `1`, `no agent in dna.yaml with an adapter executes as role
+'tech-lead'` (this repository's agents do not execute that role; the `default` entry is pinned by the suites, (iii)).
+`git status --short` before and after → empty; the head unchanged (`722578e76`).
+
+### refactor (developer, 2026-11-11)
+
+No restructuring beyond green: the selection lives in one function (`launchPermissions`), read by `renderLaunchArgv`
+and `launchPlan`, and the placeholder walk reuses `argvIssues`. Gates in this worktree, each after
+`bash <the heavy-gate slot script>` (it printed nothing and returned `0` at once, both times), `--maxWorkers=2`,
+foreground or a tracked background command; no pending amendment in the working tree (`git status --short` → empty):
+- `npm run -s build` → exit `0`.
+- `npm test -- --maxWorkers=2` → `Test Suites: 601 passed, 601 total`, `Tests: 11046 passed, 11046 total`
+  (`Time: 1188.936 s`); the document-parity suites (`test/docs/`, `test/docs/cli-reference.test.ts` among them) and
+  `test/lint` (with `typecheck-clean`) are part of it.
+- `npm run -s test:coverage -- --maxWorkers=2` → `All files | 99.25 | 97.15 | 98.65 | 99.66` (statements, branches,
+  functions, lines), the same 601 suites and 11046 tests; `src/agent/manifest.ts`, `placeholders.ts`, `schema.ts` and
+  `src/storage/builtin-adapters.ts` at `100` in all four columns; `launch.ts` `98.77 | 94.27 | 98.41 | 98.89` and
+  `execute.ts` `96.38 | 90 | 96.07 | 98.46`, their uncovered lines (`627-630`; `264,512,530,642`) not this task's.
+- `npm run -s lint`, `npm run -s docs:api`, `npm run -s typecheck` → each exit `0`, no output.
+- Invisible characters: the `grep -nP` of the control and format ranges on every file this task changed → no hit.
+- Version bumps: none (the design's list; `grep -n "^version:" .wingfoil/agents/built-in/claude-code.yaml` → nothing).
+
+### self-review (developer, 2026-11-11)
+
+- AC 1: met — `test/agent/manifest-permissions.test.ts` passes for both kinds (accepted shapes, refused shapes at
+  `launch.<kind>.permissions` or below, the missing `default`, placeholders). AC 2: met — `launch-permissions.test.ts`
+  (selection, argv order, `launchAgent` passing the role), `agent-execute-permissions.integration.test.ts` (i)–(vi)
+  and the dry-run terminal file's key list; the dry run above on this repository. AC 3: structure met
+  (`builtin-adapters-permissions.test.ts`; the table check above); the by-hand H2 is the approver's (D8), below.
+  AC 4: the two amendments recorded at the gate (`1f7135552`, `c0550f63c`).
+- Absence claims with their positive case: no interactive `permissions` on the built-ins, while both declare the
+  headless map (`grep -c "permissions" src/storage/builtin-adapters.ts` → `6`); an adapter without the field prints
+  `permissions: []` (red (vi)) while the `perm` adapter prints its entry ((i)).
+- T4: `git log --first-parent --no-merges --format=%h 47f1fdcf5..HEAD -- test/agent/launch-permissions.test.ts
+  test/agent/manifest-permissions.test.ts test/cli/agent-execute-dry-run-terminal.integration.test.ts
+  test/cli/agent-execute-permissions.integration.test.ts test/storage/builtin-adapters-permissions.test.ts` → nothing;
+  `git log --first-parent --no-merges --format=%h 2a02f8eed..HEAD -- test/agent/fake-agent.test.ts` → nothing.
+- Scope: `git diff --name-only main...HEAD` → the design's eleven green files, red's five test files,
+  `test/agent/fake-agent.test.ts` (the qa's correction), `test/docs/name-resolvability.allowlist.ts` and the two specs
+  (the gate's amendments), and this task file; `fake.yaml` and `test/fixtures/agents/` untouched (D10).
+- Same-class instances: the two launch kinds share one schema node and one placeholder walk; `spec-016` §2.3's
+  "holds no placeholder" fields now list `launch.*.permissions` in `placeholderIssues`' TSDoc.
+- Limits recorded: whether `dontAsk` lets a headless Claude read the MCP Resource, and how a `Bash(...)` rule's prefix
+  matches, are the CLI's, settled only by H2 (D6); a Codex reviewer under `workspace-write` can edit (D7 (a)).
+
+### Pending amendments (approver)
+
+None: the two spec amendments were recorded at the design gate (`1f7135552`, `c0550f63c`) and nothing else past its
+first state was changed (`git status --short` → empty before submit).
+
+### by-hand pass H2 (approver)
+
+To be filled by the orchestrator from the approver's runs.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -443,3 +553,8 @@ invisible-character `grep -nP` on the file → no hit.
      printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
      Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
      here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+
+- The design's list of tests pinning the changed shape missed `test/agent/fake-agent.test.ts`'s schema-leaf walk, so
+  green stopped on three failures it could not fix within its files and a red correction followed (`2a02f8eed`). A
+  design that adds a manifest field can find the pin with `grep -rln "leafPaths\|toHaveLength(27)" test/agent`;
+  proposal: the design's "tests that pin the shape" step greps for schema walks, not only for the field's name.
