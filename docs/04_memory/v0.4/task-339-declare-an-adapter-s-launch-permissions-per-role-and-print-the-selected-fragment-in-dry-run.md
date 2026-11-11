@@ -348,6 +348,77 @@ Each with a recommendation; the prepared amendments follow the recommendations.
   test/fixtures/agents/custom/fake.yaml` → `0`; the field is in `test/fixtures/agents/config-arg/fake-conflict.yaml`).
   Expected: the sentence speaks of the fixture set, or the fixture declares the field. Suggested severity: low.
 
+### red (qa, 2026-11-11)
+
+**Base.** The task's PATH shim checked first (`command -v wingfoil` → the shim; `wingfoil --version` and `node
+dist/cli.js --version` → both `0.3.2 (346386f80c300485802246553a63a41dbf339e94)`). `main` merged first (`git merge
+--no-edit main`, no conflict; the merge commit `6f5abc952`, trailers amended in). The contract: the design above, the
+approver's design record `230e994b0` (D1–D12) and the amends `1f7135552` (`spec-016`) and `c0550f63c` (`spec-008`). No
+`src/` file and no fixture under `test/fixtures/agents/` is touched (`git show --stat 47f1fdcf5` → the five test files
+below only); `fake.yaml` is unchanged (D10). No agent CLI was launched.
+
+**Red commit `47f1fdcf5`** (`test(agent): task-339 — failing test: …`). Files and per-AC mapping:
+
+| AC | Class | File | Tests |
+|---|---|---|---|
+| 1 | red-first | `test/agent/manifest-permissions.test.ts` (new) | per kind `interactive` / `headless` (`describe.each`): (a) a fragment `W`, `[]`, a fragment holding `""`, the map `{ default: D, reviewer: R, 'tech-lead': [] }` accepted and parsed as declared; absent → `undefined`; (b) `'--allow read'`, `1`, `null`, `['--allow', 1]`, `{ default: '--allow' }`, `{ default: ['--allow', 1] }` refused with every issue at `launch.<kind>.permissions` or below; (c) `{ reviewer: R }` → exactly `[{ E_ADAPTER_MANIFEST, launch.<kind>.permissions }]` with the design's message; (d) `['--allow', '{bootstrap}']` → `E_ADAPTER_PLACEHOLDER` at `.1`, `not legal here`; `{ default: D, developer: ['{session_id}'] }` → at `.developer.0`; `['{role}']` → at `.0`, `unknown placeholder {role}` |
+| 2 | red-first | `test/agent/launch-permissions.test.ts` (new) | `launchPermissions`: a map (`reviewer` → `R`, `qa` → `D`), a list (`W` for five roles), absent (`[]`, both kinds), interactive never reads the headless field; `renderLaunchArgv(m, values, 'headless', role)`: `reviewer` → headless args, `R`, `--session-id`; `developer` → `D`; no `permissions` → today's argv; `launchAgent` (the `FakeChild` pattern of `test/agent/launch-headless.test.ts`, a hand-built manifest) of a headless reviewer spawns `['scripts/agent-ok.cjs', '--work', ...R]` — the in-process pin of `launchAgent` passing `input.role` (a child-process run does not count toward coverage) |
+| 2 | red-first | `test/cli/agent-execute-permissions.integration.test.ts` (new) | the design's (i)–(vi) on `seed()` with the `perm` adapter (`manifest('perm', …)`, headless `{ default: D, reviewer: R }`, interactive `W`; `DNA_YAML.replace('adapter: fake', 'adapter: perm')`) |
+| 2 | red-first | `test/cli/agent-execute-dry-run-terminal.integration.test.ts` (l.37) | the plan's key list gains `'launch'` after `'run'` (header and test title follow) |
+| 3 | red-first (structure) | `test/storage/builtin-adapters-permissions.test.ts` (new) | per built-in: `launch.headless.permissions` a map (not a list) naming `default`, `developer`, `qa`, `reviewer`, `architect`; `launch.interactive.permissions` absent (D5); no fragment word holds one of the five bypass words of the design's table; `claude-code`: every entry begins `--permission-mode dontAsk`, `default` and `reviewer` hold no word matching `Edit` or `Write`; `codex-cli`: `default` = `[--sandbox, read-only]`. Exact flag lists not pinned (D8) |
+| 4 | characterization | — (existing suites) | run below |
+
+Fragments, as the design says: `R = ['--allow', 'read']`, `D = ['--allow', 'none']`, `W = ['--allow', 'write',
+'--deny', 'push']`. Fields not yet in the types are read through a record (as `test/agent/manifest-conflict-args.test.ts`
+does), so no `TS2339` appears.
+
+**Real runs the CLI expectations are copied from** (today's build, on a replica of `seed()` built outside the worktree
+from `test/agent/helpers/agent-execute-fixture.ts`'s constants):
+- unchanged fake: `node dist/cli.js agent execute --element task:task-202-explicit-override --role reviewer --headless
+  --dry-run --format json` → exit `0`, stderr empty, keys `dryRun, subject, paths, run, bootstrap`; the same with
+  `--format console` → exit `0`, stderr empty, stdout beginning `{` / `  "dryRun": true,`; `--role developer --dry-run
+  --format json` → exit `0`, stderr empty. The pins `stderr ''` of (i)–(iv), (vi) come from these runs.
+- `perm` adapter: the same headless reviewer dry run → exit `1`, `{"error":"adapter 'perm': launch.interactive:
+  Unrecognized key: \"permissions\"", …}` (console: `error: adapter 'perm': launch.interactive: Unrecognized key:
+  "permissions"`), the reason every (i)–(v) fails today.
+
+**Type check.** `npx tsc --noEmit -p tsconfig.json` → exactly four diagnostics, all in `test/agent/launch-permissions.test.ts`:
+`(24,23) TS2305 … no exported member 'launchPermissions'` and `(88,59)`, `(93,59)`, `(98,59) TS2554 Expected 2-3
+arguments, but got 4` — the design's expected reds; no other error.
+
+**Runs.**
+- `npx jest --maxWorkers=2 test/agent/manifest-permissions.test.ts test/agent/launch-permissions.test.ts
+  test/storage/builtin-adapters-permissions.test.ts test/cli/agent-execute-dry-run-terminal.integration.test.ts
+  test/cli/agent-execute-permissions.integration.test.ts` → `Test Suites: 5 failed, 5 total`, `Tests: 50 failed, 9
+  passed, 59 total`. Per file (failed/passed): `manifest-permissions` 28/2, `launch-permissions` 7/1,
+  `builtin-adapters-permissions` 8/3, `agent-execute-permissions` 6/0, `agent-execute-dry-run-terminal` 1/3. The nine
+  passing tests pin behaviour that does not change: AC 1's "absent" (both kinds), `renderLaunchArgv` with no
+  `permissions`, the built-ins listed and their absent interactive field (both), and the three unchanged tests of
+  the dry-run terminal file.
+- First failing assertion of each red group:
+  - AC 1 (a), (c), (d): `expect(issuesOf(manifest)).toEqual([])` / `expect(located(issues)).toEqual(…)` — received the
+    one Pass-1 issue `launch.<kind>: Unrecognized key: "permissions"`; (b): `expect(… .every(…)).toBe(true)` —
+    `Expected: true`, `Received: false` (the path is `launch.<kind>`).
+  - AC 2 unit: the map/list cases throw `ValidationError: E_VALIDATION launch.headless (HEAD:.wingfoil/agents/custom/fake.yaml):
+    Unrecognized key: "permissions"` from `parseAdapterManifest`; "absent" throws `TypeError: (0 , agent_1.launchPermissions)
+    is not a function`; the `launchAgent` case: `expect(calls[0]!.args).toEqual(…)` — `- Expected - 2` (`--allow`,
+    `read` missing).
+  - AC 2 CLI (i)–(v): `expect(run.stderr).toBe('')` (or `errorLine` for (v)) — received the `Unrecognized key:
+    "permissions"` error; (vi) and the dry-run terminal file: `expect(Object.keys(plan)).toEqual(…)` — `- "launch",`.
+  - AC 3: `expect(permissions).toEqual(expect.any(Object))` — `Expected: Any<Object>`, `Received: undefined`.
+- AC 4 (characterization, on the amended tree): `npx jest --maxWorkers=2 test/docs/name-resolvability.test.ts
+  test/docs/dry-run-documented.test.ts test/docs/command-surface-specs.test.ts test/docs/exit-codes-parity.test.ts` →
+  `Test Suites: 4 passed, 4 total`, `Tests: 21 passed, 21 total` — passes on first run.
+- `npx jest test/lint --maxWorkers=2` with the files in place → `Test Suites: 1 failed, 14 passed, 15 total`, `Tests: 1
+  failed, 160 passed, 161 total`: only `typecheck-clean.test.ts` "tsconfig.json typechecks with zero diagnostics",
+  listing exactly the four diagnostics above (the expected reds, as in `task-355`'s red). With the files staged,
+  `npx jest --maxWorkers=2 test/lint --testPathIgnorePatterns typecheck-clean` → `Tests: 156 passed, 156 total`.
+- Invisible characters: the `grep -nP` of the control and format ranges on the five files → no hit.
+
+**For green.** The four TS diagnostics and the fifty reds above are what green turns; the four test files and the
+dry-run terminal file are T4's (`tests.unchanged(since: red)` from `47f1fdcf5`). AC 3's by-hand pass (H2) is the
+approver's, after green (D8); this suite pins only the maps' invariants.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
