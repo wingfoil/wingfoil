@@ -378,7 +378,8 @@ the implementing task stops and returns the choice to the approver; R17 is not s
 `launch.headless` block for the work run (§3.5), read from its agent CLI's own help output at the version
 `verified_with` names, keeping `prompt.via: arg` (the bootstrap is the CLI's positional prompt in both launches) and
 the MCP registration of its interactive launch, and declaring `output: none`, since the work run reads nothing
-from stdout (§2.2):
+from stdout (§2.2), except `codex-cli`, which declares `output: jsonl`: its work run's stdout is read for the session
+id only (§2.6, `task-356`):
 
 | `name` | `launch.headless` | Read from | `verified_with` |
 |---|---|---|---|
@@ -1356,3 +1357,9 @@ run from `codex exec --json`, the `thread_id` of its first event (§2.8, observe
 unsupported until §7's resume ships. (3) `bug-468`: `--step` without its scope resolves per `spec-017` §4.9 (§3.1,
 §3.2 step 1, §3.7). Edited in place without a supersede or a state change (`dl-047`), pending the approver's
 `memory amend`.
+
+**Revision (2026-11-09, `task-356-pin-codex-s-c-override-behaviour-record-codex-cli-session-ids-and-resolve-an-unscoped-step-key`,
+review) — §2.8.** The paragraph that introduces the built-ins' headless launches said every built-in declares
+`output: none`; it now says that `codex-cli`'s declares `output: jsonl`, read for its session id (as its row already
+says), while `claude-code`'s stays `none`. Edited in place without a supersede or a state change (`dl-047`), pending
+the approver's `memory amend`.
