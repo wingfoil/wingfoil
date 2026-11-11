@@ -423,6 +423,116 @@ expects `user not authorized to approve` for an identity outside `team.members` 
   first. `task-344`'s report check is unaffected (`scripts/check-phase-report.cjs` is not touched); its commit
   `89432fb24` is the one false positive of (c).
 
+### red (qa, 2026-11-11)
+
+**Red commit `33be8f2dc`** (`git log --oneline -1` → `33be8f2dc test(approvals): task-333 — failing test: …`), test
+files only (`git show --stat 33be8f2dc` → 15 files under `test/`, none under `src/` or `scripts/`). Base: head
+`5bcc2d77b`, `git rev-list --count HEAD..main` → `0`, no merge. PATH guard: the task's PATH shim, `wingfoil --version`
+and `node dist/cli.js --version` both `0.3.2 (682d6edcd09aed70bd2812b3bd70769f5cfbb1d9)`. The session carries the
+marker (`env | grep -c '^CLAUDE_CODE_CHILD_SESSION='` → `1`); every child environment is built from `process.env`
+minus the `spec-018` §1 markers (`withoutAgentMarkers`), then the case's variables.
+
+**Files.** New: `test/agent-markers.cjs` + `test/agent-markers.d.cts` (AC 7's helper: `AGENT_ENV_MARKERS`,
+`withoutAgentMarkers`), `test/core/helpers/l0-fixture.ts` (the `spec-018` §6 fixture: the identity a member with
+`approver`, agents `Claude` (`adapter: claude-code`) and `Other`, one target per gated command, the pinned
+`E_AGENT_CONTEXT` / `E_NOT_A_MEMBER` / §3.3 texts), `test/cli/agent-context-refusal.integration.test.ts`,
+`test/core/agent-context.test.ts`, `test/storage/approval-trailer-backstop.test.ts`,
+`test/core/approval-reason-agent-keys.test.ts`, `test/core/team-membership.test.ts`,
+`test/cli/team-membership.integration.test.ts`, `test/cli/check-governance-approval-agent-trailer.test.ts`,
+`test/lint/agent-markers-scrubbed.test.ts`, `test/docs/l0-traceability.test.ts`. Changed: `test/global-setup.cjs` (D8:
+`removeAgentMarkers()` before `applyGitIsolation()`), `test/core/workflow-finalize-bdd.test.ts` (the P4.14 pin 4 → 5,
+`titles[4]` the new scenario), `test/cli/check-governance-enforcement.test.ts` (the `CHECKS` pin and the bug-307
+`describe`, D6).
+
+**Run.** `npx jest <the 11 suites> --maxWorkers=2 --json` → `Test Suites: 10 failed, 1 passed, 11 total`,
+`Tests: 81 failed, 60 passed, 141 total`. Per file (failed / passed): `agent-context-refusal.integration` 24 / 10,
+`team-membership.integration` 23 / 2, `check-governance-enforcement` 3 / 24, `check-governance-approval-agent-trailer`
+7 / 1, `approval-reason-agent-keys` 8 / 5, `approval-trailer-backstop` 6 / 2, `agent-markers-scrubbed` 1 / 3,
+`l0-traceability` 9 / 6, `workflow-finalize-bdd` 0 / 7; `agent-context` and `team-membership` (core) fail to run:
+`Cannot find module '../../src/core/agent-context'` / `'../../src/core/team-membership'`.
+`npx tsc --noEmit -p tsconfig.json` → exactly two diagnostics, both intended: `test/core/agent-context.test.ts(25,8):
+error TS2307` and `test/core/team-membership.test.ts(20,39): error TS2307`. `npx jest test/lint --maxWorkers=2` with the
+files in place → `Test Suites: 2 failed, 14 passed, 16 total`, `Tests: 2 failed, 163 passed, 165 total`: AC 7's parity
+case and `typecheck-clean.test.ts` "tsconfig.json typechecks with zero diagnostics" (the two TS2307 above) only.
+`npx eslint` on the 15 files → no error (one "File ignored" warning for the `.d.cts`). Invisible-character grep on the
+15 files → no hit. Suites that read the global setup or walk `test/`: `npx jest test/storage/jest-git-isolation.test.ts
+test/storage/jest-git-isolation-xdg.test.ts test/core/latency-budget-placement.test.ts test/docs/dl-086-citations.test.ts
+test/docs/name-resolvability.test.ts test/cli/approval-authority-baseline.integration.test.ts --maxWorkers=2` →
+`Tests: 2047 passed`. Full suite not run (targeted runs only; `npm test` stays the developer's at refactor).
+
+**Per AC** (first failing assertion of each red test):
+- **AC 1 (red-first)**, `test/cli/agent-context-refusal.integration.test.ts` "AC 1": T-1, T-2, T-4, T-5, all four markers
+  at once, T-8 (`memory reject`), the never-printed value, `--format json` → received `status: 0` with the approve's
+  JSON on stdout (the `toEqual` on `{status, stdout, stderr}`); T-3 and the all-markers case → `status: 2`,
+  `error: unknown option '--co-author'`. T-6 (`CLAUDECODE=1`) passes (characterization). `test/core/agent-context.test.ts`
+  (AGENT_MARKERS frozen, ids, kinds, phrases; `E_AGENT_CONTEXT`; `refuseAgentContext`'s `{code, message, hint,
+  details.markers}`; the in-process `memoryApprove` under `process.env.WINGFOIL_AGENT` and under `withAgentInvocation`,
+  D5) → TS2307 and "Cannot find module".
+- **AC 2 (red-first)**, same CLI file "AC 2": the six commands under `WINGFOIL_AGENT=Claude` (`memory approve`,
+  `memory reject`, `memory amend`, `workflow finalize` on `release-cycle.go` (`approval:`), `workflow adopt --plan
+  --apply`, `workflow rekey`) → each `status: 0`, `stderr: ''`. The list is held equal to the call sites, each mapped
+  by file and enclosing declaration (`src/core/index.ts#memoryApproveFn|memoryRejectFn|memoryAmendFn`,
+  `workflow-finalize.ts#workflowFinalizeAtHead`, `workflow-adopt.ts#workflowAdoptAtHead`,
+  `workflow-rekey.ts#workflowRekeyAtHead`; `grep -rn "requireApproverAuthority(\|requireApprovalAuthority(" src | grep -v
+  '^src/core/approval-authority.ts:'` → six lines): passes today. Six controls (no marker → exit 0, one commit) pass,
+  so the fixture is good for every command.
+- **AC 3 (red-first)**: T-7 (`WINGFOIL_AGENT=Nobody`; `CLAUDE_CODE_CHILD_SESSION=1` with `team.agents: []`) and T-20's
+  first half (`--dry-run` refused identically) → `status: 0`. The gated-form unit (`resolveAgentContext(root, { env:
+  { WINGFOIL_AGENT: 'Nobody' }, gated: true })` on a root with no committed `dna.yaml` and an unparsable working-tree
+  one; markers order; empty values; `CLAUDECODE`) → TS2307.
+- **AC 4 (red-first)**: (a) `test/storage/approval-trailer-backstop.test.ts`: `writeAndCommit`, `commitEmpty`,
+  `commitPaths`, the lower-case key, a `CommitOptions.trailers` agent line → `expected the primitive to refuse, but it
+  committed`; under `runAsDryRun` → `Received value: undefined` for `toBeInstanceOf(StorageError)` (a plan, no throw).
+  Two controls pass. (b) `test/core/approval-reason-agent-keys.test.ts`: `reasonRefusalMessage(reason, { approval: true
+  })` → `Received: null`; `requireReason(…, { approval: true })` and the in-process `memoryApprove|Reject|Amend` → no
+  throw (`Received value: undefined`); the widened signatures are read through a cast, so `tsc` stays clean. Controls
+  (no option → `null`; mid-line key; `memoryDeprecate`, `memoryPark` record the reason) pass. CLI: the six commands with
+  `--reason $'Fine.\nCo-Authored-By: X <x@example.invalid>\nDone.'` → `status: 0`; `deprecate` and `park` → exit 0 (pass).
+- **AC 5 (red-first)**: `test/cli/team-membership.integration.test.ts`: the table equals the registry's 22 `mutates:
+  true` operations (passes); each row's member `--dry-run` exits 0 (no failure on that line); the stranger
+  (`Sam Stranger <stranger@example.invalid>` in `GIT_AUTHOR_*`/`GIT_COMMITTER_*`) → `status: 0` on 18 rows, and today's
+  authority refusals on four (`error: user not authorized to approve type 'task'` on approve, reject and amend, `error:
+  user not authorized to rekey`; D2 puts membership first); the uncommitted-grant case → `status: 0`. `init` as the stranger
+  plus a `memory add` on the scaffold's `members: []` passes (D1). `test/core/team-membership.test.ts` (refusal text,
+  case-insensitive match, working tree never decides, `members: []` and no committed `dna.yaml` not refused, fail-closed
+  prefix and suffix, per-file call-site parity with `requireGitIdentity(` minus `src/core/init.ts`) → TS2307.
+- **AC 6 (red-first)**: `check-governance-enforcement.test.ts`: the `CHECKS` pin → received `approval-ai-trailer`; the
+  rewritten describe → `approval-agent-trailer` findings `Received length: 0`; its starting-mode case →
+  `gated.get(before)` `undefined`. `check-governance-approval-agent-trailer.test.ts` (T-23, an approve, an amend and a
+  `workflow: rekey` record before and after the marker) → `Received length: 0` on all six; "the older rule is gone" →
+  an `approval-ai-trailer` finding received. The `wf(task): start` with both trailers → no finding (passes).
+- **AC 7 (characterization, one red case)**: `test/lint/agent-markers-scrubbed.test.ts`: the helper's list, the
+  worker's `process.env` holding no marker (the setup's scrub), the helper's purity → pass. The parity case with
+  `AGENT_MARKERS` → `Cannot find module '../../src/core/agent-context'` (read with `jest.requireActual` inside the test,
+  so the other cases run).
+- **AC 8 (characterization)**: `test/docs/l0-traceability.test.ts` "AC 8" (REQ-SEC-03's Description and Fit Criterion,
+  its trace to `spec-018`, the three scenarios) → 6 passed, on the text committed at `5bcc2d77b`.
+- **AC 9 (red-first)**: same file, the `memory amend` entry of `docs/cli-reference.md` → `toContain` fails on both
+  sentences of the design.
+- **AC 10 (red-first)**: same file → the four sentences of the design not found; the three stale phrases found.
+  Compared with whitespace runs and blockquote markers collapsed, words verbatim.
+- **AC 11 (characterization, no test)**: `git log -1 --format='%h %s' -- docs/04_memory/design/specs/<spec>.md` →
+  `e2224081a wf(tech-spec): amend spec-006-core-domain-api [approved → approved]` and `123fbb635 wf(tech-spec): amend
+  spec-017-workflow-commands-and-state-deduction [approved → approved]`.
+
+**Read against the design** (no rule changed; for the developer and the reviewer):
+- `Other`'s email is `other@example.com`, not the design's `other@example.invalid`: `src/dna/schema.ts` refuses an
+  agent email on a reserved top-level domain (bug-261), so that fixture would refuse every approval for another reason.
+- `E_NOT_A_MEMBER`'s hint keeps `<role>` literally (the amendment names no role to suggest); `<name>` and `<email>` are
+  the identity's.
+- `E_AGENT_TRAILER_ON_APPROVAL` for a lower-case `co-authored-by:` line accepts the key in either spelling; the exact
+  message is pinned with `AI-Model:`.
+- `withAgentInvocation({ env })` decides over `process.env` when a surface sets it (the third in-process case), as D5's
+  "`process.env` when no registrar set one" reads.
+- The rewritten bug-307 `describe` no longer pins `git-conventions §7` in the message: `spec-018` §4 fixes only that
+  the finding names the key.
+- `team-membership.integration` rebuilds the fixture of `test/cli/dry-run.integration.test.ts`, which exports nothing.
+
+**For the developer.** The registrar must accept `--co-author <name>` on every `mutates: true` command but `agent
+execute` (T-3); `refuseAgentContext`'s error is exactly `{ code, message, hint, details: { markers } }`; the backstop is
+a `StorageError` with `code === 'E_AGENT_TRAILER_ON_APPROVAL'`, thrown out of `runAsDryRun`; the 39 membership-broken
+suites of the design's measure are green's (D15).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
