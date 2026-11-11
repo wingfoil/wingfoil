@@ -4,7 +4,7 @@
 name: claude-code
 format: 1
 command: claude
-verified_with: "2.1.310 (Claude Code)"
+verified_with: "2.1.322 (Claude Code)"
 version_args: [ --version ]
 launch:
   interactive:

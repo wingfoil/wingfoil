@@ -47,7 +47,8 @@ export interface BuiltinAdapterManifest {
  * session's model or token counts, so `usage.from` is `none` and both are recorded `not-reported`
  * (`spec-016` §2.6). The headless role map (task-339) is read from the same help of 2.1.310: `--permission-mode
  * <mode>` with its choice `dontAsk`, and `--allowedTools` / `--disallowedTools` ("Comma or space-separated list of
- * tool names", the example `"Bash(git *) Edit"`).
+ * tool names", the example `"Bash(git *) Edit"`). Its by-hand pass, one headless run per role, ran on 2.1.322, the
+ * version `verified_with` names (task-339).
  */
 const CLAUDE_CODE: BuiltinAdapterManifest = {
   name: 'claude-code',
@@ -57,7 +58,7 @@ const CLAUDE_CODE: BuiltinAdapterManifest = {
 name: claude-code
 format: 1
 command: claude
-verified_with: "2.1.310 (Claude Code)"
+verified_with: "2.1.322 (Claude Code)"
 version_args: [ --version ]
 launch:
   interactive:
