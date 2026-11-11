@@ -518,11 +518,55 @@ differently, so the gates were not re-run after it.
 - **R2 — `trailer-paragraph` beyond `WingFoil-*`.** The reused governance function returns `WingFoil-*` keys only; the
   script adds `Co-Authored-By:`/`AI-Model:` lines outside the final paragraph, as the design's table lists, with its
   own two-line check rather than a change to `check-governance.cjs`.
+- **R1, ruled at the review (2026-11-11): fixed in the task.** The exemption is narrowed to an approver record (an
+  approver-shaped subject and a first body line `Approver: <name> <<email>> (approver)`); see the review fix round below.
+- **R2** stands as written: the fix round adds a test of the stray `Co-Authored-By:` / `AI-Model:` paragraph case.
 
 ### Pending amendments (approver)
 
 - None from green or refactor. The design's pending amendment of `dev-loop-rel-v0.4-plan` stands as written above (the
   plan holds the paragraph at line 203 of `design/dev_loop_v0.4`).
+
+### review fix round (developer, 2026-11-11)
+
+**Start.** No leftover process of this task: `ps -eo pid,etime,args | grep -E "jest|waitslot|heavy-gate"` → one
+`heavy-gate.cjs build` whose cwd is another worktree (`ls -l /proc/<pid>/cwd` → `.wf2-wt/ingest-351r`), none here.
+`git rev-list --count HEAD..main` → `21` (task-351 merged); `git merge --no-edit main` merged without a conflict and was
+amended with the §7 trailers → `7b2d9e3d5` (`HEAD..main` → `0` after it).
+
+**Finding 2 (R1, ruled in the task).** Before the fix any body line matching `/^approver:/i` exempted a commit from
+`commit-unlisted`, `trailer-missing` and the file checks. Now only an **approver record** is exempt
+(`isApproverRecord` in `scripts/check-phase-report.cjs`, declared in its module doc): the subject matches
+`wf(<type>): approve|reject|amend` or `workflow: finalize|rekey`, AND the first body line reads through
+`parseApprovalMetadata` of `dist/memory` (the grammar `check-governance.cjs` holds approvals to,
+`/^Approver:\s*(.+?)\s*<([^>]+)>\s*\(([^)]+)\)\s*$/`) with the role `approver`. An approver record carrying
+`Co-Authored-By:` or `AI-Model:`, listed or not, is `trailer-forbidden` — the existing kind, whose rule is widened
+from a listed `approve`/`reject`; `MISMATCH_KINDS` is unchanged (17 kinds, the red's pin), so no stop was owed.
+Whether the record's author holds the `approver` role stays the governance check's `authority` rule.
+
+**Finding 1 (tests), a new file `test/cli/check-phase-report-approver.test.ts`** (8 tests; red's files untouched):
+(a) an unlisted amend changing an unclaimed file → `[]`, and an unlisted approve plus a `workflow: finalize` record with
+an `Approver:` line → `[]`; (b) the reviewer's forgery (`docs: sneak`, `Approver: Someone <s@x> (approver)`, an
+unclaimed file, no §7 trailers) → `commit-unlisted` + `file-unclaimed`; listed → `trailer-missing`; an amend whose
+`Approver:` line has no `<email> (role)`, and one with the role `developer` → `commit-unlisted` each; (c) a stray
+`AI-Model:` and a stray `Co-Authored-By:` alone in an earlier paragraph → `trailer-paragraph`, the key in `detail`;
+(d) an amend record with the AI trailers → `trailer-forbidden`, unlisted and listed. Messages copied from `b28640566`
+and `d69286802` (`git log -1 --format=%B <sha>`).
+
+**Red → green of the fix.** Against the pre-fix script (`git show HEAD:scripts/check-phase-report.cjs` put in place
+for one run, then the fixed file restored): `npx jest test/cli/check-phase-report-approver.test.ts --maxWorkers=2
+--json` → 4 failed (the three (b) tests and (d)), 4 passed ((a) and (c): the exemption and the paragraph rule already
+held, characterization). With the fix: `npx jest test/cli/check-phase-report-approver.test.ts
+test/cli/check-phase-report.test.ts test/lint --maxWorkers=2` → `Test Suites: 17 passed, 17 total`,
+`Tests: 223 passed, 223 total`. Fix commit `89432fb24`.
+
+**Gates.** `npx tsc --noEmit -p tsconfig.json` → exit `0`; `npm run -s lint` → exit `0`; after `waitslot.sh`
+(15:01:47 → 15:01:52 UTC) `npm test -- --maxWorkers=2` → `Test Suites: 590 passed, 590 total`,
+`Tests: 10893 passed, 10893 total`, exit `0` (until 15:19:05). The prescribed invisible-character `grep -nP` over the
+two changed files → no hit (exit `1`).
+
+**T4.** `git log --first-parent --no-merges --format=%h 6d00b50ff..HEAD -- scripts/check-phase-report.d.cts
+scripts/check-governance.d.cts test/cli/check-phase-report.test.ts test/lint/git-log-readers.test.ts` → empty.
 
 ### Retrospective
 
