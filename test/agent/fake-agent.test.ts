@@ -114,10 +114,14 @@ describe('AC 1 — custom/fake.yaml declares every §2.2 field and validates', (
     expect(paths).toEqual(
       expect.arrayContaining(['name', 'format', 'command', 'verified_with', 'launch.interactive.terminal', 'session.resume.args', 'usage.fields.cache_write', 'summary.export_args']),
     );
-    expect(paths).toHaveLength(26);
+    // task-356 (`bug-372`) adds `mcp.conflict_args`: 27 leaves.
+    expect(paths).toHaveLength(27);
   });
 
-  it.each(leafPaths(AdapterManifest).map((path) => [path]))('declares `%s`', (path) => {
+  // `mcp.conflict_args` is the one field the fixture leaves out on purpose (task-356): declared, it would run the
+  // conflict probe before every launch and add a record line ahead of the launch's, which every suite reading
+  // `fake[0]` as the launch relies on. `config-arg/fake-conflict.yaml` declares it.
+  it.each(leafPaths(AdapterManifest).filter((path) => path !== 'mcp.conflict_args').map((path) => [path]))('declares `%s`', (path) => {
     expect(at(raw, path)).toBeDefined();
   });
 

@@ -16,7 +16,8 @@
  * **Refusal order** (design "The command"): the usage refusals (exit 2, before any read: `--apply` without
  * `--plan`, `--plan` with `--step`/`--element`, none of the three, a malformed `--element`, a missing or
  * unrecordable `--reason` — validated, unused, with `--plan` alone, D6) → the git identity (REQ-SEC-01; not on
- * `--plan` alone) → approver authority (`--plan --apply`) → the instance → the step (on the frontier; else the one
+ * `--plan` alone) → approver authority (`--plan --apply`) → the instance → the step (on the frontier, an unscoped
+ * key naming the one frontier step of its workflow and phase, `spec-017` §4.9, task-356; else the one
  * frontier step adding `--element`'s type) → it adds a type → `--element`'s type is one of them (before existence,
  * D10) → it lacks its created element (D1) → `--element` exists at `HEAD` → not owned (§4.8) → without
  * `--element`, its one candidate (several: their `<type>:<id>` in `details.candidates`; several frontier steps: their keys
@@ -42,6 +43,7 @@ import { coreErr, coreOk, type CoreResult } from './types';
 import { UsageError } from './usage-error';
 import { instancePlanIds, readDeductionSnapshotAtHead } from './workflow-deduction';
 import { buildStep, readNextInputs, stepLines, unresolvedRef, type Step } from './workflow-next';
+import { ambiguousStepKey, resolveFrontierKey } from './workflow-step-key';
 
 /** `spec-017` §10: `--plan --apply` without approver authority. */
 export const BULK_ADOPT_UNAUTHORIZED = 'user not authorized to apply adoptions in bulk';
@@ -130,8 +132,10 @@ function adoptOne(
 
   let step: DeducedStep | undefined;
   if (stepKey !== undefined) {
-    step = frontier.find((candidate) => candidate.key === stepKey);
-    if (step === undefined) return coreErr({ code: 'CONFLICT', message: `step '${stepKey}' is not on the frontier of ${instance.id}`, details: { frontier: frontier.map((entry) => entry.key) } });
+    const resolved = resolveFrontierKey(frontier, stepKey);
+    if (resolved.kind === 'many') return ambiguousStepKey(stepKey, instance.id, resolved.steps);
+    if (resolved.kind === 'none') return coreErr({ code: 'CONFLICT', message: `step '${stepKey}' is not on the frontier of ${instance.id}`, details: { frontier: frontier.map((entry) => entry.key) } });
+    step = resolved.step;
   } else {
     const type = named!.type;
     const adding = frontier.filter((candidate) => candidate.additions.some((addition) => addition.type === type));

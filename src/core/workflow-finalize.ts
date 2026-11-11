@@ -29,7 +29,8 @@
  * index, whose staged changes refuse the commit (`requireCleanIndex`, `dl-106`).
  *
  * **Refusal order**, every one before the commit: an unrecordable `--reason` (exit 2, before any read) →
- * the git identity (REQ-SEC-01) → the instance → the step on the frontier → its evidence → on an
+ * the git identity (REQ-SEC-01) → the instance → the step on the frontier (a key without its scope: the one
+ * frontier step of its workflow and phase, `spec-017` §4.9, task-356) → its evidence → on an
  * `approval:` phase, a missing `--reason` (exit 2) and approver authority (REQ-SEC-03, the identity read
  * once, `bug-149`) → a dirty index.
  */
@@ -42,6 +43,7 @@ import { optionalReason, requireReason } from './require-reason';
 import { coreErr, coreOk, type CoreResult } from './types';
 import { instancePlanIds, readDeductionSnapshotAtHead } from './workflow-deduction';
 import { buildStep, emptyFrontierMessage, readNextInputs, stepLines, unresolvedRef, type Step } from './workflow-next';
+import { ambiguousStepKey, resolveFrontierKey } from './workflow-step-key';
 import { requireCleanIndex } from './write-guard';
 
 /** The refusal when no `<ref>` is given and no instance is open (as `workflow end`'s, `spec-017` §10). */
@@ -123,13 +125,18 @@ export function workflowFinalizeAtHead(root: string, request: FinalizeRequest): 
   }
   const { instance, frontier } = selected;
   if (frontier.length === 0) return coreErr({ code: 'CONFLICT', message: emptyFrontierMessage(selected), details: { instance: instance.id } });
-  const step = request.step === undefined ? frontier[0]! : frontier.find((candidate) => candidate.key === request.step);
-  if (step === undefined) {
-    return coreErr({
-      code: 'CONFLICT',
-      message: `step '${request.step}' is not on the frontier of ${instance.id}`,
-      details: { frontier: frontier.map((candidate) => candidate.key) },
-    });
+  let step: DeducedStep = frontier[0]!;
+  if (request.step !== undefined) {
+    const resolved = resolveFrontierKey(frontier, request.step);
+    if (resolved.kind === 'many') return ambiguousStepKey(request.step, instance.id, resolved.steps);
+    if (resolved.kind === 'none') {
+      return coreErr({
+        code: 'CONFLICT',
+        message: `step '${request.step}' is not on the frontier of ${instance.id}`,
+        details: { frontier: frontier.map((candidate) => candidate.key) },
+      });
+    }
+    step = resolved.step;
   }
   if (!step.evidence.finalizable) return evidenceRefusal(step);
 

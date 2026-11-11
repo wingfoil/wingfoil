@@ -16,10 +16,11 @@
  * pass by hand: every flag a manifest declares is read from that agent CLI's own `--help` output at the
  * version `verified_with` names, never from memory. Listed in name order (REQ-SYS-07):
  * - `claude-code` — Claude Code (task-236; its headless block, task-335).
- * - `codex-cli` — Codex CLI (task-237; its headless block, task-335).
+ * - `codex-cli` — Codex CLI (task-237; its headless block, task-335; its conflict check and session id, task-356).
  *
  * Each declares a `launch.headless` block for the work run (`spec-016` §2.8, §3.5; `dl-181` Q3 (c)), read
- * from its CLI's help at `verified_with`, with `output: none`: nothing parses the agent's stdout yet.
+ * from its CLI's help at `verified_with`: `claude-code`'s with `output: none` (its stdout is not read), `codex-cli`'s
+ * with `output: jsonl`, its stdout read for the session id only (`session.id: output`, task-356).
  *
  * With an empty list, `init` reserves the directory with a `.gitkeep` (the seam's empty case).
  */
@@ -83,13 +84,20 @@ usage:
  * takes an MCP configuration file, only `-c <key=value>` overrides parsed as TOML, so the server is
  * registered with `mcp.via: config-arg`: the rendered template is one `-c` value, a whole argv element
  * (`spec-016` §2.3). `enabled` and `required` make a same-named server elsewhere, or a failed start,
- * unable to leave the session without it. No option assigns a session id and no command prints a past
- * session's id, model or token counts, so all three are recorded `not-reported` (`spec-016` §2.6).
+ * unable to leave the session without it. A `-c` override merges into a same-named table of a trusted project
+ * (`env = {}` included, observed by hand with `codex-cli 0.145.0`, task-356, `bug-372`), so `mcp.conflict_args` asks
+ * Codex itself: `codex mcp get wingfoil` exits `0` exactly when Codex would load a `wingfoil` table, and `agent
+ * execute` then refuses the launch (`spec-016` §2.5). No option assigns a session id and no command prints a past
+ * session's id, but `codex exec --json` prints its events to stdout as JSONL, the first (`thread.started`) carrying
+ * the session id as `thread_id`, which `codex exec resume <id>` accepts (observed by hand, task-356, `bug-375`): a
+ * headless run's session is read from it (`session.id: output`), an interactive one's is `not-reported`. Resume is
+ * not supported until `spec-016` §7's ships; the model and token counts are recorded `not-reported` (§2.6).
  */
 const CODEX_CLI: BuiltinAdapterManifest = {
   name: 'codex-cli',
   content: `# Codex CLI, a built-in adapter (spec-016 section 2.8). Every flag below is read from the
-# --help output of the version in verified_with, checked by hand (task-237; headless, task-335).
+# --help output of the version in verified_with, checked by hand (task-237; headless, task-335; the
+# conflict check and the session id, task-356).
 name: codex-cli
 format: 1
 command: codex
@@ -101,16 +109,22 @@ launch:
     args: [ -c, "{mcp_config}", "{bootstrap}" ]
     terminal: required
   headless:
-    # codex exec runs non-interactively; the same -c override, the prompt as its positional.
-    args: [ exec, -c, "{mcp_config}", "{bootstrap}" ]
-    output: none
+    # codex exec runs non-interactively; --json prints its events to stdout as JSONL; the same -c
+    # override, the prompt as its positional.
+    args: [ exec, --json, -c, "{mcp_config}", "{bootstrap}" ]
+    output: jsonl
 prompt:
   via: arg
 mcp:
   via: config-arg
   template: 'mcp_servers.wingfoil={command = "{mcp_command}", args = {mcp_args}, enabled = true, required = true}'
+  # -c merges into a same-named table of a trusted project: exit 0 here (a wingfoil table Codex
+  # would load) refuses the launch.
+  conflict_args: [ mcp, get, wingfoil ]
 session:
-  id: none
+  # A headless run's first --json event (thread.started) carries the id; codex exec resume takes it.
+  id: output
+  field: thread_id
   resume:
     supported: false
 usage:
