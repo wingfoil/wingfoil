@@ -203,6 +203,14 @@ export interface CoreOperation<P = unknown, R = unknown> {
    * calls it.
    */
   readonly renderToStderr?: (value: R) => StderrReport | undefined;
+  /**
+   * `false` for a mutating operation that takes no agent attribution option (`spec-018` §1.1: `agent execute`, whose
+   * record commit is WingFoil's own and names the launched agent in its `run`). Absent — every other operation —
+   * the CLI registrar derives `--co-author <name>` for each `mutates: true` operation, as it derives `--dry-run`, so
+   * an operation added later takes it with no line of its own (`spec-018` §1, §2.3; task-333 design D4). Declared
+   * here, never by an operation name in the registrar (`spec-006` §4.2).
+   */
+  readonly agentAttribution?: false;
 }
 
 /** A success report written on stderr instead of a stdout payload ({@link CoreOperation.renderToStderr}). */

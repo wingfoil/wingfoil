@@ -115,6 +115,8 @@ import { selectDirectivesById } from './context';
 import { checkAssignable, checkUnreferenced, updateRoleAssignments } from './directive-assign';
 import type { MemoryYaml } from '../memory/schema';
 import { requireGitIdentity } from './git-identity';
+import { requireTeamMembership } from './team-membership';
+import { resolveGatedAgentContext } from './agent-context';
 import { requireRequiredFields } from './required-fields';
 import { requireInitializedProject } from './init';
 import { requireCustomAsset } from './builtin-asset';
@@ -291,6 +293,8 @@ export * from './registry';
 export * from './exit-code';
 export * from './git-identity';
 export * from './approval-authority';
+export * from './agent-context';
+export * from './team-membership';
 export * from './require-reason';
 export * from './builtin-asset';
 export * from './confinement';
@@ -618,6 +622,8 @@ async function runDnaMutation(
 ): Promise<CoreResult<{ key: string; value?: string }>> {
   const identity = requireGitIdentity(root);
   if (!identity.ok) return identity;
+  const member = requireTeamMembership(root, identity.value);
+  if (!member.ok) return member;
 
   // REQ-SEC-06 / bug-121 (task-172): `writeDocument` follows a symlinked `dna.yaml`, so a file that
   // leads outside the project, or is itself a link, is refused before any read or write. First, so a
@@ -971,6 +977,8 @@ const memoryAddFn: CoreFn<unknown, { id: string; path: string }> = async (params
 
   const identity = requireGitIdentity(root);
   if (!identity.ok) return identity;
+  const member = requireTeamMembership(root, identity.value);
+  if (!member.ok) return member;
 
   // task-095 / `bug-085`: the registry, the `path` and the scaffold all resolve at HEAD, inside a
   // function that accepts no parsed `MemoryYaml` — so this verb cannot decide any of the three from
@@ -1554,14 +1562,16 @@ const memoryApproveFn: CoreFn<unknown, MemoryApproveResult> = async (params) => 
   if (reference === undefined || reference.trim().length === 0) {
     throw new UsageError(missingOperandReason('id'));
   }
-  const reason = requireReason(options);
+  const reason = requireReason(options, { approval: true });
 
   const prepared = beginMemoryTransition(root, reference, 'approve', { resolveReference: true });
   if (!prepared.ok) return prepared;
   const { id } = prepared.value; // the element's full id, whatever reference the verb was given (task-332)
   const { type, path, content, from, to } = prepared.value;
 
-  const authorized = requireApprovalAuthority(root, type, prepared.value.identity);
+  const agent = resolveGatedAgentContext(root);
+  if (!agent.ok) return agent;
+  const authorized = requireApprovalAuthority(root, type, prepared.value.identity, agent.value, 'memory approve');
   if (!authorized.ok) return authorized;
 
   const supersede = prepareSupersede(root, prepared.value);
@@ -1715,14 +1725,16 @@ const memoryRejectFn: CoreFn<unknown, MemoryRejectResult> = async (params) => {
   if (reference === undefined || reference.trim().length === 0) {
     throw new UsageError(missingOperandReason('id'));
   }
-  const reason = requireReason(options);
+  const reason = requireReason(options, { approval: true });
 
   const prepared = beginMemoryTransition(root, reference, 'reject', { resolveReference: true });
   if (!prepared.ok) return prepared;
   const { id } = prepared.value; // the element's full id, whatever reference the verb was given (task-332)
   const { type, path, from, to, content } = prepared.value;
 
-  const authorized = requireApprovalAuthority(root, type, prepared.value.identity);
+  const agent = resolveGatedAgentContext(root);
+  if (!agent.ok) return agent;
+  const authorized = requireApprovalAuthority(root, type, prepared.value.identity, agent.value, 'memory reject');
   if (!authorized.ok) return authorized;
 
   const { name, email } = prepared.value.identity;
@@ -1970,7 +1982,7 @@ const memoryAmendFn: CoreFn<unknown, MemoryAmendResult> = async (params) => {
   if (reference === undefined || reference.trim().length === 0) {
     throw new UsageError(missingOperandReason('id'));
   }
-  const reason = requireReason(options);
+  const reason = requireReason(options, { approval: true });
 
   const prepared = beginMemoryTransition(root, reference, 'amend', { resolveReference: true });
   if (!prepared.ok) return prepared;
@@ -1983,7 +1995,9 @@ const memoryAmendFn: CoreFn<unknown, MemoryAmendResult> = async (params) => {
   // would otherwise be refused for a field change it never made.
   const confined = requireConfinedWriteTarget(root, path, 'write');
   if (!confined.ok) return confined;
-  const authorized = requireApprovalAuthority(root, type, prepared.value.identity);
+  const agent = resolveGatedAgentContext(root);
+  if (!agent.ok) return agent;
+  const authorized = requireApprovalAuthority(root, type, prepared.value.identity, agent.value, 'memory amend');
   if (!authorized.ok) return authorized;
 
   const amendable = requireAmendableType(memoryYaml, type);
@@ -2071,6 +2085,8 @@ const directiveCreateFn: CoreFn<unknown, { name: string; path: string }> = async
 
   const identity = requireGitIdentity(root);
   if (!identity.ok) return identity;
+  const member = requireTeamMembership(root, identity.value);
+  if (!member.ok) return member;
 
   // One spelling of the location, reused for the existence check, the write and the commit scope, so
   // the three can never drift apart. `join` normalizes the separators, so the POSIX form is also the
@@ -2171,6 +2187,8 @@ const directiveAssignFn: CoreFn<unknown, DirectiveAssignResult> = async (params)
 
   const identity = requireGitIdentity(root);
   if (!identity.ok) return identity;
+  const member = requireTeamMembership(root, identity.value);
+  if (!member.ok) return member;
 
   const invalid = checkAssignable(root, role, directives);
   if (invalid) return coreErr(invalid);
@@ -2368,6 +2386,8 @@ const directiveRemoveFn: CoreFn<unknown, DirectiveRemoveResult> = async (params)
 
   const identity = requireGitIdentity(root);
   if (!identity.ok) return identity;
+  const member = requireTeamMembership(root, identity.value);
+  if (!member.ok) return member;
 
   let atHead: HeadDirectiveInventory;
   try {
@@ -2671,6 +2691,8 @@ export const CORE_MODULES: readonly CoreModule[] = [
       // (spec-016 §7, §8). Reads `HEAD` (spec-008 §11).
       agentExecute: {
         name: 'agentExecute',
+        // `spec-018` §1.1: its record commit names the launched agent in its `run`, so it takes no `--co-author`.
+        agentAttribution: false,
         mutates: true,
         description: 'launch an agent CLI through its adapter on one Memory element, with its context assembled and checked first',
         // task-235 (spec-016 §3.1, ruling R16): the step forms. `--workflow` and `--step` imply `--next`.

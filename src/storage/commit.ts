@@ -110,6 +110,58 @@ function stampedMessage(message: string, trailers: readonly string[] = []): stri
   return `${message.replace(/\s+$/, '')}\n\n${[...trailers, formatVersionTrailer(readBuildStamp())].join('\n')}`;
 }
 
+/** The code of {@link ApprovalTrailerError} (`spec-018` §3.3). */
+export const E_AGENT_TRAILER_ON_APPROVAL = 'E_AGENT_TRAILER_ON_APPROVAL';
+
+/** A line that makes a commit an approval commit: `Approver:`, any letter case (`spec-018` §0). */
+const APPROVER_LINE_RE = /^approver:/im;
+
+/** An agent trailer line, any letter case, anywhere in the message (`spec-018` §0) — the governance check's pattern. */
+const AGENT_TRAILER_LINE_RE = /^(co-authored-by|ai-model):/im;
+
+/** Each agent trailer key in its canonical spelling, as the refusal names it. */
+const AGENT_TRAILER_KEYS: Readonly<Record<string, string>> = { 'co-authored-by': 'Co-Authored-By', 'ai-model': 'AI-Model' };
+
+/**
+ * `E_AGENT_TRAILER_ON_APPROVAL` (`spec-018` §3.3, task-333 design D7): the commit primitive was asked to write an
+ * approval commit — its message has an `Approver:` line — that would carry an agent trailer (`Co-Authored-By:` or
+ * `AI-Model:`). Thrown before any path is written or staged and before a dry run's plan, so nothing was written; it
+ * reaches the CLI as the `error:` line, exit `1`. The backstop behind the agent-context refusal (§3.1): it holds for
+ * every writer, whatever brought the trailer.
+ */
+export class ApprovalTrailerError extends StorageError {
+  /** The subject of the refused commit. */
+  readonly subject: string;
+  /** The agent trailer key found first, canonically spelled (`Co-Authored-By` or `AI-Model`). */
+  readonly key: string;
+
+  constructor(subject: string, key: string) {
+    super(
+      E_AGENT_TRAILER_ON_APPROVAL,
+      `the commit '${subject}' records an approval and would carry an agent trailer (${key}:), which an approval never ` +
+        'carries (dl-212, git-conventions §7); nothing was written',
+    );
+    this.name = 'ApprovalTrailerError';
+    this.subject = subject;
+    this.key = key;
+    Object.setPrototypeOf(this, ApprovalTrailerError.prototype);
+  }
+}
+
+/**
+ * Refuse, by throwing {@link ApprovalTrailerError}, a stamped commit message that has an `Approver:` line and an agent
+ * trailer line (`spec-018` §3.3). Run first by each writer — {@link commitPaths}, {@link commitEmpty},
+ * {@link writeAndCommit} — on the message it would record, its {@link CommitOptions.trailers} included.
+ */
+function refuseAgentTrailerOnApproval(message: string, trailers: readonly string[] | undefined): void {
+  const stamped = stampedMessage(message, trailers);
+  if (!APPROVER_LINE_RE.test(stamped)) return;
+  const found = AGENT_TRAILER_LINE_RE.exec(stamped);
+  if (found === null) return;
+  const subject = (/^.*/.exec(message) as RegExpExecArray)[0];
+  throw new ApprovalTrailerError(subject, AGENT_TRAILER_KEYS[(found[1] as string).toLowerCase()] as string);
+}
+
 /**
  * Stage exactly `paths` (root-relative or absolute; each passed verbatim after `--` so a path that
  * looks like a flag is never misread) and create a single commit with `message` that contains **only**
@@ -142,6 +194,7 @@ export function commitPaths(
   message: string,
   options: CommitOptions = {},
 ): string {
+  refuseAgentTrailerOnApproval(message, options.trailers);
   refuseDuringDryRun('commitPaths');
   return commitPathsNow(root, paths, message, options);
 }
@@ -198,6 +251,7 @@ export function stagedPaths(root: string, options: CommitOptions = {}): string[]
  *   nothing was written, so there is nothing to put back.
  */
 export function commitEmpty(root: string, message: string, options: CommitOptions = {}): string {
+  refuseAgentTrailerOnApproval(message, options.trailers);
   const stamped = stampedMessage(message, options.trailers);
   if (isDryRunActive()) {
     stopWithPlan({ dryRun: true, subject: (/^.*/.exec(message) as RegExpExecArray)[0], message: stamped, paths: [], diff: '' }, options.plannedWarnings ?? options.warnings);
@@ -264,6 +318,7 @@ function repoRelative(root: string, path: string): string {
  * is told.
  */
 export function writeAndCommit(root: string, changes: readonly PathChange[], message: string, options: CommitOptions = {}): string {
+  refuseAgentTrailerOnApproval(message, options.trailers);
   const planned: PlannedChange[] = changes.map((change) => ({
     absolute: isAbsolute(change.path) ? change.path : join(root, change.path),
     relative: repoRelative(root, change.path),

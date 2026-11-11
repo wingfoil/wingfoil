@@ -1,6 +1,6 @@
 # WingFoil — Product Vision (docs/vision)
 
-**Last indexed:** 2026-11-08
+**Last indexed:** 2026-11-11
 
 This folder holds the **product-vision specification** for WingFoil, produced through a Lean Inception workshop (see
 [`X_lean-inception-plan.md`](X_lean-inception-plan.md)). This README is a **navigation index**: it tells you which
@@ -45,7 +45,7 @@ line count (`awk 'END{print NR}'`).
 | [`06_features.md`](06_features.md)                     | 1.17 | 2026-10-18 | Approved | 549   | 66 features (by pillar + by release) and the data-model / implementation notes                                          |
 | [`07_sequencer.md`](07_sequencer.md)                   | 2.1 | 2026-10-18 | Approved | 480   | Active-day budgets, actuals and calendar forecast; the original 5-week plan; per-release Definition of Done, risks      |
 | [`08_mvp-canvas.md`](08_mvp-canvas.md)                 | 1.13 | 2026-10-18 | Approved | 221   | MVP canvas: problem/solution/value, target users, metrics, success criteria                                             |
-| [`X_cli-cmds.md`](X_cli-cmds.md)                       | 2.0 | 2026-11-08 | Approved | 505   | CLI command reference: signatures, parameters, release timeline, per-persona usage                                      |
+| [`X_cli-cmds.md`](X_cli-cmds.md)                       | 2.1 | 2026-11-11 | Approved | 512   | CLI command reference: signatures, parameters, release timeline, per-persona usage                                      |
 | [`X_lean-inception-plan.md`](X_lean-inception-plan.md) | —   | 2026-06-11 | —        | 42    | Workshop plan: sessions, key decisions, output list                                                                     |
 
 ---
@@ -178,11 +178,11 @@ line count (`awk 'END{print NR}'`).
 - Pillar 4 — Workflow commands + parameters (params L184) — L140–199
 - Pillar 5 — Initialization commands + parameters (params L217) — L200–226
 - Agent Execution commands + parameters (params L235) — L227–250
-- Global Options — L251–266
-- Command-Line Syntax Conventions — L267–306
-- Release Timeline by Command — L307–345
-- Command Reference by Persona (Alex L348, Morgan L357, Casey L367, Jordan L376, Sam L385) — L346–394
-- Revision history — L395–505
+- Global Options — L251–268
+- Command-Line Syntax Conventions — L269–308
+- Release Timeline by Command — L309–347
+- Command Reference by Persona (Alex L350, Morgan L359, Casey L369, Jordan L378, Sam L387) — L348–396
+- Revision history — L397–512
 
 ### `X_lean-inception-plan.md`
 

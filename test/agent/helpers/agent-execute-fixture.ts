@@ -30,7 +30,7 @@ stacks:
 team:
   members:
     - name: WingFoil Test
-      email: wf-test@example.com
+      email: wf-test@example.invalid
       roles: [ approver ]
   roles:
     - name: developer

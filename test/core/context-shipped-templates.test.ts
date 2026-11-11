@@ -98,7 +98,10 @@ describe('task-318 — the context payload of documents made from the shipped Me
 
   it('builds the golden payload from one document per shipped template, byte for byte', async () => {
     for (const file of shippedMemoryEntries('scrum')) writeFixtureFile(repo, file.path, file.content);
-    writeFixtureFile(repo, '.wingfoil/dna.yaml', DNA_YAML);
+    // task-333 (`dl-220` Q2 (b)): `memory add` and `submit` refuse an identity outside the committed team, so the
+    // Memory is written while the fixture's member carries the test identity's email; the golden's `dna.yaml` is
+    // committed back after, so the payload below is the one this file pins.
+    writeFixtureFile(repo, '.wingfoil/dna.yaml', DNA_YAML.replace('    - name: Golden User\n', '    - name: Golden User\n      email: wf-test@example.invalid\n'));
     writeFixtureFile(repo, '.wingfoil/roles.yaml', ROLES_YAML);
     writeFixtureFile(repo, '.wingfoil/directives/custom/testing.md', TESTING_DIRECTIVE);
     commitAll(repo, 'seed');
@@ -123,6 +126,8 @@ describe('task-318 — the context payload of documents made from the shipped Me
       const submitted = await submit({ root: repo, positional: ids.get(type)! });
       if (!submitted.ok) throw new Error(`memory submit ${type}: ${submitted.error.code}: ${submitted.error.message}`);
     }
+    writeFixtureFile(repo, '.wingfoil/dna.yaml', DNA_YAML);
+    commitAll(repo, 'fixture: the golden dna.yaml');
 
     const result = assembleExecutionContext(repo, { role: 'developer', element: { type: 'task', id: TASK_ID }, stateRef: 'HEAD' });
     if (!result.ok) throw new Error(`expected a context, got ${result.error.code}: ${result.error.message}`);

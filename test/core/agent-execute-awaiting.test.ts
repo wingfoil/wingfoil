@@ -29,8 +29,8 @@ afterAll(() => {
 
 const CASES: readonly [AwaitingCase, 'approval' | 'party', string][] = [
   // case, details.awaiting, the line `workflow next` prints (copied from a real run, see the task's red notes)
-  ['gated', 'approval', `human needed: approve or reject ${TASK_ID} — routed to WingFoil Test <wf-test@example.com>`],
-  ['signoff', 'approval', 'human needed: finalize signoff.review@release:minor-1 — routed to WingFoil Test <wf-test@example.com>'],
+  ['gated', 'approval', `human needed: approve or reject ${TASK_ID} — routed to WingFoil Test <wf-test@example.invalid>`],
+  ['signoff', 'approval', 'human needed: finalize signoff.review@release:minor-1 — routed to WingFoil Test <wf-test@example.invalid>'],
   [
     'outreach',
     'party',

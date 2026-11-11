@@ -19,6 +19,8 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { load } from 'js-yaml';
+
 import { CORE_MODULES } from '../../src/core';
 import type { CoreFn } from '../../src/core/registry';
 import { makeTempGitRepo, removeTempDir, writeFixtureFile, commitAll } from '../storage/helpers/git-fixture';
@@ -31,6 +33,16 @@ const REAL_DNA = readFileSync(
 );
 
 /** The real, registered `dna.dnaSet` `CoreFn` — fails loudly if a future change un-registers it. */
+/**
+ * Make the fixture repository's git identity the first `team.members` entry of `dnaYaml` (task-333, `dl-220` Q2 (b)):
+ * every mutating verb now refuses an identity outside the committed team, and this repository's own `dna.yaml` is
+ * the fixture, so the test acts as its member instead of editing the file it pins byte for byte.
+ */
+function actAsFirstMember(repo: string, dnaYaml: string): void {
+  const members = (load(dnaYaml) as { team: { members: { email: string }[] } }).team.members;
+  execFileSync('git', ['-C', repo, 'config', 'user.email', (members[0] as { email: string }).email]);
+}
+
 function dnaSetFn(): CoreFn<unknown, unknown> {
   const operation = CORE_MODULES.find((module) => module.name === 'dna')?.operations.dnaSet;
   if (!operation) throw new Error('fixture bug: "dnaSet" operation not registered on the dna module');
@@ -69,6 +81,7 @@ describe('dna.dnaSet — bug-004: a comment-rich dna.yaml survives a set (task-0
     repo = makeTempGitRepo();
     writeFixtureFile(repo, '.wingfoil/dna.yaml', REAL_DNA);
     commitAll(repo, 'seed WingFoil own dna.yaml');
+    actAsFirstMember(repo, REAL_DNA);
   });
 
   afterEach(() => {
@@ -129,6 +142,7 @@ describe('dna.dnaSet — bug-004: a comment-rich dna.yaml survives a set (task-0
     try {
       writeFixtureFile(second, '.wingfoil/dna.yaml', REAL_DNA);
       commitAll(second, 'seed WingFoil own dna.yaml');
+      actAsFirstMember(second, REAL_DNA);
 
       await dnaSetFn()({ root: repo, positionals: ['project.name'], options: { value: 'WingFoil Renamed' } });
       await dnaSetFn()({ root: second, positionals: ['project.name'], options: { value: 'WingFoil Renamed' } });

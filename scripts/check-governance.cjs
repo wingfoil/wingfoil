@@ -63,10 +63,12 @@
  *   numerically greater (`isVersionIncrease`, `src/validation`, shared with the pending-change gate of
  *   `test/lint/helpers/version-bump.ts`). The finding sits on the range's last commit touching the file.
  *   Without `--base` nothing is judged: a whole-history run has no range to bump over.
- * - `approval-ai-trailer` (`bug-307`; rule `body`): an `approve` or `reject` commit records the
- *   approver's decision and carries no `Co-Authored-By:` and no `AI-Model:` line (`git-conventions` §7);
- *   every other verb may. The approve/reject commits written before this check are history: they cannot
- *   be rewritten (`git-conventions` §2, §8).
+ * - `approval-agent-trailer` (`spec-018` §4, task-333; widening `bug-307`'s `approval-ai-trailer`; rule `body`): on
+ *   every non-merge commit whose message has a line starting `Approver:` (any letter case) — an approval commit:
+ *   `wf(…): approve|reject|amend` and every `workflow:` record with an `Approver:` line, keyed on the line, not on
+ *   a verb list — each line matching `^(co-authored-by|ai-model):` (any case) is one finding, naming the key
+ *   (`git-conventions` §7); a commit with no `Approver:` line may carry them. The approval commits written before
+ *   this check are history: they cannot be rewritten (`git-conventions` §2, §8).
  * - `workflow-record-authority` (`bug-444`; rules `body`, `authority`): a `workflow: finalize`, `workflow: adopt`
  *   or `workflow: rekey` record that has an `Approver:` line holds it to the grammar above and to the
  *   `authority` rule (its author holds `approver` at the first parent, the line names the author). Whether a
@@ -126,15 +128,15 @@ const CHECKS = Object.freeze({
   'status-outside-wf': 'governance-check:status-outside-wf',
   'supersedes-pair': 'governance-check:supersedes-pair',
   'config-version': 'governance-check:config-version',
-  'approval-ai-trailer': 'governance-check:approval-ai-trailer',
+  'approval-agent-trailer': 'governance-check:approval-agent-trailer',
   'workflow-record-authority': 'governance-check:workflow-record-authority',
   'trailer-paragraph': 'governance-check:trailer-paragraph',
 });
 
-/** The verbs that record the approver's decision and carry no AI co-author (`git-conventions` §7). */
-const DECISION_VERBS = new Set(['approve', 'reject']);
-/** A co-author or model trailer line (`git-conventions` §7, `bug-307`). */
-const AI_TRAILER_RE = /^(co-authored-by|ai-model):/i;
+/** A line that makes a commit an approval commit (`spec-018` §0): `Approver:`, any letter case. */
+const APPROVAL_LINE_RE = /^approver:/i;
+/** An agent trailer line (`spec-018` §0, `git-conventions` §7, `bug-307`): `Co-Authored-By:` or `AI-Model:`, any case. */
+const AGENT_TRAILER_RE = /^(co-authored-by|ai-model):/i;
 
 /** The subject of a record written outside the `wf()` grammar by `workflow finalize|adopt|rekey` (`spec-017` §7.9, §7.11, §7.12). */
 const WORKFLOW_RECORD_RE = /^workflow: (?:finalize|adopt|rekey)(?: |$)/;
@@ -675,16 +677,6 @@ function checkGovernance(root, options = {}) {
     const { findings: subjectFindings, op, ids } = checkSubjectAndBracket(commit, memoryYaml, dist);
     subjectFindings.forEach(push);
     if (op !== null) checkBodyAndAuthority(commit, op, dna, dist).forEach(push);
-    if (DECISION_VERBS.has(op)) {
-      for (const line of commit.body.split('\n').filter((candidate) => AI_TRAILER_RE.test(candidate))) {
-        const key = line.slice(0, line.indexOf(':'));
-        push({
-          rule: 'body',
-          message: `'${op}' records the approver's decision and carries no AI co-author trailer (git-conventions §7), yet it has a ${key}: line`,
-          check: 'approval-ai-trailer',
-        });
-      }
-    }
 
     if (!WF_HEAD_RE.test(commit.subject)) return;
     const gated = !history.has(commit.sha);
@@ -926,6 +918,30 @@ function checkGovernance(root, options = {}) {
       findings.push({ sha: commit.sha, subject: commit.subject, rule, message, gated: isGated(commit.sha, check), check }),
     );
   });
+
+  // approval-agent-trailer: an approval commit carries no agent trailer (spec-018 §4, bug-307, task-333). Every
+  // non-merge commit of the range is judged, keyed on its `Approver:` line, so a record of any kind is covered.
+  for (const commit of allCommits.filter((candidate) => !candidate.merge)) {
+    const lines = [commit.subject, ...commit.body.split('\n')];
+    if (!lines.some((line) => APPROVAL_LINE_RE.test(line))) continue;
+    // One finding per line: a repeated key is numbered, so the de-duplication by message keeps every line.
+    const seen = new Map();
+    for (const line of lines.filter((candidate) => AGENT_TRAILER_RE.test(candidate))) {
+      const key = line.slice(0, line.indexOf(':'));
+      const count = (seen.get(key.toLowerCase()) ?? 0) + 1;
+      seen.set(key.toLowerCase(), count);
+      findings.push({
+        sha: commit.sha,
+        subject: commit.subject,
+        rule: 'body',
+        message:
+          `an approval commit (it has an Approver: line) carries no agent trailer (spec-018 §4, git-conventions §7), ` +
+          `yet it has a ${key}: line${count > 1 ? ` (occurrence ${count})` : ''}`,
+        gated: isGated(commit.sha, 'approval-agent-trailer'),
+        check: 'approval-agent-trailer',
+      });
+    }
+  }
 
   // trailer-paragraph: a `WingFoil-*` trailer outside the final paragraph is lost to the deduction (bug-391).
   for (const commit of allCommits.filter((candidate) => !candidate.merge)) {

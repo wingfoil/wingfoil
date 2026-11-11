@@ -9,6 +9,10 @@
 import { requireApprovalAuthority, requireApproverAuthority } from '../../src/core/approval-authority';
 import { exitCodeForResult } from '../../src/core/exit-code';
 import { commitAll, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
+import type { AgentContext } from '../../src/core/agent-context';
+
+/** No agent marker: the approver's own session (task-333 made the agent context a required parameter, `spec-018` §3.1). */
+const NO_AGENT: AgentContext = { markers: [], attribution: null };
 
 function dnaYaml(developerRoles: string): string {
   return `version: 1.0
@@ -49,9 +53,9 @@ describe('task-294 — requireApprovalAuthority keeps its messages (characteriza
   afterEach(() => removeTempDir(root));
 
   it("refuses a non-approver with REQ-SEC-03's message, accepts the approver", () => {
-    const refused = requireApprovalAuthority(root, 'task', DEVELOPER);
+    const refused = requireApprovalAuthority(root, 'task', DEVELOPER, NO_AGENT, 'memory approve');
     expect(refused).toEqual({ ok: false, error: { code: 'VALIDATION', message: "user not authorized to approve type 'task'" } });
-    expect(requireApprovalAuthority(root, 'task', MORGAN).ok).toBe(true);
+    expect(requireApprovalAuthority(root, 'task', MORGAN, NO_AGENT, 'memory approve').ok).toBe(true);
   });
 });
 
@@ -65,14 +69,14 @@ describe("task-294 — requireApproverAuthority: memory approve's check, the cal
   afterEach(() => removeTempDir(root));
 
   it('accepts a member holding the approver role at HEAD', () => {
-    expect(requireApproverAuthority(root, MORGAN, REFUSAL).ok).toBe(true);
+    expect(requireApproverAuthority(root, MORGAN, REFUSAL, NO_AGENT, 'workflow rekey').ok).toBe(true);
   });
 
   it('refuses any other identity with the refusal given, VALIDATION, exit 1', () => {
-    const result = requireApproverAuthority(root, DEVELOPER, REFUSAL);
+    const result = requireApproverAuthority(root, DEVELOPER, REFUSAL, NO_AGENT, 'workflow rekey');
     expect(result).toEqual({ ok: false, error: { code: 'VALIDATION', message: REFUSAL } });
     expect(exitCodeForResult(result)).toBe(1);
-    expect(requireApproverAuthority(root, { name: 'Nobody', email: 'nobody@example.invalid' }, 'user not authorized to rekey')).toEqual({
+    expect(requireApproverAuthority(root, { name: 'Nobody', email: 'nobody@example.invalid' }, 'user not authorized to rekey', NO_AGENT, 'workflow rekey')).toEqual({
       ok: false,
       error: { code: 'VALIDATION', message: 'user not authorized to rekey' },
     });
@@ -80,20 +84,20 @@ describe("task-294 — requireApproverAuthority: memory approve's check, the cal
 
   it("appends requireApprovalAuthority's uncommitted-grant suffix when only the working tree grants the role", () => {
     writeFixtureFile(root, '.wingfoil/dna.yaml', dnaYaml('developer, approver'));
-    const approve = requireApprovalAuthority(root, 'task', DEVELOPER);
+    const approve = requireApprovalAuthority(root, 'task', DEVELOPER, NO_AGENT, 'memory approve');
     expect(approve.ok).toBe(false);
     if (approve.ok) return;
     const prefix = "user not authorized to approve type 'task'";
     expect(approve.error.message.startsWith(`${prefix} — `)).toBe(true);
     const suffix = approve.error.message.slice(prefix.length);
 
-    const result = requireApproverAuthority(root, DEVELOPER, REFUSAL);
+    const result = requireApproverAuthority(root, DEVELOPER, REFUSAL, NO_AGENT, 'workflow rekey');
 
     expect(result).toEqual({ ok: false, error: { code: 'VALIDATION', message: `${REFUSAL}${suffix}` } });
   });
 
   it('reads who may approve from HEAD, not the working tree: an uncommitted removal does not refuse the approver', () => {
     writeFixtureFile(root, '.wingfoil/dna.yaml', dnaYaml('developer').replace('roles: [ approver ]', 'roles: [ developer ]'));
-    expect(requireApproverAuthority(root, MORGAN, REFUSAL).ok).toBe(true);
+    expect(requireApproverAuthority(root, MORGAN, REFUSAL, NO_AGENT, 'workflow rekey').ok).toBe(true);
   });
 });

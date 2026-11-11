@@ -114,6 +114,31 @@ describe('the config writers refuse a target symlinked outside the project root,
       })) as CoreResult<unknown>;
 
       expectRefusal(result, DNA);
+      // task-333 (design D2, `spec-006` §7 "Membership"): the membership step runs right after the identity, before
+      // the confinement guard, and reads the `dna.yaml` committed at HEAD — here a link, not DNA — so it refuses first,
+      // fail-closed. The guard's own refusal is pinned by the uncommitted-link case below.
+      expect(errorMessage(result)).toContain('cannot resolve team membership');
+      expect(readFileSync(target, 'utf-8')).toBe(bytes);
+      expect(head(repo)).toBe(before);
+      assertPersistenceUnchanged(repo, unchanged);
+    });
+
+    it('dna set — a dna.yaml linked outside the project in the working tree only: the confinement guard refuses it (symbolic link)', async () => {
+      const target = join(outside, 'dna.yaml');
+      const bytes = readFileSync(join(repo, DNA), 'utf-8');
+      writeFileSync(target, bytes);
+      rmSync(join(repo, DNA));
+      symlinkSync(target, join(repo, DNA));
+      const before = head(repo);
+      const unchanged = snapshotPersistence(repo);
+
+      const result = (await op('dna', 'dnaSet')({
+        root: repo,
+        positionals: ['project.name'],
+        options: { value: 'Renamed' },
+      })) as CoreResult<unknown>;
+
+      expectRefusal(result, DNA);
       expect(errorMessage(result)).toContain('symbolic link');
       expect(readFileSync(target, 'utf-8')).toBe(bytes);
       expect(head(repo)).toBe(before);

@@ -270,8 +270,9 @@ hands this rule to the agents it launches; an agent started from its own CLI has
 > `memory search` and `memory history` (P1.10). `finalize` is written by `workflow end` (`wf(plan): finalize`,
 > `active → done`) and by the supersede trigger; `workflow start` writes a plan's `add` and `submit`; no command
 > writes `start` or commits `sync` (`workflow next` prints the `sync` subjects a step owes), so those two are
-> written by hand, in the same format. Approvals, rejections and amendments run only on the approver's instruction,
-> whether by verb or by hand (§8). Run `node dist/cli.js memory --help` rather than trusting this paragraph.
+> written by hand, in the same format. Approvals, rejections and amendments are the approver's own, run from the
+> approver's terminal: the verbs refuse an agent's session, and an agent never writes one by hand (§8, `spec-018`
+> §3). Run `node dist/cli.js memory --help` rather than trusting this paragraph.
 >
 > The commit *format* is the contract either way — it is what the verbs emit and what
 > `wingfoil memory history` reads back — so follow it exactly, and keep each operation to its own commit.
@@ -293,6 +294,9 @@ and the rule is the same whether the commit is written by `wingfoil memory <verb
   `Approver:` line of its own and performs no authority check — one would make `memory history` report an
   approval that never happened. Ordinary `Key: value` prose (`Action: amend spec-015 §3`) is fine; only
   those keys are reserved.
+- **On an approval — an operation that writes an `Approver:` line — no line may begin with `Co-Authored-By:` or
+  `AI-Model:` either**, in any letter case: an approval never carries an agent trailer (`spec-018` §3.3), so the CLI
+  refuses such a reason at exit `2`.
 - **A reason may not END with a paragraph made entirely of `Key: value` lines**, because a reader
   cannot tell it from the commit's own trailer block. Add a closing sentence, or fold the lines into
   prose.
@@ -367,8 +371,9 @@ two must appear explicitly in the commit message.
    under `docs/03_backlog/04_backlog/by-release/` when it reaches `backlog` — that JSON is an output of
    the `backlog-export` sub-workflow from the *specification* phase (`docs/design.md` phase 4), read as
    a source and cited by each release's `requirements:` frontmatter field.
-5. Agents may execute `memory.approve` **only when explicitly instructed** by the `approver` role (Roberto);
-   agents never approve autonomously (§4, §8).
+5. Agents never run `memory approve`, `memory reject` or `memory amend`: the approver runs them from their own
+   terminal, and the verbs refuse an agent's session with `E_AGENT_CONTEXT`, whatever its git identity (`dl-212` D1,
+   `spec-018` §3; §4, §8).
 
 ### `memory.reject` — send back for revision
 
@@ -389,8 +394,9 @@ the commit message (the timestamp comes from the git commit itself).
    Approver: {full name} <{email}> ({role})
    Reason: <what needs to change before resubmitting>
    ```
-3. Agents may execute `memory.reject` **only when explicitly instructed** by the `approver` role — same
-   restriction as `memory.approve` (§4, §8). A task with linked bugs: see the two-commit exception above.
+3. Agents never run `memory reject`, nor `approve` or `amend`: the approver runs them from their own terminal, and
+   the verbs refuse an agent's session (`E_AGENT_CONTEXT`, `spec-018` §3). A task with linked bugs: see the
+   two-commit exception above.
 
 ### `memory.amend` — record a correction without a state change
 

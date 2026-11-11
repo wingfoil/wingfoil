@@ -1,7 +1,7 @@
 # CLI Commands Reference — WingFoil
 
-**Version:** 2.0
-**Date:** 2026-11-08  
+**Version:** 2.1
+**Date:** 2026-11-11  
 **Status:** Approved
 
 ---
@@ -250,13 +250,15 @@ needs; `--template` names the methodology without a prompt; the mode inferred fr
 
 ## Global Options
 
-Every command accepts these, except `--dry-run`, which only the commands that change the project take:
+Every command accepts these, except `--dry-run`, which only the commands that change the project take, and
+`--co-author`, which those commands but `agent execute` take:
 
 | Option | Format | Description |
 |--------|--------|-------------|
 | `--format` | `json`, `yaml`, `console` (default) | Output format, stated once here for every command. JSON/YAML for scripting/CI. Console prints the JSON payload indented for now, unless the command defines its own text (`spec-008` §2) |
 | `-h`, `--help` | flag | Show command-specific help and examples |
 | `-V`, `--version` | flag | Print the build stamp `<semver> (<sha>)` (top level only) |
+| `--co-author <name>` | `team.agents` entry name | An agent marker (`spec-018` §1): the command runs in an agent's session, as the entry `<name>`. Taken by every command that takes `--dry-run` but `agent execute`, after the verb; a blank `<name>` exits `2`. With it, or with `WINGFOIL_AGENT`, `CLAUDE_CODE_CHILD_SESSION` or `CODEX_SANDBOX` defined, the approver-gated commands (`memory approve`, `reject`, `amend`, `workflow finalize` on an approval phase, `workflow adopt --plan --apply`, `workflow rekey`) refuse with `E_AGENT_CONTEXT`, exit `1` (`dl-212` D1) |
 | `--verbose` | flag | Show detailed execution logs on stderr (useful for debugging) |
 | `--no-color` | flag | Disable ANSI colours (accepted; no output is coloured yet) |
 | `--no-interactive` | flag | Fail on a missing argument instead of prompting for it (only init prompts) |
@@ -393,6 +395,11 @@ Every command accepts these, except `--dry-run`, which only the commands that ch
 ---
 
 ## Revision history
+
+**Version 2.1 (2026-11-11) — the `--co-author` global option, per `task-333` (`spec-018` §1, `dl-212` D1).** Global
+Options gets a `--co-author <name>` row: an agent marker, registered on every command that takes `--dry-run` but
+`agent execute`, and the refusal of the approver-gated commands in an agent's session. Like `--dry-run`, it is stated
+once here, not in each command row.
 
 **Version 2.0 (2026-11-08) — `agent execute` gets `--headless`, `--interactive` and `--timeout`, per `task-335` (`dl-181`, `dl-183`, `dl-171`).** The row is
 written from `node dist/cli.js agent execute --help` on the task's build; it states the waiting-step refusal, and

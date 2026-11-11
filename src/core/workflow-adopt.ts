@@ -36,6 +36,8 @@ import { resolveProvenance } from '../workflow/provenance';
 import { requireApproverAuthority } from './approval-authority';
 import { parseElementRef } from './element-ref';
 import { requireGitIdentity, type GitIdentity } from './git-identity';
+import { requireTeamMembership } from './team-membership';
+import { resolveGatedAgentContext } from './agent-context';
 import { missingOperandReason } from './registry';
 import { adoptionSubject, adoptionTrailers, writeProvenanceRecord } from './provenance-record';
 import { optionalReason, requireReason } from './require-reason';
@@ -231,7 +233,8 @@ export function workflowAdoptAtHead(root: string, request: AdoptRequest): CoreRe
     if (!parsed.ok) throw new UsageError(parsed.error.message);
     named = parsed.value;
   }
-  const reason = plan && !apply ? optionalReason(request.options) : requireReason(request.options);
+  // `--plan --apply` records its reason under an `Approver:` line (`spec-018` §3.3); the single form does not.
+  const reason = plan && !apply ? optionalReason(request.options) : requireReason(request.options, { approval: plan && apply });
   // A required positional: the CLI registrar refuses its absence before the operation runs; an in-process caller
   // that leaves it out gets the same usage refusal.
   const ref = request.ref;
@@ -240,6 +243,8 @@ export function workflowAdoptAtHead(root: string, request: AdoptRequest): CoreRe
   if (!plan) {
     const identity = requireGitIdentity(root);
     if (!identity.ok) return identity;
+    const member = requireTeamMembership(root, identity.value);
+    if (!member.ok) return member;
     return adoptOne(root, identity.value, ref, request.step, named, reason!, null);
   }
 
@@ -247,7 +252,11 @@ export function workflowAdoptAtHead(root: string, request: AdoptRequest): CoreRe
   if (apply) {
     const checked = requireGitIdentity(root);
     if (!checked.ok) return checked;
-    const authorized = requireApproverAuthority(root, checked.value, BULK_ADOPT_UNAUTHORIZED);
+    const member = requireTeamMembership(root, checked.value);
+    if (!member.ok) return member;
+    const agent = resolveGatedAgentContext(root);
+    if (!agent.ok) return agent;
+    const authorized = requireApproverAuthority(root, checked.value, BULK_ADOPT_UNAUTHORIZED, agent.value, 'workflow adopt --plan --apply');
     if (!authorized.ok) return authorized;
     identity = checked.value;
   }

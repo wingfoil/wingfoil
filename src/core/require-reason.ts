@@ -32,7 +32,7 @@
  * formatter that writes the trailer and consumed by the reader in `src/memory/audit.ts` (dl-067
  * clause 5). This module only maps a defect onto the CLI's usage-error exit code.
  */
-import { normalizeReason, reasonRefusalMessage } from '../memory/commit-message';
+import { normalizeReason, reasonRefusalMessage, type ReasonContext } from '../memory/commit-message';
 
 import { UsageError } from './usage-error';
 
@@ -50,8 +50,8 @@ const MISSING_REASON_ERROR = 'missing required argument: --reason';
  * case alone, so reusing it would make those scenarios ambiguous about which failure they pin
  * (dl-067 S1).
  */
-function recordableReason(reason: string): string {
-  const refusal = reasonRefusalMessage(reason);
+function recordableReason(reason: string, context: ReasonContext): string {
+  const refusal = reasonRefusalMessage(reason, context);
   if (refusal !== null) {
     throw new UsageError(refusal);
   }
@@ -69,13 +69,18 @@ function recordableReason(reason: string): string {
  * Returning the NORMALIZED text rather than the raw argument is what keeps the commit trailer and
  * `memory reject`'s `rejection_reason` frontmatter field (`spec-010` — the one verb that writes the
  * reason twice) carrying byte-identical text: the rule is applied once, here, not at each sink.
+ *
+ * `context.approval` is `true` when the operation records the reason under an `Approver:` line — `approve`,
+ * `reject`, `amend`, `workflow finalize` on an `approval:` phase, `workflow adopt --plan --apply`, `workflow rekey`:
+ * a line starting `Co-Authored-By:` or `AI-Model:` is then refused too (`spec-018` §3.3), because an approval never
+ * carries an agent trailer.
  */
-export function requireReason(options: Readonly<Record<string, string>> | undefined): string {
+export function requireReason(options: Readonly<Record<string, string>> | undefined, context: ReasonContext = {}): string {
   const reason = options?.reason;
   if (reason === undefined) {
     throw new UsageError(MISSING_REASON_ERROR);
   }
-  return recordableReason(reason);
+  return recordableReason(reason, context);
 }
 
 /**
@@ -92,5 +97,5 @@ export function requireReason(options: Readonly<Record<string, string>> | undefi
  */
 export function optionalReason(options: Readonly<Record<string, string>> | undefined): string | undefined {
   const reason = options?.reason;
-  return reason === undefined ? undefined : recordableReason(reason);
+  return reason === undefined ? undefined : recordableReason(reason, {});
 }
