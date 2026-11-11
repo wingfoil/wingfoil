@@ -4,7 +4,8 @@
  * approver ruling D9 (a)), on the compiled CLI with `fake-terminal.yaml` and no terminal (under Jest the child's
  * stdin and stdout are pipes).
  *
- * - the dry run exits `0` with the plan on stdout, its keys unchanged (`{dryRun, subject, paths, run, bootstrap}`),
+ * - the dry run exits `0` with the plan on stdout, its keys `{dryRun, subject, paths, run, launch, bootstrap}` (`launch`
+ *   from task-339),
  *   and one `warning:` line saying a real run is refused here — under `--format json` and `--format console`;
  * - without `--dry-run` the existing `NO_TERMINAL` refusal is unchanged (also pinned by
  *   `test/cli/agent-execute.integration.test.ts`);
@@ -28,13 +29,14 @@ afterAll(() => {
 const ARGS = ['--element', TASK_REF, '--role', 'developer'];
 
 describe('task-335 AC 7 — a dry run needs no terminal (bug-392)', () => {
-  it('--format json: exit 0, the plan with its keys unchanged, stderr exactly the one warning document, nothing spawned or written', () => {
+  it('--format json: exit 0, the plan with its keys, stderr exactly the one warning document, nothing spawned or written', () => {
     const before = headOf(repo);
     const run = execute(repo, [...ARGS, '--dry-run', '--format', 'json']);
     expect(run.status).toBe(0);
     expect(run.stderr).toBe(`${JSON.stringify({ warning: WARNING })}\n`);
     const plan = JSON.parse(run.stdout) as Record<string, unknown>;
-    expect(Object.keys(plan)).toEqual(['dryRun', 'subject', 'paths', 'run', 'bootstrap']);
+    // task-339 (dl-223 Action 3, approver ruling D3 (a)): the plan gains `launch`, the kind and the role's fragment.
+    expect(Object.keys(plan)).toEqual(['dryRun', 'subject', 'paths', 'run', 'launch', 'bootstrap']);
     expect(plan).toMatchObject({ dryRun: true, subject: `agent: record ${TASK_ID}/adhoc/1`, paths: [`docs/runs/${TASK_ID}.jsonl`], run: { adapter: 'custom/fake-terminal' } });
     expect(run.fake).toEqual([]);
     expect(headOf(repo)).toBe(before);
