@@ -51,18 +51,18 @@
  * - `head` — `git rev-parse HEAD` does not start with the claimed sha.
  * - `commit-unknown` — a listed sha names no commit.
  * - `commit-outside` — a listed commit is not in the range.
- * - `commit-unlisted` — a commit of the range is not listed, unless its body has an `Approver:` line (the
- *   approver's act: an approve, a reject, an amend, a design-gate record).
- * - `trailer-missing` — a listed commit without an `Approver:` line whose final paragraph lacks `Co-Authored-By:`
+ * - `commit-unlisted` — a commit of the range is not listed, unless it is an approver record (below).
+ * - `trailer-missing` — a listed commit, not an approver record, whose final paragraph lacks `Co-Authored-By:`
  *   or a non-blank `AI-Model:` (`git-conventions` §7).
  * - `trailer-identity` — a `Co-Authored-By:` of a listed commit names no `team.agents` entry `<name> <<email>>` of
  *   the `dna.yaml` committed at `HEAD` (§7 "Which name").
- * - `trailer-forbidden` — a listed `wf(<type>): approve` or `reject` commit carrying `Co-Authored-By:` or
- *   `AI-Model:` (§7 "Which commits").
+ * - `trailer-forbidden` — an approver record of the range (listed or not), or a listed `wf(<type>): approve` or
+ *   `reject` commit, carrying `Co-Authored-By:` or `AI-Model:` (§7 "Which commits": the approver's acts carry no AI
+ *   trailers).
  * - `trailer-paragraph` — a listed commit with a `WingFoil-*`, `Co-Authored-By:` or `AI-Model:` line outside its
  *   final paragraph (§8, `bug-391`; the `WingFoil-*` rule is `check-governance.cjs`'s own function).
  * - `file-unclaimed` — a path the phase's commits changed that no `file` line names. The phase's commits are the
- *   range's, less the unlisted ones the approver wrote; a non-merge contributes `git diff-tree -r` paths, a merge
+ *   range's, less the unlisted approver records (approver ruling on R1); a non-merge contributes `git diff-tree -r` paths, a merge
  *   its `--cc` paths (what the merge itself resolved).
  * - `file-unchanged` — a `file` line naming a path those commits did not change.
  * - `uncommitted-unclaimed` — a path of `git status --porcelain -uall` (a rename: its new path) no `uncommitted`
@@ -75,6 +75,13 @@
  *   yet taken over).
  * - `plan-parent` — a changed path that is, at `HEAD`, a `plan` document whose non-empty `parent` names no
  *   workflow, or no phase of its workflow (the rule of `plans`, applied to the changed plans only, D6).
+ *
+ * **An approver record** is the approver's act, the one kind of commit a phase report need not list: its subject is
+ * `wf(<type>): approve|reject|amend …` or a record `workflow: finalize|rekey …`, AND its first body line is
+ * `Approver: <name> <<email>> (approver)` as `parseApprovalMetadata` of `dist/memory` reads it (the grammar
+ * `check-governance.cjs` holds approvals to; `/^Approver:\s*(.+?)\s*<([^>]+)>\s*\(([^)]+)\)\s*$/`, role `approver`).
+ * An `Approver:` line on any other commit, or of any other shape, exempts nothing. Whether its author holds the
+ * `approver` role is the governance check's (`authority`), not this script's.
  *
  * Within a kind the lines follow the report's order, then the path order. A hold is the `acquire`/`release` pair
  * of the trace with equal `pid`, `worktree` and `start`; claims are matched in the report's order, each to the
@@ -122,7 +129,8 @@ const CLAIM_RE = /^(commit|file|uncommitted|gate) (.+)$/;
 const SHA_RE = /^[0-9a-f]{7,40}$/;
 const GATE_RE = /^(\S+) exit=(\d+)$/;
 const FULL_COMMIT_NAME_RE = /^[0-9a-f]{40}([0-9a-f]{24})?$/;
-const APPROVER_RE = /^approver:/i;
+const APPROVER_ROLE = 'approver';
+const APPROVER_SUBJECT_RE = /^(?:wf\([^)]*\):\s*(?:approve|reject|amend)|workflow: (?:finalize|rekey))(?:\s|$)/;
 const CO_AUTHOR_RE = /^co-authored-by:\s*(.*)$/i;
 const AI_MODEL_RE = /^ai-model:\s*(.*)$/i;
 const AI_TRAILER_RE = /^(co-authored-by|ai-model):/i;
@@ -324,23 +332,28 @@ function checkReport(options) {
     else if (!inRange.has(sha)) add('commit-outside', `${claim} is not a commit of the first-parent range ${shortSha(base)}..HEAD`);
     else listed.add(sha);
   }
+  const approverRecords = new Set(range.filter(isApproverRecord).map((commit) => commit.sha));
   const exempt = new Set();
   for (const commit of range) {
     if (listed.has(commit.sha)) continue;
-    if (commit.body.split('\n').some((line) => APPROVER_RE.test(line))) exempt.add(commit.sha);
+    if (approverRecords.has(commit.sha)) exempt.add(commit.sha);
     else add('commit-unlisted', `${shortSha(commit.sha)} ${commit.subject} is not listed`);
   }
 
-  // trailers, on the listed commits of the range
+  // trailers: every check on the listed commits; on the unlisted approver records, trailer-forbidden only
   const agents = loadAgentIdentities(root);
-  for (const commit of range.filter((candidate) => listed.has(candidate.sha))) {
+  for (const commit of range.filter((candidate) => listed.has(candidate.sha) || exempt.has(candidate.sha))) {
     const lines = commit.body.split('\n');
-    const { before, final } = paragraphs(commit.body);
     const at = `${shortSha(commit.sha)} ${commit.subject}`;
-    const hasApprover = lines.some((line) => APPROVER_RE.test(line));
+    const record = approverRecords.has(commit.sha);
+    if ((record || DECISION_SUBJECT_RE.test(commit.subject)) && lines.some((line) => AI_TRAILER_RE.test(line))) {
+      add('trailer-forbidden', `${at}: ${record ? 'an approver record' : 'an approve or reject'} carries Co-Authored-By: or AI-Model: (git-conventions §7)`);
+    }
+    if (!listed.has(commit.sha)) continue;
+    const { before, final } = paragraphs(commit.body);
     const finalCoAuthor = final.some((line) => CO_AUTHOR_RE.test(line));
     const finalModel = final.some((line) => (AI_MODEL_RE.exec(line)?.[1] ?? '').trim() !== '');
-    if (!hasApprover && !(finalCoAuthor && finalModel)) {
+    if (!record && !(finalCoAuthor && finalModel)) {
       const missing = [finalCoAuthor ? null : 'Co-Authored-By:', finalModel ? null : 'AI-Model:'].filter((key) => key !== null);
       add('trailer-missing', `${at}: its final paragraph has no ${missing.join(' and no ')} (git-conventions §7)`);
     }
@@ -349,9 +362,6 @@ function checkReport(options) {
       if (value !== undefined && !agents.includes(value)) {
         add('trailer-identity', `${at}: Co-Authored-By: ${value} names no team.agents entry (${agents.join(', ') || 'none declared'})`);
       }
-    }
-    if (DECISION_SUBJECT_RE.test(commit.subject) && lines.some((line) => AI_TRAILER_RE.test(line))) {
-      add('trailer-forbidden', `${at}: an approve or reject carries Co-Authored-By: or AI-Model: (git-conventions §7)`);
     }
     const outside = [...trailerKeysOutsideFinalParagraph(commit.body)];
     for (const line of before) {
@@ -386,6 +396,16 @@ function checkReport(options) {
     .map((mismatch, index) => ({ mismatch, index }))
     .sort((a, b) => MISMATCH_KINDS.indexOf(a.mismatch.kind) - MISMATCH_KINDS.indexOf(b.mismatch.kind) || a.index - b.index)
     .map(({ mismatch }) => mismatch);
+}
+
+/**
+ * Whether `commit` is an approver record: an approver-shaped subject and, as its first body line, an `Approver:` line
+ * that `parseApprovalMetadata` reads with the role `approver`.
+ */
+function isApproverRecord(commit) {
+  if (!APPROVER_SUBJECT_RE.test(commit.subject)) return false;
+  const approval = loadDist().memory.parseApprovalMetadata(commit.body);
+  return approval !== null && approval.approverRole === APPROVER_ROLE;
 }
 
 /** The `<name> <<email>>` identities of `team.agents` in the `dna.yaml` committed at `HEAD`. */
