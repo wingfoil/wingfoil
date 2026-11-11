@@ -25,6 +25,13 @@ import { MEMBER, notAMemberRefusal, STRANGER } from './helpers/l0-fixture';
 
 const REPO_ROOT = join(__dirname, '..', '..');
 
+/** A fixture refusal `{ error, hint }` as the `CoreError` it is carried in: `VALIDATION`, the text as `message`. */
+const asCoreError = (refusal: { readonly error: string; readonly hint: string }): { code: string; message: string; hint: string } => ({
+  code: 'VALIDATION',
+  message: refusal.error,
+  hint: refusal.hint,
+});
+
 function dna(members: string): string {
   return `version: 1.0
 modules:
@@ -70,7 +77,7 @@ describe('task-333 AC 5 — requireTeamMembership (spec-006 §7 Membership)', ()
     const unchanged = snapshotPersistence(root);
     const result = await membership(root, STRANGER);
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error).toMatchObject({ code: 'VALIDATION', ...notAMemberRefusal(STRANGER) });
+    if (!result.ok) expect(result.error).toMatchObject(asCoreError(notAMemberRefusal(STRANGER)));
     assertPersistenceUnchanged(root, unchanged, 'membership refusal');
   });
 

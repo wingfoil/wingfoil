@@ -42,6 +42,13 @@ interface ContextView {
 
 const ids = (context: ContextView): string[] => context.markers.map((marker) => marker.id);
 
+/** A fixture refusal `{ error, hint }` as the `CoreError` it is carried in: `VALIDATION`, the text as `message`. */
+const asCoreError = (refusal: { readonly error: string; readonly hint: string }): { code: string; message: string; hint: string } => ({
+  code: 'VALIDATION',
+  message: refusal.error,
+  hint: refusal.hint,
+});
+
 /** `resolveAgentContext`'s value; throws on a refusal, which the gated form never returns. */
 async function resolved(root: string, request: Record<string, unknown>): Promise<ContextView> {
   const result = (await resolveAgentContext(root, request as never)) as CoreResult<ContextView>;
@@ -157,7 +164,7 @@ describe('task-333 AC 1 — the registered operation refuses in-process too (des
     const result = await approve(root);
 
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error).toMatchObject({ code: 'VALIDATION', ...agentContextRefusal('memory approve', 'WINGFOIL_AGENT is set') });
+    if (!result.ok) expect(result.error).toMatchObject(asCoreError(agentContextRefusal('memory approve', 'WINGFOIL_AGENT is set')));
     assertPersistenceUnchanged(root, unchanged, 'in-process refusal');
   });
 
@@ -169,7 +176,7 @@ describe('task-333 AC 1 — the registered operation refuses in-process too (des
     const result = (await withAgentInvocation({ env: withoutAgentMarkers(process.env), coAuthor: 'Claude' } as never, () => approve(root))) as CoreResult<unknown>;
 
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error).toMatchObject({ code: 'VALIDATION', ...agentContextRefusal('memory approve', '--co-author was given') });
+    if (!result.ok) expect(result.error).toMatchObject(asCoreError(agentContextRefusal('memory approve', '--co-author was given')));
     assertPersistenceUnchanged(root, unchanged, 'in-process --co-author refusal');
   });
 
