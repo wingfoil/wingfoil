@@ -1898,10 +1898,21 @@ adapter whose `session.id` is `output` has its session id read from the run's st
 still recorded and exits `1` with `error: agent timed out after <duration>; run <run-id> recorded`, whatever
 the agent's exit status.
 
+**The launch's permissions** (new in 0.4). An adapter may declare `launch.headless.permissions` (and
+`launch.interactive.permissions`): one list of arguments for every role, or a map from a role name to a list, with
+a `default` entry for every role the map does not name. The launch appends the list of the run's role after the
+launch's own arguments; without the field nothing is appended. Both built-in adapters declare a headless map:
+`default` lets the agent read only; `developer`, `qa` and `architect` may edit, run the tests and commit, never
+push or publish; `reviewer` may read, read the history and run the tests (`claude-code`: `--permission-mode
+dontAsk` with `--allowedTools` and `--disallowedTools`; `codex-cli`: `--sandbox read-only` or
+`--sandbox workspace-write`). Neither declares an interactive one: at a terminal you answer the agent's own prompts.
+A build before 0.4 refuses a manifest that declares the field.
+
 With `--dry-run` it runs every check above, launches nothing, and prints on stdout the launch it would
 make: `{"dryRun": true, "subject": "agent: record <run-id>", "paths": [<run log>], "run": {id, element,
-workflow, phase, role, mode, agent, adapter, state_ref}, "bootstrap": "<the prompt the agent would
-receive>"}`. The terminal check does not refuse a dry run, which launches nothing: for an interactive launch of
+workflow, phase, role, mode, agent, adapter, state_ref}, "launch": {"kind": "interactive" | "headless",
+"permissions": [<the arguments appended for the run's role>]}, "bootstrap": "<the prompt the agent would
+receive>"}` — `permissions` is `[]` when the adapter declares none (changed in 0.4: `launch`). The terminal check does not refuse a dry run, which launches nothing: for an interactive launch of
 an adapter that needs a terminal (both built-in adapters), a dry run with stdin or stdout redirected prints
 `warning: interactive launch needs a terminal on stdin and stdout: a run without --dry-run is refused here`
 and its plan, and exits `0` (changed in 0.4; the run without `--dry-run` is still refused with

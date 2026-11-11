@@ -681,6 +681,12 @@ when it ends. `--timeout 30m` (`<n>s`, `<n>m` or `<n>h`, at most `24h`) stops th
 the run is still recorded. A step that only waits for an approval or another party is refused with the line
 `wingfoil workflow next` prints for it, unless `--element` names the target.
 
+A headless agent cannot be asked for permission, so the adapter says what each role may do without asking
+(`launch.headless.permissions`, new in 0.4): a map from a role name to the arguments appended to the launch, with
+a `default` entry for every other role. The built-in adapters let `developer`, `qa` and `architect` edit, run the
+tests and commit but never push or publish, let `reviewer` read and run the tests, and let any other role only
+read. `--dry-run` prints the arguments the run's role would get, under `launch.permissions`.
+
 ```bash
 wingfoil agent list            # the recorded runs, and the workflow steps waiting for an agent
 wingfoil agent show task-001-my-first-task/adhoc/1

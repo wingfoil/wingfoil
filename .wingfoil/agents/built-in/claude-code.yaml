@@ -1,5 +1,6 @@
 # Claude Code, a built-in adapter (spec-016 section 2.8). Every flag below is read from the
-# --help output of the version in verified_with, checked by hand (task-236; headless, task-335).
+# --help output of the version in verified_with, checked by hand (task-236; headless, task-335;
+# the headless permissions, task-339).
 name: claude-code
 format: 1
 command: claude
@@ -14,6 +15,16 @@ launch:
     # -p (--print) prints the response and exits; the prompt first, for the reason above.
     args: [ -p, "{bootstrap}", --mcp-config, "{mcp_config_file}" ]
     output: none
+    # The posture of each role (dl-223 (b), task-339), appended after args: --permission-mode
+    # dontAsk denies every tool no rule allows, so a headless agent never waits on a prompt;
+    # --allowedTools and --disallowedTools take a list, closed by the next option. default, the
+    # posture of every role not named here, reads only; no entry publishes.
+    permissions:
+      default: [ --permission-mode, dontAsk, --allowedTools, Read, Glob, Grep ]
+      developer: [ --permission-mode, dontAsk, --allowedTools, Read, Glob, Grep, Edit, Write, "Bash(git *)", "Bash(npm *)", "Bash(npx *)", "Bash(node *)", --disallowedTools, "Bash(git push *)", "Bash(npm publish *)" ]
+      qa: [ --permission-mode, dontAsk, --allowedTools, Read, Glob, Grep, Edit, Write, "Bash(git *)", "Bash(npm *)", "Bash(npx *)", "Bash(node *)", --disallowedTools, "Bash(git push *)", "Bash(npm publish *)" ]
+      architect: [ --permission-mode, dontAsk, --allowedTools, Read, Glob, Grep, Edit, Write, "Bash(git *)", "Bash(npm *)", "Bash(npx *)", "Bash(node *)", --disallowedTools, "Bash(git push *)", "Bash(npm publish *)" ]
+      reviewer: [ --permission-mode, dontAsk, --allowedTools, Read, Glob, Grep, "Bash(git log *)", "Bash(git show *)", "Bash(git diff *)", "Bash(git status *)", "Bash(npm test *)", "Bash(npm run *)", "Bash(npx jest *)" ]
 prompt:
   via: arg
 mcp:

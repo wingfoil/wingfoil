@@ -22,6 +22,11 @@
  * from its CLI's help at `verified_with`: `claude-code`'s with `output: none` (its stdout is not read), `codex-cli`'s
  * with `output: jsonl`, its stdout read for the session id only (`session.id: output`, task-356).
  *
+ * Each `launch.headless` also declares `permissions`, a role map (`spec-016` §2.8's posture table, `dl-223` (b),
+ * task-339): `default` reads only, `developer`, `qa` and `architect` edit, run the tests and commit but never publish,
+ * `reviewer` reads and runs the tests; no entry bypasses the CLI's permission checks or sandbox. Neither declares
+ * `launch.interactive.permissions`: at a terminal a person answers the CLI's own prompts.
+ *
  * With an empty list, `init` reserves the directory with a `.gitkeep` (the seam's empty case).
  */
 
@@ -40,12 +45,15 @@ export interface BuiltinAdapterManifest {
  * several values: placed after it, the bootstrap would be read as a second MCP configuration. The
  * `--session-id` option `session.assign_args` appends closes that list. No command of this CLI prints a past
  * session's model or token counts, so `usage.from` is `none` and both are recorded `not-reported`
- * (`spec-016` §2.6).
+ * (`spec-016` §2.6). The headless role map (task-339) is read from the same help of 2.1.310: `--permission-mode
+ * <mode>` with its choice `dontAsk`, and `--allowedTools` / `--disallowedTools` ("Comma or space-separated list of
+ * tool names", the example `"Bash(git *) Edit"`).
  */
 const CLAUDE_CODE: BuiltinAdapterManifest = {
   name: 'claude-code',
   content: `# Claude Code, a built-in adapter (spec-016 section 2.8). Every flag below is read from the
-# --help output of the version in verified_with, checked by hand (task-236; headless, task-335).
+# --help output of the version in verified_with, checked by hand (task-236; headless, task-335;
+# the headless permissions, task-339).
 name: claude-code
 format: 1
 command: claude
@@ -60,6 +68,16 @@ launch:
     # -p (--print) prints the response and exits; the prompt first, for the reason above.
     args: [ -p, "{bootstrap}", --mcp-config, "{mcp_config_file}" ]
     output: none
+    # The posture of each role (dl-223 (b), task-339), appended after args: --permission-mode
+    # dontAsk denies every tool no rule allows, so a headless agent never waits on a prompt;
+    # --allowedTools and --disallowedTools take a list, closed by the next option. default, the
+    # posture of every role not named here, reads only; no entry publishes.
+    permissions:
+      default: [ --permission-mode, dontAsk, --allowedTools, Read, Glob, Grep ]
+      developer: [ --permission-mode, dontAsk, --allowedTools, Read, Glob, Grep, Edit, Write, "Bash(git *)", "Bash(npm *)", "Bash(npx *)", "Bash(node *)", --disallowedTools, "Bash(git push *)", "Bash(npm publish *)" ]
+      qa: [ --permission-mode, dontAsk, --allowedTools, Read, Glob, Grep, Edit, Write, "Bash(git *)", "Bash(npm *)", "Bash(npx *)", "Bash(node *)", --disallowedTools, "Bash(git push *)", "Bash(npm publish *)" ]
+      architect: [ --permission-mode, dontAsk, --allowedTools, Read, Glob, Grep, Edit, Write, "Bash(git *)", "Bash(npm *)", "Bash(npx *)", "Bash(node *)", --disallowedTools, "Bash(git push *)", "Bash(npm publish *)" ]
+      reviewer: [ --permission-mode, dontAsk, --allowedTools, Read, Glob, Grep, "Bash(git log *)", "Bash(git show *)", "Bash(git diff *)", "Bash(git status *)", "Bash(npm test *)", "Bash(npm run *)", "Bash(npx jest *)" ]
 prompt:
   via: arg
 mcp:
@@ -91,13 +109,15 @@ usage:
  * session's id, but `codex exec --json` prints its events to stdout as JSONL, the first (`thread.started`) carrying
  * the session id as `thread_id`, which `codex exec resume <id>` accepts (observed by hand, task-356, `bug-375`): a
  * headless run's session is read from it (`session.id: output`), an interactive one's is `not-reported`. Resume is
- * not supported until `spec-016` §7's ships; the model and token counts are recorded `not-reported` (§2.6).
+ * not supported until `spec-016` §7's ships; the model and token counts are recorded `not-reported` (§2.6). The
+ * headless role map (task-339) is read from `codex exec --help` of the same version: `-s, --sandbox <SANDBOX_MODE>`,
+ * with `read-only`, `workspace-write` and `danger-full-access` (never shipped).
  */
 const CODEX_CLI: BuiltinAdapterManifest = {
   name: 'codex-cli',
   content: `# Codex CLI, a built-in adapter (spec-016 section 2.8). Every flag below is read from the
 # --help output of the version in verified_with, checked by hand (task-237; headless, task-335; the
-# conflict check and the session id, task-356).
+# conflict check and the session id, task-356; the headless permissions, task-339).
 name: codex-cli
 format: 1
 command: codex
@@ -113,6 +133,16 @@ launch:
     # override, the prompt as its positional.
     args: [ exec, --json, -c, "{mcp_config}", "{bootstrap}" ]
     output: jsonl
+    # The posture of each role (dl-223 (b), task-339), appended after the prompt, where codex exec
+    # still reads an option: --sandbox. default, the posture of every role not named here, reads
+    # only; the roles that edit, and the reviewer, who runs the tests and so writes the build, get
+    # workspace-write, the narrowest sandbox they can work in.
+    permissions:
+      default: [ --sandbox, read-only ]
+      developer: [ --sandbox, workspace-write ]
+      qa: [ --sandbox, workspace-write ]
+      architect: [ --sandbox, workspace-write ]
+      reviewer: [ --sandbox, workspace-write ]
 prompt:
   via: arg
 mcp:

@@ -4,8 +4,9 @@
  *
  * 13. The banner, `run <run-id>: launching <agent> (<adapter>) as <role> on <type>:<id>`, as a notice
  *     on stderr (`reportNotice`): the CLI renders it in the active `--format`.
- * 14. The spawn: the adapter's `command` with `launch.<kind>.args` (+ `session.assign_args` under
- *     `session.id: assign`), every placeholder filling whole argv elements ({@link renderLaunchArgv}),
+ * 14. The spawn: the adapter's `command` with `launch.<kind>.args`, then the permission fragment of the run's role
+ *     ({@link launchPermissions}, task-339), then `session.assign_args` under `session.id: assign`, every
+ *     placeholder filling whole argv elements ({@link renderLaunchArgv}),
  *     no shell, its working directory the project root, the environment passed through unchanged
  *     (`adr-012` point 1). An interactive agent inherits stdin, stdout and stderr; a headless one (the
  *     work run, §3.5, task-335) reads the null device, its stdout is piped and drained (and read for the
@@ -127,14 +128,32 @@ function renderArgv(template: readonly string[], values: LaunchValues): string[]
 export type LaunchKindRun = 'interactive' | 'headless';
 
 /**
- * The launch argv (§3.3 step 14): `launch.<kind>.args` rendered, then `session.assign_args` rendered when
+ * The permission fragment of a run (§3.3 step 14, §2.2 `launch.<kind>.permissions`, `dl-223` (b), task-339): the
+ * declared fragment itself, for every role; or the role map's entry for `role`, else its `default` (Pass 2 makes a
+ * map declare one); `[]` when the launch kind declares none. It holds no placeholder (§2.3), so it is not rendered.
+ *
+ * @param manifest - A validated manifest.
+ * @param kind - The launch kind of the run; `interactive` never reads the headless field.
+ * @param role - The run's resolved role (§3.2).
+ */
+export function launchPermissions(manifest: AdapterManifest, kind: LaunchKindRun, role: string): readonly string[] {
+  const permissions = kind === 'headless' ? manifest.launch.headless?.permissions : manifest.launch.interactive.permissions;
+  if (permissions === undefined) return [];
+  if (Array.isArray(permissions)) return permissions;
+  // An own key only: a role named like an `Object.prototype` member picks `default`, never an inherited value.
+  return (Object.hasOwn(permissions, role) ? permissions[role] : permissions['default']) ?? [];
+}
+
+/**
+ * The launch argv (§3.3 step 14): `launch.<kind>.args` rendered, then the permission fragment of `role`
+ * ({@link launchPermissions}; the `default` entry when no role is given), then `session.assign_args` rendered when
  * the session id is assigned. The `command` is not part of it. A headless launch of an adapter without
  * `launch.headless` is refused before (§3.3 step 4, `NO_LAUNCH_KIND`), so its argv is never rendered here.
  */
-export function renderLaunchArgv(manifest: AdapterManifest, values: LaunchValues, kind: LaunchKindRun = 'interactive'): string[] {
+export function renderLaunchArgv(manifest: AdapterManifest, values: LaunchValues, kind: LaunchKindRun = 'interactive', role = 'default'): string[] {
   const assign = manifest.session.id === 'assign' ? (manifest.session.assign_args ?? []) : [];
   const args = kind === 'headless' ? (manifest.launch.headless?.args ?? []) : manifest.launch.interactive.args;
-  return [...renderArgv(args, values), ...renderArgv(assign, values)];
+  return [...renderArgv(args, values), ...launchPermissions(manifest, kind, role), ...renderArgv(assign, values)];
 }
 
 /**
@@ -685,7 +704,7 @@ export async function launchAgent(root: string, input: LaunchInput, host: Launch
     mcpConfig: input.mcpConfig,
     sessionId: assigned ?? '',
   };
-  const argv = renderLaunchArgv(manifest, values, input.kind);
+  const argv = renderLaunchArgv(manifest, values, input.kind, input.role);
 
   // Step 13 — the banner; step 14 — the spawn; step 15 — the wait, with the signals taken over.
   reportNotice(launchBanner(input));
