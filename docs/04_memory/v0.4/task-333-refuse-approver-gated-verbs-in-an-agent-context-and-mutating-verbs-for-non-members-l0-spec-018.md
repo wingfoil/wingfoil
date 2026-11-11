@@ -533,6 +533,20 @@ execute` (T-3); `refuseAgentContext`'s error is exactly `{ code, message, hint, 
 a `StorageError` with `code === 'E_AGENT_TRAILER_ON_APPROVAL'`, thrown out of `runAsDryRun`; the 39 membership-broken
 suites of the design's measure are green's (D15).
 
+### red correction (qa, 2026-11-11)
+
+**Correction commit `dd90463c4`** (`git show --stat dd90463c4` → `test/core/agent-context.test.ts`,
+`test/core/team-membership.test.ts` only). Defect of red, found at green: three cases spread the fixture's
+`{ error, hint }` into `toMatchObject` on a `CoreError`, which carries `message`, not `error`
+(`src/core/types.ts:19-31`), while the `refuseAgentContext` case of the same file pins `toEqual({ code, message, hint,
+details })`; no implementation could satisfy both. The three cases ("memoryApprove with WINGFOIL_AGENT in process.env
+and no invocation set", "withAgentInvocation({ env, coAuthor }) hands the operation its markers", "a non-member:
+VALIDATION, the E_NOT_A_MEMBER message and hint") now match `asCoreError(refusal)` = `{ code: 'VALIDATION', message:
+refusal.error, hint: refusal.hint }`; every other assertion and every pinned text unchanged. With the developer's
+uncommitted green in the tree: `npx jest --maxWorkers=2 test/core/agent-context.test.ts test/core/team-membership.test.ts`
+→ `Test Suites: 2 passed, 2 total`, `Tests: 26 passed, 26 total`. `npx eslint` on the two files → clean; the
+invisible-character grep → no hit.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
