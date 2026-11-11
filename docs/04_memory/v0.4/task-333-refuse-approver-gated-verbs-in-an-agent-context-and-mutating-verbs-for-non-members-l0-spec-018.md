@@ -547,6 +547,156 @@ uncommitted green in the tree: `npx jest --maxWorkers=2 test/core/agent-context.
 → `Test Suites: 2 passed, 2 total`, `Tests: 26 passed, 26 total`. `npx eslint` on the two files → clean; the
 invisible-character grep → no hit.
 
+### green (developer, 2026-11-11)
+
+**Base.** PATH guard: the task's PATH shim; `wingfoil --version` and `node dist/cli.js --version` both
+`0.3.2 (33be8f2dc42541ede85e0568c5fe875eb3f6f040)`. The session carries the marker
+(`env | grep -c '^CLAUDE_CODE_CHILD_SESSION='` → `1`). Before the green commit `git rev-list --count HEAD..main` → `5`:
+merged with `git merge --no-edit main` (`5d6b02fd7`, trailers amended in; `git diff --stat HEAD^1 HEAD` → three plan
+files only, none of this task's). Green commit `af9f500a6`.
+
+**Stop at green, resolved.** Three red cases spread the fixture's `{ error, hint }` into `toMatchObject` on a
+`CoreError`, whose field is `message` (`src/core/types.ts:19-31`), while the same file pins `refuseAgentContext`'s error
+with `toEqual({ code, message, hint, details })`: no implementation satisfies both (`npx jest
+test/core/agent-context.test.ts test/core/team-membership.test.ts --maxWorkers=2` → `3 failed, 23 passed`, each on the
+missing `error` key only). Sent back; the qa's correction is `dd90463c4` (`### red correction`).
+
+**What was built** (the design's list, decisions D1–D15):
+- `src/core/agent-context.ts` (new): `AGENT_MARKERS` (frozen, `spec-018` §1 order), `E_AGENT_CONTEXT`,
+  `resolveAgentContext` (gated form: markers only, `attribution: null`, no `team.agents` read), `resolveGatedAgentContext`,
+  `refuseAgentContext` (`{ code: 'VALIDATION', message, hint, details: { markers } }`), `withAgentInvocation` /
+  `currentAgentInvocation` (an `AsyncLocalStorage`, `{ env: process.env }` by default, D5), `CO_AUTHOR_OPTION`,
+  `BLANK_CO_AUTHOR`.
+- `src/core/team-membership.ts` (new): `requireTeamMembership`, `E_NOT_A_MEMBER`; `null` or empty `team.members` → ok
+  (D1); an invalid committed file → the fail-closed message of the `spec-006` §7 amendment. Called right after each
+  `requireGitIdentity` but `init`'s (D2, D3): `grep -rn "requireTeamMembership(" src | grep -v "^src/core/team-membership.ts" |
+  wc -l` → `15`, the same count as `requireGitIdentity(` outside `git-identity.ts` and `init.ts` (the design says "16 today"
+  but enumerates these 15 sites; red's per-file parity test passes).
+- `src/core/approval-authority.ts`: `requireApprovalAuthority(root, type, identity, agent, command)` and
+  `requireApproverAuthority(root, identity, refusal, agent, command)`, required, `refuseAgentContext` first (§3.1); the
+  module comment's "no code-level signal" paragraph rewritten. The six callers resolve the gated context at the check;
+  `workflow finalize` inside its `approval:` branch (D11).
+- `requireReason(options, { approval })`, `reasonRefusalMessage` / `reasonDefect(reason, { approval })`: the defect
+  `agent-trailer-on-approval` with §3.3's message, passed at approve, reject, amend, an approval `finalize`,
+  `adopt --plan --apply`, `rekey`.
+- `src/storage/commit.ts`: `ApprovalTrailerError` (`E_AGENT_TRAILER_ON_APPROVAL`, a `StorageError` subclass, D7), run
+  first in `commitPaths`, `commitEmpty` and `writeAndCommit` over the stamped message, `CommitOptions.trailers`
+  included.
+- `src/core/registry.ts` `CoreOperation.agentAttribution?: false`, set on `agentExecute`; `src/cli/registrar.ts`
+  derives `--co-author <name>` for every other mutating operation (D4), refuses a blank value at exit `2` before
+  `resolveRoot()`, strips it from `ctx.options` and wraps the call in `withAgentInvocation`.
+- `scripts/check-governance.cjs` (+ `.d.cts`): `approval-agent-trailer` replaces `approval-ai-trailer` (D6): every
+  non-merge commit with an `Approver:` line, one finding per agent-trailer line, naming the key.
+- `scripts/e2e-smoke.cjs` (D14): the base environment without the markers. The smoke spells its own frozen
+  `AGENT_ENV_MARKERS`: a first version requiring `../test/agent-markers.cjs` failed `test/cli/e2e-smoke-candidate.test.ts`
+  (`Cannot find module '../test/agent-markers.cjs'`), because the smoke runs from a copy of `scripts/`; the new
+  `test/cli/e2e-smoke-agent-markers.test.ts` holds the two lists equal.
+- Docs: `docs/cli-reference.md` (the `--co-author` Global options row, the membership paragraph of "Git identity",
+  `approve`'s and `amend`'s errors with AC 9's sentence, the `--reason` bullet), `docs/01_vision/X_cli-cmds.md`
+  (**2.0 → 2.1**, row and history entry), `.wingfoil/directives/custom/git-conventions.md` (**2.6 → 2.7**, §9, Date),
+  `AGENTS.md` §5.1 (AC 10's four sentences, D12).
+- New tests of my own: `test/cli/registrar-co-author.test.ts`, `test/cli/e2e-smoke-agent-markers.test.ts`.
+
+**Scope items beyond the design's list, allowed by the orchestrator** (each forced by an approved ruling):
+- (a) `docs/01_vision/00_index.md`: X_cli-cmds.md's row (2.1, 2026-11-11, 512 lines), its section ranges and persona
+  anchors after Global Options, and Last indexed — forced by the 2.0 → 2.1 bump (`test/docs/vision-index.test.ts`
+  listed the stale row).
+- (b) `test/docs/name-resolvability.allowlist.ts`: a "retired on purpose" entry for spec-018's `DECISION_VERBS`, which D6
+  removes from the script (the gate listed `spec-018…|symbol|DECISION_VERBS` as unlisted).
+- (c) `test/core/approval-authority-baseline.test.ts` AC3 now expects `cannot resolve team membership` (D2: membership
+  reads the same committed file first) and calls `requireApprovalAuthority` directly to keep the authority refusal of an
+  invalid committed file pinned (`git grep "cannot resolve approval authority: the committed" test` had no other hit);
+  `test/core/config-writer-confinement.test.ts`, same class: the committed-symlink `dna set` case expects the membership
+  message, and a new working-tree-only link case keeps pinning `symbolic link` (bug-121).
+
+**D15 — suites the membership refusal broke, fixed in fixtures** (none of them red's). The discovery run (`npm test --
+--maxWorkers=2`, 20:31–21:01 UTC) → `Test Suites: 46 failed, 560 passed`; besides the three red cases, (a)–(c) and the
+smoke, every failure was a fixture whose committed team did not hold the test identity `wf-test@example.invalid`:
+- `test/agent/helpers/agent-execute-fixture.ts`: the member's email `wf-test@example.com` → `wf-test@example.invalid`
+  (and the two expected routing lines of `test/cli/agent-execute-awaiting.integration.test.ts` and
+  `test/core/agent-execute-awaiting.test.ts`). This fixed every `agent execute`, head-label, step-key,
+  step-refusal and element-short-reference suite, and five of the nine whose failure text named neither refusal
+  (both `agent-execute-diagnostics`, `agent-execute-process-group`, `agent-execute-signals`, `head-label`): a re-run
+  of the 39 with (a)–(c) → `Test Suites: 15 failed, 28 passed`, so 24 of the 39 with this fix alone. The other four
+  unattributed: `e2e-smoke-candidate` (the D14 helper above), `workflow-start-plan-patterns`,
+  `dna-set-tab-before-comment` and `dna-set-comment-preservation` (below).
+- A member with no email, or `r@example.it`, given `wf-test@example.invalid`: `test/core/dna-set.test.ts`,
+  `dna-set-tab-before-comment.test.ts`, `paths-extra-category.test.ts`,
+  `dna-agent-adapter-runs.test.ts`, `dna-mutation-surface.test.ts`, `dna-quoted-path-segments.test.ts`,
+  `agent-role-definition.test.ts`, `test/dna/agent-identity.test.ts`, the two dna fixtures of
+  `test/cli/program.integration.test.ts`.
+- `WingFoil Test` added as a member beside Alex: `test/cli/workflow-start-end.integration.test.ts`,
+  `workflow-start-plan-patterns.integration.test.ts`.
+- This repository's own `dna.yaml` as the fixture: `dna-set-comment-preservation.test.ts` and
+  `dna-whole-file-rewrite.test.ts` set the throwaway repository's `user.email` to that file's first member
+  (`actAsFirstMember`), so the bytes they pin are not edited.
+- `test/core/context-shipped-templates.test.ts`: the Memory is written while the member carries the email, then the
+  golden `dna.yaml` is committed back, so the golden file is unchanged.
+- Pins that D2 and D4 change: `test/core/memory-reject.test.ts` (a stranger → `E_NOT_A_MEMBER`),
+  `program.integration`'s reject fixture gains `Reviewer Ray` as a member so its REQ-SEC-03 case stays "a member
+  without approver"; `test/cli/program.test.ts:312` and `test/cli/registrar.test.ts:333` (`--co-author` last among a
+  mutating command's options); `test/core/approval-authority{,-approver}.test.ts` (the required parameters, a
+  `NO_AGENT` context); `test/docs/x-cli-cmds.test.ts` (the `--co-author` exemption, D4).
+
+**Red → green.** `npx jest <41 suites> --maxWorkers=2` (red's 11, the two corrected, `test/lint`, my new suites, every
+touched pin and the D15 suites listed in the green report) → `Test Suites: 41 passed, 41 total`, `Tests: 611 passed`.
+
+### refactor (developer, 2026-11-11)
+
+- `3ea1e2403`: the backstop documented on the three writers (`@throws ApprovalTrailerError`). No behaviour change.
+- `git rev-list --count HEAD..main` → `0`: no merge.
+- Every heavy gate after `waitslot.sh`, `--maxWorkers=2`, in this shell with `CLAUDE_CODE_CHILD_SESSION` set
+  (`env | grep -c '^CLAUDE_CODE_CHILD_SESSION='` → `1`). A first run of build and test was lost to a machine reboot and
+  re-run whole:
+  - `npm run build` (21:58:10–21:58:15 UTC) → exit `0`.
+  - `npm test -- --maxWorkers=2` (slot waited 21:58:20 → 22:00:25; ended 22:22:57) → exit `0`,
+    `Test Suites: 608 passed, 608 total`, `Tests: 11159 passed, 11159 total`. The document-parity suites
+    (`test/docs/`, `docs.parity`) and `test/docs/cli-reference.test.ts` are in it.
+  - `npm run test:coverage -- --maxWorkers=2` (slot 22:23:17 → 22:43:10; ended 23:03:38) → exit `0`, `Tests: 11159
+    passed`, `All files | 99.07 | 96.91 | 98.66 | 99.64` (statements, branches, functions, lines; all above 80 %). The
+    files changed: `agent-context.ts`, `team-membership.ts`, `approval-authority.ts`, `require-reason.ts`,
+    `registrar.ts`, `commit-message.ts` 100 / 100 / 100 / 100; `commit.ts` 99.23 / 98.2 / 100 / 100, its uncovered lines
+    594, 810, 896, 1094 outside this task's code. The latest v0.4 task notes on `main` record `All files | 99.24 | 97.14
+    | 98.64 | …`; no line of the files this task changed is uncovered, so the lower statements and branches columns
+    come from code outside them (not measured further).
+  - `npm run typecheck` (23:04:27) → exit `0`, both configurations.
+- `npm run lint` → exit `0`. `npm run docs:api` → exit `0`, `grep -ci warning` on its output → `0`.
+- `.wingfoil/` change (dl-205): `npm run -s check:mcp` → both lines printed, `tools: 0`, every Resource read and
+  Prompt get answered; `npm run -s wingfoil -- directives list --role reviewer` (pinned build) lists
+  `directives/custom/git-conventions.md`.
+- Invisible-character grep over every changed file → no hit (exit `1`).
+
+### self-review (developer, 2026-11-11)
+
+Against `code-review`, AC by AC (evidence: the full suite above, `608 passed`):
+- AC 1–3: `test/cli/agent-context-refusal.integration.test.ts` and `test/core/agent-context.test.ts` pass — each marker,
+  §1 order, no value printed, `--format json`, `CLAUDECODE` not a marker, the six commands held equal to the six call
+  sites, T-7 and T-20's first half.
+- AC 4: `test/storage/approval-trailer-backstop.test.ts` and `test/core/approval-reason-agent-keys.test.ts` pass; the
+  CLI T-18 cases (exit `2` on the six, accepted on `deprecate` and `park`) pass.
+- AC 5: `test/cli/team-membership.integration.test.ts` (22 operations from the registry) and
+  `test/core/team-membership.test.ts` pass; the structural parity with `requireGitIdentity(` holds.
+- AC 6: `test/cli/check-governance-approval-agent-trailer.test.ts` and `check-governance-enforcement.test.ts` pass.
+- AC 7: `test/lint/agent-markers-scrubbed.test.ts` passes, and `npm test` passes in this marked shell.
+- AC 8–10: `test/docs/l0-traceability.test.ts` passes. AC 11: the two amends are `e2224081a` and `123fbb635`.
+- Absence claims with their positive case: `approval-ai-trailer` survives only as history — `git grep -n
+  "approval-ai-trailer" -- scripts src test` → the script's comment naming the rule it replaced, the "the older rule is
+  gone" pin of `test/cli/check-governance-approval-agent-trailer.test.ts` and the allowlist entry of (b) — while `approval-agent-trailer` has its marker once in
+  `CHECKS` (`grep -c "governance-check:approval-agent-trailer" scripts/check-governance.cjs` → `1`).
+- Same class in touched files: the `approve` errors line of `docs/cli-reference.md` gains the agent-session refusal
+  beside `amend`'s; `reject`'s says "as for `approve`".
+- `dl-212` D4 wording: no "signed" or "human-approved" in the lines this task wrote (`git diff main...HEAD | grep "^+" |
+  grep -ci "signed\|human-approved"` → `0`).
+- T4: `git log --first-parent --no-merges --format=%h 33be8f2dc..HEAD -- <red's 15 files>` → `dd90463c4` (the qa's
+  correction, named above), and `dd90463c4..HEAD -- <its 2 files>` → empty.
+
+Candidate findings (not filed): none.
+
+### Pending amendments (approver)
+
+None from green or refactor: no element past its first state is edited (`git status --short` → clean before submit).
+The two spec amendments the design prepared are recorded (`e2224081a`, `123fbb635`).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -556,3 +706,6 @@ invisible-character grep → no hit.
      here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
 
 - design: measuring which suites an agent marker breaks needed a full-suite run on a probe clone (17:52 → 18:29 UTC under the heavy-gate slot); no cheaper source names the in-process suites that read the session environment.
+- green: three red cases matched a `CoreError` field that does not exist (`error` for `message`); found only when green ran them, one send-back round (`dd90463c4`). Proposal: qa runs each red case against a stub that returns the pinned `CoreError` shape before committing red.
+- green: the design measured 39 membership-broken suites but not their shared cause; one fixture email (`wf-test@example.com` against the test identity `wf-test@example.invalid`) explained 24 of them (the re-run after that fix: 15 failed, 28 passed).
+- refactor: a machine reboot lost the first build and test run; both were re-run whole under the slot.
