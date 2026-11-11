@@ -74,6 +74,10 @@
  * - `trailer-paragraph` (`bug-391`; rule `body`): on every non-merge commit, a `WingFoil-*` line (any key, any
  *   letter case) sits in the body's final paragraph, the one the workflow deduction reads
  *   (`git-conventions` §8).
+ * - `plan-retrospective` (`bug-320`, `dl-115` Q2 (a), task-358 approver ruling D2 (a) (i); rule `state`): a
+ *   `wf(plan): finalize` into the last state of the plan's `sequence` (`[active → done]`) leaves, at that commit, a
+ *   plan whose `### Retrospective` subsection holds an entry — a line outside HTML comments, `None` included (D2 (b)) —
+ *   as `scripts/check-retrospective.cjs` (`hasRetrospectiveEntry`, shared) tests a task's at `dev-loop.done`.
 
  * **Starting mode** (`dl-103` §1). A finding on a commit that is not the introduction commit nor one
  * of its ancestors is gated, and fails the check (exit 1). A finding on history — the introduction
@@ -107,6 +111,8 @@ const { execFileSync } = require('node:child_process');
 const { existsSync } = require('node:fs');
 const { basename, join } = require('node:path');
 
+const { hasRetrospectiveEntry } = require('./check-retrospective.cjs');
+
 /** This file's path inside the repository it governs: its introduction is the first-parent commit adding it. */
 const SCRIPT_PATH = 'scripts/check-governance.cjs';
 const MEMORY_YAML = '.wingfoil/memory.yaml';
@@ -129,6 +135,7 @@ const CHECKS = Object.freeze({
   'approval-ai-trailer': 'governance-check:approval-ai-trailer',
   'workflow-record-authority': 'governance-check:workflow-record-authority',
   'trailer-paragraph': 'governance-check:trailer-paragraph',
+  'plan-retrospective': 'governance-check:plan-retrospective',
 });
 
 /** The verbs that record the approver's decision and carry no AI co-author (`git-conventions` §7). */
@@ -664,6 +671,8 @@ function checkGovernance(root, options = {}) {
   const rejectCrossings = [];
   /** Named, bracketed touches of a document gone at `HEAD`: { sha, parent, path, hops, type }. */
   const goneAtHead = [];
+  /** The plan documents a `wf(plan): finalize` into the machine's last state names, for `plan-retrospective`: { sha, path }. */
+  const planFinalizes = [];
 
   memoryCommits.forEach((commit, index) => {
     const memoryOid = blobs[index * 2];
@@ -753,6 +762,9 @@ function checkGovernance(root, options = {}) {
     if (![...documents.values()].some(Boolean)) unchecked('no document it touches is named by its subject');
     for (const [path, isNamedDocument] of documents) {
       if (isNamedDocument && op === 'approve' && machine) approvals.push({ sha: commit.sha, path: writtenAt.get(path) ?? path, machine, type });
+      if (isNamedDocument && op === 'finalize' && type === 'plan' && machine && hops && hops.length > 0 && hops[hops.length - 1].to === machine.sequence[machine.sequence.length - 1]) {
+        planFinalizes.push({ sha: commit.sha, path: writtenAt.get(path) ?? path });
+      }
       if (!atHead.has(path)) {
         if (!isNamedDocument) continue;
         if (machine && hops && !EDGE_EXEMPT_VERBS.has(op)) {
@@ -908,6 +920,20 @@ function checkGovernance(root, options = {}) {
           `not '${dist.memory.SUPERSEDED_STATE}': complete the pair with \`wf(${entry.type}): finalize ${target} [${state ?? approved.status} → ${dist.memory.SUPERSEDED_STATE}]\`, ` +
           `Reason: superseded by ${approvedId} (its supersedes: field), approved in ${entry.sha}.`,
         'supersedes-pair',
+      );
+    });
+  }
+
+  // plan-retrospective: a plan finalized into its last state holds a ### Retrospective entry (bug-320, dl-115 Q2 (a)).
+  if (planFinalizes.length > 0) {
+    const texts = readBlobTexts(root, planFinalizes.map((entry) => `${entry.sha}:${entry.path}`));
+    planFinalizes.forEach((entry, index) => {
+      const text = texts[index];
+      if (text === null || hasRetrospectiveEntry(text)) return;
+      stateFinding(
+        entry.sha,
+        `${entry.path}: plan ${basename(entry.path, '.md')} is finalized with no ### Retrospective entry, a line outside HTML comments ("None" counts; dl-115 Q2 (a), bug-320)`,
+        'plan-retrospective',
       );
     });
   }
