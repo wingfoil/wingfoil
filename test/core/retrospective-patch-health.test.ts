@@ -87,8 +87,9 @@ describe('AC 1c — token-neutral: no actions/checks token and no explore produc
       ]),
     ).toEqual([
       ['explore', ['agent.execute'], [], ['secondary-sources.listed']],
-      ['collect-feedback', ['agent.execute'], [], ['feedback-notes.recorded']],
-      ['additional-points', [], ['proposals.disposed'], []],
+      // task-358 (bug-435 item 4): the two mixed checks are split, the reading in a second token.
+      ['collect-feedback', ['agent.execute'], [], ['feedback-notes.recorded', 'feedback-notes.restated']],
+      ['additional-points', [], ['proposals.disposed', 'proposals.outcome-chosen'], []],
       ['capture', ['memory.add', 'memory.submit'], [], ['frontmatter.required']],
       ['approve', ['decision-log.set_state'], [], []],
     ]);

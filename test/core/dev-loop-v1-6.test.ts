@@ -18,9 +18,10 @@
  * sources and `package.json` are read from the working tree, as the other live-configuration suites do.
  *
  * What is NOT asserted here: that any of these checks is evaluated — no check runs before P4.12 (v1.0,
- * `dl-090` Q2 (c)); the unbound ones are `W_WORKFLOW_UNBOUND_TOKEN` warnings until then. The readings a human
- * confirms on purpose — `acceptance-criteria.consistent`, `claims.rerun`, `rereview.previous-reject` — are bound
- * `manual: true` (task-303, `dl-186` Q6, `dl-172` (a)) and raise no warning.
+ * `dl-090` Q2 (c)). The readings a human confirms on purpose — `acceptance-criteria.consistent`, `claims.rerun`,
+ * `rereview.previous-reject` — are bound `manual: true` (task-303, `dl-186` Q6, `dl-172` (a)) and raise no warning.
+ * task-358 (`bug-469`, `bug-320`, approver ruling D1 (B)) bound the rest: `stop-the-line.clear` `manual: true` until a
+ * command decides it, `retrospective.present` `run` (`scripts/check-retrospective.cjs` on `{element.path}`).
  */
 import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
@@ -207,13 +208,13 @@ describe('AC 2 — workflow show dev-loop lists each new check with its binding,
   });
 
   it.each([
-    ['start:stop-the-line.clear', 'unbound'],
+    ['start:stop-the-line.clear', 'manual'],   // task-358 (bug-469, D1 (B)): manual until a command
     ['design:acceptance-criteria.consistent', 'manual'],
     ['refactor:typecheck.clean', 'run'],
     ['review:claims.rerun', 'manual'],
     ['review:rereview.previous-reject', 'manual'],
     ['review:docs.parity', 'run'],
-    ['done:retrospective.present', 'unbound'],
+    ['done:retrospective.present', 'run'],     // task-358 (bug-320): scripts/check-retrospective.cjs on {element.path}
   ])('%s is shown with binding kind %s, never evaluated', (key, kind) => {
     const entry = checks.get(key);
     expect(entry).toBeDefined();

@@ -153,8 +153,16 @@ describe('task-347 AC 3 — release-planning declares collect-feedback as the re
     const { bindings } = loadWorkflowRegistryAtHead(ROOT);
     const post = phaseOf(planning(), 'collect-feedback').checks?.post ?? [];
     expect(post).toEqual(phaseOf(workflow('retrospective'), 'collect-feedback').checks?.post);
-    expect(post).toHaveLength(1);
-    expect(resolveToken(post[0]!, 'check', bindings)).toEqual({ kind: 'manual', source: 'project' });
+    // task-358 (bug-435 item 4, W0-R10): retrospective's check is split into its mechanical half and its reading,
+    // and this phase declares the same tokens, so it takes the same split.
+    expect(post.map(tokenName)).toEqual(['feedback-notes.recorded', 'feedback-notes.restated']);
+    for (const token of post) expect(resolveToken(token, 'check', bindings)).toEqual({ kind: 'manual', source: 'project' });
+  });
+
+  it('red-first: release-planning.yaml is at least 2.6, its 2.6 entry naming task-358 (bug-435 split, bug-314)', () => {
+    const { value, rest } = versionLine(atHead(RELEASE_PLANNING_FILE));
+    expect(value).toBeGreaterThanOrEqual(2.6);
+    expect(historyEntryOf(rest, '2.6', 'task-358')).toBeDefined();
   });
 
   it("red-first: its description restates the read: active repository services with a feedback_inbox, the consumer's main, the commit read, the cite, the ruling before define-scope", () => {

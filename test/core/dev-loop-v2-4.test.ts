@@ -13,8 +13,8 @@
  *   instruction; its `manual: true` binding, resolved and shown by `workflow show` (AC 4's jest twin); the
  *   `bindings.yaml` version and its history entry;
  * - AC 3 (red-first, the version row; approver ruling on the design): `dev-loop.yaml` raises `version:` once;
- * - AC 3 (characterization): the phase names and their order, no error at `HEAD`, the registry's 68 warnings,
- *   every one an unbound check and none naming `pinned-build.reads`.
+ * - AC 3 (characterization): the phase names and their order, no error at `HEAD`, and no warning naming
+ *   `pinned-build.reads`; since task-358 (`bug-469`) the registry raises no diagnostic at all (68 → 0).
  */
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
@@ -140,10 +140,9 @@ describe('task-348 AC 3 — dev-loop.yaml raises its version once; the rest of t
     expect(shown.value.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
   });
 
-  it('characterization: the registry still warns 68 times, every warning an unbound check, none naming pinned-build.reads', () => {
+  it('characterization: the registry raises no diagnostic (68 → 0 at task-358, bug-469), none naming pinned-build.reads', () => {
     const diagnostics = loadWorkflowRegistryAtHead(ROOT).diagnostics as readonly { code: string; severity: string; message: string }[];
-    expect(diagnostics.length).toBe(68);
-    expect(diagnostics.filter((d) => d.code !== 'W_WORKFLOW_UNBOUND_TOKEN' || d.severity !== 'warning')).toEqual([]);
+    expect(diagnostics).toEqual([]);
     expect(diagnostics.filter((d) => d.message.includes(TOKEN))).toEqual([]);
   });
 });

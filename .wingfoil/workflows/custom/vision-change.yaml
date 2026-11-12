@@ -9,7 +9,7 @@
 name: vision-change
 kind: main
 description: Change the vision (a new feature or any other vision edit) through a change-proposal, its impact analysis, a scoped downcast and a release assignment.
-version: 1.1                     # 1.0 dl-132 (task-212): the first version; schedule's target_release pre-check added at task-212's review, before the file reached main; 1.1 task-277 (approver ruling 2026-10-10 item 5 on task-212 decision 4): schedule writes the sequencer entry and the release stamp only, and release-planning's define-scope writes the release's features:
+version: 1.2                     # 1.0 dl-132 (task-212): the first version; schedule's target_release pre-check added at task-212's review, before the file reached main; 1.1 task-277 (approver ruling 2026-10-10 item 5 on task-212 decision 4): schedule writes the sequencer entry and the release stamp only, and release-planning's define-scope writes the release's features:; 1.2 task-358 (bug-469, W0-R10), comment only: schedule's change-proposal.target_release check is bound manual: true "until a command", no longer unbound; no phase, step or action changes
 # No fixed `element:` — self-creating (spec-003 Layer 2 `element`): the change-proposal its capture phase
 # adds becomes the instance's element.
 phases:
@@ -78,5 +78,5 @@ phases:
       - element.set_release("{change-proposal.target_release}")   # stamp `release` on the change-proposal (traceability directive)
       - element.set_state(scheduled)                               # change-proposal: accepted -> scheduled
     checks:
-      pre: ["change-proposal.target_release is not empty"]   # set_release("") would stamp nothing (task-212 review); prose, unbound until P4.12
+      pre: ["change-proposal.target_release is not empty"]   # set_release("") would stamp nothing (task-212 review); bound manual: true "until a command" in workflows/bindings.yaml (task-358), owing a Memory query command with an exit status
       post: ["vision-index.current"]          # the sequencer edit updates its index row in the same commit (dl-132 element 5)

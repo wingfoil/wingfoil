@@ -17,7 +17,7 @@ description: >-
   One wave of a release: the dev-loop of each of the wave's backlog tasks, then the wave boundary — the
   wave-end e2e smoke and mechanical user-doc checks, a governance re-sweep of the unscheduled elements, and a
   re-plan checkpoint that records the scope delta, clears the growth threshold and opens the next wave.
-version: 1.0                     # 1.0 dl-100 §1 (a), §2, §3 (a); dl-133 §2 (task-230): the first wave workflow
+version: 1.1                     # 1.0 dl-100 §1 (a), §2, §3 (a); dl-133 §2 (task-230): the first wave workflow; 1.1 task-358 (bug-469, W0-R10), comment only: wave-checks' docs.examples.passing is bound manual: true "until a command", no longer unbound; no phase, step or action changes
 element: release        # the enclosing release-cycle's element, kept by an element: collection (spec-003, task-230)
 
 phases:
@@ -46,7 +46,7 @@ phases:
     checks:
       post:
         - "e2e-smoke-passed(report: docs/07_gates/rl-{release.release-line}/rel-{release.version}-{item}-e2e-smoke.md)"
-        - "docs.examples.passing"           # every docs/examples/*/run.sh ends with OK against the wave's build; unbound: no single command runs them (docs/examples/README.md)
+        - "docs.examples.passing"           # every docs/examples/*/run.sh ends with OK against the wave's build; bound manual: true "until a command" in workflows/bindings.yaml (task-358): no single command runs them yet (docs/examples/README.md)
         - "docs.parity"                     # the document-parity suites dev-loop.review runs (bound in workflows/bindings.yaml)
 
   - name: re-sweep                           # dl-100 §1: triage-bugs + reconcile-governance, widened to ready decision-logs, at every wave boundary
