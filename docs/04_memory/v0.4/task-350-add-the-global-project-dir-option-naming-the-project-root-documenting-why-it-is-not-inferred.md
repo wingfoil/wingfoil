@@ -487,6 +487,102 @@ project?: string; ceiling?: string })` (design "Files to touch"); the refusal me
 `docs/01_vision/X_cli-cmds.md` has the row (design). The AC 1 and AC 2 sweeps spawn the CLI about 70 times
 (`project-option.integration.test.ts` took 51 s here); each test has a 180 s jest timeout.
 
+### green (developer, 2026-11-12)
+
+**Base.** `git rev-list --count HEAD..main` → `43` at the start: `git merge --no-edit main` → no conflict, the two
+trailers added with `git commit --amend --no-edit --trailer …` → `9251252fe` (`git rev-parse HEAD` after the amend).
+PATH guard: `command -v wingfoil` → the task's PATH shim; `wingfoil --version` and `node dist/cli.js --version` →
+`0.3.2 (f3e87f00dc5785a24afa438767a24a2914556c49)`.
+
+**Green commit `8b55efbf2`** (`git show --stat 8b55efbf2` → the ten files of the design's list, no other):
+- `src/storage/git-root.ts` — `findGitRoot(cwd, { ceiling? })` stops before the ceiling (the starting directory is
+  always examined, a ceiling that is not an ancestor changes nothing); `resolveProjectRoot(cwd, { project?, ceiling? })`
+  checks only that the named directory, resolved against `cwd`, holds its own `.git` (D1 (a)), else
+  `StorageError` `E_NOT_AT_GIT_ROOT: --project is not a git root: <abs>`. D4: `grep -rn GIT_CEILING src/ | wc -l` →
+  `0` (positive case: `grep -c GIT_CEILING test/storage/helpers/git-fixture.ts` → `6`).
+- `src/cli.ts` — the resolver takes the value; a blank one throws `UsageError('invalid flag value: --project must not
+  be blank')` (D5 (a)).
+- `src/cli/program.ts` — `.option('--project <dir>', …)` after `--format`; one resolver bound to
+  `program.opts().project` for the derived commands, `init` and `mcp`; `init`'s root failure through `exitCodeForThrow`.
+- `src/cli/mcp-command.ts` — the same `exitCodeForThrow` mapping. `src/cli/registrar.ts` — only the type
+  `(project?: string) => string` and its doc comment.
+- `src/agent/execute.ts` — `runningBuildMcpServer(root)` → `[<dist>/cli.js, '--project', root, 'mcp']`, its call site
+  passes `root` (D2 (a)); `grep -rn "runningBuildMcpServer(" src` → the definition and `:759` only.
+- Docs: `docs/cli-reference.md` (a "New in 0.4" paragraph in Where to run it with the fragment "WingFoil never infers
+  the project root", a Global options row, the `mcp` and `agent execute` entries), `docs/user-guide.md` (§1, a §10
+  paragraph, the §11 bullet; no heading), `docs/01_vision/X_cli-cmds.md` 2.1 → 2.2 (Global Options row, revision note),
+  `docs/01_vision/00_index.md` (row 2.2 / 2026-11-12 / 518, "Last indexed", the shifted ranges). `llms.txt` unchanged:
+  `test/docs/llms-txt.test.ts` passes inside `npx jest test/docs` below.
+
+**Red → green** (targeted, `--maxWorkers=2`):
+- `npx jest test/storage/git-root.test.ts test/cli/program.test.ts test/docs/project-option-docs.test.ts
+  test/docs/x-cli-cmds.test.ts test/docs/vision-index.test.ts test/agent/execute.test.ts
+  test/cli/agent-execute-config-arg.integration.test.ts` → `Tests: 135 passed, 135 total`.
+- `npx jest test/cli/project-option.integration.test.ts` on the uncommitted tree → `15 passed, 1 failed`: "--help and
+  --version keep their precedence" received `0.3.2 (9251252f…-dirty)` (the build stamp of a dirty tree, not a defect);
+  after the commit, the six red suites (`project-option.integration`, `git-root`, `program`, `project-option-docs`,
+  `agent/execute`, `agent-execute-config-arg.integration`) → `Tests: 122 passed, 122 total`.
+- `npx jest test/docs test/cli/entrypoint.test.ts test/cli/registrar.test.ts test/cli/mcp-command.test.ts
+  test/cli/program.integration.test.ts test/cli/help-describes-every-command.test.ts test/lint/typecheck-clean.test.ts`
+  → `Test Suites: 40 passed; Tests: 522 passed`.
+- `npx tsc --noEmit -p tsconfig.json` → no output (red's 14 `TS2554` cleared); `npx eslint` on the changed `src` files → clean.
+
+### refactor (developer, 2026-11-12)
+
+**Refactor commit `1258ef8bc`** — doc comments only, same class as green's change: `src/cli/mcp-command.ts` (the
+module header, `McpCliDeps.resolveRoot`, `runMcp`'s step 1 now name `--project` and the exit `2` of a blank value)
+and `src/cli.ts`'s header. `git rev-list --count HEAD..main` → `0` before the gates and at the end: no merge.
+
+**Gates** (heavy ones after `waitslot.sh`, `--maxWorkers=2`, foreground; the green record `e946593e2` + `1258ef8bc`):
+- `npm run -s build` → exit `0` (on the clean tree, before the suite).
+- `npm test -- --maxWorkers=2` → exit `0`, `Test Suites: 623 passed, 623 total`, `Tests: 11439 passed, 11439 total`.
+- `npm run test:coverage -- --maxWorkers=2` → exit `0`, same counts, `All files | 99.21 | 97.12 | 98.66 | 99.64`
+  (statements, branches, functions, lines; > 80 %). This task's files: `git-root.ts` 96.42 / 94.44 / 100 / 100 (line 49,
+  the filesystem-root `return null`, now reached by no test: the "outside" fixtures stop at their ceiling), `cli.ts`
+  93.75 / 84.61 / 100 / 100, `mcp-command.ts` 100 / 87.5 / 100 / 100, `program.ts` 100 / 94.17 / 100 / 100, `execute.ts`
+  96.42 / 90.08 / 96.07 / 98.48. These notes carry no batch baseline; `task-358`'s last run on its branch recorded
+  `99.25 | 97.15 | 98.65 | 99.66`.
+- `npm run -s lint` → exit `0`, no output. `npm run -s docs:api` → exit `0`, no output.
+- `npm run -s typecheck` → exit `0` (both tsc configs, through the heavy-gate lock).
+- `docs.parity` and `test/docs/cli-reference.test.ts`: inside `npx jest test/docs …` above (40 suites passed) and
+  the full suite.
+- BDD: `grep -rln "E_NOT_AT_GIT_ROOT\|--project" docs/02_requirements/02_bdd/features/` → nothing (the only "project
+  root" hit, `P1.11-memory-entries.feature`, is about Memory paths): no scenario to keep or extend.
+
+**Probes** (code build, run from the scratch directory outside the worktree, `node <worktree>/dist/cli.js`):
+`--format console --project <worktree>/docs dna show` → exit 1, `error: E_NOT_AT_GIT_ROOT: --project is not a git root:
+<worktree>/docs`; `--format json` → `{"error":"E_NOT_AT_GIT_ROOT: --project is not a git root: <worktree>/docs"}`,
+exit 1; `dna show --project ''` → `error: invalid flag value: --project must not be blank` / `{"error":"invalid flag
+value: --project must not be blank"}`, exit 2 each; `--format json --project <worktree> dna show` → this repository's
+DNA (`{"version":2.1,"project":{"name":"WingFoil",…`), exit 0.
+
+### self-review (developer, 2026-11-12)
+
+- **AC 1** met: every leaf command accepts `--project`, a non-root is refused naming it (`project-option.integration`
+  sweep, `git-root.test.ts` "the named root"); the write and the pre-flight read the named root (same file).
+- **AC 2** met: the no-flag sweep from `<root>/sub` → `E_NOT_AT_GIT_ROOT: run wingfoil from the project root` (same file).
+- **AC 3** met: `findGitRoot`/`resolveProjectRoot` with `{ ceiling }` (`git-root.test.ts`), the six git-based suites
+  bounded by red's helper; no `src/` change reads the git ceiling variable (D4, grep above).
+- **AC 4** met: `test/docs/project-option-docs.test.ts` passes; `test/docs/x-cli-cmds.test.ts` "every root-program long
+  option has a Global Options row" passes with the new row.
+- **AC 5** met: `runningBuildMcpServer(root)` (`agent/execute.test.ts`), the rendered `args` and the fake's connection
+  (`agent-execute-config-arg.integration`), `agent execute --project <root>` from elsewhere (`project-option.integration`).
+- **AC 6**: the amendments `8ee6e2fbb`, `02cac8501`, `05b989b0a` are on the branch (`git log --oneline` lists them); the
+  code follows them: no gap found.
+- **T4:** `git log --first-parent --no-merges --format=%h f3e87f00d..HEAD -- <the 13 files git show --name-only
+  f3e87f00d lists>` → empty.
+- Scope: `git diff --name-only 9251252fe HEAD` → the ten files of the design's list (plus this file once committed).
+- Invisible characters: the grep of the brief over every changed file → no hit (exit 1), before each commit.
+- Same class, outside the files the design lists (not changed, a candidate finding): `src/storage/errors.ts:26`'s doc
+  comment says `E_NOT_AT_GIT_ROOT` is raised "when the git root exists but isn't `cwd` itself"; it is now also the
+  refusal of a `--project` that is not a git root.
+
+### Pending amendments (approver)
+
+None: the three spec amendments were recorded at the design gate (`8ee6e2fbb`, `02cac8501`, `05b989b0a`), and both bugs
+already hold their `### Retrospective` entries (`grep -n "### Retrospective" -A2` on `bug-406` and `bug-453` → `None.`
+and `- None.`), so nothing beyond the two status syncs touches them.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -494,3 +590,10 @@ project?: string; ceiling?: string })` (design "Files to touch"); the refusal me
      printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
      Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
      here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+
+- The red guard "--help and --version keep their precedence" asserts a clean build stamp, so it fails on any uncommitted
+  tree (`15 passed, 1 failed`, received `…-dirty`) and passes once committed; a targeted run before the green commit is
+  not conclusive for it. Proposal: match an optional `-dirty` suffix, or say so in the test.
+- `findGitRoot`'s filesystem-root `return null` (`src/storage/git-root.ts:49`) is now reached by no test (coverage
+  line 49): a hermetic test cannot reach it without depending on what lies above the temporary directory, the very
+  dependence `bug-406` removed.
