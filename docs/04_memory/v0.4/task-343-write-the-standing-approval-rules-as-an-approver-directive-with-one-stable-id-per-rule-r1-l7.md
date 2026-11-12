@@ -264,6 +264,51 @@ For AC 5, the statuses the rules carry:
 - **SA-01** (the `e2e-smoke` gate on its command-checked evidence): **adopted** (D4).
 - **SA-02** (the review approve): **proposed** (D5 (b)), kept until a command can check a review verdict.
 
+### red (qa, 2026-11-11)
+
+**Base.** Head `7648930ce` (`git rev-list --count HEAD..main` → `0`, no merge). PATH guard: the task's PATH shim;
+`wingfoil --version` and `node dist/cli.js --version` both print `0.3.2 (570d23754536c31f68aa55c879aecf9b2ad3225c)`.
+
+**File.** `test/directives/standing-approvals.test.ts` (new, 14 cases). No `src/`, no `.wingfoil/`, no new export, no
+`.d.cts`. Red commit: `d75eaf39aec2a9223778ba7d2730887b2b221d82`.
+
+**Per AC** (classification as the design's table; every read of the directive is lazy, so each case fails on its own):
+
+| AC | Class | Cases | First failing line before green |
+|----|-------|-------|---------------------------------|
+| 1 | red-first | frontmatter (id, type, kind, no `scope`, `version` ≥ 1.0 naming task-343); `## 4. The rules` holds ≥ 1 `SA-<nn>` heading, strictly ascending; each block has exactly one Status, Gate, Evidence and Command line; each Gate names a phase of `.wingfoil/workflows/custom/<workflow>.yaml` with `approval.by_role: approver`; each Evidence line is followed by command-and-output items; each Command line by exactly one `node dist/cli.js memory approve` / `workflow finalize … --reason "…"`; no `npx` | `ENOENT: no such file or directory, open '…/.wingfoil/directives/custom/standing-approvals.md'` (all 7) |
+| 2 | red-first | `assignments.approver` contains `standing-approvals`, no other role nor `global` does; `roles.yaml` `version:` ≥ 1.9 and its line names task-343; S1 (flattened substring) | `expect(roles.assignments['approver']).toContain(ID)` — Received `["code-review"]`; `expect(versionNumber(…)).toBeGreaterThanOrEqual(1009)` — Received `1008`; S1: ENOENT |
+| 3 | red-first | S2 (flattened substring); every block's `--reason` contains `under standing rule <id>` and `reasonRefusalMessage(reason, { approval: true })` (`src/memory/commit-message.ts`) is `null` | ENOENT (both) |
+| 4 | characterization + red-first | exit-0 half: nothing added (pinned by `test/cli/check-role-directives.test.ts` "this repository passes the sweep"); listing half: `spawnSync(node, ['node_modules/wingfoil-released/dist/cli.js', 'directives', 'list', '--role', 'approver', '--format', 'json'])` → status 0, `warnings` `[]`, exactly one entry `[directives/custom/standing-approvals.md, ['approver'], false, 'approver']` (path, roles, global, assignment) | the `toEqual` of the filtered entries — `Expected - 10, Received + 1` (no entry) |
+| 5 | characterization (of the design-gate ruling) | the id → status map of the blocks equals `{ SA-01: adopted, SA-02: proposed }` | ENOENT |
+
+**Fixture shape (AC 4).** Copied from a real run on the base: `npm run -s wingfoil -- directives list --role approver
+--format json` → exit `0`, keys `entries, warnings`, `warnings` `[]`, eight entries each with keys `path, frontmatter,
+roles, global, assignment`; the non-global one is `code-review directives/custom/code-review.md ["approver","reviewer","tech-lead"]
+false "approver, reviewer, tech-lead"`, so a directive bound to `approver` alone lists `roles ["approver"]`, `global
+false`, `assignment "approver"`, as the design's probe printed.
+
+**Reading of the design, for green.** The regexes are the design's, verbatim. Two consequences:
+- `Status:` and `Gate:` carry the colon inside the bold (`- **Status:** …`), `Evidence` and `Command` do not
+  (`^- \*\*Evidence\*\*`, `^- \*\*Command\*\*`): a `- **Evidence:**` line fails the "exactly one" case; write
+  `- **Evidence** …` and `- **Command** …`.
+- Evidence items: SA-02 as designed ends with an item no command decides (the reviewer's verdict), so the case
+  requires the first item after the Evidence line to match the command-and-output pattern (at least one), and does
+  not refuse a later non-command item. Every item, and the Command line, is one physical line (the items are the
+  indented lines right after the head; a non-indented line ends them).
+
+**Can pass.** In a `git clone --shared` of this branch in the qa scratch directory (never in the worktree), with a
+directive written to the design's shape (SA-01 adopted with the e2e-smoke Gate and a `workflow finalize` Command,
+SA-02 proposed with the `dev-loop.review` Gate and a `memory approve` Command, S1, S2) and `roles.yaml` at 1.9 naming
+task-343: `npx jest test/directives/standing-approvals.test.ts --maxWorkers=2` → `Tests: 14 passed, 14 total`. The
+SA-01 Command line of the design passes `COMMAND_ITEM`, and its reason gives `null` from `reasonRefusalMessage(…,
+{ approval: true })` (`dist/memory/index.js`).
+
+**Runs (in the worktree, red in place).**
+- `npx jest test/directives/standing-approvals.test.ts --maxWorkers=2` → `Tests: 14 failed, 14 total`.
+- `npx tsc --noEmit -p tsconfig.json` → exit `0`.
+- `npx jest test/lint --maxWorkers=2` → `Test Suites: 16 passed, 16 total`, `Tests: 165 passed, 165 total`.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
