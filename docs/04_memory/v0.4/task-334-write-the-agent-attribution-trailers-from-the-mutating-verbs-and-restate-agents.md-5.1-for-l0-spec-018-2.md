@@ -8,7 +8,7 @@ kind: "feature"   # REQUIRED — feature | fix (dl-133 Q1 (b)): `fix` when the t
 priority: "high"   # optional — high | medium | low
 tags: ["v0.4","w0","governance","attribution","agents"]               # optional — additional labels, e.g. [architecture, backend]
 ref: "dl-212, dl-117, dl-158"   # optional — backlog item ID, e.g. "TASK-001"
-bug: []   # optional — LIST of bug ids this task closes (dl-045). Two cases: a fix task derived from a bug
+bug: [bug-531]   # optional — LIST of bug ids this task closes (dl-045). Two cases: a fix task derived from a bug
                        # by release-planning, and a bug ABSORBED into an existing task's Acceptance Criteria because that
                        # task already owns the ground. `bug.sync_state` iterates this list; a bug with no task naming it
                        # here never advances past `triaged` (only a reject to `closed`, dl-123). A single string is still accepted for documents predating dl-045.
@@ -62,6 +62,11 @@ AGENTS.md §5.1 amendment in the L0 task: its refusal half lands with `task-333`
 8. (characterization) The spec amendments of `spec-008` § 2 global flags, commit subject list, build-signature trailer note (`spec-008` §2: the `--co-author` / `--ai-model` rows, the reserved
    keys, the trailers in the build-signature note, the §6 rows) and the `spec-017` §7.9 sentence are approved at the
    design gate; the BDD scenarios for P1.2, P1.3 and P1.6 that `spec-018` Consequences lists land before `red`.
+9. (red-first, structural) The agent context is resolved where `spec-006` §7 places it (`bug-531`, design-gate ruling
+   D1 (a)): `resolveGatedAgentContext(` is called only in `src/core/memory-transition.ts`, `workflow-adopt.ts`,
+   `workflow-rekey.ts` and `workflow-finalize.ts`, each before its first read past membership, except `finalize`'s, which
+   stays in its `approval:` branch (`spec-017` §7.9); a source-reading test pins the call sites, as `task-333`'s
+   call-site parity does.
 
 ## Implementation Notes
 
