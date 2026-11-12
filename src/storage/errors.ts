@@ -20,10 +20,16 @@ export class StorageError extends Error {
   }
 }
 
-/** Raised by {@link resolveProjectRoot} when no ancestor of `cwd` contains a `.git` entry. */
+/**
+ * Raised by {@link resolveProjectRoot} when no ancestor of `cwd` contains a `.git` entry — below the test-only
+ * `ceiling`, when one is given (spec-011, task-350). Never the answer to `--project`: a named root is not walked.
+ */
 export const E_NO_GIT_ROOT = 'E_NO_GIT_ROOT';
 
-/** Raised by {@link resolveProjectRoot} when the git root exists but isn't `cwd` itself. */
+/**
+ * Raised by {@link resolveProjectRoot} when the git root exists but isn't `cwd` itself, or when the directory the
+ * global `--project <dir>` names does not hold its own `.git` entry (`--project is not a git root: <dir>`, task-350).
+ */
 export const E_NOT_AT_GIT_ROOT = 'E_NOT_AT_GIT_ROOT';
 
 /** Raised by {@link renderMemoryPath} when a `{placeholder}` in a `path` pattern has no value. */

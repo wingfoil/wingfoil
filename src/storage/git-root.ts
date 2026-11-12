@@ -15,11 +15,12 @@ import { E_NO_GIT_ROOT, E_NOT_AT_GIT_ROOT, StorageError } from './errors';
 /** The options of {@link findGitRoot}. */
 export interface FindGitRootOptions {
   /**
-   * A directory the walk never examines, nor anything above it (git's own ceiling directories). Only
-   * tests pass one, so an "outside any repository" fixture gives the same result whatever lies above
-   * the system temporary directory (spec-011, `bug-406`, `bug-453`); the CLI never does. A ceiling that
-   * is not an ancestor of the starting directory changes nothing, and the starting directory itself is
-   * always examined.
+   * A directory the walk stops before (git's own ceiling directories): the starting directory is always
+   * examined, then each ancestor below the ceiling, and a ceiling that is a proper ancestor of the starting
+   * directory is never examined, nor anything above it. A ceiling that is not a proper ancestor changes
+   * nothing — given the starting directory itself, the walk goes on above it as without one. Only tests pass
+   * one, so an "outside any repository" fixture gives the same result whatever lies above the system
+   * temporary directory (spec-011, `bug-406`, `bug-453`); the CLI never does.
    */
   readonly ceiling?: string;
 }
@@ -36,8 +37,8 @@ export interface ResolveProjectRootOptions extends FindGitRootOptions {
 /**
  * Walk up from `cwd` looking for a `.git` entry (spec-011: "no upward search for `.wingfoil/`
  * itself, only for `.git`"). Returns the first ancestor directory (inclusive of `cwd`) that
- * contains `.git`, or `null` if the filesystem root — or the `ceiling` — is reached without finding
- * one. `cwd` is resolved first so relative paths and trailing separators don't affect the result
+ * contains `.git`, or `null` if the filesystem root is reached, or the next directory would be the
+ * `ceiling`, without finding one. `cwd` is resolved first so relative paths and trailing separators don't affect the result
  * (determinism).
  */
 export function findGitRoot(cwd: string, options: FindGitRootOptions = {}): string | null {
