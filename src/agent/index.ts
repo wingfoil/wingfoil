@@ -54,6 +54,7 @@ export {
   assignedSessionId,
   launchAgent,
   launchBanner,
+  launchPermissions,
   LOOKUP_TIMEOUT_MS,
   readJsonPath,
   renderLaunchArgv,
