@@ -5,7 +5,7 @@ type: directive
 kind: custom
 title: "Standing approvals: the evidence that suffices for a gate and the command the approver runs"
 tags: [custom, approval, process, governance]
-version: "1.0"   # 1.0 the first rules: SA-01 adopted, SA-02 proposed (release-planning v0.4 R1 L7, dl-212 D1, task-343; approver ruling at the design gate, 2026-11-12)
+version: "1.0"   # 1.0 the first rules: SA-01 adopted, SA-02 proposed (release-planning v0.4 R1 L7, dl-212 D1, task-343; approver ruling at the design gate, 2026-11-12; at the review, approver ruling 2026-11-12: SA-01's evidence checks the committed report against its candidate instead of re-running the smoke, its `warn` exclusion dropped, and both rules' governance item runs against the integration branch's remote; no bump, the file is not on the integration branch yet)
 ref: [P3.5, P3.7, REQ-SYS-08]
 ---
 
@@ -64,17 +64,24 @@ does not end with a paragraph made entirely of `Key: value` lines (`dl-067`, AGE
 
 - **Status:** adopted (2026-11-12, the approver's ruling D4 at `task-343`'s design gate)
 - **Gate:** `e2e-smoke.gate@release:<release id>` — the smoke on the packed candidate, hard-reject (`dl-023`).
+- **Who and when:** the `e2e-smoke` phase (qa) runs the smoke on the candidate and commits its report on top of it,
+  so the report commit's parent is the candidate. The approver runs every item below after that commit, in a worktree
+  at the head the gate is approved on, then runs the Command. The smoke is not re-run: a re-run rewrites the committed
+  report. `<candidate>` is the full sha of the commit the release ships; `<report>` is
+  `docs/07_gates/rl-<line>/rel-<version>-e2e-smoke.md`.
 - **Evidence** (each a command and its expected output; every item must hold):
-  1. `node scripts/e2e-smoke.cjs --candidate --report docs/07_gates/rl-<line>/rel-<version>-e2e-smoke.md` → exit `0`
-  2. `grep -cE '^Result: \*\*PASS\*\* \([0-9]+/[0-9]+ checks ok\)$' docs/07_gates/rl-<line>/rel-<version>-e2e-smoke.md` → `1`
-  3. `npm run check:mcp` → exit `0`
-  4. `npm run check:audit` → exit `0`
-  5. `node scripts/check-governance.cjs --base origin/main` → exit `0`
-  6. `git status --porcelain` → empty, in the phase's worktree
+  1. `git log -1 --format=%P -- <report>` → `<candidate>`
+  2. `grep -cx -- '- Expected commit: .<candidate>.' <report>` → `1`
+  3. `grep -cE '^Result: \*\*PASS\*\* \([0-9]+/[0-9]+ checks ok\)$' <report>` → `1`
+  4. `git diff --name-only <candidate>..HEAD -- . ':!docs/04_memory/' ':!docs/05_plans/' ':!docs/07_gates/'` → empty
+  5. `npm run check:mcp` → exit `0`
+  6. `npm run check:audit` → exit `0`
+  7. `node scripts/check-governance.cjs --base <the integration branch's remote>` → exit `0` (`origin/main` for a minor, `origin/release/X.Y` for a patch, `git-conventions` §9)
+  8. `git status --porcelain` → empty
 - **Command** (the approver, from their own terminal, at the repository root):
-  `node dist/cli.js workflow finalize sw-life-cycle-1-plan --step e2e-smoke.gate@release:<release id> --reason "Approves the e2e-smoke gate of <release id> under standing rule SA-01: the smoke on the packed candidate <sha> passes <n> of <n> checks (report <report path>), and check:mcp, check:audit and the governance check exit 0."`
-- **Outside the rule:** a coverage gap or a follow-up the phase proposes, a `warn` row, a report on a candidate
-  other than the one the release ships.
+  `node dist/cli.js workflow finalize sw-life-cycle-1-plan --step e2e-smoke.gate@release:<release id> --reason "Approves the e2e-smoke gate of <release id> under standing rule SA-01: the smoke on the packed candidate <candidate> passes <n> of <n> checks (report <report path>, committed on that candidate), and check:mcp, check:audit and the governance check exit 0."`
+- **Outside the rule:** a coverage gap or a follow-up the phase proposes, a report on a candidate other than the
+  one the release ships.
 
 ### SA-02 — The review approve of a task
 
@@ -87,7 +94,7 @@ does not end with a paragraph made entirely of `Key: value` lines (`dl-067`, AGE
   4. `npm run lint` → exit `0`
   5. `npm run typecheck` → exit `0`
   6. `npm run docs:api` → exit `0`
-  7. `node scripts/check-governance.cjs --base origin/main` → exit `0`
+  7. `node scripts/check-governance.cjs --base <the integration branch's remote>` → exit `0` (`origin/main` for a minor, `origin/release/X.Y` for a patch, `git-conventions` §9)
   8. `git status --porcelain` → empty, in the task's worktree (no pending amendment)
   9. the independent reviewer's verdict, no finding — no command decides it today: `scripts/check-phase-report.cjs` declares no claim for a verdict or a finding
 - **Command** (the approver, from their own terminal, at the repository root):
