@@ -29,11 +29,24 @@ const Argv = z.array(z.string());
 /** A non-empty string: a field whose empty value could only be a mistake. */
 const NonEmpty = z.string().min(1, 'must not be empty');
 
+/**
+ * `launch.<kind>.permissions` — the launch's permission posture (§2.2, `dl-223` (b), task-339): one argv fragment,
+ * for every role, or a map from a role name to a fragment. A map must declare `default`, the fragment of every role
+ * it does not name: that rule reads the map as a whole and names the field, so it is Pass 2's (`./manifest.ts`). The
+ * keys are not checked against `team.roles` (a built-in ships to projects with any role set). It holds no
+ * placeholder (§2.3). §3.3 step 14 appends the run's fragment after `launch.<kind>.args`.
+ */
+const Permissions = z.union([Argv, z.record(z.string(), Argv)]);
+
+/** A declared `launch.<kind>.permissions`: a fragment, or a role map with a `default` entry (`spec-016` §2.2). */
+export type LaunchPermissions = z.infer<typeof Permissions>;
+
 /** `launch.interactive` — the v0.3 launch, the agent owning the terminal (`adr-012` point 4). */
 const InteractiveLaunch = z.strictObject({
   args: Argv,
   /** Whether the launch needs a terminal on stdin and stdout (§3.3 step 12); `required` when absent. */
   terminal: z.enum(['required', 'optional']).default('required'),
+  permissions: Permissions.optional(),
 });
 
 /**
@@ -45,6 +58,7 @@ const InteractiveLaunch = z.strictObject({
 const HeadlessLaunch = z.strictObject({
   args: Argv,
   output: z.enum(['json', 'jsonl', 'none']),
+  permissions: Permissions.optional(),
 });
 
 /** The JSON paths `usage.fields` may declare (§2.2); an undeclared one yields `not-reported`. */

@@ -83,7 +83,7 @@ import type { Step } from '../core/workflow-next';
 import type { LaunchKind } from '../workflow/schema';
 
 import type { TimeBound } from './duration';
-import { LOOKUP_TIMEOUT_MS, runConflictProbe, type LaunchHost, type LaunchKindRun } from './launch';
+import { launchPermissions, LOOKUP_TIMEOUT_MS, runConflictProbe, type LaunchHost, type LaunchKindRun } from './launch';
 import type { AdapterManifest } from './schema';
 import { adapterTreeDiagnosticsAtRev, duplicateAdapterRefusal, loadAdapter, type LoadedAdapter } from './discovery';
 import { ADHOC_PHASE, executionNotesSection, nextRunId, NO_WORKFLOW, recordSubject, runLogPreflight } from './run-log';
@@ -813,7 +813,7 @@ async function runPipeline<T>(
   });
 }
 
-/** The launch `--dry-run` prints (`spec-008` §2): the record commit it would make, and the run. */
+/** The launch `--dry-run` prints (`spec-008` §2): the record commit it would make, the run, and its launch. */
 export interface AgentLaunchPlan {
   readonly dryRun: true;
   /** `agent: record <run-id>`. */
@@ -831,6 +831,15 @@ export interface AgentLaunchPlan {
     readonly agent: string;
     readonly adapter: string;
     readonly state_ref: string;
+  };
+  /**
+   * The launch (`spec-016` §3.3 `--dry-run`, `dl-223` Action 3, task-339): the kind §3.2 step 7 resolved, and the
+   * permission fragment §3.3 step 14 would append for the run's role, `[]` when the adapter declares none. Not part
+   * of the record (§4.2): it is the manifest's at `state_ref`, for the record's `role`.
+   */
+  readonly launch: {
+    readonly kind: LaunchKindRun;
+    readonly permissions: readonly string[];
   };
   /** §2.4's bootstrap, the bytes the agent would be given. */
   readonly bootstrap: string;
@@ -852,6 +861,10 @@ export function launchPlan(prepared: PreparedLaunch): AgentLaunchPlan {
       agent: prepared.agent.name,
       adapter: `${prepared.adapter.kind}/${prepared.adapter.name}`,
       state_ref: prepared.stateRef,
+    },
+    launch: {
+      kind: prepared.kind,
+      permissions: [...launchPermissions(prepared.adapter.manifest, prepared.kind, prepared.role)],
     },
     bootstrap: prepared.bootstrap,
   };

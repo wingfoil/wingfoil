@@ -115,13 +115,19 @@ describe('AC 1 — custom/fake.yaml declares every §2.2 field and validates', (
       expect.arrayContaining(['name', 'format', 'command', 'verified_with', 'launch.interactive.terminal', 'session.resume.args', 'usage.fields.cache_write', 'summary.export_args']),
     );
     // task-356 (`bug-372`) adds `mcp.conflict_args`: 27 leaves.
-    expect(paths).toHaveLength(27);
+    // task-339 (`dl-223` (b)) adds `launch.interactive.permissions` and `launch.headless.permissions`: 29 leaves.
+    expect(paths).toHaveLength(29);
   });
 
   // `mcp.conflict_args` is the one field the fixture leaves out on purpose (task-356): declared, it would run the
   // conflict probe before every launch and add a record line ahead of the launch's, which every suite reading
   // `fake[0]` as the launch relies on. `config-arg/fake-conflict.yaml` declares it.
-  it.each(leafPaths(AdapterManifest).filter((path) => path !== 'mcp.conflict_args').map((path) => [path]))('declares `%s`', (path) => {
+  // `launch.interactive.permissions` and `launch.headless.permissions` are left out on purpose too (task-339, D10):
+  // declared, they would add a fragment to every launch argv the suites pin. The `perm` adapter of the permissions
+  // suites (`test/agent/launch-permissions.test.ts`, `test/cli/agent-execute-permissions.integration.test.ts`) is
+  // derived inline from this fixture and declares them.
+  const LEFT_OUT = ['mcp.conflict_args', 'launch.interactive.permissions', 'launch.headless.permissions'];
+  it.each(leafPaths(AdapterManifest).filter((path) => !LEFT_OUT.includes(path)).map((path) => [path]))('declares `%s`', (path) => {
     expect(at(raw, path)).toBeDefined();
   });
 

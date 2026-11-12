@@ -1,3 +1,6 @@
+# Revised 2026-11-11 (task-339, spec-016 §2.2, §3.3 step 14 and --dry-run; dl-223 (b), Action 3): the headless
+# posture of the run's role is added. It is implemented by test/cli/agent-execute-permissions.integration.test.ts.
+# Earlier scenarios are unchanged.
 # Revised 2026-11-08 (task-335, spec-016 §3.1, §3.2 steps 1 and 7, §3.3 steps 4, 12, 14, 15 and 18, §3.5, §3.7;
 # dl-181, dl-183, dl-171, bug-392): the headless work run, the launch-kind flags, the waiting-step refusal, the
 # time bound and the dry run without a terminal are added. They are implemented by
@@ -136,3 +139,10 @@ Feature: P5.3.1 (US-1-03) - wingfoil agent execute [--next]
     Then no agent is launched and the launch plan is printed
     And stderr has the line "warning: interactive launch needs a terminal on stdin and stdout: a run without --dry-run is refused here"
     And the command exits with code 0
+
+  Scenario: A headless launch takes the posture of its role
+    Given the agent's adapter declares "launch.headless.permissions" as a map with a "reviewer" entry and a "default" entry
+    When I run "wingfoil agent execute --element task:202 --role reviewer --headless --dry-run --format json"
+    Then the launch plan's "launch" is {"kind": "headless", "permissions": <the reviewer entry>}
+    And with "--role developer", a role the map does not name, its "permissions" is the "default" entry
+    And a run without "--dry-run" launches the agent with the reviewer entry after the adapter's headless arguments

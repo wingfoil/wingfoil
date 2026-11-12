@@ -102,7 +102,9 @@ that changes from task to task.
   `adapter` must also declare `email` (`dl-158` Rule 2 (ii), `task-260`): the entry is the identity
   that signs the launched agent's commits (§3.2 step 4). An agent without
   `adapter` can still be named in DNA, but it cannot be launched (§3.7, `NO_ADAPTER`). The DNA stays
-  the only place where *who* executes *which roles* is declared. The manifest never lists roles.
+  the only place where *who* executes *which roles* is declared. The manifest never says which agent executes a
+  role: the one place it names roles is a `launch.*.permissions` map's keys (§2.2, `dl-223` (b)), which pick the
+  argv fragment of a run whose role is already resolved and grant no role to anyone.
 - Manifests are read at `HEAD`, because they gate what `agent execute` launches
   (`dl-080` (B), `command-baseline` directive, `spec-006` §6).
 - **What is not an adapter is reported** (`bug-290`). An adapter is a `.yaml` file directly inside
@@ -133,6 +135,8 @@ without its MCP registration.
 | `launch.interactive.terminal` | `required` \| `optional` | no (default `required`) | Whether the interactive launch needs a terminal on stdin and stdout (§3.3 step 12, `NO_TERMINAL`). `required` for every agent CLI that owns a terminal session, and for every built-in. `optional` declares an executable that runs to completion on inherited, non-terminal stdio; the fake adapter declares it, which is how the interactive success path runs under Jest and CI with no pseudo-terminal (§2.7). |
 | `launch.headless.args` | string[] | no | Argv template for the headless launch (§2.3). Read from v0.4 by the work run (§3.5, `dl-181`); an adapter without it cannot launch headless (§3.7 `NO_LAUNCH_KIND`, `dl-183` Q3 (a)). |
 | `launch.headless.output` | `json` \| `jsonl` \| `none` | with `headless` | How stdout is read after a headless run: `json`, one JSON document; `jsonl`, one JSON value per line; `none`, not read. The v0.4 work run reads from it only the session id under `session.id: output` (§2.6, §3.5). |
+| `launch.interactive.permissions` | string[] \| map | no | The permission posture of the interactive launch (`dl-223` (b)): either one argv fragment, for every role, or a map from a role name to an argv fragment, which declares a `default` entry, the fragment of every role the map does not name. Any other shape is a manifest validation error: a scalar, a map without `default`, a value that is not a list of strings. It holds no placeholder (§2.3). §3.3 step 14 appends the run's fragment to `launch.interactive.args`. Absent, nothing is appended and the agent CLI keeps its own posture. A map's keys name roles only to pick a fragment for a run whose role is already resolved (§3.2); they are not checked against `team.roles`, since a built-in ships to projects with any role set. |
+| `launch.headless.permissions` | string[] \| map | no | The same, for the headless launch: what a headless agent may do without asking (`dl-181` Q2 (a), refined per role by `dl-223` (b)), never wider than the step's role needs (`dl-181`'s ratification). Appended to `launch.headless.args` (§3.3 step 14). |
 | `prompt.via` | `arg` \| `stdin` \| `file` | yes | How the bootstrap (§2.4) reaches the agent: as the `{bootstrap}` argument, on stdin, or as a file whose path is `{bootstrap_file}`. `stdin` is legal only for `headless`, because an interactive agent owns stdin. Every format-1 manifest declares `launch.interactive`, so a format-1 manifest declaring `stdin` is refused; the value is kept so that v1.0 can make `launch.interactive` optional for a headless-only adapter (§3.5) without changing this enum. |
 | `mcp.via` | `config-file` \| `config-arg` \| `args` | yes | How the `wingfoil` MCP server is registered for the launched process (§2.5): a file, one argument holding the rendered `mcp.template`, or the server's command and argv as arguments. There is no `none`: an adapter that cannot register the server is refused (`adr-012` Consequences). |
 | `mcp.template` | string | `config-file`, `config-arg`: yes | The registration, with placeholders (§2.3). Under `config-file` it is rendered to a file outside the repository and its path passed as `{mcp_config_file}`; under `config-arg` the rendered text itself is passed as the one argument `{mcp_config}` (for an agent CLI that has no option taking a configuration file's path, task-237). |
@@ -358,7 +362,7 @@ needs:
 
 | `name` (file basename) | Agent CLI | `command`, `launch.interactive.args`, `prompt.via`, `mcp.*`, `session.*`, `usage.*` | `verified_with` |
 |---|---|---|---|
-| `claude-code` | Claude Code | `command: claude`; `launch.interactive.args: ["{bootstrap}", --mcp-config, "{mcp_config_file}"]`; `prompt.via: arg`; `mcp.via: config-file`; `session.id: assign` with `[--session-id, "{session_id}"]`, resume `[--resume, "{session_id}"]`; `usage.from: none` (`task-236`; launch, MCP and session id checked by hand on 2026-10-14 with 2.1.296, resume from `--help` only) | `2.1.296 (Claude Code)` |
+| `claude-code` | Claude Code | `command: claude`; `launch.interactive.args: ["{bootstrap}", --mcp-config, "{mcp_config_file}"]`; `prompt.via: arg`; `mcp.via: config-file`; `session.id: assign` with `[--session-id, "{session_id}"]`, resume `[--resume, "{session_id}"]`; `usage.from: none` (`task-236`; launch, MCP and session id checked by hand on 2026-10-14 with 2.1.296, resume from `--help` only) | the pass ran on `2.1.296 (Claude Code)` (`task-236`); the manifest has one `verified_with`, the headless table's |
 | `codex-cli` | Codex CLI | `command: codex`; `launch.interactive.args: [-c, "{mcp_config}", "{bootstrap}"]`; `prompt.via: arg`; `mcp.via: config-arg` with the template `mcp_servers.wingfoil={command = "{mcp_command}", args = {mcp_args}, enabled = true, required = true}` and `mcp.conflict_args: [mcp, get, wingfoil]` (`task-356`, §2.5); `session.id: output` with `session.field: thread_id`, read from the headless launch's `--json` events (the first event, `thread.started`, carries it; `codex exec resume <id>` accepts it) (§2.6; an interactive run records `not-reported`), resume not supported until §7's resume ships; `usage.from: none` (`task-237`; from `codex --help` of `codex-cli 0.145.0`; checked by hand on 2026-10-14 with codex-cli 0.145.0 (ChatGPT sign-in); the conflict check and the session field by hand with `codex-cli 0.145.0`, `task-356`) | `codex-cli 0.145.0` |
 
 Each built-in declares `launch.interactive.terminal: required` (§2.2) and carries `verified_with`,
@@ -383,13 +387,30 @@ id only (§2.6, `task-356`):
 
 | `name` | `launch.headless` | Read from | `verified_with` |
 |---|---|---|---|
-| `claude-code` | `args: [-p, "{bootstrap}", --mcp-config, "{mcp_config_file}"]`, `output: none` (`-p`/`--print`, "print response and exit"; the prompt before `--mcp-config` for the reason of the interactive launch; `session.assign_args` still closes the list) | `claude --help` of `2.1.310 (Claude Code)`, which still lists every flag of the interactive launch, `--session-id` and `--resume` | `2.1.310 (Claude Code)` |
+| `claude-code` | `args: [-p, "{bootstrap}", --mcp-config, "{mcp_config_file}"]`, `output: none` (`-p`/`--print`, "print response and exit"; the prompt before `--mcp-config` for the reason of the interactive launch; `session.assign_args` still closes the list) | `claude --help` of `2.1.310 (Claude Code)`, which still lists every flag of the interactive launch, `--session-id` and `--resume` | `2.1.322 (Claude Code)`, the version the by-hand pass of the headless role map ran (`task-339`) |
 | `codex-cli` | `args: [exec, --json, -c, "{mcp_config}", "{bootstrap}"]`, `output: jsonl` (`codex exec`, "run Codex non-interactively", which takes `-c` and the prompt as its positional; `--json` prints its events to stdout as JSONL, the source of the session id, `task-356`) | `codex exec --help` of `codex-cli 0.145.0` | `codex-cli 0.145.0` |
 
 The by-hand pass of a headless launch, as `task-236` and `task-237` made for the interactive one (the agent starts
 with no terminal, registers the `wingfoil` server, reads the session Resource and exits), is recorded in
-`task-335`'s Execution Notes with the version it ran, before any project relies on the block. The posture a
-headless agent runs with (what it may do without asking) is `dl-223`'s and is not declared here.
+`task-335`'s Execution Notes with the version it ran, before any project relies on the block.
+
+**The posture of the built-ins' headless launch (v0.4, `task-339`; `dl-223` (b), Action 3).** Each built-in
+declares `launch.headless.permissions` as a role map, read from its agent CLI's own help output at the version
+`verified_with` names. `default`, the entry of every role the map does not name, grants reading only. `developer`,
+`qa` and `architect`, whose work edits files, runs the tests and the `wingfoil` verbs and commits, are granted that and
+no publishing step — the verbs run through the project's own copy of wingfoil, in any of the forms a project uses:
+bare (`node_modules/.bin` on `PATH`, or an alias), `npx wingfoil …` or `npm run wingfoil -- …`; `reviewer`, whose work reads history and diffs and runs the tests (`dl-223` Context), is granted
+reading and running them:
+
+| `name` | `default` | `developer`, `qa`, `architect` | `reviewer` | Read from |
+|---|---|---|---|---|
+| `claude-code` | `[--permission-mode, dontAsk, --allowedTools, Read, Glob, Grep]` (`dontAsk` is chosen to deny every tool no rule allows, so that a headless agent never waits on a prompt nobody can answer; the help lists the mode without describing it, so the by-hand pass below settles it) | `default`'s, with `Edit`, `Write`, `"Bash(git *)"`, `"Bash(npm *)"`, `"Bash(npx *)"`, `"Bash(node *)"` and `"Bash(wingfoil *)"` allowed (with `"Bash(npx *)"` and `"Bash(npm *)"`, the three forms the project's own wingfoil runs in), then `--disallowedTools` with `"Bash(git push *)"` and `"Bash(npm publish *)"` | `default`'s, with `"Bash(git log *)"`, `"Bash(git show *)"`, `"Bash(git diff *)"`, `"Bash(git status *)"`, `"Bash(npm test *)"`, `"Bash(npm run *)"` and `"Bash(npx jest *)"` allowed | `claude --help` of `2.1.310 (Claude Code)`: `--permission-mode` and its choices, `--allowedTools` and `--disallowedTools` ("Comma or space-separated list of tool names", the example `"Bash(git *) Edit"`) |
+| `codex-cli` | `[--sandbox, read-only]` | `[--sandbox, workspace-write]` | `[--sandbox, workspace-write]`: the narrowest sandbox the tests can run in, since they write the build | `codex exec --help` of `codex-cli 0.145.0`: `-s, --sandbox <SANDBOX_MODE>`, with `read-only`, `workspace-write` and `danger-full-access` |
+
+Neither built-in declares `launch.interactive.permissions`: at a terminal a person answers the agent CLI's own
+prompts. The by-hand pass of each entry (the agent starts with the fragment, reads the session Resource, can do what
+its role's work needs and is refused the rest) is recorded in `task-339`'s Execution Notes with the CLI version it
+ran, before any project relies on the maps; `verified_with` names that version.
 
 ### 3. `wingfoil agent execute`
 
@@ -572,7 +593,9 @@ repository.
 13. Print `run <run-id>: launching <agent> (<adapter>) as <role> on <type>:<id>` on stderr, `<adapter>`
     in the record's `<built-in|custom>/<name>` form. It is a **notice** (§3.4).
 14. **Spawn** the agent's `command` (a name is looked up on `PATH`, a path resolved against the project
-    root) with `launch.<kind>.args` (+ `session.assign_args` when `assign`), no shell, the project
+    root) with `launch.<kind>.args`, then the permission fragment of the run's role (`launch.<kind>.permissions`:
+    the fragment itself, or the map's entry for the role, else its `default`; nothing when the field is absent;
+    §2.2, `dl-223` (b)), then `session.assign_args` when `assign`, no shell, the project
     root as its working directory, WingFoil's environment passed through. Interactive: stdio inherited.
     Headless (§3.5): stdin is not connected (the null device), stdout is captured and not echoed, stderr is
     `agent execute`'s own, and the agent runs in a session and process group of its own (POSIX), so it has no
@@ -629,9 +652,12 @@ repository.
 of step 13, prints the launch plan on stdout and exits `0`. Step 12 does not refuse a dry run, which
 spawns no agent and needs no terminal (`bug-392`): when a real run would be refused there, the dry run
 prints the one line `warning: interactive launch needs a terminal on stdin and stdout: a run without
---dry-run is refused here` and its plan. The plan is `{dryRun: true, subject, paths, run, bootstrap}`, the
+--dry-run is refused here` and its plan. The plan is `{dryRun: true, subject, paths, run, launch, bootstrap}`, the
 record commit's subject and run-log path, the record's fields known before the spawn (`id`, `element`,
-`workflow`, `phase`, `role`, `mode`, `agent`, `adapter`, `state_ref`, §4.2 order) and §2.4's bootstrap.
+`workflow`, `phase`, `role`, `mode`, `agent`, `adapter`, `state_ref`, §4.2 order), the launch
+`{kind, permissions}` — the kind §3.2 step 7 resolved and the fragment step 14 would append for the run's role,
+`[]` when the adapter declares none (`dl-223` Action 3) — and §2.4's bootstrap. The fragment is not part of the
+record (§4.2): it is the manifest's at `state_ref`, for the record's `role`.
 It has no `message` or `diff`: the record holds the run's exit, which no plan can know. Nothing is
 spawned but the pre-flight's server, and nothing is written to the repository.
 
@@ -1363,3 +1389,24 @@ review) — §2.8.** The paragraph that introduces the built-ins' headless launc
 `output: none`; it now says that `codex-cli`'s declares `output: jsonl`, read for its session id (as its row already
 says), while `claude-code`'s stays `none`. Edited in place without a supersede or a state change (`dl-047`), pending
 the approver's `memory amend`.
+
+**Revision (2026-11-11, `task-339-declare-an-adapter-s-launch-permissions-per-role-and-print-the-selected-fragment-in-dry-run`)
+— §2.1, §2.2, §2.8 and §3.3.** `dl-223` (b) (`ready`) refines `dl-181` Q2 (a) from per adapter to per role: §2.2
+gains `launch.interactive.permissions` and `launch.headless.permissions`, an argv fragment or a map from a role name to
+a fragment with a `default` entry, holding no placeholder; §2.1 says what a map's role keys are; §3.3 step 14 appends
+the fragment of the run's role between `launch.<kind>.args` and `session.assign_args`, and the dry-run plan gains
+`launch: {kind, permissions}`; §2.8 gives each built-in's headless launch a role map, read from its CLI's help, and
+replaces the sentence that left the posture to `dl-223`. The manifest `format` stays 1, an additive optional field
+(`dl-149`); a 0.3.x build refuses a manifest that declares it (an unknown key). No placeholder, record key or exit code
+changes. Edited in place without a supersede or a state change (`dl-047`), pending the approver's `memory amend`.
+
+**Revision (2026-11-12, `task-339-declare-an-adapter-s-launch-permissions-per-role-and-print-the-selected-fragment-in-dry-run`)
+— §2.8.** The `claude-code` row of the headless table names `verified_with` `2.1.322 (Claude Code)`: the CLI updated
+itself from `2.1.310` between the help read and the by-hand pass of the role map, which ran on `2.1.322` and passed
+(`task-339`'s Execution Notes, "by-hand pass H2"; approver ruling 2026-11-12). The flags stay those read from the help
+of `2.1.310`. The `claude-code` map's `developer`, `qa` and `architect` entries gain `"Bash(wingfoil *)"`, and the
+posture paragraph says the `wingfoil` verbs run through the project's own copy of wingfoil, bare, through `npx` or
+through an npm script, the copy the project itself installs (the task's review, approver ruling 2026-11-12). The interactive table's
+`claude-code` `verified_with` cell reads as the history of `task-236`'s pass on `2.1.296`: the manifest has one
+`verified_with`, the headless table's. Edited in place without a supersede or a state change (`dl-047`), pending the
+approver's `memory amend`.
