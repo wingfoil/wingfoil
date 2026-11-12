@@ -526,6 +526,63 @@ the stamp with `distBuildStamp()`. The dry-run shape of T-20 is copied the same 
 - The registrar test names the option by its spelling `ai-model` and the messages by their text, not by exports: the
   design names `AI_MODEL_OPTION` without saying which module exports it.
 
+### green (developer, 2026-11-12)
+
+**Base.** Head `e3a8c087c` at start, `git rev-list --count HEAD..main` → `0`, so no merge. PATH guard: the task's PATH
+shim; `wingfoil --version` and `node dist/cli.js --version` both `0.3.2 (2fb81e1ea942f577b2d350a54d039f92565062fa)`.
+At the green commit `main` has moved (`git rev-list --count HEAD..main` → `43`; of the files this task changes only
+`AGENTS.md` moved on `main`: `git diff --name-only HEAD...main`); the merge is refactor's (W0-R3).
+
+**Green commit `1e725ac7d`** (`feat(attribution): task-334 — …`), 23 files, the design's list only (`git show --stat
+HEAD`): `src/storage/commit.ts`, `src/storage/index.ts`, `src/core/agent-context.ts`, `memory-transition.ts`,
+`index.ts`, `workflow-start-end.ts`, `workflow-create-remove.ts`, `workflow-finalize.ts`, `workflow-adopt.ts`,
+`workflow-rekey.ts`, `provenance-record.ts`, `directive-assign.ts`, `src/cli/registrar.ts`; `AGENTS.md`,
+`docs/user-guide.md`, `docs/cli-reference.md`, `docs/01_vision/X_cli-cmds.md` (2.1 → 2.2, Date, history entry),
+`docs/01_vision/00_index.md` (the row, the ranges, Last indexed), `git-conventions.md` (2.7 → 2.8, Date, version
+note); the four pins the design gives green (`test/docs/x-cli-cmds.test.ts`, `test/cli/registrar.test.ts`,
+`test/cli/program.test.ts`, `test/cli/registrar-co-author.test.ts`). No red file touched (T4 below).
+
+**What it does.**
+- Storage: `CommitAttribution { name, email, model, note? }` and `CommitOptions.attribution`; `stampedMessage` appends
+  `Co-Authored-By: <name> <<email>>` and `AI-Model: <model>` after `WingFoil-Version:` in the final paragraph, and puts
+  `note` as the body's first paragraph; the approval backstop stamps with the attribution. Without it, today's bytes.
+- `agent-context.ts`: the ungated form of `resolveAgentContext` (rules 1–4 of `spec-018` §2.3, §2.5's two refusals,
+  `W_AGENT_ENTRY_GUESSED`, `W_NO_AGENT_ENTRY` with §1's phrases, the model by §2.4 and D4);
+  `resolveOperationAgentContext(root)`, memoized per invocation and root, reporting its warnings once (D3);
+  `AI_MODEL_OPTION` and the four `--ai-model` / `WINGFOIL_AGENT_MODEL` messages as exported constants.
+- Call sites, right after membership: `runDnaMutation`, `memoryAddFn`, `directiveCreate/Assign/Remove`,
+  `workflowStart`/`End`, `workflowCreate`/`Remove`, single `workflow adopt`; `finalize` in its non-`approval:`
+  branch; `beginMemoryTransition` gated for `approve`/`reject`/`amend`, ungated otherwise, carried as
+  `BegunMemoryTransition.agent` and used by the three gated callers in `index.ts` (D1, `bug-531`).
+- Registrar: `--ai-model <id>` derived after `--co-author`, stripped from `ctx.options`, handed in the invocation;
+  usage checks after the blank `--co-author` one and before `resolveRoot()`.
+
+**One choice inside the declared files.** `src/core/memory-supersede.ts` (not in the design's list) builds a
+`BegunMemoryTransition` for the superseded element; a required `agent` field broke it (`npx tsc --noEmit -p
+tsconfig.json` → TS2322 at `memory-supersede.ts:74`). Rather than touch an undeclared file, `agent` is optional on the
+interface and `beginMemoryTransition` returns `BegunMemoryTransition & { agent: AgentContext }`, so the three gated
+callers still get it typed required; the supersede's `finalize` commit (an approve's second commit) carries no
+attribution, as an approval never does (`spec-018` §3.3). `ProvenanceRecord.attribution` is optional for the same
+reason (`test/core/provenance-record.test.ts` builds records without it).
+
+**Red → green.** Red: `npx jest <the 6 suites>` → `Tests: 98 failed, 18 passed, 116 total` (red notes). Green, this
+worktree: `npx jest test/storage/commit-attribution.test.ts test/core/agent-attribution.test.ts
+test/core/agent-context-call-sites.test.ts test/cli/registrar-ai-model.test.ts --maxWorkers=2` → `Tests: 49 passed`;
+`npx jest test/cli/agent-attribution.integration.test.ts --maxWorkers=2` → `Tests: 50 passed, 50 total`; the docs suite
+with the pins: `npx jest test/docs/l0-attribution-text.test.ts test/docs/x-cli-cmds.test.ts test/docs/vision-index.test.ts
+test/directives/git-conventions.test.ts test/docs/cli-reference.test.ts test/cli/registrar.test.ts
+test/cli/program.test.ts test/cli/registrar-co-author.test.ts --maxWorkers=2` → `Tests: 183 passed`. AC 7, after
+`waitslot.sh`: `npx jest test/docs test/directives test/lint --maxWorkers=2` → `Test Suites: 63 passed`, `Tests: 756
+passed`. The design's test list plus all of `test/storage` and the CLI suites (28 paths), after `waitslot.sh` → `Test
+Suites: 71 passed`, `Tests: 1112 passed`. `npx tsc --noEmit -p tsconfig.json` → no output; `npx eslint` on the changed
+`.ts` files → no output (a first run flagged `no-control-regex` on the one-line check, rewritten with code points).
+
+**T4.** `git log --first-parent --no-merges --format=%h 2fb81e1ea..HEAD -- <red's 7 files>` → empty.
+
+**Deviation, declared.** One `npx tsc --noEmit -p tsconfig.build.json` was run bare, outside the slot and outside the
+npm script, while fixing the type error above (it completed with no output); the heavy-gate rule (T5) says it runs
+only through `npm run typecheck`. Refactor runs it there.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
