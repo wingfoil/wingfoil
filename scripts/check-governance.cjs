@@ -936,7 +936,7 @@ function checkGovernance(root, options = {}) {
         rule: 'body',
         message:
           `an approval commit (it has an Approver: line) carries no agent trailer (spec-018 §4, git-conventions §7), ` +
-          `yet it has a ${key}: line${count > 1 ? ` (occurrence ${count})` : ''}`,
+          `yet it has ${/^[aeiou]/i.test(key) ? 'an' : 'a'} ${key}: line${count > 1 ? ` (occurrence ${count})` : ''}`,
         gated: isGated(commit.sha, 'approval-agent-trailer'),
         check: 'approval-agent-trailer',
       });

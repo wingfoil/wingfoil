@@ -1569,9 +1569,8 @@ const memoryApproveFn: CoreFn<unknown, MemoryApproveResult> = async (params) => 
   const { id } = prepared.value; // the element's full id, whatever reference the verb was given (task-332)
   const { type, path, content, from, to } = prepared.value;
 
-  const agent = resolveGatedAgentContext(root);
-  if (!agent.ok) return agent;
-  const authorized = requireApprovalAuthority(root, type, prepared.value.identity, agent.value, 'memory approve');
+  const agent = resolveGatedAgentContext();
+  const authorized = requireApprovalAuthority(root, type, prepared.value.identity, agent, 'memory approve');
   if (!authorized.ok) return authorized;
 
   const supersede = prepareSupersede(root, prepared.value);
@@ -1732,9 +1731,8 @@ const memoryRejectFn: CoreFn<unknown, MemoryRejectResult> = async (params) => {
   const { id } = prepared.value; // the element's full id, whatever reference the verb was given (task-332)
   const { type, path, from, to, content } = prepared.value;
 
-  const agent = resolveGatedAgentContext(root);
-  if (!agent.ok) return agent;
-  const authorized = requireApprovalAuthority(root, type, prepared.value.identity, agent.value, 'memory reject');
+  const agent = resolveGatedAgentContext();
+  const authorized = requireApprovalAuthority(root, type, prepared.value.identity, agent, 'memory reject');
   if (!authorized.ok) return authorized;
 
   const { name, email } = prepared.value.identity;
@@ -1995,9 +1993,8 @@ const memoryAmendFn: CoreFn<unknown, MemoryAmendResult> = async (params) => {
   // would otherwise be refused for a field change it never made.
   const confined = requireConfinedWriteTarget(root, path, 'write');
   if (!confined.ok) return confined;
-  const agent = resolveGatedAgentContext(root);
-  if (!agent.ok) return agent;
-  const authorized = requireApprovalAuthority(root, type, prepared.value.identity, agent.value, 'memory amend');
+  const agent = resolveGatedAgentContext();
+  const authorized = requireApprovalAuthority(root, type, prepared.value.identity, agent, 'memory amend');
   if (!authorized.ok) return authorized;
 
   const amendable = requireAmendableType(memoryYaml, type);

@@ -254,9 +254,8 @@ export function workflowAdoptAtHead(root: string, request: AdoptRequest): CoreRe
     if (!checked.ok) return checked;
     const member = requireTeamMembership(root, checked.value);
     if (!member.ok) return member;
-    const agent = resolveGatedAgentContext(root);
-    if (!agent.ok) return agent;
-    const authorized = requireApproverAuthority(root, checked.value, BULK_ADOPT_UNAUTHORIZED, agent.value, 'workflow adopt --plan --apply');
+    const agent = resolveGatedAgentContext();
+    const authorized = requireApproverAuthority(root, checked.value, BULK_ADOPT_UNAUTHORIZED, agent, 'workflow adopt --plan --apply');
     if (!authorized.ok) return authorized;
     identity = checked.value;
   }

@@ -135,13 +135,21 @@ function isPresent(marker: AgentMarker, invocation: AgentInvocation): boolean {
  * @param root - The project root; read by the ungated form (`team.agents` at `HEAD`), never by the gated one.
  */
 export function resolveAgentContext(root: string, request: AgentContextRequest): CoreResult<AgentContext> {
-  const markers = AGENT_MARKERS.filter((marker) => isPresent(marker, request));
-  return coreOk<AgentContext>({ markers, attribution: null });
+  return coreOk<AgentContext>(gatedContext(request));
 }
 
-/** The gated agent context of the running operation: {@link resolveAgentContext} over {@link currentAgentInvocation}. */
-export function resolveGatedAgentContext(root: string): CoreResult<AgentContext> {
-  return resolveAgentContext(root, { ...currentAgentInvocation(), gated: true });
+/** The markers `invocation` carries, in §1 order, and no attribution: the gated form, which never refuses (§2.6). */
+function gatedContext(invocation: AgentInvocation): AgentContext {
+  return { markers: AGENT_MARKERS.filter((marker) => isPresent(marker, invocation)), attribution: null };
+}
+
+/**
+ * The gated agent context of the running operation (`spec-018` §2.6): {@link resolveAgentContext}'s gated form over
+ * {@link currentAgentInvocation}. The gated form reads no `team.agents` entry and never refuses, so this returns the
+ * context itself rather than a `CoreResult` a caller would have to test for a refusal that cannot happen.
+ */
+export function resolveGatedAgentContext(): AgentContext {
+  return gatedContext(currentAgentInvocation());
 }
 
 /**

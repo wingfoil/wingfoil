@@ -151,9 +151,8 @@ export function workflowFinalizeAtHead(root: string, request: FinalizeRequest): 
     const reason = requireReason(request.options, { approval: true });
     // `spec-018` §2.6 (design D11): only here is the operation known to be approver-gated, so the gated agent context
     // is resolved here, and the shared check refuses an agent's session first (§3.1).
-    const agent = resolveGatedAgentContext(root);
-    if (!agent.ok) return agent;
-    const authorized = requireApprovalAuthority(root, authorityType(step, instance), identity.value, agent.value, 'workflow finalize');
+    const agent = resolveGatedAgentContext();
+    const authorized = requireApprovalAuthority(root, authorityType(step, instance), identity.value, agent, 'workflow finalize');
     if (!authorized.ok) return authorized;
     body.push(`Approver: ${identity.value.name} <${identity.value.email}> (${APPROVER_ROLE})`, `Reason: ${reason}`);
   } else if (given !== undefined) {

@@ -127,9 +127,8 @@ export function workflowRekeyAtHead(root: string, request: RekeyRequest): CoreRe
   if (!identity.ok) return identity;
   const member = requireTeamMembership(root, identity.value);
   if (!member.ok) return member;
-  const agent = resolveGatedAgentContext(root);
-  if (!agent.ok) return agent;
-  const authorized = requireApproverAuthority(root, identity.value, REKEY_UNAUTHORIZED, agent.value, 'workflow rekey');
+  const agent = resolveGatedAgentContext();
+  const authorized = requireApproverAuthority(root, identity.value, REKEY_UNAUTHORIZED, agent, 'workflow rekey');
   if (!authorized.ok) return authorized;
 
   const snapshot = readDeductionSnapshotAtHead(root);
