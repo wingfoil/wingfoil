@@ -80,7 +80,8 @@ wingfoil [global-flags] <noun> [args] [flags]              # flat command: `init
 - **One order of usage checks.** Every command, the bootstrap ones included, checks in this order: the
   global `--format` value — it decides how every later error is rendered, so an invalid one is refused
   first, in console text (`spec-005` §2); then the operand count, a surplus before a missing operand;
-  then the project root (`E_NOT_AT_GIT_ROOT`, `E_NO_GIT_ROOT`, exit `1`); then the operation's own
+  then a blank `--project` value (exit `2`, §2); then the project root (`E_NOT_AT_GIT_ROOT`, `E_NO_GIT_ROOT`,
+  exit `1`) — the directory `--project` names, or the current directory without it; then the operation's own
   checks.
 - **One id per call.** The Memory transition verbs (`memory submit`, `approve`, `reject`, `deprecate`),
   `memory amend`, `memory park` and `memory history` act on exactly one document per invocation;
@@ -106,6 +107,7 @@ here: it is in §12.
 | `--verbose`       | flag                   | `false`   | Emit diagnostic logs to stderr in plain text, even under `--format json`/`yaml`. Never alters stdout.  |
 | `--color` (negatable) | boolean flag        | `true`    | ANSI colour on stdout. Pass `--no-color` to disable; also disabled automatically when `NO_COLOR` is set to any non-empty string (https://no-color.org/) — an explicitly empty `NO_COLOR=` does **not** disable colour. **Today no output is coloured** (see `--format`), so `--no-color` and `NO_COLOR` are accepted and change nothing; the rule above is the one the colour P5.1.4 adds must honour. Commander itself already honours `NO_COLOR` (it strips colour from its help, which has none) but not `--no-color`, so that rendering must read both. |
 | `--interactive` (negatable) | boolean flag  | `true`    | Whether missing required args may trigger a readline prompt in a TTY (§4). Pass `--no-interactive` to force immediate failure instead. |
+| `--project <dir>` | path                   | the current directory | From `minor-v0.4` (`dl-198` (a)). Names the project root: the command runs on the repository rooted at `<dir>`, resolved against the current directory, instead of on the current directory. `<dir>` must itself be a git root, holding a `.git` entry (a directory in a clone, a file in a worktree); nothing above or below it is examined (`spec-011` § Git-root detection algorithm). Any other directory — a subdirectory of a repository, one outside every repository, a missing path or a file — is refused at §1's root step, so after `--format` and the operand checks and before anything is read or written, at exit `1` with `error: E_NOT_AT_GIT_ROOT: --project is not a git root: <absolute dir>`. A blank value is refused at exit `2` with `error: invalid flag value: --project must not be blank`, just before the root step. Without the flag the root is the current directory, which must be the git root: a subdirectory is still refused with `E_NOT_AT_GIT_ROOT: run wingfoil from the project root`, for read-only commands too, because the root is never resolved upwards (`dl-198` (b) was not taken). The flag changes which repository a command reads and writes, never which baseline it reads there (§11). `init` scaffolds the named repository, `mcp` serves it for the server's whole life, and `agent execute` registers its MCP server with `--project <root>` (`spec-016` §2.5). `--help` and `--version` keep their precedence: with either, the value is not checked. Why the root is named rather than inferred is `spec-011`'s. |
 
 Notes:
 
@@ -741,6 +743,10 @@ server, whose Resources and Prompts follow `spec-006` §6 item 4 — except the 
 Resources, which follow item 6. Before it starts, `mcp`'s pre-flight reads the working tree's
 `dna.yaml` role set once, and the Prompts channel serves that set until a restart (`spec-014` §1,
 `dl-049` (b)).
+
+`--project <dir>` (§2) changes which repository each row reads, never the row: a command given it reads the
+baseline its row names in the repository rooted at `<dir>` — that repository's `HEAD`, working tree and
+filesystem — the identity and `team.members` pre-flight of every mutating verb included (`spec-006` §7).
 
 ### 12. Command-specific flags
 
@@ -1484,3 +1490,12 @@ pending the approver's `memory amend`.
 permission fragment the launch would append for the run's role (`spec-016` §3.3, `dl-223` Action 3). No flag, exit code
 or other plan changes. Edited in place without a supersede or a state change (`dl-047`), pending the approver's
 `memory amend`.
+
+**Revision (2026-11-12, `task-350-add-the-global-project-dir-option-naming-the-project-root-documenting-why-it-is-not-inferred`)
+— §1, §2 and §11: the global `--project <dir>`.** `dl-198` (a), ratified with (c)'s documentation: §2 gains the
+`--project <dir>` row, a global flag every command accepts, `init` and `mcp` included, which names the project root
+instead of the current directory and is refused with `E_NOT_AT_GIT_ROOT` when `<dir>` is not itself a git root; §1's
+order of usage checks places its blank-value refusal (exit `2`) just before the root step; §11 says the flag changes
+the repository, never the baseline. Without the flag nothing changes: the root is still the current directory and is
+never resolved upwards (`dl-198` (b) was not taken). No other flag, exit code or message changes. Edited in place
+without a supersede or a state change (`dl-047`), pending the approver's `memory amend` at `task-350`'s design gate.
