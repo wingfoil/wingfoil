@@ -653,6 +653,19 @@ total`, `Tests: 11127 passed, 11127 total`; `npm run -s typecheck` → `0`; `npm
 **Merge order.** `vision-change.yaml` is also `task-359`'s file (backlog): whichever merges second takes the next
 version (here 1.2) and re-reads its comment on `change-proposal.target_release`.
 
+**Merge of `main` after task-333 (2026-11-12).** `git merge --no-edit main` → `d760819bd`, one conflict, ruled mine (a
+union of two independent additions): `scripts/check-governance.d.cts`'s `GovernanceCheck` union keeps task-333's
+`approval-agent-trailer` and this task's `plan-retrospective`, in the order `CHECKS` declares them (`'trailer-paragraph':
+…, 'plan-retrospective': 'governance-check:plan-retrospective',` after `'approval-agent-trailer':
+'governance-check:approval-agent-trailer'` in the `.cjs`); the auto-merged `.cjs` keeps the `require('./check-retrospective.cjs')`
+and the check, `test/cli/check-governance-enforcement.test.ts`'s `CHECKS` pin lists both markers, `AGENTS.md` keeps the
+§3 bindings row, the name-resolvability allowlist its `scripts/check-retrospective.cjs` line. Gates after it (each heavy one
+after `waitslot.sh`, exit `0`): `npm run -s build` → `0`; `npm test -- --maxWorkers=2` → exit `0`, `Test Suites: 616
+passed, 616 total`, `Tests: 11326 passed, 11326 total`; `npm run -s typecheck` → `0`; `npm run -s check:governance --
+--base origin/main` → `gated: 0 findings on 0 commits`, `history: 0 findings on 0 commits`. Frontier (pinned build):
+15 keys (task-333's `dev-loop.start` left it, task-333 being done on `main`), `late` 207, diagnostics `{}`, `workflow
+list` `[]`; `npm run check:mcp` → exit `0`.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
