@@ -55,3 +55,294 @@ a stray `.git` outside the project turns them red.
 ## Execution Notes
 
 <!-- Filled by the dev-loop. -->
+
+### design (architect, 2026-11-12)
+
+**Inputs read.** `depends_on: []` (no dl-015 gate); no handover. Base: `main` `09d7f5e76` + the start commit `13c0c7883`
+and the two bug syncs (`git log --oneline -4` → head `9ad4b15c0`). PATH guard: `command -v wingfoil` → the task's PATH
+shim; `wingfoil --version` and `node dist/cli.js --version` → `0.3.2 (09d7f5e76baaac4ead48d9d0cfbfe092b7adb2de)`.
+Contract: `dl-198` `ready` (`git log -1 --format=%B 42dcd8f52` → "Ratifies (a) with (c)'s documentation … v0.4's headless
+launches and the MCP server need a declared working root"). `spec-008`, `spec-011`, `spec-016` are `approved`
+(`git show HEAD:<spec> | sed -n 5p` → `status: approved` ×3). Plan rulings W0-R1 … W0-R12 read
+(`git show design/dev_loop_v0.4:docs/05_plans/rl-v1/rel-v0.4/dev-loop-rel-v0.4-plan.md`); W0-R4 L3 orders
+`task-350` → `task-353`, W0-R1 lists this task among the prerequisites of the headless pilot. No `.wingfoil/` file
+changes (`git diff --name-only main -- .wingfoil` → empty, and none is planned), so `npm run check:mcp` and the
+pinned-build workflow reads are not required.
+
+**Today's behaviour, by command** (code build of this worktree, `node dist/cli.js`):
+- From `docs/` (a subdirectory): `workflow list` → exit 1, `error: E_NOT_AT_GIT_ROOT: run wingfoil from the project
+  root`; with `--format json` → `{"error":"E_NOT_AT_GIT_ROOT: run wingfoil from the project root"}`; `mcp`, `init
+  --template x` and `agent execute --dry-run --role developer --element task:x` → the same console line, exit 1.
+- Outside any repository (a scratch directory outside the worktree, no `.git` above it): `dna show` → exit 1,
+  `error: E_NO_GIT_ROOT: not inside a git repository`.
+- From the root: `--project . dna show` → exit 2, `error: unknown option '--project'`.
+- A probe that enumerates every leaf command of `buildProgram(CORE_MODULES, …)` from `dist/` (35, `help` excluded) and
+  spawns each from `docs/` (one `x` operand where the command registers an argument): **35 × exit 1
+  `error: E_NOT_AT_GIT_ROOT: run wingfoil from the project root`**; the same with `--project <worktree>/docs` appended:
+  **35 × exit 2 `error: unknown option '--project'`**. So nothing accepts `--project` today, and adding it cannot change
+  a command run without it (the STOP condition of the orchestrator's brief does not arise).
+
+**Every entry point that resolves the root** (`grep -rn "findGitRoot\|resolveRoot\|resolveProjectRoot\|process\.cwd()"
+src/`), and how `--project` reaches it:
+- `src/cli.ts:27` — `resolveRoot: () => resolveProjectRoot(process.cwd())`, the only `process.cwd()` read in `src/`.
+  It becomes `resolveRoot: (project) => …`, passing the value to `resolveProjectRoot(process.cwd(), { project })`.
+- `src/cli/program.ts` registers the global flags (`.option('--format …')` …) — `--project <dir>` is registered there,
+  on the root program, so Commander accepts it before or after the noun and verb like `--format`
+  (`test/cli/program.test.ts` "honors a global flag placed BEFORE the noun/verb"). `buildProgram` binds the resolver
+  once: `() => options.resolveRoot(program.opts().project)`, handed to the three callers below. Nothing else reads it.
+- `src/cli/registrar.ts:165` — `root: options.resolveRoot()` inside `run`, after the `--format` and operand checks: every
+  `CORE_MODULES` command, `paths`, `dna *`, `memory *`, `directive(s) *`, `workflow *`, `agent *`. Root errors are
+  caught there and rendered through `exitCodeForThrow` (a `StorageError` → 1, a `UsageError` → 2).
+- `src/cli/program.ts:193` — `init`'s action: `root = options.resolveRoot()`, caught and **hard-wired to exit 1**.
+- `src/cli/program.ts:218` → `src/cli/mcp-command.ts:60` — `runMcp` resolves once, hard-wired to exit 1, then hands the
+  MCP server `resolveRoot: () => root` (`src/mcp/server.ts:47`, read by every Resource, Prompt and Tool through
+  `src/mcp/registrar.ts:110` and the `*-resource.ts`/`prompt.ts` closures). So `wingfoil --project <dir> mcp` serves
+  `<dir>` for the server's whole life; the MCP modules change nothing.
+- `agent execute` — its root is the registrar's `params.root`. Every later read uses it: the launch (`src/agent/launch.ts:287-288`,
+  `cwd: root`), the post-run lookups (`:369`, `cwd: root`) and the MCP pre-flight (`src/agent/execute.ts:405`,
+  `cwd: input.root`). The server the agent CLI starts is `runningBuildMcpServer()` (`src/agent/execute.ts:214`,
+  `[<dist>/cli.js, 'mcp']`, no root): it resolves its root from the working directory the agent CLI gives it. AC5 below.
+- Every git read and write takes `git -C <root>` (`grep -rn "spawnSync('git'\|execFileSync('git'\|execFile('git'\|spawn('git'"
+  src/ | grep -v "'-C'"` → only a comment in `src/storage/commit.ts:14`), so a named root redirects all of them.
+
+**`task-333`'s pre-flight and `command-baseline`.** The identity read is `git -C <root> config …`
+(`src/core/git-identity.ts:73`) and the membership read is `loadDnaYamlAtHead(root)` (`src/core/team-membership.ts:42`):
+with `--project <dir>` both read **the named repository** — its local git configuration and its `dna.yaml` at its
+`HEAD`. `--project` changes which repository each `spec-008` §11 row reads, never the row: the amended §11 says so.
+
+**The bugs, reproduced** (no file written above the system temporary directory: each probe sets `TMPDIR` to a
+directory under a scratch tree outside the worktree whose parent holds the stray `.git`):
+- `bug-406` / `bug-453`, empty stray `.git` in the parent: `node -e` replaying the suite's fixture
+  (`mkdtempSync(join(os.tmpdir(), 'wf-no-git-'))`) → `findGitRoot` returns the parent, `resolveProjectRoot` throws
+  `E_NOT_AT_GIT_ROOT`; `TMPDIR=… npx jest test/storage/git-root.test.ts --maxWorkers=2` → `Tests: 2 failed, 4 passed`
+  ("returns null when no ancestor directory contains .git" received the parent; "throws E_NO_GIT_ROOT" received
+  `E_NOT_AT_GIT_ROOT`), as `bug-453` reports for `/tmp/.git`.
+- A real repository (`git init`) as the parent — the case `bug-453`'s second Note names for `integration-branch`: the same
+  jest invocation over the 13 suites that build an "outside any repository" directory on disk (of the 18 files
+  `grep -rln "E_NO_GIT_ROOT\|not inside a git repository\|outside any repo\|no-git\|not a git repository" test/`
+  lists; the other five mock the root) → **`Tests: 12 failed, 273 passed`, 7 suites**:
+  `test/storage/git-root.test.ts` (2), `test/cli/integration-branch.test.ts` (2: "readHeadBranch … a refusal outside a
+  repository", "task-319 AC1 — outside any repository"), `test/memory/audit.test.ts` (1), `test/memory/history.test.ts`
+  (1), `test/memory/git-read.test.ts` (1), `test/storage/git-read.test.ts` (2), `test/memory/history-rename-path.test.ts`
+  (3). The empty stray `.git` breaks only `git-root.test.ts` (git ignores a `.git` that is not a repository): with it the
+  13 suites give `Tests: 2 failed, 283 passed`. `npm-distribution`, `read-at-rev-large`, `init`, `init-project`,
+  `fake-agent`, `workflow-rekey` pass under both.
+- `findGitRoot` (`src/storage/git-root.ts:17`) walks the filesystem with `existsSync`, not git, so
+  `GIT_CEILING_DIRECTORIES` cannot bound it: it needs a seam (D4). The six git-based suites need only git's own ceiling,
+  checked by command: in `<parent>/sub` with `<parent>` a repository, `git rev-parse --show-toplevel` → `<parent>`;
+  with `GIT_CEILING_DIRECTORIES=<parent>` → `fatal: not a git repository …`, exit 128, and `node
+  scripts/integration-branch.cjs --check-head --kind minor --version v0.4` → exit 2, `could not read HEAD: fatal: not a
+  git repository …`.
+
+**AC classification and what qa pins.** Red runs `npx tsc --noEmit -p tsconfig.json` and `npx jest test/lint
+--maxWorkers=2` before its commit. No new export: the reds come from new parameters, so `tsc` reports **TS2554**
+("Expected 1 arguments, but got 2" / "Expected 0 arguments, but got 1") at the new call sites of `findGitRoot`,
+`resolveProjectRoot` and `runningBuildMcpServer`, and at jest run time (`isolatedModules`) the extra argument is ignored,
+so the assertions fail, not the import. A test that drives a gated verb in a child scrubs the agent markers through
+`test/agent-markers.cjs`. Fixtures are built with `test/storage/helpers/git-fixture.ts`; CLI runs with
+`spawnCapture` + `CLI_ENTRY` (`test/cli/helpers/spawn-cli.ts`).
+
+| AC | Class | Why |
+|---|---|---|
+| 1 `--project` on every command | red-first | 35 × `unknown option '--project'` today (probe above) |
+| 2 no `--project`: still `E_NOT_AT_GIT_ROOT` | characterization | 35 × `E_NOT_AT_GIT_ROOT` from a subdirectory today (probe above); no test pins it per command (`grep -rln E_NOT_AT_GIT_ROOT test/` → `entrypoint.test.ts`, `git-root.test.ts` only) |
+| 3 hermetic git-root tests | red-first for `findGitRoot` / `resolveProjectRoot` (the ceiling is new code); characterization for the six git-based suites (git's own `GIT_CEILING_DIRECTORIES`, no `src/` change) | reproduction above |
+| 4 docs | red-first | `grep -c -- "--project" docs/cli-reference.md docs/user-guide.md` → `0` for each |
+| 5 `agent execute` passes its root | red-first | `runningBuildMcpServer()` carries no root (`src/agent/execute.ts:214`); D2 decides the carrier |
+| 6 spec amendments | characterization | prepared uncommitted (below), recorded by the approver's `memory amend` at this gate; no test |
+
+- **AC1** — new file `test/cli/project-option.integration.test.ts`. Fixtures: `root`, a WingFoil project (reuse
+  `test/agent/helpers/agent-execute-fixture.ts`'s `seed()` or `wingfoil init --template Scrum` in a `makeTempGitRepo()`,
+  with a `team.members` entry whose email is the fixture identity); `elsewhere`, a second `makeTempGitRepo()` with a
+  different local identity; `root/sub`, a subdirectory. Pin:
+  (a) **acceptance on every command** — enumerate the leaf commands of `buildProgram(CORE_MODULES, …)` (as
+  `test/docs/x-cli-cmds.test.ts`'s `shippedProgram` does, `init` and `mcp` included, 35 today: assert the count is the
+  enumeration's, never a literal), each spawned with cwd `elsewhere`, one `x` operand where the command registers an
+  argument, and `--project <root>/sub` → exit 1 and stderr exactly
+  `error: E_NOT_AT_GIT_ROOT: --project is not a git root: <root>/sub\n` (absolute path). Never `unknown option`. Plus
+  the three other non-roots, on `dna show` only: a directory outside every repository **created inside a bounded
+  fixture** (the AC3 helper; this check does not walk, so no ceiling is needed, but the directory must exist), a
+  missing path `<root>/nope`, a file `<root>/README.md` → the same line with that absolute path, exit 1. A relative
+  value, `--project sub` with cwd `root` → the line names `<root>/sub`.
+  (b) **it names the root** — `--format json dna show`: stdout run with cwd `root` and no flag **byte-equals** stdout run
+  with cwd `elsewhere` and `--project <root>`, and with cwd `root/sub` and `--project ..`; exit 0 each; the flag also
+  works after the verb (`dna show --project <root>`). A write: from `elsewhere`, `memory add --type task --title t
+  --set release=v0.1 --project <root>` (or the fixture's simplest `add`) → exit 0, `git -C <root> log -1 --format=%s`
+  is the `wf(task): add …` subject, `git -C <elsewhere> rev-list --count HEAD` unchanged.
+  (c) **`task-333`'s pre-flight reads the named root** — from cwd `elsewhere` (local identity not a member of
+  `root`'s team), `--project <root>` with the fixture's member identity in `root`'s local config: the write succeeds;
+  with `root`'s local identity set to a non-member: exit 1, stderr line 0 `error: E_NOT_A_MEMBER: the git identity
+  <name> <<email>> is not a team member: …` naming `root`'s identity, not `elsewhere`'s.
+  (d) **blank value (D5)** — `dna show --project ''` → exit 2, `error: invalid flag value: --project must not be blank\n`;
+  the same for `init --project ''` and `mcp --project ''`; `--format bogus dna show --project ''` → the `--format`
+  refusal (spec-008 §1 order).
+  (e) **help and version** — `--project <root>/sub --help` and `--project <root>/sub --version` → exit 0 (precedence).
+  (f) **mcp** — `node <CLI_ENTRY> --project <root> mcp` spawned with cwd `elsewhere`, an MCP client (`@modelcontextprotocol/sdk`
+  `StdioClientTransport`, as `src/agent/execute.ts:405` does) → `initialize` succeeds and `wingfoil://dna` (or the
+  resource the existing MCP suites read) returns `root`'s DNA.
+  Also update `test/cli/program.test.ts` "registers the four global flags": the list becomes
+  `['-V, --version', '--format <format>', '--project <dir>', '--verbose', '--no-color', '--no-interactive']`, and the
+  description of `--project <dir>` is
+  `run on the project rooted at <dir> instead of the current directory (it must be a git root)`.
+- **AC2** — same file, a `describe('without --project')`: the 35-command sweep from cwd `root/sub` with no flag → each
+  exit 1, stderr `error: E_NOT_AT_GIT_ROOT: run wingfoil from the project root\n`; `workflow list --format json` →
+  `{"error":"E_NOT_AT_GIT_ROOT: run wingfoil from the project root"}`. Use a subdirectory of the fixture, never a
+  directory "outside any repository" (a spawned CLI's walk cannot be bounded).
+- **AC3** — a helper in `test/storage/helpers/git-fixture.ts`:
+  `makeBoundedOutsideDir(): { dir: string; ceiling: string }` — `ceiling = mkdtempSync(fixtureDirPrefix())`, `git init`
+  in it (a real repository: the condition of both bugs, planted by the fixture itself, so the check fails in every
+  environment if the boundary is lost — `testing` T2), `dir = join(ceiling, 'outside')`, created. Remove `ceiling`
+  with `removeTempDir`. Then:
+  (a) `test/storage/git-root.test.ts` (red-first): `findGitRoot(dir, { ceiling })` → `null`;
+  `resolveProjectRoot(dir, { ceiling })` throws `StorageError` code `E_NO_GIT_ROOT`; positive cases kept: a repo below
+  the ceiling is still found (`findGitRoot(join(repo, 'a', 'b'), { ceiling: dirname(repo) })` → `repo`), a ceiling that
+  is not an ancestor changes nothing, the starting directory is always examined (`findGitRoot(repo, { ceiling: repo })`
+  → `repo`). New unit cases of the named root: `resolveProjectRoot(anyCwd, { project: repo })` → `repo`; `{ project:
+  relative }` resolved against `cwd`; `{ project: join(repo, 'sub') }` → `StorageError` `E_NOT_AT_GIT_ROOT`, message
+  `E_NOT_AT_GIT_ROOT: --project is not a git root: <abs>`; a worktree (`git worktree add`, `.git` is a file) is a root.
+  The two existing "outside" cases switch to the helper.
+  (b) the six git-based suites (characterization): each "outside any repository" fixture becomes the helper's `dir`, and
+  the call runs with `process.env.GIT_CEILING_DIRECTORIES = ceiling` set and restored in `try/finally` (in-process
+  calls: `runGitRead`, `getMemoryHistory`, `auditAttribution`, `readHeadBranch`, the `history-rename-path` probe) or
+  passed in the child's `env` (`integration-branch.cjs` CLI). Same assertions as today. Confirm each passes on first run
+  in the normal environment **and** with `TMPDIR` under a parent that is a repository (the reproduction above).
+- **AC4** — new file `test/docs/project-option-docs.test.ts`: in `docs/cli-reference.md`, the `### Global options`
+  table has a row whose first cell is `` `--project <dir>` ``, and the `### Where to run it` section contains
+  `--project <dir>` and the sentence fragment **`WingFoil never infers the project root`**; in `docs/user-guide.md`, the
+  file contains `--project <dir>` and the same fragment, and the bullet of `## 11.` that starts `**Run from the repository
+  root**` names `--project`. The existing `test/docs/x-cli-cmds.test.ts` "every root-program long option has a Global
+  Options row" turns red by itself once green registers the flag, until `docs/01_vision/X_cli-cmds.md` has the row.
+- **AC5** — under D2 (a): `test/agent/execute.test.ts` "runningBuildMcpServer (§2.5)": `runningBuildMcpServer(root)` from
+  the compiled build → `{ command: process.execPath, args: [CLI_ENTRY, '--project', root, 'mcp'] }`, from the sources
+  `args[1] === '--project'`, `args[2] === root`, `args[3] === 'mcp'`; `test/cli/agent-execute-config-arg.integration.test.ts`
+  line 93: the rendered argv element's `args` is `[CLI_ENTRY, '--project', repo, 'mcp']`, and the fake still connects and
+  reads the session Resource (the next case, unchanged). New case in that file or in AC1's: `agent execute` with cwd
+  `elsewhere` and `--project <repo>` → exit 0, the `agent: record` commit lands in `repo`. The bootstrap text is not
+  pinned here (D2).
+
+**Decisions for the approver.**
+- **D1 — what `--project <dir>` accepts.** (a) `<dir>`, resolved against the current directory, must hold its own `.git`
+  entry; no walk; any other directory (a subdirectory, one outside every repository, a missing path, a file) →
+  `E_NOT_AT_GIT_ROOT: --project is not a git root: <absolute dir>`, exit 1; (b) walk from `<dir>` and answer
+  `E_NO_GIT_ROOT` outside every repository, `E_NOT_AT_GIT_ROOT` in a subdirectory. **Recommendation (a):** it is AC1's
+  wording ("a `<dir>` that is not a git root is refused with `E_NOT_AT_GIT_ROOT` naming it"), it never infers anything,
+  and it needs no ceiling to be hermetic. A worktree is a root (its `.git` is a file), which `task-353` can use.
+- **D2 — the carrier of AC5.** `spec-016` §2.4 says the bootstrap "has no clock and no host data", and AC6 names no
+  `spec-016` amendment, so writing the absolute root into the bootstrap contradicts an approved spec. (a) The root goes
+  into the MCP registration: `{mcp_args}` = `[<dist>/cli.js, '--project', <root>, 'mcp']`, used by the step 11 pre-flight
+  too, so the server the agent CLI starts serves the root `agent execute` resolved whatever working directory it is
+  started in (it also stops a merged project `cwd` key from redirecting it, `spec-016` §2.5); the agent's own shell
+  already starts in that root (`cwd: root`); the bootstrap text stays `task-338`'s, which decides whether its invocation
+  line carries `--project`. Needs the extra `spec-016` §2.5 amendment prepared below. (b) Add a bootstrap line naming
+  the root: amends §2.4's host-data clause and the template `task-338` is rewriting in the same wave. **Recommendation
+  (a)**, reading AC5's "bootstrap" as the launch's registration.
+- **D3 — scope of the hermeticity fix.** (a) The seven suites (12 tests) the reproduction found, as `bug-453`'s Expected
+  Behavior asks ("every suite with an 'outside any repository' fixture"); (b) only `git-root.test.ts` and
+  `integration-branch.test.ts`, the two the bugs name. **Recommendation (a)**: one helper, and the same-class instances
+  are fixed in the task that closes the bug.
+- **D4 — how `findGitRoot` is bounded.** (a) An optional `ceiling` parameter only tests pass (`spec-011` amended);
+  (b) `findGitRoot` honours `GIT_CEILING_DIRECTORIES` in production: rejected, it changes what a command does without
+  `--project` for a user who sets the variable; (c) mock `fs.existsSync` in the suite. **Recommendation (a).**
+- **D5 — a blank `--project ''`.** (a) Refused at exit 2, `error: invalid flag value: --project must not be blank` (the
+  `--co-author` form), after the operand checks and before the root step, for every command, `init` and `mcp`
+  included; (b) let `''` resolve to the current directory. **Recommendation (a)**: a silent fallback would be an
+  inferred root. Implementation note: the CLI's resolver throws a `UsageError` (core), not `src/storage`; `init`'s
+  action and `runMcp` map a thrown root error through `exitCodeForThrow` instead of a hard-wired `1`.
+- **D6 — `spec-014` is not amended.** Its §1 step 1 says "resolves the project root (`resolveProjectRoot`, `spec-011`)",
+  still true with the named root. **Recommendation:** no amendment.
+
+### Pending amendments (approver)
+
+Prepared in this worktree, left uncommitted (`git status --short docs/04_memory/design/specs` → the three files):
+- `spec-008-cli-grammar` (§1 order of usage checks, §2 `--project <dir>` row, §11 paragraph, Revision note) —
+  `--reason "Adds the global --project <dir> option to §2, with its blank-value refusal in §1's order of usage checks and the rule that it changes the repository, never the baseline, in §11 (dl-198 (a), task-350)."`
+- `spec-011-storage-layout` (§ Git-root detection algorithm: the named root, why the root is not inferred, the walk's
+  test ceiling; Revision note) —
+  `--reason "Adds the named root of --project, why the root is never inferred, and findGitRoot's test-only ceiling to the git-root detection algorithm (dl-198 (a) and (c), bug-406, bug-453, task-350)."`
+- `spec-016-agent-execution` (§2.5 `{mcp_args}`; Revision note), **only under D2 (a)** —
+  `--reason "Adds --project <the project root> to the MCP server agent execute registers and pre-flights, so the server serves the root agent execute resolved whatever its working directory (dl-198 (a), task-350)."`
+
+The amended specs name no code that does not exist yet as a backticked name the name-resolvability test classifies
+(`npx jest test/docs/name-resolvability.test.ts --maxWorkers=2` with the three amendments in the tree → `Tests: 11
+passed`; a first draft backticking git's ceiling variable was reported as an unresolved symbol and reworded), so the
+allowlist is unchanged.
+
+**Files to touch.**
+- `src/storage/git-root.ts` (`findGitRoot(cwd, options?: { ceiling?: string })`, `resolveProjectRoot(cwd, options?: {
+  project?: string; ceiling?: string })`); `src/cli.ts` (the resolver takes the value, the blank check);
+  `src/cli/program.ts` (the option, the bound resolver for the derived commands, `init` and `mcp`, `init`'s exit through
+  `exitCodeForThrow`); `src/cli/mcp-command.ts` (same mapping); `src/cli/registrar.ts` (only the doc comment of
+  `BuildCommandsOptions.resolveRoot`, if the type widens to `(project?: string) => string`); `src/agent/execute.ts`
+  (`runningBuildMcpServer(root)` and its call site, `:757`).
+- Tests (qa): `test/storage/helpers/git-fixture.ts`, `test/storage/git-root.test.ts`, `test/cli/integration-branch.test.ts`,
+  `test/memory/audit.test.ts`, `test/memory/history.test.ts`, `test/memory/git-read.test.ts`, `test/storage/git-read.test.ts`,
+  `test/memory/history-rename-path.test.ts`, `test/cli/program.test.ts`, `test/agent/execute.test.ts`,
+  `test/cli/agent-execute-config-arg.integration.test.ts`, new `test/cli/project-option.integration.test.ts`, new
+  `test/docs/project-option-docs.test.ts`.
+- Docs (green): `docs/cli-reference.md` (Where to run it, Global options row, the `mcp` and `agent execute` entries
+  where they say where the server runs), `docs/user-guide.md` (§1 prerequisites line, §10 a paragraph on driving
+  WingFoil from elsewhere with the rationale, §11's bullet; no new heading, so the Contents and
+  `test/docs/user-guide-scaffold.test.ts` are unaffected), `docs/01_vision/X_cli-cmds.md` (Global Options row, revision
+  note), `docs/01_vision/00_index.md` (the row's version, date and line count, "Last indexed", any shifted `X_cli-cmds`
+  ranges: `test/docs/vision-index.test.ts`), `llms.txt` if `test/docs/llms-txt.test.ts` asks for it.
+- **Version bumps:** `docs/01_vision/X_cli-cmds.md` 2.1 → 2.2, date 2026-11-12 (first edit on this branch); `00_index.md`
+  follows. No `.wingfoil/*.yaml` change. The specs carry no `version:` field (Revision notes).
+
+**Tests that pin what changes** (`grep -rln "no-interactive" test/`, `grep -rln "runningBuildMcpServer\|'mcp'\]" test/`):
+`test/cli/program.test.ts` (the global flag list), `test/agent/execute.test.ts` (`runningBuildMcpServer`),
+`test/cli/agent-execute-config-arg.integration.test.ts:93` (the rendered `args`), `test/docs/x-cli-cmds.test.ts` (a
+Global Options row per root option), `test/docs/vision-index.test.ts` (line counts). Every other `[CLI_ENTRY, 'mcp']` in
+`test/` is an injected `host.mcpServer` (`test/core/agent-execute.test.ts:22`, `test/agent/execute-config-arg.test.ts:24`,
+…) and does not go through `runningBuildMcpServer`.
+
+**Existing tests run** (targeted, `--maxWorkers=2`, in this worktree, before any edit):
+- `npx jest test/storage/git-root.test.ts test/cli/integration-branch.test.ts test/cli/entrypoint.test.ts
+  test/cli/program.test.ts test/cli/program.integration.test.ts test/cli/registrar.test.ts test/cli/mcp-command.test.ts
+  test/agent/execute.test.ts test/agent/execute-config-arg.test.ts test/agent/execute-mcp-conflict.test.ts` →
+  `Test Suites: 10 passed, 10 total; Tests: 288 passed, 288 total`.
+- `npx jest test/docs/cli-reference.test.ts test/docs/x-cli-cmds.test.ts test/docs/x-cli-cmds-citations.test.ts
+  test/docs/vision-index.test.ts test/docs/vision-revision-history.test.ts test/docs/name-resolvability.test.ts
+  test/docs/user-guide-scaffold.test.ts test/docs/llms-txt.test.ts test/docs/command-surface-specs.test.ts
+  test/docs/exit-codes-parity.test.ts test/cli/help-describes-every-command.test.ts test/cli/npm-distribution.test.ts`
+  → `12 passed; Tests: 122 passed`.
+- With the three amendments in the tree: `npx jest test/docs/name-resolvability.test.ts test/docs/command-surface-specs.test.ts
+  test/docs/exit-codes-parity.test.ts test/docs/dry-run-documented.test.ts test/docs/enumeration-parity.allowlist.test.ts
+  test/docs/commands-parity.test.ts test/docs/l0-traceability.test.ts test/docs/memory-store-location-text.test.ts
+  test/cli/help-describes-every-command.test.ts` → `Tests: 61 passed` after the rewording above (first run: 1 failed,
+  the unresolved symbol).
+- The reproduction runs of the bugs, above. No full suite was run at design.
+
+**For `task-353` (launch working directory; it depends on this task, dl-015).** Read: D1 — a worktree is a git root, so
+`wingfoil agent execute --project <worktree> …` already runs every read, the record commit and the launch (`cwd: root`)
+in that worktree; D2 (a) — the registered MCP server is started with `--project <root>`, so it serves the root
+`agent execute` resolved, **not** the agent's working directory: a launch whose working directory differs from that root
+(a `--cwd` or a `{worktree}` placeholder) gets a server that serves the root, and `task-353` decides whether that is
+wanted or the root must follow the worktree; `runningBuildMcpServer(root)`'s new signature (`src/agent/execute.ts`);
+this task does not change `src/agent/launch.ts`'s `cwd: root`.
+
+**Risks for the other open `w0` tasks.**
+- `task-334` (on its branch, `git diff main...task/task-334-… -- docs/04_memory/design/specs/spec-008-cli-grammar.md` →
+  36+/5−): it rewrites §2's lead paragraph and adds the `--co-author`/`--ai-model` rows after `--dry-run`; this
+  amendment adds its row after `--interactive` and leaves the lead alone (`--project` is accepted by every command), so
+  the hunks are not adjacent; both append a Revision note at the end of the file (a trivial conflict for the second
+  merge). It also adds a `--ai-model` row to `docs/cli-reference.md`'s and `X_cli-cmds.md`'s Global Options, and may
+  take `X_cli-cmds` 2.2: the second to merge bumps to the next version and redoes the `00_index` row.
+- `task-338` rewrites `spec-016` §2.4 and the bootstrap in `src/agent/execute.ts` (`renderBootstrap`), next to
+  `runningBuildMcpServer`; the §2.5 amendment starts five lines below §2.4's last paragraph (line 256 → line 261). Under D2 (a) its invocation
+  line decides whether it adds `--project`.
+- `task-355` (refactor of `agent execute`) edits `src/agent/execute.ts`: a textual conflict is possible around
+  `:214` and `:757`.
+- `task-356` amends `spec-008` and `spec-016` (Revision notes at the end of both files): the same end-of-file conflict.
+- `task-344`: no shared file. `task-339`: already merged into `main` (`09d7f5e76`); its `spec-016` Revision notes are the
+  base this amendment appends to.
+
+**Candidate findings (not filed).** None outside the task: the six git-based suites `bug-453`'s Expected Behavior names
+are inside it (D3).
+
+### Retrospective
+
+<!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
+     reconstructed afterwards. One line per item: what happened, the evidence (a command and what it
+     printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
+     Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
+     here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
