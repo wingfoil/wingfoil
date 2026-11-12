@@ -583,6 +583,28 @@ None: the three spec amendments were recorded at the design gate (`8ee6e2fbb`, `
 already hold their `### Retrospective` entries (`grep -n "### Retrospective" -A2` on `bug-406` and `bug-453` → `None.`
 and `- None.`), so nothing beyond the two status syncs touches them.
 
+### red correction (qa, 2026-11-12)
+
+**Commit `464c6a9e8`** (`git log --oneline -1` → `464c6a9e8 test(cli): task-350 — red correction: the version guard
+accepts the -dirty build stamp (review finding 1)`), one file: `test/cli/project-option.integration.test.ts`, test "--help
+and --version keep their precedence: the value is not checked". The version line's pattern was
+`/^\d+\.\d+\.\d+\S* \([0-9a-f]{40}\)\n$/`, which refuses the `<sha>-dirty` stamp `scripts/write-build-info.cjs` writes when
+a build input (`src`, `package.json`, `package-lock.json`, `tsconfig*.json`, the writer; tracked or untracked) has
+changes, so the test failed on any such tree. It is now `/^\d+\.\d+\.\d+\S* \([0-9a-f]{40}(?:-dirty)?\)\n$/`, the stamp
+`test/cli/build-info.test.ts` accepts (HEAD, or HEAD with `-dirty`) and `scripts/e2e-smoke.cjs` `versionOfStamp` parses
+(`(?:-dirty)?`). Every other assertion is unchanged (`git show 464c6a9e8 --stat` → 1 file, 2 insertions, 1 deletion). Base:
+`140774c02`, green and refactor in.
+
+**Runs** (`npx jest test/cli/project-option.integration.test.ts --maxWorkers=2`):
+- clean build inputs (`dist/build-info.json` `commit` → `140774c029f819f64d81c195234e010c1b55d5d6`) → `Test Suites: 1
+  passed`, `Tests: 16 passed, 16 total`;
+- with an untracked scratch file `src/zz-red-correction-scratch.txt` (an untracked file elsewhere does not mark the build,
+  `BUILD_INPUTS`), removed afterwards (`git status --short` then lists only the edited test) → the jest setup's build
+  stamped `140774c029f819f64d81c195234e010c1b55d5d6-dirty` (`node dist/cli.js --version` → `0.3.2
+  (140774c029f819f64d81c195234e010c1b55d5d6-dirty)`) → `Tests: 16 passed, 16 total`.
+- `npx jest test/lint --maxWorkers=2` → `Test Suites: 16 passed, 16 total`, `Tests: 165 passed, 165 total` (the rebuild
+  restored the clean stamp); the invisible-character grep on the file → no match; `npx eslint` on it → clean.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
