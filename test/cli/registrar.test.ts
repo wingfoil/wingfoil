@@ -8,6 +8,7 @@
  * lifted the ESM barrier `bug-007` describes) and by `./program.integration.test.ts` (out-of-process,
  * against the compiled `dist/`).
  */
+import { CO_AUTHOR_OPTION } from '../../src/core/agent-context';
 import type { CoreModule } from '../../src/core/registry';
 import { coreErr, coreOk } from '../../src/core/types';
 import type { CoreErrorCode, CoreResult } from '../../src/core/types';
@@ -330,7 +331,8 @@ describe('value-bearing option threading (task-020-implement-memory-add — `--t
   it('copies `CoreOperation.options` onto the derived `CliCommand` (so program.ts can register `--<name> <value>`)', () => {
     const commands = buildCliCommands(OPTION_MODULES, { resolveRoot: () => '/fixture-root', buildParams: () => ({}) });
     const add = findCommand(commands, 'memory', 'add');
-    expect(add.options).toEqual([{ name: 'type', required: true }, { name: 'title', required: true }, { name: 'tags' }]);
+    // A mutating operation also gets the registrar's own `--co-author` (task-333, `spec-018` §1, design D4), last.
+    expect(add.options).toEqual([{ name: 'type', required: true }, { name: 'title', required: true }, { name: 'tags' }, CO_AUTHOR_OPTION]);
   });
 
   it('`run` threads the parsed value options into `buildParams` as `ctx.options`', async () => {

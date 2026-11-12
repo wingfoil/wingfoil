@@ -41,6 +41,8 @@ import { resolveProvenance } from '../workflow/provenance';
 
 import { requireApproverAuthority } from './approval-authority';
 import { requireGitIdentity } from './git-identity';
+import { requireTeamMembership } from './team-membership';
+import { resolveGatedAgentContext } from './agent-context';
 import { rekeySubject, rekeyTrailers, writeProvenanceRecord } from './provenance-record';
 import { missingOperandReason } from './registry';
 import { requireReason } from './require-reason';
@@ -116,14 +118,17 @@ function nextOf(root: string, snapshot: DeductionSnapshot, deduction: Deduction,
 export function workflowRekeyAtHead(root: string, request: RekeyRequest): CoreResult<RekeyResult> {
   const from = stepKeyOption('from', request.from);
   const to = stepKeyOption('to', request.to);
-  const reason = requireReason(request.options);
+  const reason = requireReason(request.options, { approval: true });
   // A required positional: the CLI registrar refuses its absence first; an in-process caller gets the same refusal.
   const ref = request.ref;
   if (ref === undefined) throw new UsageError(missingOperandReason('ref'));
 
   const identity = requireGitIdentity(root);
   if (!identity.ok) return identity;
-  const authorized = requireApproverAuthority(root, identity.value, REKEY_UNAUTHORIZED);
+  const member = requireTeamMembership(root, identity.value);
+  if (!member.ok) return member;
+  const agent = resolveGatedAgentContext();
+  const authorized = requireApproverAuthority(root, identity.value, REKEY_UNAUTHORIZED, agent, 'workflow rekey');
   if (!authorized.ok) return authorized;
 
   const snapshot = readDeductionSnapshotAtHead(root);

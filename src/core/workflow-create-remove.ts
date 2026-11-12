@@ -31,6 +31,7 @@ import { invalidKindMessage, WORKFLOW_NAME_RE, type Workflow } from '../workflow
 import { requireCustomAsset } from './builtin-asset';
 import { requireConfinedTarget, requireConfinedWriteTarget } from './confinement';
 import { requireGitIdentity } from './git-identity';
+import { requireTeamMembership } from './team-membership';
 import { requireInitializedProject } from './init';
 import { missingOperandReason } from './registry';
 import { atHeadOr, resolveRevision } from './revision';
@@ -164,6 +165,8 @@ export async function workflowCreate(params: WorkflowCreateParams): Promise<Core
   const workflow = createUsage(params);
   const identity = requireGitIdentity(root);
   if (!identity.ok) return identity;
+  const member = requireTeamMembership(root, identity.value);
+  if (!member.ok) return member;
   const initialized = requireInitializedProject(root);
   if (!initialized.ok) return initialized;
 
@@ -234,6 +237,8 @@ export async function workflowRemove(params: WorkflowRemoveParams): Promise<Core
   if (ref === undefined || ref.trim() === '') throw new UsageError(missingOperandReason('ref'));
   const identity = requireGitIdentity(root);
   if (!identity.ok) return identity;
+  const member = requireTeamMembership(root, identity.value);
+  if (!member.ok) return member;
   const initialized = requireInitializedProject(root);
   if (!initialized.ok) return initialized;
 

@@ -28,19 +28,27 @@
 
 ### REQ-SEC-03 — Role-based approval authority
 
-* **Description:** Only users/agents holding the required approver role (per DNA) may exercise an approval gate on a
-  given element type — that is, `approve` **or** `reject`.
+* **Description:** Only a user holding the required approver role (per DNA), from a session no agent marker marks,
+  may exercise an approval gate on a given element type — that is, `approve`, `reject` **or** `amend` — and an agent
+  never exercises one.
 * **Rationale:** Governance gates; no self-approval bypass. A gate one verb can walk past is not a gate: `reject` sits
-  on the same `gates` state and decides the same element, so it answers to the same authority as `approve`.
-* **Fit Criterion:** An `approve` **or** `reject` attempt by a principal lacking the required role is rejected with
-  `"user not authorized to approve type '<type>'"` and the state is unchanged. Both verbs share that one message,
-  which says *approve* even on a reject: deliberate, per `dl-063` clause B — one authority predicate, one string, so
-  `requireApprovalAuthority` takes no verb parameter and an operator learns a single message.
+  on the same `gates` state and decides the same element, so it answers to the same authority as `approve`, and
+  `amend` records a correction under the same `Approver:` line. An agent shares the approver's git identity, so the
+  identity alone cannot keep it from an approval: the session it runs in must.
+* **Fit Criterion:** An `approve`, `reject` **or** `amend` attempt by a principal lacking the required role is
+  rejected with `"user not authorized to approve type '<type>'"` and the state is unchanged. The three verbs share that
+  one message, which says *approve* even on a reject or an amend: deliberate, per `dl-063` clause B — one authority
+  predicate, one string, so `requireApprovalAuthority` takes no verb parameter for it and an operator learns a single
+  message. An attempt from a session an agent marker marks (`spec-018` §1) is rejected first, whoever the git
+  identity is, with `"E_AGENT_CONTEXT: '<command>' needs the approver and does not run in an agent's session
+  (<markers>): …"` (`spec-018` §3.2), and the state is unchanged.
 * **Traceability:** Feature P1.7 (US-2-10, BDD `p1-memory/P1.7-memory-approve.feature`); Feature P1.8 (US-4-11,
   BDD `p1-memory/P1.8-memory-reject.feature`); Feature P4.14 (US-4-07,
   BDD `p4-workflow/P4.14-approval-routing.feature`). Widened from `approve` alone to both approval-gate verbs by
   `dl-063-p1-8-reject-message-and-authority-trace` (2026-09-21, clause B), which also added P1.8's authority
-  scenario. `memory deprecate` stays outside this requirement: it is not an approval gate (no `Approver:` line, no
+  scenario; `amend` named beside them, as it runs the same check (`dl-108` A2 (i), `bug-395`). The agent-session
+  refusal is `dl-212` D1, specified by `spec-018-approval-binding-l0-agent-markers-attribution-trailers-and-the-approver-verb-refusal`.
+  `memory deprecate` stays outside this requirement: it is not an approval gate (no `Approver:` line, no
   authority check), per `dl-027-req-sec-04-deprecate-reason-scope`.
 
 ### REQ-SEC-04 — Mandatory justification on decision verbs

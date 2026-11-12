@@ -74,6 +74,7 @@ import { diagnosticWarning } from '../core/agent-list';
 import { APPROVER_ROLE } from '../core/approval-authority';
 import { assembleExecutionContext, type ExecutionContextElement } from '../core/context';
 import { requireGitIdentity } from '../core/git-identity';
+import { requireTeamMembership } from '../core/team-membership';
 import { DNA_YAML_PATH, loadDnaYamlAtRev, loadMemoryYamlAtRev, MEMORY_YAML_PATH } from '../core/loaders';
 import { resolveRevision, RevisionError } from '../core/revision';
 import { coreErr, coreOk, type CoreResult } from '../core/types';
@@ -713,9 +714,11 @@ async function runPipeline<T>(
   const conflict = await mcpConflictCheck(root, adapter.value.name, manifest, host.lookupTimeoutMs ?? LOOKUP_TIMEOUT_MS);
   if (!conflict.ok) return conflict;
 
-  // Step 5 — the identity the record commit (step 17) needs.
+  // Step 5 — the identity the record commit (step 17) needs, a team member's (`dl-220` Q2 (b), `spec-006` §7).
   const identity = requireGitIdentity(root);
   if (!identity.ok) return identity;
+  const member = requireTeamMembership(root, identity.value);
+  if (!member.ok) return member;
 
   // Step 6 — the run log, declared and unmodified (`runs` is spec-016 §4.1's declared category; `paths`
   // also admits a project's own categories through its typed catchall, task-312).

@@ -26,6 +26,7 @@ stacks:
 team:
   members:
     - name: Test User
+      email: wf-test@example.invalid
       roles: [ developer ]
   roles:
     - name: developer

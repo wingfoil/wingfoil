@@ -281,6 +281,7 @@ stacks:
 team:
   members:
     - name: Test User
+      email: wf-test@example.invalid
       roles: [ developer ]
   roles:
     - name: developer
@@ -345,6 +346,7 @@ stacks:
 team:
   members:
     - name: Test User
+      email: wf-test@example.invalid
       roles: [ developer ]
   roles:
     - name: developer
@@ -781,8 +783,12 @@ team:
     - name: WingFoil Test
       email: wf-test@example.invalid
       roles: [ approver ]
+    - name: Reviewer Ray
+      email: ray@example.invalid
+      roles: [ reviewer ]
   roles:
     - name: approver
+    - name: reviewer
 paths:
   sources: [ src/ ]
 `;

@@ -42,6 +42,7 @@ import { workflowFacts, type Workflow } from '../workflow/schema';
 
 import { parseElementRef } from './element-ref';
 import { requireGitIdentity } from './git-identity';
+import { requireTeamMembership } from './team-membership';
 import { requireInitializedProject } from './init';
 import { beginMemoryTransition, commitMemoryTransition } from './memory-transition';
 import { missingOperandReason, type CoreFn } from './registry';
@@ -278,6 +279,8 @@ export async function workflowStart(params: WorkflowStartParams, verbs: StartVer
 
   const identity = requireGitIdentity(root);
   if (!identity.ok) return identity;
+  const member = requireTeamMembership(root, identity.value);
+  if (!member.ok) return member;
   const initialized = requireInitializedProject(root);
   if (!initialized.ok) return initialized;
 
@@ -360,6 +363,8 @@ export async function workflowEnd(params: WorkflowEndParams): Promise<CoreResult
   const { root, positional: ref } = params;
   const identity = requireGitIdentity(root);
   if (!identity.ok) return identity;
+  const member = requireTeamMembership(root, identity.value);
+  if (!member.ok) return member;
   const initialized = requireInitializedProject(root);
   if (!initialized.ok) return initialized;
 

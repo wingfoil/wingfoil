@@ -39,6 +39,8 @@ import { deduceWorkflowState, resolveInstanceRef, type Baseline, type DeducedSte
 
 import { APPROVER_ROLE, requireApprovalAuthority } from './approval-authority';
 import { requireGitIdentity } from './git-identity';
+import { requireTeamMembership } from './team-membership';
+import { resolveGatedAgentContext } from './agent-context';
 import { optionalReason, requireReason } from './require-reason';
 import { coreErr, coreOk, type CoreResult } from './types';
 import { instancePlanIds, readDeductionSnapshotAtHead } from './workflow-deduction';
@@ -115,6 +117,8 @@ export function workflowFinalizeAtHead(root: string, request: FinalizeRequest): 
   const given = optionalReason(request.options);
   const identity = requireGitIdentity(root);
   if (!identity.ok) return identity;
+  const member = requireTeamMembership(root, identity.value);
+  if (!member.ok) return member;
 
   const snapshot = readDeductionSnapshotAtHead(root);
   const deduction = deduceWorkflowState(snapshot);
@@ -144,8 +148,11 @@ export function workflowFinalizeAtHead(root: string, request: FinalizeRequest): 
   const phase = snapshot.workflows.find((workflow) => workflow.name === step.workflow)!.phases.find((candidate) => candidate.name === step.phase)!;
   const body: string[] = [];
   if (phase.approval !== undefined) {
-    const reason = requireReason(request.options);
-    const authorized = requireApprovalAuthority(root, authorityType(step, instance), identity.value);
+    const reason = requireReason(request.options, { approval: true });
+    // `spec-018` §2.6 (design D11): only here is the operation known to be approver-gated, so the gated agent context
+    // is resolved here, and the shared check refuses an agent's session first (§3.1).
+    const agent = resolveGatedAgentContext();
+    const authorized = requireApprovalAuthority(root, authorityType(step, instance), identity.value, agent, 'workflow finalize');
     if (!authorized.ok) return authorized;
     body.push(`Approver: ${identity.value.name} <${identity.value.email}> (${APPROVER_ROLE})`, `Reason: ${reason}`);
   } else if (given !== undefined) {

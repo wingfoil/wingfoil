@@ -28,3 +28,12 @@ Feature: P1.8 (US-4-11) - wingfoil memory reject
     When I run "wingfoil memory reject task-101 --reason 'ok'"
     Then the state is unchanged
     And the command exits with code 1 and message "user not authorized to approve type 'task'"
+
+  # dl-212 D1, spec-018 §3 (task-333): a rejection is a decision of the approver, refused in an agent's session.
+  Scenario: Error - a rejection is refused in an agent's session
+    Given the current user holds the "approver" role
+    And the session is marked by the variables WINGFOIL_AGENT and CODEX_SANDBOX
+    When I run "wingfoil memory reject task-101 --reason 'needs work'"
+    Then the state is unchanged
+    And no commit is written
+    And the command exits with code 1 and message "E_AGENT_CONTEXT: 'memory reject' needs the approver and does not run in an agent's session (WINGFOIL_AGENT is set, CODEX_SANDBOX is set): an approval is recorded only from the approver's own session, never from an agent's (dl-212)"
