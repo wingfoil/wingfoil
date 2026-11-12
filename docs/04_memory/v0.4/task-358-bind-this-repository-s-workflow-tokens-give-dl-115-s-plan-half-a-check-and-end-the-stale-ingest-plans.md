@@ -475,6 +475,26 @@ two halves); the version test → `Expected: >= 2.6, Received: 2.5`. `npx tsc --
 `npx jest test/lint --maxWorkers=2` → `Test Suites: 15 passed, 15 total`, `Tests: 161 passed, 161 total`; the
 invisible-character scan → no match.
 
+### red correction 2 (qa, 2026-11-12)
+
+**Correction commit `4e2b15034`** (`4e2b15034e2318503329a652df4d726c8b3f2a71`), a new qa commit on top of the developer's
+merge of `main`, `7abdc047a`. It touches `test/cli/e2e-smoke.test.ts` and `test/release-health/measure.test.ts` only. Why:
+the developer's full suite at refactor failed 9 tests in two suites that neither the red nor the design listed. Both pin
+what the approved rulings change, so they move to the designed values (W0-R10, the same class as the release-planning pin):
+- `test/cli/e2e-smoke.test.ts` (task-243 AC 3, task-242 Q3). Two tests expected `driveCli.checks.post` to have length 3.
+  Ruling D3 (a) made drive-cli's three prose checks the one token `e2e-smoke.scenario`, so both now assert
+  `toEqual(['e2e-smoke.scenario'])`, each with a task-358 / D3 (a) comment.
+- `test/release-health/measure.test.ts`. Seven tests failed: P02's "Process conformance (REQ-STATE-10)" clean-range case
+  and kinds 1–5. The fixture's `wf(plan): finalize demo-plan` drew D2's new `plan-retrospective` finding, because
+  `planDoc` had no `### Retrospective`. Ruling (a): `planDoc` gains `## Execution Notes` / `### Retrospective` /
+  `- None.`, so the clean fixture stays clean. `measure.cjs` and the rule are unchanged. Whether P02 should count the new
+  check's history findings is a question for the approver (`bug-466`'s class), not settled here.
+
+**Run.** `npx jest --maxWorkers=2 test/cli/e2e-smoke.test.ts test/release-health/measure.test.ts` (green at `HEAD`) →
+exit `0`, `Test Suites: 2 passed, 2 total`, `Tests: 142 passed, 142 total`. `npx jest test/lint --maxWorkers=2` →
+`Test Suites: 15 passed, 15 total`, `Tests: 161 passed, 161 total`. The invisible-character scan of the two files found no
+match.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
