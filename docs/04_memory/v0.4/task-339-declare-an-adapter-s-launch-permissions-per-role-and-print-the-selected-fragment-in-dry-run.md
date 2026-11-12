@@ -600,6 +600,22 @@ points. Read with a grep for a few strings only:
 What H2 does not show: that a write role can run the tests and the `wingfoil` verbs its step needs. The probe ran
 none, and the review found that the `claude-code` map has no rule for `wingfoil` itself (finding 2, fixed in this task).
 
+**Re-check of `Bash(wingfoil *)` (approver, 2026-11-12, after fix round 2).** On this task's build at `2f0199ed8` and
+`claude --version` → `2.1.322 (Claude Code)`, in a fresh scratch project with its OWN copy of wingfoil: a
+`node_modules/.bin/wingfoil` link to the build, put on `PATH`, and the npm script `"wingfoil": "wingfoil"`. No global
+install was used. Before the runs, `wingfoil --version` and `npm run -s wingfoil -- --version` both printed
+`0.3.2 (2f0199ed8…)`. The probe task asked the agent to run `wingfoil --version`, `npm run -s wingfoil -- --version`,
+`wingfoil memory search --type task` and `wingfoil memory add --type task --title "Probe two"`, then to report.
+- `developer`: exit `0`. All four commands ran (read in the CLI's transcript), and `memory add` committed
+  `wf(task): add task-002-probe-two`, the only commit besides the run record.
+- `reviewer`: exit `0`. The bare `wingfoil --version; wingfoil --help; …` was refused with "Permission to use Bash has
+  been denied because Claude Code is running in don't ask mode"; its git and file reads ran. It made no commit besides the
+  run record, and the tree was clean.
+
+So the CLI matches `Bash(wingfoil *)` as the new test models it: the write roles reach the project's own wingfoil, bare
+or through npm, and the reviewer does not reach it bare. The reviewer's `Bash(npm run *)` path to the verbs is
+`dl-237`'s question.
+
 ### fix round (developer, 2026-11-12)
 
 **Why.** The by-hand pass H2 above ran Claude Code `2.1.322` (the CLI updated itself after H1 read `2.1.310`) and
