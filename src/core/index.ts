@@ -116,7 +116,7 @@ import { checkAssignable, checkUnreferenced, updateRoleAssignments } from './dir
 import type { MemoryYaml } from '../memory/schema';
 import { requireGitIdentity } from './git-identity';
 import { requireTeamMembership } from './team-membership';
-import { resolveGatedAgentContext } from './agent-context';
+import { resolveOperationAgentContext } from './agent-context';
 import { requireRequiredFields } from './required-fields';
 import { requireInitializedProject } from './init';
 import { requireCustomAsset } from './builtin-asset';
@@ -624,6 +624,8 @@ async function runDnaMutation(
   if (!identity.ok) return identity;
   const member = requireTeamMembership(root, identity.value);
   if (!member.ok) return member;
+  const agent = resolveOperationAgentContext(root);
+  if (!agent.ok) return agent;
 
   // REQ-SEC-06 / bug-121 (task-172): `writeDocument` follows a symlinked `dna.yaml`, so a file that
   // leads outside the project, or is itself a link, is refused before any read or write. First, so a
@@ -679,6 +681,7 @@ async function runDnaMutation(
   const sha = writeAndCommit(root, [{ path: DNA_YAML_PATH, content: serialized }], subject, {
     warnings,
     plannedWarnings,
+    attribution: agent.value.attribution ?? undefined,
   });
   const leaked = committedScopeError(root, sha, DNA_YAML_PATH, serialized);
   if (leaked) return leaked;
@@ -979,6 +982,8 @@ const memoryAddFn: CoreFn<unknown, { id: string; path: string }> = async (params
   if (!identity.ok) return identity;
   const member = requireTeamMembership(root, identity.value);
   if (!member.ok) return member;
+  const agent = resolveOperationAgentContext(root);
+  if (!agent.ok) return agent;
 
   // task-095 / `bug-085`: the registry, the `path` and the scaffold all resolve at HEAD, inside a
   // function that accepts no parsed `MemoryYaml` — so this verb cannot decide any of the three from
@@ -1051,6 +1056,7 @@ const memoryAddFn: CoreFn<unknown, { id: string; path: string }> = async (params
       author: identity.value,
       warnings,
       trailers,
+      attribution: agent.value.attribution ?? undefined,
       // `@`: git reads a bare `<seconds> <offset>` as a timestamp only from 9 digits of seconds up
       // (`0 +0000` is "invalid date format"); `@<seconds> <offset>` is a timestamp at any width.
       ...(date === undefined ? {} : { env: { GIT_AUTHOR_DATE: `@${date}` } }),
@@ -1569,7 +1575,7 @@ const memoryApproveFn: CoreFn<unknown, MemoryApproveResult> = async (params) => 
   const { id } = prepared.value; // the element's full id, whatever reference the verb was given (task-332)
   const { type, path, content, from, to } = prepared.value;
 
-  const agent = resolveGatedAgentContext();
+  const agent = prepared.value.agent;
   const authorized = requireApprovalAuthority(root, type, prepared.value.identity, agent, 'memory approve');
   if (!authorized.ok) return authorized;
 
@@ -1731,7 +1737,7 @@ const memoryRejectFn: CoreFn<unknown, MemoryRejectResult> = async (params) => {
   const { id } = prepared.value; // the element's full id, whatever reference the verb was given (task-332)
   const { type, path, from, to, content } = prepared.value;
 
-  const agent = resolveGatedAgentContext();
+  const agent = prepared.value.agent;
   const authorized = requireApprovalAuthority(root, type, prepared.value.identity, agent, 'memory reject');
   if (!authorized.ok) return authorized;
 
@@ -1993,7 +1999,7 @@ const memoryAmendFn: CoreFn<unknown, MemoryAmendResult> = async (params) => {
   // would otherwise be refused for a field change it never made.
   const confined = requireConfinedWriteTarget(root, path, 'write');
   if (!confined.ok) return confined;
-  const agent = resolveGatedAgentContext();
+  const agent = prepared.value.agent;
   const authorized = requireApprovalAuthority(root, type, prepared.value.identity, agent, 'memory amend');
   if (!authorized.ok) return authorized;
 
@@ -2084,6 +2090,8 @@ const directiveCreateFn: CoreFn<unknown, { name: string; path: string }> = async
   if (!identity.ok) return identity;
   const member = requireTeamMembership(root, identity.value);
   if (!member.ok) return member;
+  const agent = resolveOperationAgentContext(root);
+  if (!agent.ok) return agent;
 
   // One spelling of the location, reused for the existence check, the write and the commit scope, so
   // the three can never drift apart. `join` normalizes the separators, so the POSIX form is also the
@@ -2106,7 +2114,7 @@ const directiveCreateFn: CoreFn<unknown, { name: string; path: string }> = async
 
   const content = renderCustomDirective(name);
   const message = `wf(directive): create ${name}`;
-  const sha = writeAndCommit(root, [{ path: relativePath, content }], message);
+  const sha = writeAndCommit(root, [{ path: relativePath, content }], message, { attribution: agent.value.attribution ?? undefined });
   const leaked = committedScopeError(root, sha, relativePath, content);
   if (leaked) return leaked;
   return coreOk({ name, path: relativePath }, { sha, message });
@@ -2186,6 +2194,8 @@ const directiveAssignFn: CoreFn<unknown, DirectiveAssignResult> = async (params)
   if (!identity.ok) return identity;
   const member = requireTeamMembership(root, identity.value);
   if (!member.ok) return member;
+  const agent = resolveOperationAgentContext(root);
+  if (!agent.ok) return agent;
 
   const invalid = checkAssignable(root, role, directives);
   if (invalid) return coreErr(invalid);
@@ -2193,6 +2203,7 @@ const directiveAssignFn: CoreFn<unknown, DirectiveAssignResult> = async (params)
   const message = `wf(directive): assign ${directives.join(', ')} to ${role}`;
   const updated = updateRoleAssignments(root, role, (current) => withAssignedDirectives(current, directives), message, {
     force: force === true,
+    attribution: agent.value.attribution ?? undefined,
   });
   if (!updated.ok) return updated;
   return coreOk({ directives, role, assignments: updated.value.assignments }, updated.commit, updated.warnings);
@@ -2385,6 +2396,8 @@ const directiveRemoveFn: CoreFn<unknown, DirectiveRemoveResult> = async (params)
   if (!identity.ok) return identity;
   const member = requireTeamMembership(root, identity.value);
   if (!member.ok) return member;
+  const agent = resolveOperationAgentContext(root);
+  if (!agent.ok) return agent;
 
   let atHead: HeadDirectiveInventory;
   try {
@@ -2442,7 +2455,7 @@ const directiveRemoveFn: CoreFn<unknown, DirectiveRemoveResult> = async (params)
   if (!unmodified.ok) return unmodified;
 
   const message = `wf(directive): remove ${name}`;
-  const sha = writeAndCommit(root, [{ path: relativePath, content: null }], message);
+  const sha = writeAndCommit(root, [{ path: relativePath, content: null }], message, { attribution: agent.value.attribution ?? undefined });
   const leaked = committedScopeError(root, sha, relativePath, null);
   if (leaked) return leaked;
   return coreOk({ name, path: relativePath }, { sha, message });

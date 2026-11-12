@@ -65,7 +65,8 @@ describe('task-333 — the registrar derives --co-author and hands it to the cor
   const command = (verb: string): CliCommand => commands.find((candidate) => candidate.verb === verb) as CliCommand;
 
   it('is derived for a mutating operation, after its own options; absent on a read and on agentAttribution: false', () => {
-    expect(command('add').options?.map((option) => option.name)).toEqual(['title', CO_AUTHOR_OPTION.name]);
+    // `--ai-model` follows it (task-334, `spec-018` §2.4, design D7).
+    expect(command('add').options?.map((option) => option.name)).toEqual(['title', CO_AUTHOR_OPTION.name, 'ai-model']);
     expect(command('show').options).toBeUndefined();
     expect(command('launch').options).toBeUndefined();
   });

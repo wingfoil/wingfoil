@@ -250,20 +250,24 @@ the same kind (`workflow: adopt <instance-id> <step-key> <type>:<id>`, `workflow
 on a `memory add --workflow … --step …`, and `WingFoil-Phase:`, `WingFoil-Instance:` and `WingFoil-Element:` or
 `WingFoil-Item:` on a `workflow finalize` record, `WingFoil-Instance:`, `WingFoil-Step:` and `WingFoil-Adopted:` on a
 `workflow adopt` record, and `WingFoil-Instance:`, `WingFoil-Rekey-From:` and `WingFoil-Rekey-To:` on a
-`workflow rekey` record. To add a trailer to such a commit,
-amend with `git commit --amend --no-edit --trailer "…"`, which joins that paragraph; never add a new paragraph
+`workflow rekey` record. To add a trailer to such a commit — one it lacks: the agent's two are already there when an
+agent ran the command —, amend with `git commit --amend --no-edit --trailer "…"`, which joins that paragraph; never add a new paragraph
 after it, or a reader takes `WingFoil-Version:` into the `Reason:` block and the workflow deduction, which reads
 only the final paragraph, loses the step link or the phase record (`git-conventions` §8, `bug-236`). Only a commit
 not yet pushed may be amended. On push, the governance check flags a `WingFoil-*` trailer outside the final
 paragraph (`bug-391`) and holds an `Approver:` line on a `workflow:` record to an approval's grammar and authority
 (`bug-444`, `git-conventions` §9).
 
-**AI attribution** (`git-conventions` §7, `dl-117`). Every commit an agent writes, **except an `approve` or
-`reject` commit**, ends with the trailer paragraph
-`Co-Authored-By: <team.agents name> <<team.agents email>>` and `AI-Model: <the model identifier you run as>`,
-the values read from `dna.yaml` `team.agents`. On a commit `wingfoil` wrote, add the two with
-`git commit --amend --no-edit --trailer …`, in the paragraph of `WingFoil-Version:`. `wingfoil agent execute`
-hands this rule to the agents it launches; an agent started from its own CLI has only this file.
+**AI attribution** (`git-conventions` §7, `dl-117`, `spec-018` §2). Every commit an agent causes, **except an
+approval commit** (`approve`, `reject`, `amend` and a `workflow:` record with an `Approver:` line, which the verbs
+refuse in an agent's session), ends with the trailer paragraph
+`Co-Authored-By: <team.agents name> <<team.agents email>>` and `AI-Model: <the model identifier you run as>`, the
+values read from `dna.yaml` `team.agents`. A `wingfoil` command that writes a commit in an agent's session writes
+the two lines itself, after `WingFoil-Version:`: pass `--ai-model <the model identifier you run as>` (or set
+`WINGFOIL_AGENT_MODEL`), or it writes `AI-Model: not-reported`; never add them again to such a commit, which would
+leave two pairs. The hand recipe `git commit --amend --no-edit --trailer …` stays only for a commit an agent writes
+with plain `git commit`. `wingfoil agent execute` hands this rule to the agents it launches; an agent started from
+its own CLI has only this file.
 
 > **All Memory verbs ship and run on this repository** through the code build (§3): `memory add`, `submit`,
 > `approve`, `reject`, `deprecate`, `amend`, `park` (P1.6–P1.9, `dl-108`, `dl-110`), with the read-only

@@ -50,6 +50,7 @@ import { type Diagnostic, formatDiagnostic, isNewerFormatError, ValidationError 
 
 import { requireConfinedWriteTarget } from './confinement';
 import { requireGitIdentity, type GitIdentity } from './git-identity';
+import { resolveGatedAgentContext, resolveOperationAgentContext, type AgentContext } from './agent-context';
 import { requireTeamMembership } from './team-membership';
 import { loadMemoryYamlAtRev, MEMORY_YAML_PATH } from './loaders';
 import { atHeadOr, resolveRevision } from './revision';
@@ -682,7 +683,18 @@ export interface BegunMemoryTransition extends PreparedMemoryTransition {
    * `bug-149`).
    */
   readonly identity: GitIdentity;
+  /**
+   * The agent context of the invocation, resolved once right after membership (`spec-006` §7 step 2, `spec-018` §2.6,
+   * `bug-531`): the gated form for `approve`, `reject` and `amend`, handed to their authority check; the ungated form
+   * otherwise, whose attribution {@link commitMemoryTransition} hands to the commit primitive. Always set by
+   * {@link beginMemoryTransition}; absent on the superseded element's transition the `supersedes:` trigger prepares
+   * (`./memory-supersede.ts`), the second commit of an approve, which carries no agent trailer (`spec-018` §3.3).
+   */
+  readonly agent?: AgentContext;
 }
+
+/** The transition verbs that are approver-gated (`spec-018` §0): their agent context is the gated form (§2.6). */
+const GATED_TRANSITIONS: ReadonlySet<string> = new Set(['approve', 'reject', 'amend']);
 
 /**
  * The shared preamble of every state-moving `memory` verb — `submit`, `approve`, `reject`,
@@ -702,14 +714,16 @@ export function beginMemoryTransition(
   id: string,
   op: TransitionOp | 'amend' | 'finalize',
   options: ReferenceLookupOptions = {},
-): CoreResult<BegunMemoryTransition> {
+): CoreResult<BegunMemoryTransition & { readonly agent: AgentContext }> {
   const identity = requireGitIdentity(root);
   if (!identity.ok) return identity;
   const member = requireTeamMembership(root, identity.value);
   if (!member.ok) return member;
+  const agent = GATED_TRANSITIONS.has(op) ? coreOk<AgentContext>(resolveGatedAgentContext()) : resolveOperationAgentContext(root);
+  if (!agent.ok) return agent;
   const prepared = prepareMemoryTransition(root, id, op, options);
   if (!prepared.ok) return prepared;
-  return coreOk({ ...prepared.value, identity: identity.value });
+  return coreOk({ ...prepared.value, identity: identity.value, agent: agent.value });
 }
 
 /**
@@ -878,7 +892,11 @@ export function commitMemoryTransition(
   const checked = checkMemoryTransition(root, prepared, content, expected, scope);
   if (!checked.ok) return checked;
   const owned = { status: prepared.to, ...expected };
-  const sha = writeAndCommit(root, [{ path: prepared.path, content }], message, { author: prepared.identity, warnings });
+  const sha = writeAndCommit(root, [{ path: prepared.path, content }], message, {
+    author: prepared.identity,
+    warnings,
+    attribution: prepared.agent?.attribution ?? undefined,
+  });
 
   const leaked = verifyCommittedScope(root, sha, prepared.path, owned, scope);
   if (leaked.length > 0) {
