@@ -495,6 +495,121 @@ exit `0`, `Test Suites: 2 passed, 2 total`, `Tests: 142 passed, 142 total`. `npx
 `Test Suites: 15 passed, 15 total`, `Tests: 161 passed, 161 total`. The invisible-character scan of the two files found no
 match.
 
+### green (developer, 2026-11-11)
+
+**Base and builds.** The task's PATH shim: `wingfoil --version` and `node dist/cli.js --version` → `0.3.2
+(c399bad2003a292eb8d989c69cf451c0c262064e)`; `git rev-list --count HEAD..main` → `0` at the start, so no merge.
+
+**Commits** (one concern each, no `src/` change):
+- `bf0319fd4` — `scripts/check-retrospective.cjs` + `.d.cts` (AC 2 (b)): `hasRetrospectiveEntry(markdown)` is true when the
+  last `### Retrospective` under a `## …Execution Notes` section (`## Execution Notes`, or the bug template's `## Triage &
+  Execution Notes`) has a non-blank line outside HTML comments (D2 (b)); a heading inside a fenced block is no heading.
+  The command takes one or more repository-relative paths, confined to the working directory (symbolic links followed);
+  a task's `bug:` ids are found under the directory of `memory.yaml`'s `bug.path` by full id, else by the prefix `<id>-`
+  (the red's reading: short ids, as `resolveElementReference` resolves a prefix); only `closed` bugs are checked. Exit 0 /
+  1 (`<path>: no ### Retrospective entry` per file, the files in the order given, each task's bugs in `bug:` order) / 2
+  (the reason on stderr). `scripts/check-governance.cjs` + `.d.cts` (AC 2 (c), D2 (a) (i)): the later check
+  `plan-retrospective` (marker `governance-check:plan-retrospective`, rule `state`) on every `wf(plan): finalize` whose
+  bracket ends in the plan machine's last state, reading the plan at that commit with the shared predicate.
+- `2a157edc2` — `test/docs/agents-md.test.ts` (AC 3 (b), the command of `agents-md.current`): §1's command list and count
+  against `buildProgram(CORE_MODULES)`, §5's type table against `memory.yaml` (each row's chain, `(→x)` reject targets and
+  `⟲` returns against `resolveStateMachine`), §6 naming every `kind: main` workflow, §7's table against `roles.yaml`,
+  `CLAUDE.md` as `@AGENTS.md` plus one sentence. It cites `dl-025`, `dl-137`, `dl-116`. On this base it found no
+  mismatch once its parser read §1's continuation lines, so `AGENTS.md` changes only in its §3 bindings row.
+- `be1aeaf3e` — the configuration (AC 1, AC 2 (a), AC 3): `bindings.yaml` 3.1 (the three new `run` bindings,
+  `agents-md.test.ts` in `docs.parity`, the header's two groups, "Manual on purpose" (19) and "Manual until a command"
+  (36, each comment naming the command owed)); `dev-loop.yaml` 2.5, `e2e-smoke.yaml` 2.0, `agent-docs.yaml` 1.2,
+  `release-health.yaml` 1.3, `retrospective.yaml` 1.9, `specification-downcast.yaml` 1.1, `user-story-mapping.yaml` 1.2;
+  `.wingfoil/WORKFLOW.md` (the Stop-Check, collect-feedback, align-agent-docs, e2e-smoke nodes, the dev-loop paragraph,
+  the bindings paragraph).
+- `5f15b7d40` — a correction of `be1aeaf3e`: four files carried the new history clause without the new number; dev-loop's
+  2.5 clause sits beside 2.4's instead of nesting it under `(prev`, so the newest part still names task-348
+  (`test/core/dev-loop-v2-4.test.ts` reads it); release-health's comment reads "no command reads a report against the
+  catalogue" (the red's pattern is lower-case).
+- `5f02b75c9` — after the red correction `7eeb69d3d` (ruling W0-R10): `release-planning.yaml` 2.6, `collect-feedback`
+  takes retrospective's split, the two tokens character for character (both keys already bound in their groups).
+
+**Red → green.** `npx jest <the 16 red files, release-planning-v2-5 and 16 neighbouring suites> --maxWorkers=2` (the
+`release-planning` split measured on a scratch clone with the change as a probe commit, since every registry read is at
+`HEAD`) → `Test Suites: 33 passed, 33 total`, `Tests: 578 passed, 578 total`; at red the 17 red files gave `144 failed,
+210 passed`. The stop-the-lines met on the way: `release-planning-v2-5`'s pin (ruled, red correction `7eeb69d3d`).
+
+**Frontier and the pinned build (`dl-205`).** `npm run -s wingfoil -- workflow next sw-life-cycle-1-plan --format json` and
+`workflow status --format json`, fingerprinted (sorted frontier keys, per-instance phase states, frontier and `late`
+counts, diagnostic codes) before green and after `5f02b75c9`: identical — 16 frontier keys, five instances with the same
+phase states, `late` 204 — except the diagnostics, `{ W_WORKFLOW_UNBOUND_TOKEN: 68 }` → `{}` on both commands; `workflow
+list --format json` → `diagnostics []`; the console `workflow next` prints no `diagnostic(s)` line (`grep -c` → `0`).
+`npm run check:mcp` → exit `0`: `.mcp.json "wingfoil" runs the pinned wingfoil 0.3.2 … (prompts: 8, resources: 4, tools:
+0)` and the build under development answers every listed read.
+
+### refactor (developer, 2026-11-12)
+
+**Merge.** `git merge --no-edit main` → `7abdc047a` (main's D5 `workflow end`s and D6 `workflow adopt`, `a16802577`; three
+plan files, no conflict), the two trailers added with `--amend`; `git rev-list --count HEAD..main` → `0` before and after
+the gates. The frontier after it, same fingerprint: 16 keys, `late` 204, diagnostics `{}`; the expected differences only —
+the task's key is `dev-loop.refactor@…`, the three ended ingest plans are no open instance (`workflow next
+decision-log-ingest` → `error: workflow is not open: decision-log-ingest`), and `service-ingest-rel-v0.3-listings-plan` is
+`capture:complete,approve:current` (`workflow next service-ingest` → `next step:
+service-ingest.approve@service:svc-012-mcp.so-listing-wingfoil`).
+
+**The full suite's first run** (after `7abdc047a`) → `Test Suites: 2 failed, 600 passed`, `Tests: 9 failed, 11113 passed,
+11122 total`: `test/cli/e2e-smoke.test.ts` (two pins of drive-cli's three checks) and `test/release-health/measure.test.ts`
+(seven P02 tests: the fixture plan's finalize drew the new `plan-retrospective` finding). Both outside the design's list:
+stopped, ruled W0-R10, fixed by the red correction `4e2b15034` (qa). No code changed after it.
+
+**Gates** (each heavy one after `waitslot.sh`, which exited `0` each time; the typecheck's lock printed `heavy gate
+typecheck: waiting for the 1-minute load average 12.55 to fall to the 12 cores (dl-170).`), at `a1d6c354b`:
+- `npm run -s build` → exit `0`;
+- `npm test -- --maxWorkers=2` → exit `0`, `Test Suites: 602 passed, 602 total`, `Tests: 11122 passed, 11122 total`
+  (1781 s); the document-parity suites `docs.parity` names, `cli-reference` included, run inside it;
+- `npm run test:coverage -- --maxWorkers=2` → exit `0`, `All files | 99.25 | 97.15 | 98.65 | 99.66` (statements, branches,
+  functions, lines), the same 11122 tests;
+- `npm run -s lint` → exit `0`; `npm run -s docs:api` → exit `0`; `npm run -s typecheck` → exit `0`.
+
+**The parity suite catches drift (positive case).** `AGENTS.md` edited in the working tree to drop `park` from §1 and
+`command-baseline` from §7's developer row, then `npx jest test/docs/agents-md.test.ts --maxWorkers=2` → `Tests: 2 failed,
+14 passed, 16 total`; restored with `git checkout -- AGENTS.md` (`git status --short` → clean).
+
+### self-review (developer, 2026-11-12)
+
+Against `code-review`, every AC with its evidence:
+- AC 1 — met: the registry at `HEAD` raises no diagnostic (`workflow-bindings-complete` (a)), every check and action
+  resolves (b), the four `run` bindings and the 55 manual names in their groups ((c), (d)); the CLI forms
+  (`workflow-unbound-none.integration`); the count before, 68, is in the design and above.
+- AC 2 — met: `retrospective.present` runs `scripts/check-retrospective.cjs` on `{element.path}` (`workflow show dev-loop`);
+  the script's 16 tests; `plan-retrospective` (3 tests) with its marker in `CHECKS` (`check-governance-enforcement`); design
+  reads the `ref:` decision-logs. On real files: `node scripts/check-retrospective.cjs
+  docs/04_memory/v0.3.2/task-305-…md` (and task-306, task-307) → exit `0`; with no argument → exit `2`, `usage: …`.
+- AC 3 — met: the e2e-smoke tokens, `agents-md.current` and its suite in `docs.parity`, the release-health comment, the
+  four splits plus release-planning's (W0-R10).
+- AC 4 — for the reviewer's commands (D5, D6 done on `main`); after the merge, `workflow next decision-log-ingest` names
+  no stale capture (above).
+- AC 5 — the spec-003 amendment is `2528d9543` (approved at the gate); `test/workflow/bindings*.test.ts`, the conformance
+  suite and `name-resolvability` pass in the full suite.
+
+**T4.** `git log --first-parent --no-merges --format=%h d08149fc0..HEAD -- <the 17 files of d08149fc0>` → empty;
+`… 7eeb69d3d..HEAD -- test/core/release-planning-v2-5.test.ts` → empty; `… 4e2b15034..HEAD -- test/cli/e2e-smoke.test.ts
+test/release-health/measure.test.ts` → empty. The test commits since the red are the qa's two corrections and green's own
+new suite `test/docs/agents-md.test.ts` (`git log --first-parent --no-merges d08149fc0..HEAD -- test/`).
+
+**The bugs' Retrospective subsections.** `hasRetrospectiveEntry` over the four bug files → `true` each (`bug-469`,
+`bug-435` `- None.`; `bug-320`, `bug-324` `None.`), so `retrospective.present` passes when they close; no amendment owed.
+
+**Candidate findings (not filed).**
+- F-b, `plan-retrospective` on history: `node scripts/check-governance.cjs --json` over the whole history (after
+  `waitslot.sh`, 2888 s, exit `1` from two gated `wf(bug): assign` subject findings, `9cdea2e3b` and `8d6c005f6`, which
+  predate this task) reports 50 `plan-retrospective` findings, none gated, from rel-v0.1 (`d320d863b`, six plans) to
+  rel-v0.3.2 (`e5d6ce976`), the seven `bug-324` plans among them. They block nothing, but `scripts/release-health/measure.cjs`
+  counts every governance `state` finding of its range into P02 (line 1011), so a range holding such a finalize counts it:
+  `bug-466`'s class (P01/P05 count new checks' findings outside their definition), now for P02. Suggested: an amendment of
+  `bug-466` or a new bug, severity low.
+- F1 (from the design): the commands the 36 "manual until a command" checks owe.
+
+### Pending amendments (approver)
+
+None: the `spec-003` amendment was recorded at the design gate (`2528d9543`), and the four bugs already hold their
+`### Retrospective` entries.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -502,3 +617,11 @@ match.
      printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
      Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
      here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+
+- Two pins outside the design's file list moved under this task's rulings and stopped green and refactor
+  (`release-planning-v2-5`, then `e2e-smoke` and `measure`), each a red correction (`7eeb69d3d`, `4e2b15034`). The design
+  listed the suites that read the changed configuration at `HEAD`, not those that enumerate a phase's checks or run the
+  governance check on a fixture. Proposal: the design's search for moved pins also greps the phase names and the check
+  tokens it changes (`grep -rn "<phase>\|<token>" test/`), and runs the suites that call `checkGovernance` when it adds a check.
+- `node scripts/check-governance.cjs` over the whole history took 2888 s (exit `1`); a later check's history count is
+  expensive to measure. None blocking.
