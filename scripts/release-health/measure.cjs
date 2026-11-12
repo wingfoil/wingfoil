@@ -149,6 +149,9 @@
  *   rather than a path, is counted `unresolved`, not judged; a typed `{ type, path }` entry is a Memory element, judged by P02;
  * - P02, P05: a governance finding saying no `memory.yaml`/`dna.yaml` was committed at the commit (history
  *   before the configuration existed) is counted `unchecked`, not failing;
+ * - P02 counts only transitions: the governance check's `plan-retrospective` findings (task-358, `bug-320`), reported
+ *   under rule `state` because they read a plan's document at its finalize, judge no transition and are left out
+ *   (`P02_EXCLUDED_CHECKS`; `bug-466`'s class, closed here for this check);
  * - P04 the tasks touched in the window; each link must resolve at the point: `ref`, `bug`, `depends_on`,
  *   `supersedes` values (a `REQ-*` or feature id as such, else a Memory element id: its exact id, or a short id
  *   `<prefix>-<n>` exactly one element carries, task-241 F8), feature ids in
@@ -812,12 +815,22 @@ function uncheckedCommits(report, rules) {
   return shas.size;
 }
 
-/** Governance findings of `rules`, one failing item per commit: `<sha> <subject>: <messages>`. */
-function groupFindings(report, rules) {
+/**
+ * The later governance checks reported under rule `state` that judge no transition, so P02 ("Legal transitions",
+ * REQ-STATE-01) does not count them: `plan-retrospective` reads a finalized plan's `### Retrospective` (task-358).
+ */
+const P02_EXCLUDED_CHECKS = ['plan-retrospective'];
+
+/**
+ * Governance findings of `rules`, one failing item per commit: `<sha> <subject>: <messages>`; a finding of a later
+ * check named in `excludedChecks` is not counted.
+ */
+function groupFindings(report, rules, excludedChecks = []) {
   /** @type {Map<string, { subject: string, messages: string[] }>} */
   const bySha = new Map();
   for (const finding of report.findings) {
     if (!rules.includes(finding.rule) || UNCHECKABLE_RE.test(finding.message)) continue;
+    if (finding.check !== undefined && excludedChecks.includes(finding.check)) continue;
     if (!bySha.has(finding.sha)) bySha.set(finding.sha, { subject: finding.subject, messages: [] });
     bySha.get(finding.sha).messages.push(finding.message);
   }
@@ -1008,7 +1021,7 @@ function conformanceIn(root, tree, point, base, dist) {
   const dna = loadYamlAt(root, point, '.wingfoil/dna.yaml');
   return [
     countEntry('P01', governance.checked, groupFindings(governance, ['subject', 'bracket', 'body']), { unchecked: uncheckedCommits(governance, ['subject', 'bracket', 'body']) }),
-    countEntry('P02', governance.checked + governance.otherCommits, groupFindings(governance, ['state']), { unchecked: uncheckedCommits(governance, ['state']) }),
+    countEntry('P02', governance.checked + governance.otherCommits, groupFindings(governance, ['state'], P02_EXCLUDED_CHECKS), { unchecked: uncheckedCommits(governance, ['state']) }),
     producesPresent(root, point, base, memoryYaml),
     traceability(root, point, commits, memoryYaml),
     rolesAndSessions(root, point, base, commits, dna, governance, dist),

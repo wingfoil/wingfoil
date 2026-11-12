@@ -11,18 +11,23 @@
 #   - a check a human confirms on purpose is `manual: true` too (dl-172 (a)): exactly one of `run` / `manual`, and
 #     no `severity` or `args` on it; it raises no W_WORKFLOW_UNBOUND_TOKEN.
 #   - changed only through a task reviewed at dev-loop's `review` gate, never by an ordinary docs commit (Q5 (c)).
-# Nothing runs a binding in v0.3: `workflow list` validates them and reports what is still unbound
-# (W_WORKFLOW_UNBOUND_TOKEN, a warning until P4.10/P4.12 ship in v1.0).
+# Nothing runs a binding in v0.4: `workflow list` validates them and reports what is still unbound
+# (W_WORKFLOW_UNBOUND_TOKEN, a warning until P4.10/P4.12 ship in v1.0). From task-358 (bug-469, approver ruling
+# D1 (B)) no token of this repository is unbound: each check is bound `run` when a command decides it, or
+# `manual: true` in one of the two groups below.
 #
-# Manual on purpose (dl-172 (a), dl-186 Q6, task-303): a prose check whose condition is a reading or a judgement
-# no program can decide (spec-review.passed, the specification-phase quality criteria, the reviewer's and the
-# facilitator's readings, …) is bound `manual: true` below, keyed by its prose as tokenName cuts it (the text
-# before the first `(` or `:`), with the reason a human confirms it.
-# Deliberately unbound: the prose checks a deterministic command could decide but none does yet
-# (`frontmatter.required: […]`, the Memory state queries, the advance-pinned-build comparisons, the e2e-smoke
-# prose, `tests.unchanged`, …), each listed with its reason in task-303's Execution Notes. Each stays a
-# W_WORKFLOW_UNBOUND_TOKEN warning, which in v1.0 fails closed (dl-090 Q2 (c)), until a `run` binding names its command.
-version: 3.0                     # 1.0 dl-090 Action 3 (task-199): the first bindings file — dev-loop's refactor gates (bound until now only in a YAML comment), then every remaining token a command or a manual step can carry; 1.1 bug-134 (task-207): e2e-smoke-passed writes its report and states severity: reject (dl-023); 1.2 git.merge also names dev-loop's main-sync, `from: main` (task-205, dl-035); 1.3 task-219 (dl-099 §1–§2): e2e-smoke-passed smokes the packed candidate (`--candidate`), staging-rehearsal-passed and tests.no-identity are bound; 1.4 dl-089 §1, dl-090 Action 4 (task-222): release-health's measure and compare bound to scripts/release-health/; 1.5 dev-loop v1.6 (task-221): typecheck.clean also gates dev-loop.refactor (dl-044), docs.parity names the document-parity suites dev-loop.review runs (dl-116 Action 4); 1.6 vision-index.current, vision-change's index check (task-212, bug-270); 1.7 services.verify-sweep, release-publishing.publish's service verify sweep at severity warn (task-229, dl-130 step 4); 1.8 presentation.current, user-docs.align-user-docs' README badges and demo (task-224, dl-128); demo.rendered stays unbound, a manual step (approver ruling 2026-10-10); 1.9 release-health.measure / .compare pass --any-node and --max-workers 2 (task-241, bug-344; dl-170's interim rule; approver ruling D3 2026-10-12); 2.0 docs.parity also runs test/docs/llms-txt.test.ts, the llms.txt / docs/site.yaml parity suite (task-234, dl-129 Q3 (b), dl-116; 1.9 on its branch, re-bumped at the W3 B7 gate after task-241); 2.1 role-directives.clean, release-planning.reconcile-governance's pre-check: `npm run check:role-directives` (dl-050 option 1, task-215, batch ruling D1; 1.9 on its branch, re-bumped at the W3 B7 gate after task-241 and task-234); 2.2 evidence-only-since-candidate, release-publishing.tag's pre-check that only evidence paths changed between the rehearsed candidate and the tip, the evidence paths declared in its --evidence arguments (task-282, bug-312, dl-099 §1, task-219 D2; approver rulings D2 (a), D3); 2.3 on-integration-branch, release-publishing.tag's pre-check that HEAD is on the release's integration branch, scripts/integration-branch.cjs --check-head (task-288, dl-159 A1.8, approver rulings D1, D3); the git.create_branch / git.merge / git.tag comments name the integration branch; 2.4 task-289: the presentation.current comment names dl-128 items 1–4 (task-246 added items 3–4 to the check, with no binding change); 2.5 task-298 (dl-172 (a)): demo.rendered bound `manual: true`, the check form spec-003 Layer 3 now allows; the rules and the user-docs comment say so; 2.6 task-303 (dl-186 Q6, dl-172 (a)): the 17 prose checks a human confirms on purpose (21 occurrences) bound manual: true, each group with its reason, keyed by their prose; the checks a command could decide stay unbound (86 to 65 warnings), the header says which; 2.7 task-306 (bug-428, bug-405, release-planning v0.3.2 R8, approver ruling D3), comments only: the git.merge comment names release-publishing.merge-forward's git.merge(from: integration_branch, ff: false), and the tests.passing comment says release-publishing.publish's tests.passing is the run on the release commit; 2.8 task-319 (bug-386, bug-387): on-integration-branch exits 2 when git cannot read HEAD, and its version pattern admits only a minor's vX.Y and a patch's vX.Y.Z with Z ≥ 1, the script refusing a version of the other kind's shape; 2.9 task-320 (bug-407), comment only: the release-health comment gives the pinned-Node command with a writable N_PREFIX, and the npx alternative; 3.0 task-348 (dl-205 Q1 (a)): pinned-build.reads, dev-loop.design's check that a .wingfoil/ shape change is loaded with the pinned build before red, bound manual: true
+# The two manual groups (spec-003 Layer 3, as amended by task-358). The loader does not tell them apart; this file does.
+#   - Manual on purpose (dl-172 (a), dl-186 Q6, task-303): a prose check whose condition is a reading or a judgement
+#     no program can decide (spec-review.passed, the specification-phase quality criteria, the reviewer's and the
+#     facilitator's readings, …). It stays manual at v1.0, when the engine waits for the confirmation.
+#   - Manual until a command (task-358, superseding task-303's D1 (a) and bug-435's "left unbound until a command
+#     exists" for these rows): a check a deterministic command could decide but none does yet (`frontmatter.required:
+#     […]`, the Memory state queries, the advance-pinned-build comparisons, `tests.unchanged`, …). Each entry names the
+#     command it owes; a `run` binding replaces the entry when that command exists. Until then the role named on the
+#     phase applies it by hand, as before.
+# Both are keyed by the check's prose as tokenName cuts it (the text before the first `(` or `:`); a reworded check
+# comes back as a W_WORKFLOW_UNBOUND_TOKEN warning, which test/core/workflow-bindings-complete.test.ts refuses.
+version: 3.1                     # 1.0 dl-090 Action 3 (task-199): the first bindings file — dev-loop's refactor gates (bound until now only in a YAML comment), then every remaining token a command or a manual step can carry; 1.1 bug-134 (task-207): e2e-smoke-passed writes its report and states severity: reject (dl-023); 1.2 git.merge also names dev-loop's main-sync, `from: main` (task-205, dl-035); 1.3 task-219 (dl-099 §1–§2): e2e-smoke-passed smokes the packed candidate (`--candidate`), staging-rehearsal-passed and tests.no-identity are bound; 1.4 dl-089 §1, dl-090 Action 4 (task-222): release-health's measure and compare bound to scripts/release-health/; 1.5 dev-loop v1.6 (task-221): typecheck.clean also gates dev-loop.refactor (dl-044), docs.parity names the document-parity suites dev-loop.review runs (dl-116 Action 4); 1.6 vision-index.current, vision-change's index check (task-212, bug-270); 1.7 services.verify-sweep, release-publishing.publish's service verify sweep at severity warn (task-229, dl-130 step 4); 1.8 presentation.current, user-docs.align-user-docs' README badges and demo (task-224, dl-128); demo.rendered stays unbound, a manual step (approver ruling 2026-10-10); 1.9 release-health.measure / .compare pass --any-node and --max-workers 2 (task-241, bug-344; dl-170's interim rule; approver ruling D3 2026-10-12); 2.0 docs.parity also runs test/docs/llms-txt.test.ts, the llms.txt / docs/site.yaml parity suite (task-234, dl-129 Q3 (b), dl-116; 1.9 on its branch, re-bumped at the W3 B7 gate after task-241); 2.1 role-directives.clean, release-planning.reconcile-governance's pre-check: `npm run check:role-directives` (dl-050 option 1, task-215, batch ruling D1; 1.9 on its branch, re-bumped at the W3 B7 gate after task-241 and task-234); 2.2 evidence-only-since-candidate, release-publishing.tag's pre-check that only evidence paths changed between the rehearsed candidate and the tip, the evidence paths declared in its --evidence arguments (task-282, bug-312, dl-099 §1, task-219 D2; approver rulings D2 (a), D3); 2.3 on-integration-branch, release-publishing.tag's pre-check that HEAD is on the release's integration branch, scripts/integration-branch.cjs --check-head (task-288, dl-159 A1.8, approver rulings D1, D3); the git.create_branch / git.merge / git.tag comments name the integration branch; 2.4 task-289: the presentation.current comment names dl-128 items 1–4 (task-246 added items 3–4 to the check, with no binding change); 2.5 task-298 (dl-172 (a)): demo.rendered bound `manual: true`, the check form spec-003 Layer 3 now allows; the rules and the user-docs comment say so; 2.6 task-303 (dl-186 Q6, dl-172 (a)): the 17 prose checks a human confirms on purpose (21 occurrences) bound manual: true, each group with its reason, keyed by their prose; the checks a command could decide stay unbound (86 to 65 warnings), the header says which; 2.7 task-306 (bug-428, bug-405, release-planning v0.3.2 R8, approver ruling D3), comments only: the git.merge comment names release-publishing.merge-forward's git.merge(from: integration_branch, ff: false), and the tests.passing comment says release-publishing.publish's tests.passing is the run on the release commit; 2.8 task-319 (bug-386, bug-387): on-integration-branch exits 2 when git cannot read HEAD, and its version pattern admits only a minor's vX.Y and a patch's vX.Y.Z with Z ≥ 1, the script refusing a version of the other kind's shape; 2.9 task-320 (bug-407), comment only: the release-health comment gives the pinned-Node command with a writable N_PREFIX, and the npx alternative; 3.0 task-348 (dl-205 Q1 (a)): pinned-build.reads, dev-loop.design's check that a .wingfoil/ shape change is loaded with the pinned build before red, bound manual: true; 3.1 task-358 (bug-469, bug-320, bug-435; approver rulings D1 (B), D3 (a), D4; spec-003 Layer 3 as amended): no token is unbound — retrospective.present bound run to scripts/check-retrospective.cjs on {element.path}, agents-md.current to test/docs/agents-md.test.ts (which docs.parity also runs), e2e-smoke.scenario to scripts/e2e-smoke.cjs --candidate; the checks a command could decide but none does yet bound manual: true in a group of their own, "manual until a command", each naming the command owed (68 to 0 warnings); the mixed checks split, the release-health and proposals.disposed reasons restated
 format: 1                        # dl-153 (A): a dl-149 file kind (BINDINGS_YAML_FORMAT)
 
 checks:
@@ -42,7 +47,7 @@ checks:
   # dev-loop.review (dl-116 Action 4): the document-parity suites, by name — every test/docs suite citing dl-116
   # (test/core/dev-loop-v1-6.test.ts checks that each one is listed), plus command-surface-specs (dl-116 Q1 (A)'s
   # first enumeration), cli-reference (the model dl-116 names) and the enumeration-parity allowlist's own gate.
-  docs.parity:              { run: [npm, test, --, test/docs/cli-reference.test.ts, test/docs/command-surface-specs.test.ts, test/docs/commands-parity.test.ts, test/docs/enumeration-parity.allowlist.test.ts, test/docs/exit-codes-parity.test.ts, test/docs/llms-txt.test.ts, test/docs/mcp-surface-parity.test.ts, test/docs/memory-types-parity.test.ts, test/docs/name-resolvability.test.ts, test/docs/workflow-md.test.ts] }
+  docs.parity:              { run: [npm, test, --, test/docs/agents-md.test.ts, test/docs/cli-reference.test.ts, test/docs/command-surface-specs.test.ts, test/docs/commands-parity.test.ts, test/docs/enumeration-parity.allowlist.test.ts, test/docs/exit-codes-parity.test.ts, test/docs/llms-txt.test.ts, test/docs/mcp-surface-parity.test.ts, test/docs/memory-types-parity.test.ts, test/docs/name-resolvability.test.ts, test/docs/workflow-md.test.ts] }
   # release-submit.pre-release-checks (task-219, dl-099; bug-172): the suite with no git identity, as the CI
   # gate job runs it — scripts/test-no-identity.cjs.
   tests.no-identity:        { run: [npm, run, "test:no-identity"] }
@@ -90,26 +95,39 @@ checks:
   role-directives.clean:    { run: [npm, run, "check:role-directives"] }
   # agent-docs.align-agent-docs (bug-170): WORKFLOW.md names every workflow and phase workflows.yaml includes.
   workflow-md.complete:     { run: [npm, test, --, test/docs/workflow-md.test.ts] }
+  # agent-docs.align-agent-docs (task-358, bug-435 item 2; dl-025, dl-137): AGENTS.md's command list, Memory type
+  # table, startable workflows and role table against CORE_MODULES, memory.yaml, workflows.yaml and roles.yaml, and
+  # CLAUDE.md as its pointer — the parity suite docs.parity also runs (dl-116).
+  agents-md.current:        { run: [npm, test, --, test/docs/agents-md.test.ts] }
+  # e2e-smoke.fresh-init and .drive-cli (task-358, bug-435 item 1, approver ruling D3 (a)): the conditions in the
+  # phases' descriptions — exit codes, re-loads through their own readers, a clean tree — asserted by the smoke's
+  # scenario on the packed candidate, as the gate runs it, without the report.
+  e2e-smoke.scenario:       { run: [node, scripts/e2e-smoke.cjs, --candidate] }
+  # dev-loop.done (dl-115 Q2 (a), Action 3; task-358, bug-320): the task's ### Retrospective subsection, and that of
+  # each closed bug of its bug: list, holds at least one line outside HTML comments ("None" counts). {element.path}
+  # is the task's repository-relative file (spec-003 Layer 3 as amended); exit 1 names each file with no entry,
+  # exit 2 a path that is not a Memory document of this repository. A plan's half is check-governance's
+  # plan-retrospective, on every `wf(plan): finalize … [active → done]`.
+  retrospective.present:    { run: [node, scripts/check-retrospective.cjs, "{element.path}"] }
   # vision-change.update-vision / schedule (dl-132 element 5, bug-270): docs/01_vision/00_index.md matches every vision file.
   vision-index.current:     { run: [npm, test, --, test/docs/vision-index.test.ts] }
   # user-docs.align-user-docs (dl-128 items 1–4: task-224, task-246): the README's badges are derived and its demo GIF
   # is committed and rendered from the tape that drives example 01; the comparison page and the case study keep their
   # shape (presentation.current).
   presentation.current:     { run: [npm, test, --, test/docs/presentation.test.ts] }
-  # demo.rendered, re-recording the tape — a manual step by the approver's ruling of 2026-10-10 (VHS is a separate
-  # binary, not an npm dependency, dl-010, and the recording rewrites a tracked file): bound `manual: true`
-  # (dl-172 (a), task-298), so a human confirms it and no W_WORKFLOW_UNBOUND_TOKEN is raised; the steps are in
+  # ==== Manual on purpose (dl-172 (a), dl-186 Q6, task-298, task-303, task-348): a reading or a judgement no program
+  # can decide, so from v1.0 the engine waits for the confirmation instead of failing closed.
+  # demo.rendered, re-recording the tape — a step by the approver's ruling of 2026-10-10 (VHS is a separate
+  # binary, not an npm dependency, dl-010, and the recording rewrites a tracked file; task-298); the steps are in
   # docs/assets/README.md § "Regenerating the demo GIF".
   demo.rendered:            { manual: true }
-  # task-303 (dl-186 Q6, dl-172 (a)): the prose checks a human confirms on purpose — a reading or a judgement no
-  # program can decide, so from v1.0 the engine waits for the confirmation instead of failing closed. The key is the
-  # prose as tokenName cuts it; a reworded check comes back as a W_WORKFLOW_UNBOUND_TOKEN warning.
   # specification-downcast, user-story-mapping, specification-by-examples, volere-requirements: whether a story map
   # covers its edge cases, a scenario is atomic and unambiguous, a Fit Criterion is measurable, is a reader's judgement.
-  "100% of MVP Canvas features covered; edge-case stories present": { manual: true }
+  # The two edge-case halves are the judgement half of the checks task-358 split (bug-435 item 4).
+  "edge-case stories present": { manual: true }
   "each scenario atomic + testable; zero ambiguous adjectives/adverbs": { manual: true }
   "every REQ has a numeric/percentage/boolean Fit Criterion": { manual: true }
-  "100% of MVP Canvas features included; edge-case stories generated": { manual: true }
+  "edge-case stories generated": { manual: true }
   "each story has >=1 happy path and >=1 edge/error path": { manual: true }
   "no ambiguous adjectives/adverbs": { manual: true }
   "each scenario atomic and testable": { manual: true }
@@ -136,8 +154,82 @@ checks:
   # presentation.current and docs.parity, bound above.
   "user-facing docs aligned with the release's shipped CLI/feature surface": { manual: true }
   # retrospective (dl-115 Q3 (x), dl-163 S3d): the sources the phase was given are not in the repository, a feedback
-  # note is restated in WingFoil's words, and each proposal's outcome is the approver's disposition.
+  # note is restated in WingFoil's words, and each proposal's outcome is the approver's disposition (the judgement
+  # halves of the checks task-358 split, bug-435 item 4).
   secondary-sources.listed: { manual: true }
+  feedback-notes.restated:  { manual: true }
+  proposals.outcome-chosen: { manual: true }
+
+  # ==== Manual until a command (task-358, bug-469, approver rulings D1 (B), D4): a deterministic command could decide
+  # each check below, but none exists yet. Each comment names the command owed; a `run` binding replaces the entry
+  # when it exists. Until then the phase's role applies the check by hand.
+  # The created elements' required frontmatter (19 occurrences: every capture, seed, define-scope, build-backlog,
+  # commit-backlog, dev-loop.design, retrospective.capture and end-of-life phase). The verbs refuse a missing required
+  # field at `memory submit`; owed: a check over the phase's created elements, which no placeholder carries yet.
+  frontmatter.required:     { manual: true }
+  # service-ingest.capture: owed a command running spec-007's scanText over one element's file.
+  secret-scan.clean:        { manual: true }
+  # Memory queries (vision-change.schedule, release-planning, release-line-cycle, user-docs, release-submit,
+  # end-of-life): `memory search` exits 0 whatever it finds; owed: a Memory query command with an exit status
+  # (bug-435 Notes).
+  "change-proposal.target_release is not empty": { manual: true }
+  change-proposals.swept:   { manual: true }
+  ready-decision-logs.covered: { manual: true }
+  task.wave.declared:       { manual: true }
+  waves.declared:           { manual: true }
+  tech-spec.approved:       { manual: true }
+  "all releases where release-line={release-line.version} are status": { manual: true }
+  "all tasks where tags=[{release.version}] are status": { manual: true }
+  "all bugs where tags=[{release.version}] are status": { manual: true }
+  "deprecated content excluded from agent context and default search": { manual: true }
+  # specification-downcast.backlog-export and backlog-export.validate: owed a JSON and dependency-graph check of
+  # docs/03_backlog/04_backlog/backlog.json.
+  "valid JSON; no duplicate IDs; no circular dependencies": { manual: true }
+  "valid JSON parse":       { manual: true }
+  "no duplicate IDs":       { manual: true }
+  "no circular dependencies": { manual: true }
+  # release-planning.advance-pinned-build: owed the three comparisons as one script — the pinned build's --version
+  # against package.json, the new pin against the old one and `npm view wingfoil versions`, and
+  # `git diff --name-only` of the switch commit.
+  "`npm run -s wingfoil -- --version` == the version package.json pins": { manual: true }
+  "new pin >= old pin, and `npm view wingfoil versions` lists it": { manual: true }
+  "the switch commit changes only package.json and package-lock.json": { manual: true }
+  # wave.wave-checks: owed one command running every docs/examples/*/run.sh (measure.cjs Q11 runs them as a metric).
+  docs.examples.passing:    { manual: true }
+  # dev-loop.start: owed the arithmetic over memory.yaml task.stop_the_line / release.growth_threshold and the tasks'
+  # frontmatter, which the orchestrator applies by hand.
+  stop-the-line.clear:      { manual: true }
+  growth.clear:             { manual: true }
+  # dev-loop.design (dl-015, dl-090 Q6; bug-320): owed a command reading the acknowledgement of every depends_on task
+  # and every ref: decision-log from the Execution Notes.
+  depends_on.acknowledged:  { manual: true }
+  # dev-loop.red / .green / .refactor: the red commit's sha is in no placeholder; owed the T4 command
+  # (`git log --first-parent --no-merges <red>..HEAD -- <files>`) and the red run, from that sha.
+  tests.exist:              { manual: true }
+  tests.failing:            { manual: true }
+  tests.unchanged:          { manual: true }
+  # dev-loop.green / .refactor / .review (dl-170, task-349): scripts/heavy-gate.cjs takes the lock inside the npm
+  # scripts; owed a probe mode that reports the lock and the load without taking them.
+  gate.slot-free:           { manual: true }
+  # release-publishing.tag (task-288 D3, task-303 D2 (a), task-358 D4): no plan declares its phase branches; owed
+  # `git merge-base --is-ancestor <phase branch> HEAD` once a plan declares them.
+  phase-branch-merged-to-integration-branch: { manual: true }
+  # release-publishing.publish: owed one check over `npm view`, `gh release view` and the MCP Registry API;
+  # scripts/wait-npm-version.cjs polls only the first.
+  "staged version approved on npm, installable from the npm registry once its tarball answers HTTP 200, its GitHub Release created with the test reports attached and its MCP Registry listing published": { manual: true }
+  # release-health.measure / .compare / .propose (bug-435 item 3): no command reads a report against the catalogue
+  # (docs/08_health/metrics.yaml) — scripts/release-health/ holds catalogue, compare and measure, none with a
+  # report-check mode; owed: that mode.
+  "every catalogue metric has a value or an explicit not-measurable reason": { manual: true }
+  "every regressed metric and every breached floor has a finding": { manual: true }
+  "every finding is tracked by an element or carries an RH proposal in the report's Proposals section": { manual: true }
+  # specification-downcast.user-story-mapping and user-story-mapping.mvp-cut (bug-435 item 4, the coverage halves of
+  # the split checks): owed a comparison of the MVP Canvas's feature ids with the story map's.
+  "100% of MVP Canvas features covered": { manual: true }
+  "100% of MVP Canvas features included": { manual: true }
+  # retrospective.collect-feedback / .additional-points (bug-435 item 4, the mechanical halves): completeness and the
+  # closed outcome set — one row per note with its cite, one outcome per item, each element outcome with an id and each
+  # superseded one with a command. Owed: a command reading the read record and the listed sources.
   feedback-notes.recorded:  { manual: true }
   proposals.disposed:       { manual: true }
 
