@@ -125,7 +125,7 @@ the move. Start from `.wingfoil/README.md`.
 | `.wingfoil/memory/templates/`                              | Memory (P1.13)         | One Markdown scaffold per element type (`frontmatter.required` enforced on submit)                                                                                                                   |
 | `docs/04_memory/planning/{id}.md`                          | Memory (P1.11)         | The **release-line** roadmap (one file per major version, e.g. `rl-v1.md`)                                                                                                                           |
 | `docs/04_memory/planning/rl-{release-line}/{id}.md`        | Memory (P1.11)         | That release-line's releases: the minors (v0.1→v1.0 for `rl-v1`) and the patches (`patch-v0.2.2`, `dl-092`)                                                                                          |
-| `.wingfoil/directives/custom/`                             | Directives (P3.5/P3.8) | Rules: P3.8 template **stand-ins** (`code-quality, testing, code-review, architecture, security, documentation`) + WingFoil-specific (`determinism, doc-versioning, security-secrets, traceability, command-baseline, claim-evidence, git-conventions, wingfoil-cli`) |
+| `.wingfoil/directives/custom/`                             | Directives (P3.5/P3.8) | Rules: P3.8 template **stand-ins** (`code-quality, testing, code-review, architecture, security, documentation`) + WingFoil-specific (`determinism, doc-versioning, security-secrets, traceability, command-baseline, claim-evidence, git-conventions, wingfoil-cli, standing-approvals`) |
 | `.wingfoil/roles.yaml`                                     | Directives (P3.2/P3.7) | Role → directive bindings                                                                                                                                                                            |
 | `.wingfoil/workflows.yaml` + `workflows/custom/`           | Workflow (P4.1)        | `sw-life-cycle` (main) + its sub-workflows + five more startable mains: four ingest mains and `vision-change`                                                                                        |
 | `.wingfoil/workflows/bindings.yaml`                        | Workflow (P4.10/P4.12) | The command each project-bound `actions:` / `checks:` token runs — binding kind `run` (an argument vector), or `manual: true` (`spec-003` Layer 3, `dl-090`); unbound prose checks stay `W_WORKFLOW_UNBOUND_TOKEN` warnings |
@@ -517,7 +517,7 @@ Bindings are by **role**, never by person (REQ-SYS-08).
 | product-owner          | traceability                                                                                     |
 | tech-lead              | architecture, code-review, traceability                                                          |
 | facilitator            | traceability                                                                                     |
-| approver               | code-review                                                                                      |
+| approver               | code-review, standing-approvals                                                                  |
 | **global (all roles)** | doc-versioning, documentation, security, security-secrets, claim-evidence, git-conventions, wingfoil-cli |
 
 `command-baseline` states which state a command may read and write (`dl-080`); `claim-evidence` states that
@@ -525,7 +525,9 @@ a sentence asserting a fact about the code names the command that establishes it
 (`dl-119`) covers branch prefixes, staying current with the integration branch, tags, `wf()` subjects,
 identity, id allocation, AI attribution, amending a tool commit, the two release lines and their merge forward (§1)
 and the governance check on pushed commits (§9); `wingfoil-cli` (`task-270`) says which
-build runs which command (§3). `roles.yaml` declares its own `version:`; read it there.
+build runs which command (§3); `standing-approvals` (`task-343`, R1 L7) holds the rules under which a gate's
+command-checked evidence suffices and the exact command the approver runs — no rule lets an agent run an approver
+verb (`dl-212` D1). `roles.yaml` declares its own `version:`; read it there.
 
 When executing under a role, **auto-load and obey that role's directives** (P3.6/P5.4.2).
 

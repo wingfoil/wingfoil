@@ -34,7 +34,11 @@
 # 2026-10-13 D-A (a)): `npm run check:role-directives` fails on any `directives list --role` warning, and a role with
 # no assignments of its own warns (dl-029). code-review already applies to the approver gate; inception, which the
 # facilitator drives, produces the feature ids the traceability chain starts from.
-version: 1.9                      # 1.8 approver: [code-review], facilitator: [traceability] (task-215)
+#
+# `approver` also loads `standing-approvals` (release-planning v0.4 R1 L7, dl-212 D1, task-343): the rules under which
+# a gate's command-checked evidence suffices, each with the exact command the approver runs. Bound to `approver` only:
+# no rule lets an agent run an approver verb, and the verbs refuse an agent's session.
+version: 1.9                      # 1.9 approver: [code-review, standing-approvals] (task-343) (prev 1.8 approver: [code-review], facilitator: [traceability] (task-215))
 
 assignments:
   developer:
