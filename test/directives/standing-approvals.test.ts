@@ -177,7 +177,8 @@ describe('task-343 AC 1 — the directive lists each rule with an id, a gate, it
 
   // The design's SA-02 (status proposed) ends its evidence with an item no command decides (the reviewer's verdict),
   // so the pin is the design's "followed by one or more lines" read literally: the items right after the Evidence
-  // line start with at least one command-and-output item; a later non-command item is not refused here.
+  // line start with at least one command-and-output item; a later non-command item is not refused here — for a
+  // `proposed` block only: the next case holds an `adopted` block to commands alone.
   it('red-first: each Evidence line is followed by one or more numbered items, each a command and its expected output', () => {
     const found = blocks();
     expect(found.length).toBeGreaterThanOrEqual(1);
@@ -186,6 +187,19 @@ describe('task-343 AC 1 — the directive lists each rule with an id, a gate, it
       const leading = items.findIndex((item) => !EVIDENCE_ITEM.test(item));
       const commands = leading < 0 ? items.length : leading;
       expect([block.id, commands > 0, items[0]]).toEqual([block.id, true, expect.stringMatching(EVIDENCE_ITEM)]);
+    }
+  });
+
+  // Review finding 2 (dl-212 D1, the directive's §1): a rule in force decides a gate on commands alone, so for an
+  // `adopted` block EVERY item after the Evidence head is a command and its expected output; the leniency of the case
+  // above stays for `proposed` blocks only.
+  it('red-first: an adopted rule\'s Evidence items are all commands with their expected output, none a judgement', () => {
+    const adopted = blocks().filter((block) => STATUS.exec(linesMatching(block, STATUS)[0] ?? '')?.[1] === 'adopted');
+    expect(adopted.length).toBeGreaterThanOrEqual(1);
+    for (const block of adopted) {
+      const items = itemsAfter(block, EVIDENCE_HEAD);
+      expect([block.id, items.length > 0]).toEqual([block.id, true]);
+      for (const item of items) expect([block.id, item]).toEqual([block.id, expect.stringMatching(EVIDENCE_ITEM)]);
     }
   });
 
