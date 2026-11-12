@@ -19,6 +19,18 @@ Run `wingfoil` from the **root of a git repository** that has been initialized w
 Outside a git repository a command fails with `error: E_NO_GIT_ROOT: not inside a git repository`; in a
 subdirectory it fails with `error: E_NOT_AT_GIT_ROOT: run wingfoil from the project root` (both exit `1`).
 
+New in 0.4: to run a command on a project from another directory, name its root with the global
+`--project <dir>` — `wingfoil --project ../my-project workflow status`, or after the verb,
+`wingfoil workflow status --project ../my-project`. `<dir>` is resolved against the current directory and must
+itself be the git root, holding its own `.git` (a worktree's root counts); every read and write then lands in that
+repository, at its own `HEAD`, the git identity and the `team.members` check of a command that writes included.
+Anything else — a subdirectory, a directory outside every repository, a file or a missing path — exits `1` with
+`error: E_NOT_AT_GIT_ROOT: --project is not a git root: <absolute dir>`; a blank value exits `2` with
+`error: invalid flag value: --project must not be blank`. WingFoil never infers the project root: without
+`--project` the current directory must be the root, even for a command that only reads, so the same command line
+always acts on the repository it names or the one it is run in, never on one found by searching upwards. A tool
+that drives WingFoil from elsewhere — an MCP client, an agent launch — names the root it means.
+
 New in 0.3: a command that reads the configuration, run where there is no `.wingfoil/`, exits `1`
 with `error: WingFoil not initialized (no .wingfoil/ directory at the project root): run 'wingfoil init'
 first`. When `.wingfoil/` exists but lacks the file the command needs, the error names that file from
@@ -67,6 +79,7 @@ Accepted by every command, except `--dry-run`, which only the commands that chan
 | `--format <console\|json\|yaml>` | Output format. On success, `console` (default) prints the result `json` prints, indented by two spaces — it has no human rendering yet (New in 0.3: except the commands whose entry shows their own console text — `agent list`, `agent show`, `workflow next`, `workflow status`, `workflow start`, `workflow end`, `workflow finalize`, `workflow adopt`, `workflow rekey`); errors and warnings keep their `error:`/`warning:` lines on stderr. A human rendering is planned with the CLI UX work (P5.1.4, `dl-043`), and will change what the default prints. `json` prints compact single-line JSON; `yaml` prints YAML. `json`/`yaml` write only the result — nothing else — so scripts can parse stdout directly: a script should pass `--format json` rather than parse the default. |
 | `--dry-run` | New in 0.3. Show the commit the command would make, and make nothing. Taken by every command that changes the project — `memory add`, `submit`, `approve`, `reject`, `deprecate`, `park`, `amend`, `dna set`, `add`, `update`, `remove`, `directive create`, `assign`, `remove`, `workflow start`, `end`, `finalize`, `create`, `remove`, `adopt`, `rekey`, `agent execute` — after the verb (`wingfoil memory submit task-001-my-first-task --dry-run`); any other command refuses it as an unknown option (exit `2`). The command runs all its checks, then prints `{"dryRun": true, "subject", "message", "paths", "diff"}`: the commit subject, its full message, the files it would contain, and the unified diff from the last commit — and exits `0`, leaving the working tree, the index and the branch untouched. If the real run would be refused, the dry run is refused the same way, with the same exit code; the warnings the real run would print are printed too, a rewrite warning worded as a plan (`dna.yaml would be rewritten as a whole file (--force): …`). The diff is of what the commit would store — after your `core.autocrlf` or `.gitattributes` line-ending conversion — and is laid out with git's default diff settings, whatever your own git configuration says, so `git show` with a customized `diff.*` configuration can group the same changes into different hunks. It does not run git hooks, for a `memory approve` that also moves a superseded document it shows only the approve commit, and for `workflow start` only the plan's `add` commit. `workflow finalize`'s, `workflow adopt`'s and `workflow rekey`'s commits change no file, so their `paths` is `[]` and their `diff` is empty. `agent execute` prints the launch it would make instead, with no `message` or `diff`: its commit records how the agent's run ended, which cannot be known beforehand (see [`agent execute`](#wingfoil-agent-execute)). |
 | `--co-author <name>` | New in 0.4. Says the command runs in an agent's session, as the `team.agents` entry `<name>`. Taken by every command that takes `--dry-run` except `agent execute`, after the verb; any other command refuses it as an unknown option (exit `2`), and a blank `<name>` is refused at exit `2` (`error: invalid flag value: --co-author must not be blank`). It is one of the agent markers (`spec-018` §1), beside the `WINGFOIL_AGENT`, `CLAUDE_CODE_CHILD_SESSION` and `CODEX_SANDBOX` environment variables, defined with any value, the empty one included (`CLAUDECODE` is not one): with any of them present, the commands that need the approver — `memory approve`, `reject`, `amend`, `workflow finalize` on an approval phase, `workflow adopt --plan --apply`, `workflow rekey` — are refused (exit `1`, `error: E_AGENT_CONTEXT: '<command>' needs the approver and does not run in an agent's session (<markers>): …`, with a `hint:` line), before anything is written. Run them yourself, from a terminal no agent started. On the other commands it changes nothing yet. |
+| `--project <dir>` | New in 0.4. Run on the project rooted at `<dir>` instead of the current directory, before or after the verb; `<dir>` must itself be a git root (see [Where to run it](#where-to-run-it)). `--help` and `--version` keep their precedence: with either, the value is not checked. |
 | `--verbose` | Emit diagnostic logs to stderr. |
 | `--no-color` | Disable ANSI colors. Accepted, but no output is colored yet, so it changes nothing; neither does the `NO_COLOR` environment variable. Both will apply once `console` has a colored rendering (P5.1.4, `dl-043`). |
 | `--no-interactive` | Fail on a missing argument instead of prompting for it. |
@@ -253,6 +266,9 @@ by an MCP client, not typed by hand.
 ```
 wingfoil mcp
 ```
+
+New in 0.4: `wingfoil --project <dir> mcp` serves the project rooted at `<dir>` for the server's whole life, whatever
+directory the client starts it in (see [Where to run it](#where-to-run-it)).
 
 Exposes the project **read-only**: Resources for DNA, Memory and workflows, and one Prompt per role
 (`<role>-session`) embedding that role's directives. It exposes no Tools — every write goes through the
@@ -1855,7 +1871,9 @@ execution context (DNA, the role's directives, the relevant Memory) assembles an
 neither JSON nor TOML can write, gives `error: mcp.template cannot carry the MCP server's argument <n>: it holds
 an unpaired surrogate (U+<XXXX>)`, or `… command: …`; new in 0.4); the
 WingFoil MCP server of this same build starts and serves that context (your project's `.mcp.json` is
-neither read nor changed); and, for an interactive launch of an adapter that needs one, stdin and stdout are a
+neither read nor changed; new in 0.4, the server is registered and started as `<this build's cli.js> --project <the
+project root> mcp`, so it serves the root `agent execute` resolved whatever working directory the agent CLI starts
+it in); and, for an interactive launch of an adapter that needs one, stdin and stdout are a
 terminal.
 The first check that fails ends the command with exit `1` and its message, for example
 `error: context pre-load failed: MCP server unreachable` or

@@ -42,7 +42,7 @@ import type { Command } from 'commander' with { 'resolution-mode': 'import' };
 import { extraOperandsReason, missingOperandReason, type CoreModule, type CorePositional } from '../core/registry';
 // Direct module import, not the `../core` barrel — the same path `./registrar.ts` already uses for the
 // other two exit-code mappings (task-101; keeps this file out of the barrel's merge surface).
-import { classifyParseOutcome } from '../core/exit-code';
+import { classifyParseOutcome, exitCodeForThrow } from '../core/exit-code';
 import { readBuildStamp, TEMPLATE_NAMES } from '../core/surface-reads';
 
 import { buildCliCommands, type BuildCommandsOptions, type CliCommand } from './registrar';
@@ -165,9 +165,16 @@ export async function buildProgram(modules: readonly CoreModule[], options: Buil
     // Until P5.1.4 gives `console` a human rendering (`dl-043`), the help says what the default prints
     // and that no output is coloured (spec-008 §2, task-156, `bug-152`, `bug-203`).
     .option('--format <format>', 'output format (console|json|yaml); console prints indented JSON for now, unless the command defines its own', 'console')
+    // `--project <dir>` names the project root instead of the current directory (task-350, `dl-198` (a), spec-008 §2);
+    // `resolveRoot` below reads it, so it is checked at the root step of every command, `init` and `mcp` included.
+    .option('--project <dir>', 'run on the project rooted at <dir> instead of the current directory (it must be a git root)')
     .option('--verbose', 'emit diagnostic logs to stderr')
     .option('--no-color', 'disable ANSI colors (accepted; no output is colored yet)')
     .option('--no-interactive', 'fail on missing args instead of prompting');
+
+  // The resolver every command calls, bound once to the global `--project` value (task-350, spec-008 §2): the
+  // derived commands, `init` and `mcp` all resolve the root through it, after their usage checks.
+  const resolveRoot = (): string => options.resolveRoot(program.opts<{ project?: string }>().project);
 
   // `wingfoil init` is a SPECIAL bootstrap command (task-029, P5.1.1): it runs BEFORE config exists,
   // so it is NOT a `CORE_MODULES` noun-verb op — it is wired directly here and drives `runInit`
@@ -190,10 +197,13 @@ export async function buildProgram(modules: readonly CoreModule[], options: Buil
       const globalOpts = program.opts<{ format: string; interactive: boolean }>();
       let root: string;
       try {
-        root = options.resolveRoot();
+        root = resolveRoot();
       } catch (error) {
-        emitError(error instanceof Error ? error.message : String(error), { format: activeFormat(program) });
-        exitWith(1);
+        // A blank `--project` is a usage error (exit 2), a root that is not a git root a failure (exit 1):
+        // core selects the code (spec-008 §1, task-350 D5).
+        const { reason, exitCode } = exitCodeForThrow(error);
+        emitError(reason, { format: activeFormat(program) });
+        exitWith(exitCode);
         return;
       }
       await runInit(
@@ -215,11 +225,11 @@ export async function buildProgram(modules: readonly CoreModule[], options: Buil
     .allowExcessArguments(true)
     .action(async (_localOpts: unknown, command: Command) => {
       if (refusedInvalidFormat(program) || refusedSurplus(program, 'mcp', command.args)) return;
-      await runMcp({ resolveRoot: options.resolveRoot, version: readPackageVersion(), format: activeFormat(program) });
+      await runMcp({ resolveRoot, version: readPackageVersion(), format: activeFormat(program) });
     });
 
   const nounCommands = new Map<string, Command>();
-  for (const command of buildCliCommands(modules, options)) {
+  for (const command of buildCliCommands(modules, { ...options, resolveRoot })) {
     const target = resolveCommandTarget(program, nounCommands, command);
 
     // A flat command IS its noun (`paths`), so only a nested verb's noun takes the module's own line.

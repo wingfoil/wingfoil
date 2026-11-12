@@ -57,7 +57,8 @@ A few ideas run through everything:
 ## 1. Prerequisites
 
 - **Node.js 22.12 or later** — `node --version`.
-- **git**, and a **git repository** to work in. WingFoil must be run from the repository root.
+- **git**, and a **git repository** to work in. WingFoil must be run from the repository root, or be given it
+  with `--project <dir>` (§10).
 - **A git identity** — WingFoil refuses to commit without one:
 
   ```bash
@@ -724,12 +725,21 @@ PENDING=$(wingfoil memory search --type task --status pending --format json \
 
 Full script: [`examples/05-ci-json-exit-codes`](examples/05-ci-json-exit-codes/run.sh).
 
+A script, a CI job or an agent launch that runs somewhere else names the project instead of changing directory:
+`wingfoil --project <dir> <command>` (new in 0.4) runs the command on the repository rooted at `<dir>`, which must
+itself be the git root, and `wingfoil --project <dir> mcp` serves that project to an MCP client started in any
+directory. WingFoil never infers the project root: it does not search upwards from a subdirectory the way git does,
+even for a command that only reads, so a command line acts on the repository it names, or on the one it is run in,
+and never on one it found. A directory that is not a git root exits `1` with
+`E_NOT_AT_GIT_ROOT: --project is not a git root: <absolute dir>` ([CLI reference](cli-reference.md#where-to-run-it)).
+
 ## 11. Known limitations in 0.3
 
 - **No step execution** — WingFoil tracks workflows and routes their approvals, but people and agents
   carry out the steps and run their checks (§7).
 - **No unassign command for directives** — edit `roles.yaml` and commit (§6.2).
-- **Run from the repository root** — a subdirectory fails with `E_NOT_AT_GIT_ROOT`.
+- **Run from the repository root** — or name it with `--project <dir>` (new in 0.4, §10); a subdirectory fails with
+  `E_NOT_AT_GIT_ROOT`.
 - **`dna show` takes only a top-level section** (`team`, not `team.members`).
 
 ## 12. Upgrading from 0.2.x

@@ -1,7 +1,7 @@
 # CLI Commands Reference — WingFoil
 
-**Version:** 2.1
-**Date:** 2026-11-11  
+**Version:** 2.2
+**Date:** 2026-11-12  
 **Status:** Approved
 
 ---
@@ -256,6 +256,7 @@ Every command accepts these, except `--dry-run`, which only the commands that ch
 | Option | Format | Description |
 |--------|--------|-------------|
 | `--format` | `json`, `yaml`, `console` (default) | Output format, stated once here for every command. JSON/YAML for scripting/CI. Console prints the JSON payload indented for now, unless the command defines its own text (`spec-008` §2) |
+| `--project <dir>` | path | Run on the project rooted at `<dir>`, resolved against the current directory, instead of on the current directory. `<dir>` must itself be a git root, holding its own `.git` (a worktree included); anything else exits `1` with `E_NOT_AT_GIT_ROOT: --project is not a git root: <absolute dir>`, and a blank value exits `2`. Without it, the current directory must be the git root: WingFoil never infers the project root (`spec-008` §2, `spec-011`, `dl-198` (a)) |
 | `-h`, `--help` | flag | Show command-specific help and examples |
 | `-V`, `--version` | flag | Print the build stamp `<semver> (<sha>)` (top level only) |
 | `--co-author <name>` | `team.agents` entry name | An agent marker (`spec-018` §1): the command runs in an agent's session, as the entry `<name>`. Taken by every command that takes `--dry-run` but `agent execute`, after the verb; a blank `<name>` exits `2`. With it, or with `WINGFOIL_AGENT`, `CLAUDE_CODE_CHILD_SESSION` or `CODEX_SANDBOX` defined, the approver-gated commands (`memory approve`, `reject`, `amend`, `workflow finalize` on an approval phase, `workflow adopt --plan --apply`, `workflow rekey`) refuse with `E_AGENT_CONTEXT`, exit `1` (`dl-212` D1) |
@@ -395,6 +396,11 @@ Every command accepts these, except `--dry-run`, which only the commands that ch
 ---
 
 ## Revision history
+
+**Version 2.2 (2026-11-12) — the `--project <dir>` global option, per `task-350` (`spec-008` §2, `spec-011`, `dl-198` (a)).**
+Global Options gets a `--project <dir>` row: every command, `init` and `mcp` included, runs on the repository the option
+names, which must itself be a git root. Without it the current directory must be the root, as before; the root is
+never inferred.
 
 **Version 2.1 (2026-11-11) — the `--co-author` global option, per `task-333` (`spec-018` §1, `dl-212` D1).** Global
 Options gets a `--co-author <name>` row: an agent marker, registered on every command that takes `--dry-run` but

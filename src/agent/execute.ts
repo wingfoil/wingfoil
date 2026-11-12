@@ -208,11 +208,13 @@ export interface McpServerCommand {
 
 /**
  * The server `agent execute` registers and pre-flights (§2.5): the build that is running it — the Node
- * executable, and `[<that build's cli.js>, "mcp"]`, `cli.js` sitting one directory above this module in
- * the compiled layout (`dist/agent/` → `dist/cli.js`).
+ * executable, and `[<that build's cli.js>, "--project", <root>, "mcp"]`, `cli.js` sitting one directory
+ * above this module in the compiled layout (`dist/agent/` → `dist/cli.js`). `root` is the project root
+ * `agent execute` resolved, so the server serves it whatever working directory the agent CLI starts it in
+ * (task-350, `dl-198` (a)).
  */
-export function runningBuildMcpServer(): McpServerCommand {
-  return { command: process.execPath, args: [join(__dirname, '..', 'cli.js'), 'mcp'] };
+export function runningBuildMcpServer(root: string): McpServerCommand {
+  return { command: process.execPath, args: [join(__dirname, '..', 'cli.js'), '--project', root, 'mcp'] };
 }
 
 /** `mcp.template`'s placeholder tokens: the narrow class, so JSON braces are left alone (§2.3). */
@@ -754,7 +756,7 @@ async function runPipeline<T>(
     // A team.agents entry that declares an adapter declares an email (dna.yaml schema, dl-158 Rule 2 (ii)).
     agent: { name: agent.value.name, email: agent.value.email ?? '' },
   });
-  const mcpServer = host.mcpServer ?? runningBuildMcpServer();
+  const mcpServer = host.mcpServer ?? runningBuildMcpServer(root);
   // `mcp.template` rendered once, before anything is written or spawned: a command or argument it cannot carry
   // is refused here, a dry run included (§3.3 step 10, §3.7; task-355, bug-371).
   let rendered: string | undefined;

@@ -15,6 +15,7 @@
  */
 import { loadDnaRoleSet } from '../core';
 import { errorDetails } from '../core/error-details';
+import { exitCodeForThrow } from '../core/exit-code';
 import { startMcpServer } from '../mcp/server';
 
 import { emitError } from './error';
@@ -59,8 +60,10 @@ export async function runMcp(deps: McpCliDeps): Promise<void> {
   try {
     root = deps.resolveRoot();
   } catch (error) {
-    emitError(error instanceof Error ? error.message : String(error), { format });
-    exitWith(1);
+    // A blank `--project` is a usage error (exit 2); every other root failure is exit 1 (task-350 D5).
+    const { reason, exitCode } = exitCodeForThrow(error);
+    emitError(reason, { format });
+    exitWith(exitCode);
     return;
   }
 
