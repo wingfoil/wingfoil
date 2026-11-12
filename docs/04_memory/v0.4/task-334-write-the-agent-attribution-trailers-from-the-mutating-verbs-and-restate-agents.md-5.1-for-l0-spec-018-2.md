@@ -81,3 +81,346 @@ AGENTS.md §5.1 amendment in the L0 task: its refusal half lands with `task-333`
 ## Execution Notes
 
 <!-- Filled by the dev-loop. -->
+
+### design (architect, 2026-11-12)
+
+**Base and inputs.** Branch head `572a9b639` = `main` `bf3f8aee3` + `wf(task): start` (`git log --oneline
+main..HEAD` → one commit; `bug: []`, so no bug sync). `main` has moved to `006a6ada8` since (`git rev-list --count
+HEAD..main` → `8`, Memory files only: `git diff --stat HEAD...main -- src scripts AGENTS.md .wingfoil docs/cli-reference.md
+docs/user-guide.md docs/04_memory/design/specs` → empty), so no merge at design; red merges it (W0-R4). PATH guard: the
+task's PATH shim; `wingfoil --version` and `node dist/cli.js --version` both `0.3.2 (bf3f8aee3b3d31d854421bb6a72cb9250ea2e18b)`.
+The session carries `CLAUDE_CODE_CHILD_SESSION` and `CLAUDECODE` (`env | grep -E '^(CLAUDE_CODE_CHILD_SESSION|CLAUDECODE)='`
+→ both set), no `WINGFOIL_AGENT`, no `WINGFOIL_AGENT_MODEL`. Ratified sources (`grep -m1 '^status'`): `spec-018`,
+`spec-006`, `spec-008`, `spec-016`, `spec-017` approved; `dl-212`, `dl-117`, `dl-158`, `dl-137` ready; `dl-193`
+deprecated (settled by `dl-212`). No AC contradicts them; the gaps they leave are D4–D6 below.
+
+**`depends_on: [task-333]` read (dl-015).** Its design D1–D15, red (`33be8f2dc`) and correction (`dd90463c4`), green
+(`af9f500a6`), refactor, fix round (`4af085638`). What binds this task: `AGENT_MARKERS`, `AgentContext`/`Attribution`
+and `resolveAgentContext`'s `CoreResult` shape (`src/core/agent-context.ts`); `--co-author` derived by the registrar for
+every `mutates: true` operation but `agentAttribution: false` (`agent execute`), stripped from `ctx.options`, handed to
+the core through `withAgentInvocation` (D4, D5); the gated form `resolveGatedAgentContext()` returns an `AgentContext`,
+not a `CoreResult` (fix round); `workflow finalize` knows it is gated only after deduction (D11); the commit primitive's
+backstop `refuseAgentTrailerOnApproval` runs over the stamped message (D7); the test environment is scrubbed of the
+markers in `test/global-setup.cjs` (D8), so in-process suites see no marker and every commit message they pin is
+unchanged; `git-conventions` is at 2.7, so this task's bump is 2.8.
+
+`bug-531` (triaged, low, `release: ""`) is a design input, ruled in D1: today `resolveAgentContext` is called nowhere in
+`src/` (`grep -rn "resolveAgentContext(" src | grep -v "^src/core/agent-context.ts"` → no output) and the six gated
+callers call `resolveGatedAgentContext()` just before the authority check (`src/core/index.ts:1572`, `:1734`, `:1996`,
+`workflow-finalize.ts:154`, `workflow-adopt.ts:257`, `workflow-rekey.ts:130`), while `spec-006` §7 step 2 places the
+resolution right after membership.
+
+#### Per-AC classification and what red (qa) must pin
+
+Every CLI case runs `node dist/cli.js` in a child process whose environment is `withoutAgentMarkers(process.env)`
+(`test/agent-markers.cjs`) plus the case's variables, never `WINGFOIL_AGENT_MODEL` unless the case sets it. Fixture:
+`buildL0Repo()` of `test/core/helpers/l0-fixture.ts` (member `WingFoil Test <wf-test@example.invalid>` with `approver`;
+agents `Claude` — `noreply@anthropic.com`, `adapter: claude-code` — and `Other` — `other@example.com`; targets
+`task-004-deprecate-me` (draft), `task-005-park-me` (in-progress), `rc-1`, `adoptable-1-plan`, `adr-001-adopt-me`). New
+variants qa builds in its own helper (reserved domains are refused for agent emails, `bug-261`, so `@example.com`):
+an entry with no email and no adapter (`NoMail`, T-16), `team.agents: []` (T-17, the existing `agents: false`), and a
+first entry without `adapter` before `Claude` (for the vendor rule). The final paragraph is read with
+`git log -1 --format=%B` split on the last blank line, and with `git log -1 --format='%(trailers:key=Co-Authored-By,valueonly)'`
+(git's own reader, `spec-018` §6 T-11). The `WingFoil-Version:` value is computed as the existing storage tests do
+(`formatVersionTrailer(readBuildStamp())`, `test/storage/write-and-commit.test.ts`), never typed.
+
+| AC | Class | What qa pins (observable · interface · fixture · file) |
+|----|-------|----------------------------------------------------------|
+| 1 | red-first | **Unit, the primitive** (new `test/storage/commit-attribution.test.ts`): `writeAndCommit(root, [{path, content}], 'wf(task): add t', { attribution: { name: 'Claude', email: 'noreply@anthropic.com', model: 'm-1' } })` → `git log -1 --format=%B` is exactly `wf(task): add t\n\nWingFoil-Version: <stamp>\nCo-Authored-By: Claude <noreply@anthropic.com>\nAI-Model: m-1\n`; with `trailers: ['WingFoil-Instance: i', 'WingFoil-Step: s']` the paragraph is those two, then `WingFoil-Version:`, then the two agent lines, one paragraph; the same for `commitEmpty` and `commitPaths`; under `runAsDryRun` the plan's `message` ends with the two lines; `attribution` on a message with an `Approver:` line → `ApprovalTrailerError`, `code === 'E_AGENT_TRAILER_ON_APPROVAL'`, key `Co-Authored-By`, nothing written or staged (the backstop sees the attribution). Interface: new `CommitOptions.attribution?: CommitAttribution`, `CommitAttribution { readonly name: string; readonly email: string; readonly model: string; readonly note?: string }`, exported from `src/storage` (barrel `src/storage/index.ts`). Expected reds: `tsc` TS2353 (unknown property `attribution`) / TS2305 (`CommitAttribution` not exported); jest runs (isolatedModules), the message lacks the lines. **CLI** (new `test/cli/agent-attribution.integration.test.ts`): one `it.each` over the §2.1 operations under `WINGFOIL_AGENT=Claude` — `memory add`, `submit`, `deprecate` (with and without `--reason`), `park --reason r`; `dna set`, `add`, `update`, `remove`; `directive create`, `assign`, `remove`; `workflow start`, `end`, `create`, `remove`, `adopt` (single, `adr-001-adopt-me`), `finalize` on `rc-1`'s non-`approval:` step (or a fixture step without `approval:`) — exit `0`, the commit's final paragraph's last three lines exactly `WingFoil-Version: <stamp>`, `Co-Authored-By: Claude <noreply@anthropic.com>`, `AI-Model: not-reported`, the paragraph's other lines (`WingFoil-Start:`, `WingFoil-Instance:`, `WingFoil-Phase:` …) before them, and `%(trailers:key=Co-Authored-By,valueonly)` → `Claude <noreply@anthropic.com>`. The table is held equal to the registry: every `CORE_MODULES` operation with `mutates: true` and `agentAttribution !== false` minus the four always-gated (`memoryApprove`, `memoryReject`, `memoryAmend`, `workflowRekey`) — 17 (`node -e` over `dist/core/index.js`, below) — so a new mutating operation without a case fails. |
+| 2 | red-first | Same CLI file. T-12: `WINGFOIL_AGENT=Claude memory submit <id> --co-author Other --ai-model m-1` → `Co-Authored-By: Other <other@example.com>`, `AI-Model: m-1`. T-13: `CLAUDE_CODE_CHILD_SESSION=1 memory add …` → `Claude <noreply@anthropic.com>` (the `claude-code` entry, though a first entry without adapter precedes it), stderr has no `W_AGENT_ENTRY_GUESSED`. Vendor without a matching entry: `CODEX_SANDBOX=1` (no `codex-cli` entry) → the first entry, guessed. T-14: `WINGFOIL_AGENT=` (empty) `memory park task-005-park-me --reason r` → the message is exactly `wf(task): park task-005-park-me [in-progress → backlog]\n\nAttributed to the first team.agents entry, Claude: no entry is named for this agent.\n\nReason: r\n\nWingFoil-Version: <stamp>\nCo-Authored-By: Claude <noreply@anthropic.com>\nAI-Model: not-reported\n`; `memory history task-005-park-me --format json` reads that entry's reason as `r` alone; stderr exactly one line `warning: W_AGENT_ENTRY_GUESSED: Attributed to the first team.agents entry, Claude: no entry is named for this agent.`. The same body-first placement on `memory deprecate --reason r` and on a non-`approval:` `workflow finalize --reason r` (`spec-018` §2.3 rule 4). One warning per invocation: `WINGFOIL_AGENT= workflow start …` (which adds its plan through `memory add`) prints it once. **Unit** (new `test/core/agent-attribution.test.ts`): `resolveAgentContext(root, { env, coAuthor?, aiModel?, gated: false })` on a committed `buildL0Repo()` → `value.attribution` `{ name, email, model }` per rule 1–4, `note` only on rule 4 (the body line above), `warnings` `['W_AGENT_ENTRY_GUESSED: …']` on rule 4; no marker → `attribution: null`, no warning. |
+| 3 | red-first | CLI file. `--ai-model m-1` with `WINGFOIL_AGENT=Claude` → `AI-Model: m-1`; `WINGFOIL_AGENT_MODEL=m-2` alone → `AI-Model: m-2`; both → `m-1`; neither → `not-reported`. T-21: `memory add … --ai-model m-1`, no marker → exit `2`, stderr exactly `error: invalid flag combination: --ai-model needs an agent context (--co-author, or a session an agent started)`, nothing written; `--ai-model $'a\nb'` with a marker → exit `2`, `error: invalid flag value: --ai-model must be one line`; and, per D4 if ruled as drafted: `--ai-model ''` → exit `2` `error: invalid flag value: --ai-model must not be blank`; `WINGFOIL_AGENT_MODEL=$'a\nb'` → exit `2` `error: invalid environment value: WINGFOIL_AGENT_MODEL must be one line`; `WINGFOIL_AGENT_MODEL=' '` → `not-reported`; `--ai-model ' m-1 '` → `AI-Model: m-1`. Usage order: before `resolveRoot()` (the check runs outside a repository too: `cwd` a non-repository → exit `2` with the same line). On a gated command with a marker, `--ai-model m-1` → `E_AGENT_CONTEXT` (exit `1`); with no marker → the combination refusal (exit `2`, usage first). Registrar unit (existing `test/cli/registrar-co-author.test.ts` style, new file `test/cli/registrar-ai-model.test.ts`): `--ai-model <id>` derived after `--co-author` on every mutating command but `agent execute`, never in `ctx.options`, read through `currentAgentInvocation().aiModel`. |
+| 4 | red-first | CLI file. T-15: `WINGFOIL_AGENT=Nobody memory add …` → exit `1`, stderr exactly `error: unknown team.agents entry 'Nobody' (from WINGFOIL_AGENT): the committed dna.yaml declares Claude, Other`; `--co-author Nobody` → the same with `(from --co-author)`; with `team.agents: []` → `… declares none`; `git rev-parse HEAD`, `git status --porcelain`, `git diff --cached --name-only` unchanged, no file created. T-16: `--co-author NoMail` → exit `1`, `error: team.agents entry 'NoMail' has no email, and a commit it co-authors must name one; declare it first (wingfoil dna update team.agents.NoMail --entry-email <address>), then retry`, nothing written. T-17: `CLAUDE_CODE_CHILD_SESSION=1 memory add …` with `team.agents: []` → exit `0`, no `Co-Authored-By:`/`AI-Model:` line in the message, stderr exactly `warning: W_NO_AGENT_ENTRY: this command runs in an agent's session (CLAUDE_CODE_CHILD_SESSION is set) but dna.yaml declares no team.agents entry, so its commit names no AI co-author; declare one (wingfoil dna add team.agents …)`. `--dry-run` of T-15 and T-16 refused identically. |
+| 5 | red-first | T-10 (characterization half, passes before green): no marker — `memory add`, `memory submit`, `memory approve`, `workflow finalize` (non-approval step) — the message equals a fixture **copied from a real run of the code build at this branch's head** with no marker, the producing command recorded in red's notes (not typed). T-20 second half (red): `WINGFOIL_AGENT=Claude memory submit <id> --dry-run --format json` → `message` ends with `Co-Authored-By: Claude <noreply@anthropic.com>\nAI-Model: not-reported`, and the same with `--format console` (W0-R11: both formats); tree unchanged. CLI file. |
+| 6 | red-first | New `test/docs/l0-attribution-text.test.ts` (whitespace-flattened substrings, each absence beside its positive, task-276): AGENTS.md holds the AI-attribution paragraph quoted below verbatim and no longer the sentence `On a commit \`wingfoil\` wrote, add the two with`; `git-conventions` §7 holds the four new sentences quoted below, `version:` ≥ 2.8 by the "≥ plus history" rule (bug-314) and its version note names `task-334`; §8 holds the new example sentence and no longer `(e.g. \`Co-Authored-By:\`)`; `docs/user-guide.md` §8.3 holds `E_AGENT_CONTEXT` and the limit sentence, §9 the trailer sentence; `docs/cli-reference.md`'s Global options table has a `--ai-model <id>` row with the three exit-`2` messages and the `--co-author` row no longer says `On the other commands it changes nothing yet`; none of the lines added contains `signed` or `human-approved` (`git diff main...HEAD` on those four files, `dl-212` D4). |
+| 7 | characterization | `npx jest test/docs test/directives test/lint --maxWorkers=2` green at red's head (with red's own suites failing only where intended) and at refactor. Existing pins that change are listed below; red updates the ones that are red's, green the rest (D15). |
+| 8 | characterization, checked at design | The amendments are prepared, uncommitted (below); the qa agent checks before red that `git log -1 --format='%h %s' -- docs/04_memory/design/specs/spec-008-cli-grammar.md` and `…/spec-017-…` show `wf(tech-spec): amend …`, and that the BDD commit of D11 is on the branch (`grep -c "agent's session" docs/02_requirements/02_bdd/features/p1-memory/P1.{2-versioning-audit-trail,3-memory-add,6-memory-submit}.feature` → `1`/`2`/`1` or more). No test. |
+
+#### Design
+
+- **`src/storage/commit.ts`.** `CommitAttribution` (above) and `CommitOptions.attribution`. `stampedMessage(message,
+  trailers, attribution)`: when `attribution.note` is set, the message becomes `<subject>\n\n<note>` + (`\n\n<rest of the
+  body>` when there is one), so the note is the body's first paragraph; then the final paragraph `[...trailers,
+  WingFoil-Version, 'Co-Authored-By: <name> <<email>>', 'AI-Model: <model>']`. `refuseAgentTrailerOnApproval(message,
+  trailers, attribution)` stamps with the attribution, so the backstop sees it. With `attribution` absent the bytes are
+  exactly today's (T-10). Storage still imports nothing from `src/core` (`grep -rn "from '../core" src/storage` → none).
+- **`src/core/agent-context.ts`.** `Attribution` gains `readonly note?: string` (structurally a `CommitAttribution`).
+  `resolveAgentContext(root, { env, coAuthor, aiModel, gated })`: gated → unchanged (markers only); ungated, no marker
+  → `attribution: null`; otherwise reads `team.agents` from `loadDnaYamlAtHead(root)` (`src/core/loaders.ts`) and
+  applies `spec-018` §2.3 rules 1–4 and §2.5, returning the refusals as `CoreError` `VALIDATION` and the warnings
+  (`W_AGENT_ENTRY_GUESSED`, `W_NO_AGENT_ENTRY`) in `CoreResult.warnings`, pure. The model: `aiModel` (trimmed), else a
+  non-blank `env.WINGFOIL_AGENT_MODEL` (trimmed), else `not-reported` (D4). An explicit name (`--co-author`, a non-blank
+  `WINGFOIL_AGENT`) that names nothing is refused even when `team.agents` is empty (`… declares none`, §2.5's own
+  wording); only a vendor marker or a blank `WINGFOIL_AGENT` with no entry gets `W_NO_AGENT_ENTRY`. New
+  `resolveOperationAgentContext(root): CoreResult<AgentContext>`: the ungated form over `currentAgentInvocation()`,
+  memoized on the invocation object per `root` (a `WeakMap`), its warnings passed to `reportWarning`
+  (`src/validation/warning.ts`) once — so `workflow start` → `memory add`, and `workflow end` → the transition
+  preamble, resolve and warn once (D3). Membership has already refused an invalid committed `dna.yaml`
+  (`requireTeamMembership`, fail-closed), so the read cannot meet one.
+- **Call sites — once per operation, right after membership** (`spec-006` §7 step 2, `spec-018` §2.6): ungated
+  `resolveOperationAgentContext(root)` in `runDnaMutation` (`src/core/index.ts:623`), `memoryAddFn` (`:978`),
+  `directiveCreateFn` (`:2083`), `directiveAssignFn` (`:2185`), `directiveRemoveFn` (`:2384`), `workflowStart` and
+  `workflowEnd` (`src/core/workflow-start-end.ts:280`, `:364`), `workflowCreate`/`workflowRemove`
+  (`src/core/workflow-create-remove.ts:166`, `:238`), single `workflow adopt` (`src/core/workflow-adopt.ts:244`), and
+  `workflow finalize` in its non-`approval:` branch only, after deduction (D11 of `task-333`; the `spec-017` §7.9
+  sentence below). `beginMemoryTransition` (`src/core/memory-transition.ts:706`) resolves the gated form for `approve`,
+  `reject`, `amend` and the ungated one for `submit`, `deprecate`, `park` and `finalize` (`workflow end`), and carries
+  it as `BegunMemoryTransition.agent`; `commitMemoryTransition` passes `agent.attribution` to `writeAndCommit`; the three
+  gated callers in `src/core/index.ts` use `prepared.value.agent` instead of `resolveGatedAgentContext()` (D1).
+  `workflow adopt --plan --apply` and `workflow rekey` move their `resolveGatedAgentContext()` right after membership
+  (D1). The attribution reaches each writer explicitly: `memory/entry.ts` (`options` already passed through),
+  `writeAndCommit` at `index.ts:679`, `:2109`, `:2445`, `directive-assign.ts:414`, `workflow-create-remove.ts:149`,
+  `workflow-finalize.ts:168`, `provenance-record.ts:60` (`record.attribution`, `null` for the bulk adoption and the rekey).
+  `src/agent/run-log.ts:718` and `src/storage/layout.ts:93` (`init`) pass none (`spec-018` §1.1, §2.1).
+- **`src/cli/registrar.ts`, `src/core/agent-context.ts`.** `AI_MODEL_OPTION` (`ai-model`, value `id`) derived beside
+  `CO_AUTHOR_OPTION` by `takesCoAuthor`, stripped by `withoutCoAuthor` (renamed `withoutAgentOptions`), its usage checks
+  after the blank `--co-author` check and before `resolveRoot()`: blank, one-line (any C0 incl. tab, DEL, C1, U+2028,
+  U+2029), then the combination (no `--co-author` and no environment marker of `AGENT_MARKERS` in `process.env`), then the
+  `WINGFOIL_AGENT_MODEL` one-line check when no `--ai-model` is given and a marker is present; `aiModel` added to the
+  `withAgentInvocation` call. Messages as constants beside `BLANK_CO_AUTHOR`.
+- **Text.** `AGENTS.md` §5.1, `git-conventions` §7–§8 (**2.7 → 2.8**, Date, version note), `docs/user-guide.md` §8.3
+  and §9, `docs/cli-reference.md` (the `--ai-model` row, the `--co-author` row's last sentence, the Global options
+  preamble), `docs/01_vision/X_cli-cmds.md` (the `--ai-model` Global Options row, **2.1 → 2.2**, history entry) and
+  `docs/01_vision/00_index.md` (X_cli-cmds.md's row, forced by `test/docs/vision-index.test.ts` as in `task-333`).
+
+**AC 6 — the exact AGENTS.md text** (§5.1, hand-written, `dl-137` R3/R4; `docs/agents.md` is not touched). The
+paragraph `**AI attribution** …` (`AGENTS.md:261-266`) becomes:
+
+> **AI attribution** (`git-conventions` §7, `dl-117`, `spec-018` §2). Every commit an agent causes, **except an
+> approval commit** (`approve`, `reject`, `amend` and a `workflow:` record with an `Approver:` line, which the verbs
+> refuse in an agent's session), ends with the trailer paragraph
+> `Co-Authored-By: <team.agents name> <<team.agents email>>` and `AI-Model: <the model identifier you run as>`, the
+> values read from `dna.yaml` `team.agents`. A `wingfoil` command that writes a commit in an agent's session writes
+> the two lines itself, after `WingFoil-Version:`: pass `--ai-model <the model identifier you run as>` (or set
+> `WINGFOIL_AGENT_MODEL`), or it writes `AI-Model: not-reported`; never add them again to such a commit, which would
+> leave two pairs. The hand recipe `git commit --amend --no-edit --trailer …` stays only for a commit an agent writes
+> with plain `git commit`. `wingfoil agent execute` hands this rule to the agents it launches; an agent started from
+> its own CLI has only this file.
+
+Same class (D8): in the paragraph above it (`AGENTS.md:253-254`), "To add a trailer to such a commit, amend with" becomes
+"To add a trailer to such a commit — one it lacks: the agent's two are already there when an agent ran the command —,
+amend with".
+
+**AC 6 — `git-conventions` §7–§8** (keep every line `test/directives/git-conventions.test.ts:45-100` pins, line breaks
+included: "The entry `agent execute` launches signs", "the entry whose `name` is\n  the agent's own", "it signs with the
+first entry and says so in the commit\n  body", "Hand sessions", "task-256"). Added sentences:
+- "Which commits", after its first sentence: "Every commit an agent caused carries the two trailers, whoever writes it:
+  `wingfoil` on the commits it writes in an agent's session (`spec-018` §2.1), the agent on a commit it makes with
+  `git commit`."
+- "Which name", after "carries the model identifier the running agent reports": "— the `--ai-model` value or
+  `WINGFOIL_AGENT_MODEL` on a commit `wingfoil` writes, and `not-reported` when the agent reports none (`spec-018` §2.4)".
+- "Which entry signs", a new first sentence: "On a commit `wingfoil` writes, the first rule that applies decides
+  (`spec-018` §2.3): `--co-author <name>`; else a non-blank `WINGFOIL_AGENT`; else the entry whose `adapter` is the
+  built-in adapter of the vendor marker (`CLAUDE_CODE_CHILD_SESSION` → `claude-code`, `CODEX_SANDBOX` → `codex-cli`);
+  else the first entry, with the body line `Attributed to the first team.agents entry, <name>: no entry is named for
+  this agent.` and the warning `W_AGENT_ENTRY_GUESSED`."
+- "Who applies it", a new first sentence: "`wingfoil` writes the two lines itself on every commit it writes in an
+  agent's session, after `WingFoil-Version:`, and an agent never adds them again to such a commit." and a last one:
+  "An amend the approver writes carries no co-author; an agent's credit, if any, goes in its `Reason:` prose
+  (`spec-018` Process Notes)."
+- §8: "To add a trailer to such a commit (e.g. `Co-Authored-By:`), amend with `git commit --amend --no-edit --trailer
+  "Co-Authored-By: …"`," becomes "To add a trailer to such a commit by hand — one it lacks: an agent's `Co-Authored-By:`
+  and `AI-Model:` are already there when an agent ran the command (§7) —, amend with `git commit --amend --no-edit
+  --trailer "<Key>: …"`,".
+
+**AC 6 — user documentation** (`dl-212` D4 wording; no "signed", no "human-approved"):
+- `docs/user-guide.md` §8.3, a new bullet after "Without the approver role …": "Only the approver approves, from a
+  terminal of their own. In a session an AI agent started — `WINGFOIL_AGENT`, `CLAUDE_CODE_CHILD_SESSION` or
+  `CODEX_SANDBOX` defined, or `--co-author` given — `approve`, `reject` and `amend` refuse with `error: E_AGENT_CONTEXT:
+  …` (exit `1`) and write nothing: run them yourself, from a terminal no agent started. So approvals carry a name and a
+  reason, and agent commits are marked by their `Co-Authored-By:` and `AI-Model:` trailers, which an approval never
+  carries. This stops an agent that cooperates or makes a mistake, not one working against you: an agent that removes
+  its markers, or runs the command through a process that drops its environment, is not stopped, and its commit looks
+  like yours (Codex marks only the commands it runs sandboxed)."
+- `docs/user-guide.md` §9, a paragraph after its first: "Commits an agent causes carry its trailers: in an agent's
+  session every `wingfoil` command that writes ends its commit with `Co-Authored-By: <name> <<email>>` — the
+  `team.agents` entry `--co-author <name>` names, else the one the session selects — and `AI-Model: <model>`, from
+  `--ai-model <id>` or `WINGFOIL_AGENT_MODEL`, else `not-reported`. An agent never approves: the approval commands
+  refuse its session (§8.3)."
+- `docs/cli-reference.md`: the `--ai-model <id>` row as `spec-008` §2's amended row; the `--co-author` row's last
+  sentence "On the other commands it changes nothing yet." becomes "On the other commands their commit names the agent:
+  `Co-Authored-By: <name> <<email>>` and `AI-Model:` after `WingFoil-Version:`, signed by the entry `<name>`, and
+  `<name>` naming no `team.agents` entry exits `1` (`error: unknown team.agents entry …`)."; the preamble "and
+  `--co-author`, which those commands but `agent execute` take" gains "and `--ai-model`".
+
+#### Measures asked by the orchestrator
+
+- **Where this repository adds the two trailers by hand** (`git grep -n -- "--trailer" -- ':!docs/04_memory'
+  ':!docs/05_plans' ':!docs/06_runs'`; and `git grep -n -i "co-authored-by\|ai-model" -- scripts docs/examples .githooks
+  .github .wingfoil README.md CONTRIBUTING.md docs/user-guide.md docs/cli-reference.md`): no script and no example adds
+  them (`scripts/` and `docs/examples/` only read them: `check-governance.cjs`, `check-phase-report.cjs`,
+  `release-health/measure.cjs`). The instructions that tell an agent to add them to a `wingfoil` commit: `AGENTS.md:254`
+  and `:265` (this task, above); `.wingfoil/directives/custom/git-conventions.md:302` (§8, this task); the bootstrap's
+  `{attribution_line}` in `src/agent/execute.ts:173` (`attributionLine`) and its description in
+  `docs/cli-reference.md:1878-1879` (`task-338` AC 3, `spec-016` §2.4); `docs/agents.md:72` (`user-docs`). Tests that
+  amend on purpose (`test/cli/check-governance-workflow-records.test.ts:254`, `test/cli/check-phase-report.test.ts:270`)
+  build fixtures and stay.
+- **What the agents' procedure becomes, and the rule for tooling outside the repository.** After the merge, a commit
+  the code build writes in an agent's session already ends with `WingFoil-Version:`, `Co-Authored-By:` and `AI-Model:`
+  (today's amended shape: `git log -1 --format=%B cb41801d0` shows exactly that paragraph, amended by hand). The rule:
+  (i) before adding the pair to a `wingfoil` commit, read `git log -1 --format='%(trailers:key=Co-Authored-By,valueonly)'`
+  — non-empty means the build wrote them, and nothing is added; a build from a branch that has not merged this task
+  writes none, so the check is on the commit, never on the date; (ii) never amend to replace `AI-Model: not-reported`
+  (it would leave two `AI-Model:` lines or rewrite a tool record): pass the model at the source; (iii) hand commits
+  (`git commit`, the `wf()` syncs and `start`s, `docs(memory)` notes) keep the pair in the message as today; (iv) an
+  approve, reject, amend or approval record, run by the approver in a terminal with no marker, carries none.
+- **Which `AI-Model:` an agent session yields.** In this session, with no `--ai-model` and no `WINGFOIL_AGENT_MODEL`
+  (`env | grep -c '^WINGFOIL_AGENT_MODEL='` → `0`), `AI-Model: not-reported`, signed by `Claude <noreply@anthropic.com>`
+  (rule 3: `CLAUDE_CODE_CHILD_SESSION` → the entry with `adapter: claude-code`, `npm run -s wingfoil -- dna show team
+  --format json` → one agent, `Claude`, that adapter). A phase agent gets its model recorded by
+  `WINGFOIL_AGENT_MODEL=<model id>` exported in the same `export` that sets the task's PATH shim at the start of every
+  Bash call (one place, covers `node dist/cli.js` and the shim alike), or `--ai-model <model id>` on each command; the
+  export is the one recommended (D9).
+
+#### Files to touch and `version:` bumps
+
+- New: the red files above.
+- Changed: `src/storage/commit.ts`, `src/storage/index.ts` (barrel), `src/core/agent-context.ts`,
+  `src/core/memory-transition.ts`, `src/core/index.ts`, `src/core/workflow-start-end.ts`,
+  `src/core/workflow-create-remove.ts`, `src/core/workflow-finalize.ts`, `src/core/workflow-adopt.ts`,
+  `src/core/workflow-rekey.ts`, `src/core/provenance-record.ts`, `src/core/directive-assign.ts`, `src/cli/registrar.ts`;
+  `AGENTS.md` (no `version:`); `.wingfoil/directives/custom/git-conventions.md` (**2.7 → 2.8**, then `npm run check:mcp`
+  and `npm run -s wingfoil -- directives list --role reviewer` on the pinned build, dl-205); `docs/user-guide.md`,
+  `docs/cli-reference.md` (no `version:`, `head -8` → none); `docs/01_vision/X_cli-cmds.md` (**2.1 → 2.2**, Date,
+  history entry), `docs/01_vision/00_index.md`; tests green owns: `test/docs/x-cli-cmds.test.ts:179-181` (the exemption
+  gains `--ai-model`), `test/cli/registrar.test.ts:333-334`, `test/cli/program.test.ts:312`,
+  `test/cli/registrar-co-author.test.ts:68` (options now end `co-author`, `ai-model`). No `.wingfoil/*.yaml` and no
+  workflow change, so no phase/step list or workflow count changes (`git diff --stat main -- .wingfoil` → empty).
+- Design-prepared, uncommitted: `spec-008`, `spec-017`, the three `.feature` files, `test/docs/name-resolvability.allowlist.ts`.
+
+#### Tests run at design (this worktree, targeted, no slot)
+
+- `npx jest test/storage/approval-trailer-backstop.test.ts test/storage/commit-empty.test.ts test/storage/commit.test.ts
+  test/storage/wingfoil-version-trailer.test.ts test/storage/write-and-commit.test.ts test/core/agent-context.test.ts
+  test/core/memory-transition-preamble.test.ts test/core/memory-transition-commit-scope.test.ts
+  test/core/provenance-record.test.ts test/core/provenance-record-rekey.test.ts test/core/memory-add.test.ts
+  test/core/memory-submit.test.ts test/core/memory-park.test.ts test/core/memory-deprecate.test.ts
+  test/core/directive-assign.test.ts test/core/dna-set.test.ts test/core/workflow-finalize.test.ts
+  test/core/workflow-adopt.test.ts test/core/workflow-rekey.test.ts test/core/workflow-start-end.test.ts
+  test/core/workflow-create-remove.test.ts test/core/team-membership-preflight.test.ts --maxWorkers=2` (14:23–14:24 UTC)
+  → `Test Suites: 22 passed`, `Tests: 398 passed`.
+- `npx jest test/cli/registrar.test.ts test/cli/registrar-co-author.test.ts test/cli/registrar-dry-run.test.ts
+  test/cli/program.test.ts test/cli/agent-context-refusal.integration.test.ts test/cli/dry-run.integration.test.ts
+  test/cli/check-phase-report.test.ts test/docs test/directives test/lint --maxWorkers=2`, with the prepared amendments
+  in the tree (AC 7's command plus the CLI files) → `Test Suites: 69 passed`, `Tests: 958 passed`.
+- `npx jest test/docs/name-resolvability.test.ts` with the amendments and before the allowlist entries → 1 failed: three
+  unlisted names of `spec-008` (`WINGFOIL_AGENT_MODEL`, `W_AGENT_ENTRY_GUESSED`, `W_NO_AGENT_ENTRY`); with the three
+  `PLANNED` entries (plannedBy `task-334`, sorted after `NO_COLOR`) → `Tests: 11 passed`.
+- `npm run -s check:mcp` (baseline, no `.wingfoil/` change yet) → both lines, `tools: 0`, every Resource read and Prompt
+  get answered; `npm run -s wingfoil -- directives list --role reviewer | grep -c git-conventions` → `2`.
+- The registry's mutating operations (`node -e` over `dist/core/index.js`'s `CORE_MODULES`): 22, `agentExecute` the one
+  with `agentAttribution: false`; without it and the four always-gated, 17 rows for AC 1's table (`workflowAdopt` and
+  `workflowFinalize` are in it by their ungated form).
+- Not a gate: an `npm run build` was started by mistake outside the slot at design and stopped while it waited on the
+  heavy-gate lock (`ps -eo pid,etime,args` showed `node scripts/heavy-gate.cjs build -- tsc -p tsconfig.build.json`
+  waiting 02:10 behind another worktree's jest); `dist/` was not rewritten (`node dist/cli.js --version` → the same
+  stamp, `git status --short` → only the prepared files).
+
+**Existing pins that change** (`grep -rln` over `test/` for each changed name): `test/directives/git-conventions.test.ts`
+§7 pins (kept by the text above, so none should change — green checks); `test/cli/registrar.test.ts:333-334`,
+`test/cli/program.test.ts:312`, `test/cli/registrar-co-author.test.ts:68` (the derived options); `test/docs/x-cli-cmds.test.ts:179-181`
+(the exemption); `test/core/agent-context.test.ts` pins only the gated form (`gated: true`) and stays. No test counts the
+P1.2, P1.3 or P1.6 scenarios (`grep -rn "toHaveLength" test/memory/versioning-audit-trail.test.ts` counts history entries,
+not scenarios); the new scenarios are appended last, so the scenario indices `test/docs/memory-store-location-text.test.ts`
+reads ("P1.3 scenario 1") are unchanged.
+
+### Pending amendments (approver)
+
+- `spec-008-cli-grammar` — `memory amend spec-008-cli-grammar --reason "Add the agent markers and the attribution
+  trailers of spec-018 to sections 2 and 6: the --co-author and --ai-model rows, the two keys reserved on an approval,
+  the agent trailers after WingFoil-Version in the build-signature note, the E_AGENT_CONTEXT, E_AGENT_TRAILER_ON_APPROVAL
+  and team.agents refusal rows, and the two warnings (task-334)."`
+- `spec-017-workflow-commands-and-state-deduction` — `memory amend spec-017-workflow-commands-and-state-deduction
+  --reason "State in section 7.9 that an approval phase refuses an agent's session first, resolved once the phase is
+  known, and that a record of a phase without approval carries the agent trailers; let the agent trailers follow
+  WingFoil-Version in sections 7.9 and 7.10 (task-334)."`
+- Not Memory, also uncommitted for the gate (D11): the scenarios appended to `P1.2-versioning-audit-trail.feature` (2),
+  `P1.3-memory-add.feature` (3), `P1.6-memory-submit.feature` (3); three `PLANNED` entries in
+  `test/docs/name-resolvability.allowlist.ts`.
+- `spec-006` is not amended if D1 is ruled (a): the code moves to its §7 order.
+
+#### Decisions for the approver
+
+- **D1 — `bug-531`: the code follows `spec-006` §7.** `beginMemoryTransition` resolves the context once, right after
+  membership — gated for `approve`, `reject`, `amend`, ungated otherwise — and carries it to the authority check and to
+  the commit; `workflow adopt --plan --apply` and `workflow rekey` (always gated) resolve right after membership too;
+  `workflow finalize` resolves after deduction, as `spec-017` §7.9 now says (task-333's D11). The gated form is pure, so
+  no output changes (unobservable, as `bug-531` says). *Recommend* (a): absorb `bug-531` here — `bug: [bug-531]`, its
+  triage stamped `v0.4` and its syncs `triaged → planned → in-progress` by the orchestrator — with a new AC "(red-first,
+  structural) `resolveGatedAgentContext(` is called only in `src/core/memory-transition.ts`, `workflow-adopt.ts`,
+  `workflow-rekey.ts` and `workflow-finalize.ts`, each before its first read past membership, except `finalize`'s in its
+  `approval:` branch" (a source-reading test, as `task-333`'s call-site parity). Alternative (b): amend `spec-006` §7 to
+  say the gated resolution sits with the authority check, and leave the code; then the ungated sites still follow §7.
+- **D2 — `CommitOptions.attribution` is explicit**, a storage type `CommitAttribution { name, email, model, note? }`
+  that `Attribution` matches, passed by each writer's caller — not read from the `AsyncLocalStorage` inside the
+  primitive — so `agent execute`'s record and `init` cannot pick one up (`spec-018` §1.1, §2.1) and storage keeps
+  importing nothing from `src/core`. *Recommend:* accept (it is `spec-018` §2.2's wording).
+- **D3 — "once per operation" across nested operations** (`workflow start` adds its plan through `memoryAddFn`;
+  `workflow end` goes through `beginMemoryTransition`): `resolveOperationAgentContext` memoizes per invocation and
+  root, so one warning per command. *Recommend:* accept.
+- **D4 — what `spec-018` §2.4 leaves open**, written into the `spec-008` `--ai-model` row: a blank `--ai-model` → exit
+  `2` `invalid flag value: --ai-model must not be blank`; `WINGFOIL_AGENT_MODEL` held to the same one-line rule
+  (`invalid environment value: WINGFOIL_AGENT_MODEL must be one line`, exit `2`, a usage check before `resolveRoot()`)
+  and a blank one counted as unset; "control character" as `--reason`'s set plus tab; leading and trailing whitespace
+  trimmed. Without it a multi-line `WINGFOIL_AGENT_MODEL` would add lines to the trailer paragraph. *Recommend:* accept
+  as drafted; alternative: refuse the variable at exit `1` (`VALIDATION`) in the core.
+- **D5 — `<markers>` in `W_NO_AGENT_ENTRY`** is the phrase list of `spec-018` §3.2 (`CLAUDE_CODE_CHILD_SESSION is set`),
+  in §1 order. *Recommend:* accept (written into the `spec-008` warning row).
+- **D6 — an explicit name with an empty `team.agents`** (`--co-author Claude`, `WINGFOIL_AGENT=Claude` on
+  `team.agents: []`) is the §2.5 refusal (`… declares none`), not `W_NO_AGENT_ENTRY`: rules 1–2 decide before "No entry
+  at all", and §2.5's `or "none"` exists for that case. *Recommend:* accept.
+- **D7 — `--ai-model` and the registrar.** Derived exactly as `--co-author` (`takesCoAuthor`), so `agent execute` stays
+  without both (`spec-018` §1.1; its `--co-author` refusal, T-22, is `task-338`'s). *Recommend:* accept.
+- **D8 — AGENTS.md's sentence "To add a trailer to such a commit, amend with …"** (`AGENTS.md:253-254`) is the same class
+  as the attribution paragraph and is reworded too. *Recommend:* accept.
+- **D9 — the model in this repository's agent sessions.** A phase agent's commits record `AI-Model: not-reported` unless
+  it passes `--ai-model` or `WINGFOIL_AGENT_MODEL` is set. *Recommend:* the launcher of each phase agent exports
+  `WINGFOIL_AGENT_MODEL=<the model id it launches>` beside the PATH shim, so every `wingfoil` commit records the model
+  without a per-command flag, and no agent amends a tool commit after the merge (the rule of the measures above).
+- **D10 — the bootstrap still tells a launched agent to amend** until `task-338` lands its `{attribution_line}`
+  (`src/agent/execute.ts:173`, `docs/cli-reference.md:1878-1879`; `docs/agents.md:72` with `user-docs`). An `agent execute`
+  launch between the two merges would write the pair twice. *Recommend:* the `agent execute --headless` pilot (W0-R1)
+  waits for `task-338`'s merge, or its prompt overrides the bootstrap line; no change here (`task-338` AC 3 owns it).
+- **D11 — the BDD scenarios and the allowlist entries are not Memory**: as `task-333`'s D9, one commit by the
+  orchestrator right after the two `memory amend`s, before red: `docs(requirements): task-334 — the agent attribution
+  scenarios (spec-018)`, with the §7 trailers (name-resolvability fails between the `spec-008` amend and the allowlist).
+  *Recommend:* accept.
+- **D12 — `spec-008` §6 has no `E_NOT_A_MEMBER` row** (`task-333`'s membership refusal is pinned in `spec-006` §7 and
+  `spec-017` §10 only: `grep -c "E_NOT_A_MEMBER" docs/04_memory/design/specs/spec-008-cli-grammar.md` → `0`). Not this
+  task's AC. *Recommend:* leave it out here and file it as a follow-up finding (D13's list), so the amendment stays the
+  one AC 8 names.
+
+#### Candidate findings (not filed)
+
+- **No check catches a doubled attribution pair.** `scripts/check-phase-report.cjs` (`trailer-missing`,
+  `trailer-identity`) and `scripts/check-governance.cjs` accept a final paragraph with two `Co-Authored-By:` lines or two
+  `AI-Model:` lines (`grep -n "trailer-" scripts/check-phase-report.cjs` lists no duplicate rule). Expected after this
+  task: a tool commit that an agent amends anyway is reported. Severity low; a follow-up beside `task-352`'s rule.
+- **`spec-008` §6 lacks `E_NOT_A_MEMBER`** (D12). Severity low, documentation.
+
+#### Risks
+
+- **This repository's own commits after the merge (W0-R5).** Every code-build command an agent runs writes the pair; a
+  kit script or an agent that still amends writes it twice. The rule above (read the final paragraph first) is what the
+  tooling follows; the governance check does not catch a duplicate (candidate finding).
+- **Approver sessions.** The approver's terminal carries no marker (an IDE terminal's `CLAUDECODE` is not one), so the
+  approver's own `memory add` or `submit` there writes no agent trailer, as today.
+- **Other open `w0` tasks.** `task-338` edits `src/agent/execute.ts`/`launch.ts` and the bootstrap (D10), imports
+  `AGENT_MARKERS`; no file overlap with this design but `docs/cli-reference.md` (its agent-execute section vs. the Global
+  options rows: different hunks). `task-339` (per-role permissions) touches `src/agent/`, `.wingfoil/agents/`: no overlap.
+  `task-355` (agent execute refactor) touches `src/agent/execute.ts`, `run-log.ts`: `run-log.ts:718` must keep passing
+  no attribution (AC 1's table excludes `agent execute`; T-22 is `task-338`'s). `task-356` merged into `main`
+  (`5b19dd086`), its `spec-008` amend recorded (`f24e366d3`), so this task's pending `spec-008` amend is the only one in
+  flight; `task-352` adds a rule beside `approval-agent-trailer` and may take the duplicate-pair finding. `task-344`
+  is `done`: its `trailer-missing` rule passes the verbs' commits (`AI-Model: not-reported` is non-blank).
+- **Fixtures with a marker and no team.agents.** In an agent's shell, `docs/examples/*/run.sh` (scaffold `agents: []`)
+  print `W_NO_AGENT_ENTRY` on each commit; `expect_exit` (`docs/examples/lib.sh:24`) merges stderr into `LAST_OUTPUT`, so
+  an assertion on that whole text could see the line — green runs the non-approving examples once in this shell to
+  check; the jest suites and the e2e smoke are scrubbed (task-333 D8, D14).
+
+### Retrospective
+
+<!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
+     reconstructed afterwards. One line per item: what happened, the evidence (a command and what it
+     printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
+     Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
+     here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
