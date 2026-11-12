@@ -641,6 +641,58 @@ docs/04_memory/design/specs/spec-016-agent-execution.md`):
   `2.1.296`, the version of `task-236`'s pass; it has differed from the manifest's value since `task-335` and is left
   as is.
 
+### fix round 2 (developer, 2026-11-12)
+
+From the independent review (APPROVE WITH FIXES, 0 blockers); finding 1 (the H2 notes) is the orchestrator's correction
+above. The task's PATH shim checked first; `git rev-list --count HEAD..main` → `0` at the start and at the end.
+
+**Finding 2 — the write roles run the project's own wingfoil** (approver ruling 2026-11-12; commit `faa352b0a`).
+- `src/storage/builtin-adapters.ts`: the `claude-code` map's `developer`, `qa` and `architect` entries gain
+  `"Bash(wingfoil *)"` after `"Bash(node *)"`, before `--disallowedTools`; `reviewer` and `default` are unchanged (what a
+  reviewer writes is `bug-527`'s question). The manifest comment and the constant's TSDoc say the write roles run the
+  project's own copy, in three forms. `.wingfoil/agents/built-in/claude-code.yaml` written from the constant, byte for
+  byte.
+- The three forms against the write roles' entry: a bare `wingfoil …` (`node_modules/.bin` on `PATH`, or an alias)
+  matches `"Bash(wingfoil *)"`; `npx wingfoil …` matches `"Bash(npx *)"`; `npm run wingfoil -- …` matches `"Bash(npm
+  *)"`; none matches a `--disallowedTools` rule (`"Bash(git push *)"`, `"Bash(npm publish *)"`). Pinned by a new test
+  file of this phase, `test/storage/builtin-adapter-claude-code-wingfoil-verbs.test.ts` (a `Bash(<prefix> *)` rule read
+  as "the command starts with `<prefix> `", the reading of the help's example; the CLI's own matching is the by-hand
+  pass's): `npx jest --maxWorkers=2 --verbose test/storage/builtin-adapter-claude-code-wingfoil-verbs.test.ts` → `Tests:
+  5 passed, 5 total`.
+- `spec-016` §2.8 (pending amendment): the write roles' cell names `"Bash(wingfoil *)"`, and the posture paragraph says
+  the verbs run through the project's own copy of wingfoil, bare, `npx wingfoil …` or `npm run wingfoil -- …`, so it
+  no longer implies a global install.
+
+**Finding 3 — the interactive table's `verified_with` cell** (pre-existing; pending amendment): the `claude-code` cell
+now reads "the pass ran on `2.1.296 (Claude Code)` (`task-236`); the manifest has one `verified_with`, the headless
+table's". The Revision entry of 2026-11-12 covers the three changes.
+
+**Runs** (each after the heavy-gate slot script, which printed nothing and returned `0`; the amendment in the working
+tree):
+- `npx tsc --noEmit -p tsconfig.json` → no output, exit `0`; `npx eslint` on the new test file → exit `0`.
+- `npx jest --maxWorkers=2 test/storage/builtin-adapter test/storage/builtin-template-sources
+  test/core/builtin-adapter-writers test/core/init-builtin-adapters test/core/builtin-integrity test/agent/fake-agent
+  test/agent/manifest-permissions test/agent/launch-permissions test/cli/agent-execute-permissions test/docs test/lint`
+  → `Test Suites: 59 passed, 59 total`, `Tests: 681 passed, 681 total`.
+- `npm run -s check:mcp` → exit `0`: `.mcp.json "wingfoil" runs the pinned wingfoil 0.3.2, advertising [prompts,
+  resources, tools] (prompts: 8, resources: 4, tools: 0)`; `the build under development (dist/cli.js) serves [...];
+  every listed Resource read and Prompt get answered`.
+- `npm test -- --maxWorkers=2` → `Test Suites: 602 passed, 602 total`, `Tests: 11054 passed, 11054 total`
+  (`Time: 1012.291 s`); `npm run -s typecheck` → exit `0`, no output.
+- Invisible characters: the `grep -nP` on the four changed files → no hit. T4: `git log --first-parent --no-merges
+  --format=%h 47f1fdcf5..HEAD --` on red's five files and `2a02f8eed..HEAD -- test/agent/fake-agent.test.ts` → nothing.
+
+**Pending amendment (approver)** — replaces the `--reason` of the fix round above; left uncommitted (`git status
+--short` → ` M docs/04_memory/design/specs/spec-016-agent-execution.md`):
+- `spec-016-agent-execution` — §2.8: the headless table's `claude-code` `verified_with` `2.1.322 (Claude Code)`; the
+  write roles' cell with `"Bash(wingfoil *)"` and the posture paragraph's sentence on the project's own copy of
+  wingfoil; the interactive table's `claude-code` `verified_with` cell as history; one Revision entry dated 2026-11-12.
+  `--reason "Record task-339's review fixes to section 2.8: the claude-code adapter's verified_with becomes 2.1.322, the
+  version its by-hand H2 pass ran; its developer, qa and architect entries allow Bash(wingfoil *), and the posture
+  paragraph says the wingfoil verbs run through the project's own copy, bare, through npx or through an npm script; the
+  interactive table's verified_with cell reads as the history of task-236's pass on 2.1.296 (approver ruling
+  2026-11-12)."`
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
