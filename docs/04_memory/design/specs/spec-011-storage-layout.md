@@ -230,6 +230,29 @@ if (root !== process.cwd()) throw new Error('E_NOT_AT_GIT_ROOT: run wingfoil fro
 `.wingfoil/` directories (a subdirectory of the project already containing its own `.wingfoil/`) are
 not supported — at most one WingFoil root per git root.
 
+**The named root (`--project <dir>`, from `minor-v0.4`, `dl-198` (a)).** When the global `--project <dir>`
+(`spec-008` §2) is given, the root is `<dir>` resolved against the current directory, and the only check is
+that it holds a `.git` entry (a directory in a clone, a file in a worktree): `findGitRoot` is not called, and
+nothing above or below `<dir>` is examined. A directory without one is refused with
+`E_NOT_AT_GIT_ROOT: --project is not a git root: <absolute dir>`, whether it is a subdirectory of a repository,
+outside every repository, a file or a missing path; `E_NO_GIT_ROOT` stays the answer of the walk alone. Without
+`--project` the algorithm above is unchanged.
+
+**Why the root is not inferred** (`dl-198` (c)'s documentation). A command run from a subdirectory could find
+the root upwards, as git does. WingFoil does not, for a read as for a write: the root is the current directory
+or the directory `--project` names. A tool that drives WingFoil from elsewhere — a headless agent launch, the MCP
+server an agent CLI starts in a working directory of its own — then names the repository it acts on rather than
+depending on where it was started, and the repository every read and write lands in is declared, never inferred
+(the `determinism` directive; `REQ-SYS-07`). The option was preferred to an upward search for read-only commands
+alone (`dl-198` (b)), which would have made the same command line answer from different repositories depending
+on the directory it was typed in.
+
+**The walk's ceiling, for tests** (`bug-406`, `bug-453`). `findGitRoot` takes an optional `ceiling` directory: the
+walk examines the starting directory and its ancestors below the ceiling, never the ceiling itself or anything
+above it, as git's own ceiling directories do. The CLI never passes one. It exists so that a test's
+"outside any repository" fixture bounds the walk itself and gives the same result whatever lies above the
+system temporary directory; a ceiling that is not an ancestor of the starting directory changes nothing.
+
 ### Initialization-marker detection algorithm
 
 A project is WingFoil-initialized when `.wingfoil/` exists **and** contains at least one file:
@@ -362,3 +385,12 @@ manifest key.** For `patch-v0.3.1`, the `roles.yaml` write contract gains item 5
 `spec-006` §6 item 7. The `dl-022` cross-spec review of the same date: the manifest's key is `include` (singular),
 as `spec-003` Layer 1 makes it canonical and `.wingfoil/workflows.yaml` writes it; the layout and the table said
 `includes:`. Edited in place without a supersede or a state change (`dl-047`), pending the approver's `memory amend`.
+
+**Revision (2026-11-12, `task-350-add-the-global-project-dir-option-naming-the-project-root-documenting-why-it-is-not-inferred`)
+— § Git-root detection algorithm: the named root, why it is not inferred, and the walk's ceiling.** `dl-198` (a), with
+(c)'s documentation: the global `--project <dir>` (`spec-008` §2) names the root, checked only for its own `.git`
+entry and refused with `E_NOT_AT_GIT_ROOT` otherwise; the section states why the root is never resolved upwards
+(`dl-198` (b) was not taken). `findGitRoot` gains an optional ceiling that only tests pass, so their "outside any
+repository" fixtures do not depend on what lies above the system temporary directory (`bug-406`, `bug-453`). The
+algorithm without `--project`, the layout and the init-marker algorithm are unchanged. Edited in place without a
+supersede or a state change (`dl-047`), pending the approver's `memory amend` at `task-350`'s design gate.
