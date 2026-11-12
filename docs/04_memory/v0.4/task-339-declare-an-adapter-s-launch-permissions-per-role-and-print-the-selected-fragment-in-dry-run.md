@@ -582,6 +582,24 @@ RTM_NEWADDR: Operation not permitted`. This is a host limitation (D12): on this 
 **`verified_with`.** H1 read `2.1.310 (Claude Code)`; the CLI updated itself to `2.1.322` before the Claude pass. See
 the approver's ruling recorded with the review.
 
+**Correction (orchestrator, 2026-11-12, from the review).** Two sentences above are wrong: "the agents' replies are
+not kept" and "the `workspace-write` and `read-only` entries cannot be told apart by a run". Each agent CLI keeps its
+own session transcript on the machine that ran it, outside this repository, and those of the H2 runs settle both
+points. Read with a grep for a few strings only:
+- Claude, one transcript per role: each run read the session Resource (`ReadMcpResourceTool` on
+  `wingfoil://session/<role>`, 12–13 occurrences each). `reviewer` and `tech-lead` were refused `Edit` with "Permission
+  to use Edit has been denied because Claude Code is running in don't ask mode". `developer`, `qa` and `architect` were
+  refused `git push origin HEAD` (and `… 2>&1`) with "Permission to use Bash with command git push origin HEAD … has
+  been denied", the `--disallowedTools` rule. A bare `git log -1` ran for every role, `default` included: the CLI
+  allows it as read-only.
+- Codex, one transcript per run (`grep -o 'wingfoil://session/[a-z-]*'` and ``grep -o '`sandbox_mode` is `[a-z-]*`'``):
+  each run read the session Resource; `developer`, `qa`, `architect` and `reviewer` ran with `sandbox_mode` is
+  `workspace-write`, `tech-lead` (`default`) with `read-only`. So every Codex fragment reached the CLI and chose the
+  role's sandbox; the host's `bwrap` failure blocks only the edit that would show it.
+
+What H2 does not show: that a write role can run the tests and the `wingfoil` verbs its step needs. The probe ran
+none, and the review found that the `claude-code` map has no rule for `wingfoil` itself (finding 2, fixed in this task).
+
 ### fix round (developer, 2026-11-12)
 
 **Why.** The by-hand pass H2 above ran Claude Code `2.1.322` (the CLI updated itself after H1 read `2.1.310`) and
