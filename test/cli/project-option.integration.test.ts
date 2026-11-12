@@ -167,7 +167,8 @@ describe('task-350 AC 1 — every command accepts --project <dir>, which names t
     expect(wingfoil(elsewhere, ['--project', '', '--help']).status).toBe(0);
     const version = wingfoil(elsewhere, ['--project', sub, '--version']);
     expect(version.status).toBe(0);
-    expect(version.stdout).toMatch(/^\d+\.\d+\.\d+\S* \([0-9a-f]{40}\)\n$/);
+    // The build stamp ends in `-dirty` when a build input had changes (test/cli/build-info.test.ts, review finding 1).
+    expect(version.stdout).toMatch(/^\d+\.\d+\.\d+\S* \([0-9a-f]{40}(?:-dirty)?\)\n$/);
   });
 
   it(
