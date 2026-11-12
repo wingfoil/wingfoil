@@ -56,7 +56,8 @@ does not end with a paragraph made entirely of `Key: value` lines (`dl-067`, AGE
   - `withdrawn (<date>, <ruling>)` — never adopted, kept for its analysis;
   - `retired (<date>, <ruling>)` — adopted, then taken out of force.
 - A rule is adopted by the approver, one rule at a time: each adoption, change, withdrawal or retirement is one
-  approver ruling and one commit that raises this directive's `version:`.
+  approver ruling and one commit that raises this directive's `version:` once the directive is on the integration
+  branch (`doc-versioning`); until then, changes on the branch that creates it keep its first version.
 
 ## 4. The rules
 
