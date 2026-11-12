@@ -362,7 +362,7 @@ needs:
 
 | `name` (file basename) | Agent CLI | `command`, `launch.interactive.args`, `prompt.via`, `mcp.*`, `session.*`, `usage.*` | `verified_with` |
 |---|---|---|---|
-| `claude-code` | Claude Code | `command: claude`; `launch.interactive.args: ["{bootstrap}", --mcp-config, "{mcp_config_file}"]`; `prompt.via: arg`; `mcp.via: config-file`; `session.id: assign` with `[--session-id, "{session_id}"]`, resume `[--resume, "{session_id}"]`; `usage.from: none` (`task-236`; launch, MCP and session id checked by hand on 2026-10-14 with 2.1.296, resume from `--help` only) | `2.1.296 (Claude Code)` |
+| `claude-code` | Claude Code | `command: claude`; `launch.interactive.args: ["{bootstrap}", --mcp-config, "{mcp_config_file}"]`; `prompt.via: arg`; `mcp.via: config-file`; `session.id: assign` with `[--session-id, "{session_id}"]`, resume `[--resume, "{session_id}"]`; `usage.from: none` (`task-236`; launch, MCP and session id checked by hand on 2026-10-14 with 2.1.296, resume from `--help` only) | the pass ran on `2.1.296 (Claude Code)` (`task-236`); the manifest has one `verified_with`, the headless table's |
 | `codex-cli` | Codex CLI | `command: codex`; `launch.interactive.args: [-c, "{mcp_config}", "{bootstrap}"]`; `prompt.via: arg`; `mcp.via: config-arg` with the template `mcp_servers.wingfoil={command = "{mcp_command}", args = {mcp_args}, enabled = true, required = true}` and `mcp.conflict_args: [mcp, get, wingfoil]` (`task-356`, §2.5); `session.id: output` with `session.field: thread_id`, read from the headless launch's `--json` events (the first event, `thread.started`, carries it; `codex exec resume <id>` accepts it) (§2.6; an interactive run records `not-reported`), resume not supported until §7's resume ships; `usage.from: none` (`task-237`; from `codex --help` of `codex-cli 0.145.0`; checked by hand on 2026-10-14 with codex-cli 0.145.0 (ChatGPT sign-in); the conflict check and the session field by hand with `codex-cli 0.145.0`, `task-356`) | `codex-cli 0.145.0` |
 
 Each built-in declares `launch.interactive.terminal: required` (§2.2) and carries `verified_with`,
@@ -387,7 +387,7 @@ id only (§2.6, `task-356`):
 
 | `name` | `launch.headless` | Read from | `verified_with` |
 |---|---|---|---|
-| `claude-code` | `args: [-p, "{bootstrap}", --mcp-config, "{mcp_config_file}"]`, `output: none` (`-p`/`--print`, "print response and exit"; the prompt before `--mcp-config` for the reason of the interactive launch; `session.assign_args` still closes the list) | `claude --help` of `2.1.310 (Claude Code)`, which still lists every flag of the interactive launch, `--session-id` and `--resume` | `2.1.310 (Claude Code)` |
+| `claude-code` | `args: [-p, "{bootstrap}", --mcp-config, "{mcp_config_file}"]`, `output: none` (`-p`/`--print`, "print response and exit"; the prompt before `--mcp-config` for the reason of the interactive launch; `session.assign_args` still closes the list) | `claude --help` of `2.1.310 (Claude Code)`, which still lists every flag of the interactive launch, `--session-id` and `--resume` | `2.1.322 (Claude Code)`, the version the by-hand pass of the headless role map ran (`task-339`) |
 | `codex-cli` | `args: [exec, --json, -c, "{mcp_config}", "{bootstrap}"]`, `output: jsonl` (`codex exec`, "run Codex non-interactively", which takes `-c` and the prompt as its positional; `--json` prints its events to stdout as JSONL, the source of the session id, `task-356`) | `codex exec --help` of `codex-cli 0.145.0` | `codex-cli 0.145.0` |
 
 The by-hand pass of a headless launch, as `task-236` and `task-237` made for the interactive one (the agent starts
@@ -398,12 +398,13 @@ with no terminal, registers the `wingfoil` server, reads the session Resource an
 declares `launch.headless.permissions` as a role map, read from its agent CLI's own help output at the version
 `verified_with` names. `default`, the entry of every role the map does not name, grants reading only. `developer`,
 `qa` and `architect`, whose work edits files, runs the tests and the `wingfoil` verbs and commits, are granted that and
-no publishing step; `reviewer`, whose work reads history and diffs and runs the tests (`dl-223` Context), is granted
+no publishing step — the verbs run through the project's own copy of wingfoil, in any of the forms a project uses:
+bare (`node_modules/.bin` on `PATH`, or an alias), `npx wingfoil …` or `npm run wingfoil -- …`; `reviewer`, whose work reads history and diffs and runs the tests (`dl-223` Context), is granted
 reading and running them:
 
 | `name` | `default` | `developer`, `qa`, `architect` | `reviewer` | Read from |
 |---|---|---|---|---|
-| `claude-code` | `[--permission-mode, dontAsk, --allowedTools, Read, Glob, Grep]` (`dontAsk` is chosen to deny every tool no rule allows, so that a headless agent never waits on a prompt nobody can answer; the help lists the mode without describing it, so the by-hand pass below settles it) | `default`'s, with `Edit`, `Write`, `"Bash(git *)"`, `"Bash(npm *)"`, `"Bash(npx *)"` and `"Bash(node *)"` allowed, then `--disallowedTools` with `"Bash(git push *)"` and `"Bash(npm publish *)"` | `default`'s, with `"Bash(git log *)"`, `"Bash(git show *)"`, `"Bash(git diff *)"`, `"Bash(git status *)"`, `"Bash(npm test *)"`, `"Bash(npm run *)"` and `"Bash(npx jest *)"` allowed | `claude --help` of `2.1.310 (Claude Code)`: `--permission-mode` and its choices, `--allowedTools` and `--disallowedTools` ("Comma or space-separated list of tool names", the example `"Bash(git *) Edit"`) |
+| `claude-code` | `[--permission-mode, dontAsk, --allowedTools, Read, Glob, Grep]` (`dontAsk` is chosen to deny every tool no rule allows, so that a headless agent never waits on a prompt nobody can answer; the help lists the mode without describing it, so the by-hand pass below settles it) | `default`'s, with `Edit`, `Write`, `"Bash(git *)"`, `"Bash(npm *)"`, `"Bash(npx *)"`, `"Bash(node *)"` and `"Bash(wingfoil *)"` allowed (with `"Bash(npx *)"` and `"Bash(npm *)"`, the three forms the project's own wingfoil runs in), then `--disallowedTools` with `"Bash(git push *)"` and `"Bash(npm publish *)"` | `default`'s, with `"Bash(git log *)"`, `"Bash(git show *)"`, `"Bash(git diff *)"`, `"Bash(git status *)"`, `"Bash(npm test *)"`, `"Bash(npm run *)"` and `"Bash(npx jest *)"` allowed | `claude --help` of `2.1.310 (Claude Code)`: `--permission-mode` and its choices, `--allowedTools` and `--disallowedTools` ("Comma or space-separated list of tool names", the example `"Bash(git *) Edit"`) |
 | `codex-cli` | `[--sandbox, read-only]` | `[--sandbox, workspace-write]` | `[--sandbox, workspace-write]`: the narrowest sandbox the tests can run in, since they write the build | `codex exec --help` of `codex-cli 0.145.0`: `-s, --sandbox <SANDBOX_MODE>`, with `read-only`, `workspace-write` and `danger-full-access` |
 
 Neither built-in declares `launch.interactive.permissions`: at a terminal a person answers the agent CLI's own
@@ -1398,3 +1399,14 @@ the fragment of the run's role between `launch.<kind>.args` and `session.assign_
 replaces the sentence that left the posture to `dl-223`. The manifest `format` stays 1, an additive optional field
 (`dl-149`); a 0.3.x build refuses a manifest that declares it (an unknown key). No placeholder, record key or exit code
 changes. Edited in place without a supersede or a state change (`dl-047`), pending the approver's `memory amend`.
+
+**Revision (2026-11-12, `task-339-declare-an-adapter-s-launch-permissions-per-role-and-print-the-selected-fragment-in-dry-run`)
+— §2.8.** The `claude-code` row of the headless table names `verified_with` `2.1.322 (Claude Code)`: the CLI updated
+itself from `2.1.310` between the help read and the by-hand pass of the role map, which ran on `2.1.322` and passed
+(`task-339`'s Execution Notes, "by-hand pass H2"; approver ruling 2026-11-12). The flags stay those read from the help
+of `2.1.310`. The `claude-code` map's `developer`, `qa` and `architect` entries gain `"Bash(wingfoil *)"`, and the
+posture paragraph says the `wingfoil` verbs run through the project's own copy of wingfoil, bare, through `npx` or
+through an npm script, the copy the project itself installs (the task's review, approver ruling 2026-11-12). The interactive table's
+`claude-code` `verified_with` cell reads as the history of `task-236`'s pass on `2.1.296`: the manifest has one
+`verified_with`, the headless table's. Edited in place without a supersede or a state change (`dl-047`), pending the
+approver's `memory amend`.
