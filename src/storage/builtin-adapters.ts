@@ -48,7 +48,9 @@ export interface BuiltinAdapterManifest {
  * (`spec-016` §2.6). The headless role map (task-339) is read from the same help of 2.1.310: `--permission-mode
  * <mode>` with its choice `dontAsk`, and `--allowedTools` / `--disallowedTools` ("Comma or space-separated list of
  * tool names", the example `"Bash(git *) Edit"`). Its by-hand pass, one headless run per role, ran on 2.1.322, the
- * version `verified_with` names (task-339).
+ * version `verified_with` names (task-339). The write roles' `"Bash(wingfoil *)"`, `"Bash(npx *)"` and
+ * `"Bash(npm *)"` cover the three forms a project runs its own copy of wingfoil in: bare, `npx wingfoil …` and
+ * `npm run wingfoil -- …` (task-339 review, approver ruling 2026-11-12).
  */
 const CLAUDE_CODE: BuiltinAdapterManifest = {
   name: 'claude-code',
@@ -72,12 +74,14 @@ launch:
     # The posture of each role (dl-223 (b), task-339), appended after args: --permission-mode
     # dontAsk denies every tool no rule allows, so a headless agent never waits on a prompt;
     # --allowedTools and --disallowedTools take a list, closed by the next option. default, the
-    # posture of every role not named here, reads only; no entry publishes.
+    # posture of every role not named here, reads only; no entry publishes. The write roles run
+    # the project's own copy of wingfoil: bare (node_modules/.bin on PATH, or an alias), through
+    # npx, or through an npm script.
     permissions:
       default: [ --permission-mode, dontAsk, --allowedTools, Read, Glob, Grep ]
-      developer: [ --permission-mode, dontAsk, --allowedTools, Read, Glob, Grep, Edit, Write, "Bash(git *)", "Bash(npm *)", "Bash(npx *)", "Bash(node *)", --disallowedTools, "Bash(git push *)", "Bash(npm publish *)" ]
-      qa: [ --permission-mode, dontAsk, --allowedTools, Read, Glob, Grep, Edit, Write, "Bash(git *)", "Bash(npm *)", "Bash(npx *)", "Bash(node *)", --disallowedTools, "Bash(git push *)", "Bash(npm publish *)" ]
-      architect: [ --permission-mode, dontAsk, --allowedTools, Read, Glob, Grep, Edit, Write, "Bash(git *)", "Bash(npm *)", "Bash(npx *)", "Bash(node *)", --disallowedTools, "Bash(git push *)", "Bash(npm publish *)" ]
+      developer: [ --permission-mode, dontAsk, --allowedTools, Read, Glob, Grep, Edit, Write, "Bash(git *)", "Bash(npm *)", "Bash(npx *)", "Bash(node *)", "Bash(wingfoil *)", --disallowedTools, "Bash(git push *)", "Bash(npm publish *)" ]
+      qa: [ --permission-mode, dontAsk, --allowedTools, Read, Glob, Grep, Edit, Write, "Bash(git *)", "Bash(npm *)", "Bash(npx *)", "Bash(node *)", "Bash(wingfoil *)", --disallowedTools, "Bash(git push *)", "Bash(npm publish *)" ]
+      architect: [ --permission-mode, dontAsk, --allowedTools, Read, Glob, Grep, Edit, Write, "Bash(git *)", "Bash(npm *)", "Bash(npx *)", "Bash(node *)", "Bash(wingfoil *)", --disallowedTools, "Bash(git push *)", "Bash(npm publish *)" ]
       reviewer: [ --permission-mode, dontAsk, --allowedTools, Read, Glob, Grep, "Bash(git log *)", "Bash(git show *)", "Bash(git diff *)", "Bash(git status *)", "Bash(npm test *)", "Bash(npm run *)", "Bash(npx jest *)" ]
 prompt:
   via: arg

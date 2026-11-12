@@ -18,12 +18,14 @@ launch:
     # The posture of each role (dl-223 (b), task-339), appended after args: --permission-mode
     # dontAsk denies every tool no rule allows, so a headless agent never waits on a prompt;
     # --allowedTools and --disallowedTools take a list, closed by the next option. default, the
-    # posture of every role not named here, reads only; no entry publishes.
+    # posture of every role not named here, reads only; no entry publishes. The write roles run
+    # the project's own copy of wingfoil: bare (node_modules/.bin on PATH, or an alias), through
+    # npx, or through an npm script.
     permissions:
       default: [ --permission-mode, dontAsk, --allowedTools, Read, Glob, Grep ]
-      developer: [ --permission-mode, dontAsk, --allowedTools, Read, Glob, Grep, Edit, Write, "Bash(git *)", "Bash(npm *)", "Bash(npx *)", "Bash(node *)", --disallowedTools, "Bash(git push *)", "Bash(npm publish *)" ]
-      qa: [ --permission-mode, dontAsk, --allowedTools, Read, Glob, Grep, Edit, Write, "Bash(git *)", "Bash(npm *)", "Bash(npx *)", "Bash(node *)", --disallowedTools, "Bash(git push *)", "Bash(npm publish *)" ]
-      architect: [ --permission-mode, dontAsk, --allowedTools, Read, Glob, Grep, Edit, Write, "Bash(git *)", "Bash(npm *)", "Bash(npx *)", "Bash(node *)", --disallowedTools, "Bash(git push *)", "Bash(npm publish *)" ]
+      developer: [ --permission-mode, dontAsk, --allowedTools, Read, Glob, Grep, Edit, Write, "Bash(git *)", "Bash(npm *)", "Bash(npx *)", "Bash(node *)", "Bash(wingfoil *)", --disallowedTools, "Bash(git push *)", "Bash(npm publish *)" ]
+      qa: [ --permission-mode, dontAsk, --allowedTools, Read, Glob, Grep, Edit, Write, "Bash(git *)", "Bash(npm *)", "Bash(npx *)", "Bash(node *)", "Bash(wingfoil *)", --disallowedTools, "Bash(git push *)", "Bash(npm publish *)" ]
+      architect: [ --permission-mode, dontAsk, --allowedTools, Read, Glob, Grep, Edit, Write, "Bash(git *)", "Bash(npm *)", "Bash(npx *)", "Bash(node *)", "Bash(wingfoil *)", --disallowedTools, "Bash(git push *)", "Bash(npm publish *)" ]
       reviewer: [ --permission-mode, dontAsk, --allowedTools, Read, Glob, Grep, "Bash(git log *)", "Bash(git show *)", "Bash(git diff *)", "Bash(git status *)", "Bash(npm test *)", "Bash(npm run *)", "Bash(npx jest *)" ]
 prompt:
   via: arg
