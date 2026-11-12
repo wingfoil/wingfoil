@@ -6,7 +6,7 @@ description: >-
   Close the release loop: EXPLORE the release's Execution Notes for friction, let the approver add
   points, capture what went well / what to improve as Memory, and feed adjustments into the next
   release planning.
-version: 1.8                     # dl-019/retro-v0.1 — added explore + additional-points phases; 1.2 dl-104 D3/Action 2: explore produces a path (task-175); 1.3 dl-104 Action 2 (task-199): approve declares the Memory transition it stands for, explore's agent.mine_execution_notes becomes agent.execute (dl-090 Q6); 1.4 dl-115 Q1 (A) + Q3 (x), dl-163 (task-213): explore reads the ### Retrospective subsections first and lists every secondary source it was given; additional-points gains a checks.pre that every proposal and every consumer feedback note has one outcome (four, six for a consumer feedback note); 1.5 dl-089 §1 (task-222): explore reads the release-health report, additional-points presents its proposals, capture writes the retro's ## Release health section; the friction inventory moves to docs/09_retrospectives/ (bug-299); 1.6 dl-163 S3d (task-272): a read-only collect-feedback phase between explore and additional-points reads the registered consumer inboxes and writes a read record the approver rules on, capture records the ruling; 1.7 dl-167 (a) (task-300): explore reads the release-health reports of the patches released since the previous retrospective (dl-092 Q2 (ii)); additional-points and capture name every report explore read; 1.8 task-303 (dl-186 Q6, dl-172 (a)), comments only: the three checks the facilitator and the approver confirm are bound manual: true in workflows/bindings.yaml, no longer unbound
+version: 1.9                     # dl-019/retro-v0.1 — added explore + additional-points phases; 1.2 dl-104 D3/Action 2: explore produces a path (task-175); 1.3 dl-104 Action 2 (task-199): approve declares the Memory transition it stands for, explore's agent.mine_execution_notes becomes agent.execute (dl-090 Q6); 1.4 dl-115 Q1 (A) + Q3 (x), dl-163 (task-213): explore reads the ### Retrospective subsections first and lists every secondary source it was given; additional-points gains a checks.pre that every proposal and every consumer feedback note has one outcome (four, six for a consumer feedback note); 1.5 dl-089 §1 (task-222): explore reads the release-health report, additional-points presents its proposals, capture writes the retro's ## Release health section; the friction inventory moves to docs/09_retrospectives/ (bug-299); 1.6 dl-163 S3d (task-272): a read-only collect-feedback phase between explore and additional-points reads the registered consumer inboxes and writes a read record the approver rules on, capture records the ruling; 1.7 dl-167 (a) (task-300): explore reads the release-health reports of the patches released since the previous retrospective (dl-092 Q2 (ii)); additional-points and capture name every report explore read; 1.8 task-303 (dl-186 Q6, dl-172 (a)), comments only: the three checks the facilitator and the approver confirm are bound manual: true in workflows/bindings.yaml, no longer unbound; 1.9 task-358 (bug-435 item 4, bug-469): collect-feedback's and additional-points' checks are split into the half a command could decide (feedback-notes.recorded, proposals.disposed: completeness and the closed outcome set, bound manual: true until a command) and the half a human reads (feedback-notes.restated, proposals.outcome-chosen, manual on purpose); no phase, step or action changes
 element: release
 
 phases:
@@ -70,13 +70,18 @@ phases:
       # bug-299's numbering, task-222).
       - "docs/09_retrospectives/rl-{release.release-line}/rel-{release.version}-feedback-triage.md"
     checks:
-      # dl-163 S3d: no command can assert it; the facilitator confirms it (bound manual: true, task-303).
+      # dl-163 S3d, split by task-358 (bug-435 item 4). feedback-notes.recorded is the half a command could decide —
+      # every service listed with the commit read, one row per note with its cite, one outcome from the closed set —
+      # bound manual: true until a command reads the record; feedback-notes.restated is a reading, manual on purpose.
+      # The facilitator confirms both.
       post:
         - >-
           feedback-notes.recorded(every service read is listed with the commit read; one row per note,
-          with its cite <service id>/F-<nnn>@<sha>, the commit read, its content restated in WingFoil's
-          words and one proposed outcome among covered | element | restated | superseded | declined |
-          needs-info; no row holds a consumer's configuration, paths or prose)
+          with its cite <service id>/F-<nnn>@<sha>, the commit read and one proposed outcome among
+          covered | element | restated | superseded | declined | needs-info)
+        - >-
+          feedback-notes.restated(each note's content restated in WingFoil's words; no row holds a
+          consumer's configuration, paths or prose)
 
   - name: additional-points
     description: >-
@@ -93,7 +98,10 @@ phases:
       # dl-115 Q3 (x), amended 2026-10-07 with dl-163: a proposal is never read as a finding. Written over
       # every source listed before the gate, so the read record of a read-only phase added between
       # explore and this one (dl-163 S3d, collect-feedback) is one more source with no change here.
-      # No command can assert it; the approver confirms it (bound manual: true, task-303).
+      # Split by task-358 (bug-435 item 4): proposals.disposed is the half a command could decide — every item has
+      # exactly one outcome from the closed set, each element outcome citing an id and each superseded one a command —
+      # bound manual: true until a command reads the sources; proposals.outcome-chosen, the approver's disposition of
+      # each item read against it, is manual on purpose. The approver confirms both.
       pre:
         - >-
           proposals.disposed(every item that is a proposal, and every consumer feedback note (dl-163),
@@ -104,6 +112,9 @@ phases:
           ground) | superseded (with the command that proves it); a consumer feedback note, which may
           be a defect rather than a proposal, may instead be declined (the approver does not take it
           up, with a reason) | needs-info (sent back to its consumer for more information))
+        - >-
+          proposals.outcome-chosen(each outcome is the approver's disposition of its item, read against
+          it; a proposal is never read as a finding)
     approval: { by_role: approver }
 
   - name: capture

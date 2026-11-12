@@ -640,7 +640,10 @@ The commands above are illustrative. This repository's file (`task-199`, `dl-090
 bound only in a YAML comment on that key (`npm run docs:api`, `npm run lint`) — and every
 other token a command or a manual step can carry; the prose checks no command asserts stay unbound
 (`W_WORKFLOW_UNBOUND_TOKEN`) until, from `patch-v0.3.1`, those a human confirms on purpose are bound
-`manual: true` (`dl-172` (a), `dl-186` Q6).
+`manual: true` (`dl-172` (a), `dl-186` Q6). From v0.4 (`task-358`, `bug-469`) it leaves none unbound: a check a
+command decides is bound `run` (`dev-loop`'s `retrospective.present` to `scripts/check-retrospective.cjs` with
+`{element.path}`), and a check a command could decide but none does yet is bound `manual: true` in a group of its
+own, "manual until a command", each entry naming the command owed, until a `run` binding replaces it.
 
 | Field                  | Type                     | Required | Description |
 |------------------------|--------------------------|----------|-------------|
@@ -657,8 +660,11 @@ other token a command or a manual step can carry; the prose checks no command as
 | `*.args`               | map<placeholder, pattern>| no       | A declared pattern per interpolated argument, where `spec-009`'s ID class is too narrow. |
 
 A placeholder — `{<key>}` for a token's `key: value` argument, `{element.field}` or `{<type>.field}`
-for the scope — may stand only as a **whole** element of `run` (`E_BINDING_PARTIAL_INTERPOLATION`
-otherwise). A project binding may not rebind a built-in token
+for the scope, and `{element.path}` or `{<type>.path}` for the repository-relative path of that scope
+element's file (from v0.4, `bug-320`) — may stand only as a **whole** element of `run` (`E_BINDING_PARTIAL_INTERPOLATION`
+otherwise). The path is the file the deduction read the element from, under its type's `memory.yaml` `path`;
+`path` is no frontmatter field, and in a placeholder it always names the file. It belongs to a binding's `run`
+only: in a `where` value, a `produces` pattern or an action argument the type's pattern is the path itself. A project binding may not rebind a built-in token
 (`E_BINDING_BUILTIN_TOKEN`), and a check binding whose program is `wingfoil agent execute` is refused
 (`E_BINDING_AGENT_CHECK`).
 
@@ -788,7 +794,9 @@ makes an unbound check fail closed and requires every action to be bound or `man
 engine runs a binding, `workflow list` reports each unbound token as `W_WORKFLOW_UNBOUND_TOKEN` in
 `diagnostics` and exits `0`. It becomes an error when P4.10/P4.12 ship in v1.0 and the engine would
 otherwise fail closed at run time. A check that is manual on purpose is declared `manual: true` (`dl-172` (a)), so
-the warning keeps naming only the checks not bound yet.
+the warning keeps naming only the checks not bound yet. A project may also declare `manual: true` for a check a
+command could decide but none does yet, while a person applies it by hand: the loader does not tell the two apart,
+so the project's file keeps them in separate groups, and from v1.0 both wait for a confirmation.
 
 **Measured on this repository** at `997e8998` (branch `design/release_planning_v0.3`), applying the
 table to the committed files (`git show 997e8998:.wingfoil/<path>`; `npm run -s wingfoil -- workflow
@@ -1168,3 +1176,14 @@ as `mode` and `distinct_from` are. The field is new to the format but needs no `
 loads a phase that declares it, reporting the key as an unknown field it ignores (the pinned build 0.3.2, checked at
 `task-335`'s design, `dl-205` Q1 (a)). Edited in place without a supersede or a state change (`dl-047`), pending the
 approver's `memory amend`.
+
+**Revision (2026-11-11, `task-358-bind-this-repository-s-workflow-tokens-give-dl-115-s-plan-half-a-check-and-end-the-stale-ingest-plans`,
+`bug-320`, `bug-469`) — Layer 3's placeholders, and `manual: true` for a check no command decides yet.** A binding's
+`run` may carry `{element.path}` / `{<type>.path}`, the repository-relative path of the scope element's file, so a
+check that reads the element's document can be bound (`retrospective.present`, `dl-115` Q2 (a)). Nothing in v0.4 fills
+it: the loader accepts it as a whole `run` element (`isWholeInterpolation`) and `workflow next` / `workflow show` print
+it as written (the pinned build 0.3.2 too, checked at `task-358`'s design, `dl-205` Q1 (a)); the v1.0 engine fills it.
+And a check a deterministic command could decide, while none exists, may be bound `manual: true` in a group of its own
+(approver ruling at the same design gate), so this repository's configuration carries no `W_WORKFLOW_UNBOUND_TOKEN`.
+No `format` bump: no released build refuses either form. Edited in place without a supersede or a state change
+(`dl-047`), pending the approver's `memory amend`.
