@@ -697,6 +697,50 @@ Candidate findings (not filed): none.
 None from green or refactor: no element past its first state is edited (`git status --short` → clean before submit).
 The two spec amendments the design prepared are recorded (`e2224081a`, `123fbb635`).
 
+### fix round (developer, 2026-11-12)
+
+Review: APPROVE WITH FIXES, 0 blockers; findings 1, 2 and 6 fixed in `4af085638`. T4 holds (no red file, nor the
+qa's two, touched: `git show --name-only 4af085638` lists none of them).
+
+**Correction to `### refactor`'s coverage paragraph (finding 1).** "no line of the files this task changed is
+uncovered, so the lower statements and branches columns come from code outside them" was false for branches: the
+reviewer matched `coverage/lcov.info`'s `BRDA` records against the lines `git diff -U0 main...HEAD -- src` adds and found
+18 untaken branches — the `if (!member.ok) return member;` sites only the child-process CLI suites reach, and the
+`if (!agent.ok) return agent;` sites after `resolveGatedAgentContext`, never taken because the gated form cannot
+refuse. That ≈ 0.24 pp is the whole drop from 97.14 to 96.91: it was this task's.
+
+**Choice (i).**
+- `resolveGatedAgentContext()` now returns the `AgentContext` itself (the gated form never refuses, `spec-018` §2.6);
+  the six `if (!agent.ok)` checks are removed from `src/core/index.ts` (approve, reject, amend),
+  `workflow-finalize.ts`, `workflow-rekey.ts` and `workflow-adopt.ts`. `resolveAgentContext` keeps its `CoreResult`
+  for the ungated half (`task-334`).
+- New `test/core/team-membership-preflight.test.ts`: each of the twelve remaining sites (`memory add`, `directive
+  create`, `directive remove`, `workflow start`, `end`, `finalize`, `adopt` single and `--plan --apply`, `rekey`,
+  `create`, `remove`, `agent execute`'s step 5) refused in process as a non-member, `toEqual` the `E_NOT_A_MEMBER`
+  error and hint, nothing written.
+- Evidence: `npm run test:coverage -- --maxWorkers=2` (slot 09:25:26 → 10:03:33 UTC, build exit `0` first; ended
+  10:20:06) → exit `0`, `Test Suites: 610 passed`, `Tests: 11178 passed`, `All files | 99.23 | 97.15 | 98.66 | 99.64`.
+  The same `BRDA`/`DA` match against `git diff -U0 main...HEAD -- src` (a short script over `coverage/lcov.info`) →
+  `uncovered branches on added lines: 0`, `uncovered lines on added lines: 0`.
+
+**Finding 2 — `git-conventions` 2.7 said an agent types approvals.** Reworded in the bump already on the branch (its
+version note extended): the preamble ("the `approver` running an `approve` from their own terminal"), §7 "Which
+commits" (approval commits — `approve`, `reject`, `amend`, a `workflow:` record with an `Approver:` line — carry no AI
+co-author because agents never run them and the verbs refuse an agent's session with `E_AGENT_CONTEXT`), and, same
+class, §8's second limit ("Never an approval commit", as `spec-018` Consequences asks). `grep -n "agent typed\|approver's
+instruction\|agent types" .wingfoil/directives/custom/git-conventions.md` → no output. `npm run -s check:mcp` → both
+lines, `tools: 0`, every Resource read and Prompt get answered; `npm run -s wingfoil -- directives list --role
+reviewer` (pinned build) still lists `git-conventions` (`grep -c` → `2`, its path and id).
+
+**Finding 6.** The `approval-agent-trailer` message picks the article from the key ("an AI-Model:", "a
+Co-Authored-By:"); pinned by the new `test/cli/check-governance-agent-trailer-article.test.ts`.
+
+**Gates.** `npx jest test/cli/check-governance test/directives test/core/team-membership-preflight.test.ts
+test/core/agent-context.test.ts test/cli/agent-context-refusal.integration.test.ts --maxWorkers=2` → `Test Suites: 25
+passed`, `Tests: 411 passed`; `npx jest test/lint test/docs --maxWorkers=2` → `Test Suites: 48 passed`, `Tests: 519
+passed`; the full suite ran inside the coverage gate above; `npm run typecheck` (slot 10:20:21 → 10:40:57, behind another task's coverage run) → exit `0`, both configurations; `npm run lint` → exit `0`; `npx eslint`
+on the changed files → clean; the invisible-character grep → no hit.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -709,3 +753,4 @@ The two spec amendments the design prepared are recorded (`e2224081a`, `123fbb63
 - green: three red cases matched a `CoreError` field that does not exist (`error` for `message`); found only when green ran them, one send-back round (`dd90463c4`). Proposal: qa runs each red case against a stub that returns the pinned `CoreError` shape before committing red.
 - green: the design measured 39 membership-broken suites but not their shared cause; one fixture email (`wf-test@example.com` against the test identity `wf-test@example.invalid`) explained 24 of them (the re-run after that fix: 15 failed, 28 passed).
 - refactor: a machine reboot lost the first build and test run; both were re-run whole under the slot.
+- review: the refactor note judged the coverage drop by uncovered lines only; branches on added lines need the `BRDA` match the reviewer ran (finding 1). Proposal: the refactor gate records uncovered branches on the lines `git diff -U0 main...HEAD -- src` adds.
