@@ -339,6 +339,154 @@ this task does not change `src/agent/launch.ts`'s `cwd: root`.
 **Candidate findings (not filed).** None outside the task: the six git-based suites `bug-453`'s Expected Behavior names
 are inside it (D3).
 
+### red (qa, 2026-11-11)
+
+**Red commit `f3e87f00d`** (`git log --oneline -1` → `f3e87f00d test(cli): task-350 — failing test: the global --project
+<dir> option, hermetic git-root fixtures`), test files only (`git show --stat f3e87f00d` → 13 files under `test/`, no
+`src/`, `scripts/` or doc file). Base unchanged: `git rev-list --count HEAD..main` → `0`, no merge. PATH guard: `command -v
+wingfoil` → the task's PATH shim; `wingfoil --version` and `node dist/cli.js --version` → `0.3.2
+(30eef3c6c28f024aa61d0b3e6fc0cd54f3ef6e49)`.
+
+**Files.** New: `test/cli/project-option.integration.test.ts` (AC 1, AC 2, AC 5), `test/docs/project-option-docs.test.ts`
+(AC 4). Changed: `test/storage/helpers/git-fixture.ts` (`makeBoundedOutsideDir()` and `withGitCeiling(ceiling, fn)`),
+`test/storage/git-root.test.ts`, `test/cli/integration-branch.test.ts`, `test/memory/audit.test.ts`,
+`test/memory/history.test.ts`, `test/memory/git-read.test.ts`, `test/storage/git-read.test.ts`,
+`test/memory/history-rename-path.test.ts` (AC 3), `test/cli/program.test.ts` (AC 1), `test/agent/execute.test.ts`,
+`test/cli/agent-execute-config-arg.integration.test.ts` (AC 5). No new export is imported, so no `.d.cts`.
+
+**The bugs, reproduced before any edit** (a scratch tree outside the worktree; `TMPDIR` set to a directory whose parent
+holds the stray `.git`, never the system temporary directory itself):
+- parent with an empty `.git` directory: `TMPDIR=<scratch>/repro-empty/tmp npx jest test/storage/git-root.test.ts
+  --maxWorkers=2` → `Tests: 2 failed, 4 passed, 6 total` ("returns null when no ancestor directory contains .git",
+  "throws E_NO_GIT_ROOT when not inside a git repository at all");
+- parent a real repository (`git init`): `TMPDIR=<scratch>/repro-repo/tmp npx jest <the seven suites> --maxWorkers=2` →
+  `Test Suites: 7 failed, 7 total`, `Tests: 12 failed, 160 passed, 172 total` (git-root 2, integration-branch 2, audit 1,
+  history 1, memory/git-read 1, storage/git-read 2, history-rename-path 3), as the design measured.
+
+**Helper (AC 3, D3).** `makeBoundedOutsideDir()` returns `{ dir, ceiling }`: `ceiling` a fresh `mkdtemp` directory
+initialised as a real git repository, `dir` its subdirectory `outside`; the caller removes `ceiling`. Because the
+ceiling is itself a repository, a suite that loses the boundary fails in every environment (`testing` T2).
+`withGitCeiling(ceiling, fn)` sets `process.env.GIT_CEILING_DIRECTORIES` around an in-process git read and restores it.
+
+**Runs** (targeted, `--maxWorkers=2`, with every file in place):
+- `npx jest test/storage/git-root.test.ts` → `Tests: 10 failed, 7 passed, 17 total`.
+- `npx jest test/cli/project-option.integration.test.ts --verbose` → `Tests: 13 failed, 3 passed, 16 total` (51 s).
+- `npx jest test/agent/execute.test.ts test/cli/agent-execute-config-arg.integration.test.ts test/cli/program.test.ts
+  test/docs/project-option-docs.test.ts` → `Test Suites: 4 failed, 4 total`, `Tests: 9 failed, 80 passed, 89 total`.
+- The six git-based suites (`test/cli/integration-branch.test.ts test/memory/audit.test.ts test/memory/history.test.ts
+  test/memory/git-read.test.ts test/storage/git-read.test.ts test/memory/history-rename-path.test.ts`) → `Test Suites: 6
+  passed`, `Tests: 166 passed, 166 total` three times: with the default `TMPDIR`, with `TMPDIR=<scratch>/repro-repo/tmp`
+  and with `TMPDIR=<scratch>/repro-empty/tmp`.
+- `npx tsc --noEmit -p tsconfig.json` → 14 diagnostics, all `TS2554`, all at the new calls: `test/storage/git-root.test.ts`
+  (12: lines 67, 74, 82, 87, 121, 130, 135, 138, 154, 163, 171, 184; "Expected 1 arguments, but got 2") and
+  `test/agent/execute.test.ts` (2: lines 167, 171; "Expected 0 arguments, but got 1"). No other diagnostic.
+- `npx jest test/lint --maxWorkers=2` → `Test Suites: 1 failed, 15 passed, 16 total`, `Tests: 1 failed, 164 passed`: the
+  failure is `test/lint/typecheck-clean.test.ts` "tsconfig.json typechecks with zero diagnostics", whose output lists
+  exactly the 14 `TS2554` above (`grep -c "error TS"` on it → `14`). It is the design's expected red, carried by the gate;
+  green clears it with the new parameters. `npx eslint` on the 13 files → clean.
+
+**Per AC** (first failing assertion of each red test):
+- **AC 1 (red-first)**
+  - `test/cli/project-option.integration.test.ts`, `describe` "task-350 AC 1 — every command accepts --project <dir>, which
+    names the project root" (fixtures: `seed()` of `test/agent/helpers/agent-execute-fixture.ts` plus a `README.md`, its
+    `sub/`, a second repository `elsewhere` whose local identity `Elsewhere Person <elsewhere@example.invalid>` is no
+    team member, and `makeBoundedOutsideDir()`):
+    - "every leaf command, run from another repository with --project <a subdirectory of the root>, is refused with
+      E_NOT_AT_GIT_ROOT naming it (never `unknown option`)" — the leaf commands of `buildProgram(CORE_MODULES, …)`
+      (Commander's `help` excluded, one `x` operand where a command registers an argument; the count is the
+      enumeration's) → each expected `[path, 1, "error: E_NOT_AT_GIT_ROOT: --project is not a git root: <root>/sub\n"]`,
+      received `[path, 2, "error: unknown option '--project'\n"]` (first entry `init`).
+    - "dna show --project <a directory outside every repository | a missing path | a file> is refused …, exit 1" (3) →
+      expected `status: 1`, received `2` with `unknown option '--project'`.
+    - "a relative value is resolved against the current directory and named by its absolute path" → the same.
+    - "dna show reads the named root: the same stdout from the root, from elsewhere with --project <root>, and from a
+      subdirectory with --project .." → expected the root's `--format json dna show` result (`status: 0`), received
+      `status: 2`, stderr `{"error":"unknown option '--project'"}`.
+    - "the flag is also accepted after the verb" → the same.
+    - "D5 (a) — a blank value is refused at exit 2, for dna show, init and mcp alike" → expected stderr `error: invalid
+      flag value: --project must not be blank\n`, received `error: unknown option '--project'\n`.
+    - "D5 (a) — an invalid --format is refused first (spec-008 §1 order)" → expected `error: invalid --format value
+      "bogus", expected one of: console, json, yaml\n`, received `unknown option '--project'`.
+    - "mcp --project <root>, started in another repository, serves the named root" → `McpError: MCP error -32000:
+      Connection closed`.
+    - passes today (precedence, kept as a guard): "--help and --version keep their precedence: the value is not checked".
+  - same file, `describe` "a write lands in the named root, and task-333's pre-flight reads the named root" (its own
+    `seed()`):
+    - "memory add --project <root>, run from another repository whose identity is no member, commits in the root as the
+      root's member identity" → expected `{ status: 0, stderr: '' }`, received `status: 2`, `unknown option '--project'`.
+    - "with the root's own identity no member, the refusal names the root's identity, not the current directory's" →
+      `expect(run.status).toBe(1)`, received `2`.
+  - `test/storage/git-root.test.ts`, `describe` "task-350 AC 1 — the named root ({ project })" (7 tests): "returns the
+    named root, whatever the current directory" → received the current directory, not the named repository; "resolves a
+    relative value against the current directory" → `StorageError: E_NO_GIT_ROOT: not inside a git repository` (the
+    current directory is resolved instead); the three `it.each` refusals, "refuses a directory outside every repository …
+    (no walk)" and "names a relative value by its absolute path in the refusal" → `toBeInstanceOf(StorageError)`,
+    received `undefined` (nothing thrown); "accepts a worktree, whose .git is a file" → received the current directory.
+  - `test/cli/program.test.ts`: "registers the global flags from spec-008 §2 (`--project <dir>` included, task-350) plus
+    `-V, --version` (bug-001)" → `- "--project <dir>",` missing after `--format <format>`; "task-350 AC 1 — `--help`
+    describes `--project <dir>` …" → expected `run on the project rooted at <dir> instead of the current directory (it
+    must be a git root)`, received `undefined`.
+- **AC 2 (characterization, passes on first run)** — `test/cli/project-option.integration.test.ts`, `describe` "task-350
+  AC 2 — without --project, a command run from a subdirectory of the root is still refused": "every leaf command exits 1
+  with `error: E_NOT_AT_GIT_ROOT: run wingfoil from the project root`" (the same enumeration, cwd `<root>/sub`, no flag)
+  and "with --format json the refusal is the JSON error object" (stderr `{"error":"E_NOT_AT_GIT_ROOT: run wingfoil from the
+  project root"}\n`, stdout empty) → both pass.
+- **AC 3** — red-first, `test/storage/git-root.test.ts`: "task-350 AC 3 — returns null when no directory below the
+  ceiling contains .git (the ceiling is a repository)" → `expect(findGitRoot(dir, { ceiling })).toBeNull()`, received the
+  ceiling's path; "task-350 AC 3 — throws E_NO_GIT_ROOT when not inside a git repository below the ceiling" → expected
+  `"E_NO_GIT_ROOT"`, received `"E_NOT_AT_GIT_ROOT"`. Pass today (the walk's positive cases, kept so the ceiling does not
+  break them): "a repository below the ceiling is still found", "a ceiling that is not an ancestor of the starting
+  directory changes nothing", "the starting directory is always examined, even when it is the ceiling".
+  Characterization (pass on first run, in all three `TMPDIR` runs above): every "outside any repository" fixture of the
+  six git-based suites is now `makeBoundedOutsideDir()`'s `dir`, the read running under `GIT_CEILING_DIRECTORIES=<ceiling>`
+  — in-process through `withGitCeiling` (`runGitRead` / `runGitReadBytes`, `getMemoryHistory` ×2, `auditAttribution`,
+  `collectHistoricalPaths`), in the child's `env` (`integration-branch.cjs --check-head`; `history-rename-path`'s
+  `callOutOfProcess`, which now takes the ceiling). Same assertions as before.
+- **AC 4 (red-first)** — `test/docs/project-option-docs.test.ts`: "the Global options table has a `--project <dir>` row" →
+  the first cells do not contain the code span of `--project <dir>`; "\"Where to run it\" names --project <dir> and says WingFoil never
+  infers the project root" and "names --project <dir> and says WingFoil never infers the project root" (user guide) →
+  expected substring `--project <dir>`; "the known-limitations bullet \"Run from the repository root\" names --project" →
+  received the bullet unchanged ("a subdirectory fails with `E_NOT_AT_GIT_ROOT`").
+- **AC 5 (red-first, D2 (a))** — `test/agent/execute.test.ts` "runningBuildMcpServer (§2.5) — the build that runs agent
+  execute, serving the root it resolved": both cases → `args` missing `"--project", "/fixture/project-root"` before
+  `"mcp"`; `test/cli/agent-execute-config-arg.integration.test.ts` "the rendered mcp.template reaches the agent as
+  exactly ONE argv element, naming the running build" → expected `args` `[<dist>/cli.js, "--project", <repo>, "mcp"]`,
+  received `[<dist>/cli.js, "mcp"]` (the next case, the fake's connection, unchanged and passing);
+  `test/cli/project-option.integration.test.ts` "task-350 AC 5 — … › exits 0, records the run in the root, and the agent
+  reads the session Resource through the registered server" (cwd `elsewhere`, `--project <root>`, the fake with
+  `WINGFOIL_FAKE_AGENT_CONNECT=1`) → expected `status: 0`, received `2`, `unknown option '--project'`.
+- **AC 6 (characterization)** — not pinned by a test: the approver's `memory amend` commits `8ee6e2fbb` (spec-008),
+  `02cac8501` (spec-011) and `05b989b0a` (spec-016 §2.5) are on the branch (`git log --oneline -5`).
+
+**Where the expected lines come from** (code build, `node dist/cli.js` of this worktree at `2230d5400`, on a `seed()`
+fixture built in the scratch tree): from `<root>/sub`, `dna show` → exit 1 `error: E_NOT_AT_GIT_ROOT: run wingfoil from
+the project root`, and `workflow list --format json` → exit 1, stderr `{"error":"E_NOT_AT_GIT_ROOT: run wingfoil from the
+project root"}`, stdout empty; from `<root>`, `--format bogus dna show` → exit 2 `error: invalid --format value "bogus",
+expected one of: console, json, yaml`; `memory add --type task --title t --set release=v0.1` → exit 0, `git log -1
+--format=%s` → `wf(task): add task-204-t`; with the root's local identity set to `No Body <nobody@example.invalid>` the same
+add → exit 1, first stderr line `error: E_NOT_A_MEMBER: the git identity No Body <nobody@example.invalid> is not a team
+member: no team.members entry of the dna.yaml committed at HEAD has the email nobody@example.invalid, and only a member
+changes this project (dl-220)`; `agent execute --element task:task-202-explicit-override --role developer` with the fake
+→ exit 0, `agent: record task-202-explicit-override/adhoc/1`; `--project x --help` → exit 0 (precedence, today too); an
+MCP client on `node dist/cli.js mcp` in `<root>` reads `wingfoil://dna` (`"name":"Fixture"`), in `<root>/sub` →
+`Connection closed`, stderr `error: E_NOT_AT_GIT_ROOT: run wingfoil from the project root`. The `--project` refusal lines
+and the blank-value line are `spec-008` §2's, as amended at `8ee6e2fbb`; the option description is the design's.
+
+**Departure from the design, declared.** The design lists `readHeadBranch` among the in-process calls bounded by setting
+`process.env.GIT_CEILING_DIRECTORIES`. `scripts/integration-branch.cjs:75` spawns git without an `env`, so git gets node's
+own environment, not the test's copy (task-268): with `withGitCeiling` around the in-process call the case still failed
+(`TMPDIR=<scratch>/repro-repo/tmp npx jest test/cli/integration-branch.test.ts` → "Expected: false / Received: true" on
+`refused.ok`). The case now calls `readHeadBranch(outside)` in a child `node -e` whose `env` carries the ceiling, and
+asserts the same `ok: false` and `/^could not read HEAD: /` on what it returns. No production file changed.
+
+**For the developer.** `findGitRoot(cwd, options?: { ceiling?: string })` and `resolveProjectRoot(cwd, options?: {
+project?: string; ceiling?: string })` (design "Files to touch"); the refusal message is
+`E_NOT_AT_GIT_ROOT: --project is not a git root: <absolute dir>` as the `StorageError` message (the CLI prints it after
+`error: `); `runningBuildMcpServer(root)` → `[<dist>/cli.js, '--project', root, 'mcp']`. `test/docs/x-cli-cmds.test.ts`
+"every root-program long option has a Global Options row" will turn red once the flag is registered, until
+`docs/01_vision/X_cli-cmds.md` has the row (design). The AC 1 and AC 2 sweeps spawn the CLI about 70 times
+(`project-option.integration.test.ts` took 51 s here); each test has a 180 s jest timeout.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
