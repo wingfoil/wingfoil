@@ -55,6 +55,19 @@ const TRAILER_LINE_RE = /^[A-Za-z][A-Za-z0-9-]*:[ \t]\S/;
 const RESERVED_TRAILER_LINE_RE = /^(?:Approver|Reason|WingFoil-Version):/i;
 
 /**
+ * The agent trailer keys (`spec-018` §0, §3.3): reserved too, but only in a reason recorded under an `Approver:`
+ * line, because an approval never carries an agent trailer (`dl-212` D1). Any letter case, as the governance
+ * check's `approval-agent-trailer` rule matches them; elsewhere such a line is ordinary prose.
+ */
+const AGENT_TRAILER_LINE_RE = /^(?:Co-Authored-By|AI-Model):/i;
+
+/** What the caller says about where a reason is recorded (`spec-018` §3.3). */
+export interface ReasonContext {
+  /** `true` when the reason is recorded under an `Approver:` line: an approval (`approve`, `reject`, `amend`, …). */
+  readonly approval?: boolean;
+}
+
+/**
  * The first character in `text` a reason may not carry, or `null` when there is none:
  *
  * - a C0 control other than tab (`U+0009`) and newline (`U+000A`) — the two a reason legitimately
@@ -107,7 +120,12 @@ export type ReasonDefect =
    * rule is judged by SHAPE, git's own heuristic, not against a list of known trailer keys: `dl-070`
    * (A) kept it, and its S4 put the remedy into the message.
    */
-  | 'trailing-trailer-paragraph';
+  | 'trailing-trailer-paragraph'
+  /**
+   * On an approval only ({@link ReasonContext.approval}): carries a line starting `Co-Authored-By:` or `AI-Model:`, in
+   * any letter case — an agent trailer, which an approval commit never carries (`spec-018` §3.3).
+   */
+  | 'agent-trailer-on-approval';
 
 /** The exact refusal message for each defect — `spec-008-cli-grammar` §2's "invalid flag value" class (exit 2). */
 const REASON_DEFECT_MESSAGES: Readonly<Record<ReasonDefect, string>> = {
@@ -117,6 +135,8 @@ const REASON_DEFECT_MESSAGES: Readonly<Record<ReasonDefect, string>> = {
     'invalid flag value: --reason must not contain a line starting with "Approver:", "Reason:" or "WingFoil-Version:"',
   'trailing-trailer-paragraph':
     'invalid flag value: --reason must not end in a paragraph of "Key: value" lines; add a closing sentence after it, or fold those lines into prose',
+  'agent-trailer-on-approval':
+    'invalid flag value: --reason must not contain a line starting with "Co-Authored-By:" or "AI-Model:" on an approval',
 };
 
 /**
@@ -140,10 +160,10 @@ function codePointOf(character: string): string {
  * of the wording the CLI prints (`src/core/require-reason.ts`) and {@link formatMemoryCommitMessage}
  * throws. It is {@link reasonDefectMessage}'s class message, plus, for a control character, the FIRST
  * offending one by code point (`dl-078` (A): "naming the character"), so the message is a function of
- * the input alone (REQ-SYS-07).
+ * the input alone (REQ-SYS-07). `context.approval` adds the agent-trailer rule of `spec-018` §3.3.
  */
-export function reasonRefusalMessage(reason: string): string | null {
-  const defect = reasonDefect(reason);
+export function reasonRefusalMessage(reason: string, context: ReasonContext = {}): string | null {
+  const defect = reasonDefect(reason, context);
   if (defect === null) return null;
   const message = reasonDefectMessage(defect);
   const control = defect === 'control-character' ? firstControlCharacter(normalizeReason(reason)) : null;
@@ -199,15 +219,17 @@ function paragraphsOf(normalized: string): string[][] {
  * stored — otherwise a defect could hide behind trailing whitespace git strips on the way in. This is
  * the ONE place the rule is decided: `src/core/require-reason.ts` turns a non-`null` result into the
  * `UsageError` (exit 2) the CLI boundary reports, and {@link formatMemoryCommitMessage} refuses the
- * same values so no caller can route around that boundary.
+ * same values so no caller can route around that boundary. On an approval (`context.approval`), a line starting
+ * `Co-Authored-By:` or `AI-Model:` is a defect too (`spec-018` §3.3); on every other operation it is prose.
  */
-export function reasonDefect(reason: string): ReasonDefect | null {
+export function reasonDefect(reason: string, context: ReasonContext = {}): ReasonDefect | null {
   const normalized = normalizeReason(reason);
   if (normalized === '') return 'blank';
   if (firstControlCharacter(normalized) !== null) return 'control-character';
 
   const lines = normalized.split('\n');
   if (lines.some((line) => RESERVED_TRAILER_LINE_RE.test(line))) return 'reserved-trailer-line';
+  if (context.approval === true && lines.some((line) => AGENT_TRAILER_LINE_RE.test(line))) return 'agent-trailer-on-approval';
 
   const paragraphs = paragraphsOf(normalized);
   const last = paragraphs[paragraphs.length - 1];

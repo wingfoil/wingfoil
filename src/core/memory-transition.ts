@@ -50,6 +50,7 @@ import { type Diagnostic, formatDiagnostic, isNewerFormatError, ValidationError 
 
 import { requireConfinedWriteTarget } from './confinement';
 import { requireGitIdentity, type GitIdentity } from './git-identity';
+import { requireTeamMembership } from './team-membership';
 import { loadMemoryYamlAtRev, MEMORY_YAML_PATH } from './loaders';
 import { atHeadOr, resolveRevision } from './revision';
 import { coreErr, coreOk, type CoreResult } from './types';
@@ -704,6 +705,8 @@ export function beginMemoryTransition(
 ): CoreResult<BegunMemoryTransition> {
   const identity = requireGitIdentity(root);
   if (!identity.ok) return identity;
+  const member = requireTeamMembership(root, identity.value);
+  if (!member.ok) return member;
   const prepared = prepareMemoryTransition(root, id, op, options);
   if (!prepared.ok) return prepared;
   return coreOk({ ...prepared.value, identity: identity.value });

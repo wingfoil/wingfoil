@@ -28,6 +28,9 @@ team:
     - name: Alex
       email: alex@example.invalid
       roles: [ developer ]
+    - name: WingFoil Test
+      email: wf-test@example.invalid
+      roles: [ developer ]
   roles:
     - name: developer
 paths:

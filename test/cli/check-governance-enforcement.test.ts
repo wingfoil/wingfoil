@@ -13,8 +13,9 @@
  *   state whose `supersedes:` names an element that is not `superseded` at `HEAD`.
  * - **config versions over a range** (`bug-249`): with `--base`, each of the four versioned config files
  *   whose bytes differ between the merge-base and `HEAD` declares a numerically greater `version:`.
- * - **no AI co-author on an approval** (`bug-307`, `git-conventions` §7): an `approve` or `reject`
- *   commit carries no `Co-Authored-By:` and no `AI-Model:` trailer; other verbs may.
+ * - **no agent trailer on an approval** (`bug-307`, `git-conventions` §7; widened by task-333 to `spec-018` §4's
+ *   `approval-agent-trailer`, design D6): a commit with an `Approver:` line carries no `Co-Authored-By:` and no
+ *   `AI-Model:` line; a commit without one may.
  * - **per-check introduction**: each check added after the script gates only the commits after the
  *   first-parent commit that brought its marker into the script, so a new rule never fails on commits
  *   pushed before it existed (`dl-103` §1 starting mode, applied per check).
@@ -330,7 +331,7 @@ describe('per-check introduction (dl-103 §1 starting mode, per check)', () => {
       'status-outside-wf': 'governance-check:status-outside-wf',
       'supersedes-pair': 'governance-check:supersedes-pair',
       'config-version': 'governance-check:config-version',
-      'approval-ai-trailer': 'governance-check:approval-ai-trailer',
+      'approval-agent-trailer': 'governance-check:approval-agent-trailer',
       'workflow-record-authority': 'governance-check:workflow-record-authority',
       'trailer-paragraph': 'governance-check:trailer-paragraph',
       // task-358 (bug-320, approver ruling D2 (a) (i)): a wf(plan): finalize whose plan has no ### Retrospective entry.
@@ -386,7 +387,7 @@ describe('per-check introduction (dl-103 §1 starting mode, per check)', () => {
   });
 });
 
-describe('no AI co-author trailer on approve and reject (bug-307, git-conventions §7)', () => {
+describe('no agent trailer on an approval commit (bug-307, git-conventions §7; spec-018 §4 approval-agent-trailer, task-333 D6)', () => {
   const f = fixture();
   const trailers = '\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nAI-Model: claude-opus-5-5';
   f.task('t-1', 'pending', 'wf(task): add t-1');
@@ -397,16 +398,21 @@ describe('no AI co-author trailer on approve and reject (bug-307, git-convention
   const approveClean = f.task('t-3', 'backlog', 'wf(task): approve t-3 [pending → backlog]' + approval(), APPROVER);
   const startWithTrailers = f.task('t-3', 'in-progress', 'wf(task): start t-3 [backlog → in-progress]' + trailers);
   const report = checkGovernance(f.root);
+  /** The findings of the widened rule on `sha` (read as strings: `GovernanceCheck` gains the name with the rule). */
+  const agentTrailerFindings = (sha: string): string[] =>
+    report.findings.filter((finding) => finding.sha === sha && (finding.check as string | undefined) === 'approval-agent-trailer').map((finding) => finding.message);
 
-  it('reports an approve or a reject that carries an AI co-author or model trailer, naming the trailer', () => {
+  it('reports an approve or a reject that carries an AI co-author or model trailer, one approval-agent-trailer finding per line, naming the key', () => {
     expect(rulesOf(report, approveWithTrailers)).toEqual(['body']);
-    expect(messagesOf(report, approveWithTrailers)).toMatch(/Co-Authored-By/);
-    expect(messagesOf(report, approveWithTrailers)).toMatch(/git-conventions §7/);
+    expect(agentTrailerFindings(approveWithTrailers)).toHaveLength(2);
+    expect(agentTrailerFindings(approveWithTrailers).join('\n')).toMatch(/Co-Authored-By/);
+    expect(agentTrailerFindings(approveWithTrailers).join('\n')).toMatch(/AI-Model/);
     expect(rulesOf(report, rejectWithModel)).toEqual(['body']);
-    expect(messagesOf(report, rejectWithModel)).toMatch(/AI-Model/);
+    expect(agentTrailerFindings(rejectWithModel)).toHaveLength(1);
+    expect(agentTrailerFindings(rejectWithModel)[0]).toMatch(/AI-Model/);
   });
 
-  it('accepts an approval without them, and the trailers on any other verb', () => {
+  it('accepts an approval without them, and the trailers on a commit with no Approver: line', () => {
     expect(rulesOf(report, approveClean)).toEqual([]);
     expect(rulesOf(report, startWithTrailers)).toEqual([]);
   });
@@ -416,10 +422,11 @@ describe('no AI co-author trailer on approve and reject (bug-307, git-convention
     g.commit('chore: introduce the check', { 'scripts/check-governance.cjs': '// placeholder\n' });
     g.task('t-1', 'pending', 'wf(task): add t-1');
     const before = g.task('t-1', 'backlog', 'wf(task): approve t-1 [pending → backlog]' + approval() + trailers, APPROVER);
-    g.commit('chore: add the rule', { 'scripts/check-governance.cjs': `// placeholder\n// ${CHECKS['approval-ai-trailer']}\n` });
+    g.commit('chore: add the rule', { 'scripts/check-governance.cjs': '// placeholder\n// governance-check:approval-agent-trailer\n' });
     g.task('t-2', 'pending', 'wf(task): add t-2');
     const after = g.task('t-2', 'backlog', 'wf(task): approve t-2 [pending → backlog]' + approval() + trailers, APPROVER);
-    const gated = new Map(checkGovernance(g.root).findings.map((finding) => [finding.sha, finding.gated]));
+    const findings = checkGovernance(g.root).findings.filter((finding) => (finding.check as string | undefined) === 'approval-agent-trailer');
+    const gated = new Map(findings.map((finding) => [finding.sha, finding.gated]));
     expect(gated.get(before)).toBe(false);
     expect(gated.get(after)).toBe(true);
   });

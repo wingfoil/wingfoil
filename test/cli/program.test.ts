@@ -309,7 +309,9 @@ describe('buildProgram — command tree derivation (spec-006 §4, spec-008 §1)'
     const memoryAdd = program.commands.find((c) => c.name() === 'memory')?.commands.find((c) => c.name() === 'add');
     // `--dry-run` is not declared by the operation: the registrar adds it to every mutating command
     // (task-210), as a flag, so Commander registers it before the value options.
-    expect(memoryAdd?.options.map((option) => option.flags)).toEqual(['--dry-run', '--type <value>', '--title <value>', '--set <name=value>']);
+    // `--co-author <name>` likewise (task-333, `spec-018` §1, design D4): derived for every mutating command but
+    // `agent execute`, after the operation's own value options.
+    expect(memoryAdd?.options.map((option) => option.flags)).toEqual(['--dry-run', '--type <value>', '--title <value>', '--set <name=value>', '--co-author <name>']);
   });
 
   it("an unknown noun terminates through commander's own `unknownCommand`, whose SUGGESTED exit code is 1", async () => {

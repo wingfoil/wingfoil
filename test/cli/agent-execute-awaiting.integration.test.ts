@@ -25,8 +25,8 @@ afterAll(() => {
 const CASES: readonly [AwaitingCase, string, string][] = [
   // case, step key, the line `workflow next` prints for it — copied from a real `wingfoil workflow next` in each
   // fixture (the task's red notes).
-  ['gated', `gated.review@task:${TASK_ID}`, `human needed: approve or reject ${TASK_ID} — routed to WingFoil Test <wf-test@example.com>`],
-  ['signoff', 'signoff.review@release:minor-1', 'human needed: finalize signoff.review@release:minor-1 — routed to WingFoil Test <wf-test@example.com>'],
+  ['gated', `gated.review@task:${TASK_ID}`, `human needed: approve or reject ${TASK_ID} — routed to WingFoil Test <wf-test@example.invalid>`],
+  ['signoff', 'signoff.review@release:minor-1', 'human needed: finalize signoff.review@release:minor-1 — routed to WingFoil Test <wf-test@example.invalid>'],
   [
     'outreach',
     'outreach.announce@release:minor-1',

@@ -50,3 +50,29 @@ Feature: P1.7 (US-2-10) - wingfoil memory approve
     Then the commit subject is "wf(decision-log): approve dl-002-pick-a-storage-engine [in-discussion → ready]"
     And no word of the commit message equals "dl-2"
     And the command exits with code 0
+
+  # dl-212 D1, spec-018 §1, §3 (task-333): an approval is never recorded from an agent's session, whoever the
+  # git identity is; the session is refused before its authority is judged.
+  Scenario Outline: Error - an approval is refused in an agent's session
+    Given the current user holds the "approver" role
+    And the session is marked by <marker>
+    When I run "wingfoil memory approve task-101 --reason 'ok'"
+    Then the state is unchanged
+    And no commit is written
+    And the command exits with code 1 and message "E_AGENT_CONTEXT: 'memory approve' needs the approver and does not run in an agent's session (<listed>): an approval is recorded only from the approver's own session, never from an agent's (dl-212)"
+    And the hint is "run 'memory approve' yourself, from a terminal no agent started — not through an agent's shell"
+
+    Examples:
+      | marker                                 | listed                          |
+      | the variable WINGFOIL_AGENT, even empty | WINGFOIL_AGENT is set           |
+      | the option --co-author Claude           | --co-author was given           |
+      | the variable CLAUDE_CODE_CHILD_SESSION  | CLAUDE_CODE_CHILD_SESSION is set |
+      | the variable CODEX_SANDBOX              | CODEX_SANDBOX is set            |
+
+  Scenario: CLAUDECODE alone does not mark an agent's session
+    Given the current user holds the "approver" role
+    And the variable CLAUDECODE is "1" and no agent marker is present
+    When I run "wingfoil memory approve task-101 --reason 'ok'"
+    Then the document transitions to the type's post-review approved state
+    And the commit carries no "Co-Authored-By:" and no "AI-Model:" line
+    And the command exits with code 0

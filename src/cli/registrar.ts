@@ -15,12 +15,13 @@
  * unit-testable; wiring this command model onto a real `commander` `Command` tree is a separate,
  * thin, mechanical concern.
  */
-import type { CoreFlag, CoreModule, CoreOption, CorePositional, ParamsBuilder } from '../core/registry';
+import type { CoreFlag, CoreModule, CoreOperation, CoreOption, CorePositional, ParamsBuilder } from '../core/registry';
 import { commandUsage, deriveVerb, enumerateOperations, extraOperandsReason, missingOperandReason } from '../core/registry';
 import type { CoreResult } from '../core/types';
 import { exitCodeForResult, exitCodeForThrow } from '../core/exit-code';
 import { errorDetails } from '../core/error-details';
 import { DRY_RUN_FLAG, runAsDryRun } from '../core/dry-run';
+import { BLANK_CO_AUTHOR, CO_AUTHOR_OPTION, withAgentInvocation } from '../core/agent-context';
 import { withNoticeSink, withWarningSink } from '../validation/warning';
 
 import { emitError } from './error';
@@ -100,7 +101,9 @@ export function buildCliCommands(modules: readonly CoreModule[], options: BuildC
       // `--dry-run` (task-210, `dl-106` W2, spec-008 §2): every operation that mutates takes it, and
       // none declares it — it is derived here from `mutates`, so an operation added later inherits it.
       flags: operation.mutates ? [...(operation.flags ?? []), DRY_RUN_FLAG] : operation.flags,
-      options: operation.options,
+      // `--co-author <name>` (task-333, `spec-018` §1 row 2, design D4): derived the same way, for every mutating
+      // operation that does not declare `agentAttribution: false` (`agent execute`, `spec-018` §1.1).
+      options: takesCoAuthor(operation) ? [...(operation.options ?? []), CO_AUTHOR_OPTION] : operation.options,
       run: async (
         formatValue: string,
         positionals?: readonly string[],
@@ -139,6 +142,16 @@ export function buildCliCommands(modules: readonly CoreModule[], options: BuildC
         // The operation's own flags reach `buildParams`; `--dry-run` is the registrar's, not the operation's.
         const dryRun = operation.mutates && flags?.[DRY_RUN_FLAG.name] === true;
         const operationFlags = operation.mutates && flags !== undefined ? withoutDryRun(flags) : flags;
+        // `--co-author` likewise (task-333): a usage check first, exit `2` before `resolveRoot()` (`spec-018` §2.5,
+        // §2.6), then it reaches the core as part of the agent invocation, never as an operation option.
+        const coAuthorValue = takesCoAuthor(operation) ? optionValues?.[CO_AUTHOR_OPTION.name] : undefined;
+        const coAuthor = typeof coAuthorValue === 'string' ? coAuthorValue : undefined;
+        if (coAuthor !== undefined && coAuthor.trim().length === 0) {
+          emitError(BLANK_CO_AUTHOR, { format });
+          exitWith(2);
+          return;
+        }
+        const operationOptions = takesCoAuthor(operation) && optionValues !== undefined ? withoutCoAuthor(optionValues) : optionValues;
 
         let result: CoreResult<unknown>;
         try {
@@ -157,12 +170,15 @@ export function buildCliCommands(modules: readonly CoreModule[], options: BuildC
             flags: operationFlags,
             // Value-bearing `--{name} <value>` options a data-mutating op reads (task-020's `memoryAdd`
             // reads `type`/`title`/`tags`). Undefined for every op declaring none.
-            options: optionValues,
+            options: operationOptions,
           });
           // Every warning raised while the operation runs — a loader's unknown-field warning (`bug-202`),
           // `agent execute`'s context warnings (task-218) — is rendered here, in the active format, the
           // moment it is raised: before the payload or the error that follows it.
-          const call = (): Promise<CoreResult<unknown>> => operation.fn(params);
+          // The agent invocation (`spec-018` §1, design D5): the environment and `--co-author`, which the core reads
+          // through `currentAgentInvocation()` — the approver-gated operations refuse an agent's session from it.
+          const call = (): Promise<CoreResult<unknown>> =>
+            withAgentInvocation({ env: process.env, ...(coAuthor === undefined ? {} : { coAuthor }) }, () => operation.fn(params));
           // A notice (`agent execute`'s launch banner, task-228) is rendered the same way, on stderr.
           result = await withNoticeSink(
             (text) => emitNotice(text, { format }),
@@ -219,6 +235,22 @@ export function buildCliCommands(modules: readonly CoreModule[], options: BuildC
  */
 export function listRegisteredCliCommands(commands: readonly CliCommand[]): string[] {
   return commands.map((command) => (command.verb ? `${command.noun} ${command.verb}` : command.noun)).sort();
+}
+
+/** Whether the registrar derives `--co-author` for `operation`: it mutates and does not opt out (`spec-018` §1.1). */
+function takesCoAuthor(operation: CoreOperation): boolean {
+  return operation.mutates && operation.agentAttribution !== false;
+}
+
+/**
+ * `options` without the registrar's `--co-author`, or `undefined` when nothing else is left — the shape an operation
+ * that declares no options of its own was always called with.
+ */
+function withoutCoAuthor(
+  options: Readonly<Record<string, string | readonly string[]>>,
+): Readonly<Record<string, string | readonly string[]>> | undefined {
+  const rest = Object.fromEntries(Object.entries(options).filter(([name]) => name !== CO_AUTHOR_OPTION.name));
+  return Object.keys(rest).length > 0 ? rest : undefined;
 }
 
 /**

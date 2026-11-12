@@ -60,12 +60,13 @@ not a file` (exit `1`).
 
 ### Global options
 
-Accepted by every command, except `--dry-run`, which only the commands that change the project take:
+Accepted by every command, except `--dry-run`, which only the commands that change the project take, and `--co-author`, which those commands but `agent execute` take:
 
 | Option | Effect |
 |---|---|
 | `--format <console\|json\|yaml>` | Output format. On success, `console` (default) prints the result `json` prints, indented by two spaces — it has no human rendering yet (New in 0.3: except the commands whose entry shows their own console text — `agent list`, `agent show`, `workflow next`, `workflow status`, `workflow start`, `workflow end`, `workflow finalize`, `workflow adopt`, `workflow rekey`); errors and warnings keep their `error:`/`warning:` lines on stderr. A human rendering is planned with the CLI UX work (P5.1.4, `dl-043`), and will change what the default prints. `json` prints compact single-line JSON; `yaml` prints YAML. `json`/`yaml` write only the result — nothing else — so scripts can parse stdout directly: a script should pass `--format json` rather than parse the default. |
 | `--dry-run` | New in 0.3. Show the commit the command would make, and make nothing. Taken by every command that changes the project — `memory add`, `submit`, `approve`, `reject`, `deprecate`, `park`, `amend`, `dna set`, `add`, `update`, `remove`, `directive create`, `assign`, `remove`, `workflow start`, `end`, `finalize`, `create`, `remove`, `adopt`, `rekey`, `agent execute` — after the verb (`wingfoil memory submit task-001-my-first-task --dry-run`); any other command refuses it as an unknown option (exit `2`). The command runs all its checks, then prints `{"dryRun": true, "subject", "message", "paths", "diff"}`: the commit subject, its full message, the files it would contain, and the unified diff from the last commit — and exits `0`, leaving the working tree, the index and the branch untouched. If the real run would be refused, the dry run is refused the same way, with the same exit code; the warnings the real run would print are printed too, a rewrite warning worded as a plan (`dna.yaml would be rewritten as a whole file (--force): …`). The diff is of what the commit would store — after your `core.autocrlf` or `.gitattributes` line-ending conversion — and is laid out with git's default diff settings, whatever your own git configuration says, so `git show` with a customized `diff.*` configuration can group the same changes into different hunks. It does not run git hooks, for a `memory approve` that also moves a superseded document it shows only the approve commit, and for `workflow start` only the plan's `add` commit. `workflow finalize`'s, `workflow adopt`'s and `workflow rekey`'s commits change no file, so their `paths` is `[]` and their `diff` is empty. `agent execute` prints the launch it would make instead, with no `message` or `diff`: its commit records how the agent's run ended, which cannot be known beforehand (see [`agent execute`](#wingfoil-agent-execute)). |
+| `--co-author <name>` | New in 0.4. Says the command runs in an agent's session, as the `team.agents` entry `<name>`. Taken by every command that takes `--dry-run` except `agent execute`, after the verb; any other command refuses it as an unknown option (exit `2`), and a blank `<name>` is refused at exit `2` (`error: invalid flag value: --co-author must not be blank`). It is one of the agent markers (`spec-018` §1), beside the `WINGFOIL_AGENT`, `CLAUDE_CODE_CHILD_SESSION` and `CODEX_SANDBOX` environment variables, defined with any value, the empty one included (`CLAUDECODE` is not one): with any of them present, the commands that need the approver — `memory approve`, `reject`, `amend`, `workflow finalize` on an approval phase, `workflow adopt --plan --apply`, `workflow rekey` — are refused (exit `1`, `error: E_AGENT_CONTEXT: '<command>' needs the approver and does not run in an agent's session (<markers>): …`, with a `hint:` line), before anything is written. Run them yourself, from a terminal no agent started. On the other commands it changes nothing yet. |
 | `--verbose` | Emit diagnostic logs to stderr. |
 | `--no-color` | Disable ANSI colors. Accepted, but no output is colored yet, so it changes nothing; neither does the `NO_COLOR` environment variable. Both will apply once `console` has a colored rendering (P5.1.4, `dl-043`). |
 | `--no-interactive` | Fail on a missing argument instead of prompting for it. |
@@ -200,6 +201,12 @@ but cannot read its configuration — a config file it cannot parse, for example
 config line 9 in file .git/config`) rather than reporting a missing identity; `agent execute` and a read
 such as `workflow list` report it as `E_GIT_READ_FAILED: git rev-parse HEAD failed in <root>: fatal: bad
 config line …`. In every case nothing is written.
+
+New in 0.4: every command that commits, except `init`, also requires the author's email to belong to a
+`team.members` entry of the `dna.yaml` committed at `HEAD`, matched in any letter case; otherwise it exits `1`
+with `error: E_NOT_A_MEMBER: the git identity <name> <email> is not a team member: …` and a `hint:` line, and
+writes nothing. A `dna.yaml` that is not committed, or a committed one whose `team.members` is empty (as `init`
+writes it), refuses nobody; a member added in the working tree and not committed is not a member yet.
 
 `memory approve`, `memory reject` and `memory amend` additionally require the author's email to
 belong to a `team.members` entry holding the `approver` role in the committed `dna.yaml` (see
@@ -696,7 +703,9 @@ commit or stash them first.
 
 - **Errors:** missing `--reason` → exit `2`; blank `--reason` → exit `2`
   (`error: invalid flag value: --reason must not be blank`); not an approver → exit `1`
-  (`error: user not authorized to approve type 'task'`); the state is not a gate → exit `1`
+  (`error: user not authorized to approve type 'task'`); new in 0.4, run in an agent's session → exit `1`
+  (`error: E_AGENT_CONTEXT: 'memory approve' needs the approver and does not run in an agent's session …`, see
+  [Global options](#global-options)); the state is not a gate → exit `1`
   (`error: illegal transition draft -> (none) for type 'task'`; 0.2.x prints `draft -> backlog`, see
   [Exit codes](#exit-codes)).
 
@@ -899,7 +908,9 @@ Other modified or staged files are left as they are and are not committed.
   (`error: missing required field on amend: <fields>`), or (new in 0.3) sets a not-applicable
   value the type does not allow on that field → exit `1` (`error: not-applicable value on amend: <field> …`);
   the type is not amendable → exit `1` (`error: type 'release-line' is not amendable: …`); not an approver →
-  exit `1` (`error: user not authorized to approve type 'tech-spec'`).
+  exit `1` (`error: user not authorized to approve type 'tech-spec'`): the message names `approve` because
+  `approve`, `reject` and `amend` share one authority check and one message (REQ-SEC-03, `dl-063` clause B); run in
+  an agent's session → exit `1` (`error: E_AGENT_CONTEXT: 'memory amend' needs the approver …`).
 
 #### Rules for `--reason` (approve, reject, deprecate, park, amend)
 
@@ -907,6 +918,11 @@ Other modified or staged files are left as they are and are not committed.
 - No line of it may begin with `Approver:` or `Reason:` — those keys are reserved for the commit trailer.
   New in 0.3: `WingFoil-Version:` is reserved too, and all three keys are matched in any letter
   case.
+- New in 0.4: on `approve`, `reject` and `amend` — and on `workflow finalize` of an approval phase, `workflow adopt
+  --plan --apply` and `workflow rekey`, the commands that write an `Approver:` line — no line of it may begin with
+  `Co-Authored-By:` or `AI-Model:` either, in any letter case: an approval never carries an agent trailer
+  (`error: invalid flag value: --reason must not contain a line starting with "Co-Authored-By:" or "AI-Model:" on
+  an approval`, exit `2`). `deprecate` and `park` accept such a line.
 - It may not end with a paragraph made only of `Key: value` lines; end with a sentence instead.
   New in 0.3: the refusal says so (`… add a closing sentence after it, or fold those lines into
   prose`).

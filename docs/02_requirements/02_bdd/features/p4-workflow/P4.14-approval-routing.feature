@@ -35,3 +35,12 @@ Feature: P4.14 (US-4-07) - Approval Routing (role-based from DNA)
     Then "workflow status" reports "human needed: finalize <step>" routed to "Morgan"
     And only an identity holding the approver role can record it, with "wingfoil workflow finalize --reason"
     And the record carries "Approver: Morgan <email> (approver)" and the reason
+
+  # dl-212 D1, spec-018 §3 (task-333): the record of an approval phase is the approver's, never an agent's.
+  Scenario: Error - an approval phase is not recorded from an agent's session
+    Given the step's actions move no element through a gate
+    And the current user holds the "approver" role
+    And the session is marked by the variable CLAUDE_CODE_CHILD_SESSION
+    When I run "wingfoil workflow finalize --reason 'evidence checked'"
+    Then no record is written
+    And the command exits with code 1 and message "E_AGENT_CONTEXT: 'workflow finalize' needs the approver and does not run in an agent's session (CLAUDE_CODE_CHILD_SESSION is set): an approval is recorded only from the approver's own session, never from an agent's (dl-212)"

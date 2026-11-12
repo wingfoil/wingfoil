@@ -49,7 +49,7 @@ stacks:
 team:
   members:
     - name: roberto
-      email: r@example.it
+      email: wf-test@example.invalid
       roles: [ approver ]
   roles:
     - name: approver
