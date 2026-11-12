@@ -130,7 +130,8 @@ phases:
       # (test/workflow/release-kind-rule.test.ts holds them together).
       # task-277 (approver ruling 2026-10-12 D1 (c)): the sweep is declared as this check, not as a `where`
       # selection — a selection would be the target of memory.submit (spec-017 §4.2) and the release's state
-      # would stop being evidence. Unbound until dl-166 Q2 (ii) binds it.
+      # would stop being evidence. Bound manual: true "until a command" in workflows/bindings.yaml (task-358),
+      # owing a Memory query command with an exit status, until dl-166 Q2 (ii) binds it.
       post:
         - "frontmatter.required: [title, kind, version, pillar, features, requirements, release-line] except kind for [minor-v0.1, minor-v0.2, minor-v0.3, minor-v0.4, minor-v1.0]"
         - "change-proposals.swept(every feature id of a change-proposal with status scheduled and release {release.version} is in the release's features:)"
@@ -184,7 +185,8 @@ phases:
     fallback: { step: reconcile-governance, set_state: draft }   # reject (element incomplete): -> draft
     checks:
       pre: ["role-directives.clean"]   # dl-050 option 1 (task-215): `npm run check:role-directives` exit 0 (bound in workflows/bindings.yaml)
-      # task-230 (D2): unbound — no command asserts it yet (W_WORKFLOW_UNBOUND_TOKEN until P4.12, v1.0).
+      # task-230 (D2): no command asserts it yet — bound manual: true "until a command" in workflows/bindings.yaml (task-358),
+      # owing a Memory query command with an exit status.
       post: ["ready-decision-logs.covered(each ready decision-log with release {release.version} is named by the ref: of a task of the release; an uncovered one is flagged, never moved or assigned here)"]
 
   - name: record-adrs
