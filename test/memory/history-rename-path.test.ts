@@ -15,8 +15,7 @@
  * to `planning/rl-v1/*`, renaming five `release` elements at once because the `release` type's
  * `path` pattern interpolates the release-line id) rather than reading the live case itself.
  */
-import { mkdirSync, mkdtempSync } from 'fs';
-import { tmpdir } from 'os';
+import { mkdirSync } from 'fs';
 import { dirname, join } from 'path';
 
 import { reconstructMemoryTransitions } from '../../src/memory/audit';
@@ -29,8 +28,10 @@ import {
 import {
   commitAll,
   git,
+  makeBoundedOutsideDir,
   makeTempGitRepo,
   removeTempDir,
+  withGitCeiling,
   writeFixtureFile,
 } from '../storage/helpers/git-fixture';
 import { spawnCapture } from '../cli/helpers/spawn-cli';
@@ -91,11 +92,13 @@ describe('collectHistoricalPaths — the walk is the source of truth for where t
   });
 
   it('surfaces a failing probe as an error rather than as "this element was never renamed"', () => {
-    repo = mkdtempSync(join(tmpdir(), 'wf-not-a-repo-'));
+    // task-350 AC 3 (bug-453): a directory outside any repository below a ceiling that is one.
+    const { dir, ceiling } = makeBoundedOutsideDir();
+    repo = ceiling;
 
     // Same reasoning as `findElementCreationSha` (task-089): collapsing "git could not answer" into
     // "no rename edges" restores the defect silently, reading every commit at the current path again.
-    expect(() => collectHistoricalPaths(repo, NEW_PATH)).toThrow(/--follow --name-status/);
+    expect(() => withGitCeiling(ceiling, () => collectHistoricalPaths(dir, NEW_PATH))).toThrow(/--follow --name-status/);
   });
 });
 
@@ -264,11 +267,16 @@ describe('task-142 — no Memory git call writes to the operator\'s stderr (AC2)
 
   afterEach(() => removeTempDir(dir));
 
-  /** Call `module.fn(root, …args)` from `dist/` in a child; report whether it threw, and its stderr. */
+  /**
+   * Call `module.fn(root, …args)` from `dist/` in a child; report whether it threw, and its stderr.
+   * The child's git stops at `ceiling` (task-350 AC 3, `bug-453`): it gets this test's environment
+   * plus `GIT_CEILING_DIRECTORIES`.
+   */
   function callOutOfProcess(
     module: string,
     fn: string,
     args: readonly unknown[],
+    ceiling: string,
   ): { status: number; stdout: string; stderr: string } {
     const compiled = join(__dirname, '..', '..', 'dist', 'memory', `${module}.js`);
     const script = [
@@ -276,7 +284,7 @@ describe('task-142 — no Memory git call writes to the operator\'s stderr (AC2)
       `try { m[${JSON.stringify(fn)}](...${JSON.stringify(args)}); process.stdout.write('returned'); }`,
       `catch (error) { process.stdout.write('threw: ' + error.message); }`,
     ].join('\n');
-    return spawnCapture(process.execPath, ['-e', script]);
+    return spawnCapture(process.execPath, ['-e', script], { env: { ...process.env, GIT_CEILING_DIRECTORIES: ceiling } });
   }
 
   it.each([
@@ -284,9 +292,11 @@ describe('task-142 — no Memory git call writes to the operator\'s stderr (AC2)
     ['history', 'findElementCreationSha', (root: string) => [root, NEW_PATH]],
     ['history', 'collectHistoricalPaths', (root: string) => [root, NEW_PATH]],
   ] as const)('%s.%s reports a failure in its error and leaves stderr empty', (module, fn, args) => {
-    dir = mkdtempSync(join(tmpdir(), 'wf-not-a-repo-'));
+    // task-350 AC 3 (bug-453): a directory outside any repository below a ceiling that is one.
+    const bounded = makeBoundedOutsideDir();
+    dir = bounded.ceiling;
 
-    const run = callOutOfProcess(module, fn, args(dir));
+    const run = callOutOfProcess(module, fn, args(bounded.dir), bounded.ceiling);
 
     // The run must have reached git and failed there, or the empty stderr proves nothing.
     expect(run.stdout).toMatch(/^threw: .*not a git repository/s);

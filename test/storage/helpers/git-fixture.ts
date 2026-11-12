@@ -78,6 +78,42 @@ export function makeTempGitRepo(): string {
 }
 
 /**
+ * A directory "outside any repository" whose boundary the fixture plants itself (`bug-406`, `bug-453`,
+ * task-350; `testing` T2): `ceiling` is a fresh temp directory initialised as a real git repository, and
+ * `dir` is its subdirectory `outside`, which holds no `.git` of its own.
+ *
+ * A suite that wants "not inside a repository" bounds the search at `ceiling` — `findGitRoot`'s and
+ * `resolveProjectRoot`'s `{ ceiling }` option (`spec-011` § Git-root detection algorithm), or git's own
+ * `GIT_CEILING_DIRECTORIES=<ceiling>` for a git read — so the answer is the same whatever lies above the
+ * system temporary directory. Because the ceiling is itself a repository, a suite that loses the
+ * boundary finds it and fails in every environment, not only on a machine with a stray `.git` above the
+ * temp directory. Remove `ceiling` (which holds `dir`) with {@link removeTempDir}.
+ */
+export function makeBoundedOutsideDir(): { dir: string; ceiling: string } {
+  const ceiling = mkdtempSync(fixtureDirPrefix());
+  git(ceiling, ['init', '--quiet', '--initial-branch=main']);
+  const dir = join(ceiling, 'outside');
+  mkdirSync(dir);
+  return { dir, ceiling };
+}
+
+/**
+ * Run `fn` with `process.env.GIT_CEILING_DIRECTORIES` set to `ceiling`, restoring the previous value
+ * (or its absence) afterwards, so an in-process git read started from {@link makeBoundedOutsideDir}'s
+ * `dir` stops at the fixture's boundary (task-350, `bug-453`).
+ */
+export function withGitCeiling<T>(ceiling: string, fn: () => T): T {
+  const previous = process.env.GIT_CEILING_DIRECTORIES;
+  process.env.GIT_CEILING_DIRECTORIES = ceiling;
+  try {
+    return fn();
+  } finally {
+    if (previous === undefined) delete process.env.GIT_CEILING_DIRECTORIES;
+    else process.env.GIT_CEILING_DIRECTORIES = previous;
+  }
+}
+
+/**
  * Set `gc.auto=0` in a fixture repo's local config. Called on every repo the helper hands out —
  * {@link makeTempGitRepo}'s and {@link cloneTempRepo}'s — because `git clone` does not copy the
  * source's local config, so a clone would otherwise keep git's 6,700-object default (bug-065).
