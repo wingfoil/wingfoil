@@ -380,6 +380,27 @@ proposed until a command can check a review verdict (design gate `9c8e6f96c`, ru
 
 None: the task edits no element past its first state (`git status --porcelain` → empty).
 
+### red correction (qa, 2026-11-12)
+
+**Why.** Review finding 2: the Evidence case let any rule, an adopted one included, end its evidence with a
+non-command item, so the invariant of `dl-212` D1, the directive's §1 and AC 1 ("each a command and its expected
+output") was unpinned for a rule in force.
+
+**Change.** `test/directives/standing-approvals.test.ts` only (`git diff --stat` → 15 insertions, 1 deletion: a
+comment line). New case `red-first: an adopted rule's Evidence items are all commands with their expected output, none
+a judgement`: for every block whose Status is `adopted` (at least one), every indented item after the Evidence head
+matches `EVIDENCE_ITEM`. A `proposed` block keeps the earlier rule (first item a command, a later non-command item
+allowed). Red correction commit: `89fa3b0b0442bf9f566ecb93d6d3f2efe760f7b0`. The directive was not edited.
+
+**Runs (head `684369ab1` + the correction).**
+- `npx jest test/directives/standing-approvals.test.ts --maxWorkers=2` → `Tests: 15 passed, 15 total`: SA-01, the
+  only adopted rule, passes the new case by its current content (its six items are all commands with an output).
+- The case can fail: in a `git clone --shared` of this branch in the qa scratch directory, with SA-02's Status set
+  to `adopted`, `npx jest test/directives/standing-approvals.test.ts --maxWorkers=2 -t "adopted rule"` →
+  `Tests: 1 failed, 14 skipped, 15 total`, the received item being SA-02's item 9 (the reviewer's verdict).
+- `npx tsc --noEmit -p tsconfig.json` → exit `0`.
+- `npx jest test/lint --maxWorkers=2` → `Test Suites: 16 passed, 16 total`, `Tests: 165 passed, 165 total`.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
