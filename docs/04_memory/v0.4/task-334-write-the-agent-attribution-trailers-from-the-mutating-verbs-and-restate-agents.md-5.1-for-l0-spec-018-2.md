@@ -422,6 +422,110 @@ reads ("P1.3 scenario 1") are unchanged.
   an assertion on that whole text could see the line — green runs the non-approving examples once in this shell to
   check; the jest suites and the e2e smoke are scrubbed (task-333 D8, D14).
 
+### red (qa, 2026-11-11)
+
+**Red commit `2fb81e1ea`** (`git log --oneline -1` → `2fb81e1ea test(attribution): task-334 — failing test: …`), test
+files only (`git show --stat 2fb81e1ea` → 7 files under `test/`, `1362 insertions(+)`, none under `src/` or `scripts/`).
+Base: head `007fc7238` (the orchestrator's merge of `main`), `git rev-list --count HEAD..main` → `0`, so no merge. PATH
+guard: the task's PATH shim; `wingfoil --version` and `node dist/cli.js --version` both `0.3.2
+(0f264527aec2be6384391c27fb3aa89ec2095f93)` at start, `0.3.2 (007fc72387d7c9aa908b3a890a5ef02b6b44722e)` after `npm run
+build` at head. The session carries the marker (`echo $CLAUDE_CODE_CHILD_SESSION` → `1`); every child environment is
+`withoutAgentMarkers(process.env)` (`test/agent-markers.cjs`) minus `WINGFOIL_AGENT_MODEL`, then the case's variables.
+AC 8 checked before red: `git merge-base --is-ancestor cb328b2c0 HEAD` and `… 3312b9ccb HEAD` → both ancestors;
+`git log -1 --format='%h %s' -- docs/04_memory/design/specs/spec-017-*.md` → `9f7db1c8c wf(tech-spec): amend
+spec-017-…`; for `spec-008` the last commit is the merge `007fc7238` (its conflict resolution), the amend `cb328b2c0`
+before it. `grep -c "agent's session"` on the three `.feature` files → P1.2 `0`, P1.3 `4`, P1.6 `2`: P1.2's two scenarios
+(`3312b9ccb`, +16 lines) use other words ("no agent marker is present", "A commit an agent caused"), so the design's
+`1`/`2`/`1` grep does not hold for P1.2 although its scenarios landed (see Ambiguities).
+
+**Files** (all new). `test/core/helpers/attribution-fixture.ts` — `buildAttributionRepo({ agents })` over `buildL0Repo()`:
+`task` and `plan` gain an `id_pattern` and a `template`; the mains `notes` (one phase without `approval:`, instance
+`notes-1-plan`, the `finalize` target) and `report` (`produces: [ README.md ]`, instance `report-1-plan`, complete: the
+`end` target, and what `start` starts); `task-006-submit-me` at `draft`; `agents` `'two'` (L0's), `'none'`, `'noMail'`
+(`NoMail`, no email, no adapter), `'unadaptedFirst'` (`Plain`, no adapter, before `Claude`). `test/storage/commit-attribution.test.ts`,
+`test/core/agent-attribution.test.ts`, `test/core/agent-context-call-sites.test.ts`, `test/cli/registrar-ai-model.test.ts`,
+`test/cli/agent-attribution.integration.test.ts`, `test/docs/l0-attribution-text.test.ts`. No `.d.cts`: no red imports a
+new export from a `.cjs`. The existing pins the design gives to green (`test/docs/x-cli-cmds.test.ts:179-181`,
+`test/cli/registrar.test.ts:333-334`, `test/cli/program.test.ts:312`, `test/cli/registrar-co-author.test.ts:68`) are not
+touched.
+
+**Run.** `npx jest <the 6 suites> --maxWorkers=2 --json` → `Tests: 98 failed, 18 passed, 116 total`; per file (failed /
+passed): `commit-attribution` 10 / 1, `agent-attribution` (core) 17 / 2, `agent-context-call-sites` 2 / 3,
+`registrar-ai-model` 11 / 3, `agent-attribution.integration` 45 / 5, `l0-attribution-text` 13 / 4.
+`npx tsc --noEmit -p tsconfig.json` → 11 diagnostics, all intended, all in `test/storage/commit-attribution.test.ts`: one
+`TS2305` (`CommitAttribution` not exported from `src/storage`) and ten `TS2353` (`attribution` not in `CommitOptions`).
+`npx jest test/lint --maxWorkers=2` with the files in place → `Tests: 1 failed, 164 passed, 165 total`: only
+`typecheck-clean.test.ts` "tsconfig.json typechecks with zero diagnostics", on those 11 diagnostics (the precedent of
+`task-333`'s red). `npx eslint` on the 7 files → no output. Invisible-character grep on the 7 files → no hit (one raw
+U+2028 the editor wrote was rewritten as `\u2028` before the commit).
+
+**T-10's fixture** (AC 5), copied from a real run, not typed: a throwaway script built `buildAttributionRepo()` per
+command and ran `node dist/cli.js memory add --type task --title "A probe"`, `memory submit task-006-submit-me`,
+`memory approve task-001-approve-me --reason r`, `workflow finalize notes-1-plan --reason r` with
+`withoutAgentMarkers(process.env)`, on the code build at head `007fc7238`, then `git log -1 --format=%B` → each exit
+`0`, stderr empty, the messages `wf(task): add task-007-a-probe\n\nWingFoil-Version: 0.3.2 (007fc72…)\n\n`, `wf(task):
+submit task-006-submit-me\n\n…`, `wf(task): approve task-001-approve-me [pending → backlog]\n\nApprover: WingFoil Test
+<wf-test@example.invalid> (approver)\nReason: r\n\n…`, `workflow: finalize notes-1-plan notes.write\n\nReason:
+r\n\nWingFoil-Phase: notes.write completed\nWingFoil-Instance: notes-1-plan\nWingFoil-Version: …\n\n`; the test replaces
+the stamp with `distBuildStamp()`. The dry-run shape of T-20 is copied the same way (`memory submit task-006-submit-me
+--dry-run --format json` and `--format console`: both print the plan as JSON, the console one pretty-printed).
+
+**Per AC** (first failing assertion of each red test):
+- **AC 1 (red-first).** `commit-attribution`: the eight message pins (`writeAndCommit`, with `trailers`, `commitEmpty`,
+  `commitPaths`, a body, `note` first before `Reason:`, `note` on a subject-only message, the dry run's
+  `plan.message`) → `toBe` received the message without `Co-Authored-By:`/`AI-Model:`; the two backstop cases →
+  `toBeInstanceOf(StorageError)` received `undefined` (it committed) and `code` `undefined`. The no-attribution case
+  passes (characterization). `agent-attribution.integration` "AC 1": the case list equals the registry's 17 operations
+  (passes); each of the 17 under `WINGFOIL_AGENT=Claude` exits `0` with empty stderr and fails on `paragraph.slice(-3)`
+  (`Expected - 2`: the two agent lines missing; `workflow start` shows `WingFoil-Start: report`, `adopt` its
+  `WingFoil-Step:`/`WingFoil-Adopted:`, `finalize` its `WingFoil-Phase:`/`WingFoil-Instance:` in their place); `memory
+  deprecate --reason r` → `toBe` without the two lines.
+- **AC 2 (red-first).** CLI "AC 2": T-12 (`--co-author Other --ai-model m-1`) → `status: 2`, `error: unknown option
+  '--ai-model'`; T-13 (`CLAUDE_CODE_CHILD_SESSION=1`, `unadaptedFirst`) → `toBe` without the trailers; `CODEX_SANDBOX=1`,
+  T-14 (`WINGFOIL_AGENT=` `park --reason r`), the same on `deprecate --reason r` → received `stderr: ''` (no
+  `W_AGENT_ENTRY_GUESSED`); `finalize notes-1-plan --reason r` → `toBe` without the body line; `workflow start report`
+  under `WINGFOIL_AGENT=` → zero warning lines, one expected (D3). Core `agent-attribution`: rules 1–4 and the five model
+  cases → `toEqual` received `null` attribution; the four refusals → `result.ok` received `true`; the two
+  `W_NO_AGENT_ENTRY` cases → warnings `[]`. "No marker" and `gated: true` pass (characterization).
+- **AC 3 (red-first).** CLI "AC 3": the six model cases → `status: 2` (unknown option) or the last line
+  `WingFoil-Version: …` instead of `AI-Model: …`; the four usage refusals and the outside-a-repository case → stderr
+  `error: unknown option '--ai-model'` or exit `0`; the gated command with a marker and `--ai-model m-1` → `status` `2`
+  received, `1` expected; with no marker → `error: unknown option '--ai-model'` instead of the combination line.
+  `registrar-ai-model`: the derived option list → `['title', 'co-author']`; `ctx.options` → still holds `ai-model`;
+  `aiModel` → `undefined`; each refusal → `process.exit` called with `0`, `2` expected. Three cases pass: no `aiModel`
+  key without the option, the blank `--co-author` first, a multi-line `WINGFOIL_AGENT_MODEL` with no marker not read.
+- **AC 4 (red-first).** CLI "AC 4": T-15, `--co-author Nobody`, `WINGFOIL_AGENT=Claude` on `team.agents: []` (D6), T-16
+  `--co-author NoMail` → `status: 0` with the add's JSON on stdout (the `toEqual` on `{status, stdout, stderr}`); T-17 →
+  stderr `''` instead of the `W_NO_AGENT_ENTRY` line.
+- **AC 5 (red-first; T-10 half characterization).** T-10's four cases pass on first run. T-20 (`--format json` and
+  `--format console`) → `plan.message` without the two lines.
+- **AC 6 (red-first).** `l0-attribution-text`: the AGENTS.md paragraph, the D8 sentence, §7's five sentences, §8's
+  sentence, the user guide §8.3 and §9 texts → `toContain` not found; the two AGENTS.md absences → `not.toContain`
+  found; version → `2007` received, `≥ 2008` expected; the `--ai-model <id>` row → `toMatch` received `''`; the
+  `--co-author` row → `not.toContain` found `On the other commands it changes nothing yet`. The four "no `signed` or
+  `human-approved`" cases pass today (`grep -n -i "\bsigned\b\|human-approved" AGENTS.md
+  .wingfoil/directives/custom/git-conventions.md docs/user-guide.md docs/cli-reference.md` → no output), so a whole-file
+  absence is the "no added line" rule without a diff against `main`.
+- **AC 7 (characterization).** Not a new test: `npx jest test/lint` above; `test/docs` and `test/directives` run at
+  green/refactor with the text in place.
+- **AC 8 (characterization, checked at design).** Checked above; no test.
+- **AC 9 (red-first, structural).** `agent-context-call-sites`: the file list → received `src/core/index.ts` three
+  times plus `workflow-adopt.ts`, `workflow-finalize.ts`, `workflow-rekey.ts`, no `memory-transition.ts`;
+  `memory-transition.ts` first statement after membership → `toBeDefined` received `undefined`. The `adopt`, `rekey`
+  and `finalize` (in the `approval:` branch, after `readDeductionSnapshotAtHead(`) placements pass today.
+
+**Ambiguities (for the orchestrator; nothing reinterpreted).**
+- The design's drafted `docs/cli-reference.md` sentence for the `--co-author` row says "signed by the entry `<name>`",
+  while AC 6 and the design's own table forbid "signed" in those files (`dl-212` D4). The red pins the AC (no
+  `signed`) and does not pin that sentence verbatim; green words it without "signed".
+- The design's AC 8 check counts `1`/`2`/`1` for `agent's session` in P1.2/P1.3/P1.6; P1.2 gives `0` (its scenarios
+  use other words). The scenarios are on the branch; only the grep's expectation is off.
+- AC 9's "before its first read past membership" is pinned as "the first statement after `if (!member.ok) return
+  member;` contains `resolveGatedAgentContext(`" in `memory-transition.ts`, `workflow-adopt.ts`, `workflow-rekey.ts`: a
+  green that resolves through a helper function of the same file would fail it.
+- The registrar test names the option by its spelling `ai-model` and the messages by their text, not by exports: the
+  design names `AI_MODEL_OPTION` without saying which module exports it.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
