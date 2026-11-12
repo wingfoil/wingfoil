@@ -427,6 +427,7 @@ The review (approve with fixes, 0 blockers) and the approver's ruling of 2026-11
   passed`, `Tests: 416 passed`; `reasonRefusalMessage(<SA-01's new template>, { approval: true })` → `null`;
   `npm run -s check:mcp` → exit `0`; `npm run -s wingfoil -- directives list --role approver --format json` → nine ids
   with `standing-approvals`, `warnings` `[]`, empty stderr; `grep -nP` for invisible characters → no hit.
+- **Re-review N1** (`a10b69659`): §3 now says a rule change raises the directive's `version:` once the directive is on the integration branch (`doc-versioning`), and changes on the branch that creates it keep its first version, as `061e6e996` did; `version: "1.0"` kept. `npx jest test/directives test/docs/agents-md.test.ts test/lint --maxWorkers=2` → `Test Suites: 32 passed`, `Tests: 416 passed`; invisible-character `grep -nP` → no hit.
 
 ### Retrospective
 
