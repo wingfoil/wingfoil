@@ -54,3 +54,212 @@ agent run an approver verb; a rule only tells the approver which evidence suffic
 ## Execution Notes
 
 <!-- Filled by the dev-loop. -->
+
+### design (architect, 2026-11-12)
+
+**Base and inputs.** Branch head `570d23754` = `main` `09d7f5e76` + `wf(task): start` (`git log --oneline main..HEAD`
+→ one commit; `bug: []`, so no bug sync). PATH guard: the task's PATH shim; `wingfoil --version` and
+`node dist/cli.js --version` both print `0.3.2 (09d7f5e76baaac4ead48d9d0cfbfe092b7adb2de)`. The session carries an
+agent marker (`env | grep -c '^CLAUDE_CODE_CHILD_SESSION='` → `1`), so the code build refuses the approver verbs here
+(`spec-018` §3); this design runs none. Ratified sources, read with `grep -m1 '^status'`: `dl-212` ready, `dl-067`
+ready, `spec-018` approved, `dl-203` ready, `dl-134` ready, `dl-103` ready. `release-planning-rel-v0.4-plan` R1 L7:
+standing approvals "only as commands the approver runs, one rule at a time, once each rule has an id in a directive"
+(`grep -n "Standing approvals (L7)" docs/05_plans/rl-v1/rel-v0.4/release-planning-rel-v0.4-plan.md` → line 88).
+Triage row C-18 (`docs/09_retrospectives/rl-v1/rel-v0.4-planning-feedback-triage.md:248`) asks for it and line 269
+says to decide it against `dl-212`.
+
+**`depends_on` (dl-015).** `task-333` is `done`, merged at `bf3f8aee3`. Its Execution Notes fix the boundary this
+directive restates: the shared approver check refuses every agent marker with `E_AGENT_CONTEXT` for `memory
+approve`, `reject`, `amend`, an approval `workflow finalize`, `workflow adopt --plan --apply` and `workflow rekey`;
+on an approval a reason line starting `Co-Authored-By:` or `AI-Model:` is refused at exit `2`; AGENTS.md §5.1 says the
+approver runs these verbs from their own terminal. Checked on the code build in this worktree:
+`reasonRefusalMessage("Prose.\nCo-Authored-By: x", { approval: true })` (from `dist/memory/index.js`) → the
+`"Co-Authored-By:" or "AI-Model:" on an approval` refusal. So a standing rule is never a delegate (`dl-103` §2 (ii)) and
+never an allow-rule an agent can use: it only tells the approver which evidence suffices and which exact command to
+run (`dl-212` D1).
+
+#### Per-AC classification and what red (qa) must pin
+
+One new test file, `test/directives/standing-approvals.test.ts`, in the style of `test/directives/wingfoil-cli.test.ts`
+and `test/directives/testing-heavy-gates.test.ts` (read the file with `readFileSync` from the repository root,
+`yaml.load` for `roles.yaml` and the frontmatter; prose pins are substrings of the whitespace-flattened text, version
+pins are "≥" plus the version line naming the task, bug-314). "Block" below is the text from a rule heading to the next
+line starting `### ` or `## `.
+
+| AC | Class | What qa pins (observable · interface · file) |
+|----|-------|------------------------------------------------|
+| 1 | red-first | `.wingfoil/directives/custom/standing-approvals.md` exists; frontmatter `id: standing-approvals`, `type: directive`, `kind: custom`, no `scope:` key, a `version:` string ≥ `1.0` whose line names `task-343`. A `## ` section titled exactly `## 4. The rules`; inside it at least one heading matching `^### (SA-\d{2}) — \S`, ids unique and strictly ascending. In each block exactly one line of each: `^- \*\*Status:\*\* (proposed\|adopted\|withdrawn\|retired)\b`; `^- \*\*Gate:\*\* \`([a-z0-9-]+)\.([a-z0-9-]+)@[a-z-]+:<[^>]+>\``, whose workflow and phase name a phase of `.wingfoil/workflows/custom/<workflow>.yaml` that declares `approval: { by_role: approver }` (load the YAML, find the phase by `name`); `^- \*\*Evidence\*\*` followed by one or more lines `^  \d+\. \`(npm\|node\|git\|grep) [^\`]+\` → \S` (a command and its expected output); `^- \*\*Command\*\*` followed by one line `^  \`node dist/cli\.js (memory approve\|workflow finalize) [^\`]*--reason "([^"]+)"\`$`. The file contains no `npx`. |
+| 2 | red-first | `roles.yaml` (`yaml.load`): `assignments.approver` contains `standing-approvals`; no other `assignments` entry and not `global` contains it; `version:` ≥ 1.9 (as `versionNumber` of `test/directives/dev-loop-practice.test.ts`: ≥ `1009`) and the `version:` line names `task-343`. The directive contains the sentence S1 below (flattened substring). |
+| 3 | red-first | The directive contains the sentence S2 below. For every block, the captured `--reason` text contains `under standing rule <the block's id>` and `reasonRefusalMessage(reason, { approval: true })` is `null` — the existing export of `src/memory/commit-message.ts` (also re-exported by `src/memory/index.ts:122`), so the template the approver copies passes the CLI's own `Reason:` contract (`dl-067`, `spec-018` §3.3). |
+| 4 | characterization + red-first | Exit `0` half: already pinned by `test/cli/check-role-directives.test.ts:157-159` ("this repository passes the sweep"), passes before and after — qa adds nothing. Listing half (genuinely new, fails before green): `spawnSync(process.execPath, ['node_modules/wingfoil-released/dist/cli.js', 'directives', 'list', '--role', 'approver', '--format', 'json'], { cwd: ROOT })` → status `0`, `warnings` `[]`, one entry with `frontmatter.id` `standing-approvals` and `assignment` `approver` (shape copied from the probe run below). |
+| 5 | characterization | Each block's `Status:` value equals the approver's ruling at this gate (D4, D5 below), as the orchestrator writes it into these notes before red: qa pins the id → status map from that ruling. The notes' `### green` lists the rules adopted (no test). |
+
+**S1 (AC 2), verbatim:** "No rule lets an agent run an approver verb: the approver runs every command below from their
+own terminal, and the verbs refuse an agent's session with `E_AGENT_CONTEXT` (`dl-212` D1, `spec-018` §3)."
+
+**S2 (AC 3), verbatim:** "An approval under a rule cites the rule id in its `Reason:`, in prose, as `under standing
+rule SA-<nn>`: no line of the reason begins with `Approver:`, `Reason:`, `WingFoil-Version:`, `Co-Authored-By:` or
+`AI-Model:`, and the reason does not end with a paragraph made entirely of `Key: value` lines (`dl-067`, AGENTS.md
+§5.1)."
+
+Red's expected failures: every case of the new file fails on `ENOENT` / missing binding before green; AC 4's listing
+fails on the missing entry. No new export, so no `tsc` red. qa runs `npx tsc --noEmit -p tsconfig.json` and
+`npx jest test/lint --maxWorkers=2` before the red commit.
+
+#### Design — the directive
+
+`.wingfoil/directives/custom/standing-approvals.md`, frontmatter `id: standing-approvals`, `name`/`title` "Standing
+approvals: the evidence that suffices for a gate and the command the approver runs", `kind: custom`, `tags: [custom,
+approval, process, governance]`, `version: "1.0"` (comment naming `task-343`, R1 L7), `ref: [P3.5, P3.7, REQ-SYS-08]`,
+no `scope:`. Body, in this order:
+
+- intro: applies to the `approver` role only (`roles.yaml`); sources R1 L7, C-18, `dl-212` D1, `dl-103` §2 (i); S1;
+  a rule changes no verb, no authority check and no workflow — every gate stays `approval: { by_role: approver }`;
+- `## 1. What a standing rule is` — a gate whose every condition is a command with a stated output; a condition that
+  needs judgement (an agent's verdict included) keeps the gate out of the rules; any evidence item failing, or anything
+  the phase reports beyond the evidence (a warning, a finding, an uncommitted path), takes that occurrence out of the
+  rule and the approver judges it as usual;
+- `## 2. Citing a rule` — S2; one approval cites one rule;
+- `## 3. Adopting, changing and retiring a rule` — ids `SA-<nn>`, never reused; statuses `proposed` (drafted, not in
+  force), `adopted (<date>, <ruling>)`, `withdrawn (<date>, <ruling>)` (never adopted), `retired (<date>, <ruling>)`;
+  one rule per approver ruling; each change is its own commit and raises the directive's `version:`;
+- `## 4. The rules` — the blocks below;
+- `## 5. Not a standing rule` — the rejected candidates below, one line each with the reason.
+
+**SA-01 — the e2e-smoke gate of a release** (proposed for adoption, D4):
+- Gate: `e2e-smoke.gate@release:<release id>` (`e2e-smoke.yaml` phase `gate` declares `approval: { by_role: approver }`,
+  `grep -n "approval:" .wingfoil/workflows/custom/e2e-smoke.yaml` → line 111; the key form `<workflow>.<phase>@release:<id>`
+  as `workflow next sw-life-cycle-1-plan` prints `release-planning.advance-pinned-build@release:minor-v1.0`).
+- Evidence: 1. `node scripts/e2e-smoke.cjs --candidate --report docs/07_gates/rl-<line>/rel-<version>-e2e-smoke.md` →
+  exit `0`; 2. `grep -cE '^Result: \*\*PASS\*\* \([0-9]+/[0-9]+ checks ok\)$' <report>` → `1` (run at design on
+  `docs/07_gates/rl-v1/rel-v0.3-e2e-smoke.md` and `rel-v0.3.2-e2e-smoke.md` → `1` each); 3. `npm run check:mcp` → exit `0`; 4. `npm run check:audit` → exit `0`;
+  5. `node scripts/check-governance.cjs --base origin/main` → exit `0`; 6. `git status --porcelain` in the phase's
+  worktree → empty.
+- Command: `node dist/cli.js workflow finalize sw-life-cycle-1-plan --step e2e-smoke.gate@release:<release id>
+  --reason "Approves the e2e-smoke gate of <release id> under standing rule SA-01: the smoke on the packed candidate
+  <sha> passes <n> of <n> checks (report <report path>), and check:mcp, check:audit and the governance check exit 0."`
+  (`reasonRefusalMessage(<that text>, { approval: true })` on the code build → `null`).
+- Outside the rule: a coverage gap or follow-up the phase proposes (v0.3.2's gate accepted two, a judgement), a
+  `warn` row, a candidate other than the tip's.
+
+**SA-02 — the `review` approve of a task** (proposed; recommended `withdrawn`, D5):
+- Gate: `dev-loop.review@task:<task id>` (`dev-loop.yaml:207` `approval: { by_role: approver }`), recorded by
+  `memory approve <task id>` (`in-review → approved`).
+- Evidence: 1. `node scripts/check-phase-report.cjs report --worktree <task worktree> --report <review report> --base
+  <head at launch>` → exit `0`; 2. `npm test` → exit `0`; 3. `npm run test:coverage` → exit `0` (the 80 % thresholds of
+  `jest.config.js:94-100`); 4. `npm run lint`, 5. `npm run typecheck`, 6. `npm run docs:api` → exit `0`;
+  7. `node scripts/check-governance.cjs --base origin/main` → exit `0`; 8. `git status --porcelain` → empty (no pending
+  amendment); 9. the reviewer's verdict — **no command decides it**: `check-phase-report.cjs` declares no claim for a
+  verdict or a finding (module doc, "Any other keyword … is a format error").
+- Command: `node dist/cli.js memory approve <task id> --reason "Approves the implementation of <task id> under standing
+  rule SA-02: the independent review reports no finding, its phase report checks clean against git, and the full
+  suite, coverage, lint, typecheck, docs:api and the governance check exit 0 on the reviewed head <sha>."`
+  (`reasonRefusalMessage` → `null`).
+
+**Rejected candidates (`## 5`)**, each needing judgement: the `design` gate (classification and the decisions are
+the gate's content); `memory amend` of any element (the correction's content); bug triage `open → triaged` and task
+`pending → backlog` (severity, release and scope, `dl-191`); a `tech-spec` / `adr` approve (the spec-review gate,
+`dl-022`); release-submit's `approve-release` and the publication after it (irreversible); the retrospective's
+`approve`; any `reject` (its reason is the judgement); `workflow rekey` and `adopt --plan --apply` (the mapping);
+the `review` approve of a task with any finding (W0-R9's severity is a judgement). The `red`, `green` and `refactor`
+records are not approvals (the orchestrator's, W0-R3), so they need no rule.
+
+#### Files to touch (green + refactor, the design agent resumed, W0-R7) and version bumps
+
+- `.wingfoil/directives/custom/standing-approvals.md` — new, `version: "1.0"`.
+- `.wingfoil/roles.yaml` — `approver: [code-review, standing-approvals]`; `version:` 1.8 → **1.9** (main is 1.8,
+  `git show main:.wingfoil/roles.yaml | grep -n '^version'` → `37:version: 1.8`), once; a header paragraph and the
+  version comment `# 1.9 approver: [code-review, standing-approvals] (task-343) (prev 1.8 …)`.
+- AGENTS.md §3 (line 128, the directive list) and §7 (line 520, the approver row, and the prose after the table) — the
+  hand-written projection of `roles.yaml` (D6); no `version:` (none in the file).
+- `.wingfoil/README.md:54` — the WingFoil-rules list gains `standing-approvals` (D6); no `version:` in the file.
+- The task file (notes). No `src/`, no spec, no workflow, no binding. **No spec amendment is named by the ACs**, so
+  none is prepared; the directive is not a document the name-resolvability gate scans (`test/docs/name-resolvability.test.ts`
+  header: specs, ADRs, SARD), so no allowlist entry.
+- Writes (D2): `node dist/cli.js directive create --name standing-approvals` (`wf(directive): create standing-approvals`),
+  then `node dist/cli.js directive assign --directive standing-approvals --role approver` (`wf(directive): assign
+  standing-approvals to approver`, which raises `roles.yaml` to 1.9 itself, `dl-174`), then one hand commit
+  `feat(directives): task-343 — …` with the directive's body, the `roles.yaml` comments (no second bump), AGENTS.md and
+  `.wingfoil/README.md`; §7 trailers amended into each tool commit's `WingFoil-Version:` paragraph.
+
+#### Probe of the `.wingfoil/` change on the pinned build (`dev-loop.design` `pinned-build.reads`)
+
+In a `git clone --shared` of this branch in the design scratch directory (never in the worktree), with this
+worktree's `node_modules` and `dist/` linked: `node <worktree>/dist/cli.js directive create --name standing-approvals`
+→ exit `0`, commit `wf(directive): create standing-approvals`; `directive assign --directive standing-approvals --role
+approver` → exit `0`, `wf(directive): assign standing-approvals to approver`, diff `version: 1.8` → `1.9` and
+`+    - standing-approvals` under `approver:`; then, on the pinned build (`node_modules/wingfoil-released/dist/cli.js`):
+`directives list --role approver --format json` → ids `claim-evidence, code-review, doc-versioning, documentation,
+git-conventions, security-secrets, security, standing-approvals, wingfoil-cli`, `warnings` `[]`, the new entry
+`"roles":["approver"],"global":false,"assignment":"approver"`; `workflow list --format json` → exit `0`;
+`workflow show dev-loop --format json` → exit `0`; `node scripts/check-role-directives.cjs --root <probe>` →
+`role-directives: 8 roles checked, 0 with warnings`, exit `0`; `node scripts/check-mcp-registration.cjs` in the probe →
+exit `0`, "pinned wingfoil 0.3.2 … prompts: 8, resources: 4, tools: 0 … every listed Resource read and Prompt get
+answered". The same in the worktree on the base: `npm run -s check:mcp` → exit `0`; `npm run -s check:role-directives`
+→ `8 roles checked, 0 with warnings`; `npm run -s wingfoil -- directives list --role approver` → the eight ids above
+without `standing-approvals`, `warnings` `[]`. No shape change: the pinned build reads the new files, no `pinned-build`
+bug. `--format console` was run too: `directive create --dry-run --format console` and `directives list --format
+console` print JSON (the known console fallback, `dl-043`).
+
+#### Existing tests of the files touched, and the tests that pin what changes
+
+`npx jest test/directives test/cli/check-role-directives.test.ts test/cli/check-role-directives-errors.test.ts
+test/lint/version-bump.test.ts test/core/directives-list.test.ts test/validation/secret-scan.test.ts --maxWorkers=2`
+(targeted, no slot) → `Test Suites: 19 passed, 19 total`, `Tests: 409 passed, 409 total`. They pin `roles.yaml`:
+`test/directives/dev-loop-practice.test.ts:198-201` (version ≥ 1.7, tech-lead binding), `test/directives/wingfoil-cli.test.ts:54-60`
+(`global` holds `wingfoil-cli`, eight `dna.yaml` roles), `test/directives/testing-heavy-gates.test.ts:66-69`,
+`test/cli/check-role-directives.test.ts:157-159` (exit `0` on this repository), `test/lint/version-bump.test.ts` (one
+bump per branch), `test/validation/secret-scan.test.ts` (committed `.wingfoil/` content). None pins the approver's
+list exactly (`grep -rn "assignments.approver\|\['code-review'\]" test/` → fixture repositories only). No test pins
+AGENTS.md §3/§7 or `.wingfoil/README.md:54` (`grep -ln "AGENTS.md" test/docs` → `test/docs/l0-traceability.test.ts`
+only, which pins §5.1).
+
+#### Decisions for the approver
+
+- **D1 — directive id `standing-approvals`** (AC 1's path). Recommended.
+- **D2 — writes through the verbs** (`directive create`, `directive assign`, then a hand content commit), as
+  `wingfoil-cli` §2 ("where the build in use has the verb, the verb is used") and `task-341`'s notes plan; the
+  precedent `91f2a903d` (`task-270`) was one hand commit. Recommended: the verbs.
+- **D3 — rule ids `SA-<nn>`, never reused, with the four statuses of §3;** each adoption, withdrawal or retirement is
+  one approver ruling and one commit raising the directive's `version:`. Recommended.
+- **D4 — SA-01 (the e2e-smoke gate) adopted at this gate.** Every condition is a command with its output; v0.3.2's
+  gate shows what stays outside (accepted follow-ups). Recommended: adopt.
+- **D5 — SA-02 (the `review` approve):** (a) `withdrawn` — its deciding condition is the reviewer agent's verdict, and
+  a rule that approves whenever an agent says "no finding" lets an agent's output decide the gate, the allow-rule case
+  `dl-212`'s Context cites; (b) kept `proposed` until a review verdict is a claim a command checks (a follow-up to
+  `check-phase-report.cjs`'s format); (c) adopted with a grep of a verdict line the reviewer writes. Recommended: (b),
+  which keeps the id and the analysis for C-18, the queue's largest item, without putting it in force.
+- **D6 — AGENTS.md §3/§7 and `.wingfoil/README.md:54` updated in this task,** so the hand-written projection of
+  `roles.yaml` is not left stale (same class as `task-333` AC 10, `dl-137` R3/R4); otherwise `user-docs`'s
+  `align-agent-docs` catches it. Recommended: in this task.
+- **D7 — binding to `approver` only (AC 2); `task-341`'s `coordinator` directive names `standing-approvals` without
+  binding it** and agrees with it: neither the coordinator nor any agent approves; a coordinator may run a rule's
+  evidence commands and queue the gate citing the rule id with their outputs; the approver decides whether the rule
+  applies and runs the command. Recommended; `task-341`'s design states it.
+
+#### Risks for the other open w0 tasks
+
+- **`task-341` — `roles.yaml` conflict.** Both raise `roles.yaml` 1.8 → 1.9. Whichever merges second, after
+  `git merge --no-edit main`, has the same `version:` as `main` with different content, which
+  `test/lint/version-bump.test.ts` fails: it re-bumps to 2.0 and resolves the header and version comment by hand.
+- **`task-356` (`spec-017` / `spec-008` amendments)** — SA-01's command is `workflow finalize … --step … --reason`; a change
+  of that grammar changes the rule's Command line (and this file's pin).
+- **`task-355` (`agent execute`)** — none: no launch reads this directive (bound to `approver`, which `agent execute`
+  never runs, `dl-212` Context).
+- **`task-344` (merged, `65b111855`)** and **`task-339` (merged, `09d7f5e76`)** — none; SA-02's evidence 1 cites
+  `check-phase-report.cjs`'s current CLI.
+
+#### Candidate finding (not filed)
+
+- `directive assign` raises `roles.yaml` `version:` 1.8 → 1.9 but keeps the line's history comment verbatim
+  (`# 1.8 approver: [code-review], facilitator: [traceability] (task-215)`), so the new version's line describes the
+  old one (probe: `directive assign --directive standing-approvals --role approver --dry-run`, diff hunk `@@ -34,7
+  +34,7 @@`). Expected: a documented rule for the comment (left, or marked). Severity: low.
+
+### Retrospective
+
+<!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
+     reconstructed afterwards. One line per item: what happened, the evidence (a command and what it
+     printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
+     Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
+     here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
