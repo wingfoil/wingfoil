@@ -9,7 +9,8 @@
  * a real process invocation, exactly like `test/cli/fixtures/cli-harness.cjs` drives it against a
  * fixture root in tests — the difference here is `resolveRoot` resolves the *real* project root via
  * git-root detection (`resolveProjectRoot`, spec-011-storage-layout, through `./core/surface-reads.ts`) instead of a fixed fixture
- * path, and the real `process.argv` is parsed instead of a synthetic one.
+ * path — the current directory, or the directory the global `--project <dir>` names (task-350) — and the real
+ * `process.argv` is parsed instead of a synthetic one.
  *
  * `resolveRoot` is only invoked lazily, once per dispatched command (see `./cli/registrar.ts`'s
  * `run`) — `--help` (Commander built-in) and `--version` (registered by `buildProgram` via

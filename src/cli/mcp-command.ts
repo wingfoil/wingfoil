@@ -8,7 +8,7 @@
  * `runMcp` owns the spec-014 §1 pre-flight: resolve the project root, refuse a root with no
  * `.wingfoil/` (`bug-035`), and read the DNA role set the Prompts channel serves for the server's whole
  * life (`dl-049` (b), task-174). On any failure it emits the standard `error: <reason>` line and exits
- * `1` (a user/logic error) WITHOUT starting a partially-wired server. The side-effecting server start (`startMcpServer`, which opens a
+ * `1` (a user/logic error) — `2` for a blank `--project` (task-350 D5) — WITHOUT starting a partially-wired server. The side-effecting server start (`startMcpServer`, which opens a
  * real `StdioServerTransport`) is injected as `deps.start`, so this whole pre-flight is unit-testable
  * without ever opening a real stdio channel against a repo — the same seam `init-command.ts`'s
  * injectable `runInit` uses.
@@ -24,7 +24,10 @@ import { isValidFormat, type OutputFormat } from './output';
 
 /** The options `runMcp` acts on (injected so the resolve-root/error path needs no real stdio server). */
 export interface McpCliDeps {
-  /** Resolve the project (git) root; throws when the cwd is not inside an initialized WingFoil project. */
+  /**
+   * Resolve the project (git) root — the current directory, or the one `--project <dir>` names (task-350); throws
+   * when that directory is not a git root, or a `UsageError` when the `--project` value is blank.
+   */
   readonly resolveRoot: () => string;
   /** The CLI version to advertise as the MCP server's identity `version` (read from `package.json`). */
   readonly version: string;
@@ -43,7 +46,8 @@ export interface McpCliDeps {
  * Execute `wingfoil mcp`. The pre-flight runs up front, fail-fast, and never starts the server on a
  * failure — each one emits `error: <reason>` on stderr and exits `1`:
  *
- * 1. resolve the project root once (no git root);
+ * 1. resolve the project root once (no git root; a blank `--project` exits `2` instead, through
+ *    `exitCodeForThrow`);
  * 2. read the DNA role set (`loadDnaRoleSet`): refused when the root has no `.wingfoil/`, with the
  *    shared not-initialized message, which names no path (`bug-035`), or when `dna.yaml` cannot be
  *    loaded, with the loader's reason and details. This is the one start-time read spec-014 §2
