@@ -583,6 +583,105 @@ Suites: 71 passed`, `Tests: 1112 passed`. `npx tsc --noEmit -p tsconfig.json` �
 npm script, while fixing the type error above (it completed with no output); the heavy-gate rule (T5) says it runs
 only through `npm run typecheck`. Refactor runs it there.
 
+### refactor (developer, 2026-11-12)
+
+**Merge (W0-R3).** After the green record `777407178`, `git rev-list --count HEAD..main` → `43`: `git merge --no-edit
+main` → no conflict (AGENTS.md included), merge commit `cda3d27c5` (the trailers added with `git commit --amend
+--no-edit --trailer …`, a plain git commit; `git log -1 --format=%B` → the subject, then the two trailers). After it
+and at the end of refactor `git rev-list --count HEAD..main` → `0`.
+
+**Refactor commit `46f00c262`** (`refactor(attribution): …`): doc comments only, in `src/core/agent-context.ts` (the
+module comment, `Attribution`, `AgentContext`, `resolveAgentContext` no longer say the attribution half is to come)
+and `src/storage/commit.ts` (`stampedMessage`: the agent lines close the paragraph after the signature).
+
+**Declared decision (accepted by the orchestrator after green).** `BegunMemoryTransition.agent` is optional and
+`beginMemoryTransition` returns `BegunMemoryTransition & { readonly agent: AgentContext }`, so the gated callers in
+`src/core/index.ts` get it typed required while `src/core/memory-supersede.ts` (not in the design's list) is
+untouched; the supersede's `finalize` commit, an approve's second commit, carries no attribution. `ProvenanceRecord.attribution`
+is optional (`CommitAttribution | null`) for the same reason (`test/core/provenance-record.test.ts` builds records
+without it). See green for the TS2322 that led here.
+
+**Gates** (this worktree, each heavy one after `waitslot.sh`, `--maxWorkers=2`, foreground or a tracked command; the
+pending amendment of `bug-531` in the tree):
+- `npm run -s build` then `npm test -- --maxWorkers=2` (slot from 16:55 to 17:12 UTC, after waiting behind another
+  worktree's jest: `ps -eo pid,etime,args` at 16:23 → `1295235 02:00 …/task-350/…/jest.js --maxWorkers=2`) →
+  `Test Suites: 1 failed, 626 passed, 627 total`, `Tests: 1 failed, 11537 passed, 11538 total`. The one failure is
+  `test/cli/workflow-unbound-none.integration.test.ts` (task-358's, merged from `main`): "workflow next (console) … no
+  "N diagnostic(s)" line" received `1 diagnostic(s)`; `node dist/cli.js workflow next --format json` → the one
+  diagnostic is `W_UNCOMMITTED_INPUTS` on the uncommitted `bug-531` file, i.e. the pending amendment this process
+  requires. With that file restored to `HEAD` (copied aside, `git checkout --`, copied back) the suite alone → `Tests:
+  4 passed, 4 total`. Not a defect of this task; a candidate finding (below).
+- `npm run -s test:coverage -- --maxWorkers=2` (slot 17:31) → `All files | 99.12 | 96.97 | 98.63 | 99.64`
+  (statements, branches, functions, lines), the same single failure as above.
+- `npm run -s typecheck` (slot 17:49) → exit `0`; `npm run -s lint` → exit `0`; `npm run -s docs:api` → exit `0`.
+- After the refactor commit's edits (slot 18:07): `npm run -s typecheck`, `lint`, `docs:api` → exit `0` each;
+  `npx jest test/storage test/core/agent-attribution.test.ts test/core/agent-context.test.ts
+  test/core/agent-context-call-sites.test.ts test/cli/agent-attribution.integration.test.ts test/docs/api-docs.test.ts
+  --maxWorkers=2` → `Test Suites: 49 passed`, `Tests: 619 passed`.
+- `docs.parity` and `cli-reference`: inside the full suite above (`test/docs` all green but the task-358 case), and at
+  green `npx jest test/docs test/directives test/lint` → `63 passed`, `756 passed`.
+- dl-205, the `git-conventions` change on the pinned build: `npm run -s check:mcp` → both lines, `tools: 0`, "every listed
+  Resource read and Prompt get answered"; `npm run -s wingfoil -- directives list --role reviewer | grep -c
+  git-conventions` → `2` (as at design).
+
+**The examples in an agent's shell** (design risk). `bash docs/examples/<n>/run.sh` for the three that approve
+nothing: `03-directives-per-role` → exit `0` (5 `W_NO_AGENT_ENTRY` lines in its output), `04-mcp-server` → exit `0`,
+`05-ci-json-exit-codes` → exit `1`: its `memory submit task-999-nope --format json` prints the
+`{"warning":"W_NO_AGENT_ENTRY: …"}` line before the error document, and `expect_exit` merges stderr into the text it
+parses as one JSON document. Expected by spec-018 §2.3 in a shell with `CLAUDE_CODE_CHILD_SESSION` and a scaffold with
+`agents: []`; the jest suites and the e2e smoke run without markers. Not fixed here (`docs/examples/` is not in the
+design's list): a candidate finding, of the class of `bug-529`.
+
+### self-review (developer, 2026-11-12)
+
+Against `code-review`, every claim above backed by the command shown.
+- **AC 1** met: the integration suite's 17 cases (the list equal to the registry's) each end `WingFoil-Version:`,
+  `Co-Authored-By: Claude <…>`, `AI-Model: not-reported` in one paragraph; the storage suite pins the primitive for
+  the three writers and the dry run (green runs; `49 passed`, `50 passed`; again in the 18:07 run).
+- **AC 2** met: T-12, T-13, the vendor without an entry, T-14 with `memory history` reading `r`, the body line first
+  on `deprecate` and `finalize`, one warning on `workflow start` (D3).
+- **AC 3** met: the six model cases and the four usage refusals, the outside-a-repository case, the gated cases
+  (integration and registrar suites).
+- **AC 4** met: T-15, `--co-author Nobody`, D6, T-16, each with `--dry-run` refused identically and nothing written;
+  T-17 warns and writes no trailer.
+- **AC 5** met: T-10's four fixtures byte-identical; T-20 in `json` and `console`.
+- **AC 6** met: `l0-attribution-text` passes; `git diff main...HEAD -- AGENTS.md .wingfoil/directives/custom/git-conventions.md
+  docs/user-guide.md docs/cli-reference.md | grep "^+" | grep -ciE "\bsigned\b|human-approved"` → `0`; the
+  positive case: `git diff main...HEAD -- docs/cli-reference.md | grep -c "^+.*Co-Authored-By: <name>"` → `1`, so the
+  filter does see the added `--co-author` row, which says "from the `team.agents` entry `<name>`" per the
+  orchestrator's ruling 1. `git-conventions` 2.8, `X_cli-cmds` 2.2, one bump each on this
+  branch (`git diff main...HEAD -- <file> | grep -c "^+version: \|^+\*\*Version:"` → `1` each).
+- **AC 7** met (green run above; full suite with the one environmental failure explained).
+- **AC 8** checked at design and red.
+- **AC 9** met: `test/core/agent-context-call-sites.test.ts` passes; the resolution is inline in
+  `beginMemoryTransition`, no helper (orchestrator ruling 3).
+- Same class in touched files: every `writeAndCommit`/`commitEmpty` caller in the changed core files passes the
+  attribution or is gated (`grep -n "writeAndCommit(\|commitEmpty(" src/core/*.ts src/memory/entry.ts`); the two that
+  pass none by design are `src/agent/run-log.ts` and `src/storage/layout.ts` (`spec-018` §1.1, §2.1), untouched.
+- Storage still imports nothing from `src/core`: `grep -rn "from '../core" src/storage` → no output.
+- **T4**: `git log --first-parent --no-merges --format=%h 2fb81e1ea..HEAD -- <red's 7 files>` → empty (re-run after
+  the refactor commit).
+
+### Pending amendments (approver)
+
+- `bug-531-spec-006-section-7-places-resolveagentcontext-right-after-membership-while-every-gated-caller-resolves-it-just-before-the-authority-check`
+  (`in-progress`; its `### Retrospective` entry, left uncommitted) — `memory amend
+  bug-531-spec-006-section-7-places-resolveagentcontext-right-after-membership-while-every-gated-caller-resolves-it-just-before-the-authority-check
+  --reason "Record the retrospective entry of bug-531: fixed by task-334, which resolves the agent context right after
+  membership and pins the call sites with a source-reading test."`
+
+#### Candidate findings (not filed)
+
+- **`test/cli/workflow-unbound-none.integration.test.ts` fails in a worktree that holds a pending amendment.** It runs
+  `workflow next --format console` on this repository's working tree and refuses any `N diagnostic(s)` line, so an
+  uncommitted Memory file (`W_UNCOMMITTED_INPUTS`) — which the dev-loop's pending-amendment rule requires during the
+  gates — turns it red (evidence above). Expected: the test reads a clean checkout of `HEAD`, or ignores
+  `W_UNCOMMITTED_INPUTS`. Severity medium (every task with a pending amendment meets it).
+- **`docs/examples/05-ci-json-exit-codes/run.sh` fails in an agent's shell** once the verbs warn `W_NO_AGENT_ENTRY`
+  (evidence above). Expected: the example scrubs the markers, or parses stdout only. Severity low (the class of
+  `bug-529`).
+- The design's two: no check catches a doubled attribution pair; `spec-008` §6 lacks `E_NOT_A_MEMBER`.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -590,3 +689,12 @@ only through `npm run typecheck`. Refactor runs it there.
      printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
      Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
      here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+
+- The pending-amendment rule and a test that reads this repository's working tree collide: the full suite was red on
+  one task-358 case only because `bug-531`'s retrospective entry was uncommitted (`W_UNCOMMITTED_INPUTS`); proposal:
+  tests that run the CLI on this repository read a clean `HEAD` (refactor notes).
+- A required field added to a shared interface (`BegunMemoryTransition.agent`) reached a file outside the design's
+  list (`src/core/memory-supersede.ts`, TS2322); kept out of scope with an optional field and a narrowed return type.
+  Proposal: a design that adds a field to a shared type lists every construction site (`grep -rn "identity:
+  .*identity" src/core`).
+- One `tsc -p tsconfig.build.json` was run bare outside the slot at green (declared in the green notes).
