@@ -258,9 +258,13 @@ component (`dl-131`).
 #### 2.5 MCP registration
 
 - The server that WingFoil registers is **the build that is running `agent execute`**:
-  `{mcp_command}` is the Node executable, and `{mcp_args}` is `[<that build's dist/cli.js>, "mcp"]`
-  (`spec-014-mcp-server-entry-point`). The context served then comes from the same code that
-  validated it before launch, and the run record's `wingfoil` field names it (§4.2).
+  `{mcp_command}` is the Node executable, and `{mcp_args}` is
+  `[<that build's dist/cli.js>, "--project", <the project root>, "mcp"]` (`spec-014-mcp-server-entry-point`;
+  from `minor-v0.4`, `spec-008` §2 `--project`, `dl-198`), the root being the one `agent execute` resolved. The
+  context served then comes from the same code that validated it before launch, and the run record's `wingfoil`
+  field names it (§4.2). The server serves that root whatever working directory the agent CLI starts it in, and
+  the step 11 pre-flight starts it with the same arguments. The root is in the registration only, never in the
+  bootstrap (§2.4: no host data), nor in the run record.
 - A project's own registration (`.mcp.json`, `dl-026-repo-versioned-mcp-server-config`) is not read
   and not modified. An agent that also reads it may see two `wingfoil` servers. The adapter template
   names its server `wingfoil`, and whether the agent's own precedence rules pick the adapter's is
@@ -1410,3 +1414,10 @@ through an npm script, the copy the project itself installs (the task's review, 
 `claude-code` `verified_with` cell reads as the history of `task-236`'s pass on `2.1.296`: the manifest has one
 `verified_with`, the headless table's. Edited in place without a supersede or a state change (`dl-047`), pending the
 approver's `memory amend`.
+
+**Revision (2026-11-12, `task-350-add-the-global-project-dir-option-naming-the-project-root-documenting-why-it-is-not-inferred`)
+— §2.5: the registered server names its root.** `{mcp_args}` gains `--project <the project root>` before `mcp`
+(`spec-008` §2, `dl-198` (a)), so the server the agent CLI starts serves the root `agent execute` resolved, whatever
+its working directory; the step 11 pre-flight uses the same arguments. The bootstrap (§2.4) and the run record (§4.2)
+are unchanged. Edited in place without a supersede or a state change (`dl-047`), pending the approver's
+`memory amend` at `task-350`'s design gate.
