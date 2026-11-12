@@ -605,6 +605,50 @@ changes, so the test failed on any such tree. It is now `/^\d+\.\d+\.\d+\S* \([0
 - `npx jest test/lint --maxWorkers=2` → `Test Suites: 16 passed, 16 total`, `Tests: 165 passed, 165 total` (the rebuild
   restored the clean stamp); the invisible-character grep on the file → no match; `npx eslint` on it → clean.
 
+### fix round (developer, 2026-11-12)
+
+The review: APPROVE WITH FIXES, 0 blockers. Finding 1 (the version guard and the `-dirty` stamp) is the qa's red
+correction `464c6a9e8`; findings 2 and 3 and the retrospective correction are fixed here (W0-R10). Base:
+`git rev-list --count HEAD..main` → `0`, no merge. T4: `test/cli/project-option.integration.test.ts` is red's from
+`464c6a9e8` and is not touched.
+
+**Fix commit `28e1546ad`** (`git show --stat 28e1546ad` → three files):
+- Finding 2 — `src/storage/errors.ts`: the `E_NO_GIT_ROOT` comment names the test-only ceiling and says a named root
+  is never walked; the `E_NOT_AT_GIT_ROOT` comment adds the refusal of a `--project <dir>` without its own `.git`.
+  Comments only.
+- Finding 3 — `src/storage/git-root.ts`: `FindGitRootOptions.ceiling` and `findGitRoot`'s doc comment now say what
+  the code does — the starting directory is always examined, the walk stops before stepping into a ceiling that is a
+  proper ancestor, and a ceiling that is not one (the starting directory itself included) changes nothing, the walk
+  going on above it. No code change: `git diff 1258ef8bc 28e1546ad -- src/storage/git-root.ts | grep '^[-+] ' | grep -v
+  '^[-+] *\*\|^[-+] */\*\*'` → nothing.
+- The retrospective's second item overstated it: a new test file, `test/storage/git-root-filesystem-root.test.ts`,
+  reaches the filesystem-root `return null` hermetically by mocking `fs.existsSync` (`jest.mock('fs', …)`; the
+  suggested `jest.spyOn(fs, 'existsSync')` fails with `TypeError: Cannot redefine property: existsSync`, Node's `fs`
+  exports being non-configurable) and pins the four `.git` paths the walk checks from `/wf-no-such/a/b`.
+  `npx jest test/storage/git-root-filesystem-root.test.ts` → `Tests: 1 passed`.
+
+**Gates** (the `spec-011` amendment uncommitted in the tree):
+- `npx jest test/storage/git-root.test.ts test/storage/git-root-filesystem-root.test.ts
+  test/cli/project-option.integration.test.ts test/docs test/lint --maxWorkers=2` → `Test Suites: 53 passed`,
+  `Tests: 573 passed, 573 total` (on the dirty tree: red's corrected guard passes there).
+- `npx tsc --noEmit -p tsconfig.json` → no output; `npx eslint` on the new test and `src/storage` → clean.
+- Invisible characters: the grep over the four changed files → no hit (exit 1).
+- Full suite (a new test file): after `waitslot.sh`, `npm run -s build` → exit `0`; `npm test -- --maxWorkers=2` →
+  exit `1`, `Test Suites: 1 failed, 623 passed, 624 total`, `Tests: 1 failed, 11442 passed, 11443 total`. The failure is
+  `test/cli/workflow-unbound-none.integration.test.ts` "workflow next (console): … no "N diagnostic(s)" line",
+  which runs `workflow next` on this repository: it printed `1 diagnostic(s)`, and `node dist/cli.js workflow next
+  --format json` names it — `W_UNCOMMITTED_INPUTS` on `docs/04_memory/design/specs/spec-011-storage-layout.md`, the
+  pending amendment below. With the amendment copied aside and the file checked out (`git checkout -- <spec-011>`), the
+  suite alone → `Tests: 4 passed, 4 total`; with the amendment restored (`cmp` against the copy → identical) →
+  `1 failed, 3 passed`. So it is the uncommitted amendment the rules require in the tree, not this round's code; the
+  file stays uncommitted.
+- `npm run -s typecheck` (after `waitslot.sh`) → exit `0`.
+
+**Pending amendments (approver), fix round.**
+- `spec-011-storage-layout` (uncommitted in this worktree: § Git-root detection algorithm, the paragraph "The walk's
+  ceiling, for tests", and a Revision note at the end) —
+  `--reason "Correct what the walk's ceiling bounds: the walk stops before a ceiling that is a proper ancestor of the starting directory, and a ceiling equal to the starting directory changes nothing, as findGitRoot does and its tests pin (task-350 review, finding 3)."`
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -619,3 +663,10 @@ changes, so the test failed on any such tree. It is now `/^\d+\.\d+\.\d+\S* \([0
 - `findGitRoot`'s filesystem-root `return null` (`src/storage/git-root.ts:49`) is now reached by no test (coverage
   line 49): a hermetic test cannot reach it without depending on what lies above the temporary directory, the very
   dependence `bug-406` removed.
+- Correction of the item above (review): the branch can be reached hermetically, by mocking `fs.existsSync` —
+  `test/storage/git-root-filesystem-root.test.ts` does (`jest.mock('fs', …)`; `jest.spyOn(fs, 'existsSync')` itself
+  fails with `TypeError: Cannot redefine property: existsSync`).
+- `test/cli/workflow-unbound-none.integration.test.ts` (task-358) runs `workflow next` on this repository's working
+  tree, so any pending amendment left uncommitted, as the dev-loop requires, turns it red through
+  `W_UNCOMMITTED_INPUTS` (fix round above). Proposal: the suite reads a clean checkout of `HEAD`, or tolerates that one
+  warning.
