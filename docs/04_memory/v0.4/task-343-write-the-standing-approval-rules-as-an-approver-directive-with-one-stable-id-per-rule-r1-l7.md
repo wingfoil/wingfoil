@@ -309,6 +309,77 @@ SA-01 Command line of the design passes `COMMAND_ITEM`, and its reason gives `nu
 - `npx tsc --noEmit -p tsconfig.json` → exit `0`.
 - `npx jest test/lint --maxWorkers=2` → `Test Suites: 16 passed, 16 total`, `Tests: 165 passed, 165 total`.
 
+### green (developer, 2026-11-12)
+
+**Red's two readings, confirmed** (they are what the design meant): (1) the colon is inside the bold for
+`- **Status:**` and `- **Gate:**` and outside for `- **Evidence**` and `- **Command**`, as the design's table spells
+them; (2) the first Evidence item must be a command with its output and a later non-command item is allowed (SA-02's
+item 9, the reviewer's verdict); every item and the Command line is one physical line.
+
+**Commits** (on the task branch, each with the §7 trailers, the two tool commits amended into their
+`WingFoil-Version:` paragraph):
+- `4ac4ca0ee` `wf(directive): create standing-approvals` — `node $(pwd)/dist/cli.js directive create --name
+  standing-approvals` → exit `0`, the scaffold only (D2).
+- `ccdb2ee16` `wf(directive): assign standing-approvals to approver` — `node $(pwd)/dist/cli.js directive assign
+  --directive standing-approvals --role approver` → exit `0`, `assignments` `["code-review","standing-approvals"]`;
+  the verb raised `roles.yaml` `version:` 1.8 → 1.9 itself (`dl-174`).
+- `e47404f0b` `feat(directives): task-343 — standing-approvals directive: …` — the directive's body (§1–§5; SA-01
+  `adopted`, SA-02 `proposed`, as ruled at the design gate), the `roles.yaml` header paragraph and the version line's
+  comment (no second bump), AGENTS.md §3's directive list, §7's approver row and the sentence after the table, and
+  `.wingfoil/README.md`'s directive list (D6, D7).
+
+**Red → green:** `npx jest test/directives/standing-approvals.test.ts --maxWorkers=2` → `Tests: 14 passed, 14 total`
+(red's commit `d75eaf39a` failed all 14, `### red (qa)`).
+
+**`.wingfoil/` read on the pinned build after the change:** `npm run -s check:mcp` → exit `0` ("the build under
+development … every listed Resource read and Prompt get answered"); `npm run -s wingfoil -- directives list --role
+approver --format json` → ids `claim-evidence, code-review, doc-versioning, documentation, git-conventions,
+security-secrets, security, standing-approvals, wingfoil-cli`, `warnings` `[]`, nothing on stderr;
+`npm run -s check:role-directives` → `role-directives: 8 roles checked, 0 with warnings`.
+
+**Rules adopted (AC 5):** SA-01 (the e2e-smoke gate of a release) adopted; SA-02 (the review approve of a task) stays
+proposed until a command can check a review verdict (design gate `9c8e6f96c`, rulings `7648930ce`).
+
+### refactor (developer, 2026-11-12)
+
+- Before the merge, on `e47404f0b`, after the heavy-gate slot (`waitslot.sh`) and `npm run -s build` (exit `0`):
+  `npm test -- --maxWorkers=2` → `Test Suites: 616 passed, 616 total`, `Tests: 11270 passed, 11270 total`, exit `0`
+  (15:19–15:48 UTC); `npm run test:coverage -- --maxWorkers=2` → `All files | 99.23 | 97.14 | 98.66 | 99.64`, exit `0`.
+- `main` had moved (`git rev-list --count HEAD..main` → `43`): `git merge --no-edit main` → no conflict, commit
+  `7993bd027` (trailers amended in; `git rev-parse HEAD` after the amend). It brought `test/docs/agents-md.test.ts`
+  (task-358), whose §7 check (the role table equals `roles.yaml`) the D6 edit satisfies:
+  `npx jest test/docs/agents-md.test.ts test/directives test/lint/version-bump.test.ts
+  test/cli/check-role-directives.test.ts --maxWorkers=2` → `Test Suites: 18 passed`, `Tests: 288 passed`.
+- On the merged head `7993bd027`, after `waitslot.sh` and `npm run -s build` (exit `0`): `npm run test:coverage --
+  --maxWorkers=2` → `Test Suites: 622 passed, 622 total`, `Tests: 11418 passed, 11418 total`, `All files | 99.23 |
+  97.14 | 98.66 | 99.64` (statements, branches, functions, lines; all above 80 %), exit `0` (16:39–16:55 UTC). A
+  separate `npm test` was not re-run on the merged head: the coverage run is the same full suite.
+- `npm run -s lint` → exit `0`; `npm run -s docs:api` → exit `0`; `npm run -s typecheck` → exit `0` (both tsc
+  configs), on the merged head.
+- `docs.parity` (the ten suites `.wingfoil/workflows/bindings.yaml` names), on `e47404f0b`: `Test Suites: 10 passed`,
+  `Tests: 65 passed`; the full suite on the merged head runs them too.
+- `git rev-list --count HEAD..main` at the end → `0`.
+
+### self-review (developer, 2026-11-12)
+
+- AC 1–3: the 14 red cases pass (above); S1 and S2 are in the directive verbatim; both `--reason` templates pass
+  `reasonRefusalMessage(…, { approval: true })` (the AC 3 case).
+- AC 4: `check:role-directives` exit `0` (pinned by `test/cli/check-role-directives.test.ts`, green in the full suite);
+  the pinned listing shows `standing-approvals` for `approver` (above).
+- AC 5: SA-01 `adopted`, SA-02 `proposed` (the AC 5 case).
+- D7: the directive's intro says neither a coordinator nor any other agent approves under a rule, an agent may run
+  the evidence and queue the gate citing the rule id, and the approver decides — what `task-341`'s `coordinator`
+  directive must agree with.
+- T4: `git log --first-parent --no-merges --format=%h d75eaf39a..HEAD -- test/directives/standing-approvals.test.ts`
+  → empty.
+- Invisible characters: `grep -nP` over the four changed files (the range of the instructions) → no hit, exit `1`.
+- Same class: the version line of `roles.yaml` that `directive assign` left naming 1.8 (design's candidate finding) is
+  rewritten by hand in `e47404f0b`; the verb's behaviour stays a candidate finding, not fixed here.
+
+### Pending amendments (approver)
+
+None: the task edits no element past its first state (`git status --porcelain` → empty).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -316,3 +387,6 @@ SA-01 Command line of the design passes `COMMAND_ITEM`, and its reason gives `nu
      printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
      Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
      here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+
+- `directive assign` raised `roles.yaml` to 1.9 but kept the 1.8 history comment on the version line, rewritten by hand in `e47404f0b` (candidate finding of the design).
+- `main` moved 43 commits during refactor, bringing `test/docs/agents-md.test.ts`, which now checks the AGENTS.md §7 edit D6 asked for (merge `7993bd027`).
