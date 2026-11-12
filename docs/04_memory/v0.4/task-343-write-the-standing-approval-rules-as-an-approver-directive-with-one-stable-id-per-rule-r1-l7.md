@@ -256,6 +256,14 @@ only, which pins §5.1).
   old one (probe: `directive assign --directive standing-approvals --role approver --dry-run`, diff hunk `@@ -34,7
   +34,7 @@`). Expected: a documented rule for the comment (left, or marked). Severity: low.
 
+
+### design gate (approver, 2026-11-12)
+
+The approver's record `9c8e6f96c` (`git log -1 --format=%B 9c8e6f96c`) approves the design as recommended, D1 to D7.
+For AC 5, the statuses the rules carry:
+- **SA-01** (the `e2e-smoke` gate on its command-checked evidence): **adopted** (D4).
+- **SA-02** (the review approve): **proposed** (D5 (b)), kept until a command can check a review verdict.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
