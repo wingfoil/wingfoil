@@ -610,6 +610,49 @@ new suite `test/docs/agents-md.test.ts` (`git log --first-parent --no-merges d08
 None: the `spec-003` amendment was recorded at the design gate (`2528d9543`), and the four bugs already hold their
 `### Retrospective` entries.
 
+### fix round (developer, 2026-11-12)
+
+The review: APPROVE WITH FIXES, 0 blockers; the approver's rulings of 2026-11-12 on its two findings (W0-R10).
+
+**Merge.** `git merge --no-edit main` → `79f2d9021` (three bug files only), the two trailers added with `--amend`.
+
+**Finding 1 — six stale "unbound" comments** (`5db0640d5`). Each check is bound `manual: true` "until a command" since
+`be1aeaf3e`; the comments now say so, citing task-358: `release-planning.yaml` (define-scope's `change-proposals.swept`,
+"until dl-166 Q2 (ii) binds it", and reconcile-governance's `ready-decision-logs.covered`; already 2.6 on this branch, no
+second bump), `release-publishing.yaml` 2.1 → 2.2 (tag's `phase-branch-merged-to-integration-branch`, publish's
+staged-version check), `wave.yaml` 1.0 → 1.1 (`docs.examples.passing`), `vision-change.yaml` 1.1 → 1.2 (schedule's
+`change-proposal.target_release is not empty`); each bump a history clause naming task-358, appended so the existing
+pins (`publish-pipeline` 1.7, `define-scope-sweep` 1.1) still read. `grep -n -i unbound .wingfoil/workflows/custom/*.yaml |
+grep -v version:` → one line, correct: `dev-loop.yaml:95:# each naming the command owed, so no check here raises
+W_WORKFLOW_UNBOUND_TOKEN. The stop-the-line threshold is stated`.
+
+**Finding 2 — P02** (`135dfef67`). `scripts/release-health/measure.cjs` line 1011 grouped every governance `state` finding
+into P02 ("Legal transitions", REQ-STATE-01, floor 0); `plan-retrospective` reports under `state` and judges no
+transition. Chosen: filter it in `measure.cjs` (`P02_EXCLUDED_CHECKS = ['plan-retrospective']`, `groupFindings`'s third
+argument), not another rule: `body` would move the false breach to P01 (rules subject/bracket/body), `config` names the
+version-bump check, and a new rule would change `GovernanceRule` and the report's rule order for one check; the
+governance check keeps reporting what a plan's state at its finalize lacks. The docblock's definitions list says so.
+`docs/08_health/metrics.yaml`'s P02 definition ("Status changes … that are not a legal transition") already matches; no
+schema field names P02's sources. New `test/release-health/p02-plan-retrospective.test.ts`: a scratch repository with
+this repository's `memory.yaml`/`dna.yaml` and a plan from its template finalized with the comment only — the governance
+check reports `[{ sha: <finalize>, rule: 'state' }]` under `plan-retrospective`, and `processConformance`'s P02 has no
+failing item. Against `HEAD`'s `measure.cjs` (the fix reverted in the working tree, then restored) → `Tests: 1 failed, 1
+passed`; with it → `2 passed`. This closes `bug-466`'s class for `plan-retrospective`: its fix task need not take it.
+
+**Frontier** (pinned build, same fingerprint): 16 keys, diagnostics `{}`, `workflow list` diagnostics `[]`; the task's
+key is `dev-loop.review@…` and `late` is 207. The same fingerprint on a scratch clone at `79f2d9021` (before the fix
+commits) → identical (`diff` → no output), so the 204 → 207 comes from `main` and the run's own records, not from this
+round. `npm run check:mcp` → exit `0` (pinned 0.3.2 and the build under development, prompts 8, resources 4).
+
+**Gates** (heavy ones after `waitslot.sh`, exit `0` each), at `135dfef67`: targeted `npx jest test/release-health
+test/docs test/lint test/cli/check-governance*.test.ts <the workflow pins> --maxWorkers=2` → `Test Suites: 82 passed`,
+`Tests: 1259 passed`; `npm run -s build` → `0`; `npm test -- --maxWorkers=2` → exit `0`, `Test Suites: 603 passed, 603
+total`, `Tests: 11127 passed, 11127 total`; `npm run -s typecheck` → `0`; `npm run -s lint` → `0`; `npm run -s docs:api`
+→ `0`. T4: the three `git log --first-parent --no-merges` checks of the self-review → empty.
+
+**Merge order.** `vision-change.yaml` is also `task-359`'s file (backlog): whichever merges second takes the next
+version (here 1.2) and re-reads its comment on `change-proposal.target_release`.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
