@@ -7,7 +7,8 @@
  * `test/core/dev-loop-v2-0.test.ts`. Version pins are "≥" plus the comment naming the task (bug-314).
  *
  * - red-first: the token on the three phases, review's after `docs.parity`, on no other phase; `workflow show`
- *   reports it unbound and not evaluated; the version and its comment;
+ *   reports it not evaluated, bound `manual: true` since task-358 (`bug-469`, approver ruling D1 (B)); the version
+ *   and its comment;
  * - characterization: the phase names and their order, and no error at `HEAD`.
  */
 import { execFileSync } from 'node:child_process';
@@ -62,15 +63,16 @@ describe('task-349 AC 4 — dev-loop.yaml names the heavy-gate slot on the phase
     expect(declaring).toEqual(HEAVY_PHASES);
   });
 
-  it('red-first: workflow show dev-loop at HEAD lists gate.slot-free on the three phases, unbound and evaluated: false', () => {
+  it('red-first: workflow show dev-loop at HEAD lists gate.slot-free on the three phases, bound manual (task-358) and evaluated: false', () => {
     const shown = workflowShowAtHead(ROOT, 'dev-loop');
     if (!shown.ok) throw new Error(`workflow show dev-loop failed: ${shown.error.message}`);
     const views = shown.value.workflow.phases
       .flatMap((p) => p.checks.pre.filter((check) => tokenName(check.token) === TOKEN).map((check) => [p.name, check.binding.kind, check.evaluated]));
     expect(views).toEqual([
-      ['green', 'unbound', false],
-      ['refactor', 'unbound', false],
-      ['review', 'unbound', false],
+      // task-358 (bug-469, approver ruling D1 (B)): bound manual: true until a command decides it.
+      ['green', 'manual', false],
+      ['refactor', 'manual', false],
+      ['review', 'manual', false],
     ]);
   });
 

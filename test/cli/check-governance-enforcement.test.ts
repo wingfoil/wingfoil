@@ -334,6 +334,8 @@ describe('per-check introduction (dl-103 §1 starting mode, per check)', () => {
       'approval-agent-trailer': 'governance-check:approval-agent-trailer',
       'workflow-record-authority': 'governance-check:workflow-record-authority',
       'trailer-paragraph': 'governance-check:trailer-paragraph',
+      // task-358 (bug-320, approver ruling D2 (a) (i)): a wf(plan): finalize whose plan has no ### Retrospective entry.
+      'plan-retrospective': 'governance-check:plan-retrospective',
     });
   });
 

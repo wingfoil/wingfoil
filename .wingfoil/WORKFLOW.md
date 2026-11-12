@@ -63,7 +63,7 @@ flowchart TD
     VP["Vision Package\n`docs/01_vision/`"]
 
     M1["**Module 1** *(product-owner)*\n`user-story-mapping`\nbackbone → vertical-explosion → mvp-cut"]
-    SC1{{"Stop-Check\n100% MVP Canvas features covered\nedge-case stories present"}}
+    SC1{{"Stop-Check\n100% MVP Canvas features covered (manual until a command)\nedge-case stories present (manual on purpose)"}}
 
     M2["**Module 2** *(qa)*\n`specification-by-examples`\nisolate-mvp → write-scenarios (Gherkin)"]
     SC2{{"Stop-Check\nscenarios atomic + testable\nzero ambiguous adjectives/adverbs"}}
@@ -284,8 +284,9 @@ criterion against the bound directives and the ratified specs (`dl-102` §4); `r
 reject's items first on a re-review (`dl-098`) and runs the document-parity suites (`docs.parity`,
 `dl-116`); since v1.9 (`task-230`) `start` also waits while the release's tasks exceed `backlog_committed`
 by more than `memory.yaml` `release.growth_threshold` allows, until a wave's `re-plan` (`dl-100` §3, from
-v0.4); `done` checks that the task's `### Retrospective` subsection exists, and that of each bug
-it closes (`dl-115`). No check is evaluated before v1.0 (P4.12); until then the phase's role applies it.
+v0.4); `done` checks that the task's `### Retrospective` subsection holds an entry, and that of each bug
+it closes (`dl-115`; `scripts/check-retrospective.cjs`, since v2.5, `task-358`); since v2.5 `design` also reads the
+decision-logs the task's `ref:` names, as it reads the `depends_on` tasks (`bug-320`). No check is evaluated before v1.0 (P4.12); until then the phase's role applies it.
 
 ```mermaid
 flowchart TD
@@ -344,7 +345,7 @@ which `memory submit` and `memory amend` read and the check restates (bug-342).
 ```mermaid
 flowchart TD
     AB["**advance-pinned-build** *(tech-lead)*\nnpm.pin_advance(package: wingfoil-released)\nforward only, published builds only, per line\n✔ check:lockfile · check:mcp · wingfoil-cli re-check\n→ AGENTS.md §1 status"]
-    CF["**collect-feedback** *(facilitator)*\nagent.execute: read every active repository service's feedback_inbox\nat the consumer's main, the commit read recorded (dl-163 S3d)\n✔ feedback-notes.recorded (manual)\nrows ruled by the approver before define-scope\n`docs/09_retrospectives/rl-{release-line}/rel-{version}-planning-feedback-triage.md`"]
+    CF["**collect-feedback** *(facilitator)*\nagent.execute: read every active repository service's feedback_inbox\nat the consumer's main, the commit read recorded (dl-163 S3d)\n✔ feedback-notes.recorded (manual until a command)\nrows ruled by the approver before define-scope\n`docs/09_retrospectives/rl-{release-line}/rel-{version}-planning-feedback-triage.md`"]
     DS["**define-scope** *(product-owner)*\nmemory.submit\nrelease: draft → planning\n✔ P4.12: [title, kind, version, pillar, features, requirements, release-line]\n(kind exempt for minor-v0.1 … minor-v1.0)\n20 % reserved for fixes and debt (dl-100 §4 (b))\n≥ 10 % of the task budget for low-severity bugs, oldest first (dl-191 (a))\nsweeps the scheduled change-proposals of the release\ninto its features: (dl-132 element 4; ✔ change-proposals.swept)\npast draft: memory amend by the approver\n(no kind: too, bug-342)"]
     TB["**triage-bugs** *(tech-lead)*\nmemory.approve: bug open → triaged\n🔑 Approval gate — *approver*\n↩ REJECT → closed"]
     AS["**assign-bugs** *(tech-lead)*\nselection: triaged bugs with an empty release\nelement.set_release: this release or a later one (wf(bug): assign)\nor memory reject by the approver: triaged → closed\n(dl-191 (a))"]
@@ -390,7 +391,7 @@ land at release-line boundaries). It declares no `element`, so either caller may
 ```mermaid
 flowchart TD
     subgraph AD["agent-docs"]
-        AGD["**align-agent-docs** *(architect)*\nAGENTS.md (CLAUDE.md: its @AGENTS.md pointer) · .wingfoil/README.md · .wingfoil/WORKFLOW.md\n✔ AGENTS.md status, element/state tables, workflow list and role bindings\nmatch CORE_MODULES, memory.yaml, workflows.yaml, roles.yaml\n✔ workflow-md.complete: WORKFLOW.md names every workflow and phase\n✔ CLAUDE.md is a pointer that imports AGENTS.md (dl-137)\n🔑 Approval gate — *approver*"]
+        AGD["**align-agent-docs** *(architect)*\nAGENTS.md (CLAUDE.md: its @AGENTS.md pointer) · .wingfoil/README.md · .wingfoil/WORKFLOW.md\n✔ agents-md.current: AGENTS.md status, element/state tables, workflow list and role bindings\nmatch CORE_MODULES, memory.yaml, workflows.yaml, roles.yaml; CLAUDE.md imports AGENTS.md (dl-137)\n(test/docs/agents-md.test.ts)\n✔ workflow-md.complete: WORKFLOW.md names every workflow and phase\n🔑 Approval gate — *approver*"]
     end
 ```
 
@@ -412,9 +413,9 @@ on every push in `ci.yml`'s `e2e-smoke` job, against the packed tarball.
 
 ```mermaid
 flowchart TD
-    FI["**fresh-init** *(qa)*\nwingfoil init on a scratch project\n✔ exit 0 · scaffold round-trips its own loaders"]
-    DC["**drive-cli** *(qa)*\none task each: add → submit → approve · reject · deprecate · history\nrefusals at exit 1 and 2 · dna set/add · paths · directives/workflow list\nagent run: agent execute through the fake adapter custom/fake → agent show · agent list --past\nJourney 4: docs/examples/06-workflow-approval/run.sh — workflow start → next → memory add --workflow → submit → status → approve → finalize → end\n✔ each step's declared exit (spec-005) · every write re-loaded after the last writer\n✔ tree clean after every step"]
-    MR["**mcp-registration** *(qa)*\nnpm run check:mcp\n✔ exit 0 · registered server version == package.json pin\n✔ advertised channels == EXPECTED_CHANNELS\n✔ every Resource reads, every Prompt gets (pin + dev build; KNOWN_READ_FAILURES)"]
+    FI["**fresh-init** *(qa)*\nwingfoil init on a scratch project\n✔ e2e-smoke.scenario: exit 0 · scaffold round-trips its own loaders"]
+    DC["**drive-cli** *(qa)*\none task each: add → submit → approve · reject · deprecate · history\nrefusals at exit 1 and 2 · dna set/add · paths · directives/workflow list\nagent run: agent execute through the fake adapter custom/fake → agent show · agent list --past\nJourney 4: docs/examples/06-workflow-approval/run.sh — workflow start → next → memory add --workflow → submit → status → approve → finalize → end\n✔ e2e-smoke.scenario: each step's declared exit (spec-005) · every write re-loaded after the last writer\n· tree clean after every step (scripts/e2e-smoke.cjs --candidate)"]
+    MR["**mcp-registration** *(qa)*\nnpm run check:mcp\n✔ mcp.registered: registered server version == package.json pin\n✔ advertised channels == EXPECTED_CHANNELS\n✔ every Resource reads, every Prompt gets (pin + dev build; KNOWN_READ_FAILURES)"]
     GA["**gate** *(qa)*\n✔ e2e-smoke-passed — hard-reject (dl-023)\n`docs/07_gates/rl-{release-line}/rel-{version}-e2e-smoke.md`\n🔑 Approval gate — *approver*"]
 
     FI --> DC --> MR --> GA
@@ -623,10 +624,14 @@ an action to a command (`release-health.measure` / `.compare`, `node scripts/rel
 dl-172 (a)). Token arguments are `key: value` pairs, substituted as whole argv elements, never
 through a shell. The prose checks a person confirms on purpose — a reading or a judgement no program can
 decide (`spec-review.passed`, the specification-phase quality criteria, the reviewer's re-checks, the
-retrospective's dispositions, …) — are bound `manual: true` by their prose (dl-186 Q6). The prose checks a
-command could decide but none does yet (`frontmatter.required: […]`, the Memory state queries, …) stay
-unbound: `workflow list` reports each as a `W_WORKFLOW_UNBOUND_TOKEN` warning, which fails closed once the
-engine runs checks (v1.0).
+retrospective's dispositions, …) — are bound `manual: true` by their prose (dl-186 Q6), in the file's
+"manual on purpose" group. The checks a command could decide but none does yet (`frontmatter.required: […]`,
+the Memory state queries, the `tests.*` checks of `dev-loop`, …) are bound `manual: true` too, in a group of
+their own, "manual until a command", each entry naming the command it owes, until a `run` binding replaces it
+(`task-358`, `bug-469`). `dev-loop`'s `retrospective.present` runs `scripts/check-retrospective.cjs` on
+`{element.path}`, the element's file (spec-003 Layer 3). No token of this repository is unbound, so
+`workflow list` reports no `W_WORKFLOW_UNBOUND_TOKEN` (`test/core/workflow-bindings-complete.test.ts`); in another
+project such a warning fails closed once the engine runs checks (v1.0).
 
 ---
 

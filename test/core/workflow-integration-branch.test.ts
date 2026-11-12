@@ -322,12 +322,11 @@ describe('task-306 AC 1 — release-publishing ends with the merge-forward phase
     expect(phase.produces).toBeUndefined();
   });
 
-  it('the registry loads at HEAD with no error, and its only warnings are the 68 unbound checks (task-349: dev-loop 2.3 adds three)', () => {
+  it('the registry loads at HEAD with no error and no warning (68 unbound checks until task-358 bound them, bug-469)', () => {
     const { diagnostics } = loadWorkflowRegistryAtHead(ROOT);
     const codes = diagnostics.map((d) => d.code);
     expect(codes.filter((code) => code.startsWith('E_'))).toEqual([]);
-    expect(new Set(codes)).toEqual(new Set(['W_WORKFLOW_UNBOUND_TOKEN']));
-    expect(codes.length).toBe(68);
+    expect(codes).toEqual([]);
   });
 
   it("the merge-forward merge is a bound manual step", () => {
