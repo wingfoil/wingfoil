@@ -197,8 +197,10 @@ function taskDoc(id: string, status: string, extra = '', body = 'Revision.'): st
   return `---\nid: "${id}"\ntype: task\ntitle: "Task ${id}"\nstatus: ${status}\nref: "dl-117"\n${extra}---\n\n${body}\n`;
 }
 
+// task-358 (bug-320, approver ruling D2 (a) (i), (b)): a plan carries a ### Retrospective entry, so the fixture's
+// wf(plan): finalize stays clean under the governance check plan-retrospective.
 function planDoc(status: string): string {
-  return `---\nid: "demo-plan"\ntype: plan\ntitle: "Demo"\nstatus: ${status}\nworkflow: "demo"\nphase: "build"\nelement: "minor-v0.2"\nrelease: "v0.2"\n---\n\nSteps.\n`;
+  return `---\nid: "demo-plan"\ntype: plan\ntitle: "Demo"\nstatus: ${status}\nworkflow: "demo"\nphase: "build"\nelement: "minor-v0.2"\nrelease: "v0.2"\n---\n\nSteps.\n\n## Execution Notes\n\n### Retrospective\n\n- None.\n`;
 }
 
 function runRecord(phase: string, role: string, session: string): string {
