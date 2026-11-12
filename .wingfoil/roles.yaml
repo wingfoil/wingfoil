@@ -34,7 +34,7 @@
 # 2026-10-13 D-A (a)): `npm run check:role-directives` fails on any `directives list --role` warning, and a role with
 # no assignments of its own warns (dl-029). code-review already applies to the approver gate; inception, which the
 # facilitator drives, produces the feature ids the traceability chain starts from.
-version: 1.8                      # 1.8 approver: [code-review], facilitator: [traceability] (task-215)
+version: 1.9                      # 1.8 approver: [code-review], facilitator: [traceability] (task-215)
 
 assignments:
   developer:
@@ -66,6 +66,7 @@ assignments:
     - traceability
   approver:
     - code-review
+    - standing-approvals
 
 # Global directives apply to every role.
 global:
