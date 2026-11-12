@@ -15,7 +15,9 @@
  * (`dl-064` B.1). Its gated form — the one every approver-gated operation (`spec-018` §0) calls — computes the
  * markers only: it reads no `team.agents` entry and neither refuses nor warns, so an agent on a gated operation is
  * told {@link E_AGENT_CONTEXT} and nothing else (§2.6). The ungated form, which fills {@link AgentContext.attribution}
- * for the trailers of `spec-018` §2, is `task-334`'s; until then it returns the markers with no attribution.
+ * for the trailers of `spec-018` §2 (task-334), selects the signing `team.agents` entry and the model, refuses an
+ * unknown or address-less entry and warns when it guesses or finds none (§2.3–§2.5); {@link resolveOperationAgentContext}
+ * resolves it once per invocation.
  *
  * {@link refuseAgentContext} is the first step of the shared approver check (`requireApproverAuthority`,
  * `./approval-authority.ts`, §3.1): with any marker present the operation is refused, `VALIDATION`, exit `1`, with
@@ -131,8 +133,8 @@ const VENDOR_ADAPTERS: readonly { readonly marker: AgentMarkerId; readonly adapt
 export const E_AGENT_CONTEXT = 'E_AGENT_CONTEXT';
 
 /**
- * The `team.agents` entry and the model the trailers of `spec-018` §2 name. Declared here so the attribution half
- * (`task-334`) fills it without changing {@link AgentContext}'s shape; this task never produces one.
+ * The `team.agents` entry and the model the trailers of `spec-018` §2 name (task-334); structurally a storage
+ * `CommitAttribution`, handed to the commit primitive as `CommitOptions.attribution`.
  */
 export interface Attribution {
   readonly name: string;
@@ -142,7 +144,7 @@ export interface Attribution {
   readonly note?: string;
 }
 
-/** What {@link resolveAgentContext} found: the markers present, in §1 order, and the attribution (`null` here). */
+/** What {@link resolveAgentContext} found: the markers present, in §1 order, and the attribution (`null` when gated or none). */
 export interface AgentContext {
   readonly markers: readonly AgentMarker[];
   readonly attribution: Attribution | null;
@@ -188,9 +190,12 @@ function isPresent(marker: AgentMarker, invocation: AgentInvocation): boolean {
 
 /**
  * The agent context of the invocation `request` describes (`spec-018` §2.6), read once per operation and handed on.
- * `markers` are the {@link AGENT_MARKERS} present, in §1 order. `attribution` is `null`: on a gated operation it
- * always is — `team.agents` is not read, no refusal fires and no warning is printed —, and the ungated form that fills
- * it is `task-334`'s. A `CoreResult` so that form can return its `spec-018` §2.5 refusals through the same shape.
+ * `markers` are the {@link AGENT_MARKERS} present, in §1 order. On a gated operation `attribution` is always `null` —
+ * `team.agents` is not read, no refusal fires and no warning is printed. The ungated form, in an agent context, reads
+ * `team.agents` at `HEAD` and applies `spec-018` §2.3's precedence: `--co-author`, a non-blank `WINGFOIL_AGENT`, the
+ * entry whose `adapter` is the vendor marker's built-in adapter, else the first entry with the body `note` and
+ * `W_AGENT_ENTRY_GUESSED`; with no entry, `null` and `W_NO_AGENT_ENTRY`; §2.5's refusals as `VALIDATION`. The warnings
+ * ride `CoreResult.warnings`. Without a marker, `null` and no read.
  *
  * @param root - The project root; read by the ungated form (`team.agents` at `HEAD`), never by the gated one.
  */

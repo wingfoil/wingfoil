@@ -116,8 +116,10 @@ function gitReadOptions(options: CommitOptions, accepted: readonly number[]): Gi
 /**
  * `message` with the build signature appended as the final trailer paragraph (task-192, `dl-111`): a blank
  * line, then `WingFoil-Version: <semver> (<sha>)` ({@link readBuildStamp}). The caller's
- * {@link CommitOptions.trailers}, when given, open that paragraph, the signature staying its last line
- * (task-226's phase record, task-227's step linkage).
+ * {@link CommitOptions.trailers}, when given, open that paragraph (task-226's phase record, task-227's step
+ * linkage); {@link CommitOptions.attribution}, when given, closes it with `Co-Authored-By:` and `AI-Model:` after the
+ * signature, and puts its `note` first in the body (`spec-018` §2.2, §2.3 rule 4; task-334). Without an attribution
+ * the signature is the paragraph's last line, as before.
  *
  * A final paragraph of trailers, never a line merged into the caller's body: git reads trailers from the
  * message's final paragraph only, and so does `parseReasonBlock` (`src/memory/commit-message.ts`),
