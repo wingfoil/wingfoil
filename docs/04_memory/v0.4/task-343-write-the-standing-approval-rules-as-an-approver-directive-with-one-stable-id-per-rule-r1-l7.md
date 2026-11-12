@@ -401,6 +401,33 @@ allowed). Red correction commit: `89fa3b0b0442bf9f566ecb93d6d3f2efe760f7b0`. The
 - `npx tsc --noEmit -p tsconfig.json` → exit `0`.
 - `npx jest test/lint --maxWorkers=2` → `Test Suites: 16 passed, 16 total`, `Tests: 165 passed, 165 total`.
 
+### fix round (developer, 2026-11-12)
+
+The review (approve with fixes, 0 blockers) and the approver's ruling of 2026-11-12, applied in `061e6e996`
+(`fix(directives): task-343 — SA-01 checks the committed e2e-smoke report …`); red's correction `89fa3b0b0` untouched (T4).
+
+- **Finding 1 — SA-01 tied to its candidate.** Item 1 no longer re-runs the smoke, which rewrites the committed report
+  and contradicted the clean-tree item. The evidence now checks the committed report: `git log -1 --format=%P --
+  <report>` → `<candidate>`, `grep -cx -- '- Expected commit: .<candidate>.' <report>` → `1` (a `.` stands for each
+  backtick, which an inline code item cannot hold), the PASS line, and `git diff --name-only <candidate>..HEAD -- .
+  ':!docs/04_memory/' ':!docs/05_plans/' ':!docs/07_gates/'` → empty. Run on v0.3.2's gate: `git log -1 --format=%P --
+  docs/07_gates/rl-v1/rel-v0.3.2-e2e-smoke.md` → `c79a7612f925dddcf5c8c2d3b810831fa9d9b6fb`; the `grep -cx` with that
+  sha → `1`; the diff `c79a7612f..23ddb204d` (the gate's approval) → no path, exit `0`. A **Who and when** line says
+  the qa phase commits the report on the candidate and the approver runs every item after that commit, then the
+  Command. The reason template names the report as committed on that candidate.
+- **The `warn` exclusion** is dropped from "Outside the rule": `formatReport` (`scripts/e2e-smoke.cjs:1008`) writes
+  only `ok` and `FAIL` rows.
+- **Finding 3 (W0-R10, same class):** both rules' governance item runs `--base <the integration branch's remote>`
+  (`origin/main` for a minor, `origin/release/X.Y` for a patch, `git-conventions` §9), replacing `--base origin/main`
+  in SA-01 and SA-02.
+- **Version: no bump.** The directive is not on the integration branch (`git show main:.wingfoil/directives/custom/standing-approvals.md`
+  → exit `128`), so 1.0 is its first version and a review fix on the same branch does not bump it (`doc-versioning`,
+  "review fixes included"). The 1.0 history clause names the review and the ruling.
+- **Checks:** `npx jest test/directives test/docs/agents-md.test.ts test/lint --maxWorkers=2` → `Test Suites: 32
+  passed`, `Tests: 416 passed`; `reasonRefusalMessage(<SA-01's new template>, { approval: true })` → `null`;
+  `npm run -s check:mcp` → exit `0`; `npm run -s wingfoil -- directives list --role approver --format json` → nine ids
+  with `standing-approvals`, `warnings` `[]`, empty stderr; `grep -nP` for invisible characters → no hit.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
