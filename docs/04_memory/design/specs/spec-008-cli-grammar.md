@@ -1506,6 +1506,7 @@ pending the approver's `memory amend`.
 permission fragment the launch would append for the run's role (`spec-016` §3.3, `dl-223` Action 3). No flag, exit code
 or other plan changes. Edited in place without a supersede or a state change (`dl-047`), pending the approver's
 `memory amend`.
+
 **Revision (2026-11-12, `task-334-write-the-agent-attribution-trailers-from-the-mutating-verbs-and-restate-agents.md-5.1-for-l0-spec-018-2`)
 — §2 and §6: the agent markers and the attribution trailers.** `spec-018` Consequences asks §2 for the `--co-author`
 and `--ai-model` rows (every `mutates: true` command but `agent execute`, like `--dry-run`), the two keys reserved on
