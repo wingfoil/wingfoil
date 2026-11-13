@@ -52,3 +52,225 @@ the residue of a corrected practice, dated before the correction, is accepted an
 ## Execution Notes
 
 <!-- Filled by the dev-loop. -->
+
+### design (architect, 2026-11-13)
+
+Read: AGENTS.md §1–§8; `dev-loop-rel-v0.4-plan` (W0-R1…W0-R12, from `design/dev_loop_v0.4`); `dev-loop.yaml`; `bug-475`,
+`bug-193`, `bug-535`; `dl-190` (`ready`, item 1); `spec-018` (`approved`) §2.2, §4, §6 T-11; `spec-002` (`approved`);
+`git-conventions` 2.8 §7, §9; the Execution Notes of `task-333` (its bullet for this task) and `task-334` (D9–D13,
+candidate findings), per `dl-015`. PATH guard: the task's PATH shim resolves `wingfoil`; `wingfoil --version` and
+`node dist/cli.js --version` both print `0.3.2 (69b7d0e26ca303939fea1441448ff0752a90e398)`.
+
+**Location corrections.** `isValidAttribution` is defined in `src/memory/audit.ts:88` (`grep -rn "function
+isValidAttribution" src`); `src/core/git-identity.ts:93-95` only names it in a comment. It ends in
+`isAttributableIdentity` → `attributionEmailIssue` → `hasReservedDomain` (`src/validation/identity.ts:44-50`), so the
+domain rule changes there, and it reaches `AgentEntry` (`src/dna/schema.ts:200-207`, `ATTRIBUTION_EMAIL_MESSAGES`
+`:146-155`) and release-health G07 (`scripts/release-health/measure.cjs:637`). Its tests:
+`test/validation/identity.test.ts`, `test/memory/audit.test.ts`, `test/dna/agent-identity-placeholder.test.ts`,
+`test/dna/agent-identity.test.ts`, `test/memory/git-log-framing.test.ts`, `test/memory/versioning-audit-trail.test.ts`
+(`grep -rln "isValidAttribution\|hasReservedDomain\|attributionEmailIssue" test`).
+
+#### Design
+
+- **New later check `co-author-identity`** in `scripts/check-governance.cjs`: marker
+  `governance-check:co-author-identity` in `CHECKS` (after `plan-retrospective`), `GovernanceCheck` in
+  `scripts/check-governance.d.cts`, rule `body`, a header bullet like the other later checks. Placed beside
+  `approval-agent-trailer`. Over every commit of the range, merges included (D2):
+  - a commit with any line starting `Approver:` (any case, `APPROVAL_LINE_RE`, subject included) is skipped:
+    `approval-agent-trailer` already reports every `Co-Authored-By:` on it, so nothing is reported twice;
+  - it reads the lines of the body's **final paragraph** (after its last blank line, the definition
+    `trailerKeysOutsideFinalParagraph` uses) that start `co-authored-by:` (any case) (D3);
+  - it parses each as `^co-authored-by:[ \t]*(.*?)[ \t]*<([^<>\s]+)>[ \t]*$`; a line that does not parse is a
+    finding;
+  - it matches against the `.wingfoil/dna.yaml` committed at the commit's **first parent** (D1), read through the
+    existing `readBlobIds` batch plus the memoized `configReader(…, DnaYaml)`: an entry of `team.agents` or
+    `team.members` whose `name` is equal (case-sensitive) and whose `email` is equal ignoring case (D5). An entry
+    without an `email` matches nothing. No dna.yaml at the parent, or one that does not validate, is a finding
+    (fail-closed, as `authorityFindings` does) (D6).
+  - Messages (qa pins them exactly; `<v>` is the value as written after the key):
+    - `the co-author <name> <<email>> is neither a team.agents nor a team.members entry of the .wingfoil/dna.yaml committed before this commit (name and email both; git-conventions §7, bug-475)`
+    - `a Co-Authored-By: line of the final paragraph is not \`Name <email>\` (git-conventions §7): <v>`
+    - `no .wingfoil/dna.yaml is committed before this commit, so the co-author <name> <<email>> cannot be matched against team.agents or team.members`
+    - `the .wingfoil/dna.yaml committed before this commit does not validate (<error>), so the co-author <name> <<email>> cannot be matched`
+  - **Starting mode** (AC 3, `git-conventions` §9, `dl-190` item 1) uses the existing mechanism unchanged:
+    `isGated(sha, 'co-author-identity')` with the introduction found by `markerIntroduction` (`git log --first-parent
+    -S governance-check:co-author-identity -- scripts/check-governance.cjs`). On `main` that is the `--no-ff` merge of
+    this task; every commit before it, the v0.3.2 ones included, is history: reported, exit 0.
+  - **Cost.** One `cat-file --batch-check` over the judged commits and one parse per distinct dna blob. Measured with a
+    scratch reimplementation of the rule alone over this repository's whole history (`HEAD` at `cbac260fe`):
+    11199 commits, 7250 judged, 21 distinct dna blobs, 1143 ms. The existing state checks cost far more.
+- **RFC 2606 second-level domains (AC 2, D7).** `src/validation/identity.ts`: keep `RFC2606_RESERVED_TLDS` and add
+  `RFC2606_RESERVED_SECOND_LEVEL_DOMAINS = ['example.com', 'example.net', 'example.org']`, in that file only.
+  `hasReservedDomain` (same name and signature, doc updated) is also true when the lowercased domain, with trailing
+  dots removed, equals one of the three or ends with `.` + one of them. So `a@mail.example.org` and
+  `a@test.example.com` are reserved, while `a@notexample.com`, `a@examples.org` and `a@example.com.au` are not. The
+  issue stays `reserved-domain`. `ATTRIBUTION_EMAIL_MESSAGES['reserved-domain']` becomes `an agent email may not be on
+  a reserved top-level domain (.test, .example, .invalid, .localhost) nor on example.com, example.net, example.org or a
+  subdomain of one: RFC 2606 names no mailbox there, and the attribution audit rejects it (bug-261, bug-193)`, which
+  keeps the `reserved top-level domain` substring that `agent-identity-placeholder.test.ts:52` pins. Doc comments
+  change in `src/memory/audit.ts:74-78` and `src/dna/schema.ts:176-181`. Member emails stay unaffected: no such rule
+  applies to `team.members`.
+- **AC 4** needs no code. The verbs write `Co-Authored-By: Claude <noreply@anthropic.com>`, which is this repository's
+  `team.agents` entry (`grep -n -A3 "^    - name: Claude" .wingfoil/dna.yaml`). A real verb-written commit of this
+  repository in `task-334`'s format is `740f184bf` (`wf(bug): submit bug-538-…`). Its final paragraph:
+  `WingFoil-Version: 0.3.2 (dcfe8ab073b941afdcd3336afaebda54b1db1761)` / `Co-Authored-By: Claude
+  <noreply@anthropic.com>` / `AI-Model: claude-opus-5-5` (`git log -1 --format=%B 740f184bf | tail -3`; one pair,
+  `grep -c '^Co-Authored-By:'` → 1).
+
+#### Measures asked by the orchestrator (dna.yaml at each commit, residue)
+
+- **History of the attribution values** (`git log --no-merges --format='%(trailers:key=Co-Authored-By,valueonly,separator=%x0a)' HEAD | sort | uniq -c`):
+  4626 × `Claude <noreply@anthropic.com>`, 1748 × `Claude Opus 5.5 …`, 777 × `Claude Opus 5 …`, 60 × `Claude Opus 4.8 (1M context) …`, 4 × `Claude Sonnet 5 …`, 1 × `Claude Sonnet 4.6 …`.
+- **The scratch rule alone over the whole history** (final paragraph, merges included) reports 2666 lines, all of
+  them history once the marker lands. They split into: 998 `no-dna` (before `task-111` moved `dna.yaml` to
+  `.wingfoil/` at `16fd0f021`, 2026-09-29: "the commit before `team.agents` existed" is the same case); 6 `dna-invalid`;
+  and 1662 `unknown`, all `Claude Opus 5.5 <noreply@anthropic.com>`. It reports no `Claude <noreply@anthropic.com>` line.
+  Since `task-256` declared the entry's email (`9f8691cbd`), it reports 120 lines, all `Claude Opus 5.5`
+  (`node rule-only.cjs <worktree> 9f8691cbd..HEAD final`). Since the v0.3.2 follow-ups (`1db90b57f..HEAD`), all 887
+  values are `Claude <noreply@anthropic.com>`.
+- **The v0.3.2 breach** (`954138f7c^..1db90b57f`): 125 × `Claude …` and 21 × `Claude Opus 5.5 …`, as `bug-475` counts.
+  The rule reports exactly those 21, and **6 of them are merges** (`954138f7c`, `173933214`, `6de2e13c0`, `e2170a174`,
+  `14768b505` and the merge forward `60fc3eeaf`; `LIST=1 node rule-only.cjs <worktree> 954138f7c^..1db90b57f final`, column `M`): with merges skipped it would report 15 (D2).
+- **Starting mode on that window, before green.** The script prototyped in a scratch copy, with the new check's
+  introduction simulated at the tip, was run on a scratch clone detached at `1db90b57f` with `--base 954138f7c^`. It
+  printed `history: 21 findings on 21 commits (body 21)`, every one `the co-author Claude Opus 5.5
+  <noreply@anthropic.com> is neither a team.agents nor a team.members entry …`, and no gated co-author finding. The
+  unmodified script on the same clone and range prints the same `gated: 4 findings on 4 commits (state 4)` and
+  `history: 0 findings`. Those 4 are `plan-retrospective` findings on the v0.3.2 plan finalizes, gated only because at
+  that old `HEAD` the marker of `plan-retrospective` does not exist yet and falls back to the script's introduction. That
+  is an artefact of running at an old commit, not this rule.
+- **The same command on this branch today**: `node scripts/check-governance.cjs --base origin/main` → `3 wf() commits
+  … gated: 0 findings on 0 commits`, `history: 0 findings`, exit 0. The prototype gives the same: the range holds only
+  this branch's three commits, each `Claude <noreply@anthropic.com>`. AC 3's evidence (owed at refactor, real script)
+  is that command plus `node scripts/check-governance.cjs --base 954138f7c^`: on the task branch the introduction is the
+  green commit, so the 21 come out as history and exit 0 on this check.
+- **A commit that edits `dna.yaml` itself.** It is matched against its parent's file (D1). A `wingfoil dna update
+  team.agents.Claude --entry-email <new>` run by an agent writes the trailer from `HEAD`, which is the old email
+  (`spec-018` §2.3). The parent reading accepts it, while an "at this commit" reading would report it.
+
+#### Per-AC classification and what red (qa) must pin
+
+| AC | Class | What qa pins (observable · interface · fixture · file) |
+|----|-------|----------------------------------------------------------|
+| 1 | red-first | New `test/cli/check-governance-co-author-identity.test.ts`, in the fixture style of `test/cli/check-governance-approval-agent-trailer.test.ts` (`makeTempGitRepo`, a `DNA` constant, an author per commit, no `scripts/check-governance.cjs` in the fixture, so every commit is gated). DNA: member `Ada Approver <approver@example.invalid>` (approver, developer), member `Dev Eloper <developer@example.invalid>`, agents `Claude` / `noreply@anthropic.com` and `Other` / `0+other-agent@users.noreply.github.com` (D8). Interface: `checkGovernance(root)` from `../../scripts/check-governance.cjs`, findings filtered by `(finding.check as string | undefined) === 'co-author-identity'`. Cases, each one non-approval commit with the line in its final paragraph: `Claude Opus 5.5 <noreply@anthropic.com>` on a `wf(task): start`, on a `docs:` commit and on a `--no-ff` merge commit → one finding each, `rule: 'body'`, `gated: true`, exact message 1 (D2); `Claude <noreply@anthropic.com>` and `Claude <NoReply@Anthropic.com>` → none (D5); `claude <noreply@anthropic.com>` → one (the name is case-sensitive); `Other <0+other-agent@users.noreply.github.com>` → none; member `Dev Eloper <developer@example.invalid>` → none (AC 1: a human co-author passes); `Mallory <noreply@anthropic.com>` → one; a value without `<…>` → message 2; a `Co-Authored-By: Nobody <n@x.org>` line in a non-final paragraph → none (D3); a commit that adds agent `Bot` / `0+bot@users.noreply.github.com` to the fixture dna.yaml and is co-authored by Bot → one, and the next commit co-authored by Bot → none (D1); a co-authored commit after one that deletes `.wingfoil/dna.yaml` → message 3; after one that makes it invalid (`team: 1`) → message 4 (its `(<error>)` part matched with `toMatch`); an `approve` with `Approver:` and `Co-Authored-By: Mallory <m@x.org>` → no `co-author-identity` finding, and its `approval-agent-trailer` finding is still there. Expected red: jest only (assertions; no new export, so no TS2305); `npx tsc --noEmit -p tsconfig.json` stays clean with the casts. |
+| 2 | red-first | `test/validation/identity.test.ts`: `hasReservedDomain` → `true` for `a@example.com`, `a@example.net`, `a@example.org`, `a@EXAMPLE.COM`, `a@mail.example.org`, `a@test.example.com`, `a@example.com.`; `false` for `noreply@anthropic.com`, `a@notexample.com`, `a@examples.org`, `a@example.com.au`, `a@localhost.dev`. The line-14 case (`'a@test.example.com'`, `'a@example.org'` asserted not reserved) is replaced. `attributionEmailIssue('bot@example.org')` → `'reserved-domain'`. `test/memory/audit.test.ts`: `isValidAttribution('Dev', 'dev@example.com' / 'dev@mail.example.net' / 'dev@EXAMPLE.ORG')` → `false`; the `dev@test.example.com` "still accepts" row (`:85`) moves to the rejected list, and `dev@notexample.com` is added to the accepted ones. `test/dna/agent-identity-placeholder.test.ts`: `DnaYaml.safeParse` of an agent with `bot@example.org` and with `agent@test.example.com` fails, one issue at `team.agents.0.email` whose message is the new text exactly; the "keeps accepting" list (`:74`) keeps only `noreply@anthropic.com` and adds `agent@notexample.com`; the agreement table (`:88`) gets `agent@notexample.com` in place of `agent@test.example.com`, plus a row `bot@example.org`; the holder test (`:128`) also requires that `'example.com', 'example.net', 'example.org'` appear in `src/validation/identity.ts` only; a `team.members` entry `ada@example.com` still parses. `test/dna/agent-identity.test.ts:49-51, :138-143`: `agent@example.org` now refused, and the accepted cases move to `0+agent@users.noreply.github.com`. Expected red: jest only. |
+| 3 | red-first | In the AC 1 file: a commit adding `scripts/check-governance.cjs` as `// placeholder\n`, a `Claude Opus 5.5` commit, a commit rewriting the file to `// placeholder\n// governance-check:co-author-identity\n` (written literally), and a second `Claude Opus 5.5` commit → the first finding `gated: false`, the second `gated: true`; `report.checkIntroductions['co-author-identity']` is the marker commit; with only the first case, `exitCodeFor(report)` → `0`. `test/cli/check-governance-enforcement.test.ts:329-339`: the `CHECKS` pin gains `'co-author-identity': 'governance-check:co-author-identity'`, after `plan-retrospective`. The repository evidence (both commands of the measures above, real script) is the developer's at refactor, pasted in the notes. |
+| 4 | characterization | In the AC 1 file: a `wf(task): submit t-1` commit whose final paragraph is the three lines of `740f184bf` copied verbatim (above), no `co-author-identity` finding. And a real run: `buildL0Repo()` (`test/core/helpers/l0-fixture.ts`), `node dist/cli.js memory submit task-…` under `withoutAgentMarkers(process.env)` plus `WINGFOIL_AGENT=Claude` (T-11, `spec-018` §6), then `checkGovernance(root)`: `git log -1 --format='%(trailers:key=Co-Authored-By,valueonly)'` → `Claude <noreply@anthropic.com>`, and no `co-author-identity` finding. It passes before green; its positive companion is AC 1's `Claude Opus 5.5` case. |
+
+The fixture domain moves that are only a consequence of AC 2 (D8) are green's, in files red does not touch:
+`test/core/helpers/l0-fixture.ts:68`, `test/core/helpers/attribution-fixture.ts:45,52`,
+`test/agent/helpers/agent-execute-fixture.ts:42,47`, inline YAML in `test/cli/team-membership.integration.test.ts:93`,
+`test/cli/dry-run.integration.test.ts:95` and `test/cli/agent-execute-launch.integration.test.ts:330`, the assertions
+naming those emails (`test/cli/agent-attribution.integration.test.ts:182-183`, `test/core/agent-attribution.test.ts:25,77`,
+`test/cli/agent-execute-launch.integration.test.ts:147,337`, `test/cli/agent-execute.integration.test.ts:251`,
+`test/agent/execute.test.ts`, `test/agent/launch.test.ts` where they reach `DnaYaml`), the e2e smoke's agent
+(`scripts/e2e-smoke.cjs:289`, `test/cli/e2e-smoke.test.ts:448`), and the "attributed" author fixtures
+(`test/memory/audit.test.ts:128`, `test/memory/git-log-framing.test.ts:134,145`,
+`test/memory/versioning-audit-trail.test.ts:48,74`) unless red already took them. The 41 files that use the three
+helpers: `grep -rln "agent-execute-fixture\|l0-fixture\|attribution-fixture" test`. Member and author emails on
+`example.com` that never reach the audit or `AgentEntry` (`test/core/approval-authority.test.ts`, `git-identity*`,
+`docs/examples/*`, `src/storage/templates.ts`, `src/core/index.ts:2785`) stay.
+
+#### Files to touch and `version:` bumps
+
+- `scripts/check-governance.cjs`, `scripts/check-governance.d.cts`; `scripts/release-health/measure.cjs` (D4: a
+  `P01_EXCLUDED_CHECKS = ['co-author-identity']` beside `P02_EXCLUDED_CHECKS`, with a pin in
+  `test/release-health/measure.test.ts`); `src/validation/identity.ts`, `src/dna/schema.ts`, `src/memory/audit.ts`
+  (comment); `scripts/e2e-smoke.cjs`.
+- `.wingfoil/directives/custom/git-conventions.md`: `version: "2.8"` → `"2.9"` (on `main` it is 2.8, `git show
+  main:.wingfoil/directives/custom/git-conventions.md | grep ^version`). §7 extends the refused-domain sentence while
+  keeping `an empty or blank \`name\`, and an \`email\`\n  on an RFC 2606 reserved top-level domain` (pinned by
+  `test/directives/git-conventions.test.ts:92`). §9 adds the rule: a `Co-Authored-By:` in a non-approval commit's final
+  paragraph names a `team.agents` or `team.members` entry of the `dna.yaml` committed before it, name and email, merges
+  included. Then `npm run check:mcp`, and `npm run -s wingfoil -- directives list` on the pinned build, recorded. No
+  workflow, `memory.yaml` or `roles.yaml` changes, so no phase or step-list pin moves (`git diff main --stat -- .wingfoil/workflows*` empty).
+- `docs/user-guide.md` §4.2 (`:193`) and `docs/cli-reference.md:388`: the second-level domains (no `version:` in either).
+- Tests: the new file; the pins of the table above; the fixture moves.
+- `spec-002` (Memory, `approved`): pending amendment, prepared below. The name-resolvability allowlist is not touched:
+  the amendment names only existing code (`hasReservedDomain`, `attributionEmailIssue`, `isValidAttribution`, `AgentEntry`).
+- Not touched: `.wingfoil/dna.yaml` (D10).
+
+#### Tests run at design (this worktree, targeted, no slot; the `spec-002` amendment was pending, which touches none of them)
+
+- `npx jest test/cli/check-governance test/validation/identity.test.ts test/memory/audit.test.ts test/dna/agent-identity test/memory/git-log-framing.test.ts test/memory/versioning-audit-trail.test.ts test/directives/git-conventions.test.ts test/docs/l0-attribution-text.test.ts test/release-health/measure.test.ts test/release-health/p02-plan-retrospective.test.ts --maxWorkers=2`
+  → `Test Suites: 19 passed, 19 total`, `Tests: 445 passed, 445 total`.
+- `npx jest test/core/agent-attribution.test.ts test/cli/agent-attribution.integration.test.ts test/cli/team-membership.integration.test.ts test/cli/dry-run.integration.test.ts test/cli/agent-execute-launch.integration.test.ts test/cli/e2e-smoke.test.ts test/storage/commit.test.ts test/agent/execute.test.ts test/agent/launch.test.ts --maxWorkers=2`
+  → `Test Suites: 9 passed, 9 total`, `Tests: 275 passed, 275 total`.
+- Tests whose fixtures carry a `Co-Authored-By:` their fixture dna does not declare (green re-runs them):
+  `check-governance-approval-agent-trailer`, `-enforcement`, `-agent-trailer-article`, `-plan-retrospective`,
+  `-workflow-records` (all filter by check or rule as far as read), and `test/release-health/measure.test.ts`, whose P01
+  counts `body` findings (`Someone <someone@wingfoil.dev>`, `Bob <bob@wingfoil.dev>`, `:258`, `:268`), hence D4.
+
+#### Decisions for the approver
+
+- **D1 — whose `dna.yaml` a co-author is matched against.** AC 1 says "at that commit". *Recommend:* its **first
+  parent** (the file committed before it), as `authority` does. A commit cannot legitimise its own co-author, and the
+  verbs sign from `HEAD` before they write (`spec-018` §2.3), so an agent's `dna update team.agents.<name>
+  --entry-email` is accepted. The other reading would report it. The ruling reads AC 1 as "committed before it".
+- **D2 — merges are judged.** The other rules skip merges. *Recommend:* judge them. 6 of the 21 breach commits are
+  merges, and merges written in an agent's session carry the pair.
+- **D3 — which lines.** *Recommend:* the final paragraph only, where git's trailer reader and the deduction look.
+  `89432fb24`'s body has wrapped prose lines starting `Approver:` and `Co-Authored-By:`, which an anywhere-reading
+  would treat as trailers. `approval-agent-trailer` keeps its anywhere-reading (`spec-018` §4).
+- **D4 — release-health P01.** Under rule `body`, the new findings would enter P01 ("well-formed `wf()` commits") on
+  every commit, the class of `bug-466`, and G08 already measures attribution. *Recommend:* (a) exclude
+  `co-author-identity` from P01 in `measure.cjs`, one constant like `P02_EXCLUDED_CHECKS`. Alternative (b): a new
+  rule `attribution` in `RULES`, which P01 does not read, at the cost of the `GovernanceRule` type, the sort order and
+  `countByRule`.
+- **D5 — matching.** *Recommend:* the name case-sensitive (as `--co-author`, `spec-018` §2.3), the email
+  case-insensitive (as `resolveMemberRoles` and G08), both required, so an entry without an email matches nothing.
+- **D6 — no or invalid `dna.yaml` at the parent.** *Recommend:* a finding (fail-closed, as `authorityFindings`). In
+  this repository it is only history (998 + 6 lines).
+- **D7 — the RFC 2606 rule.** *Recommend:* the three domains and every subdomain, case-insensitive, trailing dot
+  ignored, label-bounded (`notexample.com` passes). The error text is above. `noreply@anthropic.com` and every
+  `team.members` email still pass. The `spec-002` amendment is recorded at this gate.
+- **D8 — what replaces `example.com` in agent and attributed-author fixtures.** After AC 2 no RFC 2606 name is
+  attributable. *Recommend:* GitHub's id-qualified noreply form `0+<login>@users.noreply.github.com`. It is the form
+  `git-conventions` §7 documents, `AgentEntry` accepts it, no mailbox exists there and no person is named. Cost: the
+  fixture moves listed above.
+- **D9 — `bug-535` (two attribution pairs).** It is not in `bug:`. *Recommend:* absorb it under the same marker: in the
+  same loop, a final paragraph with two `Co-Authored-By:` lines of the same value, or more than one `AI-Model:` line,
+  is a finding. Cost: about 15 lines and 3 cases, `bug-535` assigned to v0.4 and synced into this task's `bug:` by the
+  orchestrator. History has no such paragraph (the scratch scan's only multiple, `89432fb24`, holds one in prose).
+  Otherwise nothing changes here.
+- **D10 — `.wingfoil/dna.yaml`'s comment (`:140`, "an RFC 2606 reserved TLD … is refused").** It stays true, though
+  incomplete. *Recommend:* leave it, avoiding a `version:` bump of a config file.
+
+#### Candidate findings (not filed)
+
+- **A wrapped prose line can start with a reserved trailer key.** `89432fb24` (task-344, history) has body lines
+  starting `Approver:` and `Co-Authored-By:` that are prose. `approval-agent-trailer` reads any line, so such a
+  non-approval commit after its introduction would be reported as an approval carrying an agent trailer, and fail a
+  push (`git log -1 --format=%B 89432fb24 | grep -n "^Approver:\|^Co-Authored-By:"` → lines 6, 7, 8, 13). Expected: a
+  documented authoring rule, or the rule reading the `Approver:` line as `parseApprovalMetadata` does. Severity low.
+
+#### Risks
+
+- **Every agent session's trailer becomes a push gate after the merge.** A launcher or prompt that still proposes
+  `Claude Opus …` is refused by CI and the hook. The kit and phase prompts already say `Claude <noreply@anthropic.com>`.
+- **The e2e smoke** (`scripts/e2e-smoke.cjs:289`) adds an agent on `example.com`: it fails at `wave-checks` unless
+  green moves it (listed).
+- **`release/0.3`** does not receive the rule. Commits written there after the merge and merged forward into `main`
+  are gated, as for every later check; no patch is planned.
+- **Other open `w0` tasks.** `task-353` (agent execute launch cwd) and `task-338` (bootstrap, PATH shim) edit
+  `src/agent/*` and use `agent-execute-fixture.ts`, whose emails this task moves: a textual conflict at most. Their
+  `dna` fixtures added later must not use `example.com` agents. `task-338`'s bootstrap line must keep naming the
+  `team.agents` value. `task-336/337/340/341/342/359`: no file overlap seen
+  (`git diff main --stat` of their branches not read). `bug-534`: the full suite will show
+  `workflow-unbound-none.integration.test.ts` failing alone while the `spec-002` amendment is pending.
+- `bug-193` has no `### Retrospective` subsection: the developer adds it at close, as a pending amendment.
+
+### Pending amendments (approver)
+
+- `spec-002-dna-yaml-schema` (`approved`; the schema comment at the `AgentEntry` email and a new Revision note, left
+  uncommitted) — `memory amend spec-002-dna-yaml-schema --reason "Record that AgentEntry also refuses an agent email on
+  the RFC 2606 reserved second-level domains example.com, example.net and example.org and their subdomains, through the
+  shared rule the attribution audit applies (bug-193, task-352)."`
+
+### Retrospective
+
+<!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
+     reconstructed afterwards. One line per item: what happened, the evidence (a command and what it
+     printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
+     Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
+     here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
