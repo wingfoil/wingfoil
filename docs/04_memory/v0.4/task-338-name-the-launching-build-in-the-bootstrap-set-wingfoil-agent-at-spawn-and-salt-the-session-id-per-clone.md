@@ -73,3 +73,175 @@ asking the agent to type it into an amend.
 ## Execution Notes
 
 <!-- Filled by the dev-loop. -->
+
+### design (architect, 2026-11-13)
+
+**Inputs read.** Base `main` `69b7d0e26` + `wf(task): start` `1f11cc45f` and the bug syncs `ab41716af` (`bug-369`),
+`6f946e646` (`bug-370`) (`git log --oneline -5`). PATH guard: `command -v wingfoil` → the task's PATH shim;
+`wingfoil --version` and `node dist/cli.js --version` → `0.3.2 (69b7d0e26ca303939fea1441448ff0752a90e398)`. Contracts
+(`grep -m1 '^status:'`): `spec-016`, `spec-011`, `spec-018` `approved`; `dl-180`, `dl-168`, `dl-212` `ready`.
+Ratifications (`git log -1 --format=%B`): `74d9c65d2` dl-180 invocation (c) + version (b) ("the bootstrap names the
+exact invocation of the build under test and a shim puts that build first on the agent's PATH"); `841047dac` dl-168 Q1
+(b) ("a per-clone random salt kept under the git directory with the run id … existing records are left as history").
+`depends_on` notes (dl-015): `task-333` — import `AGENT_MARKERS` (`src/core/agent-context.ts`), never spell the marker
+name; `agent execute` takes the membership step and, `agentAttribution: false` (`src/core/index.ts:2705`), no
+`--co-author`. `task-334` — D2: the commit primitive takes an explicit `attribution`, `recordRun`
+(`src/agent/run-log.ts:718`, `writeAndCommit(root, …, message)`) passes none, so the record commit carries no agent
+trailer already; D10: the bootstrap's `{attribution_line}` (`src/agent/execute.ts:172`) still says to amend, owned
+here. Plan rulings W0-R1 … W0-R12 read (`git show design/dev_loop_v0.4:…/dev-loop-rel-v0.4-plan.md`, lines 70–210).
+No `.wingfoil/` file changes (`git diff --stat` lists none), so `npm run check:mcp` and the pinned workflow reads are
+not required; no workflow phase list or count changes.
+
+**What exists today** (code build of this worktree):
+- Spawn env: `spawnOptions` (`src/agent/launch.ts:286`) passes `env: process.env` to both kinds; the lookups
+  (`runLookup`, `:367-369`), the pre-flight (`mcpPreflight`, execute.ts) and the conflict probe (`runConflictProbe` →
+  `runLookup`) get the same environment. Nothing sets `WINGFOIL_AGENT` (`grep -rn "WINGFOIL_AGENT\b" src` → only
+  `src/core/agent-context.ts`).
+- Session id: `assignedSessionId(root, runId)` (`launch.ts:93`) = v5 UUID of `<root>\n<run id>`, called at `:699`
+  with the project root.
+- `agent execute --co-author Claude --element task:x` (scratch dir outside any repository, `node dist/cli.js`) → exit
+  `2`, stderr `error: unknown option '--co-author'` (bytes checked with `od -c`); `--ai-model m` → exit `2`,
+  `error: unknown option '--ai-model'`; `--format json` → `{"error":"unknown option '--co-author'"}`.
+- The fake agent (`test/fixtures/agents/fake-agent.cjs`) records the NAMES of its environment variables on every
+  invocation (launch and post-run lookups), never their values.
+- Committed records before the change: `docs/06_runs/task-236-ship-verify-hand-builtin-claude-code-adapter-point.jsonl`
+  (sessions `f4458e8b-b6a3-5453-8221-90a33bb558bb`, `b0fc53be-b276-5117-95e6-2e983cf4e5e9`, root-hashed).
+
+**Design.**
+1. *Shim and environment (AC 1, 2; D1, D5).* `withRunFiles` (execute.ts:294) also writes, when given the launching
+   build, `bin/wingfoil` in the run's temporary directory: POSIX `#!/bin/sh` + `exec '<node>' '<dist/cli.js>' "$@"`
+   (single quotes, `'` written `'\''`), mode `0700`; on win32 `bin/wingfoil.cmd` (`@"<node>" "<cli.js>" %*`, CRLF).
+   It is removed with the directory on every exit path, as the other run files. Intended interface (green may refine
+   names, not observables): `runningBuildCli(): McpServerCommand` (`process.execPath` + `join(__dirname,'..','cli.js')`),
+   `runningBuildMcpServer(root)` built on it; pure `cliShim(cli, platform = process.platform): { name, text }`;
+   `AgentExecuteHost.cli?: McpServerCommand` (in-process tests); `PreparedLaunch`/`LaunchInput` gain an optional
+   `cliShim?: string` (absolute shim path; optional so the hand-built `LaunchInput`s of `test/agent/helpers/launch-input.ts`
+   still type-check); pure `agentEnvironment(env, cliShim | undefined, agentName): Record<string, string>` in
+   launch.ts: a copy of `env` with the shim's directory first on `PATH` (the key found case-insensitively on win32;
+   `PATH` = the directory alone when absent), `WINGFOIL_CLI` = the shim path, and the `WINGFOIL_AGENT` marker (its id
+   read from `AGENT_MARKERS`, never spelled) = the agent's name, overwriting any value. Only `spawnOptions` uses it;
+   `runLookup`, the pre-flight and the probe keep `process.env`; `process.env` is never mutated.
+2. *Bootstrap (AC 1, 3).* `BootstrapInput` gains `build: string` (`readBuildStamp()`, the record's `wingfoil` value);
+   a `{cli_line}` after the context instruction, before the handoff line:
+   `Run WingFoil commands as "wingfoil <command>": the build that launched you is first on your PATH, and "wingfoil --version" prints "{build}"; if it prints anything else, run "$WINGFOIL_CLI" in place of "wingfoil".`
+   `attributionLine` / `ATTRIBUTION_LINE_PREFIX` become `spec-018` Consequences' text:
+   `Commits wingfoil writes for you already end with "Co-Authored-By: {agent_name} <{agent_email}>" and an "AI-Model:" trailer: pass --ai-model <your model identifier> to each wingfoil command that writes a commit, or that trailer records "AI-Model: not-reported"; end a commit you write yourself with git commit with the trailer paragraph "Co-Authored-By: {agent_name} <{agent_email}>" and "AI-Model: <your model identifier>"; never run memory approve, memory reject or memory amend, which refuse in your session (git-conventions §7).`
+   (prefix = `Commits wingfoil writes for you already end with`). No host path enters the bootstrap.
+3. *Salt (AC 4; D2).* New `src/agent/session-salt.ts`: `SESSION_SALT_FILE = 'wingfoil/session-salt'` (relative to
+   `git rev-parse --path-format=absolute --git-common-dir`), `sessionSalt(root): CoreResult<string>`: read, or create
+   32 `randomBytes` as 64 lowercase hex + LF — temp file in the same directory (`0600`, directory `0700`), `linkSync`
+   to the final name, `EEXIST` → read the winner, temp unlinked in `finally`. Malformed → `VALIDATION` and failure to
+   create/read → `IO`, messages verbatim in amended `spec-016` §2.6, no absolute path. Called in `launchAgent` only
+   under `session.id: assign`, before the banner (launch.ts:699): a refusal launches and records nothing. Dry run and
+   non-`assign` adapters create no salt. `assignedSessionId(salt, runId)` keeps its computation (v5 of
+   `<first arg>\n<run id>`); only its first argument changes meaning, so its existing unit tests stay valid.
+4. *Record (AC 2, 5, 7).* `recordRun` unchanged (no attribution). Run-record format (§4.2) unchanged (D3).
+
+**AC classification and what qa pins.** Red runs `npx tsc --noEmit -p tsconfig.json` and
+`npx jest test/lint --maxWorkers=2` before its commit. Expected reds of new exports/fields: `tsc` TS2305 (`cliShim`,
+`agentEnvironment`, `runningBuildCli`, `sessionSalt`, `SESSION_SALT_FILE`, `CLI_VARIABLE`) and TS2353 (`build` in a
+`BootstrapInput` literal); jest under `isolatedModules`: runtime `TypeError … is not a function` / module not found.
+Fixture extension (qa, red commit): the fake gains `WINGFOIL_FAKE_AGENT_CLI=1` — on a launch, run `wingfoil --version`
+(`execFileSync('wingfoil', …)`, looked up on `PATH`, no shell) and `"$WINGFOIL_CLI" --version`, recording
+`cli: { path: <stdout trimmed>, variable: <stdout trimmed> }` and `launcher: <value of WINGFOIL_AGENT or null>` — the
+one value it records, opt-in, documented in its header as an entry name (not a secret, REQ-SEC-08), with a case in
+`test/agent/fake-agent.test.ts`. Expected strings come from real output: `distBuildStamp()`
+(`test/cli/helpers/dist-stamp.ts`) and `node dist/cli.js --version`. Integration fixtures: `seed()` of
+`test/agent/helpers/agent-execute-fixture.ts`, `runEnv`/`execute` pattern of `test/cli/agent-execute-launch.integration.test.ts`.
+
+| AC | Class | What qa pins | Where |
+|---|---|---|---|
+| 1 | red-first | unit: `renderBootstrap({…, build: '9.9.9 (0123abc)'})` = the 6-line template exactly (cli line verbatim above); `cliShim` POSIX/win32 texts and names, a quote in the path escaped; `agentEnvironment` puts the directory first on `PATH` (and alone when `PATH` is absent), sets `WINGFOIL_CLI`, leaves the input object unchanged. integration (dist): with a decoy directory first on agent execute's `PATH` whose `wingfoil` prints `decoy 0.0.0`, the fake records `cli.path` and `cli.variable` = `distBuildStamp()`; the dry-run plan's `bootstrap` contains `"wingfoil --version" prints "<stamp>"`; `leftInTmp` = `[]` (shim removed) | `test/agent/execute.test.ts` (update), new `test/agent/launch-env.test.ts`, new `test/cli/agent-execute-cli-shim.integration.test.ts` |
+| 2 | mixed: `WINGFOIL_AGENT` at spawn red-first; absences, record trailer, `--co-author` characterization (D4) | in-process: `launchAgent` with an injected `host.spawn` recorder → `options.env.WINGFOIL_AGENT === 'Hand Agent'`; a usage lookup script printing `{"model": process.env.WINGFOIL_AGENT ?? "absent"}` → record `model: "absent"`; `process.env.WINGFOIL_AGENT` undefined afterwards. integration, run twice — no marker and `CLAUDE_CODE_CHILD_SESSION=1` (env built from `withoutAgentMarkers`): fake launch line `launcher: 'Fake Agent'`, `env` names of the `--version`/`--lookup` lines lack `WINGFOIL_AGENT`; `git log -1 --format='%s%n%(trailers:key=Co-Authored-By)%(trailers:key=AI-Model)'` → `agent: record <run-id>` and nothing else; `agent execute --element … --co-author Claude` → exit 2, stderr exactly `error: unknown option '--co-author'\n`, no fake line, no commit. structural: `\bWINGFOIL_AGENT\b` appears in `src/` only in `src/core/agent-context.ts` (comment lines included) | `test/agent/launch-env.test.ts`, the shim integration file (or `test/cli/agent-execute-attribution.integration.test.ts`) |
+| 3 | red-first | the attribution line literal above (unit, replacing `test/agent/launch.test.ts:140-165` and the bootstrap pins); `renderBootstrap(…)` does not contain `<the model identifier you run as>` nor `--amend`; integration `bootstrapOf` helpers updated. BDD rewording: orchestrator commit (D7) | `test/agent/launch.test.ts`, `test/agent/execute.test.ts`, `test/cli/agent-execute.integration.test.ts:245`, `test/cli/agent-execute-launch.integration.test.ts:147` |
+| 4 | red-first | integration: two adhoc runs → `<git-common-dir>/wingfoil/session-salt` matches `/^[0-9a-f]{64}\n$/`, mode `0600`, dir `0700`, unchanged (content, inode) by run 2; each record's `session` = independent v5 of `<salt without LF>\n<run id>` and ≠ the root-based value (replaces `sessionOf` at `agent-execute-launch.integration.test.ts:144`); a malformed salt (`xyz\n`) → exit 1, the §2.6 `VALIDATION` message verbatim, no fake line, no record; `--dry-run` and a non-`assign` adapter leave no salt. unit (dist module): `sessionSalt` from a linked worktree (`git worktree add`) returns the main checkout's salt and writes nothing under `.git/worktrees/`; eight concurrent child processes calling it on a fresh repo all return one salt | integration file above; new `test/agent/session-salt.test.ts` |
+| 5 | characterization | the two committed task-236 lines copied verbatim into a fixture log: `parseRunLog` ok, sessions equal the literals above; after a new run appended to that log the old lines are byte-identical at `HEAD` | `test/agent/session-salt.test.ts` or `test/agent/run-log.test.ts` |
+| 6 | characterization | not a test: the notes record the approver's `memory amend` commits of `spec-016` and `spec-011` (`memory history`) before red | — |
+| 7 | characterization if D3 (a), else red-first | a fake run whose lookup reports no model → record `model: "not-reported"`, and `spec-016` §2.6 (amended) defines that value as "the agent's `AI-Model:` trailers are its own claim" (a docs-text case on the spec sentence) | `test/cli/agent-execute-cli-shim.integration.test.ts` |
+
+**Tests that pin behaviour this changes** (`grep -rln "the model identifier you run as\|add them with git commit --amend" test`;
+`grep -rln "wingfoil:spec-016:session\|assignedSessionId" test`): `test/agent/execute.test.ts`,
+`test/agent/launch.test.ts`, `test/cli/agent-execute.integration.test.ts`,
+`test/cli/agent-execute-launch.integration.test.ts` (bootstrap and session id); `test/docs/l0-attribution-text.test.ts`
+pins `AGENTS.md`, not the bootstrap — unchanged. `test/agent/fake-agent.test.ts:253` builds a bootstrap input of its
+own — unaffected.
+
+**Existing tests run** (this worktree, clean tree, before any amendment):
+`npx jest --maxWorkers=2 test/agent/execute.test.ts test/agent/launch.test.ts test/agent/launch-headless.test.ts
+test/agent/fake-agent.test.ts test/cli/agent-execute.integration.test.ts test/cli/agent-execute-launch.integration.test.ts
+test/cli/agent-execute-headless.integration.test.ts test/cli/registrar-co-author.test.ts test/docs/name-resolvability.test.ts
+test/docs/cli-reference.test.ts test/docs/l0-attribution-text.test.ts` → 11 suites, 206 passed; `npx jest --maxWorkers=2
+test/agent/launch-process.test.ts test/agent/launch-timeout.test.ts test/agent/launch-permissions.test.ts
+test/agent/launch-session-output.test.ts test/agent/launch-group-errors.test.ts test/agent/execute-config-arg.test.ts
+test/agent/execute-mcp-conflict.test.ts test/agent/run-log.test.ts` → 8 suites, 128 passed. With the pending
+amendments and the allowlist entries in the tree: `npx jest --maxWorkers=2 test/docs/name-resolvability.test.ts
+test/docs/l0-traceability.test.ts test/docs/l0-attribution-text.test.ts` → 3 suites, 43 passed (before the allowlist
+entries name-resolvability failed with exactly the three new names `wingfoil.cmd`, `$WINGFOIL_CLI`, `WINGFOIL_CLI` of
+spec-016).
+
+**Files to touch.** green: `src/agent/execute.ts` (`attributionLine`, `ATTRIBUTION_LINE_PREFIX`, `BootstrapInput`,
+`renderBootstrap`, `runningBuildMcpServer`/`runningBuildCli`, `cliShim`, `withRunFiles`, `AgentExecuteHost`,
+`PreparedLaunch`, `runPipeline` step 10, module doc's "nothing is written" sentence), `src/agent/launch.ts`
+(`agentEnvironment`, `spawnOptions`, `LaunchInput`, `launchAgent` salt call at :699, `assignedSessionId` doc),
+new `src/agent/session-salt.ts`, `src/agent/index.ts` (exports), `docs/cli-reference.md` (agent execute paragraph
+:1892-1898), `docs/user-guide.md` (:685, one sentence), `docs/agents.md` (:70-72, D8). red (qa): the fake fixture and
+its test, the tests above. Pending (approver): `spec-016`, `spec-011`. Orchestrator commit (D7): the P5.3.1 feature,
+the allowlist. **Version bumps: none** — none of these files carries a `version:` field (`grep -n '^version:'` on the
+specs, the docs and the task file → nothing), and no `.wingfoil/` file changes.
+
+### Pending amendments (approver)
+
+Prepared in this worktree, uncommitted (`git diff --stat` → spec-016 115 lines, spec-011 13 lines):
+- `spec-016-agent-execution` — `memory amend spec-016-agent-execution --reason "Amend § 2.4 bootstrap and § 2.6 session id for task-338: the bootstrap names wingfoil, the launching build's signature and \$WINGFOIL_CLI, the agent is spawned with a wingfoil shim of that build first on PATH and WINGFOIL_AGENT set, the attribution line takes spec-018's text, and the assign session id hashes a per-clone salt in the common git directory instead of the repository path (dl-180 (c), dl-168 Q1 (b), bug-369, bug-370); step 14, section 3.6 and the determinism bullets follow."`
+- `spec-011-storage-layout` — `memory amend spec-011-storage-layout --reason "Amend the .gitignore policy for task-338: per-clone state that must never be committed lives in the common git directory, outside the working tree, and the session salt of spec-016 section 2.6 is its one file (dl-168 Q1 (b))."`
+- Not Memory, left uncommitted for ONE orchestrator commit after the amends and before red (D7):
+  `docs/02_requirements/02_bdd/features/p5-interaction/P5.3.1-agent-execute.feature` (header note, the `--agent`
+  scenario's attribution step reworded, four scenarios added) and `test/docs/name-resolvability.allowlist.ts` (three
+  `PLANNED` entries, `plannedBy: ['task-338']`). While these are pending, `test/cli/workflow-unbound-none.integration.test.ts`
+  fails alone with one `W_UNCOMMITTED_INPUTS` diagnostic (`bug-534`).
+
+**Decisions for the approver.**
+- **D1 — the invocation the bootstrap names.** (a) `wingfoil` + the build signature; (b) (a) plus `"$WINGFOIL_CLI"`,
+  the shim's absolute path in the spawn environment, as the PATH-independent form; (c) `node <absolute dist/cli.js>`
+  as dl-180's example (host data in the bootstrap and the dry-run plan; breaks §2.4 "no host data" and the
+  identical-bootstrap-across-clones bullet). *Recommend (b)*: deterministic bytes, and it survives a shell profile
+  that puts a version manager's `bin` (with a global `wingfoil`) before the shim — the case of `bug-369`. The
+  prepared amendment is written for (b).
+- **D2 — the salt.** Common git directory (shared by linked worktrees) vs per worktree; atomic `link` creation; a
+  malformed salt refused (not silently replaced). *Recommend:* common dir, link, refuse.
+- **D3 — AC 7.** (a) no new field: the amended §2.6 defines `model: "not-reported"` as "WingFoil read no model, so the
+  agent's `AI-Model:` trailers are its own claim" — in v0.4 the trailer is always the agent's claim (spec-018 §2.4),
+  so a new field would only repeat `model == "not-reported"`; AC 7 becomes characterization (never a fabricated red);
+  (b) a new §4.2 key (outside the named amendment, makes AC 5 red-first for a legacy-tolerant reader, collides with
+  `task-337`'s §4.2 format revision); (c) a body line in the record commit (§4.4). *Recommend (a)*; the amendment is
+  written for it.
+- **D4 — AC 2's classification.** Only `WINGFOIL_AGENT` at the spawn is new; the lookups' absence, the record without
+  agent trailer and `--co-author` exit 2 already hold (above) and are pinned as characterization with that positive
+  case beside them. *Recommend:* accept.
+- **D5 — Windows.** `wingfoil.cmd` written on win32, its text unit-tested on Linux; no CI run on Windows (CI is
+  `ubuntu-24.04` only, `grep runs-on .github/workflows/*.yml`); the spec says so. *Recommend:* accept.
+- **D6 — amendment reach.** Beyond §2.4/§2.6 the spec-016 amendment edits one phrase of §3.3 step 14, adds a §3.6
+  bullet and the Consequences' determinism bullets (dl-168 Action 2 asks for the last). *Recommend:* accept; the
+  step 14 sentence is the one `task-353` edits (working directory): the second merger resolves.
+- **D7 — BDD and allowlist** in one orchestrator commit after the amends, before red. *Recommend:* accept.
+- **D8 — `docs/agents.md:70-72`** tells a launched agent to amend wingfoil commits (would duplicate the pair,
+  `bug-535`); it belongs to `user-docs`. *Recommend:* update it in this task's green.
+- **D9 — by-hand check with a real agent CLI** (not run here). In a terminal no agent started:
+  `node <worktree>/dist/cli.js agent execute --element task:<id> --role developer`, then inside the agent:
+  `command -v wingfoil; wingfoil --version; "$WINGFOIL_CLI" --version; printenv WINGFOIL_AGENT`. *Recommend:* run it
+  at review or put it in the headless pilot's prompt (W0-R1).
+
+**Risks for other tasks.** `task-353`: `spawnOptions` (launch.ts:286-288), `runLookup` (:367-369),
+`runningBuildMcpServer` (execute.ts:216) and spec-016 §3.3 step 14 — same lines. `task-336`: spec-011 `.gitignore`
+policy (adjacent paragraph) and spec-016 §3.6. `task-337`: none in §4.2 under D3 (a). `task-352`: the agent's commits
+carry the selected `team.agents` entry through `WINGFOIL_AGENT`; the record commit carries none — both pass its rule.
+`task-340/341/342/359`: none found. After this merge, any `agent execute` launch (the pilot) runs with the new
+bootstrap; before it, the pilot's prompt must override the attribution line (task-334 D10).
+
+### Retrospective
+
+<!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
+     reconstructed afterwards. One line per item: what happened, the evidence (a command and what it
+     printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
+     Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
+     here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
