@@ -59,3 +59,10 @@ resolution (trailer half): its design should read this bug (`dl-015`). Severity 
      An item met while fixing goes in the fix task's own subsection; this one holds what belongs to
      the bug itself (its finding, its triage, why it took more than one task). The retrospective's
      `explore` reads this subsection first. -->
+
+- Fixed by `task-334` (design-gate ruling D1 (a)): `beginMemoryTransition` resolves the agent context right after
+  membership — gated for `approve`, `reject`, `amend`, ungated otherwise — and carries it to the authority check and to
+  the commit; `workflow adopt --plan --apply` and `workflow rekey` already resolved right after membership;
+  `workflow finalize` resolves after deduction, as `spec-017` §7.9 says. Pinned by
+  `test/core/agent-context-call-sites.test.ts` (green `1e725ac7d`). The defect was unobservable, so its only evidence
+  is that source-reading test; a placement rule stated in a spec is worth such a test from the task that writes it.
