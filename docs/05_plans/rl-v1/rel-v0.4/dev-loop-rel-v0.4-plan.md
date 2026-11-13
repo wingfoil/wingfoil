@@ -215,6 +215,14 @@ docs/07_gates/rl-v1/rel-v0.4-w0-e2e-smoke.md`, the full suite, the latency pass 
 idle machine: after `task-357` the REQ-PERF budgets run only there, and no dev-loop gate runs it), the `docs.parity`
 suites, each `docs/examples/*/run.sh`. A failure opens a bug through `bug-ingest` and is a stop-the-line.
 
+**Who runs the examples (`bug-529`).** From `task-333`'s merge (`bf3f8aee3`) the approver-gated verbs refuse a shell
+that carries an agent marker (`spec-018` §1), and examples `01`, `02` and `06` run `memory approve`. The full suite and
+the e2e smoke scrub the markers themselves (`test/agent-markers.cjs`, `scripts/e2e-smoke.cjs`); the `run.sh` scripts do
+not, and must not. So `docs.examples.passing` is run by the approver, from their own terminal, against this worktree's
+build (`WINGFOIL="node <this worktree>/dist/cli.js" bash docs/examples/<nn>-*/run.sh`, each ending with `OK`), and the
+outputs are kept with the wave-checks report; an agent that runs a `run.sh` reports `E_AGENT_CONTEXT`, not a failure of
+the example. The other wave-checks stay with supervision.
+
 #### W0.3 — `re-sweep` · tech-lead · approver gate
 
 The elements with an empty `release`, the bugs filed during `w0` first: each proposed for `v0.4`, `v0.4.1`, `v1.0` or
