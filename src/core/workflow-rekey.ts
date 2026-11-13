@@ -160,6 +160,7 @@ export function workflowRekeyAtHead(root: string, request: RekeyRequest): CoreRe
     reason,
     approver: identity.value,
     trailers: rekeyTrailers(instance.id, from, to),
+    attribution: null,
   });
   if (!written.ok) return written;
 

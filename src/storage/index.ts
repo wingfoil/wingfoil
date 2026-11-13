@@ -21,7 +21,7 @@ export type { FrontmatterSplit } from './frontmatter';
 export { readDocument, documentExists, removeDocument, writeDocument } from './document';
 export { changedPathsBetween, CommitFailure, commitFailureSummary, commitEmpty, commitParent, commitPaths, committedBlobMatches, stagedPaths, writeAndCommit, EMPTY_TREE_SHA, listBlobEntriesAtRev, listBlobsAtRevs, listPathsAtRev, listPathsAtRevs, mergeBasesWith, pathPorcelainStatus, readBlobs, readPathAtRev, readPathsAtRev, readRevisionPaths, resolveCommitAtRev, storesAsBlob } from './commit';
 export type { BlobAtRev, BlobEntry, RevisionPath } from './commit';
-export type { CommitOptions, PathChange } from './commit';
+export type { CommitAttribution, CommitOptions, PathChange } from './commit';
 export { captureDryRun, isDryRunActive, planDiff } from './dry-run';
 export type { DryRunOutcome, DryRunPlan } from './dry-run';
 export { formatVersionTrailer, readBuildStamp, WINGFOIL_VERSION_TRAILER_KEY } from './build-stamp';

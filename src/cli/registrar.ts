@@ -21,7 +21,19 @@ import type { CoreResult } from '../core/types';
 import { exitCodeForResult, exitCodeForThrow } from '../core/exit-code';
 import { errorDetails } from '../core/error-details';
 import { DRY_RUN_FLAG, runAsDryRun } from '../core/dry-run';
-import { BLANK_CO_AUTHOR, CO_AUTHOR_OPTION, withAgentInvocation } from '../core/agent-context';
+import {
+  AGENT_MODEL_VARIABLE,
+  AI_MODEL_OPTION,
+  AI_MODEL_WITHOUT_AGENT,
+  BLANK_AI_MODEL,
+  BLANK_CO_AUTHOR,
+  CO_AUTHOR_OPTION,
+  hasEnvironmentMarker,
+  isMultiLineValue,
+  MULTI_LINE_AGENT_MODEL,
+  MULTI_LINE_AI_MODEL,
+  withAgentInvocation,
+} from '../core/agent-context';
 import { withNoticeSink, withWarningSink } from '../validation/warning';
 
 import { emitError } from './error';
@@ -102,8 +114,9 @@ export function buildCliCommands(modules: readonly CoreModule[], options: BuildC
       // none declares it — it is derived here from `mutates`, so an operation added later inherits it.
       flags: operation.mutates ? [...(operation.flags ?? []), DRY_RUN_FLAG] : operation.flags,
       // `--co-author <name>` (task-333, `spec-018` §1 row 2, design D4): derived the same way, for every mutating
-      // operation that does not declare `agentAttribution: false` (`agent execute`, `spec-018` §1.1).
-      options: takesCoAuthor(operation) ? [...(operation.options ?? []), CO_AUTHOR_OPTION] : operation.options,
+      // operation that does not declare `agentAttribution: false` (`agent execute`, `spec-018` §1.1); `--ai-model <id>`
+      // (task-334, `spec-018` §2.4, design D7) right after it, on the same operations.
+      options: takesCoAuthor(operation) ? [...(operation.options ?? []), CO_AUTHOR_OPTION, AI_MODEL_OPTION] : operation.options,
       run: async (
         formatValue: string,
         positionals?: readonly string[],
@@ -151,7 +164,16 @@ export function buildCliCommands(modules: readonly CoreModule[], options: BuildC
           exitWith(2);
           return;
         }
-        const operationOptions = takesCoAuthor(operation) && optionValues !== undefined ? withoutCoAuthor(optionValues) : optionValues;
+        // `--ai-model` (task-334, `spec-018` §2.4, design D4): its usage checks right after, also before `resolveRoot()`.
+        const aiModelValue = takesCoAuthor(operation) ? optionValues?.[AI_MODEL_OPTION.name] : undefined;
+        const aiModel = typeof aiModelValue === 'string' ? aiModelValue : undefined;
+        const aiModelRefusal = agentModelRefusal(aiModel, coAuthor !== undefined || hasEnvironmentMarker(process.env), takesCoAuthor(operation));
+        if (aiModelRefusal !== undefined) {
+          emitError(aiModelRefusal, { format });
+          exitWith(2);
+          return;
+        }
+        const operationOptions = takesCoAuthor(operation) && optionValues !== undefined ? withoutAgentOptions(optionValues) : optionValues;
 
         let result: CoreResult<unknown>;
         try {
@@ -175,10 +197,15 @@ export function buildCliCommands(modules: readonly CoreModule[], options: BuildC
           // Every warning raised while the operation runs — a loader's unknown-field warning (`bug-202`),
           // `agent execute`'s context warnings (task-218) — is rendered here, in the active format, the
           // moment it is raised: before the payload or the error that follows it.
-          // The agent invocation (`spec-018` §1, design D5): the environment and `--co-author`, which the core reads
-          // through `currentAgentInvocation()` — the approver-gated operations refuse an agent's session from it.
-          const call = (): Promise<CoreResult<unknown>> =>
-            withAgentInvocation({ env: process.env, ...(coAuthor === undefined ? {} : { coAuthor }) }, () => operation.fn(params));
+          // The agent invocation (`spec-018` §1, design D5): the environment, `--co-author` and `--ai-model`, which the
+          // core reads through `currentAgentInvocation()` — the approver-gated operations refuse an agent's session from
+          // it, the others write the agent's trailers from it (`spec-018` §2).
+          const invocation = {
+            env: process.env,
+            ...(coAuthor === undefined ? {} : { coAuthor }),
+            ...(aiModel === undefined ? {} : { aiModel }),
+          };
+          const call = (): Promise<CoreResult<unknown>> => withAgentInvocation(invocation, () => operation.fn(params));
           // A notice (`agent execute`'s launch banner, task-228) is rendered the same way, on stderr.
           result = await withNoticeSink(
             (text) => emitNotice(text, { format }),
@@ -243,13 +270,33 @@ function takesCoAuthor(operation: CoreOperation): boolean {
 }
 
 /**
- * `options` without the registrar's `--co-author`, or `undefined` when nothing else is left — the shape an operation
- * that declares no options of its own was always called with.
+ * The usage refusal of the model identifier, or `undefined` (`spec-018` §2.4, `spec-008` §2's `--ai-model` row, design
+ * D4), in this order: a blank `--ai-model`, one that is not one line, one given with no agent context, then — with no
+ * `--ai-model` and an agent context — a `WINGFOIL_AGENT_MODEL` that is not one line. Outside an agent context the
+ * variable is never read.
  */
-function withoutCoAuthor(
+function agentModelRefusal(aiModel: string | undefined, agentContext: boolean, takesModel: boolean): string | undefined {
+  if (aiModel !== undefined) {
+    if (aiModel.trim().length === 0) return BLANK_AI_MODEL;
+    if (isMultiLineValue(aiModel)) return MULTI_LINE_AI_MODEL;
+    if (!agentContext) return AI_MODEL_WITHOUT_AGENT;
+    return undefined;
+  }
+  const variable = process.env[AGENT_MODEL_VARIABLE];
+  if (takesModel && agentContext && variable !== undefined && variable.trim().length > 0 && isMultiLineValue(variable)) return MULTI_LINE_AGENT_MODEL;
+  return undefined;
+}
+
+/**
+ * `options` without the registrar's `--co-author` and `--ai-model`, or `undefined` when nothing else is left — the
+ * shape an operation that declares no options of its own was always called with.
+ */
+function withoutAgentOptions(
   options: Readonly<Record<string, string | readonly string[]>>,
 ): Readonly<Record<string, string | readonly string[]>> | undefined {
-  const rest = Object.fromEntries(Object.entries(options).filter(([name]) => name !== CO_AUTHOR_OPTION.name));
+  const rest = Object.fromEntries(
+    Object.entries(options).filter(([name]) => name !== CO_AUTHOR_OPTION.name && name !== AI_MODEL_OPTION.name),
+  );
   return Object.keys(rest).length > 0 ? rest : undefined;
 }
 

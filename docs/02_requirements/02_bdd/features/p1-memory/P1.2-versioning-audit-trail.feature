@@ -58,3 +58,19 @@ Feature: P1.2 (US-0A-02) - Versioning & Audit Trail
     Given a commit range and the configuration at its head
     When the process conformance of the range is computed twice
     Then the two reports are byte-identical
+
+  # dl-212 D1, spec-018 §2.1, §3.3 (task-334): an approval records the approver's own decision and never carries
+  # an agent trailer; every other commit an agent causes names the agent.
+  Scenario: An approval commit never carries an agent trailer
+    Given a Memory document "task-101" exists with "status: pending"
+    And the current user holds the "approver" role and no agent marker is present
+    When the approver runs "wingfoil memory approve task-101 --reason 'ok'"
+    Then the approve commit carries an "Approver:" line and no "Co-Authored-By:" and no "AI-Model:" line
+
+  Scenario: A commit an agent caused names the agent and the entry that signs
+    Given the committed dna.yaml declares the team.agents entry "Claude" with an email
+    And the variable WINGFOIL_AGENT is defined and empty
+    When I run "wingfoil memory park task-101 --reason 'blocked'"
+    Then the park commit's body opens with "Attributed to the first team.agents entry, Claude: no entry is named for this agent."
+    And "wingfoil memory history task-101" reads the park's reason as "blocked" alone
+    And stderr carries "warning: W_AGENT_ENTRY_GUESSED: Attributed to the first team.agents entry, Claude: no entry is named for this agent."

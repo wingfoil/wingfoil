@@ -826,6 +826,12 @@ has no Memory or file evidence to deduce it from.
   Otherwise: `phase '<workflow>.<phase>' completes from its evidence: <missing kinds>` (`CONFLICT`) —
   a phase that should produce a document or move an element is never completed by a record
   (`dl-104` D1 rationale).
+- When the phase declares `approval:`, the authority check refuses an agent's session first, before the identity
+  is judged (`E_AGENT_CONTEXT`, `spec-018` §3, §10); the agent context is resolved only once the step's phase is
+  known, since only the phase says whether the operation is approver-gated (`spec-018` §2.6). Without `approval:`,
+  in an agent's session the record carries the agent trailers `Co-Authored-By:` and `AI-Model:` after
+  `WingFoil-Version:` (`spec-018` §2.1–§2.2, `spec-008` §2), signed by the entry `spec-018` §2.3 selects, and a
+  `--reason` comes after the body line of `spec-018` §2.3 rule 4 when the entry is the first one by default.
 - When the phase declares `approval:`, the git identity must hold approver authority (REQ-SEC-03,
   the same check `memory approve` makes) and `--reason` is required, non-blank and shaped as
   `dl-067`'s `Reason:` block; the body carries `Approver: <name> <email> (approver)` and
@@ -834,7 +840,8 @@ has no Memory or file evidence to deduce it from.
   outside the `wf({type})` grammar (`spec-003` verb table, closing paragraph) so `memory history`
   does not read it as a Memory operation; the trailer block carries `spec-003`'s phase-record
   trailers. The trailer block is the message's final paragraph — the one git reads trailers from — so
-  the record's trailers share it with the `WingFoil-Version:` line, which stays last (`spec-008` §2);
+  the record's trailers share it with the `WingFoil-Version:` line, which follows them, and only the agent
+  trailers come after it (`spec-008` §2);
   an `Approver:` / `Reason:` body is its own paragraph before it. A git identity is required (REQ-SEC-01).
   The commit is made with `git commit --only --allow-empty`, so nothing staged rides along, and it is
   refused while the index holds staged changes (`dl-106`; the write-guard row of §10).
@@ -852,7 +859,8 @@ element it adds to a step (§4.8), which is explicit and survives concurrent ins
   listing their keys, asking for `--step`. A `--step` that is not on the instance's frontier is refused as
   `finalize` refuses it (§10); `--step` without `--workflow` is a usage error (`spec-008` §12).
 - The add commit carries the trailers `WingFoil-Instance: <instance-id>` and `WingFoil-Step: <key>`, in
-  its final paragraph with the `WingFoil-Version:` build signature (`dl-111`), which stays its last line:
+  its final paragraph with the `WingFoil-Version:` build signature (`dl-111`), which follows them, and only the
+  agent trailers of `spec-008` §2 come after it:
   git reads trailers from that paragraph only, and so does the walk (§4.8).
 - Without `--workflow`, `memory add` is unchanged and links nothing; an element added this way can be linked later
   only by `workflow adopt` (§7.11).
@@ -1820,3 +1828,11 @@ supersede or a state change (`dl-047`), pending the approver's `memory amend`.
 on the row of the other pre-flight refusals. The §7.9 sentences `spec-018` also asks for (the agent refusal on an
 `approval:` phase, the agent trailers on a phase without one) land with the attribution half, `task-334`. No other row
 changes. Edited in place without a supersede or a state change (`dl-047`), pending the approver's `memory amend`.
+
+**Revision (2026-11-12, `task-334-write-the-agent-attribution-trailers-from-the-mutating-verbs-and-restate-agents.md-5.1-for-l0-spec-018-2`)
+— §7.9 and §7.10: the agent refusal and the agent trailers.** `spec-018` Consequences asks §7.9 to state that on a
+phase that declares `approval:` the authority check refuses an agent context first, and that on a phase without one
+the record carries the agent trailers (§2.1); it also says where the gated resolution sits for `finalize`, only once
+the phase is known (`task-333` design D11). §7.9's and §7.10's sentences that kept `WingFoil-Version:` as the last
+line of the trailer paragraph now let the two agent trailers follow it (`spec-018` §2.2). No row of §10 changes.
+Edited in place without a supersede or a state change (`dl-047`), pending the approver's `memory amend`.

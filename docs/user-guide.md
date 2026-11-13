@@ -531,6 +531,14 @@ wingfoil memory reject  task-001-my-first-task --reason "Add acceptance criteria
 - These verbs commit the state change **and nothing else**. If the document has uncommitted edits they
   refuse — commit or stash them first.
 - Without the approver role you get `error: user not authorized to approve type 'task'` (exit `1`).
+- Only the approver approves, from a
+  terminal of their own. In a session an AI agent started — `WINGFOIL_AGENT`, `CLAUDE_CODE_CHILD_SESSION` or
+  `CODEX_SANDBOX` defined, or `--co-author` given — `approve`, `reject` and `amend` refuse with `error: E_AGENT_CONTEXT:
+  …` (exit `1`) and write nothing: run them yourself, from a terminal no agent started. So approvals carry a name and a
+  reason, and agent commits are marked by their `Co-Authored-By:` and `AI-Model:` trailers, which an approval never
+  carries. This stops an agent that cooperates or makes a mistake, not one working against you: an agent that removes
+  its markers, or runs the command through a process that drops its environment, is not stopped, and its commit looks
+  like yours (Codex marks only the commands it runs sandboxed).
 
 ### 8.4 Retire
 
@@ -591,6 +599,12 @@ the `Approver:` and `Reason:` lines: like `approve`, it needs the `approver` rol
 ## 9. Connect an AI agent
 
 Agents read the project through WingFoil in two ways, which complement each other.
+
+Commits an agent causes carry its trailers: in an agent's
+session every `wingfoil` command that writes ends its commit with `Co-Authored-By: <name> <<email>>` — the
+`team.agents` entry `--co-author <name>` names, else the one the session selects — and `AI-Model: <model>`, from
+`--ai-model <id>` or `WINGFOIL_AGENT_MODEL`, else `not-reported`. An agent never approves: the approval commands
+refuse its session (§8.3).
 
 ### 9.1 The MCP server
 

@@ -34,13 +34,13 @@
  * `approval:` phase, a missing `--reason` (exit 2) and approver authority (REQ-SEC-03, the identity read
  * once, `bug-149`) → a dirty index.
  */
-import { commitEmpty } from '../storage';
+import { commitEmpty, type CommitAttribution } from '../storage';
 import { deduceWorkflowState, resolveInstanceRef, type Baseline, type DeducedStep, type Instance, type ScopeRef } from '../workflow/deduce';
 
 import { APPROVER_ROLE, requireApprovalAuthority } from './approval-authority';
 import { requireGitIdentity } from './git-identity';
 import { requireTeamMembership } from './team-membership';
-import { resolveGatedAgentContext } from './agent-context';
+import { resolveGatedAgentContext, resolveOperationAgentContext } from './agent-context';
 import { optionalReason, requireReason } from './require-reason';
 import { coreErr, coreOk, type CoreResult } from './types';
 import { instancePlanIds, readDeductionSnapshotAtHead } from './workflow-deduction';
@@ -147,6 +147,7 @@ export function workflowFinalizeAtHead(root: string, request: FinalizeRequest): 
   // A frontier step's workflow and phase are loaded (deduction puts only loaded phases on a frontier).
   const phase = snapshot.workflows.find((workflow) => workflow.name === step.workflow)!.phases.find((candidate) => candidate.name === step.phase)!;
   const body: string[] = [];
+  let attribution: CommitAttribution | undefined;
   if (phase.approval !== undefined) {
     const reason = requireReason(request.options, { approval: true });
     // `spec-018` §2.6 (design D11): only here is the operation known to be approver-gated, so the gated agent context
@@ -155,8 +156,13 @@ export function workflowFinalizeAtHead(root: string, request: FinalizeRequest): 
     const authorized = requireApprovalAuthority(root, authorityType(step, instance), identity.value, agent, 'workflow finalize');
     if (!authorized.ok) return authorized;
     body.push(`Approver: ${identity.value.name} <${identity.value.email}> (${APPROVER_ROLE})`, `Reason: ${reason}`);
-  } else if (given !== undefined) {
-    body.push(`Reason: ${given}`);
+  } else {
+    // A phase without `approval:` is not gated: the ungated agent context, resolved once the phase is known
+    // (`spec-017` §7.9), names the agent the record's trailers credit (`spec-018` §2.1–§2.3).
+    const agent = resolveOperationAgentContext(root);
+    if (!agent.ok) return agent;
+    attribution = agent.value.attribution ?? undefined;
+    if (given !== undefined) body.push(`Reason: ${given}`);
   }
 
   const subject = `workflow: finalize ${instance.id} ${step.key}`;
@@ -165,7 +171,7 @@ export function workflowFinalizeAtHead(root: string, request: FinalizeRequest): 
 
   const finalized = buildStep(step, readNextInputs(root, snapshot, deduction));
   const message = body.length === 0 ? subject : `${subject}\n\n${body.join('\n')}`;
-  const sha = commitEmpty(root, message, { author: identity.value, trailers: phaseRecordTrailers(step) });
+  const sha = commitEmpty(root, message, { author: identity.value, trailers: phaseRecordTrailers(step), attribution });
 
   const after = readDeductionSnapshotAtHead(root);
   const deducedAfter = deduceWorkflowState(after);

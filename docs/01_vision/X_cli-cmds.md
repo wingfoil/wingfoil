@@ -1,7 +1,7 @@
 # CLI Commands Reference — WingFoil
 
-**Version:** 2.1
-**Date:** 2026-11-11  
+**Version:** 2.2
+**Date:** 2026-11-12  
 **Status:** Approved
 
 ---
@@ -251,14 +251,15 @@ needs; `--template` names the methodology without a prompt; the mode inferred fr
 ## Global Options
 
 Every command accepts these, except `--dry-run`, which only the commands that change the project take, and
-`--co-author`, which those commands but `agent execute` take:
+`--co-author` and `--ai-model`, which those commands but `agent execute` take:
 
 | Option | Format | Description |
 |--------|--------|-------------|
 | `--format` | `json`, `yaml`, `console` (default) | Output format, stated once here for every command. JSON/YAML for scripting/CI. Console prints the JSON payload indented for now, unless the command defines its own text (`spec-008` §2) |
 | `-h`, `--help` | flag | Show command-specific help and examples |
 | `-V`, `--version` | flag | Print the build stamp `<semver> (<sha>)` (top level only) |
-| `--co-author <name>` | `team.agents` entry name | An agent marker (`spec-018` §1): the command runs in an agent's session, as the entry `<name>`. Taken by every command that takes `--dry-run` but `agent execute`, after the verb; a blank `<name>` exits `2`. With it, or with `WINGFOIL_AGENT`, `CLAUDE_CODE_CHILD_SESSION` or `CODEX_SANDBOX` defined, the approver-gated commands (`memory approve`, `reject`, `amend`, `workflow finalize` on an approval phase, `workflow adopt --plan --apply`, `workflow rekey`) refuse with `E_AGENT_CONTEXT`, exit `1` (`dl-212` D1) |
+| `--co-author <name>` | `team.agents` entry name | An agent marker (`spec-018` §1): the command runs in an agent's session, as the entry `<name>`. Taken by every command that takes `--dry-run` but `agent execute`, after the verb; a blank `<name>` exits `2`. With it, or with `WINGFOIL_AGENT`, `CLAUDE_CODE_CHILD_SESSION` or `CODEX_SANDBOX` defined, the approver-gated commands (`memory approve`, `reject`, `amend`, `workflow finalize` on an approval phase, `workflow adopt --plan --apply`, `workflow rekey`) refuse with `E_AGENT_CONTEXT`, exit `1` (`dl-212` D1); on the other commands the commit ends with the entry's `Co-Authored-By:` and an `AI-Model:` trailer, after `WingFoil-Version:` (`spec-018` §2) |
+| `--ai-model <id>` | model identifier | The model the agent's `AI-Model:` trailer records (`spec-018` §2.4); without it `WINGFOIL_AGENT_MODEL`, else `not-reported`. Taken by the commands that take `--co-author`, after the verb; not a marker. A blank value, one that is not one line, or the option in a session no agent marker marks exits `2` |
 | `--verbose` | flag | Show detailed execution logs on stderr (useful for debugging) |
 | `--no-color` | flag | Disable ANSI colours (accepted; no output is coloured yet) |
 | `--no-interactive` | flag | Fail on a missing argument instead of prompting for it (only init prompts) |
@@ -395,6 +396,11 @@ Every command accepts these, except `--dry-run`, which only the commands that ch
 ---
 
 ## Revision history
+
+**Version 2.2 (2026-11-12) — the `--ai-model` global option and the agent trailers, per `task-334` (`spec-018` §2,
+`dl-212` D1).** Global Options gets an `--ai-model <id>` row, registered beside `--co-author`, and the `--co-author`
+row states that on the commands that are not approver-gated the commit names the agent in its `Co-Authored-By:` and
+`AI-Model:` trailers. Like `--dry-run`, both are stated once here, not in each command row.
 
 **Version 2.1 (2026-11-11) — the `--co-author` global option, per `task-333` (`spec-018` §1, `dl-212` D1).** Global
 Options gets a `--co-author <name>` row: an agent marker, registered on every command that takes `--dry-run` but

@@ -176,9 +176,9 @@ describe('AC 2 (bug-100) — one notation, the shipped one', () => {
       }
       const tokens = [...s.matchAll(/--([a-z][a-z_-]*)(<)?/g)].map(([, name, pattern]) => ({ name: `--${name}`, pattern: pattern !== undefined }));
       for (const option of command.options) {
-        // `--dry-run` and (task-333, `spec-018` §1) `--co-author` are derived for every mutating command and stated
-        // once, in Global Options.
-        if (option === '--dry-run' || option === '--co-author' || option === '--help') continue;
+        // `--dry-run`, (task-333, `spec-018` §1) `--co-author` and (task-334, `spec-018` §2.4) `--ai-model` are derived for
+        // every mutating command and stated once, in Global Options.
+        if (option === '--dry-run' || option === '--co-author' || option === '--ai-model' || option === '--help') continue;
         const named = tokens.some(({ name, pattern }) => (pattern ? option.startsWith(name) : name === option));
         if (!named) findings.push(`${where} — missing ${option}`);
       }

@@ -40,6 +40,7 @@ import { generateId, patternTokens } from '../validation';
 import { deduceWorkflowState, PLAN_TYPE, resolveInstanceRef, START_TRAILER, type Baseline, type Deduction, type ElementRef, type Instance, type InstanceDeduction } from '../workflow/deduce';
 import { workflowFacts, type Workflow } from '../workflow/schema';
 
+import { resolveOperationAgentContext } from './agent-context';
 import { parseElementRef } from './element-ref';
 import { requireGitIdentity } from './git-identity';
 import { requireTeamMembership } from './team-membership';
@@ -281,6 +282,10 @@ export async function workflowStart(params: WorkflowStartParams, verbs: StartVer
   if (!identity.ok) return identity;
   const member = requireTeamMembership(root, identity.value);
   if (!member.ok) return member;
+  // The agent context, once per operation, right after membership (`spec-006` §7 step 2, `spec-018` §2.6): the nested
+  // `memory add` (start) and transition preamble (end) get this same resolution back, so a warning prints once (D3).
+  const agent = resolveOperationAgentContext(root);
+  if (!agent.ok) return agent;
   const initialized = requireInitializedProject(root);
   if (!initialized.ok) return initialized;
 
@@ -365,6 +370,10 @@ export async function workflowEnd(params: WorkflowEndParams): Promise<CoreResult
   if (!identity.ok) return identity;
   const member = requireTeamMembership(root, identity.value);
   if (!member.ok) return member;
+  // The agent context, once per operation, right after membership (`spec-006` §7 step 2, `spec-018` §2.6): the nested
+  // `memory add` (start) and transition preamble (end) get this same resolution back, so a warning prints once (D3).
+  const agent = resolveOperationAgentContext(root);
+  if (!agent.ok) return agent;
   const initialized = requireInitializedProject(root);
   if (!initialized.ok) return initialized;
 
