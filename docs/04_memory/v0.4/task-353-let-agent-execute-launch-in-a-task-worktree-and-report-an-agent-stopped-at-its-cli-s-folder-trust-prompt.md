@@ -59,3 +59,321 @@ no survey row covered it, so this task extends amendment `spec-016` § 3.1 gramm
 ## Execution Notes
 
 <!-- Filled by the dev-loop. -->
+
+### design (architect, 2026-11-13)
+
+Worktree on `task/task-353-…`, cut from `main` at `69b7d0e26`; head at design start `8d8282b26` (the orchestrator's
+`wf(task): start` and the three bug syncs `[planned → in-progress]`). PATH guard run first with the task's PATH shim:
+`command -v wingfoil` → the shim; `wingfoil --version` and `node dist/cli.js --version` → both
+`0.3.2 (69b7d0e26ca303939fea1441448ff0752a90e398)`. Read: AGENTS.md §1–§8; `dev-loop-rel-v0.4-plan` W0-R1…W0-R12
+(on `design/dev_loop_v0.4`); `.wingfoil/workflows/custom/dev-loop.yaml` 2.5 (design's four instructions);
+`bug-499`, `bug-500`, `bug-418`; `spec-016` (`approved`) §2.2, §2.3, §2.5, §2.8, §3.1–§3.5, §3.7, §4.2–§4.4, §5,
+§5.1; `spec-017` §3.1, §3.4, §3.5; the code named by the Implementation Notes (`src/agent/launch.ts`, `execute.ts`,
+`step.ts`, `run-log.ts`, `schema.ts`, `placeholders.ts`, `src/core/agent-list.ts`, `src/storage/builtin-adapters.ts`,
+`.wingfoil/agents/built-in/claude-code.yaml`). The task's `ref:` is empty, so no decision-log is owed by
+instruction (2). No tech-spec is missing: the ACs change `spec-016`, which is `approved`; the amendment is prepared
+below.
+
+**`depends_on` (dl-015, read).** `task-350` (`done`), its paragraph "For `task-353`": D1 — a worktree is a git root,
+so `--project <worktree>` already runs every read, the record commit and the launch in it; D2 (a) — the registered
+server is started with `--project <root>` (`runningBuildMcpServer(root)`, `src/agent/execute.ts:216`), so it
+serves the root `agent execute` resolved, not the agent's working directory. Both are confirmed by the run below
+and are the ground of D1. `task-335` (`done`), its "What the tasks built on this one must read": the spawn's `cwd` is
+the root in both kinds (`spawnOptions`, `src/agent/launch.ts:286-288`), and `claude -p` skips the workspace trust
+dialog (its quote of `claude --help` of 2.1.310), which grounds `claude-code`'s `launch.headless.trust: implied`
+(D3). Its D7 evidence (both built-ins' headless runs, by the approver) shows no trust stop on either headless launch
+in that scratch project; it does not say whether the directory had been opened before, so it is not taken as proof.
+
+**What `--project <worktree>` gives today (the highest risk: is AC 1 already met?).** Run in a scratch repository
+outside the worktree (`git init`, `init --template Kanban --no-interactive`, a member, a custom adapter `pwd` whose
+`command` is `sh` running a script that writes its working directory and its argv to a file, `terminal: optional`,
+`mcp.via: args`; `memory add --type task --title T` → `task-001-t`), with this worktree's code build
+(`WINGFOIL="node <worktree>/dist/cli.js"`), never a real agent CLI:
+- From the root, `$WINGFOIL agent execute --element task:task-001-t --role developer </dev/null` → exit `0`, the
+  agent's working directory the root, `8948e74 agent: record task-001-t/adhoc/1` on `main`.
+- `git worktree add -b task/t1 ../wt-task-1`, then from the root
+  `$WINGFOIL --project ../wt-task-1 agent execute --element task:task-001-t --role developer </dev/null` → exit `0`,
+  the agent's working directory `…/wt-task-1`; the record `15318b6 agent: record task-001-t/adhoc/2` on `task/t1`
+  (`git -C ../wt-task-1 log --oneline -2`), and `main` still at `8948e74` (`git log --oneline -1 main`).
+- The same, with the argv-writing script: the agent's argv ends with the MCP server `/usr/local/bin/node`,
+  `<worktree>/dist/cli.js`, `--project`, `…/wt-task-1`, `mcp` — the server serves the worktree, the record went
+  to `100ea5f` on `task/t1`.
+- From the worktree with no `--project`, `--headless` → exit `0`, cwd the worktree, `state_ref` the worktree's
+  `HEAD` (`15318b6…`), record `86dc127` on `task/t1`.
+- `--project <dir>` for a subdirectory, a directory outside any repository and a missing path → each exit `1`,
+  `error: E_NOT_AT_GIT_ROOT: --project is not a git root: <absolute dir>` (and `{"error": …}` under `--format json`),
+  before anything is read or written.
+- `$WINGFOIL agent execute --help | grep -i -E "cwd|worktree|project"` → nothing; `$WINGFOIL --help | grep -i project`
+  → `--project <dir>  run on the project rooted at <dir> instead of the …`.
+So every clause of `bug-499`'s Expected that a caller can reach is met by `--project <worktree>` since `task-350`:
+the working directory comes from the caller, it is a worktree of the repository, the record is committed on the run's
+branch (the worktree's), the MCP server and every gating read follow it. What no option gives — a working directory
+apart from the root — would split the run (D1). Side observation, documented and not a finding: two branches that
+each record the same run id conflict at merge (`spec-016` §4.3 "Collision"; reproduced here by `adhoc/2` on both
+branches, `git merge` → `CONFLICT (content): Merge conflict in docs/runs/task-001-t.jsonl`).
+
+**`bug-418` reproduced on this build** (scratch repository, `init --template Scrum --no-interactive`, a member,
+`workflow start sw-life-cycle` → `started sw-life-cycle as sw-life-cycle-1-plan (active)`, `dna add team.agents
+--value claude --entry-adapter claude-code … --entry-executes_as product-owner,developer`): `agent list --waiting` →
+`waiting steps: 1` / `sw-life-cycle.inception  product-owner  claude`; `agent execute --next --dry-run </dev/null` →
+`error: step 'sw-life-cycle.inception' has no element: give --element <type>:<id>`, exit `1`. With
+`--element plan:sw-life-cycle-1-plan` the same dry run exits `0` and prints the plan as JSON (copied from the run): `"subject": "agent: record sw-life-cycle-1-plan/inception/1"`,
+`"paths": ["docs/runs/sw-life-cycle-1-plan.jsonl"]`, `"run": {"id": "sw-life-cycle-1-plan/inception/1", "element":
+"plan:sw-life-cycle-1-plan", "workflow": "sw-life-cycle", "phase": "inception", "role": "product-owner", …}`, and the
+bootstrap's handoff line `Record your handoff in the element's body and in your commit messages.` (the Scrum `plan`
+template has no `## Execution Notes`). The dry run printed `warning: interactive launch needs a terminal on stdin and
+stdout: a run without --dry-run is refused here` (`bug-392`'s fix) and launched nothing.
+
+**Decisions for the approver.**
+- **D1 — the launch working directory (`bug-499`, AC 1).** (a) No new surface: the working directory is the project
+  root, and the global `--project <worktree>` (`task-350`) names a linked worktree as the root; `spec-016` §3.1 and
+  §3.3 step 14 say so; AC 1 becomes a characterization of that behaviour (below). (b) A new `agent execute
+  --worktree <dir>`, confined to `git worktree list --porcelain` of the root, which then becomes the run's root for
+  every read, the record, the MCP server and the spawn (`VALIDATION`, exit `1`, `--worktree <dir> is not a worktree
+  of <root>` otherwise): red-first as AC 1 is written, but it duplicates `--project` with a membership check whose only
+  gain is refusing a repository that is not this one's worktree. (c) `--cwd <dir>` changing only the spawn's
+  directory: rejected — the reads, the record commit (`spec-016` §4.4: "whichever branch is checked out") and the MCP
+  server (`--project <root>`) would stay on the root while the agent edits the worktree, which contradicts `bug-499`'s
+  "the run record is still committed on the run's branch" and the Implementation Notes. (d) An adapter field or a
+  `{worktree}` placeholder: rejected — an adapter is per agent CLI and committed, a worktree path is per run and a host
+  value (`spec-016` Consequences), and a placeholder fills argv elements, not the process's directory.
+  **Recommendation (a)**: the smallest surface that closes `bug-499` (none), with AC 1 reworded to "(characterization)
+  `--project <worktree>` sets the launch's working directory to a worktree of the repository; a `<dir>` that is not a
+  git root is refused before any side effect, exit `1` (`E_NOT_AT_GIT_ROOT`); the run record is committed on the
+  worktree's branch". The AC's "`VALIDATION`" is a `CoreError` code the CLI does not print; the observable is exit `1`
+  and the message. Under (b) the design is amended at the gate (a `spec-008` §12 row, `--worktree` in §3.1/§3.7, red-first
+  tests) before red.
+- **D2 — the MCP server under a worktree launch** (`task-350`'s D2 (a) question). Under D1 (a) the server already
+  follows the worktree, because the worktree is the root (`--project <worktree>` in its argv, run above): no change.
+  The question only arises under D1 (c), which is rejected. **Recommendation: no change.**
+- **D3 — how an adapter declares folder trust (`bug-500`, AC 2).** (a) An optional `launch.<kind>.trust`: `implied`
+  (that launch never stops to ask), `prompt` (the CLI may stop at its start-up to ask), or an argv fragment (the CLI's
+  own option telling it to trust the launch directory, appended after the permission fragment and before
+  `session.assign_args`, no placeholder); absent: nothing declared. (b) Documentation only in `spec-016` §2.8, no field:
+  the built-ins could not "declare" it and the hint would fire on every adapter. (c) A detection with no declaration
+  (exit non-zero and no commit) for every adapter: blames trust for every early failure, `claude -p` included, which
+  skips the dialog. **Recommendation (a)**: the field makes the hint precise (only `prompt` gives it) and leaves every
+  existing adapter, the test fake included, unchanged when absent. The manifest `format` stays 1, an additive optional
+  field (`dl-149`, as `task-339` and `task-356` did); the pinned 0.3.2 build's `agent execute` already refuses this
+  repository's installed manifest for `permissions` (`task-339` D9) and would refuse `trust` the same way, while no
+  pinned read command parses a manifest (proved below).
+- **D4 — the built-ins' values, and the by-hand pass.** Proposed: `claude-code` interactive `prompt`, headless
+  `implied` (the `claude --help` of 2.1.310 quoted in `task-335`'s notes); `codex-cli` interactive `prompt`, headless
+  `prompt` (the conservative value: it gives the hint) until the pass shows `codex exec` never stops to ask. No
+  fragment: no trust option of either CLI is established in the repository. The approver runs, from a terminal of
+  their own, in a directory neither CLI has opened (`mkdir <dir> && cd <dir> && git init`):
+  `claude --version`; `claude --help | grep -n -i -E "trust|-p, --print"`; `claude` (interactive: does a trust dialog
+  appear before any prompt?); `claude -p "say ok" </dev/null; echo $?`; `codex --version`;
+  `codex --help | grep -n -i trust`; `codex exec --help | grep -n -i -E "trust|skip-git"`; `codex` (interactive: does
+  it ask about the folder?); `codex exec "say ok" </dev/null; echo $?`. A value the pass contradicts is changed in the
+  amendment at the gate, before red; if a CLI shows an option that trusts the directory, its `trust` becomes that
+  fragment. `verified_with` names the version the pass ran (`claude-code` is `2.1.322 (Claude Code)`, `codex-cli`
+  `codex-cli 0.145.0` today); a newer CLI bumps it, as `task-339` did. The red pins the schema and the fake's behaviour,
+  which do not depend on the pass, and the built-ins' values as ruled here.
+- **D5 — the start-up hint (AC 2's second half).** Condition, all four: the run did not succeed (exit non-zero, a
+  signal, or the expired time bound), `HEAD` is still `state_ref` at record time (the agent committed nothing),
+  `notes` would be `none`, and the manifest declares `launch.<kind>.trust: prompt` for the kind that ran. Then the
+  record's `notes` is the fixed text `none (no commit since state_ref: the agent CLI may have stopped at its
+  folder-trust step)` and, after the record commit and before step 18's error, one warning line:
+  `run <run-id>: the agent exited <exit_status> with no commit since state_ref: its CLI may have stopped at its
+  folder-trust step (adapter '<name>' declares launch.<kind>.trust: prompt)`. Outcome and exit code unchanged.
+  Deterministic: a function of the exit status, two committed shas and the manifest; no wall clock (a short duration
+  was rejected as a signal). Every reader accepts any string in `notes` (`fieldDefect`'s default,
+  `src/agent/run-log.ts`, and the pinned build's `node_modules/wingfoil-released/dist/agent/run-log.js:186`), so an
+  older build reads such a record. AC 2 names the record's `notes`, which is `spec-016` §4.2, a section AC 4 does not
+  list: **recommendation**: approve §4.2 within this amendment (prepared), rather than keeping the hint on stderr only.
+- **D6 — `bug-418` (AC 3).** (a) `plan:<instance-id>` becomes the last fallback of `spec-016` §3.2 step 2 (after
+  `--element`, the scope element, the bound element): an open instance is a `plan` element whose id is the instance id
+  (`spec-017` §3.1), which exists at `HEAD`; its run log is `<runs>/<instance-id>.jsonl`. `agent list --waiting`'s
+  `element` follows step 2 (§5), so the two commands agree and `--element plan:<id>` filters it. The context element
+  (`spec-017` §3.5) is not taken: it never enters deduction. `NO_STEP_ELEMENT` stays as a defence for a call with no
+  instance. (b) `agent list --waiting` leaves such a step out, or marks it as needing `--element`: the `init`
+  scaffold's checkpoints then stay unrunnable by an agent, and leaving them out undoes what `task-296` delivered for
+  `bug-400` (the scaffold step listed). **Recommendation (a)**; the run then fails later only where the project lacks
+  an agent for the role (`NO_AGENT`), as any step does. §5 is amended by one clause (prepared), outside AC 4's list:
+  approve it within this amendment.
+- **D7 — the `.wingfoil/` change (`dl-205`, instruction (4)).** Green adds `trust:` to this repository's installed
+  `.wingfoil/agents/built-in/claude-code.yaml` (it must equal the shipped manifest,
+  `test/storage/builtin-adapter-claude-code.test.ts` AC 4). Loaded with the pinned build on a scratch clone of this
+  worktree with the proposed keys (`interactive.trust: prompt`, `headless.trust: implied`, committed there): `npm run -s
+  wingfoil`-equivalent `node <worktree>/node_modules/wingfoil-released/dist/cli.js` (`0.3.2 (6de2e13c0…)`)
+  `workflow list`, `dna show`, `directives list`, `agent list --waiting`, `workflow show dev-loop` → each exit `0`;
+  `npm run check:mcp` there → exit `0` (`.mcp.json "wingfoil" runs the pinned wingfoil 0.3.2 …`, `the build under
+  development (dist/cli.js) serves [prompts, resources, tools] …; every listed Resource read and Prompt get answered`).
+  The pinned `agent execute --dry-run` on that clone already exits with `adapter 'claude-code': launch.headless:
+  Unrecognized key: "permissions"` before the keys are added (the break `task-339` D9 declared). **Recommendation**: as
+  `task-339` D9 — no `pinned-build` bug, no `KNOWN_READ_FAILURES` entry, no `wingfoil-cli` exception: `agent execute`
+  writes a commit and runs on the code build (`wingfoil-cli`), and no pinned read parses a manifest.
+
+**Acceptance criteria — classification and what red must pin** (under D1 (a), D3 (a), D5, D6 (a)).
+
+| AC | Class | Pin |
+|---|---|---|
+| 1 | characterization (D1 (a); red-first only under D1 (b)) | the worktree launch, the record's branch, the server's root, the refusal — passes on first run |
+| 2 | red-first | the `trust` field (schema, placeholders, argv order), the built-ins' values, the start-up hint |
+| 3 | red-first | `plan:<instance-id>` as the last fallback, in `agent execute` and `agent list --waiting` |
+| 4 | characterization | the approver's `memory amend` of `spec-016` at this gate |
+
+- **AC 1** — new `test/cli/agent-execute-worktree.integration.test.ts`. Fixture: `seed` of
+  `test/agent/helpers/agent-execute-fixture.ts` (the fake adapter `custom/fake.yaml`, `terminal: optional`), then
+  `git worktree add -b task/wt <scratch>/wt` and one commit on `task/wt` so its `HEAD` differs from `main`'s; run the
+  CLI with `spawnCapture`/`CLI_ENTRY` (`test/cli/helpers/spawn-cli.ts`) with cwd the main checkout and
+  `--project <wt> agent execute --element <TASK_REF> --role developer`, `WINGFOIL_FAKE_AGENT_RECORD` set. Pin: exit
+  `0`; the launch's working directory is the worktree — add `cwd: process.cwd()` to the fake's record line
+  (`test/fixtures/agents/fake-agent.cjs`, red's change; update any exact-shape assertion in
+  `test/agent/fake-agent.test.ts`) and compare with `realpathSync(wt)`; `git -C <wt> log -1 --format=%s` is
+  `agent: record <TASK_ID>/adhoc/1` and `git -C <main> log --format=%s` holds no `agent: record`; the record's
+  `state_ref` is the worktree's `HEAD` before the run; with `WINGFOIL_FAKE_AGENT_CONNECT=1` the session Resource the
+  fake read names that same sha. Refusal: `--project <a plain directory>` → exit `1`, stderr exactly
+  `error: E_NOT_AT_GIT_ROOT: --project is not a git root: <absolute dir>` (copied from the run above), no record file,
+  no new commit in either checkout. Plus `--project <wt> … --dry-run`: the plan's `run.state_ref` is the worktree's
+  `HEAD`. Every case passes before green: say so in `### red (qa)`.
+- **AC 2** — red-first.
+  - Schema and placeholders: new `test/agent/manifest-trust.test.ts`, modelled on `test/agent/manifest-permissions.test.ts`
+    (`parseAdapterManifest(text, source)`, `src/agent/manifest.ts`): for each of `launch.interactive.trust` and
+    `launch.headless.trust`, `prompt`, `implied` and `[--x, y]` validate and are returned as declared; absent validates
+    (optional); `yes`, a number, a map and `[1]` → one issue at that path (Zod's message, not pinned beyond the path and
+    the `E_ADAPTER_MANIFEST` code the permissions tests use); a fragment holding `{bootstrap}` →
+    `E_ADAPTER_PLACEHOLDER` at `launch.interactive.trust.0`, as the permissions tests pin it. Expected red today: the
+    strict schema refuses the key (`Unrecognized key: "trust"`).
+  - Argv: new `test/agent/launch-trust.test.ts`: `renderLaunchArgv(manifest, values, kind, role)` (`src/agent/launch.ts`)
+    with a fragment → `[...launch.<kind>.args rendered, ...the role's permission fragment, ...trust fragment,
+    ...session.assign_args rendered]`; with `prompt`, `implied` or absent → no element added. A manifest object built
+    in TypeScript with `trust` is `TS2353` until green (state it in the red notes).
+  - Built-ins: new `test/storage/builtin-adapters-trust.test.ts`: each entry of `BUILTIN_ADAPTERS`, parsed, declares
+    the values D4 rules (proposed: `claude-code` `prompt` / `implied`, `codex-cli` `prompt` / `prompt`), no fragment.
+    The installed copy is already held equal to the shipped one by `builtin-adapter-claude-code.test.ts`.
+  - The hint: new `test/cli/agent-execute-trust.integration.test.ts`, a fixture adapter `fake-trust` (a copy of
+    `custom/fake.yaml` with `launch.interactive.trust: prompt` and `launch.headless.trust: prompt`, written by the test
+    or as `test/fixtures/agents/custom/fake-trust.yaml`), and `implied` / absent variants. Cases: (a)
+    `WINGFOIL_FAKE_AGENT_EXIT=1`, interactive → exit `1`; stderr holds, in this order, `warning: run <TASK_ID>/adhoc/1:
+    the agent exited 1 with no commit since state_ref: its CLI may have stopped at its folder-trust step (adapter
+    'fake-trust' declares launch.interactive.trust: prompt)` then `error: agent exited 1; run <TASK_ID>/adhoc/1
+    recorded`; the run-log line's `notes` is exactly `none (no commit since state_ref: the agent CLI may have stopped
+    at its folder-trust step)`; (b) the same with `--headless` → `launch.headless.trust` in the warning; (c) exit `0`
+    → no warning line, `notes` `none`; (d) exit `1` under `implied`, and under no `trust` (`custom/fake.yaml`) → no
+    such warning, `notes` `none` (the absence, each with the positive case (a) beside it, dl-097 (a)); (e) exit `1`
+    after the agent committed → no hint: the fake gains `WINGFOIL_FAKE_AGENT_COMMIT=1` (an empty commit
+    `git commit --allow-empty --no-verify -m "fake: work"` in its working directory before it exits; red's fixture
+    change); (f) the expired bound: unit level in a new `test/agent/launch-trust-timeout.test.ts` with the injected
+    timer of `test/agent/launch-timeout.test.ts` (`launchFixture` of `test/agent/helpers/launch-input.ts`) → the
+    `TIMED_OUT` error and the warning with `exit_status` `signal:SIGTERM`. Expected red: the warning is absent and
+    `notes` is `none`.
+- **AC 3** — red-first.
+  - Unit, `test/core/agent-execute-step.test.ts` (red rewrites the case "none of the three → NO_STEP_ELEMENT"):
+    `stepTargetElement(itemStep, { ...INSTANCE, element: null }, undefined)` → `coreOk({ type: 'plan', id: INSTANCE.id })`;
+    `--element` and the scope and bound elements still win (the existing case); `stepTargetElement(itemStep, null,
+    undefined)` → the `VALIDATION` `step '<key>' has no element: give --element <type>:<id>` (the defence). Signature
+    unchanged.
+  - CLI: `test/cli/agent-execute-step.integration.test.ts` line 219's `--workflow chores` case (now the plan of the
+    `chores` instance, or a dry run that resolves it) and `test/cli/journey-0a.integration.test.ts`'s Journey 0a step 3
+    (lines 136–140: the fixture declares no agent, so `agent execute --next` then exits `1` with `error: no agent in
+    dna.yaml with an adapter executes as role 'product-owner'` instead of the element refusal) are rewritten by red.
+    New case, the `bug-418` reproduction above, in a new `test/cli/agent-execute-plan-element.integration.test.ts`:
+    `init --template Scrum`, a member, `workflow start sw-life-cycle`, a `team.agents` entry with the fake adapter for
+    `product-owner`; `agent execute --next --dry-run --format json </dev/null` → exit `0`, `run.element`
+    `plan:sw-life-cycle-1-plan`, `run.id` `sw-life-cycle-1-plan/inception/1`, `paths` `["docs/runs/sw-life-cycle-1-plan.jsonl"]`
+    (copied from the run above); `agent list --waiting --format json` → the one waiting step with `element`
+    `plan:sw-life-cycle-1-plan`; `agent list --waiting --element plan:sw-life-cycle-1-plan` keeps it, `--element
+    task:task-1` drops it. Expected red: exit `1` with the element refusal; `element: null` in the list.
+- **AC 4** — characterization: `git log -1 --format=%s -- docs/04_memory/design/specs/spec-016-agent-execution.md` on
+  the task branch is the approver's `wf(tech-spec): amend spec-016-agent-execution [approved → approved]`; red runs
+  after it.
+
+BDD: green adds three scenarios to `docs/02_requirements/02_bdd/features/p5-interaction/P5.3.1-agent-execute.feature`
+(the worktree launch, the plan element, the start-up hint) with a revision header naming the test files, as
+`task-339` did, and the `element` clause to `P5.3.4-agent-list.feature` if a scenario there names `null`.
+
+**Files green is expected to touch.** `src/agent/schema.ts` (`trust` on `InteractiveLaunch` and `HeadlessLaunch`),
+`src/agent/placeholders.ts` (a fragment holds no placeholder), `src/agent/launch.ts` (`renderLaunchArgv` appends the
+fragment; `launchAgent` computes the hint between step 16 and step 18: `HEAD` against `input.stateRef`, the notes text,
+the warning after `recordRun`; the module doc's step 14 sentence "its working directory the project root"), possibly
+`src/agent/run-log.ts` (the notes text as an exported constant beside `notesField`), `src/agent/step.ts`
+(`stepTargetElement`; the module doc), `src/core/agent-list.ts` (`waitingSteps`' element, lines 111–113, the same
+fallback; a shared helper must respect `test/lint/import-graph.test.ts`: `src/core` must not import `src/agent`),
+`src/storage/builtin-adapters.ts` (both manifests and the module doc), `.wingfoil/agents/built-in/claude-code.yaml`,
+`docs/cli-reference.md` (`agent execute`: `--project <worktree>`, the plan fallback replacing the
+`has no element` error sentence at its §"agent execute" error list, the start-up hint; `agent list`: `element`),
+`docs/user-guide.md` (the agent execute section: launching in a worktree), the two BDD files. `src/agent/execute.ts`
+needs no change under D1 (a) (comments only, if any). Version bumps: none — no `dna.yaml`, `memory.yaml`,
+`workflows.yaml` or `roles.yaml` change, and none of the files above carries a `version:`
+(`grep -c '^version:'` on each → `0`, except `docs/user-guide.md` → `1`, a YAML example at line 468, not the
+document's version). No phase, step or count of any workflow changes, so no workflow-pinning test
+is affected.
+
+**Existing tests that pin behaviour this task changes** (`grep -rln "has no element: give" test` →
+`test/core/agent-execute-step.test.ts`, `test/cli/journey-0a.integration.test.ts`,
+`test/cli/agent-execute-step.integration.test.ts`; `grep -rn "launch.headless\|permissions" test/storage` for the
+manifest shape: `builtin-adapters-headless.test.ts`, `builtin-adapters-permissions.test.ts`,
+`builtin-adapter-claude-code.test.ts`, `builtin-adapter-codex-cli.test.ts`, which pin other fields and the byte
+equality of the installed copy, and stay green if green edits both copies; `test/core/agent-list-edges.test.ts:82`
+builds a console row with `element: null`, a renderer input, unaffected).
+
+**Tests run at design** (targeted, `--maxWorkers=2`, no heavy gate, before the amendment was in the tree):
+- `npx jest test/agent test/storage/builtin-adapter test/core/agent-execute-step.test.ts test/core/agent-list
+  test/core/step-refusal-frontier.test.ts test/core/step-key-unscoped.test.ts test/core/agent-execute-awaiting.test.ts
+  test/core/agent-execute.test.ts test/core/init-builtin-adapters.test.ts test/validation/format.test.ts` →
+  `Test Suites: 40 passed`, `Tests: 665 passed`.
+- `npx jest test/cli/agent-execute-step.integration.test.ts test/cli/journey-0a.integration.test.ts
+  test/cli/agent-list.integration.test.ts test/cli/agent-list-edges.integration.test.ts
+  test/cli/agent-execute-launch.integration.test.ts test/cli/agent-execute-headless.integration.test.ts
+  test/cli/agent-execute-config-arg.integration.test.ts test/docs/cli-reference.test.ts
+  test/docs/name-resolvability.test.ts` → `Test Suites: 9 passed`, `Tests: 78 passed`.
+With the amendment in the tree: `npx jest test/docs/name-resolvability.test.ts test/docs/exit-codes-parity.test.ts
+test/docs/l0-traceability.test.ts test/docs/command-surface-specs.test.ts` → `4 passed`, `34 passed` (a first run
+found four unlisted names: the command form, now reworded to `wingfoil agent execute` given `--project <worktree>`, and
+`launch.headless.trust`, `launch.interactive.trust`, `START_UP_HINT`, now `PLANNED` by `task-353` in
+`test/docs/name-resolvability.allowlist.ts`); nine more spec-reading suites (`dry-run-documented`,
+`enumeration-parity.allowlist`, `commands-parity`, `memory-store-location-text`, `x-cli-cmds-citations`,
+`dl-086-citations`, `project-option-docs`, `req-sec-06-confinement-text`, `l0-attribution-text`) passed in the first
+run. `npx jest test/cli/workflow-unbound-none.integration.test.ts` with the amendment pending → `1 failed, 3 passed`:
+`workflow next` prints `1 diagnostic(s)`, and `node dist/cli.js workflow next --format json` lists one
+`W_UNCOMMITTED_INPUTS` on `docs/04_memory/design/specs/spec-016-agent-execution.md` — `bug-534`, expected while the
+amendment is uncommitted. No full suite was run at design.
+
+**Overlap with `task-338`** (in design, same wave; `git diff --stat main...task/task-338-…` → three Memory files only,
+no code yet). This task's code hunks: `renderLaunchArgv` (`src/agent/launch.ts:153-157`), `launchAgent` from step 16 to
+step 18 (`src/agent/launch.ts:757-813`), and the module doc's step-14 sentence (line 10); no change to
+`spawnOptions`, `runAgent`, `assignedSessionId`, `withRunFiles`, `attributionLine`, `renderBootstrap` or
+`runningBuildMcpServer`. `spec-016`: this amendment touches §2.2, §2.8, §3.1, §3.2, §3.3 steps 14 and 16, §3.5, §3.7,
+§4.2, §5, never §2.4 or §2.6; both amendments append a Revision note at the end of the file, a conflict only there,
+resolved by keeping both notes in date order. Order: the approver records the two `memory amend`s in the order the
+design gates are reached; each is made on its task branch, so the second task to merge into `main` resolves the
+Revision-note tail.
+
+**Risks for the other open `w0` tasks.** `task-352` (governance `Co-Authored-By` rule): no shared file. `task-336`
+(output forwarding, the active run registry `.wingfoil/run/`): the registry is per checkout, so under D1 (a) a run in
+a worktree and one in the main checkout on the same element are not seen by one registry; it also edits
+`launchAgent` near this task's step-16 hunk. `task-337` (record token counts, `agent_version`): edits `spec-016` §4.2
+(other keys than `notes`) and `postRunFacts`/the record literal in `launchAgent`: adjacent lines, a textual conflict
+likely. `task-340` (human-only roles): `src/agent/execute.ts` resolution and `src/core/agent-list.ts` (refusing agents
+on human-only roles may touch `waitingSteps`, next to this task's element line). `task-341`, `task-342` (docs of the
+hand-driven cycle) may describe `--project <worktree>` launches: they read this task's §3.1. `task-359`: no shared
+file. `task-355` and `task-356` are merged.
+
+**Candidate findings (not filed).** None outside the task: the pinned build's refusal of the installed manifest is
+`task-339` D9's declared break; the run-id collision across branches is `spec-016` §4.3's documented behaviour.
+
+### Pending amendments (approver)
+
+Prepared in the worktree, left uncommitted (`git status --short` → ` M docs/04_memory/design/specs/spec-016-agent-execution.md`,
+` M test/docs/name-resolvability.allowlist.ts`):
+- `spec-016-agent-execution` — §2.2 (the `trust` row), §2.8 (the built-ins' folder trust, values per D4), §3.1 (the
+  launch directory), §3.2 step 2 (the plan fallback), §3.3 steps 14 and 16 (the fragment's place, the working
+  directory, the start-up hint), §3.5 (the headless sentence), §3.7 (`NO_STEP_ELEMENT` a defence, the `START_UP_HINT`
+  row), §4.2 key 18 and §5 (D5, D6: outside AC 4's list), and a Revision note. Proposed `--reason`: "Records the
+  launch directory as the project root that --project names, a linked worktree included, the adapter field
+  launch.<kind>.trust with the built-ins' values and the start-up hint in the record's notes, and the instance's plan
+  as the last element fallback of a step, as task-353's design ruled (bug-499, bug-500, bug-418)."
+- `test/docs/name-resolvability.allowlist.ts` is not a Memory element: three `PLANNED` entries for the names the
+  amendment introduces (`launch.headless.trust`, `launch.interactive.trust`, `START_UP_HINT`), to be committed with
+  the amendment (the approver's `memory amend` commits only the spec: the orchestrator commits this file on the task
+  branch right after it, or the approver includes it).
+
+### Retrospective
+
+<!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
+     reconstructed afterwards. One line per item: what happened, the evidence (a command and what it
+     printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
+     Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
+     here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
