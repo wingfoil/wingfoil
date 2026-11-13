@@ -248,10 +248,12 @@ alone (`dl-198` (b)), which would have made the same command line answer from di
 on the directory it was typed in.
 
 **The walk's ceiling, for tests** (`bug-406`, `bug-453`). `findGitRoot` takes an optional `ceiling` directory: the
-walk examines the starting directory and its ancestors below the ceiling, never the ceiling itself or anything
-above it, as git's own ceiling directories do. The CLI never passes one. It exists so that a test's
-"outside any repository" fixture bounds the walk itself and gives the same result whatever lies above the
-system temporary directory; a ceiling that is not an ancestor of the starting directory changes nothing.
+walk always examines the starting directory, then each of its ancestors below the ceiling, and stops before it
+would step into the ceiling, so a ceiling that is a proper ancestor of the starting directory is never examined,
+nor is anything above it, as git's own ceiling directories do. A ceiling that is not a proper ancestor of the
+starting directory changes nothing: the starting directory itself given as the ceiling is examined, and the walk
+goes on above it as without one. The CLI never passes one. It exists so that a test's "outside any repository"
+fixture bounds the walk itself and gives the same result whatever lies above the system temporary directory.
 
 ### Initialization-marker detection algorithm
 
@@ -394,3 +396,10 @@ entry and refused with `E_NOT_AT_GIT_ROOT` otherwise; the section states why the
 repository" fixtures do not depend on what lies above the system temporary directory (`bug-406`, `bug-453`). The
 algorithm without `--project`, the layout and the init-marker algorithm are unchanged. Edited in place without a
 supersede or a state change (`dl-047`), pending the approver's `memory amend` at `task-350`'s design gate.
+
+**Revision (2026-11-12, `task-350-add-the-global-project-dir-option-naming-the-project-root-documenting-why-it-is-not-inferred`,
+review) — § Git-root detection algorithm, the walk's ceiling: what a ceiling bounds.** The paragraph said the walk
+never examines the ceiling or anything above it; it now says the walk stops before stepping into a ceiling that is a
+proper ancestor of the starting directory, and that a ceiling equal to the starting directory, like any other that is
+not a proper ancestor, changes nothing — the behaviour `findGitRoot` has and its tests pin. No other text changes.
+Edited in place without a supersede or a state change (`dl-047`), pending the approver's `memory amend`.
