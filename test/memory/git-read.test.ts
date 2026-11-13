@@ -13,8 +13,7 @@
  *
  * Every fixture is a throwaway repository built here, never this repository's own history.
  */
-import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'fs';
-import { tmpdir } from 'os';
+import { readdirSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { join } from 'path';
 
 import { CORE_MODULES } from '../../src/core';
@@ -23,7 +22,15 @@ import { auditAttribution } from '../../src/memory/audit';
 import { walkGitLogFields } from '../../src/memory/git-log';
 import { getMemoryHistory } from '../../src/memory/history';
 import { E_GIT_READ_FAILED, StorageError } from '../../src/storage';
-import { commitAll, git, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
+import {
+  commitAll,
+  git,
+  makeBoundedOutsideDir,
+  makeTempGitRepo,
+  removeTempDir,
+  withGitCeiling,
+  writeFixtureFile,
+} from '../storage/helpers/git-fixture';
 
 const DOC = 'docs/04_memory/design/dls/dl-900.md';
 
@@ -121,10 +128,12 @@ describe('a genuine git failure is an error, not an empty history (bug-072, AC1)
   });
 
   it('getMemoryHistory throws E_GIT_READ_FAILED when root is not a git repository', () => {
-    repo = mkdtempSync(join(tmpdir(), 'wf-not-a-repo-'));
-    writeDoc(repo, 'draft');
+    // task-350 AC 3 (bug-453): a directory outside any repository below a ceiling that is one.
+    const { dir, ceiling } = makeBoundedOutsideDir();
+    repo = ceiling;
+    writeDoc(dir, 'draft');
 
-    expect(() => getMemoryHistory(repo, DOC)).toThrow(E_GIT_READ_FAILED);
+    expect(() => withGitCeiling(ceiling, () => getMemoryHistory(dir, DOC))).toThrow(E_GIT_READ_FAILED);
   });
 
   it('`memory history` answers an IO error, exit 1, rather than an empty trail', async () => {

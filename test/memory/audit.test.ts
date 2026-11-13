@@ -14,16 +14,17 @@ import {
 } from '../../src/memory/audit';
 import { isConfiguredIdentity } from '../../src/core/git-identity';
 import type { StateMachine } from '../../src/memory/schema';
-import { mkdtempSync, rmSync } from 'fs';
-import { tmpdir } from 'os';
+import { rmSync } from 'fs';
 import { join } from 'path';
 
 import {
   commitAll,
   commitAllAs,
   git,
+  makeBoundedOutsideDir,
   makeTempGitRepo,
   removeTempDir,
+  withGitCeiling,
   writeFixtureFile,
 } from '../storage/helpers/git-fixture';
 
@@ -194,9 +195,11 @@ describe('auditAttribution — git-log walk with a 0-"unknown author" attributio
   });
 
   it('throws E_GIT_READ_FAILED, rather than reporting a clean empty audit, when `root` is not a git repository (task-142, bug-072)', () => {
-    repo = mkdtempSync(join(tmpdir(), 'wf-not-a-repo-'));
-    writeDoc(repo, DOC_PATH, 'draft'); // plain file write, no `git init`
-    expect(() => auditAttribution(repo, [DOC_PATH])).toThrow(/E_GIT_READ_FAILED: .*not a git repository/s);
+    // task-350 AC 3 (bug-453): a directory outside any repository below a ceiling that is one.
+    const { dir, ceiling } = makeBoundedOutsideDir();
+    repo = ceiling;
+    writeDoc(dir, DOC_PATH, 'draft'); // plain file write, no `git init`
+    expect(() => withGitCeiling(ceiling, () => auditAttribution(dir, [DOC_PATH]))).toThrow(/E_GIT_READ_FAILED: .*not a git repository/s);
   });
 });
 

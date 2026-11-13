@@ -43,8 +43,12 @@ import { emitNotice, emitStderrDocument, emitWarning, emitWarnings } from './war
 
 /** Ambient dependencies {@link buildCliCommands} needs: how to resolve the project root and how to shape each operation's params. */
 export interface BuildCommandsOptions {
-  /** Resolves the project root a core call needs — an ambient/environment concern, not a CLI flag. */
-  readonly resolveRoot: () => string;
+  /**
+   * Resolves the project root a core call needs — an ambient/environment concern. `project` is the value of
+   * the global `--project <dir>` (spec-008 §2, task-350), which `buildProgram` reads from the root program
+   * and binds before handing the resolver here, so the derived commands call it with no argument.
+   */
+  readonly resolveRoot: (project?: string) => string;
   /** Turns a `ParamsContext` into one operation's typed params (`../core/registry.ts`'s {@link ParamsBuilder}). */
   readonly buildParams: ParamsBuilder;
 }

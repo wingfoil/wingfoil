@@ -9,7 +9,8 @@
  * a real process invocation, exactly like `test/cli/fixtures/cli-harness.cjs` drives it against a
  * fixture root in tests — the difference here is `resolveRoot` resolves the *real* project root via
  * git-root detection (`resolveProjectRoot`, spec-011-storage-layout, through `./core/surface-reads.ts`) instead of a fixed fixture
- * path, and the real `process.argv` is parsed instead of a synthetic one.
+ * path — the current directory, or the directory the global `--project <dir>` names (task-350) — and the real
+ * `process.argv` is parsed instead of a synthetic one.
  *
  * `resolveRoot` is only invoked lazily, once per dispatched command (see `./cli/registrar.ts`'s
  * `run`) — `--help` (Commander built-in) and `--version` (registered by `buildProgram` via
@@ -22,9 +23,18 @@ import { exitWith } from './cli/exit';
 import { buildProgram } from './cli/program';
 import { CORE_MODULES } from './core';
 import { resolveProjectRoot } from './core/surface-reads';
+import { UsageError } from './core/usage-error';
+
+/** The refusal of a blank `--project` (spec-008 §1 and §2, task-350 D5): a usage error, never the current directory. */
+const BLANK_PROJECT = 'invalid flag value: --project must not be blank';
 
 buildProgram(CORE_MODULES, {
-  resolveRoot: () => resolveProjectRoot(process.cwd()),
+  // `project` is the global `--project <dir>` (spec-008 §2, `dl-198` (a)): the named root, or the current
+  // directory without it; the root is never inferred (spec-011). A blank value is refused, not defaulted.
+  resolveRoot: (project) => {
+    if (project !== undefined && project.trim().length === 0) throw new UsageError(BLANK_PROJECT);
+    return resolveProjectRoot(process.cwd(), { project });
+  },
   // task-026's single bare `positional` (`ctx.positional`, read by `dnaShowFn`/`pathsFn` as
   // section/category), task-025's full `positionals` list (read by `dnaSetFn` as `<key> <value>`),
   // task-028's additive `flags` spread (e.g. `paths`'s `--list` -> `list: true`), plus task-020's

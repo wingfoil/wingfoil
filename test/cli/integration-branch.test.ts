@@ -25,7 +25,14 @@ import { mkdtempSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { checkHead, integrationBranch, readHeadBranch } from '../../scripts/integration-branch.cjs';
-import { commitAllAs, fixtureDirPrefix, git, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
+import {
+  commitAllAs,
+  fixtureDirPrefix,
+  git,
+  makeBoundedOutsideDir,
+  removeTempDir,
+  writeFixtureFile,
+} from '../storage/helpers/git-fixture';
 
 const SCRIPT = join(__dirname, '..', '..', 'scripts', 'integration-branch.cjs');
 const IDENTITY = { name: 'WingFoil Test', email: 'wf-test@example.invalid' };
@@ -128,15 +135,18 @@ describe('task-288 AC 4 — checkHead (pure): the verdict', () => {
 
 describe('task-288 AC 4 — readHeadBranch and the CLI, on a fixture repository', () => {
   let repo: string;
+  // task-350 AC 3 (bug-453): "outside any repository" is a directory below a ceiling that is itself a
+  // repository; git stops at the ceiling through GIT_CEILING_DIRECTORIES, in-process and in the child.
   let outside: string;
+  let ceiling: string;
 
   beforeAll(() => {
     repo = makeRepo();
-    outside = mkdtempSync(fixtureDirPrefix());
+    ({ dir: outside, ceiling } = makeBoundedOutsideDir());
   });
   afterAll(() => {
     removeTempDir(repo);
-    removeTempDir(outside);
+    removeTempDir(ceiling);
   });
 
   it('readHeadBranch: the branch HEAD is on, null when detached, a refusal outside a repository', () => {
@@ -148,7 +158,14 @@ describe('task-288 AC 4 — readHeadBranch and the CLI, on a fixture repository'
     } finally {
       git(repo, ['checkout', '--quiet', 'main']);
     }
-    const refused = readHeadBranch(outside);
+    // readHeadBranch spawns git without an `env`, so git gets node's own environment, not this test's
+    // copy (task-268): the refusal is read in a child whose environment carries the ceiling.
+    const probe = spawnSync(
+      process.execPath,
+      ['-e', `process.stdout.write(JSON.stringify(require(${JSON.stringify(SCRIPT)}).readHeadBranch(${JSON.stringify(outside)})))`],
+      { encoding: 'utf-8', env: { ...process.env, GIT_CEILING_DIRECTORIES: ceiling } },
+    );
+    const refused = JSON.parse(probe.stdout) as ReturnType<typeof readHeadBranch>;
     expect(refused.ok).toBe(false);
     expect(refused.ok ? '' : refused.message).toMatch(/^could not read HEAD: /);
   });
@@ -224,7 +241,7 @@ describe('task-288 AC 4 — readHeadBranch and the CLI, on a fixture repository'
 
     // task-319 AC1 rewrites task-288's "outside any repository: exit 1": a HEAD git cannot read is exit 2 (D1 (a)).
     it('task-319 AC1 — outside any repository: exit 2, could not read HEAD, nothing on stdout', () => {
-      const result = run(outside, ['--check-head', '--kind', 'minor', '--version', 'v0.4']);
+      const result = run(outside, ['--check-head', '--kind', 'minor', '--version', 'v0.4'], { ...process.env, GIT_CEILING_DIRECTORIES: ceiling });
       expect(result.status).toBe(2);
       expect(result.stderr).toMatch(/^could not read HEAD: /);
       expect(result.stdout).toBe('');

@@ -6,9 +6,9 @@
  * `fake-agent.cjs --mcp-config-json {mcp_config} --prompt {bootstrap}`.
  *
  * What is asserted: the rendered `mcp.template` reaches the agent as exactly ONE argv element (the
- * running build's server: `process.execPath` and `[<dist/cli.js>, "mcp"]`, §2.5), the fake's MCP
- * connection through that text reads the session Resource the bootstrap names (§2.4), the run exits `0`
- * and is recorded with `adapter: custom/fake-config-arg`. No temporary file is written for the MCP
+ * running build's server: `process.execPath` and `[<dist/cli.js>, "--project", <the project root>, "mcp"]`,
+ * §2.5, task-350), the fake's MCP connection through that text reads the session Resource the bootstrap
+ * names (§2.4), the run exits `0` and is recorded with `adapter: custom/fake-config-arg`. No temporary file is written for the MCP
  * registration (`config-arg` has none).
  *
  * The fixture lives outside `test/fixtures/agents/custom/` so the fake adapters every other suite and
@@ -90,7 +90,8 @@ describe('task-237 (i) — agent execute with mcp.via: config-arg (headless, the
     expect(launch!.argv).toHaveLength(4);
     expect(launch!.argv[0]).toBe('--mcp-config-json');
     expect(launch!.argv[2]).toBe('--prompt');
-    const expected = `{"mcpServers": {"wingfoil": {"command": "${JSON.stringify(process.execPath).slice(1, -1)}", "args": ${JSON.stringify([CLI_ENTRY, 'mcp'])}}}}`;
+    // task-350 AC 5 (design D2 (a), `spec-016` §2.5): the registered server names the root agent execute resolved.
+    const expected = `{"mcpServers": {"wingfoil": {"command": "${JSON.stringify(process.execPath).slice(1, -1)}", "args": ${JSON.stringify([CLI_ENTRY, '--project', repo, 'mcp'])}}}}`;
     expect(launch!.argv[1]).toBe(expected);
   });
 

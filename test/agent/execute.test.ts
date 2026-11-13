@@ -156,17 +156,21 @@ describe('withRunFiles (§2.3) — the temporary files live in the OS temporary 
   });
 });
 
-describe('runningBuildMcpServer (§2.5) — the build that runs agent execute', () => {
-  it('from the compiled build: the Node executable and [<dist>/cli.js, "mcp"]', () => {
+// task-350 AC 5 (design D2 (a), `spec-016` §2.5 amended): the registered server names the root `agent execute`
+// resolved, so it serves that root whatever working directory the agent CLI starts it in.
+describe('runningBuildMcpServer (§2.5) — the build that runs agent execute, serving the root it resolved', () => {
+  const ROOT = '/fixture/project-root';
+
+  it('from the compiled build: the Node executable and [<dist>/cli.js, "--project", <root>, "mcp"]', () => {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const dist = require(join(DIST_DIR, 'agent')) as { runningBuildMcpServer: typeof runningBuildMcpServer };
-    expect(dist.runningBuildMcpServer()).toEqual({ command: process.execPath, args: [CLI_ENTRY, 'mcp'] });
+    expect(dist.runningBuildMcpServer(ROOT)).toEqual({ command: process.execPath, args: [CLI_ENTRY, '--project', ROOT, 'mcp'] });
   });
 
-  it('from the sources it names this tree’s cli entry beside the module (no build: the pre-flight then fails as unreachable)', () => {
-    const server = runningBuildMcpServer();
+  it('from the sources it names this tree’s cli entry beside the module, then --project <root> mcp (no build: the pre-flight then fails as unreachable)', () => {
+    const server = runningBuildMcpServer(ROOT);
     expect(server.command).toBe(process.execPath);
-    expect(server.args[1]).toBe('mcp');
+    expect(server.args.slice(1)).toEqual(['--project', ROOT, 'mcp']);
   });
 });
 
