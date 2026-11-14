@@ -1,3 +1,7 @@
+# Revised 2026-11-13 (task-338, spec-016 §2.4, §2.6 and §3.3 step 14, spec-018 §1.1 and §6 T-22; dl-180 invocation
+# (c), dl-168 Q1 (b), bug-369, bug-370): the --agent scenario's attribution step is reworded to the new
+# {attribution_line}; the CLI the agent runs, WINGFOIL_AGENT for the spawned agent only, the record commit without an
+# agent trailer, --co-author refused, and the per-clone session salt are added. Earlier scenarios are unchanged.
 # Revised 2026-11-11 (task-339, spec-016 §2.2, §3.3 step 14 and --dry-run; dl-223 (b), Action 3): the headless
 # posture of the run's role is added. It is implemented by test/cli/agent-execute-permissions.integration.test.ts.
 # Earlier scenarios are unchanged.
@@ -65,7 +69,8 @@ Feature: P5.3.1 (US-1-03) - wingfoil agent execute [--next]
     Given dna.yaml declares two agents with an adapter that execute as "developer"
     When I run "wingfoil agent execute --element task:202 --role developer --agent <second agent>"
     Then the second agent is launched
-    And its bootstrap tells it to sign the commits of its work as that agent's name and email
+    And its bootstrap names that agent's name and email as the co-author the wingfoil commands write on its commits
+    And it tells the agent to pass "--ai-model" to them, to add the trailers itself only to a commit it writes with git commit, and never to run an approve, reject or amend
 
   Scenario: The run record names the step it ran, in mode fresh
     Given the next step is phase "implement" of workflow "loop", and the phase allows modes "fresh" and "resume"
@@ -146,3 +151,29 @@ Feature: P5.3.1 (US-1-03) - wingfoil agent execute [--next]
     Then the launch plan's "launch" is {"kind": "headless", "permissions": <the reviewer entry>}
     And with "--role developer", a role the map does not name, its "permissions" is the "default" entry
     And a run without "--dry-run" launches the agent with the reviewer entry after the adapter's headless arguments
+
+  Scenario: The agent's wingfoil is the build that launched it
+    Given another "wingfoil" is on the PATH of the shell that runs agent execute
+    When I run "wingfoil agent execute --element task:202 --role developer"
+    Then the agent's bootstrap names "wingfoil" and the version and commit of the build that launched it
+    And inside the agent's shell "wingfoil --version" and "$WINGFOIL_CLI --version" print that version and commit
+    And the shim is gone once agent execute exits
+
+  Scenario: The spawned agent carries WINGFOIL_AGENT, and the run record carries no agent trailer
+    Given agent execute runs in a Claude Code session, with CLAUDE_CODE_CHILD_SESSION set
+    When I run "wingfoil agent execute --element task:202 --role developer"
+    Then the agent's environment has WINGFOIL_AGENT set to the selected team.agents entry's name
+    And the post-run lookups run without WINGFOIL_AGENT
+    And the "agent: record <run-id>" commit has no Co-Authored-By or AI-Model trailer
+
+  Scenario: Error - agent execute takes no --co-author
+    When I run "wingfoil agent execute --element task:202 --role developer --co-author Claude"
+    Then no agent is launched
+    And the command exits with code 2 and message "unknown option '--co-author'"
+
+  Scenario: The assigned session id hashes the clone's salt, not its path
+    Given the agent's adapter declares "session.id: assign"
+    When I run "wingfoil agent execute --element task:202 --role developer" twice
+    Then the first run creates the session salt in the git directory and the second reuses it
+    And each record's session is the version 5 UUID of the salt and the run id, whatever the repository's path
+    And a run from a linked worktree of the clone uses the same salt
