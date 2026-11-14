@@ -412,6 +412,25 @@ all eight), and its Revision note says so. The other pending files are unchanged
 
 - `spec-002-dna-yaml-schema` — `--reason "Add human-only roles to Role binding and the RoleEntry Zod listing, per dl-202 item 1: an optional human_only flag, approver always human-only, and a load error for an executes_as naming a human-only role; and correct Role binding's sentence on roles.yaml, which binds facilitator and approver since task-215 (task-340 design gate)."`
 
+### design gate rulings (approver, 2026-11-14)
+
+The approver approved the design as recommended (finalize `6c959c127`, after the amends of spec-002 `b818cb9c9`,
+spec-003 `24a86f5cc` and spec-016 `16a03b365`):
+
+- **D1 (A)** `approver` is human-only without a declaration; an `executes_as` naming it, or `human_only: false` on
+  it, is a load error.
+- **D2 (a)** the two `agent.execute` actions under tech-lead are dropped from release-publishing (2.2 → 2.3).
+- **D3** `dna.yaml` is written by three `dna update` verb writes (2.1 → 2.4); criterion 5's single raise is read as
+  one raise per write.
+- **D4** the pinned build's unknown-field warning is accepted, with no pinned-build bug.
+- **D5** the `W_WORKFLOW_CHECKS_NOT_RUN` message is unchanged.
+- **D6** one refusal message for every human-only role, the `approver` message unchanged; the stale `roles.yaml`
+  sentence of spec-002 § "Role binding" is corrected in this task.
+
+Before red, `main` was merged into the branch (`ca66f6142`) to bring in task-338: spec-016's Revisions block kept
+both entries word for word, task-338's first. The four BDD scenarios (P2.4 +2, P4.1 +1, P5.3.2 +1) and the allowlist
+entries are committed (`4896d04eb`).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
