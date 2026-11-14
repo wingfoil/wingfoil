@@ -56,3 +56,5 @@ Severity low: `task-334`'s range is clean today.
      An item met while fixing goes in the fix task's own subsection; this one holds what belongs to
      the bug itself (its finding, its triage, why it took more than one task). The retrospective's
      `explore` reads this subsection first. -->
+
+- Absorbed into `task-352` at its design gate (D9): the same `co-author-identity` check reports a final paragraph with two `Co-Authored-By:` lines naming the same agent (the name exact, the email in any letter case, so `Claude <noreply@anthropic.com>` and `Claude <NoReply@Anthropic.com>` count as one agent; a review fix) or more than one `AI-Model:` line, as one finding per commit naming each repeated key. History holds no such paragraph (the design's scan of the whole history), so the rule reports nothing as residue.
