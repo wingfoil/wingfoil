@@ -67,10 +67,12 @@ Run every `wingfoil` command **from the repository root**. Use `--format json` t
 1. **Change state only through the CLI verbs** (`memory submit|park|deprecate`, `workflow
    start|finalize|end|adopt`; `memory approve|reject|amend`, `workflow rekey` and `workflow adopt --plan --apply`
    are the approver's). Never edit a `status:` field
-   by hand, and never write a `wf(...)` commit yourself. When `wingfoil agent execute` launched you, its
-   first prompt asks you to end the commits you co-author with your `Co-Authored-By:` and `AI-Model:`
-   trailers: add them to a commit `wingfoil` wrote with `git commit --amend --no-edit --trailer …`, never
-   to an approve or reject commit.
+   by hand, and never write a `wf(...)` commit yourself. When `wingfoil agent execute` launched you, a plain
+   `wingfoil` runs the build that launched you (its first prompt names the version `wingfoil --version`
+   prints; if it prints another, run `"$WINGFOIL_CLI"` instead), and the commits `wingfoil` writes for you
+   already end with your `Co-Authored-By:` and `AI-Model:` trailers: pass `--ai-model <your model identifier>`
+   to each command that writes a commit and never amend one to add them again. Add both trailers only to a
+   commit you write yourself with `git commit`.
 2. **Never approve or reject.** `memory approve` and `memory reject` belong to a human holding the
    `approver` role. When work needs approval, stop and ask for it. Do so even if the command would
    succeed under the git identity you are running with.

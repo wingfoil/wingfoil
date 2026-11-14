@@ -7,8 +7,9 @@
  * 14. The spawn: the adapter's `command` with `launch.<kind>.args`, then the permission fragment of the run's role
  *     ({@link launchPermissions}, task-339), then `session.assign_args` under `session.id: assign`, every
  *     placeholder filling whole argv elements ({@link renderLaunchArgv}),
- *     no shell, its working directory the project root, the environment passed through unchanged
- *     (`adr-012` point 1). An interactive agent inherits stdin, stdout and stderr; a headless one (the
+ *     no shell, its working directory the project root, the environment passed through with three changes
+ *     ({@link agentEnvironment}, task-338): the launching build's `wingfoil` shim first on `PATH`, `WINGFOIL_CLI`
+ *     naming it, and `spec-018` §1.1's launcher marker set to the agent's name. An interactive agent inherits stdin, stdout and stderr; a headless one (the
  *     work run, §3.5, task-335) reads the null device, its stdout is piped and drained (and read for the
  *     session id under `session.id: output`, step 16), its stderr is
  *     `agent execute`'s, and on POSIX it runs in a session and process group of its own (approver ruling
@@ -36,23 +37,26 @@
  *     the exit status. A headless success also prints the summary line as a notice (§3.5).
  *
  * **Determinism.** The argv, the session id and every record field but `duration_ms` are pure functions
- * of committed state and the run's inputs; the temporary-file paths and the Node executable are host
+ * of committed state, the run's inputs and, for an assigned session id, the clone's session salt (§2.6,
+ * `./session-salt.ts`), the one random value of a launch; the temporary-file paths and the Node executable are host
  * values that never reach the context (`spec-016` Consequences). `duration_ms` is wall-clock by design:
  * a record of what happened, never part of a context (`dl-114` Q2).
  */
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { execFile, spawn, type ChildProcess, type SpawnOptions } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { isAbsolute, resolve } from 'node:path';
+import { isAbsolute, posix, resolve, win32 } from 'node:path';
 import { performance } from 'node:perf_hooks';
 
 import { readBuildStamp } from '../storage';
 import { reportNotice, reportWarning } from '../validation/warning';
+import { AGENT_MARKERS } from '../core/agent-context';
 import { coreErr, coreOk, type CoreResult } from '../core/types';
 
 import type { TimeBound } from './duration';
 import type { AdapterManifest } from './schema';
 import { deriveNotesField, NOT_REPORTED, recordRun, type ReportedCount, type RunRecord, type RunTokens } from './run-log';
+import { sessionSalt } from './session-salt';
 
 /**
  * How much one post-run lookup may print before it is stopped (§2.6): `execFile`'s `maxBuffer`, which
@@ -86,12 +90,45 @@ export function uuidV5(namespace: string, name: string): string {
 }
 
 /**
- * The session id WingFoil assigns (§2.6 `assign`): the v5 UUID of `<absolute repository root>\n<run id>`
- * in {@link SESSION_ID_NAMESPACE}. Unique per clone and run, derived, never random. Per clone by design
- * (it hashes the root): the run id is the identifier across clones (`dl-135` Q3 (a)).
+ * The session id WingFoil assigns (§2.6 `assign`): the v5 UUID of `<session salt>\n<run id>` in
+ * {@link SESSION_ID_NAMESPACE}, `salt` the clone's ({@link sessionSalt}, task-338, `dl-168` Q1 (b)). Unique per
+ * clone and run, derived, and it discloses nothing about the host; the run id is the identifier across clones
+ * (`dl-135` Q3 (a)). Records committed before the salt hashed the repository root instead and keep those ids.
  */
-export function assignedSessionId(root: string, runId: string): string {
-  return uuidV5(SESSION_ID_NAMESPACE, `${root}\n${runId}`);
+export function assignedSessionId(salt: string, runId: string): string {
+  return uuidV5(SESSION_ID_NAMESPACE, `${salt}\n${runId}`);
+}
+
+/** The variable that names the launching build's `wingfoil` shim in the agent's environment (§2.4). */
+export const CLI_VARIABLE = 'WINGFOIL_CLI';
+
+/**
+ * The environment the agent is spawned with (§2.4, §3.3 step 14, task-338): a copy of `env` with, when `cliShim` (the
+ * shim's absolute path) is given, the shim's directory first on `PATH` (the key found case-insensitively on win32;
+ * `PATH` is the directory alone when absent) and {@link CLI_VARIABLE} set to the shim's path; and always `spec-018`
+ * §1.1's launcher marker — the first of `AGENT_MARKERS`, read from there so no marker name is spelled here — set to
+ * `agentName`, whatever it held. `env` is not changed; an unset variable is left out. `platform` (the process's by
+ * default) picks the path rules: win32's `;` separator and backslashes, and its case-insensitive `Path` key.
+ */
+export function agentEnvironment(
+  env: Readonly<Record<string, string | undefined>>,
+  cliShim: string | undefined,
+  agentName: string,
+  platform: NodeJS.Platform = process.platform,
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [name, value] of Object.entries(env)) if (value !== undefined) out[name] = value;
+  if (cliShim !== undefined) {
+    const rules = platform === 'win32' ? win32 : posix;
+    const pathKey = (platform === 'win32' ? Object.keys(out).find((name) => name.toUpperCase() === 'PATH') : undefined) ?? 'PATH';
+    const current = out[pathKey];
+    const dir = rules.dirname(cliShim);
+    out[pathKey] = current === undefined || current === '' ? dir : `${dir}${rules.delimiter}${current}`;
+    out[CLI_VARIABLE] = cliShim;
+  }
+  // Read at call time: `src/core` and `src/agent` import each other, so the table may still be loading at module time.
+  out[AGENT_MARKERS[0]!.id] = agentName;
+  return out;
 }
 
 /** The values the launch placeholders take (§2.3). */
@@ -283,9 +320,9 @@ function takeOverSignals(kind: LaunchKindRun, signalGroup: (pgid: number, signal
  * drained by {@link runAgent}, which hands it to the session-id reader under `session.id: output`), stderr inherited, and on POSIX a session and process group of its own, so the
  * agent has no controlling terminal to open and gets each signal once (approver ruling D6 (a)).
  */
-function spawnOptions(kind: LaunchKindRun, root: string): SpawnOptions {
-  if (kind === 'interactive') return { cwd: root, stdio: 'inherit', env: process.env };
-  return { cwd: root, stdio: ['ignore', 'pipe', 'inherit'], env: process.env, detached: !WINDOWS };
+function spawnOptions(kind: LaunchKindRun, root: string, env: NodeJS.ProcessEnv): SpawnOptions {
+  if (kind === 'interactive') return { cwd: root, stdio: 'inherit', env };
+  return { cwd: root, stdio: ['ignore', 'pipe', 'inherit'], env, detached: !WINDOWS };
 }
 
 /**
@@ -663,6 +700,8 @@ export interface LaunchInput {
   readonly kind: LaunchKindRun;
   /** `--timeout`'s bound: its length and the value as given (§3.1); absent, the run is unbounded. */
   readonly timeout?: TimeBound | undefined;
+  /** Absolute path of the launching build's `wingfoil` shim in the run's temporary directory (§2.4), when written. */
+  readonly cliShim?: string | undefined;
 }
 
 /** A launched run, recorded: what `agent execute` reports (§3.4's `{ "run": <record> }`). */
@@ -696,7 +735,13 @@ export function launchBanner(input: LaunchInput): string {
  */
 export async function launchAgent(root: string, input: LaunchInput, host: LaunchHost, releaseSignals: () => void): Promise<CoreResult<RecordedLaunch>> {
   const { manifest } = input.adapter;
-  const assigned = manifest.session.id === 'assign' ? assignedSessionId(root, input.runId) : undefined;
+  // §2.6: the clone's salt, before the banner, so a salt refused launches and records nothing (task-338).
+  let assigned: string | undefined;
+  if (manifest.session.id === 'assign') {
+    const salt = sessionSalt(root);
+    if (!salt.ok) return coreErr(salt.error);
+    assigned = assignedSessionId(salt.value, input.runId);
+  }
   const values: LaunchValues = {
     bootstrap: input.bootstrap,
     files: input.files,
@@ -742,7 +787,8 @@ export async function launchAgent(root: string, input: LaunchInput, host: Launch
       host.spawn ?? spawn,
       commandToSpawn(root, manifest.command),
       argv,
-      spawnOptions(input.kind, root),
+      // The agent only: the lookups, the pre-flight and the probe keep `agent execute`'s own environment (§2.4).
+      spawnOptions(input.kind, root, agentEnvironment(process.env, input.cliShim, input.agent.name)),
       (child) => {
         signals.attach(child);
         armBound();
