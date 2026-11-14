@@ -282,6 +282,110 @@ Consequences for the next phases:
 - `bug-193` has no `### Retrospective` subsection (`grep -c "### Retrospective"` → 0; `bug-475` and `bug-535` → 1):
   it needs one as a pending amendment before the review gate.
 
+### red (qa, 2026-11-14)
+
+**Red commit `42b689c67`** (`git log --oneline -1 42b689c67` → `42b689c67 test(governance): 352 — failing test:
+co-author-identity check, …`), test files only. Base unchanged: `git rev-list --count HEAD..main` → `0`, no merge. PATH
+guard: the task's PATH shim resolves `wingfoil`; `wingfoil --version` and `node dist/cli.js --version` both print
+`0.3.2 (e4bc4855d6972942b25994a260968c08354a5650)`. No `src/`, `scripts/` or production file touched; no new export, so
+no `.d.cts`.
+
+**Files.** `test/cli/check-governance-co-author-identity.test.ts` (new, 28 tests); `test/cli/check-governance-enforcement.test.ts`
+(the `CHECKS` pin gains `'co-author-identity': 'governance-check:co-author-identity'` after `plan-retrospective`);
+`test/validation/identity.test.ts` (the line-14 "only the top-level label counts" row drops `a@test.example.com` and
+`a@example.org`; a new AC 2 `describe`); `test/memory/audit.test.ts` (a rejected list; `dev@test.example.com` moved there
+from the "still accepts" list, which gains `dev@notexample.com`); `test/dna/agent-identity-placeholder.test.ts` (the
+"keeps accepting" list, the agreement table, a new AC 2 `describe`, a holder test for the second-level list);
+`test/dna/agent-identity.test.ts` (accepted cases moved to `0+agent@users.noreply.github.com`, two refusals added);
+`test/release-health/measure.test.ts` (a D4 `describe` at its end). The D8 fixture moves the design assigns to green are
+not touched (`test/core/helpers/l0-fixture.ts`, `attribution-fixture.ts`, `agent-execute-fixture.ts`, the inline YAMLs,
+`test/memory/audit.test.ts:128`'s `makeAttributedRepo`, …).
+
+**Run.** `npx jest test/cli/check-governance-co-author-identity.test.ts test/cli/check-governance-enforcement.test.ts
+test/validation/identity.test.ts test/memory/audit.test.ts test/dna/agent-identity-placeholder.test.ts
+test/dna/agent-identity.test.ts test/release-health/measure.test.ts --maxWorkers=2` → `Test Suites: 7 failed, 7 total`,
+`Tests: 36 failed, 274 passed, 310 total` (failed per file: co-author-identity 16 of 28, enforcement 1, identity 8,
+audit 4, agent-identity-placeholder 4, agent-identity 2, measure 1). `npx tsc --noEmit -p tsconfig.json` → exit 0 (the new
+check is read through `(finding.check as string | undefined)` and `checkIntroductions as Record<string, string | null>`,
+as the design says). `npx jest test/lint --maxWorkers=2` with the files in place → `Test Suites: 16 passed`, `Tests: 165
+passed`. `npx eslint` on the seven files → exit 0.
+
+**Fixtures.** The AC 1/3/5 fixture follows `check-governance-approval-agent-trailer.test.ts` (a throwaway repository, an
+identity per commit, no `scripts/check-governance.cjs` except in AC 3's) with the design's DNA: members `Ada Approver
+<approver@example.invalid>` (approver, developer) and `Dev Eloper <developer@example.invalid>`, agents `Claude` /
+`noreply@anthropic.com` and `Other` / `0+other-agent@users.noreply.github.com`. The verb-written final paragraph is
+`740f184bf`'s, verbatim (`git log -1 --format=%B 740f184bf | tail -4`: `WingFoil-Version: 0.3.2
+(dcfe8ab073b941afdcd3336afaebda54b1db1761)` / `Co-Authored-By: Claude <noreply@anthropic.com>` / `AI-Model:
+claude-opus-5-5`). AC 5's duplicated pair is written by `bug-535`'s own reproduction, `git commit --amend --no-edit
+--trailer "Co-Authored-By: Claude <noreply@anthropic.com>" --trailer "AI-Model: claude-opus-5-5"` on that commit, and a
+case asserts the amend left two equal pairs (passes). The invalid `dna.yaml` replaces the `team:` block with `team: 1`
+(checked against the build: `DnaYaml.safeParse` → `false`, the valid fixture → `true`).
+
+**Per AC** (first failing assertion of each red test; every one an assertion, none a crash):
+- **AC 1 (red-first)**, `check-governance-co-author-identity.test.ts`:
+  - "the runtime-injected name on a wf(task): start / a docs: commit / a --no-ff merge commit (D2) gives one gated body
+    finding, message 1 exactly" (3) → `expect(coAuthorFindings(report, sha)).toEqual([{ rule: 'body', message: …,
+    gated: true }])`, received `[]`.
+  - "the name is compared exactly: claude <noreply@anthropic.com> gives one finding (D5)", "a known email under an
+    unknown name gives one finding" (Mallory), "the commit that adds Bot to dna.yaml is matched against its first
+    parent: one finding (D1)" → the same `toEqual`, received `[]`.
+  - "a value that is not `Name <email>` gives message 2 exactly" → received `[]`.
+  - "the positive cases are the only co-author-identity findings of the range" → received `[]` for the seven shas.
+  - D6 (second `describe`): "… after the one that deletes .wingfoil/dna.yaml gives message 3 exactly" → received `[]`;
+    "… after the one that makes it invalid (team: 1) gives message 4" → `expect(findings).toHaveLength(1)`, received 0
+    (the `(<error>)` part matched with `toMatch`).
+  - pass on first run (their positive companions are the reds above): the `Claude`, `Claude <NoReply@Anthropic.com>`,
+    `Other` and member `Dev Eloper` cases, the non-final-paragraph case (D3), the commit after the Bot entry (D1), and the
+    approval case (no `co-author-identity` finding, its `approval-agent-trailer` finding still there).
+- **AC 2 (red-first)**:
+  - `identity.test.ts` "task-352 AC 2 — hasReservedDomain …": `a@example.com`, `a@example.net`, `a@example.org`,
+    `a@EXAMPLE.COM`, `a@mail.example.org`, `a@test.example.com`, `a@example.com.` "is reserved" (7) →
+    `expect(hasReservedDomain(email)).toBe(true)`, received `false`; "attributionEmailIssue('bot@example.org') is
+    'reserved-domain'" → received `null`. Pass: `noreply@anthropic.com`, `a@notexample.com`, `a@examples.org`,
+    `a@example.com.au`, `a@localhost.dev` are not reserved.
+  - `audit.test.ts` "task-352 AC 2: rejects an email on the RFC 2606 reserved second-level domain …" (`dev@example.com`,
+    `dev@mail.example.net`, `dev@EXAMPLE.ORG`, `dev@test.example.com`) → `expect(isValidAttribution('Dev',
+    email)).toBe(false)`, received `true`. Pass: `dev@notexample.com` accepted.
+  - `agent-identity-placeholder.test.ts`: "refuses \"bot@example.org\" / \"agent@test.example.com\" with one issue at
+    team.agents.0.email, the new message exactly" → `expect(result.success).toBe(false)`, received `true`; "the
+    top-level refusal carries the same message …" → `toBe(<the design's text>)`, received today's text (`… (.test,
+    .example, .invalid, .localhost: RFC 2606 names no mailbox there, and the attribution audit rejects it, bug-261)`);
+    "the RFC 2606 reserved second-level list ('example.com', 'example.net', 'example.org') appears in exactly one file
+    under src/ …" → `toEqual(['src/validation/identity.ts'])`, received `[]` (the test matches the list literal, since
+    single mentions of `example.com` stay in `src/storage/templates.ts` and `src/core/index.ts`). The agreement table's
+    new row `Claude <bot@example.org>` passes today (both accept) and holds both sides together after green; "a
+    team.members entry on example.com still parses" passes.
+  - `agent-identity.test.ts`: "refuses agent@example.org, … naming team.agents.0.email" → `expect(issuePaths(…)).toContain('team.agents.0.email')`,
+    received `[]`; "refuses agent@example.org at exit 1 … (write path)" → `expect(result.ok).toBe(false)`, received
+    `true`. The two moved accepted cases pass.
+- **AC 3 (red-first)**, same new file, `describe` "task-352 AC 3 …": "the check's introduction is the commit that brought
+  its marker in" → `toBe(<marker commit>)`, received `undefined`; "a commit before the introduction is reported as
+  residue, not gated" and "a commit after the introduction is gated" → `toEqual([{ …, gated: false|true }])`, received
+  `[]`; "with only the residue, the check exits 0, the residue still reported" → `toHaveLength(1)`, received 0 (then
+  `exitCodeFor` → `0`). `check-governance-enforcement.test.ts` "pins every marker exactly …" → `expect(CHECKS).toEqual(…)`,
+  the `co-author-identity` entry missing. The repository evidence (`node scripts/check-governance.cjs --base
+  origin/main`, and `--base 954138f7c^`) is the developer's at refactor, as the design says.
+- **AC 4 (characterization)**, "task-352 AC 4 …": "a wf(task): submit whose final paragraph is 740f184bf's, verbatim,
+  gives no finding" and "a real memory submit of the compiled CLI under WINGFOIL_AGENT=Claude writes the team.agents
+  entry, and gives no finding" (`buildL0Repo()`, `node dist/cli.js memory submit task-004-deprecate-me` with
+  `withoutAgentMarkers(process.env)`, `WINGFOIL_AGENT_MODEL` removed, `WINGFOIL_AGENT=Claude`; exit 0, `git log -1
+  --format='%(trailers:key=Co-Authored-By,valueonly)'` → `Claude <noreply@anthropic.com>`) → both pass on first run.
+- **AC 5 (red-first; the cases are qa's, the design sized them as "about 3 cases")**, "task-352 AC 5 …": "two equal
+  Co-Authored-By: lines and two AI-Model: lines give one gated body finding" and "two AI-Model: lines under one valid
+  co-author give one gated body finding" → `expect(findings).toHaveLength(1)`, received 0. Pass on first run: one pair →
+  none; two different valid co-authors (agent `Claude` and member `Dev Eloper`) with one model line → none; the fixture
+  shape check. The design gives no message text for AC 5, so these cases pin the count, `rule: 'body'` and `gated: true`,
+  not the message.
+- **D4 (a)**, `measure.test.ts` "task-352 D4 — P01 leaves co-author-identity findings out (P01_EXCLUDED_CHECKS)" (this
+  repository's `memory.yaml` and `dna.yaml` at `HEAD`, then a `docs:` commit co-authored `Claude Opus 5.5
+  <noreply@anthropic.com>`): "the governance check reports the commit under co-author-identity, rule body (the positive
+  case)" → `toEqual([{ sha: point, rule: 'body' }])`, received `[]`; "P01 over the same window has no failing item"
+  passes today and guards the exclusion after green.
+
+**Reading of the design's message 2.** `<v>` ("the value as written after the key") is pinned without the space that
+follows `Co-Authored-By:`: the line `Co-Authored-By: Claude noreply@anthropic.com` expects `… (git-conventions §7):
+Claude noreply@anthropic.com`.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
