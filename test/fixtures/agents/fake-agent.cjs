@@ -32,7 +32,8 @@
  * - `WINGFOIL_FAKE_AGENT_CONNECT=1` — on a launch, connect to the `wingfoil` server named in the MCP
  *   config, complete `initialize`, and read the session Resource the bootstrap's context instruction
  *   names, by its full URI (§2.4; task-236, approver ruling (a) 2026-10-13: a real agent's model can read
- *   Resources but not get Prompts). The Resource's text is recorded verbatim.
+ *   Resources but not get Prompts). The Resource's text is recorded verbatim, and so is the server's `args`
+ *   from the MCP config (task-353: which root the registered server serves).
  * - `WINGFOIL_FAKE_AGENT_STDIN=1` — read stdin to its end and record it. Off by default: an interactive
  *   agent owns stdin, and an inherited pipe nobody closes would never end.
  * - `WINGFOIL_FAKE_AGENT_DOCUMENT` — the JSON document to print for `--lookup` and a headless launch,
@@ -217,7 +218,8 @@ function fetchResource(source, uri) {
       if (initialized.error) return finish(null, { initialize: initialized.error });
       send({ method: 'notifications/initialized' });
       const answer = await request(2, 'resources/read', { uri });
-      const result = { server: initialized.result.serverInfo, resource: { uri } };
+      // `args`: the server's argv as the MCP config declares it (task-353: the root it serves, `--project <root>`).
+      const result = { server: initialized.result.serverInfo, args: server.args, resource: { uri } };
       if (answer.error) return finish(null, { ...result, error: { code: answer.error.code, message: answer.error.message } });
       const [first] = answer.result.contents;
       finish(null, {

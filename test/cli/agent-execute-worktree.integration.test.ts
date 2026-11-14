@@ -8,8 +8,8 @@
  * - the record `agent: record <task>/adhoc/1` is committed on the worktree's branch, and the main checkout's branch
  *   holds no `agent:` commit;
  * - the record's `state_ref` is the worktree's `HEAD` before the run (a commit `main` does not have);
- * - with `WINGFOIL_FAKE_AGENT_CONNECT=1` the session Resource the fake read through the registered MCP server names
- *   that same sha;
+ * - with `WINGFOIL_FAKE_AGENT_CONNECT=1` the registered MCP server's argv (from the MCP config, as the fake records it)
+ *   ends `--project <worktree> mcp` (D2), and the session Resource the fake read through it names that same sha;
  * - `--dry-run` (`--format json` and `--format console`): the plan's `run.state_ref` is the worktree's `HEAD`, nothing
  *   is written;
  * - a `<dir>` that is not a git root (a plain directory) is refused before any side effect: exit `1`, stderr exactly
@@ -95,13 +95,16 @@ describe('task-353 AC 1 — agent execute in a linked worktree through --project
     expect(git(wt, ['status', '--porcelain'])).toBe('');
   });
 
-  it('the registered MCP server serves the worktree: the session Resource the agent read names the worktree\'s HEAD', () => {
+  it('the registered MCP server serves the worktree: its argv ends --project <worktree> mcp, and the session Resource the agent read through it names the worktree\'s HEAD', () => {
     const { main, wt } = checkouts();
     const wtHead = headOf(wt);
     const run = executeIn(main, wt, ['--element', TASK_REF, '--role', 'developer'], { WINGFOIL_FAKE_AGENT_CONNECT: '1' });
     expect(run.status).toBe(0);
-    const launch = run.fake[0] as unknown as { mcp: { resource?: { uri: string }; error?: unknown; text?: string | null } | null; failure?: string };
+    const launch = run.fake[0] as unknown as { mcp: { args?: string[]; resource?: { uri: string }; error?: unknown; text?: string | null } | null; failure?: string };
     expect(launch.failure).toBeUndefined();
+    const tail = (launch.mcp?.args ?? []).slice(-3);
+    expect([tail[0], tail[2]]).toEqual(['--project', 'mcp']);
+    expect(realpathSync(tail[1] ?? '')).toBe(realpathSync(wt));
     expect(launch.mcp?.resource).toEqual({ uri: `wingfoil://session/developer/${TASK_REF}/${wtHead}` });
     expect(launch.mcp?.error).toBeUndefined();
     expect(typeof launch.mcp?.text).toBe('string');
