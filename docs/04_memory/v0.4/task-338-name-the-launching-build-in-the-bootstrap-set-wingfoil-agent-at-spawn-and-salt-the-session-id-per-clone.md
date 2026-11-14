@@ -249,6 +249,115 @@ after the amendments `eef58cd19` (`spec-016`) and `d3812b331` (`spec-011`). Cons
 - D7: the BDD scenarios and the three `PLANNED` allowlist entries are committed before red, in the commit right before
   this note (`git log -2 --format='%h %s'`).
 
+### red (qa, 2026-11-14)
+
+**Red commit `c8754fc2a`** (`git log --oneline -1` → `c8754fc2a test(agent): 338 — failing test: the launching build in
+the bootstrap and on the agent's PATH, WINGFOIL_AGENT at spawn, the per-clone session salt`), test files and fixtures
+only (`git show --stat HEAD` → 10 files, nothing under `src/`, `scripts/` or `docs/`). Base: `git rev-list --count
+HEAD..main` → `0`, no merge. PATH guard: `command -v wingfoil` → the task's PATH shim; `wingfoil --version` and
+`node dist/cli.js --version` → `0.3.2 (5ac752f85a126379fc407565e08444c23eaeed3f)`. AC 6: the approver's amendments are
+`eef58cd19` (`wf(tech-spec): amend spec-016-agent-execution [approved → approved]`) and `d3812b331` (`… amend
+spec-011-storage-layout …`), both before red (`git log --oneline -6`).
+
+**Files.** New: `test/agent/launch-env.test.ts`, `test/agent/session-salt.test.ts`,
+`test/cli/agent-execute-cli-shim.integration.test.ts`, the fixture
+`test/fixtures/run-logs/task-236-ship-verify-hand-builtin-claude-code-adapter-point.jsonl` (`git show
+HEAD:docs/06_runs/task-236-….jsonl > …`, `cmp` → identical; last commit of the source `git log -1 --format=%h -- <path>`
+→ `94377e43a`). Changed: `test/fixtures/agents/fake-agent.cjs` (opt-in `WINGFOIL_FAKE_AGENT_CLI=1`: on a launch it runs
+`wingfoil --version` looked up on its `PATH` with no shell and `"$WINGFOIL_CLI" --version`, records `cli: {path, variable,
+mode}` — `mode` the octal permission bits of `$WINGFOIL_CLI`, an addition beyond the design's two keys so the spec's
+"owner-only" shim is asserted — and `launcher`, the `WINGFOIL_AGENT` value; documented in its header),
+`test/agent/fake-agent.test.ts` (three cases for it), and the pins the design lists, rewritten to the amended text:
+`test/agent/execute.test.ts`, `test/agent/launch.test.ts`, `test/cli/agent-execute.integration.test.ts` (`bootstrapOf`),
+`test/cli/agent-execute-launch.integration.test.ts` (`bootstrapOf`, and `sessionOf` now reads
+`<git common dir>/wingfoil/session-salt`, a placeholder when absent so the assertion fails, not the helper). No `.d.cts`
+is needed: no red imports a `.cjs` module with a new export.
+
+**Run.** `npx jest --maxWorkers=2 --json test/agent/fake-agent.test.ts test/agent/launch.test.ts test/agent/execute.test.ts
+test/agent/launch-env.test.ts test/agent/session-salt.test.ts test/cli/agent-execute-cli-shim.integration.test.ts
+test/cli/agent-execute.integration.test.ts test/cli/agent-execute-launch.integration.test.ts` at `c8754fc2a` → 52 failed,
+163 passed: execute 9 failed / 42, launch 3 / 14, launch-env 6 / 11, session-salt 13 / 15, fake-agent 0 / 57,
+agent-execute-cli-shim 14 / 30, agent-execute 2 / 31, agent-execute-launch 5 / 15. `npx tsc --noEmit -p tsconfig.json` →
+exactly the intended errors: TS2305 `cliShim`, `runningBuildCli` (execute.test.ts:18, :23), `agentEnvironment`
+(launch-env.test.ts:21), `SESSION_SALT_FILE`, `sessionSalt` (session-salt.test.ts:22), and TS2353 `build` in a
+`BootstrapInput` literal (execute.test.ts:46, :69, :77). `npx jest test/lint --maxWorkers=2` → 15 suites passed, 1
+failed: `typecheck-clean.test.ts`, whose output is those same eight diagnostics and nothing else (red until green adds
+the exports). `npx eslint` on the changed test files and the fixture → clean. Also run, unaffected: `npx jest
+--maxWorkers=2 test/docs/name-resolvability.test.ts test/cli/e2e-smoke-fake-read.test.ts
+test/cli/agent-execute-headless.integration.test.ts test/cli/agent-execute-config-arg.integration.test.ts
+test/agent/module.test.ts` → 32 passed.
+
+**Per AC** (first failing assertion of each red test; `jest --json` failure messages):
+- **AC 1 (red-first).**
+  - execute.test.ts "the fixed six-line template …" → `toBe` on the whole text: line 4 (`{cli_line}`) absent; "another
+    build is named in its own CLI line …" → Expected `Run WingFoil commands as "wingfoil <command>": … prints "1.2.3
+    (fedcba9)" …`, received the handoff line; "cliShim" × 4 (POSIX name and `#!/bin/sh` + `exec '<node>' '<cli.js>'
+    "$@"`, a quote written `'\''`, the script run through `sh` with `a b`, `$HOME`, `q'uote` arriving intact, win32
+    `wingfoil.cmd` text `@"<node>" "<cli.js>" %*` CRLF) → `TypeError: (0 , agent_1.cliShim) is not a function`;
+    "runningBuildCli" × 2 → `TypeError: dist.runningBuildCli is not a function` / `agent_1.runningBuildCli`.
+  - launch-env.test.ts `agentEnvironment` × 4 (directory first on `PATH`, `PATH` alone when absent, input unchanged,
+    no shim) → `TypeError: (0 , agent_1.agentEnvironment) is not a function`; "launchAgent spawns with the shim the
+    launch input names" (`cliShim` passed through a cast, as `test/agent/launch.test.ts` does for `mcpConfig`) →
+    Expected `/tmp/wingfoil-run-x/bin`, received the first entry of jest's own `PATH`.
+  - agent-execute-cli-shim "inside the agent, "wingfoil --version" prints the launching build" (a decoy `wingfoil`
+    printing `decoy 0.0.0` first on `agent execute`'s `PATH`) → Expected `0.3.2 (c8754fc2a…)`, received `decoy 0.0.0`:
+    `bug-369` reproduced; "… "$WINGFOIL_CLI --version" …" → received `null`; "the shim … is owner-only (700)" → received
+    `null`; "the bootstrap the agent received carries the CLI line …" → line 4 is the handoff line; "the dry-run plan's
+    bootstrap names that build too, under --format json and console" → `toContain` fails on the json plan (the console
+    plan is the same JSON document pretty-printed, checked by parsing it: `node dist/cli.js agent execute --element
+    task:task-202-explicit-override --role developer --dry-run` on the fixture printed `{"dryRun": true, … "bootstrap":
+    …}`). Pass: the decoy guard (`wingfoil --version` on that `PATH` → `decoy 0.0.0`), exit `0` and `leftInTmp` `[]`.
+- **AC 2.** Red-first (D4): launch-env.test.ts "the spawn's environment has WINGFOIL_AGENT set …" (injected
+  `host.spawn`) → Expected `"Hand Agent"`, received `undefined`; agent-execute-cli-shim "(red-first) the agent is spawned
+  with WINGFOIL_AGENT …", no marker and under `CLAUDE_CODE_CHILD_SESSION=1` → `toContain("WINGFOIL_AGENT")` fails on the
+  launch line's env names. Characterization, pass on first run: the usage lookup prints `process.env.WINGFOIL_AGENT ??
+  "absent"` → record `model: "absent"`; `process.env.WINGFOIL_AGENT` undefined after the launch; the post-run
+  `--version` / `--lookup` env names lack `WINGFOIL_AGENT` (both cases, the marker's presence checked as a guard);
+  `git log -1 --format='%s%n%(trailers:key=Co-Authored-By)%(trailers:key=AI-Model)'` → `agent: record <run-id>` only
+  (both cases); `--co-author Claude` → exit `2`, stderr exactly `error: unknown option '--co-author'\n` (copied from
+  `node dist/cli.js agent execute --element task:task-202-explicit-override --role developer --co-author Claude` in a
+  scratch directory: exit `2`, `od -c` of stderr → that line, stdout 0 bytes), no fake line, `HEAD` unchanged;
+  `\bWINGFOIL_AGENT\b` in `src/` only in `src/core/agent-context.ts`, with the guard that the pattern does not match
+  `WINGFOIL_AGENT_MODEL`, which `src/` does spell (`grep -rlP '\bWINGFOIL_AGENT_MODEL\b' src` → `src/core/agent-context.ts`,
+  `src/cli/registrar.ts`).
+- **AC 3 (red-first).** launch.test.ts "the prefix is spec-018 Consequences' opening words" → Expected `Commits wingfoil
+  writes for you already end with`, received `End every commit you write, except an approve or reject commit, with the
+  trailer paragraph`; "closes the bootstrap with spec-018 Consequences' text …" → the old line; "attributionLine is that
+  line, and never names the old placeholder or an amend" and execute.test.ts "no longer asks the agent to type its model
+  into an amend" → `not.toContain("<the model identifier you run as>")`; agent-execute.integration.test.ts the two
+  "task-218 AC 5 — the bootstrap bytes" cases and agent-execute-launch "--agent selects another entry …" → `toBe` on the
+  rewritten `bootstrapOf`. The BDD rewording was committed before red (`5ed5bfe58`).
+- **AC 4 (red-first).** session-salt.test.ts: `SESSION_SALT_FILE` → received `undefined`; every `sessionSalt` case
+  (create + file text, `0600`/`0700`, reuse with same inode, two clones two salts, clean `git status --ignored`, linked
+  worktree sharing the common directory's salt and nothing under `.git/worktrees/`, four malformed texts → `VALIDATION`
+  with §2.6's message and the file kept, `wingfoil` a file → `IO` with §2.6's prefix and no root path) →
+  `TypeError: (0 , agent_1.sessionSalt) is not a function`; "eight concurrent processes mint one salt" (eight `node -e`
+  children on the dist module) → `toEqual(Array(8).fill(true))` fails, each child's `sessionSalt` not a function.
+  agent-execute-cli-shim: "the first run creates <git common dir>/wingfoil/session-salt" → received `<no session salt
+  file>`; "owner-only" → `existsSync` false; "the second run reuses it" → `toBeDefined` on `undefined`; "each run's
+  session id … is the v5 UUID of `<salt>\n<run id>`" → the argv ids differ; "no record holds the root-hashed id" → both
+  records hold the root-hashed ids; "a run from a linked worktree … uses the same salt" → ids differ; "a malformed salt is
+  refused before the banner" → Expected exit `1`, received `0`. agent-execute-launch: "the full adhoc run" argv and record,
+  "session.id: assign passes the UUID v5 of `<session salt>\n<run id>` …" and "a lookup that fails …" → the session no
+  longer matches `sessionOf`. Pass today and kept as guards: a dry run and a `session.id: none` adapter
+  (`config-arg/fake-config-arg.yaml`) create no salt.
+- **AC 5 (characterization), pass on first run.** session-salt.test.ts: the fixture is the start of the committed log;
+  `parseRunLog` → ok, sessions `f4458e8b-b6a3-5453-8221-90a33bb558bb`, `b0fc53be-b276-5117-95e6-2e983cf4e5e9`.
+  agent-execute-cli-shim: a run on a fixture element `task-236-…` whose log holds those two lines appends
+  `…/adhoc/3`, and `git show HEAD:<log>` starts with the fixture's bytes.
+- **AC 6 (characterization).** Not a test (design table): the amendments above.
+- **AC 7 (characterization, D3 (a)), pass on first run.** agent-execute-cli-shim: `WINGFOIL_FAKE_AGENT_DOCUMENT` without
+  `model` → record `model: "not-reported"`, tokens kept, no `warning:` line naming the model; the docs-text case finds
+  §2.6's two sentences (`not-reported` says WingFoil read none; such a record says the trailers' model is unverified).
+
+**Interpretations to confirm (none departs from the design).** `sessionSalt(root)` returns the 64 digits without the
+line feed (§2.6 hashes `<session salt>\n<run id>`, and the design's table says `<salt without LF>`). The win32 shim text is
+pinned as exactly one line, `@"<node>" "<cli.js>" %*` followed by CRLF; the POSIX text is pinned by its first line
+`#!/bin/sh`, its `exec` line, a final LF, no CR, and by running it. `agentEnvironment(env, undefined, name)` is pinned only
+for `PATH` unchanged and `WINGFOIL_AGENT` set. **Unasserted (T1):** the win32 case-insensitive `PATH` key (no Windows
+runner, D5); the shim's removal on a signal path (the existing `withRunFiles` signal cases cover the directory; the
+integration asserts `leftInTmp` `[]` on the success path only).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
