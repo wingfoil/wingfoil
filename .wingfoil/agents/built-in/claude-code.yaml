@@ -11,10 +11,15 @@ launch:
     # The prompt first: --mcp-config takes several values and would read a following prompt as one.
     args: [ "{bootstrap}", --mcp-config, "{mcp_config_file}" ]
     terminal: required
+    # Folder trust (task-353): in a directory it has not seen, a trust dialog comes before any
+    # prompt, and the person at the terminal answers it; no option of the help skips it here.
+    trust: prompt
   headless:
     # -p (--print) prints the response and exits; the prompt first, for the reason above.
     args: [ -p, "{bootstrap}", --mcp-config, "{mcp_config_file}" ]
     output: none
+    # The help says the workspace trust dialog is skipped under -p (task-353).
+    trust: implied
     # The posture of each role (dl-223 (b), task-339), appended after args: --permission-mode
     # dontAsk denies every tool no rule allows, so a headless agent never waits on a prompt;
     # --allowedTools and --disallowedTools take a list, closed by the next option. default, the

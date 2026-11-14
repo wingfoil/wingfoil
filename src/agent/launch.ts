@@ -5,10 +5,11 @@
  * 13. The banner, `run <run-id>: launching <agent> (<adapter>) as <role> on <type>:<id>`, as a notice
  *     on stderr (`reportNotice`): the CLI renders it in the active `--format`.
  * 14. The spawn: the adapter's `command` with `launch.<kind>.args`, then the permission fragment of the run's role
- *     ({@link launchPermissions}, task-339), then `session.assign_args` under `session.id: assign`, every
- *     placeholder filling whole argv elements ({@link renderLaunchArgv}),
- *     no shell, its working directory the project root, the environment passed through with three changes
- *     ({@link agentEnvironment}, task-338): the launching build's `wingfoil` shim first on `PATH`, `WINGFOIL_CLI`
+ *     ({@link launchPermissions}, task-339), then the trust fragment ({@link launchTrust}, task-353), then
+ *     `session.assign_args` under `session.id: assign`, every placeholder filling whole argv elements
+ *     ({@link renderLaunchArgv}), no shell, its working directory the project root (the directory the global
+ *     `--project` names, a linked worktree of the repository included, `bug-499`), the environment passed
+ *     through with three changes ({@link agentEnvironment}, task-338): the launching build's `wingfoil` shim first on `PATH`, `WINGFOIL_CLI`
  *     naming it, and `spec-018` §1.1's launcher marker set to the agent's name. An interactive agent inherits stdin, stdout and stderr; a headless one (the
  *     work run, §3.5, task-335) reads the null device, its stdout is piped and drained (and read for the
  *     session id under `session.id: output`, step 16), its stderr is
@@ -48,14 +49,14 @@ import { createHash } from 'node:crypto';
 import { isAbsolute, posix, resolve, win32 } from 'node:path';
 import { performance } from 'node:perf_hooks';
 
-import { readBuildStamp } from '../storage';
+import { readBuildStamp, resolveCommitAtRev } from '../storage';
 import { reportNotice, reportWarning } from '../validation/warning';
 import { AGENT_MARKERS } from '../core/agent-context';
 import { coreErr, coreOk, type CoreResult } from '../core/types';
 
 import type { TimeBound } from './duration';
 import type { AdapterManifest } from './schema';
-import { deriveNotesField, NOT_REPORTED, recordRun, type ReportedCount, type RunRecord, type RunTokens } from './run-log';
+import { deriveNotesField, NOT_REPORTED, recordRun, START_UP_HINT_NOTES, type ReportedCount, type RunRecord, type RunTokens } from './run-log';
 import { sessionSalt } from './session-salt';
 
 /**
@@ -182,15 +183,27 @@ export function launchPermissions(manifest: AdapterManifest, kind: LaunchKindRun
 }
 
 /**
+ * The trust fragment of a launch kind (§2.2 `launch.<kind>.trust`, §3.3 step 14, `bug-500`, task-353): the declared
+ * fragment; `[]` under `implied`, `prompt` or no `trust`. It holds no placeholder (§2.3), so it is not rendered.
+ *
+ * @param manifest - A validated manifest.
+ * @param kind - The launch kind of the run; each kind reads its own field.
+ */
+export function launchTrust(manifest: AdapterManifest, kind: LaunchKindRun): readonly string[] {
+  const trust = kind === 'headless' ? manifest.launch.headless?.trust : manifest.launch.interactive.trust;
+  return Array.isArray(trust) ? trust : [];
+}
+
+/**
  * The launch argv (§3.3 step 14): `launch.<kind>.args` rendered, then the permission fragment of `role`
- * ({@link launchPermissions}; the `default` entry when no role is given), then `session.assign_args` rendered when
- * the session id is assigned. The `command` is not part of it. A headless launch of an adapter without
- * `launch.headless` is refused before (§3.3 step 4, `NO_LAUNCH_KIND`), so its argv is never rendered here.
+ * ({@link launchPermissions}; the `default` entry when no role is given), then the trust fragment
+ * ({@link launchTrust}), then `session.assign_args` rendered when the session id is assigned. The `command` is not
+ * part of it. A headless launch of an adapter without `launch.headless` is refused before (§3.3 step 4, `NO_LAUNCH_KIND`), so its argv is never rendered here.
  */
 export function renderLaunchArgv(manifest: AdapterManifest, values: LaunchValues, kind: LaunchKindRun = 'interactive', role = 'default'): string[] {
   const assign = manifest.session.id === 'assign' ? (manifest.session.assign_args ?? []) : [];
   const args = kind === 'headless' ? (manifest.launch.headless?.args ?? []) : manifest.launch.interactive.args;
-  return [...renderArgv(args, values), ...launchPermissions(manifest, kind, role), ...renderArgv(assign, values)];
+  return [...renderArgv(args, values), ...launchPermissions(manifest, kind, role), ...launchTrust(manifest, kind), ...renderArgv(assign, values)];
 }
 
 /**
@@ -722,6 +735,32 @@ export function launchBanner(input: LaunchInput): string {
 }
 
 /**
+ * Whether §3.3 step 16's start-up hint applies (`bug-500`, task-353): all four of — the run did not succeed (a
+ * non-zero exit, a signal, or the expired bound), `HEAD` is still `state_ref` (the agent committed nothing), `notes`
+ * would be `none`, and the adapter declares `launch.<kind>.trust: prompt` for the kind that ran. A function of the
+ * exit status, two committed shas and the manifest: no wall clock. A `HEAD` git cannot read gives no hint, so the
+ * record is never lost to it.
+ */
+function startUpHint(root: string, input: LaunchInput, run: { readonly expired: boolean; readonly exitStatus: ExitStatus; readonly notes: string }): boolean {
+  const { launch } = input.adapter.manifest;
+  const trust = input.kind === 'headless' ? launch.headless?.trust : launch.interactive.trust;
+  if (trust !== 'prompt' || run.notes !== 'none' || (run.exitStatus === 0 && !run.expired)) return false;
+  try {
+    return resolveCommitAtRev(root, 'HEAD') === input.stateRef;
+  } catch {
+    return false;
+  }
+}
+
+/** §3.3 step 16's start-up hint warning, without the `warning: ` prefix. */
+function startUpHintWarning(record: RunRecord, input: LaunchInput): string {
+  return (
+    `run ${record.id}: the agent exited ${String(record.exit_status)} with no commit since state_ref: its CLI may have stopped at its ` +
+    `folder-trust step (adapter '${input.adapter.name}' declares launch.${input.kind}.trust: prompt)`
+  );
+}
+
+/**
  * §3.3 steps 13–18 for a launch every pre-launch check has passed. `releaseSignals` is called right
  * before the spawn, after the launch has installed its own listeners: it hands the process's signals
  * over from the pre-launch cleanup (`withRunFiles`) to the launch (§3.3 step 15) with no gap between.
@@ -811,6 +850,12 @@ export async function launchAgent(root: string, input: LaunchInput, host: Launch
       output: reader?.end(),
     });
     const elementId = input.element.slice(input.element.indexOf(':') + 1);
+    const notes =
+      input.templatePath === undefined
+        ? 'none'
+        : deriveNotesField(root, { elementId, elementPath: input.elementPath, templatePath: input.templatePath, stateRef: input.stateRef });
+    // Step 16 — the start-up hint (bug-500): a failed run that committed nothing, under `trust: prompt`.
+    const hint = startUpHint(root, input, { expired, exitStatus: ran.exitStatus, notes });
     const record: RunRecord = {
       id: input.runId,
       element: input.element,
@@ -829,15 +874,13 @@ export async function launchAgent(root: string, input: LaunchInput, host: Launch
       duration_ms: ran.durationMs,
       exit_status: ran.exitStatus,
       result: 'n/a',
-      notes:
-        input.templatePath === undefined
-          ? 'none'
-          : deriveNotesField(root, { elementId, elementPath: input.elementPath, templatePath: input.templatePath, stateRef: input.stateRef }),
+      notes: hint ? START_UP_HINT_NOTES : notes,
     };
 
     // Step 17 — append and commit.
     const recorded = recordRun(root, input.logPath, record);
     if (!recorded.ok) return recorded;
+    if (hint) reportWarning(startUpHintWarning(record, input));
 
     // Step 18 — the outcome: an expired bound first, whatever the exit status (§3.7 `TIMED_OUT`).
     if (expired && timeout !== undefined) {
