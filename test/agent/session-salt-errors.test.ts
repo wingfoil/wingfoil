@@ -17,7 +17,8 @@ import { join } from 'node:path';
 
 import { commitAll, git, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
 
-type GitAnswer = { status: number; stdout: string; stderr: string };
+/** What the mocked `runGitRead` answers: only its stdout, the one field `sessionSalt` reads. */
+type GitAnswer = { stdout: string };
 let gitAnswer: ((root: string, args: readonly string[]) => GitAnswer) | undefined;
 
 jest.mock('../../src/storage', () => {
@@ -56,7 +57,7 @@ const commonDir = (root: string): string => git(root, ['rev-parse', '--path-form
 describe('task-338 review F1 — the common git directory must be one absolute path', () => {
   it('a git before 2.31 (the option echoed as a line, then a relative .git): IO, nothing written', () => {
     const root = repo();
-    gitAnswer = () => ({ status: 0, stdout: '--path-format=absolute\n.git\n', stderr: '' });
+    gitAnswer = () => ({ stdout: '--path-format=absolute\n.git\n' });
     expect(sessionSalt(root)).toEqual(GIT_FAILED);
     expect(existsSync(join(root, '--path-format=absolute'))).toBe(false);
     expect(existsSync(join(root, '.git', 'wingfoil'))).toBe(false);
@@ -65,20 +66,20 @@ describe('task-338 review F1 — the common git directory must be one absolute p
 
   it('a single relative path: IO, nothing written', () => {
     const root = repo();
-    gitAnswer = () => ({ status: 0, stdout: '.git\n', stderr: '' });
+    gitAnswer = () => ({ stdout: '.git\n' });
     expect(sessionSalt(root)).toEqual(GIT_FAILED);
     expect(existsSync(join(root, '.git', 'wingfoil'))).toBe(false);
   });
 
   it('no output at all: IO', () => {
-    gitAnswer = () => ({ status: 0, stdout: '', stderr: '' });
+    gitAnswer = () => ({ stdout: '' });
     expect(sessionSalt(repo())).toEqual(GIT_FAILED);
   });
 
   it('one absolute path, the real answer passed through the mock: the salt is created (a guard on the mock)', () => {
     const root = repo();
     const answer = commonDir(root);
-    gitAnswer = () => ({ status: 0, stdout: `${answer}\n`, stderr: '' });
+    gitAnswer = () => ({ stdout: `${answer}\n` });
     const salt = sessionSalt(root);
     expect(salt.ok).toBe(true);
     expect(existsSync(join(answer, 'wingfoil', 'session-salt'))).toBe(true);
