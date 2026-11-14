@@ -730,6 +730,33 @@ Prepared in the worktree, left uncommitted (`git status --short` → the three b
   — replaces its `### Retrospective` item `None.` with one item. `--reason`: "Records the bug's retrospective: task-353
   made the instance's plan element the last fallback of a step's element, in agent execute and agent list alike."
 
+### review fixes (developer, 2026-11-14)
+
+The independent review: approve with fixes (0 blockers, 1 should-fix, 2 follow-ups).
+
+- **Finding 1 (should-fix), fixed in `d50c9794e`:** `test/docs/name-resolvability.allowlist.ts`. The two `PLANNED`
+  entries for `launch.interactive.trust` and `launch.headless.trust` (spec-016, `config`) went stale once green's
+  schema shipped the keys, as the allowlist header says a shipped name does; they are removed. `START_UP_HINT`
+  (spec-016, `symbol`) is the row label of §3.7, which names a condition and never a code symbol (the code carries
+  the hint as `START_UP_HINT_NOTES` and a warning line), so its `PLANNED` reason became a hand-written `spec label:`
+  reason, per the header's rule that a new entry is written with its own reason, never `UNTRIAGED`. The other stale
+  entries (task-339's `launch.*.permissions` among them) are pre-existing, `bug-286`'s, and left as they are.
+  - `npx jest test/docs/name-resolvability.test.ts test/docs/l0-traceability.test.ts --maxWorkers=2` →
+    `Test Suites: 2 passed`, `Tests: 26 passed, 26 total`.
+  - `npx jest test/docs/name-resolvability.test.ts --maxWorkers=2 2>&1 | grep -c "trust\|START_UP"` → `0`: none of
+    the three is reported stale or untriaged any more; the warn summary reads `27 untriaged first-run finding(s),
+    114 stale allowlist entries, 4 planned entries whose tasks are all done`.
+  - `npx eslint test/docs/name-resolvability.allowlist.ts` → exit `0`.
+- **Follow-up 2, not fixed in the task:** the approver's by-hand pass did not record the exit status of `claude` and
+  `codex` after the interactive trust question is refused, so it is not known whether such a run exits non-zero (the
+  hint's first condition) or `0`. The orchestrator asks the approver to check it by hand.
+- **Follow-up 3, not fixed in the task:** `WaitingStep.element` (`src/core/agent-list.ts`) keeps its `string | null`
+  type, although with the plan fallback a waiting step always has an element; `test/core/agent-list-edges.test.ts:82`
+  builds a renderer row with `null`.
+
+No full suite was run for this fix, as instructed; the task stays `in-review` (no resubmit), and the three pending bug
+amendments are untouched (`git status --short` → the three bug files only).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
