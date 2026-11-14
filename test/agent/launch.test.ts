@@ -1,13 +1,16 @@
 /**
  * task-228 — the pure parts of `agent execute`'s launch half (`spec-016` §2.3 rendering, §2.6 session
  * id and the JSON paths of `session.field` / `usage.fields`, §2.4 attribution line), unit by unit. The
- * launch as a user meets it is `test/cli/agent-execute-launch.integration.test.ts`.
+ * launch as a user meets it is `test/cli/agent-execute-launch.integration.test.ts`. task-338 AC 3 rewrites the
+ * attribution line to `spec-018` Consequences' text (`bug-370`); `assignedSessionId`'s computation is unchanged by
+ * task-338 (only its first argument becomes the clone's salt, design §3), so its cases below stay.
  */
 import { createHash } from 'node:crypto';
 
 import {
   ATTRIBUTION_LINE_PREFIX,
   assignedSessionId,
+  attributionLine,
   handoffLine,
   readJsonPath,
   renderBootstrap,
@@ -137,7 +140,7 @@ describe('readJsonPath (§2.2 `session.field`, `usage.fields`) — a dotted path
   });
 });
 
-describe('the attribution line (§2.4, dl-117 Action 4, ruling R20 Q8, git-conventions §7)', () => {
+describe('the attribution line (§2.4 as amended by task-338, spec-018 Consequences, dl-158 Rule 1 (a), git-conventions §7)', () => {
   const SHA = '0123456789abcdef0123456789abcdef01234567';
   const input = {
     role: 'developer',
@@ -146,15 +149,27 @@ describe('the attribution line (§2.4, dl-117 Action 4, ruling R20 Q8, git-conve
     stateRef: SHA,
     handoff: handoffLine(true),
     agent: { name: 'Fake Agent', email: '0+fake-agent@users.noreply.github.com' },
+    build: '9.9.9 (0123abc)',
   };
 
-  it('closes the bootstrap, naming the signing entry (dl-158 Rule 1 (a))', () => {
+  it('task-338 AC 3 — the prefix is spec-018 Consequences\' opening words', () => {
+    expect(ATTRIBUTION_LINE_PREFIX).toBe('Commits wingfoil writes for you already end with');
+  });
+
+  it('task-338 AC 3 — closes the bootstrap with spec-018 Consequences\' text, naming the signing entry, after the handoff line', () => {
     const lines = renderBootstrap(input).split('\n');
     expect(lines[lines.length - 1]).toBe('');
     expect(lines[lines.length - 2]).toBe(
-      `${ATTRIBUTION_LINE_PREFIX} "Co-Authored-By: Fake Agent <0+fake-agent@users.noreply.github.com>" and "AI-Model: <the model identifier you run as>"; to a commit wingfoil writes, add them with git commit --amend --no-edit --trailer, never as a paragraph of their own (git-conventions §7, §8).`,
+      `${ATTRIBUTION_LINE_PREFIX} "Co-Authored-By: Fake Agent <0+fake-agent@users.noreply.github.com>" and an "AI-Model:" trailer: pass --ai-model <your model identifier> to each wingfoil command that writes a commit, or that trailer records "AI-Model: not-reported"; end a commit you write yourself with git commit with the trailer paragraph "Co-Authored-By: Fake Agent <0+fake-agent@users.noreply.github.com>" and "AI-Model: <your model identifier>"; never run memory approve, memory reject or memory amend, which refuse in your session (git-conventions §7).`,
     );
     expect(lines[lines.length - 3]).toBe(handoffLine(true));
+  });
+
+  it('task-338 AC 3 — attributionLine is that line, and never names the old placeholder or an amend (bug-370)', () => {
+    const line = attributionLine({ name: 'Fake Agent', email: 'fake-agent@example.com' });
+    expect(renderBootstrap(input).split('\n')).toContain(line);
+    expect(line).not.toContain('<the model identifier you run as>');
+    expect(line).not.toContain('--amend');
   });
 
   it('another entry is named in its own line', () => {

@@ -685,7 +685,8 @@ Before anything is spawned it checks the element, the role (never `approver`), t
 identity, `paths.runs` and the context, and refuses with exit `1` on the first failure. The agent is
 handed the terminal; its first prompt tells it to read its context from the MCP Resource
 `wingfoil://session/<role>/<type>:<id>/<commit>`, served by a WingFoil MCP server of the same build that
-`agent execute` registers for it. When the agent exits, the run is recorded as one line of
+`agent execute` registers for it. Its plain `wingfoil` is that build too: a shim of it is first on the agent's `PATH`,
+also named by `WINGFOIL_CLI`, and the first prompt says which version `wingfoil --version` prints. When the agent exits, the run is recorded as one line of
 `<paths.runs>/<element-id>.jsonl`, committed as `agent: record <run-id>`. `--dry-run` runs every check and
 prints the launch it would make; both built-in adapters need a terminal for an interactive launch, so a dry
 run with stdin or stdout redirected still plans it, with a `warning:` line saying the real run is refused

@@ -284,6 +284,11 @@ responsibility (REQ-SYS-02: isolated load/validate per artifact), not the init-m
 git is the single source of truth; there is no external state store to fall back to). No subpath
 within `.wingfoil/` is excluded.
 
+Per-clone state that must never be committed is kept in the repository's git directory, outside the working tree,
+not under `.wingfoil/`: it then needs no `.gitignore` entry and cannot be committed by mistake. The one such file is
+the session salt of `spec-016` §2.6, `wingfoil/session-salt` in the common git directory (`git rev-parse
+--git-common-dir`), shared by the clone's linked worktrees (`dl-168` Q1 (b)).
+
 ## Consequences
 
 - Every task that implements config loading (DNA loader, Memory registry loader, directive loader,
@@ -403,3 +408,11 @@ never examines the ceiling or anything above it; it now says the walk stops befo
 proper ancestor of the starting directory, and that a ceiling equal to the starting directory, like any other that is
 not a proper ancestor, changes nothing — the behaviour `findGitRoot` has and its tests pin. No other text changes.
 Edited in place without a supersede or a state change (`dl-047`), pending the approver's `memory amend`.
+
+**Revision (2026-11-13, `task-338-name-the-launching-build-in-the-bootstrap-set-wingfoil-agent-at-spawn-and-salt-the-session-id-per-clone`)
+— § `.gitignore` policy: where per-clone state lives.** `dl-168` Q1 (b) keeps a per-clone random salt for the
+`assign` session id (`spec-016` §2.6) "outside the repository (e.g. under `.git/`)": the section now says that such
+state lives in the common git directory, outside the working tree and not under `.wingfoil/`, so it needs no
+`.gitignore` entry, and names the one file, `wingfoil/session-salt`. The rule that `.wingfoil/` is tracked is
+unchanged. Edited in place without a supersede or a state change (`dl-047`), pending the approver's `memory amend` at
+`task-338`'s design gate.
