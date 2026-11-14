@@ -637,6 +637,52 @@ Left uncommitted in the worktree (`dl-047`); the gates ran with it in the tree (
 - `bug-459-check-role-directives-checks-only-the-roles-dna.yaml-team.roles-declares-so-a-roles.yaml-binding-to-a-missing-directive-under-any-other-role-is-never-an-error` —
   `--reason "Record the task-340 fix of the role-directives sweep (the union of team.roles and roles.yaml assignments, an undeclared role failing) and its retrospective entry."`
 
+### review fixes (developer, 2026-11-14)
+
+The review: approve with fixes, 0 blockers, 2 should-fix, 1 follow-up, all fixed in the task. The orchestrator
+withdrew the earlier ruling to leave the stale allowlist entries, because the allowlist header says a shipped
+`PLANNED` entry goes stale. `git rev-list --count HEAD..main` → `0`, so there was no merge. PATH guard as in green.
+- **F1** (`d5a497270`): the five `PLANNED` task-340 entries of `test/docs/name-resolvability.allowlist.ts` are deleted:
+  `HUMAN_ONLY_ROLE` (spec-002, spec-016), `W_WORKFLOW_AGENT_ROLE_UNEXECUTED` (spec-002, spec-003) and `isHumanOnlyRole`
+  (spec-002). `git diff -U0` shows exactly those five `-` lines. The other stale entries are bug-286's and are untouched.
+  `npx jest test/docs/name-resolvability.test.ts test/docs/l0-traceability.test.ts test/dna/roles.test.ts --maxWorkers=2`
+  → `Tests: 38 passed, 38 total`. `npx jest test/docs/name-resolvability.test.ts --maxWorkers=2 --verbose` now reports
+  "114 stale allowlist entries" (119 before), and none of the three names appears in its output (`grep -c` → `0`).
+- **F2** (pending amendment, uncommitted): `spec-008` § 5, the `agent execute` `--headless`/`--interactive` row, now
+  names the human-only rule and `spec-016` §3.7 `HUMAN_ONLY_ROLE` instead of "an approver step … `APPROVER_ROLE`". A
+  Revision note (2026-11-14, short `task-340`, since the full id's `.` reads as a config name) records it. The
+  same-class sweep `grep -rn "APPROVER_ROLE\b" docs --include=*.md` found these:
+  - `dl-183` (`ready`, amendable): two lines name the old row as the current rule. Both now add "`HUMAN_ONLY_ROLE`
+    since `task-340`". This is a pending amendment.
+  - `spec-016`: lines 564, 795 and 1500 already say "former" or "was `APPROVER_ROLE`" (the design-gate amend `16a03b365`).
+  - `spec-017:582` and `spec-018:495` name the constant, which still exists, re-exported at
+    `src/core/approval-authority.ts:49`, or quote a dated command. They do not name the §3.7 row, so they are not this
+    class. `spec-017`'s line reference `:43` was already off on `main` (`git show main:src/core/approval-authority.ts |
+    grep -n "APPROVER_ROLE ="` → `45:`), so it is reported as a candidate finding.
+  - Task files: historical records.
+- **F3 (a)** (pending amendment, uncommitted): `spec-002` § "Role binding" no longer says `isHumanOnlyRole` answers
+  the question for `W_WORKFLOW_AGENT_ROLE_UNEXECUTED`. That check reads `team.agents` (`agentExecutes`) and reports a
+  human-only role always, because the load error keeps it out of `executes_as`. A Revision note (2026-11-14) records it.
+- **F3 (b)** (`a9e7b9ba5`, comment only): `src/dna/roles.ts`'s doc comment of `isHumanOnlyRole` now says `approver` is
+  human-only whether or not `team.roles` defines it. The exports are unchanged; `test/dna/roles.test.ts` passes in the
+  run above. T4: `git log --first-parent --no-merges --format=%h 57458d6fa..HEAD -- <the 12 files of 57458d6fa>` →
+  empty.
+- **Gates:** `bash waitslot.sh` printed nothing (no wait). `npm run typecheck` → exit 0. `npm run docs:api` → exit 0.
+  The full suite was not run, per the orchestrator.
+- **bug-534:** `node dist/cli.js --format json workflow next` → four `W_UNCOMMITTED_INPUTS`, one per pending file
+  (bug-459, dl-183, spec-002, spec-008). Quoted, not fixed.
+- The task stays `in-review`; I did not resubmit it.
+
+### Pending amendments (approver), after the review fixes
+
+Left uncommitted in the worktree (`dl-047`); this replaces the list above.
+- `bug-459-check-role-directives-checks-only-the-roles-dna.yaml-team.roles-declares-so-a-roles.yaml-binding-to-a-missing-directive-under-any-other-role-is-never-an-error` —
+  `--reason "Record the task-340 fix of the role-directives sweep (the union of team.roles and roles.yaml assignments, an undeclared role failing) and its retrospective entry."`
+- `spec-008-cli-grammar` — `--reason "Reword the agent execute launch-kind row to the human-only rule and spec-016 section 3.7 HUMAN_ONLY_ROLE, per dl-202 item 1 (task-340 review finding F2)."`
+- `spec-002-dna-yaml-schema` — `--reason "Correct Role binding: isHumanOnlyRole answers for agent execute, while W_WORKFLOW_AGENT_ROLE_UNEXECUTED reads team.agents and reports a human-only role through the load error (task-340 review finding F3)."`
+- `dl-183-who-chooses-the-launch-kind-a-phase-field-gives-the-default-a-launch-option-overrides-it-and-the-engine-fixes-it-for-verification-runs` —
+  `--reason "Note that the approver refusal this decision cites is the HUMAN_ONLY_ROLE row of spec-016 section 3.7 since task-340, per dl-202 item 1 (task-340 review finding F2, same class)."`
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
