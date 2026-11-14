@@ -538,6 +538,65 @@ Left uncommitted in the worktree; the gates above ran with them.
   status sync): one Retrospective entry. `--reason`: Records in the Retrospective that the bug was absorbed into task-352
   at its design gate and that the co-author-identity check reports a repeated attribution pair.
 
+### review fixes (developer, 2026-11-14)
+
+The independent review of head `64889cf78`: approved with fixes, 0 blockers. All the fixes are in the task, in
+commit `1ff5533ff` (`fix(governance): task-352 — review fixes: …`), with the attribution pair. PATH guard: the task's
+PATH shim resolves `wingfoil`; `wingfoil --version` and `node dist/cli.js --version` print `0.3.2
+(64889cf78d5e1c2a540e1f1839721bf9146de507)`. `git rev-list --count HEAD..main` → `0`, so no merge.
+- **F1** (`scripts/check-governance.cjs`): `co-author-identity` now leaves out only a **non-merge** commit with an
+  `Approver:` line, the one `approval-agent-trailer` judges. Before, a merge with an `Approver:` line and an unknown
+  co-author escaped both checks. Header bullet and `git-conventions` §9 updated to match; the file is already 2.9 on
+  this branch, so there is no second bump.
+- **F2**: the repeated-pair test compares co-authors under D5's equivalence (the name exact, the email lowercased), so
+  `Claude <noreply@anthropic.com>` + `Claude <NoReply@Anthropic.com>` is one repeated pair (`bug-535` Expected: "from
+  the same agent"). A line that does not parse is compared as written. Two names on one email are not a repeated
+  pair. §9 and the header bullet say "naming the same co-author".
+- **F3**: a new suite of mine, `test/cli/check-governance-co-author-identity-review.test.ts`, 7 tests. Red's files are
+  untouched (T4). It pins:
+  - F1: the merge case, one gated finding (message 1), and no `approval-agent-trailer` finding on that merge;
+  - F2: the email-case pair (exactly one finding, the repeat), and the two-name case (no repeat);
+  - AC 5's exact message for two pairs: `… repeats the agent attribution: 2 Co-Authored-By: Claude
+    <noreply@anthropic.com> lines, 2 AI-Model: lines (…; git-conventions §7, bug-535)`;
+  - P01 for a co-authored commit whose parent has no `dna.yaml`: `failing` `[]`, `raw.unchecked` `0`, beside the
+    governance check's no-dna finding on that commit (the positive case).
+  - Red-then-green proof: with `HEAD`'s script swapped back in (`git show HEAD:scripts/check-governance.cjs`, before the
+    fix commit), `npx jest test/cli/check-governance-co-author-identity-review.test.ts --maxWorkers=2` → `Tests: 2
+    failed, 5 passed, 7 total` (the F1 merge test and the F2 email-case test). With the fix → 7 passed. The P01 case is
+    a characterization of the refactor-time `uncheckedCommits` extension.
+- **F4** (pending amendments, still uncommitted):
+  - `bug-193`'s entry now gives the real count: 14 test files beside red's 7, and 22 in all with
+    `check-governance-plan-retrospective.test.ts` (`git diff --stat main...64889cf78 -- test` → `22 files changed`).
+  - `bug-475`'s `- None.` placeholder is dropped above the real entry.
+  - `bug-535`'s entry states the D5 equivalence of F2.
+  - The `--reason` texts are updated under the list below.
+  - The trailing space on line 488 of these notes stays, since the notes only take additions.
+- **Nit**: `test/agent/execute.test.ts` is not one of red's 7. Its remaining agent emails `fake@example.com`,
+  `second@example.com` (`selectAgent`) and the bootstrap input's `a@example.com` move to
+  `0+<login>@users.noreply.github.com`. Only the fixture identity changes, no assertion.
+- **Runs** (targeted, paths first, no slot):
+  - `npx jest test/cli/check-governance-co-author-identity test/agent/execute.test.ts test/directives/git-conventions.test.ts
+    test/cli/check-governance-enforcement.test.ts --maxWorkers=2` → `Test Suites: 5 passed, 5 total`, `Tests: 139 passed,
+    139 total`.
+  - `npx tsc --noEmit -p tsconfig.json` → exit 0.
+  - `npm run -s lint` → exit 0.
+  - Invisible-character grep on the changed files → no hit.
+  - `node scripts/check-governance.cjs --base origin/main` on `1ff5533ff` → `gated: 0 findings on 0 commits`,
+    `history: 0 findings on 0 commits`, exit 0.
+  - No full suite; the re-review runs it.
+- **T4**: `git log --first-parent --no-merges --format=%h 42b689c67..HEAD -- <red's seven files>` → `1cb29dcb9` only.
+
+**Pending amendments (approver), as they now stand**
+- `bug-193-the-attribution-audit-accepts-the-rfc-2606-second-level-example-domains`. `--reason`: Adds the Retrospective
+  subsection the bug lacked, recording that task-352 fixed the rule in hasReservedDomain and that its cost lay in the
+  agent and attributed-author fixtures of 14 test files moved to the GitHub noreply form.
+- `bug-475-the-governance-check-accepts-any-co-authored-by-value-so-commits-attributed-to-an-agent-name-other-than-dna.yaml-team.agents-pass-on-push`.
+  `--reason`: Replaces the None placeholder of the Retrospective with the entry recording that task-352's
+  co-author-identity check reports the 21 v0.3.2 commits as history and binds only commits after its merge.
+- `bug-535-no-check-reports-a-commit-that-carries-two-agent-attribution-pairs`. `--reason`: Records in the
+  Retrospective that the bug was absorbed into task-352 at its design gate and that the co-author-identity check
+  reports a repeated attribution pair, the same agent named twice with its email in any letter case.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
