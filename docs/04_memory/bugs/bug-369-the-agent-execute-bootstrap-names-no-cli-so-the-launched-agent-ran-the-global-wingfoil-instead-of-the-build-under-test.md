@@ -63,4 +63,4 @@ item E3; `bug-ingest-rel-v0.3-w3b8-review-findings-plan`).** The finding and its
 
 ### Retrospective
 
-None.
+- Closed by task-338 (`dl-180` invocation (c)): `agent execute` writes a `wingfoil` shim of its own build into the run's temporary directory, puts it first on the agent's `PATH` and names it in `WINGFOIL_CLI`, and the bootstrap's CLI line names the build's signature. The integration test with a decoy `wingfoil` first on `PATH` (`test/cli/agent-execute-cli-shim.integration.test.ts`) reproduced the bug at red (`decoy 0.0.0`) and passes at green. A shell profile that reorders `PATH` inside the agent is caught only by the version check the bootstrap asks for; the by-hand check with a real agent CLI is the review's or the pilot's (task-338 design D9).
