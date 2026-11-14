@@ -9,8 +9,8 @@
  *     `session.assign_args` under `session.id: assign`, every placeholder filling whole argv elements
  *     ({@link renderLaunchArgv}), no shell, its working directory the project root (the directory the global
  *     `--project` names, a linked worktree of the repository included, `bug-499`), the environment passed
- *     through with three changes ({@link agentEnvironment}, task-338): the launching build's `wingfoil` shim first on `PATH`, `WINGFOIL_CLI`
- *     naming it, and `spec-018` §1.1's launcher marker set to the agent's name. An interactive agent inherits stdin, stdout and stderr; a headless one (the
+ *     through with three changes ({@link agentEnvironment}, task-338): the launching build's `wingfoil` shim
+ *     first on `PATH`, `WINGFOIL_CLI` naming it, and `spec-018` §1.1's launcher marker set to the agent's name. An interactive agent inherits stdin, stdout and stderr; a headless one (the
  *     work run, §3.5, task-335) reads the null device, its stdout is piped and drained (and read for the
  *     session id under `session.id: output`, step 16), its stderr is
  *     `agent execute`'s, and on POSIX it runs in a session and process group of its own (approver ruling
@@ -31,7 +31,10 @@
  *     `usage.lookup_args`, each run as
  *     `command` + argv with a time limit ({@link LOOKUP_TIMEOUT_MS}); one argv declared twice runs once.
  *     A lookup that fails, times out or prints no JSON, and a value of the wrong type, yield
- *     `not-reported` and a `warning:` line; the lookup never fails the run.
+ *     `not-reported` and a `warning:` line; the lookup never fails the run. The start-up hint (task-353,
+ *     `bug-500`): a run that did not succeed, with `HEAD` still at `state_ref` and `notes` `none`, under
+ *     `launch.<kind>.trust: prompt`, records {@link START_UP_HINT_NOTES} as its `notes` and, once committed, prints
+ *     one `warning:` line naming the agent CLI's folder-trust step.
  * 17. The record (§4.2), appended and committed by `recordRun` (task-206): `agent: record <run-id>`.
  * 18. The outcome: success only when the agent exited `0`, the bound did not expire and the record was
  *     committed. An expired bound is `agent timed out after <duration>; run <run-id> recorded`, whatever
@@ -198,7 +201,8 @@ export function launchTrust(manifest: AdapterManifest, kind: LaunchKindRun): rea
  * The launch argv (§3.3 step 14): `launch.<kind>.args` rendered, then the permission fragment of `role`
  * ({@link launchPermissions}; the `default` entry when no role is given), then the trust fragment
  * ({@link launchTrust}), then `session.assign_args` rendered when the session id is assigned. The `command` is not
- * part of it. A headless launch of an adapter without `launch.headless` is refused before (§3.3 step 4, `NO_LAUNCH_KIND`), so its argv is never rendered here.
+ * part of it. A headless launch of an adapter without `launch.headless` is refused before (§3.3 step 4,
+ * `NO_LAUNCH_KIND`), so its argv is never rendered here.
  */
 export function renderLaunchArgv(manifest: AdapterManifest, values: LaunchValues, kind: LaunchKindRun = 'interactive', role = 'default'): string[] {
   const assign = manifest.session.id === 'assign' ? (manifest.session.assign_args ?? []) : [];
