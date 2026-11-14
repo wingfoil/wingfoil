@@ -583,6 +583,153 @@ bound where the agent traps `SIGTERM` and exits `0` (`exit_status` `0`, the run 
 covers it ("the time bound expired"), but the design's cases name `signal:SIGTERM` only, so it is left to green and the
 reviewer rather than pinned by a guess at the rendering.
 
+### green (developer, 2026-11-14)
+
+Worktree on `task/task-353-…`, head at green start `cab2548d9`; `git rev-list --count HEAD..main` → `0` at the start
+and at the end of refactor, so no merge of `main`. PATH guard run first with the task's PATH shim: `command -v
+wingfoil` → the shim; `wingfoil --version` and `node dist/cli.js --version` → both
+`0.3.2 (7d925bb6bdf1f8caafabe20945756bfa241adc42)`. Read: AGENTS.md §1–§8, the developer and global directives, the
+design, its addendum, the gate rulings, the red notes, the `spec-016` amendment (`git show c0ac033df`) and every red
+file.
+
+Green commit `0f8e4991a` (`fix(agent): task-353 — …`), the design's files only:
+- `src/agent/schema.ts`: `Trust` = `implied` | `prompt` | an argv fragment, optional `trust` on `InteractiveLaunch`
+  and `HeadlessLaunch` (D3 (a)); the manifest `format` stays 1.
+- `src/agent/placeholders.ts`: `trustIssues` — a fragment's elements hold no placeholder, `E_ADAPTER_PLACEHOLDER` at
+  `launch.<kind>.trust.<n>`; the keywords hold nothing to check.
+- `src/agent/launch.ts`: `launchTrust(manifest, kind)` (exported) and `renderLaunchArgv` appending it after the
+  permission fragment, before `session.assign_args`; `launchAgent` computes `notes` first, then `startUpHint` (D5's
+  four conditions: `trust: prompt` for the kind that ran, `notes` `none`, not (exit `0` and the bound not expired),
+  `resolveCommitAtRev(root, 'HEAD') === input.stateRef`; a `HEAD` git cannot read gives no hint, so the record is
+  never lost to it), records `START_UP_HINT_NOTES` and, after `recordRun` succeeds and before step 18's error, one
+  `reportWarning` with §3.3 step 16's text. Outcome and exit code unchanged. The module doc's step 14 names the
+  trust fragment and the `--project` worktree; step 16 names the hint (refactor `6b02de9ff`).
+- `src/agent/run-log.ts`: the exported constant `START_UP_HINT_NOTES` beside `notesField`.
+- `src/agent/step.ts`: `stepTargetElement` falls back to `{ type: 'plan', id: instance.id }`; with no instance,
+  `NO_STEP_ELEMENT` stays (D6 (a)); signature unchanged.
+- `src/core/agent-list.ts`: `waitingSteps`' element takes the same fallback, written out again because `src/core` may
+  not import `src/agent` (`test/lint/import-graph.test.ts`); `WaitingStep.element` keeps its `string | null` type,
+  since `test/core/agent-list-edges.test.ts:82` builds a renderer row with `null`.
+- `src/storage/builtin-adapters.ts` and `.wingfoil/agents/built-in/claude-code.yaml`: `claude-code` and `codex-cli`
+  both interactive `trust: prompt`, headless `trust: implied` (D4), no fragment; `codex-cli`'s `verified_with` stays
+  `codex-cli 0.145.0` (D8: `grep -n verified_with src/storage/builtin-adapters.ts` → `"2.1.322 (Claude Code)"`,
+  `"codex-cli 0.145.0"`).
+- `src/agent/index.ts`: exports `launchTrust` and `START_UP_HINT_NOTES`. `src/agent/execute.ts` unchanged (D1 (a)).
+
+**Red → green** (targeted, `--maxWorkers=2`, paths first):
+- `npx jest test/agent/manifest-trust.test.ts test/agent/launch-trust.test.ts test/agent/launch-trust-timeout.test.ts
+  test/agent/fake-agent.test.ts test/storage/builtin-adapters-trust.test.ts test/core/agent-execute-step.test.ts
+  --maxWorkers=2` → red `6 failed`, `45 failed, 90 passed` (the red notes); green `Test Suites: 6 passed`,
+  `Tests: 135 passed, 135 total`.
+- `npx jest test/cli/agent-execute-worktree.integration.test.ts test/cli/agent-execute-trust.integration.test.ts
+  test/cli/agent-execute-plan-element.integration.test.ts test/cli/agent-execute-step.integration.test.ts
+  test/cli/journey-0a.integration.test.ts --maxWorkers=2` → red `4 failed, 1 passed`, `14 failed, 30 passed`; green
+  `Test Suites: 5 passed`, `Tests: 44 passed, 44 total`.
+- `npx tsc --noEmit -p tsconfig.json` → no output, exit `0` (the red's `TS2353` at `test/agent/launch-trust.test.ts:97`
+  is gone).
+
+**Per AC.**
+- **AC 1 — characterization, met with no code** (D1 (a), D2): `agent-execute-worktree.integration.test.ts` 6/6 pass,
+  as before green; documented (refactor).
+- **AC 2 — met:** the schema, placeholders, argv order, the built-ins' values and the hint, by the five AC 2 red
+  suites above, all green.
+- **AC 3 — met:** `agent execute --next` and `agent list --waiting` both resolve `plan:<instance-id>`
+  (`agent-execute-plan-element.integration.test.ts` 6/6, the `chores` rows, Journey 0a step 3, the unit cases).
+- **AC 4 — characterization:** `git log -1 --first-parent --no-merges --format='%h %s' --
+  docs/04_memory/design/specs/spec-016-agent-execution.md` → `c0ac033df wf(tech-spec): amend spec-016-agent-execution
+  [approved → approved]`; green did not touch the spec (`git diff --stat 9e31359bb..HEAD --
+  docs/04_memory/design/specs/` → empty).
+
+**The red's two unpinned cases — developer tests added** (new files, `822b0d2f2`):
+- `test/agent/launch-trust-trap.test.ts`: the bound expires, the agent traps `SIGTERM` and exits `0` → under `trust:
+  prompt` the hint with `the agent exited 0`, `TIMED_OUT`'s error unchanged (`details.exit_status` `0`), `notes` the
+  hint text; under `implied` no hint (dl-097 (a)). The implementation gives it because "did not succeed" includes
+  the expired bound whatever the exit status (§3.3 step 16).
+- `test/cli/agent-execute-trust-json.integration.test.ts`: under `--format json` the hint is the CLI's
+  `{"warning": "<step 16 text>"}` line on stderr, before the `{"error": …}` document, `notes` the hint text.
+- `npx jest test/agent/launch-trust-trap.test.ts test/cli/agent-execute-trust-json.integration.test.ts
+  --maxWorkers=2` → `Test Suites: 2 passed`, `Tests: 3 passed`.
+
+### refactor (developer, 2026-11-14)
+
+Commits: `822b0d2f2` (docs and the two developer tests), `6b02de9ff` (module doc step 16, wrapping of the doc lines
+green touched; `eslint src/agent/launch.ts` → exit `0`).
+- `docs/cli-reference.md`, `agent execute`: the step's element falls back to `plan:<instance-id>` (the `has no
+  element` refusal sentence replaced by "changed in 0.4"), a **The start-up hint** paragraph (the field, the notes
+  text, the warning line, the built-ins' values) and an **In a worktree** paragraph (`--project <worktree>`, the
+  `E_NOT_AT_GIT_ROOT` refusal); `agent list`: `--element` and the JSON `element` name the plan fallback.
+- `docs/user-guide.md` §9.4: the folder-trust paragraph and **In a worktree**.
+- `docs/02_requirements/02_bdd/features/p5-interaction/P5.3.1-agent-execute.feature`: a 2026-11-14 revision header and
+  three scenarios (the worktree launch, the plan element, the start-up hint), naming the test files.
+  `P5.3.4-agent-list.feature` unchanged: `grep -n null` on it → nothing, so no scenario named `null` (the design's
+  condition).
+- Version bumps: none — no config file changed (`git diff --name-only main...HEAD -- .wingfoil` →
+  `.wingfoil/agents/built-in/claude-code.yaml` only, which carries no `version:`: `grep -c '^version:'` → `0`).
+- `dl-205` (the `.wingfoil/` change on the pinned build, `0.3.2 (6de2e13c0…)`): `npm run -s wingfoil -- workflow
+  list`, `dna show`, `directives list`, `agent list --waiting`, `workflow show dev-loop` → each exit `0`; `npm run -s
+  check:mcp` → exit `0`, `.mcp.json "wingfoil" runs the pinned wingfoil 0.3.2, advertising [prompts, resources,
+  tools] …` and `the build under development (dist/cli.js) serves [prompts, resources, tools] …; every listed
+  Resource read and Prompt get answered`. As D7: no `pinned-build` bug.
+
+**Gates** (with the three pending bug amendments in the tree):
+- `npm run lint` → exit `0`, no output after the header.
+- `npm run docs:api` → exit `0`, no warning (re-run after `6b02de9ff`: exit `0`).
+- `npm run typecheck` (both configs, after `waitslot.sh`, which printed nothing: no wait) → exit `0`, no diagnostic.
+- `npm run build` then `npm run test:coverage -- --maxWorkers=2` (after `waitslot.sh`, which printed nothing) →
+  `Test Suites: 1 failed, 644 passed, 645 total`, `Tests: 1 failed, 11800 passed, 11801 total`; `All files` Stmts
+  `99.09`, Branch `96.94`, Funcs `98.64`, Lines `99.62`. The one failure is `bug-534`:
+  `test/cli/workflow-unbound-none.integration.test.ts` › `workflow next (console): exit 0, no unbound token …` —
+  `Expected pattern: not /^\d+ diagnostic\(s\)/m`; `node dist/cli.js workflow next --format json` lists three
+  `W_UNCOMMITTED_INPUTS`, one per pending bug amendment (`bug-418`, `bug-499`, `bug-500`).
+- `npm test` result: below, under self-review.
+- `docs.parity` and the CLI reference: `npx jest test/docs/cli-reference.test.ts test/docs/name-resolvability.test.ts
+  test/docs/l0-traceability.test.ts test/docs/project-option-docs.test.ts test/docs/dry-run-documented.test.ts
+  --maxWorkers=2` → `5 passed`, `36 passed`; every `test/docs` suite also passed inside the coverage run (its one
+  failure is in `test/cli`).
+
+**T4.** `git log --first-parent --no-merges --format=%h 9e31359bb..HEAD -- <the 13 files 7d925bb6b and 9e31359bb
+touched>` → empty (no output).
+
+### self-review (developer, 2026-11-14)
+
+Against `code-review`, on `git diff main...HEAD`:
+- Every AC met (green, per AC above); every claim above names its command. Absences each beside a positive case: no
+  hint under `implied`, a fragment, no `trust`, exit `0`, or a commit since `state_ref` (red's suites), beside the
+  `prompt` cases; no fragment in either built-in (`builtin-adapters-trust.test.ts`) beside the fragment cases of
+  `launch-trust.test.ts`.
+- Determinism: the hint is a function of the exit status, the expiry flag, two committed shas and the manifest; no
+  wall clock, no iteration order.
+- Same-class instances in the files touched: the two places that resolve a step's element (`stepTargetElement`,
+  `waitingSteps`) both carry the fallback; both launch kinds carry `trust` in the schema, the placeholder check,
+  `launchTrust` and the hint; both built-ins and the installed copy declare it
+  (`npx jest test/storage/builtin-adapter --maxWorkers=2` ran inside the full suite, green, which holds the installed
+  `claude-code.yaml` byte-equal to the shipped one).
+- Not changed on purpose: the `--dry-run` plan's `launch` object (`{kind, permissions}`) does not list the trust
+  fragment: `spec-016`'s dry-run shape was not amended, and no built-in declares a fragment.
+- `npm test -- --maxWorkers=2` (after `waitslot.sh`, which printed nothing before `slot-done`: no wait) →
+  `Test Suites: 1 failed, 644 passed, 645 total`, `Tests: 1 failed, 11800 passed, 11801 total`; the one failure is
+  `test/cli/workflow-unbound-none.integration.test.ts`, `bug-534`, as in the coverage run.
+
+**Decisions for the approver.** None new. Two readings recorded: the hint after an expired bound with exit `0` is
+given (step 16's "the time bound expired"), and its JSON form is the CLI's ordinary `{"warning": …}` document; both
+pinned by the developer tests above.
+
+**Candidate findings (not filed).** None.
+
+### Pending amendments (approver)
+
+Prepared in the worktree, left uncommitted (`git status --short` → the three bug files):
+- `bug-499-agent-execute-always-launches-the-agent-in-the-project-root-so-a-dev-loop-with-one-worktree-per-task-cannot-use-it`
+  — adds `### Retrospective` (it had none) with one item. `--reason`: "Records the bug's retrospective: task-353
+  closed it with no code, since --project naming a linked worktree already makes it the run's root, as the design
+  ruled (D1 (a))."
+- `bug-500-an-agent-launched-by-agent-execute-stops-at-its-own-cli-s-folder-trust-prompt-and-the-run-is-recorded-as-failed-with-no-hint-that-the-agent-never-started`
+  — adds `### Retrospective` (it had none) with one item. `--reason`: "Records the bug's retrospective: task-353 added
+  launch.<kind>.trust and the start-up hint, the built-ins' values coming from the approver's by-hand pass."
+- `bug-418-agent-execute-next-refuses-an-unscoped-step-that-agent-list-waiting-lists-so-the-init-scaffold-s-first-step-cannot-be-run-by-an-agent`
+  — replaces its `### Retrospective` item `None.` with one item. `--reason`: "Records the bug's retrospective: task-353
+  made the instance's plan element the last fallback of a step's element, in agent execute and agent list alike."
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -590,3 +737,5 @@ reviewer rather than pinned by a guess at the rendering.
      printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
      Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
      here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+
+- The design's line numbers predated task-338's merge (`renderLaunchArgv` moved from 153 to 190, `launchAgent` from 757 to 736); the red notes listed the new ones, which green used. No friction in green or refactor otherwise: every red test passed with the design's files only.
