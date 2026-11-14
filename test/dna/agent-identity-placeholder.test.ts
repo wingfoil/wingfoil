@@ -71,7 +71,7 @@ describe('task-260 — AgentEntry refuses a placeholder identity (bug-261)', () 
     if (!result.success) expect(result.error.issues.filter((i) => i.path.join('.') === 'team.agents.0.email')).toHaveLength(1);
   });
 
-  it.each(['noreply@anthropic.com', 'agent@test.example.com', 'bot@example.org'])('keeps accepting %j (only the top-level label counts)', (email) => {
+  it.each(['noreply@anthropic.com', 'agent@notexample.com'])('keeps accepting %j (a domain that only contains a reserved name is ordinary)', (email) => {
     expect(DnaYaml.safeParse(withAgent({ email })).success).toBe(true);
   });
 
@@ -85,7 +85,9 @@ describe('task-260 — AgentEntry refuses a placeholder identity (bug-261)', () 
     ['Claude', 'a@b.example'],
     ['Claude', 'svc@host.localhost'],
     ['Claude', 'noreply@anthropic.com'],
-    ['AI agent (Claude/Cursor/etc.)', 'agent@test.example.com'],
+    ['AI agent (Claude/Cursor/etc.)', 'agent@notexample.com'],
+    // task-352 AC 2 (bug-193): an RFC 2606 reserved second-level domain, which both refuse.
+    ['Claude', 'bot@example.org'],
     // Review F1: git's guessed-domain marker and a parenthesis in the top-level domain, which the audit's
     // address shape rejects. The table shows agreement on its rows, not equivalence of the two predicates.
     ['Claude', 'root@host.(none)'],
@@ -94,6 +96,34 @@ describe('task-260 — AgentEntry refuses a placeholder identity (bug-261)', () 
   ])('the schema and isValidAttribution agree on %j <%s>', (name, email) => {
     const schemaAccepts = DnaYaml.safeParse(withAgent({ name, email })).success;
     expect(schemaAccepts).toBe(isValidAttribution(name, email));
+  });
+});
+
+/**
+ * task-352 AC 2 (`bug-193`, RFC 2606 §3; design D7, `spec-002` revision of 2026-11-13): `AgentEntry` refuses an email on
+ * `example.com`, `example.net`, `example.org` or a subdomain of one, through the shared `reserved-domain` issue, with the
+ * design's message exactly. Member emails are unaffected.
+ */
+describe('task-352 AC 2 — AgentEntry refuses the RFC 2606 reserved second-level domains (bug-193)', () => {
+  const RESERVED_DOMAIN_MESSAGE =
+    'an agent email may not be on a reserved top-level domain (.test, .example, .invalid, .localhost) nor on example.com, example.net, example.org or a subdomain of one: RFC 2606 names no mailbox there, and the attribution audit rejects it (bug-261, bug-193)';
+
+  it.each(['bot@example.org', 'agent@test.example.com'])('refuses %j with one issue at team.agents.0.email, the new message exactly', (email) => {
+    const result = DnaYaml.safeParse(withAgent({ email }));
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.filter((i) => i.path.join('.') === 'team.agents.0.email').map((i) => i.message)).toEqual([RESERVED_DOMAIN_MESSAGE]);
+    }
+  });
+
+  it('the top-level refusal carries the same message, so it still names a reserved top-level domain', () => {
+    expect(issueAt(withAgent({ email: 'bot@agents.test' }), 'team.agents.0.email')).toBe(RESERVED_DOMAIN_MESSAGE);
+  });
+
+  it('a team.members entry on example.com still parses (no such rule applies to members)', () => {
+    const input = withAgent({ email: 'noreply@anthropic.com' }) as { team: { members: Record<string, unknown>[] } };
+    input.team.members = [{ name: 'Ada', email: 'ada@example.com', roles: ['approver'] }];
+    expect(DnaYaml.safeParse(input).success).toBe(true);
   });
 });
 
@@ -132,6 +162,14 @@ describe('task-260 — the attribution rule is defined once (bug-261: shared, no
         const text = readFileSync(file, 'utf-8');
         return /\[\s*'invalid',\s*'example',\s*'test',\s*'localhost'\s*\]/.test(text) || text.includes("'.(none)'");
       })
+      .map((file) => file.slice(root.length + 1).split('\\').join('/'));
+    expect(holders).toEqual(['src/validation/identity.ts']);
+  });
+
+  it("task-352 AC 2: the RFC 2606 reserved second-level list ('example.com', 'example.net', 'example.org') appears in exactly one file under src/, src/validation's", () => {
+    const root = join(__dirname, '..', '..');
+    const holders = sourceFiles(join(root, 'src'))
+      .filter((file) => /\[\s*'example\.com',\s*'example\.net',\s*'example\.org'\s*\]/.test(readFileSync(file, 'utf-8')))
       .map((file) => file.slice(root.length + 1).split('\\').join('/'));
     expect(holders).toEqual(['src/validation/identity.ts']);
   });

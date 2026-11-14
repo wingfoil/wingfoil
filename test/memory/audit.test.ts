@@ -81,8 +81,19 @@ describe('isValidAttribution — pure predicate, no git involved', () => {
     expect(isValidAttribution('Scratch User', email)).toBe(false);
   });
 
+  // task-352 AC 2 (`bug-193`, RFC 2606 §3; design D7): the reserved second-level domains and their subdomains are
+  // placeholders too. `dev@test.example.com` moved here from the accepted list below.
   it.each([
-    ['a domain that merely contains a reserved label', 'dev@test.example.com'],
+    ['example.com', 'dev@example.com'],
+    ['a subdomain of example.net', 'dev@mail.example.net'],
+    ['example.org, upper case', 'dev@EXAMPLE.ORG'],
+    ['a subdomain of example.com whose first label is a reserved word', 'dev@test.example.com'],
+  ])('task-352 AC 2: rejects an email on the RFC 2606 reserved second-level domain %s', (_label, email) => {
+    expect(isValidAttribution('Dev', email)).toBe(false);
+  });
+
+  it.each([
+    ['a domain that only ends in a reserved second-level name, without a label boundary', 'dev@notexample.com'],
     ['a domain ending in a longer label', 'dev@contest.org'],
     ['a domain whose TLD starts like a reserved one', 'dev@company.testing'],
   ])('still accepts %s', (_label, email) => {
