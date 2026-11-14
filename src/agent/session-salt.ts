@@ -15,7 +15,7 @@
  */
 import { randomBytes } from 'node:crypto';
 import { linkSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { isAbsolute, join } from 'node:path';
 
 import { runGitRead } from '../storage';
 import { coreErr, coreOk, type CoreResult } from '../core/types';
@@ -28,6 +28,9 @@ const SALT_TEXT_RE = /^[0-9a-f]{64}\n$/;
 
 /** §2.6's `VALIDATION` message for a salt that is not exactly that text. */
 const MALFORMED_MESSAGE = `the session salt in the git directory (${SESSION_SALT_FILE}) is not 64 lowercase hexadecimal digits: remove it, and a new one is created at the next launch`;
+
+/** The cause when git gives no common git directory: it failed, or did not answer with one absolute path. */
+const GIT_COMMON_DIR_FAILED = 'git rev-parse --git-common-dir failed';
 
 /** §2.6's `IO` refusal, `cause` naming no absolute path. */
 function ioRefusal(cause: string): CoreResult<never> {
@@ -72,12 +75,16 @@ function checked(text: string): CoreResult<string> {
  *   digits and a line feed; `IO` when it cannot be created or read, the cause naming no absolute path.
  */
 export function sessionSalt(root: string): CoreResult<string> {
-  let commonDir: string;
+  let lines: string[];
   try {
-    commonDir = runGitRead(root, ['rev-parse', '--path-format=absolute', '--git-common-dir']).stdout.trim();
+    lines = runGitRead(root, ['rev-parse', '--path-format=absolute', '--git-common-dir']).stdout.split('\n').filter((line) => line !== '');
   } catch {
-    return ioRefusal('git rev-parse --git-common-dir failed');
+    return ioRefusal(GIT_COMMON_DIR_FAILED);
   }
+  // A git before 2.31 knows no --path-format: it echoes the option as a line of its own and exits 0, and the next line
+  // is relative. Only one absolute path is an answer (task-338 review F1).
+  const commonDir = lines.length === 1 ? lines[0]! : '';
+  if (!isAbsolute(commonDir)) return ioRefusal(GIT_COMMON_DIR_FAILED);
   const file = join(commonDir, SESSION_SALT_FILE);
   try {
     const existing = readSalt(file);
