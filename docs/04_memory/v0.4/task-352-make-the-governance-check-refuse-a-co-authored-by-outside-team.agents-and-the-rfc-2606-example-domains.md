@@ -386,6 +386,25 @@ case asserts the amend left two equal pairs (passes). The invalid `dna.yaml` rep
 follows `Co-Authored-By:`: the line `Co-Authored-By: Claude noreply@anthropic.com` expects `… (git-conventions §7):
 Claude noreply@anthropic.com`.
 
+### red correction (qa, 2026-11-14)
+
+**Red correction commit `1cb29dcb9`** (`git rev-parse HEAD` after a message-only amend of the unpushed commit, which
+rewrapped a body line that began with `Co-Authored-By:`), test files only, on top of green `6af56a01b`. Base unchanged:
+`git rev-list --count HEAD..main` → `0`, no merge. With green in place, three older tests in files red changed failed,
+because their fixtures used values the two new rules now refuse:
+- `test/memory/audit.test.ts` (two tests of `auditAttribution` built on `makeAttributedRepo`): the helper's
+  `user.email wf-test@example.org` is on an RFC 2606 reserved second-level domain (AC 2). It moves to
+  `0+wf-test@users.noreply.github.com` (design D8), and the helper's comment, which predicted the move, now says why.
+- `test/cli/check-governance-enforcement.test.ts` ("accepts an approval without them, and the trailers on a commit with
+  no Approver: line"): `startWithTrailers` carries `Co-Authored-By: Claude <noreply@anthropic.com>`, and the file's `DNA`
+  declared no `team.agents`, so AC 1 reports it as it should. Following the orchestrator's ruling, the fixture's `DNA` gains
+  the `Claude` / `noreply@anthropic.com` agent entry (as this repository's `dna.yaml`). The assertion stays as it was:
+  no finding of any check.
+
+**Run.** `npx jest` on the seven red files (`--maxWorkers=2`) → `Test Suites: 7 passed, 7 total`, `Tests: 310
+passed, 310 total`. `npx tsc --noEmit -p tsconfig.json` → exit 0. `npx jest test/lint --maxWorkers=2` → `Test Suites: 16
+passed`, `Tests: 165 passed`. `npx eslint` on the two files → exit 0. Invisible-character grep → no hit.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
