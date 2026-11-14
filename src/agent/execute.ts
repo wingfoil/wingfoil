@@ -34,8 +34,9 @@
  *    session Resource (task-195, task-355).
  * 9. The run id (§4.3, `nextRunId`).
  * 10. The bootstrap (§2.4), `mcp.template` rendered once ({@link renderMcpTemplate}: a command or argument
- *    with an unpaired surrogate refused, a dry run included, task-355) and the temporary files (§2.3), in
- *    the OS temporary directory ({@link withRunFiles}), removed on every exit path.
+ *    with an unpaired surrogate refused, a dry run included, task-355) and the temporary files (§2.3) — the
+ *    launching build's `wingfoil` shim among them ({@link cliShim}, task-338) — in the OS temporary directory
+ *    ({@link withRunFiles}), removed on every exit path.
  * 11. The MCP pre-flight against the running build ({@link mcpPreflight}, §2.5): `initialize`, then the
  *    session Resource the bootstrap names, the one carrier read (task-355, `bug-376`).
  * 12. The terminal check, last, so every earlier refusal is reachable without a terminal; an interactive
@@ -49,20 +50,21 @@
  *
  * **Baseline.** Every gating read is at the one `HEAD` commit resolved at step 2 (`dl-080` (B), the
  * `command-baseline` directive), which is also `state_ref`. Nothing is written to the repository: the
- * only files written are the temporary ones, outside it.
+ * only files written are the temporary ones, outside it (the launch adds, once per clone, the session salt in the
+ * git directory, outside the working tree: `./session-salt.ts`).
  *
  * **Determinism.** The bootstrap and the run id are pure functions of committed state and the request
  * (`REQ-SYS-07`); the temporary-file paths and the Node executable are host values that never reach the
  * context (`spec-016` Consequences).
  */
-import { accessSync, constants, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { accessSync, chmodSync, constants, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, isAbsolute, join, resolve } from 'node:path';
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 
-import { readPathAtRev } from '../storage';
+import { readBuildStamp, readPathAtRev } from '../storage';
 import { formatDiagnostic, ValidationError, type Diagnostic } from '../validation';
 import { reportWarning, withDistinctWarnings } from '../validation/warning';
 import { ambiguousReferenceError, resolveElementReference } from '../memory/reference';
@@ -163,14 +165,32 @@ export interface BootstrapInput {
    * and `email`, which the attribution line hands to the agent (`dl-117` Action 4, ruling R20 Q8).
    */
   readonly agent: { readonly name: string; readonly email: string };
+  /**
+   * The launching build's signature, `"<semver> (<sha>)"` (`readBuildStamp`, the record's `wingfoil` field, §4.2),
+   * which `{cli_line}` tells the agent `wingfoil --version` prints (task-338, `dl-180` (c)).
+   */
+  readonly build: string;
 }
 
-/** The fixed opening of §2.4's attribution line (task-228, `git-conventions` §7). */
-export const ATTRIBUTION_LINE_PREFIX = 'End every commit you write, except an approve or reject commit, with the trailer paragraph';
+/** The fixed opening of §2.4's attribution line (`spec-018` Consequences, task-338). */
+export const ATTRIBUTION_LINE_PREFIX = 'Commits wingfoil writes for you already end with';
 
-/** §2.4's attribution line for `agent`: the rule of `git-conventions` §7, with the entry that signs. */
+/**
+ * §2.4's attribution line for `agent`, `spec-018` Consequences' text (task-338, `bug-370`): the verbs write the
+ * trailers themselves (`spec-018` §2), so the agent passes `--ai-model`, signs only the commits it writes with plain
+ * `git commit`, and never runs an approver verb. WingFoil never fills the model: it does not know it before the run.
+ */
 export function attributionLine(agent: { readonly name: string; readonly email: string }): string {
-  return `${ATTRIBUTION_LINE_PREFIX} "Co-Authored-By: ${agent.name} <${agent.email}>" and "AI-Model: <the model identifier you run as>"; to a commit wingfoil writes, add them with git commit --amend --no-edit --trailer, never as a paragraph of their own (git-conventions §7, §8).`;
+  const coAuthor = `"Co-Authored-By: ${agent.name} <${agent.email}>"`;
+  return `${ATTRIBUTION_LINE_PREFIX} ${coAuthor} and an "AI-Model:" trailer: pass --ai-model <your model identifier> to each wingfoil command that writes a commit, or that trailer records "AI-Model: not-reported"; end a commit you write yourself with git commit with the trailer paragraph ${coAuthor} and "AI-Model: <your model identifier>"; never run memory approve, memory reject or memory amend, which refuse in your session (git-conventions §7).`;
+}
+
+/**
+ * §2.4's `{cli_line}` (task-338, `dl-180` (c), `bug-369`): the invocation the agent runs WingFoil commands with, and
+ * the signature that tells it the shim reached the launching build. The shim's path is in the environment only.
+ */
+function cliLine(build: string): string {
+  return `Run WingFoil commands as "wingfoil <command>": the build that launched you is first on your PATH, and "wingfoil --version" prints "${build}"; if it prints anything else, run "$WINGFOIL_CLI" in place of "wingfoil".`;
 }
 
 /**
@@ -185,8 +205,9 @@ function sessionContextUri(role: string, element: string, stateRef: string): str
 
 /**
  * The bootstrap prompt (§2.4): the only text WingFoil puts into the agent's initial prompt. Pure, with
- * no clock and no host data, LF-terminated. Its last line hands the agent the attribution rule and the
- * entry that signs (task-228). A change to any literal here is a revision of `spec-016`.
+ * no clock and no host data, LF-terminated. After the context instruction, the CLI line names the launching
+ * build (task-338); its last line hands the agent the attribution rule and the entry that signs (task-228). A
+ * change to any literal here is a revision of `spec-016`.
  */
 export function renderBootstrap(input: BootstrapInput): string {
   const contextInstruction = `Read the MCP resource "${sessionContextUri(input.role, input.element, input.stateRef)}".`;
@@ -194,6 +215,7 @@ export function renderBootstrap(input: BootstrapInput): string {
     `WingFoil run ${input.runId}: act as role "${input.role}" on element ${input.element}.`,
     `Your context is assembled at commit ${input.stateRef} and served by the "wingfoil" MCP server`,
     `registered for this session. Load it before any other action: ${contextInstruction}`,
+    cliLine(input.build),
     input.handoff,
     attributionLine(input.agent),
     '',
@@ -207,14 +229,44 @@ export interface McpServerCommand {
 }
 
 /**
- * The server `agent execute` registers and pre-flights (§2.5): the build that is running it — the Node
- * executable, and `[<that build's cli.js>, "--project", <root>, "mcp"]`, `cli.js` sitting one directory
- * above this module in the compiled layout (`dist/agent/` → `dist/cli.js`). `root` is the project root
- * `agent execute` resolved, so the server serves it whatever working directory the agent CLI starts it in
- * (task-350, `dl-198` (a)).
+ * The build that is running `agent execute` (§2.4, task-338): the Node executable and `[<that build's cli.js>]`,
+ * `cli.js` sitting one directory above this module in the compiled layout (`dist/agent/` → `dist/cli.js`).
+ */
+export function runningBuildCli(): McpServerCommand {
+  return { command: process.execPath, args: [join(__dirname, '..', 'cli.js')] };
+}
+
+/**
+ * The server `agent execute` registers and pre-flights (§2.5): the build that is running it
+ * ({@link runningBuildCli}) with `["--project", <root>, "mcp"]`. `root` is the project root `agent execute`
+ * resolved, so the server serves it whatever working directory the agent CLI starts it in (task-350, `dl-198` (a)).
  */
 export function runningBuildMcpServer(root: string): McpServerCommand {
-  return { command: process.execPath, args: [join(__dirname, '..', 'cli.js'), '--project', root, 'mcp'] };
+  const cli = runningBuildCli();
+  return { command: cli.command, args: [...cli.args, '--project', root, 'mcp'] };
+}
+
+/** A `wingfoil` shim: its file name and its text. */
+export interface CliShim {
+  readonly name: string;
+  readonly text: string;
+}
+
+/** `value` as one POSIX `sh` single-quoted word: a quote inside written `'\''`. */
+function shQuote(value: string): string {
+  return `'${value.split("'").join("'\\''")}'`;
+}
+
+/**
+ * The `wingfoil` shim of `cli` (§2.4, task-338, `dl-180` (c)): on POSIX `wingfoil`, a `/bin/sh` script that `exec`s
+ * the build's executable and arguments, each single-quoted, with the arguments it is given (`"$@"`); on win32
+ * `wingfoil.cmd`, one CRLF line running them, double-quoted, with `%*` (written, not exercised by CI). Pure.
+ */
+export function cliShim(cli: McpServerCommand, platform: NodeJS.Platform = process.platform): CliShim {
+  if (platform === 'win32') {
+    return { name: 'wingfoil.cmd', text: `@${[cli.command, ...cli.args].map((part) => `"${part}"`).join(' ')} %*\r\n` };
+  }
+  return { name: 'wingfoil', text: `#!/bin/sh\nexec ${[cli.command, ...cli.args].map(shQuote).join(' ')} "$@"\n` };
 }
 
 /** `mcp.template`'s placeholder tokens: the narrow class, so JSON braces are left alone (§2.3). */
@@ -278,6 +330,9 @@ const RUN_FILE_BASENAMES: Readonly<Record<RunFileName, string>> = {
   mcp_config_file: 'mcp-config.json',
 };
 
+/** The directory of the run's temporary directory the shim is written in, the one put first on the agent's `PATH`. */
+const SHIM_DIR = 'bin';
+
 /** The signals that end `agent execute` before the spawn, and so must not leave the temporary files behind. */
 const CLEANUP_SIGNALS: readonly NodeJS.Signals[] = process.platform === 'win32' ? ['SIGINT', 'SIGTERM'] : ['SIGINT', 'SIGTERM', 'SIGHUP'];
 
@@ -290,10 +345,14 @@ const CLEANUP_SIGNALS: readonly NodeJS.Signals[] = process.platform === 'win32' 
  * task-218's review) removes the directory too, then ends the process by that same signal. `work`
  * receives `release`, which removes that handling: the launch calls it when it takes the signals over
  * (§3.3 step 15).
+ *
+ * With `shim` (task-338), its text is written too, owner-only and executable (`0700`), in a `bin` directory of
+ * its own (`0700`), and `work` receives its absolute path as `cliShim`; it goes with the directory.
  */
 export async function withRunFiles<T>(
   files: Partial<Record<RunFileName, string>>,
-  work: (paths: Partial<Record<RunFileName, string>>, release: () => void) => Promise<T>,
+  work: (paths: Partial<Record<RunFileName, string>>, release: () => void, cliShim?: string) => Promise<T>,
+  shim?: CliShim,
 ): Promise<T> {
   // The listeners go in before the directory exists (review fix 1), so no signal can leave it behind.
   let dir: string | undefined;
@@ -323,7 +382,16 @@ export async function withRunFiles<T>(
       writeFileSync(path, text, { encoding: 'utf-8', mode: 0o600 });
       paths[name] = path;
     }
-    return await work(paths, release);
+    let shimPath: string | undefined;
+    if (shim !== undefined) {
+      const bin = join(dir, SHIM_DIR);
+      mkdirSync(bin, { mode: 0o700 });
+      shimPath = join(bin, shim.name);
+      writeFileSync(shimPath, shim.text, { encoding: 'utf-8', mode: 0o700 });
+      // The mode a umask may have narrowed, set exactly: owner read, write and execute.
+      chmodSync(shimPath, 0o700);
+    }
+    return await work(paths, release, shimPath);
   } finally {
     // Removed before the last listeners come out, so no signal in between can leave it behind.
     if (dir !== undefined) rmSync(dir, { recursive: true, force: true });
@@ -468,6 +536,8 @@ export interface AgentExecuteRequest {
 export interface AgentExecuteHost extends LaunchHost {
   /** The server the pre-flight starts; {@link runningBuildMcpServer} by default. */
   readonly mcpServer?: McpServerCommand;
+  /** The build the agent's `wingfoil` shim runs (§2.4, task-338); {@link runningBuildCli} by default. */
+  readonly cli?: McpServerCommand;
   /** Whether stdin and stdout are both terminals (§3.3 step 12); the process's own by default. */
   readonly isTerminal?: () => boolean;
   /** The `PATH` step 4 searches; `process.env.PATH` by default. */
@@ -508,6 +578,8 @@ export interface PreparedLaunch {
   readonly kind: LaunchKindRun;
   /** `--timeout`'s bound, when given. */
   readonly timeout?: TimeBound | undefined;
+  /** Absolute path of the launching build's `wingfoil` shim (§2.4, task-338), valid as long as {@link files}. */
+  readonly cliShim?: string | undefined;
 }
 
 /** The process's own terminals: stdin and stdout both. */
@@ -755,6 +827,7 @@ async function runPipeline<T>(
     handoff: handoffLine(templateHasExecutionNotes(root, sha, templatePath)),
     // A team.agents entry that declares an adapter declares an email (dna.yaml schema, dl-158 Rule 2 (ii)).
     agent: { name: agent.value.name, email: agent.value.email ?? '' },
+    build: readBuildStamp(),
   });
   const mcpServer = host.mcpServer ?? runningBuildMcpServer(root);
   // `mcp.template` rendered once, before anything is written or spawned: a command or argument it cannot carry
@@ -772,7 +845,7 @@ async function runPipeline<T>(
   // Under `config-arg` the rendered template is not a file but one whole argv element (§2.3 `{mcp_config}`).
   const mcpConfig = manifest.mcp.via === 'config-arg' ? rendered : undefined;
 
-  return withRunFiles(files, async (paths, releaseSignals) => {
+  return withRunFiles(files, async (paths, releaseSignals, shimPath) => {
     // Step 11 — the MCP pre-flight.
     const preflight = await mcpPreflight({
       root,
@@ -811,8 +884,9 @@ async function runPipeline<T>(
       mcpConfig,
       kind,
       timeout: request.timeout,
+      cliShim: shimPath,
     }, releaseSignals);
-  });
+  }, cliShim(host.cli ?? runningBuildCli()));
 }
 
 /** The launch `--dry-run` prints (`spec-008` §2): the record commit it would make, the run, and its launch. */
