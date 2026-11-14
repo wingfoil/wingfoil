@@ -1893,9 +1893,18 @@ Then it launches the agent: it prints
 `run <run-id>: launching <agent> (<adapter>) as <role> on <type>:<id>`, starts the adapter's command with the arguments its manifest declares (no shell), and
 hands it the terminal. The agent's first prompt names the run, the role, the element and the commit,
 tells it where to load its context (the Resource `wingfoil://session/<role>/<type>:<id>/<commit>` of the
-`wingfoil` MCP server registered for it), and tells it to end every commit it writes, except an approve or reject commit, with
-`Co-Authored-By: <agent name> <<agent email>>` and `AI-Model: <its model>` — added to a commit `wingfoil`
-writes with `git commit --amend --no-edit --trailer`, never as a paragraph of their own. While the agent runs,
+`wingfoil` MCP server registered for it), tells it to run WingFoil commands as `wingfoil <command>` and which
+version `wingfoil --version` then prints, and tells it that the commits `wingfoil` writes for it already end with
+`Co-Authored-By: <agent name> <<agent email>>` and an `AI-Model:` trailer (it passes `--ai-model <its model>`, or the
+trailer records `not-reported`), that a commit it writes itself with plain `git commit` ends with both trailers, and
+that it never runs `memory approve`, `memory reject` or `memory amend`. The agent is started with a `wingfoil` shim
+of the build running `agent execute` first on its `PATH`, the shim's path in `WINGFOIL_CLI` (for a shell profile that
+puts another `wingfoil` first), and `WINGFOIL_AGENT` set to the agent's name; the shim lives in the run's temporary
+directory, and `agent execute`'s own environment and its other child processes are left as they were. Under an
+adapter that assigns the session id, the id hashes a random salt created once per clone in the file
+`wingfoil/session-salt` of the common git directory (outside the working tree, shared by linked worktrees) and the
+run id; a salt file that is not 64 lowercase hexadecimal digits and a line feed is refused before the launch, exit
+`1`, nothing recorded. While the agent runs,
 Ctrl-C, Ctrl-\ and a hang-up of the terminal reach the agent and do not stop `agent execute`; `SIGTERM` sent to
 `agent execute` is passed on to the agent, and a `SIGHUP` sent to `agent execute` alone is not. When the agent exits, it asks the adapter's declared
 commands for the agent's version, session, model and token counts (each within 10 seconds; one that

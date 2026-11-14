@@ -53,6 +53,13 @@
  * - `WINGFOIL_FAKE_AGENT_CHILD_TRAP=1` — that child ignores `SIGTERM`, so only a `SIGKILL` ends it.
  * - `WINGFOIL_FAKE_AGENT_MCP_GET=0|1|hang` — `--mcp-get`, after recording: exit `0` (a server of that name is
  *   declared), exit `1` (none is, the default), or wait until a signal kills it (`hang`, a probe that times out).
+ * - `WINGFOIL_FAKE_AGENT_CLI=1` — on a launch, before its record line, the fake runs `wingfoil --version`, the name
+ *   looked up on its `PATH` with no shell, and `"$WINGFOIL_CLI" --version`, and records `cli: { path, variable, mode }`:
+ *   each command's stdout, trimmed (`null` when the command could not run or `WINGFOIL_CLI` is unset), and the
+ *   permission bits of the file `WINGFOIL_CLI` names, in octal (`null` when unset or absent) — what the agent's own
+ *   shell reaches as `wingfoil` (task-338, `spec-016` §2.4, `bug-369`). It also records `launcher`: the value of
+ *   `WINGFOIL_AGENT`, or `null` (`spec-018` §1.1). That value is a `team.agents` entry name, not a secret
+ *   (`REQ-SEC-08`): the one variable value the fake ever records, and only when asked to.
  *
  * `EXIT` and `WAIT` apply to a launch only. `agent execute` passes its environment to every child it
  * starts (§2.2), so the post-run `--version` and `--lookup` (§3.3 step 16) see the same variables, and
@@ -62,8 +69,8 @@
  */
 'use strict';
 
-const { spawn } = require('child_process');
-const { appendFileSync, readFileSync, writeFileSync } = require('fs');
+const { execFileSync, spawn } = require('child_process');
+const { appendFileSync, readFileSync, statSync, writeFileSync } = require('fs');
 
 /** What `--version` prints, and what the manifests' `verified_with` names. */
 const VERSION = 'fake-agent 1.0.0';
@@ -241,6 +248,40 @@ function startChild() {
   writeFileSync(file, `${child.pid}\n`);
 }
 
+/** The trimmed stdout of `command --version` (no shell), or `null` when it cannot run or fails. */
+function versionOf(command) {
+  try {
+    return execFileSync(command, ['--version'], { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * `WINGFOIL_FAKE_AGENT_CLI=1`: what `wingfoil` and `"$WINGFOIL_CLI"` print for `--version` in the agent's environment,
+ * the shim's permission bits, and the `WINGFOIL_AGENT` value; an empty object otherwise.
+ */
+function cliFacts() {
+  if (process.env.WINGFOIL_FAKE_AGENT_CLI !== '1') return {};
+  const variable = process.env.WINGFOIL_CLI;
+  let mode = null;
+  if (variable !== undefined && variable !== '') {
+    try {
+      mode = (statSync(variable).mode & 0o777).toString(8);
+    } catch {
+      mode = null;
+    }
+  }
+  return {
+    cli: {
+      path: versionOf('wingfoil'),
+      variable: variable === undefined || variable === '' ? null : versionOf(variable),
+      mode,
+    },
+    launcher: process.env.WINGFOIL_AGENT ?? null,
+  };
+}
+
 /** One launch: record, optionally connect, then print the headless document. Returns the exit code. */
 async function launch(argv, stdin) {
   const bootstrapFile = option(argv, '--prompt-file');
@@ -264,7 +305,8 @@ async function launch(argv, stdin) {
       }
     }
   }
-  record({ argv, stdin, env: Object.keys(process.env).sort(), mcp, ...(failure === null ? {} : { failure }) });
+  const cli = cliFacts();
+  record({ argv, stdin, env: Object.keys(process.env).sort(), mcp, ...cli, ...(failure === null ? {} : { failure }) });
   if (failure !== null) {
     process.stderr.write(`fake-agent: ${failure}\n`);
     return 1;

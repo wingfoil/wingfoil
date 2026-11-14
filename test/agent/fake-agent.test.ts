@@ -15,11 +15,14 @@
  * - AC 4: no suite needs a pseudo-terminal.
  * - The rest of §2.7's script: `--version`, the declared JSON document (`--lookup`, a headless launch),
  *   a declared exit code, waiting for a signal, stdin.
+ * - task-338: under `WINGFOIL_FAKE_AGENT_CLI=1` a launch records what `wingfoil --version` and
+ *   `"$WINGFOIL_CLI" --version` print in its environment, the permission bits of `$WINGFOIL_CLI`, and the
+ *   `WINGFOIL_AGENT` value (`launcher`); without it, and on `--version` or `--lookup`, it records neither.
  */
 import { spawn, spawnSync } from 'child_process';
-import { copyFileSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'fs';
+import { copyFileSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
-import { dirname, join, relative } from 'path';
+import { delimiter, dirname, join, relative } from 'path';
 import { load } from 'js-yaml';
 import { z } from 'zod';
 
@@ -589,5 +592,61 @@ describe('review fixes — the fake is usable by agent execute (F1–F4)', () =>
     expect(JSON.parse(withoutId.stdout)).toEqual({ model: 'm', session_id: 's1' });
     const withId = runFake(['--lookup', 's1'], { WINGFOIL_FAKE_AGENT_DOCUMENT: JSON.stringify({ session_id: 'other' }) });
     expect(JSON.parse(withId.stdout)).toEqual({ session_id: 'other' });
+  });
+});
+
+describe('task-338 — WINGFOIL_FAKE_AGENT_CLI=1: the fake records what its shell reaches as wingfoil, and WINGFOIL_AGENT', () => {
+  /** A directory holding an executable `sh` script `name` that prints `line`. */
+  function scriptDir(name: string, line: string): string {
+    const dir = scratchDir();
+    writeFileSync(join(dir, name), `#!/bin/sh\necho '${line}'\n`, { mode: 0o700 });
+    return dir;
+  }
+
+  const launchArgs = ['--mcp-config', '/unused.json', '--prompt', 'p', '--session-id', 'sid'];
+
+  it('a launch records cli.path (wingfoil on PATH), cli.variable ("$WINGFOIL_CLI"), cli.mode and launcher', () => {
+    const onPath = scriptDir('wingfoil', 'probe-path 1.0');
+    const variable = join(scriptDir('probe-cli', 'probe-variable 2.0'), 'probe-cli');
+    const run = runFake(launchArgs, {
+      WINGFOIL_FAKE_AGENT_CLI: '1',
+      PATH: `${onPath}${delimiter}${process.env.PATH ?? ''}`,
+      WINGFOIL_CLI: variable,
+      WINGFOIL_AGENT: 'Probe Agent',
+    });
+    expect(run.status).toBe(0);
+    const entry = run.records[0] as unknown as Record<string, unknown>;
+    expect(entry['cli']).toEqual({ path: 'probe-path 1.0', variable: 'probe-variable 2.0', mode: '700' });
+    expect(entry['launcher']).toBe('Probe Agent');
+  });
+
+  it('with nothing to reach: cli.path, cli.variable, cli.mode and launcher are null', () => {
+    // A PATH holding only `node`, so no `wingfoil` (a global install sits beside node) can be found.
+    const nodeOnly = scratchDir();
+    symlinkSync(process.execPath, join(nodeOnly, 'node'));
+    const env = { ...process.env };
+    delete env.WINGFOIL_CLI;
+    delete env.WINGFOIL_AGENT;
+    const recordFile = join(scratchDir(), 'record.jsonl');
+    const run = spawnSync(process.execPath, [FAKE_SCRIPT, ...launchArgs], {
+      encoding: 'utf-8',
+      env: { ...env, PATH: nodeOnly, WINGFOIL_FAKE_AGENT_RECORD: recordFile, WINGFOIL_FAKE_AGENT_CLI: '1' },
+    });
+    expect(run.status).toBe(0);
+    const entry = records(recordFile)[0] as unknown as Record<string, unknown>;
+    expect(entry['cli']).toEqual({ path: null, variable: null, mode: null });
+    expect(entry['launcher']).toBeNull();
+  });
+
+  it('off by default, and never on --version or --lookup: no cli and no launcher key', () => {
+    const launch = runFake(launchArgs, { WINGFOIL_AGENT: 'Probe Agent' });
+    const version = runFake(['--version'], { WINGFOIL_FAKE_AGENT_CLI: '1', WINGFOIL_AGENT: 'Probe Agent' });
+    const lookup = runFake(['--lookup', 'sid'], { WINGFOIL_FAKE_AGENT_CLI: '1', WINGFOIL_AGENT: 'Probe Agent' });
+    for (const run of [launch, version, lookup]) {
+      expect(run.status).toBe(0);
+      expect(Object.keys(run.records[0]!)).not.toContain('cli');
+      expect(Object.keys(run.records[0]!)).not.toContain('launcher');
+      expect(JSON.stringify(run.records)).not.toContain('Probe Agent');
+    }
   });
 });
