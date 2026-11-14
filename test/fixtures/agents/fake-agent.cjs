@@ -61,6 +61,14 @@
  *   `WINGFOIL_AGENT`, or `null` (`spec-018` §1.1). That value is a `team.agents` entry name, not a secret
  *   (`REQ-SEC-08`): the one variable value the fake ever records, and only when asked to.
  *
+ * - `WINGFOIL_FAKE_AGENT_COMMIT=1` — on a launch, after its record line and before it exits, the fake makes one
+ *   empty commit in its working directory (`git commit --allow-empty --no-verify -m "fake: work"`): an agent that
+ *   committed something since `state_ref` (task-353, `bug-500`; `spec-016` §3.3 step 16's start-up hint is not given
+ *   then).
+ *
+ * Every launch record also carries `cwd`, the fake's working directory (`process.cwd()`): where `agent execute` launched
+ * the agent (task-353, `bug-499`; `spec-016` §3.1, §3.3 step 14). A path, not a secret.
+ *
  * `EXIT` and `WAIT` apply to a launch only. `agent execute` passes its environment to every child it
  * starts (§2.2), so the post-run `--version` and `--lookup` (§3.3 step 16) see the same variables, and
  * must still answer.
@@ -306,10 +314,13 @@ async function launch(argv, stdin) {
     }
   }
   const cli = cliFacts();
-  record({ argv, stdin, env: Object.keys(process.env).sort(), mcp, ...cli, ...(failure === null ? {} : { failure }) });
+  record({ argv, stdin, cwd: process.cwd(), env: Object.keys(process.env).sort(), mcp, ...cli, ...(failure === null ? {} : { failure }) });
   if (failure !== null) {
     process.stderr.write(`fake-agent: ${failure}\n`);
     return 1;
+  }
+  if (process.env.WINGFOIL_FAKE_AGENT_COMMIT === '1') {
+    execFileSync('git', ['-c', 'commit.gpgsign=false', 'commit', '--allow-empty', '--no-verify', '--quiet', '-m', 'fake: work'], { stdio: 'ignore' });
   }
   if (argv.includes('--headless')) process.stdout.write(`${JSON.stringify(documentFor(sessionId))}\n`);
   return null;
