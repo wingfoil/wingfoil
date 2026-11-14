@@ -59,4 +59,4 @@ Any `Co-Authored-By:` value passes; the mismatch is found only by the release-he
 
 ### Retrospective
 
-- None.
+- Fixed by `task-352` with the later governance check `co-author-identity` (`git-conventions` 2.9 §9). Run on a scratch clone at `1db90b57f` with `--base 954138f7c^`, it reports the 21 v0.3.2 `Claude Opus 5.5` commits as history and none gated (the task's refactor notes hold the output). The check is in starting mode: it binds only commits after its merge into `main`.
