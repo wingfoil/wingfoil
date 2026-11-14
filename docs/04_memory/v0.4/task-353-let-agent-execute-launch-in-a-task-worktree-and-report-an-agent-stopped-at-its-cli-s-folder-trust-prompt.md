@@ -370,6 +370,40 @@ Prepared in the worktree, left uncommitted (`git status --short` → ` M docs/04
   the amendment (the approver's `memory amend` commits only the spec: the orchestrator commits this file on the task
   branch right after it, or the approver includes it).
 
+### design addendum (architect, 2026-11-14) — D4 by-hand results
+
+The approver ran D4's by-hand pass on 2026-11-14 from their own terminal, in a fresh directory (`git init -q`) that
+neither CLI had opened; results as transcribed from that terminal by the orchestrator:
+- `claude --version` → `2.1.322 (Claude Code)` (the `verified_with` `claude-code` already names).
+  `claude --help | grep -n -i -E "trust|-p, --print"` → line 171 `-p, --print  Print response and exit (useful for`,
+  172 `pipes). Note: The workspace trust dialog`, 177 `directories you trust. Settings files`, 277 `the current
+  directory without a trust`. `claude` (interactive) → a workspace trust dialog naming the directory, asking whether it
+  is a project the user created or trusts, with the choices "No, exit" (the default) and "Yes, I trust this folder".
+  `claude -p "say ok" </dev/null; echo $?` → `ok`, `0`, no dialog.
+- `codex --version` → `codex-cli 0.167.2`. `codex --help | grep -n -i trust` → only `--dangerously-bypass-hook-trust`
+  (lines 91–92, about hooks); `codex exec --help | grep -n -i -E "trust|skip-git"` → `--dangerously-bypass-hook-trust`
+  (59–60) and `--skip-git-repo-check` (79). `codex` (interactive) → asked whether to trust the current folder (two Esc
+  presses dismissed it without asking again; then `/exit`). `codex exec "say ok" </dev/null; echo $?` → header
+  `workdir: … approval: never, sandbox: read-only …`, answer `ok`, exit `0`, no trust step.
+
+**Resulting values** (D4 as ruled by the pass): `claude-code` interactive `prompt`, headless `implied`; `codex-cli`
+interactive `prompt`, headless **`implied`** (the design proposed `prompt` pending the pass; `codex exec` ran in a fresh
+git repository with no trust step, and `--skip-git-repo-check` concerns a directory outside any git repository, which
+no launch directory is, `spec-016` §3.1). No fragment for either: neither help shows an option that trusts the launch
+directory (`--dangerously-bypass-hook-trust` is about hooks, `--skip-git-repo-check` about the git check). The pending
+`spec-016` §2.8 table is updated to these values and to the pass's versions; red's
+`test/storage/builtin-adapters-trust.test.ts` pins `claude-code` `prompt` / `implied` and `codex-cli` `prompt` /
+`implied`. The start-up hint therefore fires for neither built-in's headless launch, only for their interactive ones.
+
+**`verified_with` of `codex-cli`.** The pass ran on `codex-cli 0.167.2`, while the shipped manifest names
+`codex-cli 0.145.0`. Recommendation, as `task-339` did for `claude-code`: green sets `codex-cli`'s `verified_with` to
+`codex-cli 0.167.2`, the version the trust declaration was checked on, the other flags staying those read at
+`0.145.0`; the §2.8 headless table's `verified_with` cell for `codex-cli` follows in the same amendment if the approver
+agrees (not prepared: the §2.8 trust table names the version of the pass).
+
+Checks after the update: `npx jest test/docs/name-resolvability.test.ts test/docs/l0-traceability.test.ts
+--maxWorkers=2` → `2 passed`, `26 passed`, with the amendment in the tree.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
