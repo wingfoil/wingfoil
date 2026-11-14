@@ -431,6 +431,75 @@ Before red, `main` was merged into the branch (`ca66f6142`) to bring in task-338
 both entries word for word, task-338's first. The four BDD scenarios (P2.4 +2, P4.1 +1, P5.3.2 +1) and the allowlist
 entries are committed (`4896d04eb`).
 
+### red (qa, 2026-11-14)
+
+**Base.** Head `66251bf43` (`git rev-list --count HEAD..main` → `0`, no merge). PATH guard: `command -v wingfoil` → the
+task's PATH shim; `wingfoil --version` and `node dist/cli.js --version` → `0.3.2 (861bdfa13…)`. Red commit `57458d6fa`
+(test files only, `git show --stat 57458d6fa`: 12 files under `test/`).
+
+**Files.** New: `test/dna/human-only-roles.test.ts` (AC 1), `test/core/workflow-agent-role-check.test.ts` (AC 2),
+`test/cli/agent-execute-human-only.integration.test.ts` (AC 3). Extended: `test/cli/check-role-directives.test.ts`
+(AC 4), `test/agent/repository-agent-roles.test.ts` and `test/core/workflow-integration-branch.test.ts` (AC 5).
+Existing pins changed with the design (its "Existing tests that change"): `test/agent/helpers/agent-execute-fixture.ts:43`
+(`executes_as: [ developer, reviewer ]`, D1; one line, nothing else in the shared fixture), the label at
+`test/cli/agent-execute.integration.test.ts:93` (`'HUMAN_ONLY_ROLE (approver)'`, message unchanged),
+`test/core/approval-authority.test.ts` bug-017 (unvalidated half kept; the committed half pins the load refusal quoted
+in the design), `test/core/agent-list.test.ts` (task-240 AC 2 and both AC 3 cases: `diagnostics` = the one
+`dev-loop.red` warning, keys gain `warnings`), `test/cli/derived-option-namespace.test.ts` (a `team.roles` drive with
+`--entry-human_only true`), `test/dna/roles.test.ts` (see departures).
+
+**Per AC.**
+
+| AC | Class | Tests | Fails for the right reason (first failing assertion) |
+|---|---|---|---|
+| 1 | red-first | `human-only-roles.test.ts` (b), (c), (d), (f) ×4, CLI ×2 | (b)–(d) `expect(issues(…)).toEqual([...])`: Received `[]` (the file loads); (f) `TypeError: (0 , dna_1.isHumanOnlyRole) is not a function` / `(0 , schema_1.isHumanOnlyRoleEntry) is not a function`; CLI `expect(run.stderr).toBe('')`: Received `{"warning":".wingfoil/dna.yaml: unknown field(s) ignored: team.roles[1].human_only"}`, and `expect(run.status).toBe(1)`: Received `0` |
+| 1 | positive controls, pass on first run | (a) the key is kept by the parse; (e) `human_only: false` on tech-lead parses; (e) an undefined role keeps one issue | — |
+| 2 | red-first | `workflow-agent-role-check.test.ts` (a) ×2, (b) no adapter, (c), (e), (f), registry at HEAD, `workflowList`, CLI json + console | `ofCode(…)` `toEqual([...two warnings])`: Received `[]`; the order case `expect(first).toBeGreaterThanOrEqual(0)`: Received `-1` |
+| 2 | pass on first run | (b) with an adapter → none; (d) roleless / unknown role (only `E_PHASE_ROLE_UNKNOWN`) / no `agent.*`; (g) no `dna.yaml` → the `W_WORKFLOW_CHECKS_NOT_RUN` line unchanged (D5) | — |
+| 3 | red-first (non-approver role) | `agent-execute-human-only.integration.test.ts` (a)/(b) ×5 argv + `--format json`, (c) step form ×3, (e) | `errorLine(…)` Received `"error: no agent in dna.yaml with an adapter executes as role 'tech-lead'"` (with `--agent 'Fake Agent'`: `"error: agent 'Fake Agent' does not execute as role 'tech-lead'"`); json: Received `[{"warning": "HEAD:.wingfoil/dna.yaml: unknown field(s) ignored: team.roles[4].human_only"}, {"error": "no agent in dna.yaml with an adapter executes as role 'tech-lead'"}]`; (c) `warningLines(…)` Received only the unknown-field line |
+| 3 | characterization, passes on first run | (d) `--role approver --dry-run` → `error: role 'approver' is never executed by an agent`, exit 1, nothing ran; (e) control `--role developer` → `AGENT_NOT_FOUND` | — |
+| 4 | red-first | `check-role-directives.test.ts` task-340 (a) | `expect(run.status).toBe(1)`: Received `0` (today the sweep visits `developer`, `reviewer` only) |
+| 4 | characterization, passes on first run | (c) no `roles.yaml` → only the `team.roles` roles; (b)/(d) are the existing pins, unchanged | — |
+| 5 | red-first | `repository-agent-roles.test.ts` task-340 ×2 (the third, "none of Claude's roles is marked", passes and guards green's writes); `workflow-integration-branch.test.ts` task-306 merge-forward (now `['git.merge(from: integration_branch, ff: false)']`) and task-340 ×3 (publish's actions, no `agent.*` under tech-lead, `version` ≥ 2.3 with a 2.3 entry naming task-340) | marked roles `toEqual(['approver','product-owner','tech-lead'])`: Received `[]`; `version` ≥ 2.2: Received `2.1`; release-publishing `version` ≥ 2.3: Received `2.2`; actions: Received the extra `agent.execute` |
+| 6 | characterization | none (amends `b818cb9c9`, `24a86f5cc`, `16a03b365` and the BDD `4896d04eb` are committed) | — |
+
+Changed existing pins, red as expected: bug-017 Received `"user not authorized to approve type 'task'"`; agent-list
+Received keys without `warnings`; the drive `error: unknown option '--entry-human_only'` and the "every option driven"
+table; the roles surface without `isHumanOnlyRole`.
+
+**Runs.**
+- `npx tsc --noEmit -p tsconfig.json` → exit 2, exactly the two intended errors: `test/dna/human-only-roles.test.ts(17,10):
+  error TS2305: Module '"../../src/dna"' has no exported member 'isHumanOnlyRole'.` and `(18,19): error TS2305: Module
+  '"../../src/dna/schema"' has no exported member 'isHumanOnlyRoleEntry'.`
+- `npm test -- <the 11 test files above (every file listed but the fixture helper)> --maxWorkers=2`, after the slot script → `Test Suites: 10 failed, 1 passed,
+  11 total`, `Tests: 43 failed, 134 passed, 177 total` (the passing suite: `test/cli/agent-execute.integration.test.ts`,
+  the label change only).
+- `npx jest test/lint --maxWorkers=2` → `Test Suites: 1 failed, 15 passed, 16 total`, `Tests: 1 failed, 164 passed`: the one
+  failure is `typecheck-clean.test.ts`, whose output is the same two TS2305 lines — the intended missing exports, green's.
+
+**Fixtures and their source.** Outputs of commands that exist today are copied from real runs: the unknown-field
+warning (`node dist/cli.js dna show --format json` on the AC 1 fixture), the `workflow list --format json|console`
+payload shape (the AC 2 fixture, where the two `W_WORKFLOW_UNBOUND_TOKEN` warnings are why the assertions filter by
+code), `directives list --role intern` on the pinned build → `["directive 'ghost-intern' bound to role 'intern' has no
+directive file"]`, `--role ghost` and `--role developer` → `[]`, and `node scripts/check-role-directives.cjs` with no
+`roles.yaml` → `developer: ok`, `reviewer: ok`, `role-directives: 2 roles checked, 0 with warnings`, exit 0. The new
+messages (load errors, the warning, the refusal, the undeclared-role line, the bug-017 refusal) are `spec-002`/`spec-003`/
+`spec-016`'s texts as the design's prototype printed them: no red build exists to copy them from.
+
+**Departures (each with the command that shows it).**
+- The design's `src/agent/execute.ts:696` is now `:768` after the merge of `main` (`grep -n "never executed by an agent"
+  src/agent/execute.ts` → `768:`); `test/agent/helpers/agent-execute-fixture.ts:43` did not move (`grep -n executes_as` → `43:`).
+- `test/dna/roles.test.ts` "module surface" pins `Object.keys` of `src/dna/roles.ts` exactly; the design puts
+  `isHumanOnlyRole` there, so the pin gains it (not in the design's list). Consequence for green: the `src/dna`-owned
+  `'approver'` literal must not be exported from `roles.ts` (its natural place is `schema.ts`, next to
+  `isHumanOnlyRoleEntry`), or that pin needs a reviewed change. No test names that constant: (f) checks
+  `isHumanOnlyRole(dna, APPROVER_ROLE)` instead.
+- AC 5's "`workflow list` reports no `W_WORKFLOW_AGENT_ROLE_UNEXECUTED`" is held by the existing
+  `workflow-repository-conformance.test.ts` (`rows(diagnostics)` `[]`, passes today and must still pass after green); the
+  red half of D2 (a) is the release-publishing pins above. The pinned-build half of AC 5 is the review's manual check.
+
+**Candidate findings.** None.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
