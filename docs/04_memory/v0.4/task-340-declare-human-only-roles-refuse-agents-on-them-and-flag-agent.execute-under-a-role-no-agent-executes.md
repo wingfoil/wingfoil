@@ -683,6 +683,30 @@ Left uncommitted in the worktree (`dl-047`); this replaces the list above.
 - `dl-183-who-chooses-the-launch-kind-a-phase-field-gives-the-default-a-launch-option-overrides-it-and-the-engine-fixes-it-for-verification-runs` —
   `--reason "Note that the approver refusal this decision cites is the HUMAN_ONLY_ROLE row of spec-016 section 3.7 since task-340, per dl-202 item 1 (task-340 review finding F2, same class)."`
 
+### merge of main (developer, 2026-11-15)
+
+- `d6a0deeba`: `git merge --no-edit main` (main `8cd40193d`, which brings in task-352 `96b288723` and bug-539/540;
+  `HEAD..main` was 45), with the four pending amendments stashed first and popped afterwards. Committed with
+  `git commit -F` (bug-540); `git log -1 --format=%B | grep -c '^#'` → `0`, and the merge carries one attribution pair.
+- **Conflicts, each resolved by keeping both sides:**
+  - `test/agent/helpers/agent-execute-fixture.ts`: task-352's `0+fake-agent@users.noreply.github.com`, with this
+    task's `executes_as: [ developer, reviewer ]`;
+  - `docs/cli-reference.md`: this task's `team.roles` row with task-352's `team.agents` row;
+  - `spec-002`: the Revision tail, task-352's entry first, then task-340's.
+- **Auto-merged:** `src/dna/schema.ts`. task-352's `AgentEntry` rule and this task's `RoleEntry`/`Team` are both present.
+- **`git stash pop`:** no conflict; the four files stay unstaged, and the stash was dropped.
+- **Checks:**
+  - `npm run -s build` → exit 0.
+  - `npx jest test/core/agent-list.test.ts test/dna test/cli/check-governance-co-author-identity.test.ts
+    test/cli/check-governance-co-author-identity-review.test.ts test/docs/name-resolvability.test.ts --maxWorkers=2`
+    → `Tests: 371 passed, 371 total`.
+  - Full `npm test -- --maxWorkers=2`, after `waitslot.sh` (it and `ps` printed nothing, so no wait) →
+    `Tests: 1 failed, 11815 passed, 11816 total`. The one failure is `workflow-unbound-none.integration.test.ts`
+    (`4 diagnostic(s)`): bug-534, one `W_UNCOMMITTED_INPUTS` per pending file (bug-459, dl-183, spec-002, spec-008),
+    per `node dist/cli.js --format json workflow next`.
+  - `npm run -s check:governance -- --base origin/main` → `gated: 0 findings on 0 commits`,
+    `history: 0 findings on 0 commits`. Its `co-author-identity` check starts at the merge `d6a0deeba`.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
