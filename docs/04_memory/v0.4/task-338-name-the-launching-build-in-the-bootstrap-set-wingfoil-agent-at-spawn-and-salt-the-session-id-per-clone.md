@@ -508,6 +508,58 @@ under its `### Retrospective`:
 While these are pending, `test/cli/workflow-unbound-none.integration.test.ts` fails alone with one `W_UNCOMMITTED_INPUTS` per
 file (`bug-534`, quoted in the refactor section).
 
+### review fixes (developer, 2026-11-14)
+
+The independent review at `e42f26170` returned APPROVE WITH FIXES: 0 blockers, 4 should-fix, all fixed in the task. Fix commits:
+- `517fc5b03` (`git show --stat --format= 517fc5b03` → `src/agent/session-salt.ts`, new `test/agent/session-salt-errors.test.ts`,
+  `test/docs/name-resolvability.allowlist.ts`);
+- `94e23f9c2` (that test file only, see below).
+
+No red file is touched. T4: `git log --first-parent --no-merges --format=%h c8754fc2a..HEAD -- <red's 9 files and
+test/fixtures/run-logs/>` → no output. Base: `git rev-list --count HEAD..main` → `0`, so no merge. PATH guard: `command -v wingfoil` →
+the task's PATH shim, and `wingfoil --version` → `0.3.2 (e42f2617064648d6972509215543d00f66b65b19)`.
+- **F1.** On a git before 2.31, `git rev-parse --path-format=absolute --git-common-dir` echoes the unknown option and exits 0, so
+  the salt would land in a relative directory. `sessionSalt` now accepts only one non-empty output line that is an absolute path
+  (`isAbsolute`). Anything else is `IO` with §2.6's form and the cause `git rev-parse --git-common-dir failed`, which is the cause
+  `runGitRead` throwing already gave.
+  - The test mocks `runGitRead` of `src/storage` (`jest.mock` with `requireActual`). Two lines (`--path-format=absolute` and
+    `.git`) → the refusal, and no `--path-format=absolute`, `wingfoil` or `.git/wingfoil` entry is written. A single relative
+    `.git` → the refusal. Empty output → the refusal.
+  - Guard: the real absolute answer passed through the mock still creates the salt.
+- **F2.** A test spies on `linkSync` of `node:fs` and throws `EPERM`. The result is exactly `{ code: 'IO', message: 'cannot create
+  or read the session salt in the git directory (wingfoil/session-salt): EPERM: operation not permitted (link)' }`. The root is
+  absent from the serialized result. `readdirSync(<common dir>/wingfoil)` → `[]`, so the temporary file was removed and no salt
+  exists. Guard: an `EEXIST` whose winner wrote a salt still returns that salt.
+  - Coverage of the two salt suites: `npx jest --coverage --collectCoverageFrom=src/agent/session-salt.ts` → `session-salt.ts |
+    95.65 | 95.12` statements and lines. The branches rose from 64.28 % to 83.33 %. The uncovered lines are 50 and 82.
+  - Those two lines stay untested on purpose (defensive): `causeOf`'s value that is not a Node errno error, and `runGitRead`
+    throwing (git absent or failing), whose refusal is F1's.
+- **F3.** The three `PLANNED` entries of spec-016 that this task ships (`wingfoil.cmd`, `$WINGFOIL_CLI`, `WINGFOIL_CLI`,
+  `plannedBy: ['task-338']`) are removed from `test/docs/name-resolvability.allowlist.ts` (`git diff --stat` → 3 deletions). The
+  older stale entries are left. `test/docs/name-resolvability.test.ts` passes.
+- **F4 (correction).** The self-review above says `grep -rn "amend --no-edit --trailer" docs/cli-reference.md` → only task-334's
+  Global-options text. That is wrong: the re-run prints nothing and exits `1` (`grep_rc=1`). After green, `docs/cli-reference.md`
+  holds no amend recipe at all; the `--co-author` / `--ai-model` rows name the trailers without it. The conclusion stands: nothing
+  in the file tells a launched agent to amend.
+
+**My own slip, declared.** I added `--coverageReporters=text` before the test paths. It is an array option, so it took the paths as
+reporters, and jest ran the whole suite outside the slot (`Tests: 2 failed, 11693 passed, 11695 total`). I then ran the full suite
+properly, after `waitslot.sh` (it printed nothing), with `npm run -s build && npm test -- --maxWorkers=2` at `517fc5b03` and the
+two pending bug amendments in the tree → `Tests: 2 failed, 11693 passed, 11695 total` (1076 s). The two failures:
+- `test/cli/workflow-unbound-none.integration.test.ts` (`bug-534`, the two uncommitted bug files);
+- `test/lint/no-fabricated-stderr.test.ts`, which flagged my new test's mocked git answers `{ status: 0, stdout, stderr: '' }` at
+  lines 59, 68, 74 and 81. Fix `94e23f9c2`: the mock answers `{ stdout }` only, the one field `sessionSalt` reads.
+
+Runs after the fixes:
+- `npx jest --maxWorkers=2 test/agent/session-salt-errors.test.ts test/lint/no-fabricated-stderr.test.ts` → `Tests: 10 passed`;
+- `npx jest --maxWorkers=2 test/agent/session-salt-errors.test.ts test/agent/session-salt.test.ts test/agent/cli-shim-run-files.test.ts
+  test/docs/name-resolvability.test.ts` → `Tests: 39 passed`;
+- `npx jest --maxWorkers=2 test/cli/agent-execute-cli-shim.integration.test.ts test/cli/agent-execute-launch.integration.test.ts` →
+  `Tests: 45 passed`;
+- `npx tsc --noEmit -p tsconfig.json` → exit 0; `npm run lint` → exit 0.
+
+The task stays `in-review`, with no new submit.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
