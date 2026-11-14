@@ -45,7 +45,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { execFile, spawn, type ChildProcess, type SpawnOptions } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { delimiter, dirname, isAbsolute, resolve } from 'node:path';
+import { isAbsolute, posix, resolve, win32 } from 'node:path';
 import { performance } from 'node:perf_hooks';
 
 import { readBuildStamp } from '../storage';
@@ -107,15 +107,23 @@ export const CLI_VARIABLE = 'WINGFOIL_CLI';
  * shim's absolute path) is given, the shim's directory first on `PATH` (the key found case-insensitively on win32;
  * `PATH` is the directory alone when absent) and {@link CLI_VARIABLE} set to the shim's path; and always `spec-018`
  * §1.1's launcher marker — the first of `AGENT_MARKERS`, read from there so no marker name is spelled here — set to
- * `agentName`, whatever it held. `env` is not changed; an unset variable is left out.
+ * `agentName`, whatever it held. `env` is not changed; an unset variable is left out. `platform` (the process's by
+ * default) picks the path rules: win32's `;` separator and backslashes, and its case-insensitive `Path` key.
  */
-export function agentEnvironment(env: Readonly<Record<string, string | undefined>>, cliShim: string | undefined, agentName: string): Record<string, string> {
+export function agentEnvironment(
+  env: Readonly<Record<string, string | undefined>>,
+  cliShim: string | undefined,
+  agentName: string,
+  platform: NodeJS.Platform = process.platform,
+): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [name, value] of Object.entries(env)) if (value !== undefined) out[name] = value;
   if (cliShim !== undefined) {
-    const pathKey = (WINDOWS ? Object.keys(out).find((name) => name.toUpperCase() === 'PATH') : undefined) ?? 'PATH';
+    const rules = platform === 'win32' ? win32 : posix;
+    const pathKey = (platform === 'win32' ? Object.keys(out).find((name) => name.toUpperCase() === 'PATH') : undefined) ?? 'PATH';
     const current = out[pathKey];
-    out[pathKey] = current === undefined || current === '' ? dirname(cliShim) : `${dirname(cliShim)}${delimiter}${current}`;
+    const dir = rules.dirname(cliShim);
+    out[pathKey] = current === undefined || current === '' ? dir : `${dir}${rules.delimiter}${current}`;
     out[CLI_VARIABLE] = cliShim;
   }
   // Read at call time: `src/core` and `src/agent` import each other, so the table may still be loading at module time.
