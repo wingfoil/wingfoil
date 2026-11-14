@@ -51,3 +51,14 @@ batch B2 (`dev-loop-rel-v0.3-plan`).
   last revised by `task-260`); and `docs/user-guide.md` §4.2, whose *Agent commit identity* paragraph lists the
   refused domains. Member emails are not affected: `team.members` has no such rule (`DnaYaml.safeParse` on this build accepts
   a member with `a@b.test`), and the guide's `ada@example.com` examples are member emails.
+
+### Retrospective
+
+<!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
+     reconstructed afterwards. One line per item: what happened, the evidence (a command and what it
+     printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
+     An item met while fixing goes in the fix task's own subsection; this one holds what belongs to
+     the bug itself (its finding, its triage, why it took more than one task). The retrospective's
+     `explore` reads this subsection first. -->
+
+- Fixed by `task-352` together with `bug-475`: `hasReservedDomain` (`src/validation/identity.ts`) now also reserves `example.com`, `example.net`, `example.org` and their subdomains, which reaches `isValidAttribution` and `AgentEntry`. The cost was not in the rule but in the fixtures: every agent and attributed-author fixture on `example.com`/`example.org` moved to `0+<login>@users.noreply.github.com`, 14 test files beside the red phase's 7 (the e2e smoke's own test among them) and the agent in `scripts/e2e-smoke.cjs`; 22 test files changed in all with `check-governance-plan-retrospective.test.ts`, whose fixture gained a `dna.yaml` (`git diff --stat main...HEAD -- test` at `64889cf78`), and the red phase needed one correction for a fixture in a file it had changed (`1cb29dcb9`).
