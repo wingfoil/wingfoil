@@ -401,6 +401,17 @@ BDD files are not Memory: the orchestrator commits them in one commit right afte
 - BDD (committed by the orchestrator): `P2.4-project-dna-config.feature` (+2 scenarios), `P4.1-workflow-config.feature`
   (+1), `P5.3.2-agent-role-selection.feature` (+1), each with a dated header comment.
 
+### design addendum (orchestrator ruling: candidate finding 2 fixed in the task)
+
+`spec-002` § "Role binding" said `roles.yaml` "omits `facilitator` and `approver`"; it binds both since `task-215`
+(`grep -n "task-215" .wingfoil/roles.yaml` → lines 33 and 41), and today its `assignments` keys equal the eight
+`team.roles` names (`node -e` reading both files with `js-yaml` → `approver,architect,developer,facilitator,product-owner,qa,reviewer,tech-lead`
+on both sides). A same-class defect in a section this task amends, so it is fixed in the task (W0-R10): the pending
+`spec-002` amendment now says `roles.yaml` need not bind every role (it bound neither until `task-215`; today it binds
+all eight), and its Revision note says so. The other pending files are unchanged. The `spec-002` `--reason` becomes:
+
+- `spec-002-dna-yaml-schema` — `--reason "Add human-only roles to Role binding and the RoleEntry Zod listing, per dl-202 item 1: an optional human_only flag, approver always human-only, and a load error for an executes_as naming a human-only role; and correct Role binding's sentence on roles.yaml, which binds facilitator and approver since task-215 (task-340 design gate)."`
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
