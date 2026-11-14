@@ -54,8 +54,8 @@ export type { DnaMutationRequest, DnaMutationResult, DnaMutationVerb } from './m
 export { applyDnaEditInText } from './edit';
 export type { DnaTextEdit, DnaTextStep } from './edit';
 
-// `isHumanOnlyRole` (task-340, `dl-202` item 1) is the one human-only predicate: `agent execute` and the workflow
-// check `W_WORKFLOW_AGENT_ROLE_UNEXECUTED` read it rather than comparing role names.
+// `isHumanOnlyRole` (task-340, `dl-202` item 1) is the one human-only predicate: `agent execute` reads it rather than
+// comparing role names (the load refusal of `Team` uses the same rule, `isHumanOnlyRoleEntry`).
 export {
   isRoleDefined,
   isHumanOnlyRole,

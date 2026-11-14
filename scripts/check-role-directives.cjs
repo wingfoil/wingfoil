@@ -23,8 +23,7 @@
  *
  * Usage: node scripts/check-role-directives.cjs [--root <dir>]   (`npm run check:role-directives`)
  * Exit:  0 no role has a warning · 1 at least one warning (each an `error: role '<r>': <warning>` line on stderr)
- *        · 2 misconfiguration (bad argument, pinned build missing, a CLI call failing, no `team.roles`, a
- *          `roles.yaml` that is not YAML or whose `assignments` is not a mapping)
+ *        · 2 misconfiguration (bad argument, pinned build missing, a CLI call failing, no `team.roles`)
  */
 'use strict';
 
@@ -93,7 +92,9 @@ function runJson(cli, root, args) {
 }
 
 /**
- * The roles `root`'s `roles.yaml` binds under `assignments` (its keys), or none when the file is absent.
+ * The roles `root`'s `roles.yaml` binds under `assignments` (its keys), or none when the file is absent. A file
+ * that is not YAML, or whose `assignments` is not a mapping, adds none either: the schema check is the pinned
+ * build's, whose `directives list` then exits non-zero and is reported as a failing command (task-215 F4).
  *
  * @param {string} root
  * @returns {string[]}
@@ -104,12 +105,11 @@ function boundRoles(root) {
   let parsed;
   try {
     parsed = yaml.load(readFileSync(file, 'utf-8'));
-  } catch (error) {
-    throw new UsageError(`${ROLES_YAML} is not valid YAML: ${error instanceof Error ? error.message.split('\n')[0] : String(error)}`);
+  } catch {
+    return [];
   }
   const assignments = parsed !== null && typeof parsed === 'object' ? /** @type {{ assignments?: unknown }} */ (parsed).assignments : undefined;
-  if (assignments === undefined || assignments === null) return [];
-  if (typeof assignments !== 'object' || Array.isArray(assignments)) throw new UsageError(`${ROLES_YAML} assignments is not a mapping`);
+  if (assignments === null || typeof assignments !== 'object' || Array.isArray(assignments)) return [];
   return Object.keys(assignments);
 }
 
