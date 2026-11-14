@@ -68,6 +68,11 @@ team:
     - name: ${DEVELOPER.name}
       email: ${DEVELOPER.email}
       roles: [ developer ]
+  agents:
+    # task-352: the agent entry this repository's dna.yaml declares, so a Co-Authored-By: Claude trailer is known.
+    - name: Claude
+      email: noreply@anthropic.com
+      executes_as: [ developer ]
   roles:
     - name: approver
     - name: developer

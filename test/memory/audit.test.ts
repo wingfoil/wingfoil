@@ -130,13 +130,13 @@ describe('isValidAttribution reconciled with isConfiguredIdentity (task-014 ↔ 
 /**
  * A fixture repository whose configured author is NOT a placeholder. `makeTempGitRepo`'s identity is on
  * `example.invalid`, an RFC 2606 reserved top-level domain the audit itself counts as unattributed
- * since task-132 (`bug-153`), so the "every commit is valid" baseline needs another domain.
- * `example.org` is IANA-reserved too, but at the second level, which the top-level-only rule accepts
- * — so no registrable name is used; a future second-level rule would have to move it.
+ * since task-132 (`bug-153`), so the "every commit is valid" baseline needs another domain. Since task-352
+ * (`bug-193`) the audit also refuses RFC 2606's reserved second-level domains (`example.org` among them), so the
+ * address is GitHub's id-qualified noreply form (design D8): no mailbox exists there and no person is named.
  */
 function makeAttributedRepo(): string {
   const dir = makeTempGitRepo();
-  git(dir, ['config', 'user.email', 'wf-test@example.org']);
+  git(dir, ['config', 'user.email', '0+wf-test@users.noreply.github.com']);
   return dir;
 }
 
