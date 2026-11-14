@@ -191,7 +191,8 @@ ways to fill it:
 
 An agent's `name` may not be empty or blank, nor contain `<`, `>` or a line break, since it is written
 into the trailer. An `email` on a top-level domain RFC 2606 reserves (`.test`, `.example`, `.invalid`,
-`.localhost`), or carrying git's guessed `.(none)` domain, is refused: no mailbox exists there, and
+`.localhost`), on `example.com`, `example.net`, `example.org` or a subdomain of one, or carrying git's guessed
+`.(none)` domain, is refused: no mailbox exists there, and
 WingFoil's attribution audit treats such an identity as unattributed. The `email` is required on an entry that declares an `adapter`: that
 agent can be launched, and every commit it co-authors names it.
 

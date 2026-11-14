@@ -33,7 +33,7 @@ describe('renderBootstrap (§2.4) — a pure function of (role, element, run id,
       runId: 'task-001-a/adhoc/1',
       stateRef: SHA,
       handoff: handoffLine(true),
-      agent: { name: 'Fake Agent', email: 'fake-agent@example.com' },
+      agent: { name: 'Fake Agent', email: '0+fake-agent@users.noreply.github.com' },
     });
     expect(text).toBe(
       [
@@ -41,7 +41,7 @@ describe('renderBootstrap (§2.4) — a pure function of (role, element, run id,
         `Your context is assembled at commit ${SHA} and served by the "wingfoil" MCP server`,
         `registered for this session. Load it before any other action: Read the MCP resource "wingfoil://session/developer/task:task-001-a/${SHA}".`,
         'Record your handoff in the element\'s "## Execution Notes" section.',
-        'End every commit you write, except an approve or reject commit, with the trailer paragraph "Co-Authored-By: Fake Agent <fake-agent@example.com>" and "AI-Model: <the model identifier you run as>"; to a commit wingfoil writes, add them with git commit --amend --no-edit --trailer, never as a paragraph of their own (git-conventions §7, §8).',
+        'End every commit you write, except an approve or reject commit, with the trailer paragraph "Co-Authored-By: Fake Agent <0+fake-agent@users.noreply.github.com>" and "AI-Model: <the model identifier you run as>"; to a commit wingfoil writes, add them with git commit --amend --no-edit --trailer, never as a paragraph of their own (git-conventions §7, §8).',
         '',
       ].join('\n'),
     );
@@ -205,7 +205,7 @@ const team = (agents: unknown[]): DnaYaml =>
 
 describe('selectAgent (§3.2 step 4)', () => {
   const fake = { name: 'Fake', email: 'fake@example.com', executes_as: ['developer'], adapter: 'fake' };
-  const plain = { name: 'Plain', email: 'plain@example.com', executes_as: ['developer', 'qa'] };
+  const plain = { name: 'Plain', email: '0+plain@users.noreply.github.com', executes_as: ['developer', 'qa'] };
   const second = { name: 'Second', email: 'second@example.com', executes_as: ['developer', 'qa'], adapter: 'other' };
 
   it('without --agent: the first agent, in declared order, with an adapter that executes the role', () => {

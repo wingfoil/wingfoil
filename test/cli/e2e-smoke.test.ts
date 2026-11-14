@@ -445,7 +445,7 @@ describe('dl-023 smoke (task-060) — scripts/e2e-smoke.cjs', () => {
         });
         expect(steps).toContainEqual(
           expect.objectContaining({
-            args: ['dna', 'add', 'team.agents', '--value', 'Fake Agent', '--entry-email', 'fake-agent@example.com', '--entry-executes_as', 'developer', '--entry-adapter', 'fake'],
+            args: ['dna', 'add', 'team.agents', '--value', 'Fake Agent', '--entry-email', '0+fake-agent@users.noreply.github.com', '--entry-executes_as', 'developer', '--entry-adapter', 'fake'],
             exit: 0,
           }),
         );

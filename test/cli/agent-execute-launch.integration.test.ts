@@ -144,7 +144,7 @@ const SESSION_NAMESPACE = uuidV5('6ba7b811-9dad-11d1-80b4-00c04fd430c8', 'wingfo
 const sessionOf = (repo: string, runId: string): string => uuidV5(SESSION_NAMESPACE, `${toplevel(repo)}\n${runId}`);
 
 /** `spec-016` §2.4's bootstrap for the fixture's task and `Fake Agent`, written out by hand. */
-function bootstrapOf(runId: string, stateRef: string, agent = 'Fake Agent <fake-agent@example.com>'): string {
+function bootstrapOf(runId: string, stateRef: string, agent = 'Fake Agent <0+fake-agent@users.noreply.github.com>'): string {
   return [
     `WingFoil run ${runId}: act as role "developer" on element ${TASK_REF}.`,
     `Your context is assembled at commit ${stateRef} and served by the "wingfoil" MCP server`,
@@ -327,14 +327,14 @@ describe('task-228 AC 7 — the bootstrap carries the attribution rule for the s
         '.wingfoil/dna.yaml',
         DNA_YAML.replace(
           '    - name: Plain Agent\n',
-          '    - name: Second Agent\n      email: second-agent@example.com\n      executes_as: [ developer ]\n      approval_authority: false\n      adapter: fake\n    - name: Plain Agent\n',
+          '    - name: Second Agent\n      email: 0+second-agent@users.noreply.github.com\n      executes_as: [ developer ]\n      approval_authority: false\n      adapter: fake\n    - name: Plain Agent\n',
         ),
       ),
     );
     const run = execute(repo, [...FULL, '--agent', 'Second Agent', '--dry-run', '--format', 'json']);
     expect(run.status).toBe(0);
     const plan = JSON.parse(run.stdout) as { bootstrap: string };
-    expect(plan.bootstrap).toBe(bootstrapOf(RUN_1, head(repo), 'Second Agent <second-agent@example.com>'));
+    expect(plan.bootstrap).toBe(bootstrapOf(RUN_1, head(repo), 'Second Agent <0+second-agent@users.noreply.github.com>'));
   }, 120000);
 });
 

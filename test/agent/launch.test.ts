@@ -145,14 +145,14 @@ describe('the attribution line (§2.4, dl-117 Action 4, ruling R20 Q8, git-conve
     runId: 'task-001-a/adhoc/1',
     stateRef: SHA,
     handoff: handoffLine(true),
-    agent: { name: 'Fake Agent', email: 'fake-agent@example.com' },
+    agent: { name: 'Fake Agent', email: '0+fake-agent@users.noreply.github.com' },
   };
 
   it('closes the bootstrap, naming the signing entry (dl-158 Rule 1 (a))', () => {
     const lines = renderBootstrap(input).split('\n');
     expect(lines[lines.length - 1]).toBe('');
     expect(lines[lines.length - 2]).toBe(
-      `${ATTRIBUTION_LINE_PREFIX} "Co-Authored-By: Fake Agent <fake-agent@example.com>" and "AI-Model: <the model identifier you run as>"; to a commit wingfoil writes, add them with git commit --amend --no-edit --trailer, never as a paragraph of their own (git-conventions §7, §8).`,
+      `${ATTRIBUTION_LINE_PREFIX} "Co-Authored-By: Fake Agent <0+fake-agent@users.noreply.github.com>" and "AI-Model: <the model identifier you run as>"; to a commit wingfoil writes, add them with git commit --amend --no-edit --trailer, never as a paragraph of their own (git-conventions §7, §8).`,
     );
     expect(lines[lines.length - 3]).toBe(handoffLine(true));
   });

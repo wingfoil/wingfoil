@@ -151,7 +151,7 @@ const ATTRIBUTION_EMAIL_MESSAGES: Readonly<Record<AttributionEmailIssue, string>
   malformed:
     'an agent email may not have a parenthesis in its top-level domain (the attribution audit rejects it, bug-261)',
   'reserved-domain':
-    'an agent email may not be on a reserved top-level domain (.test, .example, .invalid, .localhost: RFC 2606 names no mailbox there, and the attribution audit rejects it, bug-261)',
+    'an agent email may not be on a reserved top-level domain (.test, .example, .invalid, .localhost) nor on example.com, example.net, example.org or a subdomain of one: RFC 2606 names no mailbox there, and the attribution audit rejects it (bug-261, bug-193)',
 };
 
 /** Whether `name` can be the name part of a trailer: no `<`, `>`, CR or LF (task-256). */
@@ -176,7 +176,8 @@ function isTrailerSafeName(name: string): boolean {
  *
  * The identity must also be one the attribution audit accepts (task-260, `bug-261`): a blank `name` and an
  * `email` the audit rejects (git's `.(none)` marker, a parenthesis in the top-level domain, an RFC 2606
- * reserved top-level domain) are refused through the rule `isValidAttribution` applies
+ * reserved top-level domain, or `example.com`, `example.net`, `example.org` or a subdomain of one, `bug-193`)
+ * are refused through the rule `isValidAttribution` applies
  * (`src/validation/identity.ts`), shared rather than restated. And an entry
  * that declares an `adapter` — one `agent execute` can launch, so one whose commits carry its trailer —
  * must declare an `email` (`dl-158` Rule 2 (ii)); without an `adapter` the `email` stays optional, since

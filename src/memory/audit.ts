@@ -73,9 +73,9 @@ export interface AttributionEntry {
  *    historical commit authors, however, can carry hand-edited or otherwise malformed values, so the
  *    audit validates the shape too.
  *  - Rejects an email on an RFC 2606 reserved top-level domain (`.invalid`, `.example`, `.test`,
- *    `.localhost`; task-132, `bug-153`): such an address names no mailbox, so a commit carrying it is
- *    as unattributed as one carrying `.(none)`. Only the top-level label counts — `test.example.com`
- *    is an ordinary domain. The write-time check does not apply this rule: test fixtures and scratch
+ *    `.localhost`; task-132, `bug-153`) or on one of its reserved second-level domains (`example.com`,
+ *    `example.net`, `example.org` and their subdomains; task-352, `bug-193`): such an address names no
+ *    mailbox, so a commit carrying it is as unattributed as one carrying `.(none)`. The write-time check does not apply this rule: test fixtures and scratch
  *    repositories commit under these domains on purpose, and the audit is where they must show up.
  *
  * The three augmentations, with a blank-name check the base already covers, are

@@ -5,7 +5,8 @@
  * `### Retrospective` entry (at least one line outside HTML comments, D2 (b)) is a finding naming the plan, gated from
  * the check's introduction like the other later checks (`dl-103` §1 starting mode, per check).
  *
- * The scratch repository holds this repository's committed `.wingfoil/memory.yaml` and a plan built from its
+ * The scratch repository holds this repository's committed `.wingfoil/memory.yaml` and `.wingfoil/dna.yaml` (whose
+ * `team.agents` entry the commits' `Co-Authored-By:` names, task-352) and a plan built from its
  * `.wingfoil/memory/templates/plan.md` (both read at `HEAD`), moved `add` → `submit` → `finalize` with the subjects
  * and trailer paragraphs of real plan commits (`git show -s --format=%B 397f66042` / `a02480998` on `main`: the
  * `wf(plan): add`, the `Carries content:` submit, the hand finalize `[active → done]`). The marker spelling
@@ -26,6 +27,8 @@ const MARKER = 'governance-check:plan-retrospective';
 const atHead = (path: string): string => execFileSync('git', ['show', `HEAD:${path}`], { cwd: ROOT, encoding: 'utf-8' });
 
 const MEMORY_YAML = atHead('.wingfoil/memory.yaml');
+/** This repository's `dna.yaml`, whose `team.agents` entry the trailers below name (task-352: `co-author-identity`). */
+const DNA_YAML = atHead('.wingfoil/dna.yaml');
 const PLAN_TEMPLATE = atHead('.wingfoil/memory/templates/plan.md');
 
 const DEVELOPER = { name: 'Dev Eloper', email: 'developer@example.invalid' };
@@ -71,7 +74,7 @@ function fixture(): Fixture {
     execFileSync('git', ['commit', '--quiet', '--allow-empty', '--cleanup=whitespace', '-m', message], { cwd: root, encoding: 'utf-8', env });
     return git(root, ['rev-parse', 'HEAD']).trim();
   };
-  commit('chore: configure wingfoil', { '.wingfoil/memory.yaml': MEMORY_YAML });
+  commit('chore: configure wingfoil', { '.wingfoil/memory.yaml': MEMORY_YAML, '.wingfoil/dna.yaml': DNA_YAML });
   return { root, commit };
 }
 
