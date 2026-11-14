@@ -500,6 +500,143 @@ messages (load errors, the warning, the refusal, the undeclared-role line, the b
 
 **Candidate findings.** None.
 
+### green (developer, 2026-11-14)
+
+**Base.** Head `2c45d0336`, `git rev-list --count HEAD..main` → `0` (no merge at the start nor at the end of refactor).
+PATH guard: `command -v wingfoil` → the task's PATH shim; `wingfoil --version` and `node dist/cli.js --version` →
+`0.3.2 (66251bf43…)`. `WINGFOIL_AGENT_MODEL` exported with the shim in every call.
+
+**Implementation (`52498b443`).**
+- `src/dna/schema.ts`: `RoleEntry.human_only?: boolean` (`[SPEC: dl-202 item 1]`); `APPROVER_ROLE` (the one
+  `'approver'` literal, next to `isHumanOnlyRoleEntry`, per the orchestrator's ruling on red's ambiguity 1);
+  `isHumanOnlyRoleEntry(entry)` = `name === APPROVER_ROLE || human_only === true`; `Team`'s `superRefine` adds the two
+  load errors of `spec-002` § "Role binding": `human_only: false` on `approver` at `['roles', j, 'human_only']`, and an
+  `executes_as` naming a human-only role at `['agents', i, 'executes_as', k]`, only for a role `team.roles` defines
+  (an unknown role keeps its one undefined-role issue).
+- `src/dna/roles.ts`: `isHumanOnlyRole(dna, role)`; `src/dna/index.ts` exports it and `isHumanOnlyRoleEntry`.
+- `src/core/approval-authority.ts`: `APPROVER_ROLE` is re-exported from `src/dna/schema.ts` (the literal spelled once;
+  `src/dna` imports nothing from `src/core`).
+- `src/core/workflow-core-checks.ts`: the row `W_WORKFLOW_AGENT_ROLE_UNEXECUTED`, appended to `ROWS` after
+  `W_PHASE_FALLBACK_NOT_REENTRANT`, decided inside the existing `if (dnaYaml)` block: a phase whose `role` is a
+  `team.roles` name, no `team.agents` entry with an `adapter` listing it in `executes_as`, and an action whose token
+  name starts with `agent.` → one warning at the first such action. Module doc updated.
+- `src/agent/execute.ts` (`:768`): `if (isHumanOnlyRole(dna, role))` → `role '<role>' is never executed by an agent`,
+  code `VALIDATION`, same place (before `selectAgent` and the adapter probe); the `APPROVER_ROLE` import dropped; the
+  module doc (step 3) and the step-7 comment say "human-only".
+- `scripts/check-role-directives.cjs`: the roles visited are the ascending union of `dna show`'s `team.roles` names and
+  the keys of `.wingfoil/roles.yaml`'s `assignments` (`js-yaml`); a role `dna.yaml` does not declare gets
+  `bound in roles.yaml but not declared in dna.yaml team.roles` before its listing's warnings. Module doc updated.
+
+**Configuration (rulings D2 (a), D3).**
+- `8d8c2bd58` `release-publishing.yaml` 2.2 → 2.3 (hand edit, one bump): the `agent.execute` actions of `publish` and
+  `merge-forward` dropped, their line comments folded into the two descriptions; the 2.3 history entry names task-340.
+- `f6ac7bec4`, `a70d2804b`, `dd984c5fb`: `node $(pwd)/dist/cli.js dna update team.roles.<r> --entry-human_only true`
+  for `approver`, `product-owner`, `tech-lead` (code build, built under the slot on a clean tree) → each exit 0,
+  `{"key": "team.roles.<r>"}`, one commit `wf(dna): update team.roles.<r>`, `version` 2.1 → 2.4. Each commit carries
+  `WingFoil-Version:` and one attribution pair written by the verb (`git log -1 --format=%B | grep -c '^Co-Authored-By:'`
+  → `1` for each); none was amended.
+- `db2999d8f` (hand, no further bump): the 2.1 -> 2.4 history note naming task-340 on the `version:` line, and
+  `# [SPEC: dl-202 item 1, spec-002 Role binding]` on the three `human_only: true` lines.
+
+**Docs (`a380491d1`).** `docs/user-guide.md` §4.2: a "Human-only roles" paragraph and the `dna update … --entry-human_only
+true` example. `docs/cli-reference.md`: `human_only` in the `team.roles` row of `dna add`'s fields table; `--role`'s row
+and the pre-flight list name the generalized refusal; `workflow list`'s checks paragraph names the new warning. Neither
+document carries a `version:` of its own (`grep -n "^\*\*Version\|^version:"` → only `user-guide.md:482`, inside a code
+block).
+
+**Scope addition (orchestrator ruling, 2026-11-14).** `test/docs/x-cli-cmds.test.ts` ("the --entry-<field> parameter row
+names every --entry-* option dna add registers") failed on the derived `--entry-human_only`, in a file the design did
+not list. Reported as a stop-the-line; the orchestrator ruled the `docs/01_vision/X_cli-cmds.md` edit a forced
+consequence of the approved D1 (A), the same class as task-333's X_cli-cmds bump: `83878ff29` adds `--entry-human_only`
+to the row after `--entry-adapter`, Version 2.3 → 2.4, Date 2026-11-14, a Revision history entry naming task-340 and
+`dl-202` item 1. Its forced follow-on, `3895a312f`: `docs/01_vision/00_index.md`'s row (version, date, 528 lines),
+the Revision history range `L399–528` and **Last indexed**, which `test/docs/vision-index.test.ts` (bug-270) pins
+(it failed with exactly those four values after `83878ff29`; task-350's merge `69b7d0e26` edited the two files together
+the same way).
+
+**Red → green.** Red: `Tests: 43 failed, 134 passed, 177 total` (red notes). After `52498b443` + `8d8c2bd58`,
+`npm test -- <red's 11 test files> --maxWorkers=2` under the slot → `Test Suites: 2 failed, 9 passed`, `Tests: 7 failed,
+170 passed, 177 total`, the 7 being the `HEAD` reads of `repository-agent-roles` (AC 5 dna.yaml) and
+`workflow-integration-branch` (release-publishing at HEAD, and the registry warning while `tech-lead` was still
+unmarked). After the four `dna.yaml` commits, `npx jest test/core/workflow-integration-branch.test.ts
+test/agent/repository-agent-roles.test.ts test/core/workflow-repository-conformance.test.ts
+test/lint/version-bump.test.ts --maxWorkers=2` → `Tests: 88 passed, 88 total`. The full runs below pass every red suite.
+
+**AC 5 on both builds (this worktree, after `db2999d8f`).** `node dist/cli.js dna show` → exit 0;
+`node dist/cli.js --format json workflow list` → 11 workflows, `diagnostics []`, stderr empty;
+`npm run -s wingfoil -- dna show` → exit 0, stderr `warning: .wingfoil/dna.yaml: unknown field(s) ignored:
+team.roles[4].human_only, team.roles[5].human_only, team.roles[7].human_only` (D4, accepted);
+`npm run -s wingfoil -- --format json workflow list` → 11 workflows, `diagnostics []`, the same warning labelled
+`db2999d8f…:.wingfoil/dna.yaml`; `node scripts/check-role-directives.cjs` → exit 0, `role-directives: 8 roles checked,
+0 with warnings`; `npm run -s check:mcp` → exit 0, the pinned and the development lines both answering.
+
+### refactor (developer, 2026-11-14)
+
+- **First full run with coverage** (`waitslot.sh`, `npm run build`, `npm run test:coverage -- --maxWorkers=2`, tracked
+  background command, at `a380491d1` + the pending amendment): `Test Suites: 3 failed, 636 passed, 639 total`,
+  `Tests: 3 failed, 11748 passed, 11751 total`; All files **Stmts 99.1 / Branch 96.92 / Funcs 98.64 / Lines 99.63**;
+  `src/core/workflow-core-checks.ts`, `src/dna/schema.ts`, `src/dna/roles.ts` 100 in all four columns. The three
+  failures:
+  1. `test/cli/check-role-directives-errors.test.ts` (task-215 F4): my first version refused a `roles.yaml` whose
+     `assignments` is not a mapping (`error: .wingfoil/roles.yaml assignments is not a mapping`) before the pinned
+     build could report it. Fixed in `80bcf8908`: an unparsable file or a non-mapping `assignments` adds no role and the
+     pinned `directives list` reports the schema error, as before; the barrel comment of `src/dna/index.ts` no longer
+     says the workflow check reads `isHumanOnlyRole` (it does not: it reads `team.agents`, and the load refusal keeps a
+     human-only role out of `executes_as`). `npx jest test/cli/check-role-directives-errors.test.ts
+     test/cli/check-role-directives.test.ts --maxWorkers=2` → `Tests: 10 passed, 10 total`.
+  2. `test/docs/x-cli-cmds.test.ts`: the scope addition above (`83878ff29`, `3895a312f`).
+  3. `test/cli/workflow-unbound-none.integration.test.ts` (task-358 AC 1 (e)): `bug-534`, the pending `bug-459`
+     amendment. `node dist/cli.js --format json workflow next` → `diagnostics` = one `W_UNCOMMITTED_INPUTS` on
+     `docs/04_memory/bugs/bug-459-….md` ("uncommitted change to a deduction input, not read"); quoted, not fixed.
+- `npm test -- test/docs --maxWorkers=2` under the slot after `83878ff29` → `Tests: 4 failed, 387 passed`, all four in
+  `vision-index.test.ts` (version 2.3/2.4, date, lines 524/528, range end); after `3895a312f`, `npx jest
+  test/docs/vision-index.test.ts test/docs/x-cli-cmds.test.ts --maxWorkers=2` → `Tests: 29 passed, 29 total`.
+- `npm run lint` → exit 0. `npm run docs:api` → exit 0, no output. `npm run typecheck` (both configs, after
+  `waitslot.sh`) → exit 0. `npx tsc --noEmit -p tsconfig.json` → exit 0.
+- **Final full run** (`waitslot.sh`, `npm run build`, `npm test -- --maxWorkers=2`, tracked background, head
+  `3895a312f` + the pending amendment): `Test Suites: 1 failed, 638 passed, 639 total`, `Tests: 1 failed, 11750 passed, 11751 total`;
+  the one failure is `workflow-unbound-none.integration.test.ts` (task-358 AC 1 (e), the "1 diagnostic(s)" line), `bug-534`
+  as above. `waitslot.sh` and the `ps -eo pid,etime,args` that followed it printed nothing: no wait.
+- `docs.parity` = the `test/docs` suites, inside both full runs; `test/docs/cli-reference.test.ts` passes in them.
+- T4: `git log --first-parent --no-merges --format=%h 57458d6fa..HEAD -- <the 12 files of 57458d6fa>` → empty.
+- `main` did not move (`git rev-list --count HEAD..main` → `0` before submit): no merge.
+
+### self-review (developer, 2026-11-14)
+
+- **AC 1** met: `RoleEntry.human_only`, the two load errors with `spec-002`'s messages and paths, `approver` always
+  human-only (D1 (A)); `test/dna/human-only-roles.test.ts` passes, positive controls included (an unknown role keeps one
+  issue, `human_only: false` on tech-lead loads).
+- **AC 2** met: the row, its order after every other core row of the phase (the `Collector` sorts by `ROWS` index), one
+  per phase at the first `agent.*` action, none without `dna.yaml` and `W_WORKFLOW_CHECKS_NOT_RUN` unchanged (D5);
+  `test/core/workflow-agent-role-check.test.ts` passes.
+- **AC 3** met: one refusal for every human-only role, at the place of the old `approver` check, before `selectAgent`,
+  the adapter probe and every write; `approver`'s message unchanged (D6); the step form prints the deduction's warning
+  first (task-330's printing, unchanged). `test/cli/agent-execute-human-only.integration.test.ts` and the existing
+  `approver` pins pass.
+- **AC 4** met (`bug-459`): the union sweep and the undeclared-role warning; a malformed `roles.yaml` still reaches the
+  pinned build's refusal (task-215 F4). Not changed, stays in `bug-459`'s notes: the script is not in the npm package.
+- **AC 5** met: three marked roles, `Claude`'s `executes_as` unchanged, `version` 2.4 with the task-340 history,
+  `workflow list` `diagnostics []` on both builds (commands in green).
+- **AC 6**: amends `b818cb9c9`, `24a86f5cc`, `16a03b365` and the BDD `4896d04eb` precede red (design gate rulings).
+- **Same class in files touched:** `grep -rn "APPROVER_ROLE\|'approver'" src/agent src/dna` → only
+  `src/dna/schema.ts` (the declaration and its use) and `src/dna/roles.ts`/`src/agent/execute.ts` through
+  `isHumanOnlyRole`; no second name comparison for a human-only role remains in `src/agent`.
+- **Allowlist, for the reviewer to judge** (orchestrator ruling): the five `PLANNED` task-340 entries of
+  `test/docs/name-resolvability.allowlist.ts` (`HUMAN_ONLY_ROLE` ×2, `W_WORKFLOW_AGENT_ROLE_UNEXECUTED` ×2,
+  `isHumanOnlyRole`) now resolve and are listed as `stale` by `npx jest test/docs/name-resolvability.test.ts` (warn
+  mode, `MODE = 'warn'`: "119 stale allowlist entries"); left as they are, consistent with the repository's other stale
+  entries in warn mode.
+- **Absence claims with their positive case:** "no core row read `team.agents`" — now `agentExecutes` does
+  (`grep -n "team.agents" src/core/workflow-core-checks.ts` → the helper's lines); "no `human_only` in this
+  repository's `dna.yaml` before green" — now `grep -c "human_only: true" .wingfoil/dna.yaml` → `3`.
+- Invisible characters: the `grep -nP '[\x{0080}-…]'` of every changed file before each commit → no hit.
+
+### Pending amendments (approver)
+
+Left uncommitted in the worktree (`dl-047`); the gates ran with it in the tree (`bug-534`, above).
+- `bug-459-check-role-directives-checks-only-the-roles-dna.yaml-team.roles-declares-so-a-roles.yaml-binding-to-a-missing-directive-under-any-other-role-is-never-an-error` —
+  `--reason "Record the task-340 fix of the role-directives sweep (the union of team.roles and roles.yaml assignments, an undeclared role failing) and its retrospective entry."`
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -509,3 +646,10 @@ messages (load errors, the warning, the refusal, the undeclared-role line, the b
      here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
 - design: the blast-radius run took two targeted jest passes in a scratch clone at load 9–24 (the prototype pass ~40
   minutes, `Tests: 1756`); a design that changes a load rule benefits from it, but it is slow on a shared machine.
+- green: the derived `--entry-human_only` option reached a vision document the design did not list
+  (`docs/01_vision/X_cli-cmds.md`, then its index `00_index.md`, `test/docs/x-cli-cmds.test.ts` and
+  `test/docs/vision-index.test.ts`); a stop-the-line and a ruling for a one-word parity edit. Proposal: a design that adds
+  a schema field greps `test/docs` for the derived-option parities (`grep -rln "entry-" test/docs`) and lists their files.
+- refactor: the first sweep version refused a malformed `roles.yaml` itself and hid the pinned build's own refusal, which
+  task-215 F4 pins (`check-role-directives-errors.test.ts`, fixed in `80bcf8908`); a script that wraps a CLI leaves schema
+  errors to that CLI.
