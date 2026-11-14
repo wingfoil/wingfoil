@@ -166,7 +166,7 @@ describe('the attribution line (§2.4 as amended by task-338, spec-018 Consequen
   });
 
   it('task-338 AC 3 — attributionLine is that line, and never names the old placeholder or an amend (bug-370)', () => {
-    const line = attributionLine({ name: 'Fake Agent', email: 'fake-agent@example.com' });
+    const line = attributionLine({ name: 'Fake Agent', email: '0+fake-agent@users.noreply.github.com' });
     expect(renderBootstrap(input).split('\n')).toContain(line);
     expect(line).not.toContain('<the model identifier you run as>');
     expect(line).not.toContain('--amend');

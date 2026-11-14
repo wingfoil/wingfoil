@@ -65,7 +65,7 @@ describe('renderBootstrap (§2.4) — a pure function of (role, element, run id,
       runId: 'task-001-a/adhoc/1',
       stateRef: SHA,
       handoff: handoffLine(true),
-      agent: { name: 'Fake Agent', email: 'fake-agent@example.com' },
+      agent: { name: 'Fake Agent', email: '0+fake-agent@users.noreply.github.com' },
       build: BUILD,
     });
     expect(text).not.toContain('<the model identifier you run as>');
