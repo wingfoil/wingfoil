@@ -81,12 +81,13 @@
  *   plan whose `### Retrospective` subsection holds an entry — a line outside HTML comments, `None` included (D2 (b)) —
  *   as `scripts/check-retrospective.cjs` (`hasRetrospectiveEntry`, shared) tests a task's at `dev-loop.done`.
  * - `co-author-identity` (`bug-475`, `bug-535`, task-352; rule `body`): on every commit of the range, merges
- *   included, that has no line starting `Approver:` (an approval is `approval-agent-trailer`'s), each
+ *   included, except a non-merge commit with a line starting `Approver:` (`approval-agent-trailer`'s), each
  *   `Co-Authored-By:` line (any case) of the body's final paragraph is `Name <email>` and names a `team.agents` or
  *   `team.members` entry of the `.wingfoil/dna.yaml` committed at the commit's first parent — the name compared
  *   exactly, the email ignoring case, an entry without an email matching nothing; no `dna.yaml` there, or one that
  *   does not validate, is a finding (`git-conventions` §7). The same final paragraph carries no two
- *   `Co-Authored-By:` lines of the same value and at most one `AI-Model:` line (`bug-535`).
+ *   `Co-Authored-By:` lines naming the same co-author (name exact, email any case) and at most one `AI-Model:` line
+ *   (`bug-535`).
 
  * **Starting mode** (`dl-103` §1). A finding on a commit that is not the introduction commit nor one
  * of its ancestors is gated, and fails the check (exit 1). A finding on history — the introduction
@@ -652,14 +653,20 @@ function coAuthorFindings(lines, dna) {
       );
     }
   }
-  // bug-535: the attribution pair written twice — one finding per commit, naming each repeated key.
+  // bug-535: the attribution pair written twice — one finding per commit, naming each repeated key. Two lines name
+  // the same co-author under D5's equivalence (the name exact, the email in any case); a line that does not parse is
+  // compared as written.
   const repeated = [];
   const values = new Map();
   for (const line of coAuthors) {
     const value = line.slice(line.indexOf(':') + 1).trim();
-    values.set(value, (values.get(value) ?? 0) + 1);
+    const parsed = CO_AUTHOR_VALUE_RE.exec(line);
+    const key = parsed === null ? `\0${value}` : `${parsed[1]}\0${parsed[2].toLowerCase()}`;
+    const entry = values.get(key) ?? { value, count: 0 };
+    entry.count += 1;
+    values.set(key, entry);
   }
-  for (const [value, count] of values) if (count > 1) repeated.push(`${count} Co-Authored-By: ${value} lines`);
+  for (const { value, count } of values.values()) if (count > 1) repeated.push(`${count} Co-Authored-By: ${value} lines`);
   const models = lines.filter((line) => AI_MODEL_KEY_RE.test(line)).length;
   if (models > 1) repeated.push(`${models} AI-Model: lines`);
   if (repeated.length > 0) {
@@ -1053,8 +1060,10 @@ function checkGovernance(root, options = {}) {
 
   // co-author-identity: a non-approval commit's co-authors are team entries of the dna.yaml before it, and its final
   // paragraph carries the attribution pair once (bug-475, bug-535, task-352). Merges are judged: they carry the pair too.
+  // Only a non-merge approval is left out, the one approval-agent-trailer judges: a merge with an Approver: line is
+  // judged here, or it would escape both checks.
   const attributed = allCommits
-    .filter((commit) => ![commit.subject, ...commit.body.split('\n')].some((line) => APPROVAL_LINE_RE.test(line)))
+    .filter((commit) => commit.merge || ![commit.subject, ...commit.body.split('\n')].some((line) => APPROVAL_LINE_RE.test(line)))
     .map((commit) => ({ commit, lines: finalParagraphLines(commit.body) }))
     .filter(({ lines }) => lines.some((line) => CO_AUTHOR_KEY_RE.test(line) || AI_MODEL_KEY_RE.test(line)));
   const attributedDnaBlobs = readBlobIds(root, attributed.map(({ commit }) => `${commit.parent ?? commit.sha + '^'}:${DNA_YAML}`));

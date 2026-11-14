@@ -48,7 +48,7 @@ describe('renderBootstrap (§2.4) — a pure function of (role, element, run id,
   });
 
   it('the same inputs render the same bytes', () => {
-    const input = { role: 'qa', element: 'bug:bug-1', runId: 'bug-1/adhoc/2', stateRef: SHA, handoff: handoffLine(false), agent: { name: 'A', email: 'a@example.com' } };
+    const input = { role: 'qa', element: 'bug:bug-1', runId: 'bug-1/adhoc/2', stateRef: SHA, handoff: handoffLine(false), agent: { name: 'A', email: '0+a@users.noreply.github.com' } };
     expect(renderBootstrap(input)).toBe(renderBootstrap({ ...input }));
   });
 });
@@ -204,9 +204,9 @@ const team = (agents: unknown[]): DnaYaml =>
   ({ team: { roles: [{ name: 'developer' }, { name: 'qa' }], agents } }) as unknown as DnaYaml;
 
 describe('selectAgent (§3.2 step 4)', () => {
-  const fake = { name: 'Fake', email: 'fake@example.com', executes_as: ['developer'], adapter: 'fake' };
+  const fake = { name: 'Fake', email: '0+fake@users.noreply.github.com', executes_as: ['developer'], adapter: 'fake' };
   const plain = { name: 'Plain', email: '0+plain@users.noreply.github.com', executes_as: ['developer', 'qa'] };
-  const second = { name: 'Second', email: 'second@example.com', executes_as: ['developer', 'qa'], adapter: 'other' };
+  const second = { name: 'Second', email: '0+second@users.noreply.github.com', executes_as: ['developer', 'qa'], adapter: 'other' };
 
   it('without --agent: the first agent, in declared order, with an adapter that executes the role', () => {
     const picked = selectAgent(team([plain, fake, second]), 'developer', undefined);

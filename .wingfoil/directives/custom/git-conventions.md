@@ -338,13 +338,13 @@ limits:
   record, when it has one (`bug-444`), held to the same `Approver:` grammar and the same authority as an
   approval (the record needs none: whether a record of an `approval:` phase must carry one is not judged);
   and a `WingFoil-*` trailer outside the commit's final paragraph (§8, `bug-391`), on every non-merge commit,
-  any key in any letter case, because the workflow deduction reads only that paragraph; and, on every commit with no
-  `Approver:` line, merges included, the rule `co-author-identity` (`bug-475`, `bug-535`): each `Co-Authored-By:`
+  any key in any letter case, because the workflow deduction reads only that paragraph; and, on every commit, merges
+  included, except a non-merge commit with an `Approver:` line (the agent-trailer rule's), the rule `co-author-identity` (`bug-475`, `bug-535`): each `Co-Authored-By:`
   line of the final paragraph is `Name <email>` and names a `team.agents` or `team.members` entry of the
   `.wingfoil/dna.yaml` committed before the commit (its first parent), the name exactly and the email in any letter
   case — so a runtime-injected name such as `Claude Opus …` fails, and a `dna.yaml` change cannot legitimise its own
-  commit — and the paragraph carries no two `Co-Authored-By:` lines of the same value and at most one `AI-Model:`
-  line (§7, §8). With `--base` only (CI passes it), it also checks the version bump of the four versioned
+  commit — and the paragraph carries no two `Co-Authored-By:` lines naming the same co-author (the name exactly, the email
+  in any letter case) and at most one `AI-Model:` line (§7, §8). With `--base` only (CI passes it), it also checks the version bump of the four versioned
   config files over the range (`bug-249`); a whole-history run has no range and does not judge it. Each rule
   fails only commits after the one that introduced it; older history is reported, never rewritten (§2, §8).
   Beside it, a warn-only lint (`scripts/lint-claims.cjs`, `dl-097` §2 (b)) annotates claims with no command in
