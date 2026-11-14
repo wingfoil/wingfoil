@@ -269,6 +269,19 @@ helpers: `grep -rln "agent-execute-fixture\|l0-fixture\|attribution-fixture" tes
   the RFC 2606 reserved second-level domains example.com, example.net and example.org and their subdomains, through the
   shared rule the attribution audit applies (bug-193, task-352)."`
 
+
+### design gate (approver, 2026-11-14)
+
+The approver's record `c3ff80dba` (`git log -1 --format=%B c3ff80dba`) approves the design as recommended, D1 to D10,
+after the amendments `881c326d3` (`spec-002`) and `75d85f94e` (this task: `bug-535` absorbed, criterion 5).
+Consequences for the next phases:
+- D9: `bug-535` is in `bug:`; it was assigned to v0.4 and synced `[triaged → planned → in-progress]` right after the
+  record (`git log --format='%h %s' -3 -- docs/04_memory/bugs/bug-535-*.md`). AC 5 (red-first) is the duplicate-pair
+  case of the same `co-author-identity` check: two equal `Co-Authored-By:` lines, or more than one `AI-Model:` line,
+  in the final paragraph.
+- `bug-193` has no `### Retrospective` subsection (`grep -c "### Retrospective"` → 0; `bug-475` and `bug-535` → 1):
+  it needs one as a pending amendment before the review gate.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
