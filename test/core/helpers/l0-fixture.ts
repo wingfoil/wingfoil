@@ -2,7 +2,7 @@
  * task-333 — the fixture of the approval-binding L0 suites (`spec-018` §6): a repository whose committed `dna.yaml`
  * makes the git identity (`WingFoil Test <wf-test@example.invalid>`, the fixture's `user.*`) a `team.members` entry
  * holding `approver`, and declares two agents, `Claude` (`adapter: claude-code`, `email: noreply@anthropic.com`) and
- * `Other` (`email: other@example.com`), or none ({@link L0Options.agents} `false`, T-7's `team.agents: []`).
+ * `Other` (`email: 0+other@users.noreply.github.com`), or none ({@link L0Options.agents} `false`, T-7's `team.agents: []`).
  *
  * `Other`'s address is `example.com`, not the design's `other@example.invalid`: `src/dna/schema.ts` refuses an agent
  * email on a reserved top-level domain (`ATTRIBUTION_EMAIL_MESSAGES['reserved-domain']`, bug-261), and a committed
@@ -65,7 +65,7 @@ const AGENTS = `  agents:
       executes_as: [ developer ]
       adapter: claude-code
     - name: Other
-      email: other@example.com
+      email: 0+other@users.noreply.github.com
       executes_as: [ developer ]
 `;
 

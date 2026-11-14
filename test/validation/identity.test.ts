@@ -11,8 +11,30 @@ describe('hasReservedDomain — RFC 2606 reserved top-level domains', () => {
     expect(hasReservedDomain(email)).toBe(true);
   });
 
-  it.each(['noreply@anthropic.com', 'a@test.example.com', 'a@example.org', 'a@localhost.dev'])('%j is not (only the top-level label counts)', (email) => {
+  it.each(['noreply@anthropic.com', 'a@localhost.dev'])('%j is not (a reserved word below the top level is an ordinary label)', (email) => {
     expect(hasReservedDomain(email)).toBe(false);
+  });
+});
+
+/**
+ * task-352 AC 2 (`bug-193`, RFC 2606 §3; design D7): the three reserved second-level domains and every subdomain of
+ * one are reserved too — case-insensitive, trailing dot ignored, label-bounded. Red until `hasReservedDomain` knows
+ * them: today only the top-level label counts.
+ */
+describe('task-352 AC 2 — hasReservedDomain: RFC 2606 reserved second-level domains (bug-193, D7)', () => {
+  it.each(['a@example.com', 'a@example.net', 'a@example.org', 'a@EXAMPLE.COM', 'a@mail.example.org', 'a@test.example.com', 'a@example.com.'])(
+    '%j is reserved',
+    (email) => {
+      expect(hasReservedDomain(email)).toBe(true);
+    },
+  );
+
+  it.each(['noreply@anthropic.com', 'a@notexample.com', 'a@examples.org', 'a@example.com.au', 'a@localhost.dev'])('%j is not (label-bounded)', (email) => {
+    expect(hasReservedDomain(email)).toBe(false);
+  });
+
+  it("attributionEmailIssue('bot@example.org') is 'reserved-domain'", () => {
+    expect(attributionEmailIssue('bot@example.org')).toBe('reserved-domain');
   });
 });
 

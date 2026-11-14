@@ -179,8 +179,8 @@ describe('task-334 AC 2 — the signing entry follows spec-018 §2.3\'s preceden
     const root = repo();
     const run = wingfoil(root, ['memory', 'submit', 'task-006-submit-me', '--co-author', 'Other', '--ai-model', 'm-1'], { WINGFOIL_AGENT: 'Claude' });
     expect({ status: run.status, stderr: run.stderr }).toEqual({ status: 0, stderr: '' });
-    expect(finalParagraph(messageOf(root)).slice(-2)).toEqual(['Co-Authored-By: Other <other@example.com>', 'AI-Model: m-1']);
-    expect(coAuthorByGit(root)).toBe('Other <other@example.com>');
+    expect(finalParagraph(messageOf(root)).slice(-2)).toEqual(['Co-Authored-By: Other <0+other@users.noreply.github.com>', 'AI-Model: m-1']);
+    expect(coAuthorByGit(root)).toBe('Other <0+other@users.noreply.github.com>');
   }, TIMEOUT_MS);
 
   it('T-13: CLAUDE_CODE_CHILD_SESSION=1 memory add → the claude-code entry, though a first entry without adapter precedes it; no warning', () => {

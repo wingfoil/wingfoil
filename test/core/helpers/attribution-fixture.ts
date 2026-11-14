@@ -13,11 +13,11 @@
  *
  * {@link AttributionOptions.agents} picks the committed `team.agents`:
  *
- * - `'two'` (default) — L0's `Claude` (`adapter: claude-code`, `noreply@anthropic.com`) and `Other` (`other@example.com`);
+ * - `'two'` (default) — L0's `Claude` (`adapter: claude-code`, `noreply@anthropic.com`) and `Other` (`0+other@users.noreply.github.com`);
  * - `'none'` — `team.agents: []` (T-17, and T-15's `… declares none`);
  * - `'noMail'` — `Claude`, `Other`, then `NoMail` with neither `email` nor `adapter` (valid: `src/dna/schema.ts` asks an
  *   email only of an entry with an adapter), the signing entry of T-16;
- * - `'unadaptedFirst'` — `Plain` (`plain@example.com`, no adapter) first, then `Claude` and `Other`: a vendor marker
+ * - `'unadaptedFirst'` — `Plain` (`0+plain@users.noreply.github.com`, no adapter) first, then `Claude` and `Other`: a vendor marker
  *   selects `Claude` by its adapter though it is not first (`spec-018` §2.3 rule 3), a blank `WINGFOIL_AGENT` takes
  *   `Plain` (rule 4).
  *
@@ -42,14 +42,14 @@ const CLAUDE = `    - name: Claude
       adapter: claude-code
 `;
 const OTHER = `    - name: Other
-      email: other@example.com
+      email: 0+other@users.noreply.github.com
       executes_as: [ developer ]
 `;
 const NO_MAIL = `    - name: NoMail
       executes_as: [ developer ]
 `;
 const PLAIN = `    - name: Plain
-      email: plain@example.com
+      email: 0+plain@users.noreply.github.com
       executes_as: [ developer ]
 `;
 

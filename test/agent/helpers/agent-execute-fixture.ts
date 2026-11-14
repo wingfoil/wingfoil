@@ -39,12 +39,12 @@ team:
     - name: approver
   agents:
     - name: Fake Agent
-      email: fake-agent@example.com
+      email: 0+fake-agent@users.noreply.github.com
       executes_as: [ developer, reviewer, approver ]
       approval_authority: false
       adapter: fake
     - name: Plain Agent
-      email: plain-agent@example.com
+      email: 0+plain-agent@users.noreply.github.com
       executes_as: [ developer ]
 paths:
   sources: [ src/ ]

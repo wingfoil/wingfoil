@@ -127,7 +127,8 @@ const AgentEntry = z.object({
   // on GitHub's noreply domain only the id-qualified <id>+<login>@users.noreply.github.com. [AUTHORING]
   // Neither half may be one the attribution audit rejects (bug-261): the name is not empty or blank, and
   // the email has no attributionEmailIssue — git's guessed `.(none)` domain, a parenthesis in the
-  // top-level domain, an RFC 2606 reserved TLD. That is the rule isValidAttribution applies after its
+  // top-level domain, an RFC 2606 reserved TLD, or one of RFC 2606's reserved second-level domains
+  // (example.com, example.net, example.org) or a subdomain of one. That is the rule isValidAttribution applies after its
   // non-empty base check (src/validation/identity.ts), shared, not restated: an identity this schema
   // accepts is one the audit accepts. [SPEC: REQ-SEC-02, dl-158]
   name:               z.string().refine(isTrailerSafeName).refine(not(isBlankIdentityName)),
@@ -516,3 +517,15 @@ it. `Paths` now takes `.catchall(z.array(z.string()))`: an extra category is an 
 loads with no warning (`spec-009` §2 states the rule); the write verbs still refuse it. The Zod listing gains the
 catchall and the `health` line `task-222` added to Categories. A document valid before stays valid unless an extra
 category is not a list of strings. Edited in place without a supersede or a state change (`dl-047`).
+
+**Revision (2026-11-13, `task-352`, the fix task of `bug-193`) — `AgentEntry` also refuses an email on RFC 2606's
+reserved second-level domains.** RFC 2606 §3 reserves `example.com`, `example.net` and `example.org` beside the four
+top-level domains `task-260` refuses, and no mailbox exists under them either. The shared rule
+(`hasReservedDomain`, read by `attributionEmailIssue` in `src/validation/identity.ts`) now also reports an email whose
+domain is one of the three or ends in `.` followed by one of them (`a@example.com`, `a@mail.example.org`), compared
+case-insensitively and with a trailing dot ignored, as for the top-level domains; a domain that only contains one
+(`a@notexample.com`) is not reserved. `AgentEntry` refuses such an email through the same `reserved-domain` issue, and
+the attribution audit (`isValidAttribution`, REQ-SEC-02) counts such an author as unattributed, so the schema and the
+audit still agree. `team.members` emails are unaffected: no such rule applies to them. A document valid before stays
+valid unless an agent's email is on one of those domains. Edited in place without a supersede or a state change
+(`dl-047`).
