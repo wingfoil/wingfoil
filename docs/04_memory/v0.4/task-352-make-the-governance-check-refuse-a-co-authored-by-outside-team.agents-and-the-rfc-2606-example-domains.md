@@ -8,7 +8,7 @@ kind: "fix"   # REQUIRED — feature | fix (dl-133 Q1 (b)): `fix` when the task 
 priority: "high"   # optional — high | medium | low
 tags: ["v0.4","w0","governance","attribution"]               # optional — additional labels, e.g. [architecture, backend]
 ref: "dl-190, dl-117"   # optional — backlog item ID, e.g. "TASK-001"
-bug: [bug-475, bug-193]   # optional — LIST of bug ids this task closes (dl-045). Two cases: a fix task derived from a bug
+bug: [bug-475, bug-193, bug-535]   # optional — LIST of bug ids this task closes (dl-045). Two cases: a fix task derived from a bug
                        # by release-planning, and a bug ABSORBED into an existing task's Acceptance Criteria because that
                        # task already owns the ground. `bug.sync_state` iterates this list; a bug with no task naming it
                        # here never advances past `triaged` (only a reject to `closed`, dl-123). A single string is still accepted for documents predating dl-045.
@@ -39,10 +39,12 @@ the residue of a corrected practice, dated before the correction, is accepted an
    commits signed with the runtime-injected name among them, are reported as residue and do not fail the check
    (`dl-190` item 1); `node scripts/check-governance.cjs --base origin/main` shows it, pasted in the Execution Notes.
 4. (characterization) The trailers the verbs write after `task-334` pass the new rule (`spec-018` §2.2, T-11 fixture).
+5. (red-first) The same check reports a commit whose final paragraph carries two `Co-Authored-By:` lines of the same
+   value or more than one `AI-Model:` line (`bug-535` Expected; `git-conventions` §7, §9), absorbed at the design gate.
 
 ## Implementation Notes
 
-- **wave:** w0 · Size: S. **Bugs:** `bug-475` (medium), `bug-193`.
+- **wave:** w0 · Size: S. **Bugs:** `bug-475` (medium), `bug-193`, `bug-535` (absorbed at the design gate).
 - **Files** (read at `ddadc1251`): `scripts/check-governance.cjs` (the rule table — `grep -n "approval-ai-trailer"
   scripts/check-governance.cjs`), `src/validation/identity.ts` (`isValidAttribution`), `test/cli/check-governance*.test.ts`,
   `test/validation/identity.test.ts`, `git-conventions` §9's rule list (`version:` bump).
