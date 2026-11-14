@@ -57,4 +57,4 @@ follow-ups, item E4; `bug-ingest-rel-v0.3-w3b8-review-findings-plan`).** The fin
 
 ### Retrospective
 
-None.
+- Closed by task-338 under `spec-018` §2.4: WingFoil cannot know the model before the run, so the bootstrap no longer asks the agent to type it into an amend. The attribution line now says the verbs write the trailers, that the agent passes `--ai-model`, and that it signs only the commits it writes with plain `git commit`. A run record whose `model` is `not-reported` marks those trailers as the agent's own claim (`spec-016` §2.6, design D3 (a), no new record field). Whether a real agent passes `--ai-model` is not something a test of WingFoil can check.
