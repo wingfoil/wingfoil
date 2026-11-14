@@ -425,6 +425,164 @@ spec-016, kept both texts word for word (§3.3 step 14: task-338's environment s
 fragment and launch directory; the Revisions block: task-338's revision first). The names the amendment introduces
 (`launch.interactive.trust`, `launch.headless.trust`, `START_UP_HINT`) are allowlisted as planned by task-353.
 
+### red (qa, 2026-11-14)
+
+Worktree on `task/task-353-…`, head at red start `ee3bc654a`; `git rev-list --count HEAD..main` → `0`, so no merge of
+`main`. PATH guard run first with the task's PATH shim: `command -v wingfoil` → the shim; `wingfoil --version` and
+`node dist/cli.js --version` → both `0.3.2 (5d9e7c3127979f5001ecbbabe96f6652d9392138)`. Read: AGENTS.md §1–§8, the
+`testing`, `claim-evidence` and `determinism` directives, the design, its addendum and the gate rulings above, the
+`spec-016` amendment (`git show c0ac033df`), and the existing suites of the module (`test/agent/manifest-permissions`,
+`launch-permissions`, `launch-timeout`, `fake-agent`, `test/cli/agent-execute-permissions`, `agent-execute-step`,
+`test/core/agent-execute-step`, `agent-list`, `test/storage/builtin-adapters-permissions`, the helpers
+`agent-execute-fixture`, `agent-execute-step-fixture`, `launch-input`, `fake-child`, `agent-execute-cli`). Red
+commits: `7d925bb6b` (the tests) and `9e31359bb` (the MCP server argv of AC 1, below): **T4 is measured from
+`9e31359bb`**, and covers the files both touch.
+
+**Files.** New: `test/cli/agent-execute-worktree.integration.test.ts` (AC 1), `test/agent/manifest-trust.test.ts`,
+`test/agent/launch-trust.test.ts`, `test/agent/launch-trust-timeout.test.ts`,
+`test/storage/builtin-adapters-trust.test.ts`, `test/cli/agent-execute-trust.integration.test.ts` (AC 2),
+`test/cli/agent-execute-plan-element.integration.test.ts` (AC 3). Changed: `test/fixtures/agents/fake-agent.cjs` (every
+launch record carries `cwd`; `WINGFOIL_FAKE_AGENT_COMMIT=1` makes one empty commit `fake: work` before the fake exits;
+the MCP record carries the server's `args` from the config), `test/agent/fake-agent.test.ts` (the schema walk now
+expects 31 leaves, the two `trust` paths among them and in the fixture's `LEFT_OUT`; two fixture pins for `cwd` and
+`COMMIT`), `test/core/agent-execute-step.test.ts` (the "none of the three" case rewritten, two cases added),
+`test/cli/agent-execute-step.integration.test.ts` (the `--workflow chores` row moved from the refusals to a dry run on
+`plan:chores-1`), `test/cli/journey-0a.integration.test.ts` (step 3), `test/agent/helpers/agent-execute-step-fixture.ts`
+(its module doc on `chores`). No `src/`, `scripts/` or production file (`git diff --stat ee3bc654a..HEAD` lists only
+`test/`). No `.d.cts` is owed: no red imports a new export.
+
+**Per AC.**
+- **AC 1 — characterization (D1 (a), D2).** `agent-execute-worktree.integration.test.ts`, 6 tests, **all pass on first
+  run**: from the main checkout, `--project <worktree> agent execute --element task:… --role developer` launches the
+  fake with `cwd` the worktree (`realpath`), commits `agent: record <task>/adhoc/1` on `task/wt` (one commit ahead of
+  `main`), `state_ref` the worktree's `HEAD`, `main` holds no `agent:` commit; with `WINGFOIL_FAKE_AGENT_CONNECT=1` the
+  server's argv ends `--project <worktree> mcp` and the session Resource names the worktree's `HEAD`; the dry run under
+  `--format json` and `--format console` (stdout the same JSON document) has `run.state_ref` the worktree's `HEAD`;
+  `--project <plain dir>` → exit `1`, stderr exactly `error: E_NOT_AT_GIT_ROOT: --project is not a git root: <dir>`
+  (and `{"error": …}` under `--format json`), no run log, no commit in either checkout, nothing launched. The refusal
+  text was copied from `node <worktree>/dist/cli.js --project <scratch>/plain agent execute --element
+  plan:sw-life-cycle-1-plan --role developer </dev/null` on a scratch project → exit `1`, that line.
+- **AC 2 — red-first.**
+  - `manifest-trust.test.ts` (26 tests, 24 fail): `implied`, `prompt`, a fragment, both kinds at once → accepted and
+    returned; absent → valid, `undefined` (passes); another string, a number, a map, `null`, `[1]` → issues at
+    `launch.<kind>.trust` or below; `{bootstrap}` at `.0`, `{session_id}` at `.1`, the unknown `{worktree}` at `.0` →
+    `E_ADAPTER_PLACEHOLDER`. First failing line: `expect(issuesOf(manifest)).toEqual([])` received
+    `{ code: 'E_VALIDATION', path: 'launch.interactive', message: 'Unrecognized key: "trust"' }`; the shape cases fail
+    on `every(path === field || …)` → `false` (the issue is at `launch.<kind>`), the placeholder cases on `code`
+    `E_VALIDATION` and `path` `launch.<kind>` in place of `E_ADAPTER_PLACEHOLDER` at the element.
+  - `launch-trust.test.ts` (13 tests, 11 fail; the two no-`trust` cases pass): `renderLaunchArgv(manifest, values, kind, 'developer')` → the args, the
+    permission fragment, the trust fragment, `session.assign_args`; `prompt`/`implied`/absent add nothing; each kind
+    reads its own `trust`; `launchAgent` spawns a headless `FakeChild` with `[..., ...P, ...T]`. The `renderLaunchArgv`
+    cases fail at the fixture's parse, `ValidationError: E_VALIDATION launch.<kind> (…): Unrecognized key: "trust"` (the
+    design's stated red: the schema refuses the key); the `launchAgent` case fails on its assertion, `Expected - 2`
+    `"--trust-dir", "yes"`. The typed literal of that case is **`TS2353`** (`'trust' does not exist in type '{ args:
+    string[]; output: …; permissions?: … }'`, line 97), the one `tsc` error of the red.
+  - `builtin-adapters-trust.test.ts` (5 tests, 4 fail): D4's table, `claude-code` and `codex-cli` both `prompt` /
+    `implied`, no fragment. First failing line: `expect([interactive, headless trust]).toEqual(['prompt', 'implied'])`
+    received `[undefined, undefined]`. D8 (`codex-cli`'s `verified_with` stays `0.145.0`) is not pinned: the existing
+    suites leave `verified_with` unpinned on purpose (`test/storage/builtin-adapter-codex-cli.test.ts` l.8–9).
+  - `launch-trust-timeout.test.ts` (9 tests, 4 fail): in process, the injected timer and a `FakeChild`, the warnings
+    collected through `withWarningSink` (the text without the CLI's `warning: ` prefix). (f) the bound expires and
+    `SIGTERM` ends the agent, both kinds → the hint with `signal:SIGTERM`, `TIMED_OUT`'s error unchanged, `notes` the
+    hint text; exit `1` under `prompt`, both kinds → the hint with `1`. First failing line:
+    `expect(hints(warnings)).toEqual([hintWarning(…)])` received `[]`. The absences pass, each beside a positive case
+    (dl-097 (a)): exit `0` under `prompt`; exit `1` under `implied`, a fragment and no `trust`; exit `1` after a commit
+    since `state_ref`.
+  - `agent-execute-trust.integration.test.ts` (6 tests, 5 fail): the compiled CLI, `fake-trust` / `fake-implied`
+    derived inline from the fake (`fake.yaml` unchanged). (a) interactive, `WINGFOIL_FAKE_AGENT_EXIT=1` → exit `1`, the
+    warning line `warning: run task-202-explicit-override/adhoc/1: the agent exited 1 with no commit since state_ref:
+    its CLI may have stopped at its folder-trust step (adapter 'fake-trust' declares launch.interactive.trust: prompt)`
+    before `error: agent exited 1; run task-202-explicit-override/adhoc/1 recorded`, `notes` the hint text; (b) the same
+    with `--headless`; (c) exit `0` → no warning, `notes` `none`; (d) exit `1` under `fake-implied` and under the plain
+    `fake` → no hint (the plain `fake` row passes today); (e) the fake commits then exits `1` → no hint. First failing
+    lines: (a) `expect(lines).toContain(warning)` received `["error: adapter 'fake-trust': launch.interactive:
+    Unrecognized key: \"trust\"", …]`; (b) `expect(hintWarnings(run)).toEqual([...])` received `[]`; (c)
+    `expect(run.status).toBe(0)` received `1`; (d) `fake-implied` and (e) `expect(run.fake.length).toBeGreaterThan(0)`
+    received `0` (the manifest is refused before any launch). The error line and its order after the banner were
+    copied from `WINGFOIL_FAKE_AGENT_EXIT=1 node <worktree>/dist/cli.js agent execute --element plan:sw-life-cycle-1-plan
+    --role developer </dev/null` on a scratch project → `run …/adhoc/1: launching Fake Agent (custom/fake) as developer
+    on …`, `error: agent exited 1; run …/adhoc/1 recorded`, `  run …: agent exited 1 after 0.0 s (recorded in …)`,
+    exit `1`, the record's `notes` `none`.
+  - `fake-agent.test.ts`: the schema walk → `Expected length: 31`, `Received length: 29` (the two `trust` leaves).
+- **AC 3 — red-first (D6 (a)).**
+  - `test/core/agent-execute-step.test.ts`: `stepTargetElement(itemStep, { ...INSTANCE, element: null }, undefined)` and
+    the unscoped `solo.go` → `{ ok: true, value: { type: 'plan', id: 'delivery-1' } }` (fails: received the
+    `VALIDATION` `step 'sweep.entry@modules#core' has no element: give --element <type>:<id>`); `--element` and the
+    scope element still win on an unbound instance (passes); `stepTargetElement(itemStep, null, undefined)` → the
+    `NO_STEP_ELEMENT` defence (passes).
+  - `test/cli/agent-execute-step.integration.test.ts`: `--workflow chores --dry-run`, `--format json` and `console` →
+    exit `0`, stderr empty, `subject` `agent: record chores-1/tidy/1`, `paths` `["docs/runs/chores-1.jsonl"]`,
+    `run.element` `plan:chores-1` (both fail: `[1, "error: step 'chores.tidy' has no element: give --element
+    <type>:<id>\n"]` in place of `[0, ""]`). The expected values are reachable on today's build with the element given:
+    a throw-away probe case in this suite, `execute(repo, ['--workflow', 'chores', '--element', 'plan:chores-1',
+    '--dry-run', '--format', 'json'])`, printed `[0, "", "{\"dryRun\":true,\"subject\":\"agent: record
+    chores-1/tidy/1\",\"paths\":[\"docs/runs/chores-1.jsonl\"],\"run\":{\"id\":\"chores-1/tidy/1\",\"element\":\"plan:chores-1\",…`
+    (the probe was removed before the commit: `grep -c PROBE` on the file → `0`).
+  - `test/cli/journey-0a.integration.test.ts` step 3: `agent execute --next` on the fresh Scrum scaffold now stops at
+    agent selection, `error: no agent in dna.yaml with an adapter executes as role 'product-owner'` (fails: received
+    the element refusal). Copied from `node <worktree>/dist/cli.js agent execute --next --element
+    plan:sw-life-cycle-1-plan </dev/null` on a fresh `init --template Scrum` + `workflow start sw-life-cycle` → that
+    line, exit `1`.
+  - `agent-execute-plan-element.integration.test.ts` (6 tests, 6 fail): `bug-418`'s reproduction with the fake adapter
+    (`init --template Scrum --no-interactive`, `workflow start sw-life-cycle`, the fake copied in, `dna add team.agents
+    --value 'Fake Agent' --entry-email 1+fake-agent@users.noreply.github.com --entry-executes_as product-owner,developer
+    --entry-adapter fake`). `agent execute --next --dry-run`, `--format json` and `console` → exit `0`, stderr empty,
+    `run.id` `sw-life-cycle-1-plan/inception/1`, `run.element` `plan:sw-life-cycle-1-plan`, `paths`
+    `["docs/runs/sw-life-cycle-1-plan.jsonl"]` (fail: exit `1`, the element refusal); `agent list --waiting --format
+    json` → `element` `plan:sw-life-cycle-1-plan`, the console line unchanged (fails: received `element: null`);
+    `--element plan:sw-life-cycle-1-plan` keeps the step (fails: received `[]`), `--element task:task-1` drops it; the
+    registered `agentList` operation in process reports the same element (fails: `null`); a real `--next` run records
+    on the plan's run log (fails: exit `1`). The expected values were copied from `node <worktree>/dist/cli.js agent
+    execute --next --element plan:sw-life-cycle-1-plan --dry-run --format json </dev/null` on that scratch project →
+    exit `0`, stderr empty, `"subject": "agent: record sw-life-cycle-1-plan/inception/1"`, `"paths":
+    ["docs/runs/sw-life-cycle-1-plan.jsonl"]`, `"run": {"id": "sw-life-cycle-1-plan/inception/1", "element":
+    "plan:sw-life-cycle-1-plan", …, "agent": "Fake Agent", "adapter": "custom/fake", …}`; the console dry run printed
+    the same document; today's `agent list --waiting` there printed `waiting steps: 1` /
+    `sw-life-cycle.inception  product-owner  Fake Agent` and, under `--format json`, `"element":null`.
+- **AC 4 — characterization, by command (no test file).** `git log -1 --first-parent --no-merges --format='%h %s' --
+  docs/04_memory/design/specs/spec-016-agent-execution.md` → `c0ac033df wf(tech-spec): amend spec-016-agent-execution
+  [approved → approved]`, `Approver: Roberto Pompermaier <robypomper@gmail.com> (approver)`, the `--reason` the design
+  proposed; red runs after it. `npm run -s wingfoil -- memory history spec-016-agent-execution` lists it last, with
+  that reason.
+
+**Runs** (targeted, `--maxWorkers=2`, paths first):
+- `npx jest test/agent/manifest-trust.test.ts test/agent/launch-trust.test.ts test/agent/launch-trust-timeout.test.ts
+  test/agent/fake-agent.test.ts test/storage/builtin-adapters-trust.test.ts test/core/agent-execute-step.test.ts
+  --maxWorkers=2` → `Test Suites: 6 failed`, `Tests: 45 failed, 90 passed, 135 total` (every failure one listed above).
+- `npx jest test/cli/agent-execute-worktree.integration.test.ts test/cli/agent-execute-trust.integration.test.ts
+  test/cli/agent-execute-plan-element.integration.test.ts test/cli/agent-execute-step.integration.test.ts
+  test/cli/journey-0a.integration.test.ts --maxWorkers=2` → `Test Suites: 4 failed, 1 passed`, `Tests: 14 failed, 30
+  passed, 44 total` (the worktree suite passes; 5 + 6 + 1 + 2 failures as listed).
+- After `9e31359bb`, `npx jest test/cli/agent-execute-worktree.integration.test.ts test/agent/fake-agent.test.ts
+  test/cli/project-option.integration.test.ts --maxWorkers=2` → `Tests: 1 failed, 80 passed` (the leaf count).
+- Every other suite that runs the fake, after the waitslot script granted the slot (`SLOT-GRANTED`, no wait printed):
+  `npm test -- <the 13 other test/cli/agent-execute-*.integration.test.ts> test/cli/project-option.integration.test.ts
+  test/cli/agent-list.integration.test.ts test/cli/agent-list-edges.integration.test.ts test/agent
+  test/storage/builtin-adapter test/core/agent-list --maxWorkers=2` → `Test Suites: 5 failed, 52 passed, 57 total`,
+  `Tests: 44 failed, 765 passed, 809 total`: the five failing suites are this red's AC 2 files, no other suite fails.
+- `npx tsc --noEmit -p tsconfig.json` → one error, the intended `TS2353` above.
+- `npx jest test/lint --maxWorkers=2` → `Test Suites: 1 failed, 15 passed`, `Tests: 1 failed, 164 passed`: the one
+  failure is `typecheck-clean`'s `tsconfig.json typechecks with zero diagnostics`, on that same `TS2353`
+  (`grep "error TS"` on the run → only it); `lint-clean`, `control-characters` and the others pass.
+
+**Departures from the design (task-338's code, merged at `5d9e7c312`).** The design's line numbers name the pre-338
+code: `renderLaunchArgv` is now at `src/agent/launch.ts:190` (design: 153–157) and `launchAgent` at line 736 (design:
+757–813) — `grep -n "export function renderLaunchArgv\|export async function launchAgent" src/agent/launch.ts`;
+`spawnOptions`' `cwd: root` is at lines 324–325 (`grep -n "cwd: root" src/agent/launch.ts`); `stepTargetElement` stays
+at `src/agent/step.ts:98`; the waiting step's element is built at `src/core/agent-list.ts:112`
+(`grep -n "entry.instance.element" src/core/agent-list.ts`). No test depends on those lines. Journey 0a's step 3 sits at
+lines 126–145 of its file (design: 136–140). The design's AC 4 command `git log -1 --format=%s -- <spec>` now prints the
+merge `5d9e7c312` (it brought task-338's amend `eef58cd19`), so the check above adds `--first-parent --no-merges`.
+AC 1's server root is pinned by the server's argv (a fixture change, `9e31359bb`) beside the design's Resource sha,
+because a server rooted at the main checkout can read the worktree's sha too (the object store is shared): the sha
+alone would not establish D2.
+
+**Unasserted (T1).** D8 (`codex-cli`'s `verified_with` unchanged), by the suites' convention above. The warning's JSON
+form under `--format json`: the design names only the console line, so no shape is pinned. The hint after an expired
+bound where the agent traps `SIGTERM` and exits `0` (`exit_status` `0`, the run still failed): `spec-016` §3.3 step 16
+covers it ("the time bound expired"), but the design's cases name `signal:SIGTERM` only, so it is left to green and the
+reviewer rather than pinned by a guess at the rendering.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
