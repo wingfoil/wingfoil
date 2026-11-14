@@ -10,10 +10,12 @@
  *   record is appended, `fresh` / `n/a` / `adhoc` / `n/a`, with the fake's session, model and tokens;
  *   exactly one new commit, `agent: record <run-id>`, holding only the run log; exit `0`; empty stdout;
  * - AC 2 — an agent exit `3`, a forwarded `SIGTERM`, an ignored `SIGINT`: each run still recorded;
- * - AC 3 — the assigned session id is spec-016 §2.6's UUID v5, different per run; a failed lookup
- *   records `not-reported` with a `warning:` line and the run succeeds;
+ * - AC 3 — the assigned session id is spec-016 §2.6's UUID v5, different per run (task-338 AC 4: of the clone's
+ *   session salt and the run id, never of the root); a failed lookup records `not-reported` with a `warning:` line
+ *   and the run succeeds;
  * - AC 4 — `--format json`: every stderr message one JSON document, stdout empty;
- * - AC 7 — the bootstrap carries the attribution line naming the selected `team.agents` entry;
+ * - AC 7 — the bootstrap carries the attribution line naming the selected `team.agents` entry (task-338 AC 1, AC 3:
+ *   the CLI line naming the compiled build, and `spec-018` Consequences' attribution text);
  * - the B3 handover: a `dna.yaml` unknown-field warning is printed once, labelled `HEAD:`.
  */
 import { spawn } from 'node:child_process';
@@ -141,16 +143,29 @@ function uuidV5(namespace: string, name: string): string {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 const SESSION_NAMESPACE = uuidV5('6ba7b811-9dad-11d1-80b4-00c04fd430c8', 'wingfoil:spec-016:session');
-const sessionOf = (repo: string, runId: string): string => uuidV5(SESSION_NAMESPACE, `${toplevel(repo)}\n${runId}`);
 
-/** `spec-016` §2.4's bootstrap for the fixture's task and `Fake Agent`, written out by hand. */
+/**
+ * task-338 AC 4 (`spec-016` §2.6 as amended, `dl-168` Q1 (b)): the clone's session salt, the 64 hexadecimal digits of
+ * `<git common dir>/wingfoil/session-salt` without the line feed; a placeholder that no salt can equal when the file
+ * is absent, so a missing salt fails the assertion that uses it, not the helper.
+ */
+function saltOf(repo: string): string {
+  const file = join(git(repo, ['rev-parse', '--path-format=absolute', '--git-common-dir']).trim(), 'wingfoil', 'session-salt');
+  return existsSync(file) ? readFileSync(file, 'utf-8').replace(/\n$/, '') : '<no session salt>';
+}
+const sessionOf = (repo: string, runId: string): string => uuidV5(SESSION_NAMESPACE, `${saltOf(repo)}\n${runId}`);
+/** The pre-task-338 session id, which hashed the repository root: no run may use it any more. */
+const rootSessionOf = (repo: string, runId: string): string => uuidV5(SESSION_NAMESPACE, `${toplevel(repo)}\n${runId}`);
+
+/** `spec-016` §2.4's bootstrap (as task-338 amends it) for the fixture's task and `Fake Agent`, written out by hand. */
 function bootstrapOf(runId: string, stateRef: string, agent = 'Fake Agent <fake-agent@example.com>'): string {
   return [
     `WingFoil run ${runId}: act as role "developer" on element ${TASK_REF}.`,
     `Your context is assembled at commit ${stateRef} and served by the "wingfoil" MCP server`,
     `registered for this session. Load it before any other action: Read the MCP resource "wingfoil://session/developer/${TASK_REF}/${stateRef}".`,
+    `Run WingFoil commands as "wingfoil <command>": the build that launched you is first on your PATH, and "wingfoil --version" prints "${distBuildStamp()}"; if it prints anything else, run "$WINGFOIL_CLI" in place of "wingfoil".`,
     'Record your handoff in the element\'s "## Execution Notes" section.',
-    `End every commit you write, except an approve or reject commit, with the trailer paragraph "Co-Authored-By: ${agent}" and "AI-Model: <the model identifier you run as>"; to a commit wingfoil writes, add them with git commit --amend --no-edit --trailer, never as a paragraph of their own (git-conventions §7, §8).`,
+    `Commits wingfoil writes for you already end with "Co-Authored-By: ${agent}" and an "AI-Model:" trailer: pass --ai-model <your model identifier> to each wingfoil command that writes a commit, or that trailer records "AI-Model: not-reported"; end a commit you write yourself with git commit with the trailer paragraph "Co-Authored-By: ${agent}" and "AI-Model: <your model identifier>"; never run memory approve, memory reject or memory amend, which refuse in your session (git-conventions §7).`,
     '',
   ].join('\n');
 }
@@ -263,7 +278,7 @@ describe('task-228 AC 2 — the agent\'s exit and signals; every run is recorded
 });
 
 describe('task-228 AC 3 — the assigned session id, and a lookup that fails', () => {
-  it('session.id: assign passes the UUID v5 of `<abs root>\\n<run id>`: a second run gets its own', () => {
+  it('task-338 AC 4 — session.id: assign passes the UUID v5 of `<session salt>\\n<run id>`, not of the root: a second run gets its own', () => {
     const repo = fixture();
     const first = execute(repo, FULL);
     const second = execute(repo, FULL);
@@ -272,6 +287,7 @@ describe('task-228 AC 3 — the assigned session id, and a lookup that fails', (
     expect(second.fake[0]!.argv.slice(-2)).toEqual(['--session-id', sessionOf(repo, runTwo)]);
     expect(recordsAtHead(repo).map((record) => record['session'])).toEqual([sessionOf(repo, RUN_1), sessionOf(repo, runTwo)]);
     expect(sessionOf(repo, RUN_1)).not.toBe(sessionOf(repo, runTwo));
+    expect(recordsAtHead(repo).map((record) => record['session'])).not.toContain(rootSessionOf(repo, RUN_1));
   }, 180000);
 
   it('a lookup that fails → model and tokens not-reported, a warning line, and the run succeeds', () => {
