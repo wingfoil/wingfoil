@@ -45,10 +45,15 @@ describe('task-256 — AgentEntry.email and a trailer-safe name (schema)', () =>
     expect(DnaYaml.safeParse(withAgent({})).success).toBe(true);
   });
 
+  // task-352 (design D8): the accepted case moved off example.org, which AC 2 reserves, to an id-qualified noreply address.
   it('accepts an email and exposes it on the parsed entry', () => {
-    const result = DnaYaml.safeParse(withAgent({ email: 'agent@example.org' }));
+    const result = DnaYaml.safeParse(withAgent({ email: '0+agent@users.noreply.github.com' }));
     expect(result.success).toBe(true);
-    if (result.success) expect(result.data.team.agents?.[0]?.email).toBe('agent@example.org');
+    if (result.success) expect(result.data.team.agents?.[0]?.email).toBe('0+agent@users.noreply.github.com');
+  });
+
+  it('task-352 AC 2 (bug-193): refuses agent@example.org, an RFC 2606 reserved second-level domain, naming team.agents.0.email', () => {
+    expect(issuePaths(withAgent({ email: 'agent@example.org' }))).toContain('team.agents.0.email');
   });
 
   it.each<[string, unknown]>([
@@ -134,13 +139,26 @@ describe('task-256 — `dna update team.agents.<name> --entry-email` (write path
 
   afterEach(() => removeTempDir(repo));
 
+  // task-352 (design D8): the written address moved off example.org, which AC 2 reserves.
   it('writes the declared field in place and commits', async () => {
-    const result = await dnaUpdate()({ root: repo, positionals: ['team.agents.claude'], options: { 'entry-email': 'agent@example.org' } });
+    const result = await dnaUpdate()({ root: repo, positionals: ['team.agents.claude'], options: { 'entry-email': '0+agent@users.noreply.github.com' } });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(exitCodeForResult(result)).toBe(0);
     expect(result.commit?.sha).toBe(head(repo));
-    expect(loadDnaYaml(repo).team.agents?.[0]?.email).toBe('agent@example.org');
+    expect(loadDnaYaml(repo).team.agents?.[0]?.email).toBe('0+agent@users.noreply.github.com');
+  });
+
+  it('task-352 AC 2 (bug-193): refuses agent@example.org at exit 1, naming team.agents.0.email, leaving the file and HEAD untouched', async () => {
+    const before = head(repo);
+    const text = readFileSync(join(repo, '.wingfoil', 'dna.yaml'), 'utf-8');
+    const result = await dnaUpdate()({ root: repo, positionals: ['team.agents.claude'], options: { 'entry-email': 'agent@example.org' } });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(exitCodeForResult(result)).toBe(1);
+    expect(result.error.message).toContain('team.agents.0.email');
+    expect(head(repo)).toBe(before);
+    expect(readFileSync(join(repo, '.wingfoil', 'dna.yaml'), 'utf-8')).toBe(text);
   });
 
   it('refuses a malformed email at exit 1, leaving the file and HEAD untouched', async () => {

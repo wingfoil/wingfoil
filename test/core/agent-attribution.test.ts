@@ -22,7 +22,7 @@ import { removeTempDir } from '../storage/helpers/git-fixture';
 import { buildAttributionRepo, type AgentsVariant } from './helpers/attribution-fixture';
 
 const CLAUDE = { name: 'Claude', email: 'noreply@anthropic.com' } as const;
-const OTHER = { name: 'Other', email: 'other@example.com' } as const;
+const OTHER = { name: 'Other', email: '0+other@users.noreply.github.com' } as const;
 const guessedNote = (name: string): string => `Attributed to the first team.agents entry, ${name}: no entry is named for this agent.`;
 
 interface Request {
@@ -74,7 +74,7 @@ describe('task-334 — resolveAgentContext, ungated: the signing entry, the mode
 
   it('rule 4 — a blank WINGFOIL_AGENT: the first entry, with the note and W_AGENT_ENTRY_GUESSED (T-14)', () => {
     const result = resolve({ env: { WINGFOIL_AGENT: '' } }, 'unadaptedFirst');
-    expect(attributionOf(result)).toEqual({ name: 'Plain', email: 'plain@example.com', model: 'not-reported', note: guessedNote('Plain') });
+    expect(attributionOf(result)).toEqual({ name: 'Plain', email: '0+plain@users.noreply.github.com', model: 'not-reported', note: guessedNote('Plain') });
     expect(warningsOf(result)).toEqual([`W_AGENT_ENTRY_GUESSED: ${guessedNote('Plain')}`]);
   });
 

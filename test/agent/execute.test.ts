@@ -42,7 +42,7 @@ describe('renderBootstrap (§2.4) — a pure function of (role, element, run id,
       runId: 'task-001-a/adhoc/1',
       stateRef: SHA,
       handoff: handoffLine(true),
-      agent: { name: 'Fake Agent', email: 'fake-agent@example.com' },
+      agent: { name: 'Fake Agent', email: '0+fake-agent@users.noreply.github.com' },
       build: BUILD,
     });
     expect(text).toBe(
@@ -52,7 +52,7 @@ describe('renderBootstrap (§2.4) — a pure function of (role, element, run id,
         `registered for this session. Load it before any other action: Read the MCP resource "wingfoil://session/developer/task:task-001-a/${SHA}".`,
         'Run WingFoil commands as "wingfoil <command>": the build that launched you is first on your PATH, and "wingfoil --version" prints "9.9.9 (0123abc)"; if it prints anything else, run "$WINGFOIL_CLI" in place of "wingfoil".',
         'Record your handoff in the element\'s "## Execution Notes" section.',
-        'Commits wingfoil writes for you already end with "Co-Authored-By: Fake Agent <fake-agent@example.com>" and an "AI-Model:" trailer: pass --ai-model <your model identifier> to each wingfoil command that writes a commit, or that trailer records "AI-Model: not-reported"; end a commit you write yourself with git commit with the trailer paragraph "Co-Authored-By: Fake Agent <fake-agent@example.com>" and "AI-Model: <your model identifier>"; never run memory approve, memory reject or memory amend, which refuse in your session (git-conventions §7).',
+        'Commits wingfoil writes for you already end with "Co-Authored-By: Fake Agent <0+fake-agent@users.noreply.github.com>" and an "AI-Model:" trailer: pass --ai-model <your model identifier> to each wingfoil command that writes a commit, or that trailer records "AI-Model: not-reported"; end a commit you write yourself with git commit with the trailer paragraph "Co-Authored-By: Fake Agent <0+fake-agent@users.noreply.github.com>" and "AI-Model: <your model identifier>"; never run memory approve, memory reject or memory amend, which refuse in your session (git-conventions §7).',
         '',
       ].join('\n'),
     );
@@ -65,7 +65,7 @@ describe('renderBootstrap (§2.4) — a pure function of (role, element, run id,
       runId: 'task-001-a/adhoc/1',
       stateRef: SHA,
       handoff: handoffLine(true),
-      agent: { name: 'Fake Agent', email: 'fake-agent@example.com' },
+      agent: { name: 'Fake Agent', email: '0+fake-agent@users.noreply.github.com' },
       build: BUILD,
     });
     expect(text).not.toContain('<the model identifier you run as>');
@@ -83,7 +83,7 @@ describe('renderBootstrap (§2.4) — a pure function of (role, element, run id,
   });
 
   it('the same inputs render the same bytes', () => {
-    const input = { role: 'qa', element: 'bug:bug-1', runId: 'bug-1/adhoc/2', stateRef: SHA, handoff: handoffLine(false), agent: { name: 'A', email: 'a@example.com' }, build: BUILD };
+    const input = { role: 'qa', element: 'bug:bug-1', runId: 'bug-1/adhoc/2', stateRef: SHA, handoff: handoffLine(false), agent: { name: 'A', email: '0+a@users.noreply.github.com' }, build: BUILD };
     expect(renderBootstrap(input)).toBe(renderBootstrap({ ...input }));
   });
 });
@@ -296,9 +296,9 @@ const team = (agents: unknown[]): DnaYaml =>
   ({ team: { roles: [{ name: 'developer' }, { name: 'qa' }], agents } }) as unknown as DnaYaml;
 
 describe('selectAgent (§3.2 step 4)', () => {
-  const fake = { name: 'Fake', email: 'fake@example.com', executes_as: ['developer'], adapter: 'fake' };
-  const plain = { name: 'Plain', email: 'plain@example.com', executes_as: ['developer', 'qa'] };
-  const second = { name: 'Second', email: 'second@example.com', executes_as: ['developer', 'qa'], adapter: 'other' };
+  const fake = { name: 'Fake', email: '0+fake@users.noreply.github.com', executes_as: ['developer'], adapter: 'fake' };
+  const plain = { name: 'Plain', email: '0+plain@users.noreply.github.com', executes_as: ['developer', 'qa'] };
+  const second = { name: 'Second', email: '0+second@users.noreply.github.com', executes_as: ['developer', 'qa'], adapter: 'other' };
 
   it('without --agent: the first agent, in declared order, with an adapter that executes the role', () => {
     const picked = selectAgent(team([plain, fake, second]), 'developer', undefined);
