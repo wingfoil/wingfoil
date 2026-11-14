@@ -49,9 +49,10 @@ export function isRoleDefined(dna: DnaYaml, role: string): boolean {
 
 /**
  * Whether `role` is human-only (`dl-202` item 1, spec-002 "Role binding"): a person executes it, never an agent.
- * `approver` always is, a declaration or none; any other role exactly when its `team.roles` entry declares
- * `human_only: true`. A role `team.roles` does not define is not human-only (it is unknown, which
- * {@link isRoleDefined} answers). This says who may *execute* a role, nothing about who may approve.
+ * `approver` always is, a declaration or none, and whether or not `team.roles` defines it; any other role exactly
+ * when its `team.roles` entry declares `human_only: true`, so any other role `team.roles` does not define is not
+ * human-only (it is unknown, which {@link isRoleDefined} answers). This says who may *execute* a role, nothing about
+ * who may approve.
  */
 export function isHumanOnlyRole(dna: DnaYaml, role: string): boolean {
   if (role === APPROVER_ROLE) return true;
