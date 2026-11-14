@@ -404,6 +404,27 @@ agrees (not prepared: the §2.8 trust table names the version of the pass).
 Checks after the update: `npx jest test/docs/name-resolvability.test.ts test/docs/l0-traceability.test.ts
 --maxWorkers=2` → `2 passed`, `26 passed`, with the amendment in the tree.
 
+### design gate rulings (approver, 2026-11-14)
+
+The approver approved the design as recommended (finalize `12612bd51`, spec-016 amended at `c0ac033df`):
+
+- **D1 (a)** no new surface: `--project` naming a worktree is the launch directory; criterion 1 is pinned as
+  characterization, with the `E_NOT_AT_GIT_ROOT` refusal.
+- **D2** the MCP server follows the worktree; no change.
+- **D3 (a)** an optional `launch.<kind>.trust` of `implied`, `prompt` or an argv fragment; manifest `format` stays 1.
+- **D4** `claude-code`: interactive `prompt`, headless `implied`; `codex-cli`: interactive `prompt`, headless
+  `implied` — as the approver checked by hand on claude `2.1.322` and `codex-cli 0.167.2`.
+- **D5** the start-up hint in the record's `notes` and one `warning:` line under the four conditions; §4.2 amended.
+- **D6 (a)** the instance's `plan` as the last element fallback, `NO_STEP_ELEMENT` kept as a defence; §5 amended.
+- **D7** no pinned-build bug for the `.wingfoil` change, as task-339 D9.
+- **D8** `codex-cli`'s `verified_with` stays `0.145.0`: only its folder-trust behaviour was checked at `0.167.2`.
+
+Before red, `main` was merged into the branch (`5d9e7c312`) to bring in task-338, which rewrote
+`src/agent/launch.ts` and `src/agent/execute.ts`: red and green are written against that code. The one conflict,
+spec-016, kept both texts word for word (§3.3 step 14: task-338's environment sentence with this task's trust
+fragment and launch directory; the Revisions block: task-338's revision first). The names the amendment introduces
+(`launch.interactive.trust`, `launch.headless.trust`, `START_UP_HINT`) are allowlisted as planned by task-353.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
