@@ -197,31 +197,56 @@ temporary directory, never inside the repository, and are removed when `agent ex
 #### 2.4 Bootstrap prompt
 
 The bootstrap is the only text WingFoil puts into the agent's initial prompt. Its bytes are a pure
-function of `(role, element, run id, state_ref, agent)`, `agent` being the `team.agents` entry §3.2 step 4
-selects, read at `HEAD`. It has no clock and no host data, and it is LF-terminated
-(`REQ-SYS-07`, `REQ-STATE-09`). It is a fixed template owned by this spec:
+function of `(role, element, run id, state_ref, agent, build)`, `agent` being the `team.agents` entry §3.2 step 4
+selects, read at `HEAD`, and `build` the launching build's signature `"<semver> (<sha>)"`, the value of `dl-111`'s
+`WingFoil-Version:` trailer and of the run record's `wingfoil` field (§4.2). It has no clock and no host data, and it
+is LF-terminated (`REQ-SYS-07`, `REQ-STATE-09`). It is a fixed template owned by this spec:
 
 ```
 WingFoil run {run_id}: act as role "{role}" on element {type}:{id}.
 Your context is assembled at commit {state_ref} and served by the "wingfoil" MCP server
 registered for this session. Load it before any other action: {context_instruction}
+{cli_line}
 {handoff_line}
 {attribution_line}
 ```
 
-`{attribution_line}` carries the AI-attribution rule of the `git-conventions` directive §7 to the agent
-(`dl-117` Action 4; approver ruling R20 Q8, `release-planning-rel-v0.3-plan`), with the entry that signs
-(`dl-158` Rule 1 (a)) — its `name` and `email`, which an entry declaring `adapter` always has (§2.1):
+**The CLI the agent runs** (`dl-180` invocation (c), `bug-369`). The agent's CLI work runs the build that launched
+it, the one that serves its context (§2.5). Before the spawn, `agent execute` writes a `wingfoil` shim into a
+directory of its own inside the run's temporary directory (§2.3: outside the repository, removed when `agent execute`
+exits): on POSIX an owner-only executable `sh` script that runs that build's Node executable and `dist/cli.js` with
+the arguments it is given; on Windows a `wingfoil.cmd` that does the same (written, not exercised by CI, which runs on
+Linux). The agent is spawned (§3.3 step 14) with WingFoil's environment and three changes: the shim's directory first
+on `PATH`, `WINGFOIL_CLI` set to the shim's absolute path, and `WINGFOIL_AGENT` set to the selected entry's `name`
+(`spec-018` §1.1), whatever either variable held. `agent execute`'s own environment is not changed, and its own
+child processes — the MCP pre-flight (step 11), the conflict probe (step 4) and the post-run lookups (§2.6) — get it
+unchanged. `{cli_line}` names the invocation; the shim's path is in the environment only, never in the bootstrap:
 
 ```
-End every commit you write, except an approve or reject commit, with the trailer paragraph "Co-Authored-By: {agent_name} <{agent_email}>" and "AI-Model: <the model identifier you run as>"; to a commit wingfoil writes, add them with git commit --amend --no-edit --trailer, never as a paragraph of their own (git-conventions §7, §8).
+Run WingFoil commands as "wingfoil <command>": the build that launched you is first on your PATH, and "wingfoil --version" prints "{build}"; if it prints anything else, run "$WINGFOIL_CLI" in place of "wingfoil".
 ```
 
-The agent applies it to every commit it writes. A commit `wingfoil` writes for it (a Memory verb) already
-ends with the `WingFoil-Version:` trailer paragraph, so the line tells the agent to add the two trailers to
-it with `git commit --amend --no-edit --trailer`, never as a paragraph of their own, which would push
-`WingFoil-Version:` into a `Reason:` block (`git-conventions` §8, `bug-236`). The `agent: record
-<run-id>` commit is WingFoil's, not the agent's, and keeps §4.4's form.
+A shell profile that puts another directory before the shim's (a Node version manager's, say) makes a plain
+`wingfoil` reach another build; the version check tells the agent, and `$WINGFOIL_CLI` reaches the launching build
+whatever `PATH` holds.
+
+`{attribution_line}` carries the AI-attribution rule of the `git-conventions` directive §7 as `spec-018` §2 has the
+verbs apply it (`spec-018` Consequences; `dl-117` Action 4; approver ruling R20 Q8, `release-planning-rel-v0.3-plan`),
+with the entry that signs (`dl-158` Rule 1 (a)) — its `name` and `email`, which an entry declaring `adapter` always
+has (§2.1):
+
+```
+Commits wingfoil writes for you already end with "Co-Authored-By: {agent_name} <{agent_email}>" and an "AI-Model:" trailer: pass --ai-model <your model identifier> to each wingfoil command that writes a commit, or that trailer records "AI-Model: not-reported"; end a commit you write yourself with git commit with the trailer paragraph "Co-Authored-By: {agent_name} <{agent_email}>" and "AI-Model: <your model identifier>"; never run memory approve, memory reject or memory amend, which refuse in your session (git-conventions §7).
+```
+
+A `wingfoil` command the agent runs writes the two trailers itself (`spec-018` §2): `WINGFOIL_AGENT` names the
+signing entry (`spec-018` §2.3) and `--ai-model`, else `WINGFOIL_AGENT_MODEL`, the model (`spec-018` §2.4). So the
+line no longer tells the agent to amend a commit `wingfoil` wrote, which would leave two pairs (`bug-535`); the
+amend recipe stays for a commit the agent writes with plain `git commit` (`git-conventions` §8). WingFoil learns the
+model only after the run, if at all (§2.6), so it never fills `<your model identifier>`: an `AI-Model:` value on a
+commit the agent wrote is the agent's own claim (`bug-370`). The approver-gated verbs refuse an agent's session
+(`spec-018` §3). The `agent: record <run-id>` commit is WingFoil's, not the agent's: it keeps §4.4's form and carries
+no agent trailer (`spec-018` §1.1).
 
 `{handoff_line}` is one of two fixed literals, chosen by the element type's template (read at `HEAD`):
 `Record your handoff in the element's "## Execution Notes" section.` when the type's
@@ -292,10 +317,28 @@ component (`dl-131`).
 
 - **`assign`**: WingFoil chooses the id before launch and passes it through `session.assign_args`.
   The value is a UUID version 5 (RFC 4122 §4.3) over a fixed namespace and the string
-  `<absolute repository root>\n<run id>`. The namespace is itself the version 5 UUID of the name
+  `<session salt>\n<run id>`. The namespace is itself the version 5 UUID of the name
   `wingfoil:spec-016:session` in RFC 4122's URL namespace: `a432dcd6-576d-5991-9503-2b23aa4139db`. The
-  id is unique per clone and run and derived, not random. The run id stays the identifier WingFoil
-  relies on (`dl-135` Q3 (a)).
+  id is unique per clone and run and derived, and it discloses nothing about the host: the committed record no
+  longer lets a guessed repository path be tested against it (`dl-168` Q1 (b)). The run id stays the identifier
+  WingFoil relies on (`dl-135` Q3 (a)).
+  - **The session salt** is 32 random bytes, written once per clone as 64 lowercase hexadecimal digits and a line
+    feed to the file `wingfoil/session-salt` of the repository's common git directory (`git rev-parse
+    --git-common-dir`), so the linked worktrees of a clone share it and never mint a second one. It is outside the
+    working tree, so it is never committed and needs no `.gitignore` entry (`spec-011` § `.gitignore` policy). The
+    first launch under `assign` that finds no salt creates it, owner-only (file `0600`, directory `0700` on POSIX),
+    atomically: the bytes go to a temporary file in the same directory, which is then hard-linked to the salt's name,
+    and when that name already exists — a concurrent launch won — the existing salt is read and used, so two
+    launches of one clone never use two salts. A salt that exists but is not exactly that text is refused before the
+    banner, `VALIDATION`, `the session salt in the git directory (wingfoil/session-salt) is not 64 lowercase
+    hexadecimal digits: remove it, and a new one is created at the next launch`; a salt that cannot be created or read
+    is refused there too, `IO`, `cannot create or read the session salt in the git directory (wingfoil/session-salt):
+    <cause>`, the cause naming no absolute path. Nothing is launched and nothing is recorded on either refusal. A
+    dry run computes no session id and creates no salt.
+  - The salt is the one random value of a launch. It enters the session id only — never the bootstrap, the
+    context, the run id or any other record field (`determinism`, "context assembly").
+  - Records committed before the salt keep the session ids they hold, which hashed the repository root: they are
+    history, read as any other record and never rewritten (`dl-168` ratification).
 - **`output`**: read from the stdout of a headless run (the v0.4 work run, §3.5), after the agent exits: under
   `launch.headless.output: json` the whole stdout is one JSON document and the id is at `session.field`; under
   `jsonl` each line is one JSON value, and the id is the first non-empty string found at `session.field`, lines
@@ -317,7 +360,12 @@ component (`dl-131`).
   value yields `not-reported` silently. `agent_version` is the first non-blank line `version_args`
   prints.
 - **`none`**: `not-reported`.
-- Usage and model follow the same rules through `usage.from`.
+- Usage and model follow the same rules through `usage.from`. The record's `model` is a value WingFoil read
+  from the adapter's declared lookup; `not-reported` says it read none. WingFoil never knows the model before the
+  launch (`spec-018` §2.4), so the `AI-Model:` trailers on the commits the agent wrote during the run carry what the
+  agent passed (`--ai-model`, `WINGFOIL_AGENT_MODEL`) or `not-reported`: the agent's own claim, never a value
+  WingFoil read. A record whose `model` is `not-reported` therefore says that any model those trailers name is
+  unverified (`bug-370`).
 - **`not-reported` is the literal string**, never `0`, `null` or an absent key (`dl-114` Decision: "a
   run whose agent reports no usage records that explicitly, never a zero").
 
@@ -600,7 +648,8 @@ repository.
     root) with `launch.<kind>.args`, then the permission fragment of the run's role (`launch.<kind>.permissions`:
     the fragment itself, or the map's entry for the role, else its `default`; nothing when the field is absent;
     §2.2, `dl-223` (b)), then `session.assign_args` when `assign`, no shell, the project
-    root as its working directory, WingFoil's environment passed through. Interactive: stdio inherited.
+    root as its working directory, WingFoil's environment passed through with §2.4's three changes (the
+    `wingfoil` shim first on `PATH`, `WINGFOIL_CLI`, `WINGFOIL_AGENT`). Interactive: stdio inherited.
     Headless (§3.5): stdin is not connected (the null device), stdout is captured and not echoed, stderr is
     `agent execute`'s own, and the agent runs in a session and process group of its own (POSIX), so it has no
     controlling terminal to open and receives no keyboard signal but the ones step 15 forwards. This is
@@ -715,6 +764,7 @@ in what ends them (`dl-181`):
 - **v0.3**: one run-record line in the element's run-log file, and one commit containing only that
   file (§4.4). Nothing else: no Memory transition, no workflow state (step execution is P4.10,
   v1.0). Temporary files are outside the repository and removed at exit.
+- **v0.4**: also, once per clone, the session salt in the git directory, outside the working tree (§2.6).
 - **v0.4**: also the git-ignored `.wingfoil/run/` entry for the run's lifetime (§7).
 - The Memory transitions a run causes are made **by the agent**, through the Memory verbs or MCP
   Tools, under its own commits. They are not part of `agent execute`'s write set.
@@ -1129,15 +1179,16 @@ that bullet.
     the baseline it reads (`dl-084` (A)).
 - **Determinism.**
   - The bootstrap, the MCP payload and the run id are pure functions of committed state and the run's
-    inputs `(role, element, run id, state_ref)`. The argv is too, except for the temporary-file paths
-    (`{bootstrap_file}`, `{mcp_config_file}`, in the OS temporary directory) and the Node executable
-    path (`{mcp_command}`), which are host values that never reach the context. The `assign` session
-    id hashes the absolute repository root (§2.6), so it is per clone by design and is never used as
-    an identifier across clones; the run id is.
+    inputs `(role, element, run id, state_ref)`, the bootstrap also of the launching build's signature (§2.4). The
+    argv is too, except for the temporary-file paths (`{bootstrap_file}`, `{mcp_config_file}`, in the OS temporary
+    directory) and the Node executable path (`{mcp_command}`), which are host values that never reach the context;
+    so is the spawned environment's shim path (§2.4). The `assign` session id hashes the clone's random session
+    salt (§2.6), so it is per clone by design, discloses no host path, and is never used as an identifier across
+    clones; the run id is.
   - The wall-clock values (`duration_ms`, and `started_ms` in v0.4) sit only in records of what
     happened, never in a context.
-  - Two clones that launch the same step from the same `HEAD` produce the same bootstrap bytes and the
-    same run id, which is **I** (`dl-131`).
+  - Two clones that launch the same step from the same `HEAD` with the same build produce the same bootstrap
+    bytes and the same run id, which is **I** (`dl-131`).
   - The record's `mode`, `session` and `state_ref` are what the v1.0 **P** checks read (`dl-134`
     `distinct_from`).
 - **Revision triggers.**
@@ -1421,3 +1472,19 @@ approver's `memory amend`.
 its working directory; the step 11 pre-flight uses the same arguments. The bootstrap (§2.4) and the run record (§4.2)
 are unchanged. Edited in place without a supersede or a state change (`dl-047`), pending the approver's
 `memory amend` at `task-350`'s design gate.
+
+**Revision (2026-11-13, `task-338-name-the-launching-build-in-the-bootstrap-set-wingfoil-agent-at-spawn-and-salt-the-session-id-per-clone`)
+— § 2.4 bootstrap, § 2.6 session id.** §2.4: the bootstrap gains `{cli_line}`, which names `wingfoil` as the agent's
+CLI and the launching build's signature `wingfoil --version` prints, with `"$WINGFOIL_CLI"` as the invocation that
+does not depend on `PATH`; the bootstrap becomes a function of that signature too (`dl-180` invocation (c),
+`bug-369`). The agent is spawned with a `wingfoil` shim of the launching build first on `PATH`, written in the run's
+temporary directory, `WINGFOIL_CLI` naming it, and `WINGFOIL_AGENT` naming the selected entry (`spec-018` §1.1); the
+post-run lookups, the pre-flight and the conflict probe keep WingFoil's environment. `{attribution_line}` takes
+`spec-018` Consequences' text: the verbs write the trailers, the agent passes `--ai-model`, writes the trailers itself
+only on a plain `git commit`, and never runs an approve, reject or amend (`bug-370`). §2.6: the `assign` session id
+hashes a per-clone random salt kept in the common git directory with the run id, never the repository root, the salt
+created once, atomically and owner-only, and refused when malformed (`dl-168` Q1 (b)); records committed before keep
+their ids as history; the record's `model` says whether WingFoil read a model, so `not-reported` marks the agent's
+`AI-Model:` trailers as its own claim (`bug-370`). The cross-references this needs: §3.3 step 14's environment
+sentence names §2.4's changes, §3.6 lists the salt, and the Consequences' determinism bullets follow. Edited in place
+without a supersede or a state change (`dl-047`), pending the approver's `memory amend` at `task-338`'s design gate.
