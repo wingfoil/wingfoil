@@ -63,3 +63,350 @@ never an error.
 ## Execution Notes
 
 <!-- Filled by the dev-loop. -->
+
+### design (architect, 2026-11-13)
+
+**Run note.** The design ran on 2026-11-13; its session was cut before the notes commit, and was resumed on 2026-11-14
+on the same worktree (`git log --oneline -1` → `763c55600`, `ps -eo pid,etime,args | grep jest` → no run), the pending
+edits checked file by file below. The heading keeps 2026-11-13.
+
+**Inputs read.** `depends_on: []` (no `dl-015` gate). Base: `main` `69b7d0e26` + `ddb9d6535` (`wf(task): start`) and
+`763c55600` (`wf(bug): sync bug-459… [planned → in-progress]`) — `git log --oneline -3`. PATH guard: `command -v wingfoil`
+→ the task's PATH shim; `wingfoil --version` and `node dist/cli.js --version` → `0.3.2 (69b7d0e26…)` at launch. Plan
+rulings W0-R1…W0-R12 read (`git show design/dev_loop_v0.4:docs/05_plans/rl-v1/rel-v0.4/dev-loop-rel-v0.4-plan.md`,
+lines 70–171). Contract status (`sed -n 5p`): `spec-002`, `spec-003`, `spec-016` `approved`; `dl-202`, `dl-205` `ready`.
+`dl-202` item 3 shipped in `task-292` (`git log --format='%h %s' -3 -- .wingfoil/dna.yaml` → `3c9604119`, `8a6b0c00b`).
+Every `dna.yaml` probe below ran in a scratch clone of this branch outside the worktree; nothing in the worktree was
+built or edited except the pending amendments listed at the end.
+
+**What exists today.**
+- `RoleEntry` is `{ name, description? }.passthrough()` (`src/dna/schema.ts:231-236`); `Team`'s `superRefine`
+  (`:254-280`) refuses only an undefined role in `members[].roles` / `agents[].executes_as`. An agent may list
+  `approver` in `executes_as` and the file loads.
+- `agent execute` refuses `approver` by name, after `isRoleDefined` and before `selectAgent`
+  (`src/agent/execute.ts:696`, `APPROVER_ROLE` from `src/core/approval-authority.ts:45`), message
+  `role 'approver' is never executed by an agent`; nothing has been written or probed at that point (step 3 of the
+  module doc; the adapter probe, the identity and the temporary files come after).
+- The workflow core checks (`src/core/workflow-core-checks.ts`, `ROWS` `:60-70`) read `dna.yaml`; no row reads
+  `team.agents`. `agent.execute` resolves to `wingfoil agent execute` (built in, `spec-003` § "Action expressions").
+- `scripts/check-role-directives.cjs` visits only `dna show`'s `team.roles` names with the pinned build's
+  `directives list --role <r>`.
+
+**Proved on the pinned build first (`dl-205` Q1 (a)) — the highest risk.** Scratch clone, commit `57b2269ff` adding
+`human_only: true` under `product-owner`, `tech-lead`, `approver` (version 2.2), pinned build
+`node node_modules/wingfoil-released/dist/cli.js` (`--version` → `0.3.2 (6de2e13c0…)`):
+- `dna show` → exit 0, stderr `warning: .wingfoil/dna.yaml: unknown field(s) ignored: team.roles[4].human_only,
+  team.roles[5].human_only, team.roles[7].human_only`; `paths` → exit 0, the same warning; `workflow list` → exit 0,
+  86 stdout lines as at the base, the same warning labelled `<sha>:.wingfoil/dna.yaml`; `directives list` → exit 0,
+  374 lines as at the base, no stderr. Baseline before the commit: the four commands exit 0 with empty stderr.
+- `npm run check:mcp` (dist linked to this worktree's code build) → exit 0, stdout `.mcp.json "wingfoil" runs the pinned
+  wingfoil 0.3.2, advertising [prompts, resources, tools] (prompts: 8, resources: 4, tools: 0)` and `the build under
+  development (dist/cli.js) serves [prompts, resources, tools] (prompts: 8, resources: 4, tools: 0); every listed
+  Resource read and Prompt get answered`, stderr empty — so `test/cli/mcp-registration.test.ts:241` (`stderr: ''`) holds.
+- `node scripts/check-role-directives.cjs` → exit 0, `role-directives: 8 roles checked, 0 with warnings`.
+- So 0.3.2 does **not** refuse the key (`spec-002` passthrough on read): no STOP, no `KNOWN_READ_FAILURES` entry, no
+  `wingfoil-cli` exception. The only cost is that one `warning:` line on every pinned read until the pin passes the
+  release that ships the reader (Decision D4).
+- `grep -rln "wingfoil-released" test/ scripts/` → the readers of the pinned build under test: `check-role-directives`
+  (ignores stderr on success, its module doc), `check-mcp-registration` (above), `test/directives/standing-approvals.test.ts:273`
+  (reads stdout `warnings` of `directives list`, which loads no `dna.yaml` warning), `test/core/directives-list.test.ts`,
+  `test/mcp/workflow-state-resources-review-fixes.test.ts`, `check-lockfile-pins` — none reads the dna warning.
+
+**A prototype, to measure the blast radius (scratch clone only, discarded).** The three rules below in
+`src/dna/schema.ts`, `src/core/workflow-core-checks.ts` and `src/agent/execute.ts` (27 lines), built in the clone, then
+`npx jest <the 94 test files matching agent\.execute|executes_as|agent-execute-fixture|wingfoil-root|never executed by an
+agent|team\.agents|agents:> --maxWorkers=2` under the slot → `Test Suites: 33 failed, 61 passed, 94 total`, `Tests: 246
+failed, 1510 passed`. 28 of the 33 fail only because the shared fixture `test/agent/helpers/agent-execute-fixture.ts:43`
+gives `Fake Agent` `executes_as: [ developer, reviewer, approver ]`, which the new load rule refuses (D1). With that one
+line changed to `[ developer, reviewer ]`, the 33 suites re-run → `Test Suites: 5 failed, 28 passed`, `Tests: 8 failed,
+407 passed`; the five are exactly the pins listed under "Existing tests that change" below.
+
+**The prototype's real outputs** (code build of the clone, this repository's `dna.yaml` with the three roles marked):
+- `node dist/cli.js agent execute --element task:task-340 --role tech-lead --dry-run` → exit 1, `error: role 'tech-lead'
+  is never executed by an agent`; `--role approver` → `error: role 'approver' is never executed by an agent`;
+  `--role product-owner` → `error: role 'product-owner' is never executed by an agent`; `--role tech-lead --dry-run
+  --headless --format json` → `{"error":"role 'tech-lead' is never executed by an agent"}`, exit 1.
+- `executes_as` + `tech-lead` → `node dist/cli.js dna show` exit 1, `error: E_VALIDATION team.agents.0.executes_as.5
+  (.wingfoil/dna.yaml): team.agents[0] 'Claude' executes_as names the human-only role "tech-lead" (a human-only role is
+  never executed by an agent)`.
+- `human_only: false` on `approver` → exit 1, `error: E_VALIDATION team.roles.7.human_only (.wingfoil/dna.yaml):
+  team.roles[7] "approver" may not declare human_only: false (the approver role is always human-only, REQ-SEC-03)`.
+- `node dist/cli.js --format json workflow list` → exit 0, `diagnostics` = two objects:
+  `{"code":"W_WORKFLOW_AGENT_ROLE_UNEXECUTED","severity":"warning","file":"workflows/custom/release-publishing.yaml",
+  "path":"phases[3].actions[0]","message":"phase 'publish' declares agent.execute under role 'tech-lead', but no
+  team.agents entry with an adapter executes as 'tech-lead'"}` and the same at `phases[5].actions[1]` for
+  `'merge-forward'`. `workflow list --format console` prints the same JSON payload (no console renderer for this
+  command); stderr empty in both.
+- The `dna.yaml` write: on the clone's prototype build, `dna update team.roles.approver.human_only --value true` →
+  exit 1, `Invalid input: expected boolean, received string` (the `--value` form does not coerce); the entry form
+  `dna update team.roles.<r> --entry-human_only true` for `approver`, `product-owner`, `tech-lead` → three commits
+  `wf(dna): update team.roles.<r>`, each with `WingFoil-Version:`, `Co-Authored-By: Claude <noreply@anthropic.com>`,
+  `AI-Model: claude-opus-5-5` (one pair each), `version:` 2.1 → 2.4, three `human_only: true` lines, `dna show` exit 0.
+
+**AC 5 measured: every `W_WORKFLOW_AGENT_ROLE_UNEXECUTED` this repository would raise** (role → phase), from the
+prototype run above and a read of the 27 files (`grep -ln "agent.execute" .wingfoil/workflows/custom/*.yaml` → 8 files,
+13 `agent.execute` actions; 11 under `architect`/`qa`/`developer`/`facilitator`, which `Claude` executes):
+1. `tech-lead` → `release-publishing.publish` (`phases[3].actions[0]`): push the tag and report the stage id.
+2. `tech-lead` → `release-publishing.merge-forward` (`phases[5].actions[1]`): the version-bump test, the governance check,
+   the push and the fast-forward.
+Ruling proposal D2 (a): drop both `agent.execute` actions (the work is the human tech-lead's, the descriptions already
+state it; the two dropped line comments move into the descriptions), `release-publishing.yaml` 2.2 → 2.3. Proved in the
+clone (commit `4b662a468`): code build `workflow list` → `diagnostics: []`, 11 workflows; pinned `workflow list` → exit 0,
+`diagnostics: []`, 11 workflows, only the `dna.yaml` warning on stderr; pinned `workflow show release-publishing
+--format json` → `publish` `["approver.execute(command: \"npm stage approve <stage-id>\")"]`, `merge-forward`
+`["git.merge(from: integration_branch, ff: false)"]`; `npm run check:mcp` → exit 0, stderr empty. Neither warning is on a
+startable main's own file; `release-publishing` is a sub, so `workflow list`'s `workflows` array does not change.
+
+**Rules decided here (the amendments state them).**
+- `RoleEntry.human_only?: boolean` (`[SPEC: dl-202 item 1]`). Human-only = `name === 'approver'` (always, D1) or
+  `human_only === true`. Load errors, both inside `Team`'s `superRefine`: an `executes_as` naming a human-only role, at
+  `['agents', i, 'executes_as', k]`, message `team.agents[<i>] '<name>' executes_as names the human-only role "<role>" (a
+  human-only role is never executed by an agent)`, checked only for a role `team.roles` defines (the undefined-role issue
+  stays the only one for an unknown name); `human_only: false` on `approver`, at `['roles', j, 'human_only']`, message
+  `team.roles[<j>] "approver" may not declare human_only: false (the approver role is always human-only, REQ-SEC-03)`.
+- One predicate: `isHumanOnlyRole(dna: DnaYaml, role: string): boolean` in `src/dna/roles.ts` (exported from
+  `src/dna/index.ts`), on top of an exported `isHumanOnlyRoleEntry(entry: RoleEntry): boolean` in `src/dna/schema.ts`
+  that the refinement uses. The literal `'approver'` is declared once: `src/dna` owns it and
+  `src/core/approval-authority.ts`'s `APPROVER_ROLE` re-exports that value (`src/dna` may not import `src/core`).
+- `agent execute`: `if (isHumanOnlyRole(dna, role)) return coreErr({ code: 'VALIDATION', message: \`role '${role}' is
+  never executed by an agent\` })` at the place of `:696` — same code, exit `1`, same message for `approver`; §3.7 row
+  `HUMAN_ONLY_ROLE`.
+- `W_WORKFLOW_AGENT_ROLE_UNEXECUTED`: a core row appended to `ROWS` after `W_PHASE_FALLBACK_NOT_REENTRANT`, checked
+  inside the existing `if (dnaYaml)` block of `staticChecks`: a phase whose `role` is a `team.roles` name and whose
+  `actions` hold a token named `agent.<x>`; raised when no `team.agents` entry with an `adapter` lists the role in
+  `executes_as`; one per phase, at the first such action, path `phases[<i>].actions[<a>]`, message `phase '<name>'
+  declares <token name> under role '<role>', but no team.agents entry with an adapter executes as '<role>'`. Not
+  decided without `dna.yaml` (the existing `W_WORKFLOW_CHECKS_NOT_RUN` message, "role, approver and dna: collection",
+  stays as it is — D5).
+- `check-role-directives`: the roles visited are the ascending union of `dna show`'s `team.roles` names and the keys of
+  `.wingfoil/roles.yaml`'s `assignments` (read with `js-yaml`; an absent file adds none; `global` is not a role); a role
+  `dna.yaml` does not declare gets, before its listing's warnings, the warning `bound in roles.yaml but not declared in
+  dna.yaml team.roles`. Output format unchanged. Prototype in the clone with `intern: [ghost-intern]` and
+  `ghost: [testing]` added to `roles.yaml` → exit 1, stdout `approver: ok`, `architect: ok`, `developer: ok`,
+  `facilitator: ok`, `ghost: 1 warning(s)`, `intern: 2 warning(s)`, `product-owner: ok`, `qa: ok`, `reviewer: ok`,
+  `tech-lead: ok`, `role-directives: 10 roles checked, 2 with warnings`; stderr `error: role 'ghost': bound in roles.yaml
+  but not declared in dna.yaml team.roles`, `error: role 'intern': bound in roles.yaml but not declared in dna.yaml
+  team.roles`, `error: role 'intern': directive 'ghost-intern' bound to role 'intern' has no directive file`; on the
+  unchanged repository → exit 0. The pinned 0.3.2 already answers `directives list --role intern` for an undeclared
+  role (exit 0, `warnings` = `["directive 'ghost-intern' bound to role 'intern' has no directive file"]`) and its
+  unfiltered listing carries the dangling warning, so `bug-459`'s "once the pinned build carries them" is met; but a
+  binding of an EXISTING directive under an undeclared role (`ghost: [testing]`) gives no warning on 0.3.2 at all, hence
+  the explicit undeclared-role warning. Out of scope (stays in `bug-459`'s notes for the reviewer): the script is not in
+  the npm package.
+
+**AC classification and what qa pins.** Red runs `npx tsc --noEmit -p tsconfig.json` and `npx jest test/lint
+--maxWorkers=2` before its commit. New exports (`isHumanOnlyRole`, `isHumanOnlyRoleEntry`) give two expected reds: `tsc`
+TS2305/TS2724, and at jest run time (`isolatedModules`) `undefined is not a function`.
+
+| AC | Class | Why |
+|---|---|---|
+| 1 human-only declaration, load error | red-first | `RoleEntry` has no `human_only`; `executes_as: [approver]` loads today (`test/agent/helpers/agent-execute-fixture.ts:43` loads) |
+| 2 `W_WORKFLOW_AGENT_ROLE_UNEXECUTED` | red-first | no core row reads `team.agents` (`grep -n "agents" src/core/workflow-core-checks.ts` → nothing) |
+| 3 `agent execute` refusal | red-first for a non-approver human-only role; characterization for `approver` (message and exit unchanged) | `:696` compares the name only |
+| 4 `check:role-directives` undeclared role | red-first | the prototype above; at the base the same fixture exits 0 for `ghost` |
+| 5 this repository's `dna.yaml` and `workflow list` | red-first | no `human_only` in `.wingfoil/dna.yaml` (`grep -c human_only` → 0) |
+| 6 amendments + BDD | characterization | prepared uncommitted below; the orchestrator commits the BDD after the approver's amends; no test |
+
+- **AC 1** — new file `test/dna/human-only-roles.test.ts`. Through `DnaYaml.safeParse` (and once through
+  `loadDnaYaml`/`node dist/cli.js dna show` on a temp repo, `makeTempGitRepo` + `writeFixtureFile`): (a) `human_only:
+  true` on `tech-lead` parses and is kept (`team.roles[i].human_only === true`); (b) `executes_as: [developer, tech-lead]`
+  with `tech-lead` marked → one issue at path `['team','agents',0,'executes_as',1]`, message exactly `team.agents[0]
+  'Claude' executes_as names the human-only role "tech-lead" (a human-only role is never executed by an agent)`; the CLI
+  line is the one quoted above (`error: E_VALIDATION team.agents.0.executes_as.<k> (.wingfoil/dna.yaml): …`, exit 1);
+  (c) `executes_as: [approver]` with NO `human_only` key on `approver` → the same message with `"approver"`; (d)
+  `human_only: false` on `approver` → the message quoted above at `['team','roles',j,'human_only']`; (e) positive
+  cases: `human_only: false` on `tech-lead` with `executes_as: [tech-lead]` parses; an undefined role keeps the one
+  undefined-role issue only (no second issue); (f) `isHumanOnlyRole(dna, 'approver')` true with no key,
+  `(dna, 'tech-lead')` true only when marked, `(dna, 'developer')` false, `(dna, 'ghost')` false. The approver
+  constant equals `APPROVER_ROLE`.
+- **AC 2** — new file `test/core/workflow-agent-role-check.test.ts`, the helpers and the `MEMORY_YAML` / `dnaYaml`
+  shapes of `test/core/workflow-core-checks.test.ts` (call `workflowCoreDiagnostics` directly, and once `workflow list
+  --format json` through the CLI on a temp repo). A sub workflow mirroring `release-publishing`'s shape: phase
+  `publish` (`role: tech-lead`, `actions: [agent.execute, 'approver.execute(command: "x")']`), phase `merge-forward`
+  (`role: tech-lead`, `actions: ['git.merge(from: integration_branch, ff: false)', agent.execute]`). Pins: (a) with
+  `team.agents` `[{ name: Claude, email, adapter: claude-code, executes_as: [developer] }]` → exactly two diagnostics,
+  `{ code: 'W_WORKFLOW_AGENT_ROLE_UNEXECUTED', severity: 'warning', file, path: 'phases[0].actions[0]', message: "phase
+  'publish' declares agent.execute under role 'tech-lead', but no team.agents entry with an adapter executes as
+  'tech-lead'" }` and the `phases[1].actions[1]` one, in that order, after any loader row; (b) an agent executing
+  `tech-lead` WITHOUT `adapter` still raises it; with an adapter → none; (c) `team.agents` absent → raised; (d) a phase
+  with no `role`, a phase whose role is unknown (only `E_PHASE_ROLE_UNKNOWN`), a phase whose actions hold no `agent.*`
+  → none; (e) a human-only role (`approver`) with `agent.execute` → raised; (f) two `agent.execute` in one phase → one
+  diagnostic, at the first; (g) without `dna.yaml` → none of this code, the `W_WORKFLOW_CHECKS_NOT_RUN` line unchanged;
+  (h) CLI: `workflow list` exit 0, the diagnostics in the payload.
+- **AC 3** — new file `test/cli/agent-execute-human-only.integration.test.ts`, the agent-execute fixture
+  (`test/agent/helpers/agent-execute-fixture.ts`, with D1's fixture change) plus `human_only: true` on a role
+  `tech-lead` added to its `team.roles` and to the member's roles: (a) `--element <task> --role tech-lead --dry-run` →
+  exit 1, stderr `error: role 'tech-lead' is never executed by an agent`, nothing spawned, `HEAD` unchanged, no file under
+  the run log (`expectNothingRan` of `test/cli/agent-execute-launch-kind.integration.test.ts`); (b) the same with
+  `--headless`, `--interactive`, `--agent 'Fake Agent'` and `--format json` (`{"error":"role 'tech-lead' is never
+  executed by an agent"}`); (c) a step form whose phase is `role: tech-lead` (`seedStep` + `startInstance` of
+  `test/agent/helpers/agent-execute-step-fixture.ts`) → the same error line, after the deduction's `warning:` line for
+  `W_WORKFLOW_AGENT_ROLE_UNEXECUTED` when the phase holds `agent.execute`; (d) characterization: `--role approver` keeps
+  `error: role 'approver' is never executed by an agent` (existing pins `test/core/agent-execute.test.ts:110,412`,
+  `test/cli/agent-execute.integration.test.ts:94`, `test/cli/agent-execute-launch-kind.integration.test.ts:128` stay as
+  they are); (e) the refusal precedes the adapter probe: with the adapter command off `PATH` the error is still the
+  human-only one, not `AGENT_NOT_FOUND`.
+- **AC 4** — extend `test/cli/check-role-directives.test.ts` (its `dnaYaml()` / `rolesYaml()` helpers): (a) `roles.yaml`
+  with `intern: [ghost-intern]` and `ghost: [testing]` (directive file present), `dna.yaml` roles `developer, reviewer`
+  → exit 1, stdout lines in ascending order with `ghost: 1 warning(s)`, `intern: 2 warning(s)`, the summary counting
+  the union (`role-directives: 4 roles checked, 2 with warnings`), stderr exactly the three `error: role '…': …` lines of
+  the prototype's form; (b) every role declared → output as today (the existing pins stay); (c) no `roles.yaml` → only
+  the `team.roles` roles; (d) this repository → exit 0 (`:158`, unchanged).
+- **AC 5** — extend `test/agent/repository-agent-roles.test.ts` (committed `dna.yaml`, `git show HEAD:`): `approver`,
+  `product-owner`, `tech-lead` carry `human_only: true`, no other role does, `Claude`'s `executes_as` unchanged, and
+  `version` is `>= 2.2` (bug-314: "≥" plus the history line naming task-340); `test/core/workflow-repository-conformance.test.ts`
+  keeps `rows(diagnostics)` `[]` under D2 (a) (red: the developer's `release-publishing` change and `dna.yaml` writes
+  land in green). The pinned-build half is the check `pinned-build.reads` (manual) at review: the commands in this
+  section, re-run.
+
+**Existing tests that change** (from the prototype re-run; qa changes them in the red commit, the developer never
+touches red's files, T4):
+- `test/agent/helpers/agent-execute-fixture.ts:43` → `executes_as: [ developer, reviewer ]` (D1). The label
+  `'APPROVER_ROLE, though an agent lists approver in executes_as'` (`test/cli/agent-execute.integration.test.ts:92`)
+  becomes `'HUMAN_ONLY_ROLE (approver)'`; its message stays.
+- `test/core/approval-authority.test.ts:250` (bug-017): the adversarial `dna.yaml` can no longer be loaded; the
+  prototype's received value is `cannot resolve approval authority: the committed '.wingfoil/dna.yaml' (at HEAD) is not
+  readable as DNA: E_VALIDATION team.agents.0.executes_as.0 (HEAD:.wingfoil/dna.yaml): team.agents[0] 'Claude'
+  executes_as names the human-only role "approver" (a human-only role is never executed by an agent). Approval authority
+  is read from the committed configuration, so the committed file must be valid; fix it and commit the fix, then
+  retry.` Keep the unvalidated half (`hasApproverRole`, `resolveMemberRoles` on the object) and pin this refusal for the
+  committed half: the guarantee becomes structural.
+- `test/core/agent-list.test.ts:349` and the two `task-240 AC 3` cases (`:407`): the fixture's `red` phase (`role: qa`,
+  `agent.execute`, `:115-117`) now raises the warning, so the payload gains `warnings`; pin the one
+  `W_WORKFLOW_AGENT_ROLE_UNEXECUTED (workflows/…): phase 'red' declares agent.execute under role 'qa', …` line (copy the
+  file and path from a run of the red build) — the fixture's comment `:340` already says no agent executes `qa`.
+- `test/cli/derived-option-namespace.test.ts:180`: `entry-human_only` is derived from the schema; add a drive
+  (`dna add team.roles --value r --entry-human_only true` → `human_only: true`).
+- Under D2 (a): `test/core/workflow-integration-branch.test.ts:320` → `['git.merge(from: integration_branch, ff: false)']`
+  and its title's "and one agent step"; `:329` and `test/core/workflow-repository-conformance.test.ts:65,77` stay `[]`.
+  Under D2 (c) instead, those three pin the two warnings.
+- Positive control: `test/dna/mutate.test.ts:322-365` (`dna add team.agents … executes_as approver`) passed in the
+  prototype run (it does not run `Team`'s refinement); `test/storage/templates-workflows.test.ts:204` passed.
+
+**Existing tests run on this base (before the amendments were prepared).** `npx jest <20 files> --maxWorkers=2` under
+the slot: `test/dna/{schema,roles,loader}.test.ts`, `test/core/{workflow-core-checks,agent-execute,
+workflow-repository-conformance,workflow-integration-branch,approval-authority,agent-list}.test.ts`,
+`test/agent/{execute,repository-agent-roles}.test.ts`, `test/cli/{check-role-directives,agent-execute.integration,
+derived-option-namespace,publish-pipeline,workflow-unbound-none.integration,mcp-registration,
+agent-execute-launch-kind.integration}.test.ts`, `test/docs/{name-resolvability,bdd-dna-sections}.test.ts` →
+`Test Suites: 1 failed, 19 passed, 20 total`, `Tests: 1 failed, 434 passed, 435 total`; the one failure,
+`mcp-registration.test.ts:241` (`the build under development (dist/cli.js) did not answer: no answer within 20000 ms`),
+ran at load 24 (`uptime` → `load average: 24,30`); alone → `Tests: 29 passed, 29 total`, and `npm run check:mcp` →
+exit 0. With the pending amendments in the tree: `npx jest test/docs test/lint --maxWorkers=2` → 1 failure,
+`name-resolvability.test.ts`, the 8 unresolved names of the amended specs; the 5 symbol names are now in the allowlist
+(`PLANNED`, `plannedBy: ['task-340']`) and the revision headings use the short `task-340` (the full id, with its `.`, is
+read as a config name). `HUMAN_ONLY_ROLE` and `isHumanOnlyRole` are named in this note for the `PLANNED` literal match.
+
+**Files to touch.** `src/dna/schema.ts` (`RoleEntry`, `isHumanOnlyRoleEntry`, `Team`), `src/dna/roles.ts`
+(`isHumanOnlyRole`), `src/dna/index.ts`, `src/core/approval-authority.ts` (the constant), `src/core/workflow-core-checks.ts`
+(row, module doc), `src/agent/execute.ts` (`:696`, module doc `:19`, comment `:702`), `scripts/check-role-directives.cjs`
+(+ module doc), `.wingfoil/dna.yaml` (D3), `.wingfoil/workflows/custom/release-publishing.yaml` (D2), `docs/user-guide.md`
+§4.2 (a `human_only` paragraph), `docs/cli-reference.md` (`workflow list`'s checks paragraph: the new warning;
+`dna` entry options if listed), the three BDD files, the three specs and the allowlist (pending, below); tests as listed.
+**`version:` bumps:** `.wingfoil/dna.yaml` 2.1 → 2.4 by the three verb writes (D3), plus a hand commit for the history
+annotation and the `[SPEC: dl-202 item 1]` comments with no further bump; `release-publishing.yaml` 2.2 → 2.3 (D2 (a));
+`docs/user-guide.md` / `docs/cli-reference.md` once each if they carry a `version:` (`grep -n "^version" docs/user-guide.md`
+→ `468: version: 1.0` is inside a code block: check the doc's own rule at green). `roles.yaml`, `workflows.yaml`,
+`memory.yaml` unchanged.
+
+**Uncommitted edits, file by file** (checked with `git diff` after the interrupted run; every one is kept, none
+reverted):
+- `docs/04_memory/design/specs/spec-002-dna-yaml-schema.md` — AC 1, AC 6, D1 (approver always human-only), D4 (the
+  pinned warning stated in the Revision note): `RoleEntry.human_only`, the Human-only roles paragraph, the Revision note.
+- `docs/04_memory/design/specs/spec-003-workflows-yaml-schema.md` — AC 2, AC 5, AC 6, D2 (the Revision note names the two
+  measured warnings "ruled at that design gate"), D5 (`W_WORKFLOW_CHECKS_NOT_RUN` unchanged, stated in the row): the
+  `role` and `launch` rows, the new Diagnostics row, the Revision note.
+- `docs/04_memory/design/specs/spec-016-agent-execution.md` — AC 3, AC 6, D6 (one message template): §3.1, §3.2 steps 4
+  and 7, §3.3 step 3, §3.5, §3.7, the Revision note.
+- `test/docs/name-resolvability.allowlist.ts` — AC 6 (lesson `a23c91413`): five `PLANNED` entries for
+  `HUMAN_ONLY_ROLE` (spec-002, spec-016), `W_WORKFLOW_AGENT_ROLE_UNEXECUTED` (spec-002, spec-003), `isHumanOnlyRole`
+  (spec-002).
+- `docs/02_requirements/02_bdd/features/p2-dna/P2.4-project-dna-config.feature` — AC 1, AC 6, D1: two scenarios (a role
+  declared human-only; `approver` without a declaration).
+- `docs/02_requirements/02_bdd/features/p4-workflow/P4.1-workflow-config.feature` — AC 2, AC 6: one scenario (the warning).
+- `docs/02_requirements/02_bdd/features/p5-interaction/P5.3.2-agent-role-selection.feature` — AC 3, AC 6: one scenario (a
+  human-only step role refused); beyond AC 6's "items 1–2" in that it is item 1's refusal, kept because AC 3 traces to it.
+
+**Decisions for the approver.**
+- **D1 — `approver` is human-only without a declaration.** (A) always human-only; `executes_as: [approver]` is a load
+  error; `human_only: false` on it a load error. (B) human-only only where declared, `agent execute` keeping the name
+  check for `approver`. **Recommend (A):** `dl-202` item 1 ("at least `approver`… every other role may appear in
+  `executes_as`") and AC 3 ("the existing `approver` refusal becomes a case of it") read as (A); (B) leaves an adopter
+  who never declares it with a file that says an agent executes `approver`. Cost of (A): the fixture line, the bug-017
+  test, and an adopter's `dna.yaml` that lists `approver` in `executes_as` stops loading (none of the `init` templates
+  does: `test/storage/templates-workflows.test.ts:204`).
+- **D2 — the two warnings of AC 5** (`release-publishing.publish`, `.merge-forward`, `tech-lead`). (a) drop both
+  `agent.execute` (2.2 → 2.3, measured clean above); (b) give the phases a role the agent executes — rejected, the
+  tag/merge/push are the human's (`W0-R8`); (c) keep them as known warnings, re-pinning three tests. **Recommend (a).**
+- **D3 — the `dna.yaml` route.** Three `node dist/cli.js dna update team.roles.<r> --entry-human_only true` on the code
+  build after green (the `--value` form is refused, above): three `wf(dna)` commits, 2.1 → 2.4 (`dl-174`), then one hand
+  `chore(dna)` commit with the history annotation. AC 5's "raises its `version:` once" is read as `dl-174`'s raise per
+  write. **Recommend the verb route** (prompt's preference, `dl-174`); the alternative is one hand edit, 2.1 → 2.2.
+- **D4 — the pinned build's warning.** 0.3.2 reads the file and prints `warning: … unknown field(s) ignored:
+  team.roles[…].human_only` on every read until the pin passes the release that ships the reader. **Recommend: accept it,
+  no `pinned-build` bug** (it is `spec-002`'s designed forward compatibility, nothing refuses, `check:mcp` stays green);
+  the alternative is a `pinned-build` bug closed at the next `advance-pinned-build`.
+- **D5 — `W_WORKFLOW_CHECKS_NOT_RUN`'s message** ("role, approver and dna: collection") is left unchanged; the new row
+  counts as a role check. **Recommend: unchanged** (changing it re-pins its tests for no new information).
+- **D6 — the message of the generalized refusal** keeps `role '<r>' is never executed by an agent` for every human-only
+  role (no hint). **Recommend as proposed**; alternative: add `hint: dna.yaml marks it human_only`.
+
+**Risks for the other open tasks.**
+- **`spec-016` — exact hunks and collisions** (`git diff -U0` of this worktree; the other branches by `git diff -U0
+  main...<branch>`; `task-353`'s amendment is uncommitted in its own worktree, so only its declared sections are known).
+  This task: §3.1 the `--role` table row (`@@ -435`), §3.2 step 4 first three lines (`@@ -513,3`), §3.2 step 7 one clause
+  (`@@ -533`), §3.3 step 3 (`@@ -560`), §3.5 one sentence after the work run's first two lines (`@@ -694`), §3.7 the
+  `APPROVER_ROLE` row (`@@ -740`), a Revision note at the end (`@@ -1423`). `task-338` (approved on its branch): §2.4
+  (`@@ -200…-220`), §2.6 (`@@ -295…-320`), §3.3 step 14 (`@@ -603`), §3.6 (`@@ -717`), Consequences (`@@ -1132`, `-1139`),
+  a Revision note at the end (`@@ -1423`). Collisions with `task-338`: only the end-of-file Revision note (both append
+  after line 1423: a certain, trivial conflict — keep both, in merge order); §3.3 step 3 vs step 14 and §3.5 (`-694`) vs
+  §3.6 (`-717`) are separate hunks. `task-353` (§2.2, §2.8, §3.1–§3.3, §3.5, §3.7, §4.2, §5): every hunk of this task
+  except the Revision note lies in a section it amends — likely conflicts on the §3.1 `--role` row, §3.2 step 4/7,
+  §3.3 step 3, §3.5 and the §3.7 table, and the Revision tail. `src/agent/execute.ts`: this task changes `:19`, `:74`,
+  `:696`, `:702`; `task-338` and `task-353` edit the same file (not committed on their branches at design time:
+  `git diff --stat main...<branch> -- src/agent/execute.ts` empty).
+- **`spec-002` — exact hunks and collisions.** This task: the Zod listing's `RoleEntry` (`@@ -149`, one line), Role binding
+  (`@@ -224`, a new paragraph after "is always `false`."), a Revision note at the end (`@@ -518`). `task-352` (approved on
+  its branch): the Zod listing's `AgentEntry` email rule (`@@ -127,7`) and a Revision note at the end (`@@ -516`). Collision:
+  only the Revision tail (trivial, keep both); the Zod hunks are 22 lines apart. `src/dna/schema.ts`: `task-352` edits
+  `AgentEntry` (`:163-227`), this task `RoleEntry`/`Team` (`:231-280`) — adjacent, probably auto-merged.
+- **Proposed merge order:** `task-338` → `task-352` (both past their gates) → `task-353` → `task-340`. Each task's amend is
+  recorded on its own branch; the later merge (`git merge --no-edit main` at refactor, W0-R4) resolves the spec
+  conflicts by keeping both texts, re-reading the merged section against its own ACs. If `task-340` reaches review
+  before `task-353`, the order of those two flips and `task-353` resolves instead.
+- `task-341` (the `coordinator` role, `dl-203` Q3, depends on this task): see the next paragraph.
+- `task-342`, `task-336`, `task-337`, `task-359`: not checked here whether they read `team.roles` or the agent-execute
+  fixture (their designs check it); any new test fixture with an `agent.execute` phase under
+  a role no fixture agent executes now gets one warning in `diagnostics` — a pinned empty `diagnostics` turns red.
+- Any task whose tests build a `dna.yaml` with an agent executing `approver` (the shared fixture is fixed here) fails
+  to load after this merge.
+
+**For task-341** (`dl-015`). A new role in `team.roles` is agent-executable unless its entry declares
+`human_only: true`; `approver` can never be. If `coordinator` is to be run by an agent, add it to `Claude`'s
+`executes_as` with `node dist/cli.js dna update team.agents.Claude --entry-executes_as …` (the entry form; the `--value`
+form does not coerce) and give its phases `agent.execute` only under it: `workflow list` then raises no
+`W_WORKFLOW_AGENT_ROLE_UNEXECUTED`. If it must decide no gate (`dl-203`), that is approval routing, not `human_only`:
+`human_only` says who may execute a role, nothing about approvals. Read `isHumanOnlyRole` (`src/dna/roles.ts`) rather
+than comparing names. The pinned 0.3.2 warns on `human_only` (D4); a `coordinator` entry without the key adds no
+warning.
+
+### Pending amendments (approver)
+
+Prepared in the worktree, left uncommitted (`dl-047`); the approver records each with `memory amend` before red. The
+name-resolvability allowlist change (`test/docs/name-resolvability.allowlist.ts`, 5 `PLANNED` entries) and the three
+BDD files are not Memory: the orchestrator commits them in one commit right after the amends.
+- `spec-002-dna-yaml-schema` — `--reason "Add human-only roles to Role binding and the RoleEntry Zod listing, per dl-202 item 1: an optional human_only flag, approver always human-only, and a load error for an executes_as naming a human-only role (task-340 design gate)."`
+- `spec-003-workflows-yaml-schema` — `--reason "Add the core warning W_WORKFLOW_AGENT_ROLE_UNEXECUTED to the Layer 2 Phase table and the Diagnostics table, per dl-202 item 2, and read the launch row's fixed case as human-only (task-340 design gate)."`
+- `spec-016-agent-execution` — `--reason "Generalize the approver refusal to every human-only role, per dl-202 item 1: the HUMAN_ONLY_ROLE row of section 3.7 and the matching lines of sections 3.1, 3.2, 3.3 and 3.5, the approver message unchanged (task-340 design gate)."`
+- BDD (committed by the orchestrator): `P2.4-project-dna-config.feature` (+2 scenarios), `P4.1-workflow-config.feature`
+  (+1), `P5.3.2-agent-role-selection.feature` (+1), each with a dated header comment.
+
+### Retrospective
+
+<!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
+     reconstructed afterwards. One line per item: what happened, the evidence (a command and what it
+     printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
+     Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
+     here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+- design: the blast-radius run took two targeted jest passes in a scratch clone at load 9–24 (the prototype pass ~40
+  minutes, `Tests: 1756`); a design that changes a load rule benefits from it, but it is slow on a shared machine.
