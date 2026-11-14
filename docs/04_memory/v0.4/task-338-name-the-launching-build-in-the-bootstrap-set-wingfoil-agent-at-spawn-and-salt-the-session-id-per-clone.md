@@ -358,6 +358,156 @@ for `PATH` unchanged and `WINGFOIL_AGENT` set. **Unasserted (T1):** the win32 ca
 runner, D5); the shim's removal on a signal path (the existing `withRunFiles` signal cases cover the directory; the
 integration asserts `leftInTmp` `[]` on the success path only).
 
+### green (developer, 2026-11-14)
+
+**Green commit `2dfd746f4`** (`git log --oneline -1` → `2dfd746f4 feat(agent): task-338 — name the launching build in the
+bootstrap, set WINGFOIL_AGENT at spawn, salt the session id per clone (bug-369, bug-370)`). It touches only the design's files
+(`git show --stat 2dfd746f4` → `docs/agents.md`, `docs/cli-reference.md`, `docs/user-guide.md`, `src/agent/execute.ts`,
+`src/agent/index.ts`, `src/agent/launch.ts`, `src/agent/session-salt.ts` (new); 7 files, 278 insertions, 44 deletions). No red
+file is touched. Base: `git rev-list --count HEAD..main` → `0` at the start, so no merge. PATH guard: `command -v wingfoil` →
+the task's PATH shim. `wingfoil --version` and `node dist/cli.js --version` → `0.3.2 (c8754fc2ad638985ad5029ee9e42e27b3ead17fa)`.
+- `src/agent/execute.ts`:
+  - `BootstrapInput.build` is filled from `readBuildStamp()`. `renderBootstrap` gains `{cli_line}` after the context
+    instruction, with §2.4's literal.
+  - `ATTRIBUTION_LINE_PREFIX` and `attributionLine` now carry `spec-018` Consequences' text.
+  - `runningBuildCli()` returns `process.execPath` and `[<dist>/cli.js]`, and `runningBuildMcpServer` is built on it.
+  - `cliShim(cli, platform)` is pure. On POSIX it returns `wingfoil`: `#!/bin/sh` plus `exec` with each part single-quoted
+    (`'` written `'\''`) and `"$@"`. On win32 it returns `wingfoil.cmd`, the one line `@"<node>" "<cli.js>" %*` and CRLF.
+  - `withRunFiles(files, work, shim?)` writes the shim in a `bin` directory (`0700`) of the run's temporary directory. The
+    file is `0700`, set exactly by `chmodSync`. The shim's path reaches `work` as its third argument, and the shim goes
+    with the directory on every exit path.
+  - `AgentExecuteHost.cli` and `PreparedLaunch.cliShim` are added. The module doc's "nothing is written" sentence names
+    the salt.
+- `src/agent/launch.ts`:
+  - `agentEnvironment(env, cliShim, agentName)` returns a copy of `env`. When there is a shim, its directory goes first on
+    `PATH` (the directory alone when `PATH` is absent) and `WINGFOIL_CLI` names it (`CLI_VARIABLE`). The launcher marker is
+    always set to `agentName`. Its name is read at call time as `AGENT_MARKERS[0].id` from `src/core/agent-context.ts`, so
+    the name is not spelled in `src/agent` (`grep -rlP '\bWINGFOIL_AGENT\b' src` → `src/core/agent-context.ts`).
+  - Only `spawnOptions` uses `agentEnvironment`. `runLookup` (the lookups and the probe) and `mcpPreflight` keep
+    `process.env`.
+  - `LaunchInput.cliShim` is optional.
+  - Under `session.id: assign`, `launchAgent` calls `sessionSalt(root)` before the banner, and a refusal returns at once.
+    `assignedSessionId(salt, runId)` keeps its computation; only the meaning of its first argument and its doc change.
+- `src/agent/session-salt.ts` (new):
+  - `SESSION_SALT_FILE = 'wingfoil/session-salt'`, under `git rev-parse --path-format=absolute --git-common-dir`
+    (`runGitRead`).
+  - `sessionSalt(root)` reads the salt, or creates the directory `0700` and a temporary file `0600` (flag `wx`) holding 32
+    `randomBytes` as hex and LF, then `linkSync`s it to the final name. On `EEXIST` it reads the winner's salt. The
+    temporary file is removed in `finally`.
+  - Errors: text other than `/^[0-9a-f]{64}\n$/` → `VALIDATION` with §2.6's message and no details. Any file-system error
+    → `IO` with §2.6's prefix, the cause being Node's message cut before `, <syscall> '<path>'` plus `(<syscall>)`, so it
+    names no path. A git failure → the fixed cause `git rev-parse --git-common-dir failed`.
+  - It returns the 64 digits without the LF (orchestrator ruling).
+- `src/agent/index.ts` exports `agentEnvironment`, `CLI_VARIABLE`, `cliShim`, `CliShim`, `runningBuildCli`,
+  `SESSION_SALT_FILE` and `sessionSalt`.
+- Docs:
+  - `docs/cli-reference.md` (agent execute launch paragraph): the CLI line, the new attribution rule, the shim on `PATH`
+    and `WINGFOIL_CLI`, `WINGFOIL_AGENT`, the per-clone salt and its refusal.
+  - `docs/user-guide.md` (§ agent execute): one sentence on the shim.
+  - `docs/agents.md` rule 1 (D8): no more amending wingfoil's commits; pass `--ai-model`; `"$WINGFOIL_CLI"` as the
+    fallback.
+  - None of these files has a `version:` field (design), so there is no bump.
+
+**red → green.** `npx jest --maxWorkers=2 test/agent/fake-agent.test.ts test/agent/launch.test.ts test/agent/execute.test.ts
+test/agent/launch-env.test.ts test/agent/session-salt.test.ts test/cli/agent-execute-cli-shim.integration.test.ts
+test/cli/agent-execute.integration.test.ts test/cli/agent-execute-launch.integration.test.ts`:
+- red (red notes): 52 failed, 163 passed;
+- green: `Test Suites: 8 passed, 8 total`, `Tests: 215 passed, 215 total`.
+
+Also: `npx tsc --noEmit -p tsconfig.json` → no output (the eight intended TS2305/TS2353 errors are gone).
+`npx jest --maxWorkers=2 test/docs/name-resolvability.test.ts test/docs/cli-reference.test.ts
+test/docs/l0-attribution-text.test.ts test/lint` → `Test Suites: 19 passed`, `Tests: 197 passed` (`typecheck-clean`
+included).
+
+### refactor (developer, 2026-11-14)
+
+**Refactor commit `036fd4148`** (`git show --stat 036fd4148` → `src/agent/launch.ts`, new `test/agent/cli-shim-run-files.test.ts`).
+- `agentEnvironment` takes an optional fourth argument `platform` (default `process.platform`). It picks `path.win32` or
+  `path.posix` for the separator and `dirname`, and finds the `PATH` key case-insensitively on win32.
+- The red notes left two behaviours unasserted, and the new test file asserts both:
+  - the win32 `Path` key: updated, with `;` and the backslashed directory, and no second `PATH` added; a POSIX `Path`
+    left alone;
+  - `withRunFiles`' shim: `0700` in `<tmpdir>/wingfoil-run-*/bin/wingfoil`, with its text; absent when no shim is given;
+    removed with the directory when the work rejects and when `SIGTERM` arrives before the spawn (the existing
+    `process.kill` spy pattern).
+- `npx jest --maxWorkers=2 test/agent/cli-shim-run-files.test.ts test/agent/launch-env.test.ts` → `Tests: 18 passed`.
+- Base at the end of refactor: `git rev-list --count HEAD..main` → `0`, so no merge.
+
+Gates. Heavy gates ran after `waitslot.sh` (it printed nothing and returned at once each time), through the npm scripts, with
+`--maxWorkers=2`, one jest at a time:
+- `npm run lint` → exit 0.
+- `npm run docs:api` → exit 0.
+- `npm run build && npm run typecheck` (both tsc configs) → exit 0.
+- `npm test -- --maxWorkers=2` on the clean tree at `036fd4148`, before the pending amendments → `Test Suites: 635 passed,
+  635 total`, `Tests: 11686 passed, 11686 total` (942 s). That run covers the `test/docs/` parity suites,
+  `test/docs/cli-reference.test.ts` and `test/lint`.
+- `npm run test:coverage -- --maxWorkers=2` with the two pending bug amendments in the tree → `All files | 99.08 | 96.88 |
+  98.64 | 99.62` (statements, branches, functions, lines; every column > 80 %).
+  - Per file: `execute.ts` 96.61 / 90.37 / 96.42 / 98.57; `launch.ts` 98.56 / 93.85 / 98.46 / 98.96; `session-salt.ts`
+    90.24 / 64.28 / 100 / 92.1. Its uncovered lines 47, 79 and 94 are the defensive branches: a thrown non-errno value, a
+    failing `git rev-parse`, and a `link` error other than `EEXIST`.
+  - One failure: `Tests: 1 failed, 11685 passed`, in `test/cli/workflow-unbound-none.integration.test.ts` › "workflow next
+    (console) … no "N diagnostic(s)" line". It received `2 diagnostic(s): --format json lists them`, and `node
+    dist/cli.js workflow next --format json` lists exactly `W_UNCOMMITTED_INPUTS` on the two uncommitted bug files
+    (`bug-369`, `bug-370` Retrospective amendments). That is `bug-534`, quoted here and not fixed. The same test passed in
+    the clean-tree full run above.
+
+### self-review (developer, 2026-11-14)
+
+Against `code-review`, every AC with its evidence:
+- **AC 1.** Met. These pass: the decoy case of `agent-execute-cli-shim` (with `decoy 0.0.0` first on `PATH`, the fake records
+  `cli.path` = `cli.variable` = `distBuildStamp()` and `mode` `700`, and `leftInTmp` is `[]`), the dry-run plan
+  (`--format json` and console), and the bootstrap's line 4.
+- **AC 2.** Met.
+  - `WINGFOIL_AGENT` reaches the spawn only: launch-env's injected spawn shows `Hand Agent`, and the fake records
+    `launcher: 'Fake Agent'` with and without `CLAUDE_CODE_CHILD_SESSION=1`.
+  - The positive case beside each absence: the usage lookup records `model: "absent"`, the post-run `--version` /
+    `--lookup` env names lack it, and the record commit has no agent trailer.
+  - `--co-author` → exit 2.
+  - Structural: the name is spelled only in `src/core/agent-context.ts`.
+- **AC 3.** Met. The attribution literal is pinned in launch.test.ts, execute.test.ts and both integration `bootstrapOf`s.
+  `grep -rn "the model identifier you run as" src` → no output.
+- **AC 4.** Met.
+  - The salt is created once, `0600` in `0700`, and has the same inode after the second run. The session ids are the v5
+    of `<salt>\n<run id>`, never the root-hashed ones.
+  - A linked worktree shares the salt, and eight concurrent processes mint one salt with no temporary file left.
+  - Malformed → exit 1, §2.6's message, nothing launched.
+  - Dry run and `session.id: none` → no salt.
+- **AC 5.** Met (characterization): the task-236 fixture parses, its sessions are unchanged, and its lines are byte-identical
+  after an append.
+- **AC 6.** Met at the design gate (`eef58cd19`, `d3812b331`).
+- **AC 7.** Met (characterization, D3 (a)): `model: "not-reported"` with no warning, and §2.6's sentences are found.
+
+Other checks:
+- Determinism: the salt enters `assignedSessionId` only. The bootstrap gains only `build`, a committed fact of the running
+  build with no host path (execute.test.ts asserts that `process.execPath` and the repository root are absent). The shim
+  path is in the environment only.
+- Same class in the touched files: `grep -n "env: process.env" src/agent/launch.ts` → `runLookup` only, which keeps WingFoil's
+  environment by §2.4. `docs/agents.md` held the one other amend instruction aimed at a launched agent (D8, fixed).
+  `grep -rn "amend --no-edit --trailer" docs/cli-reference.md` → only the Global-options/`--co-author` text of task-334, which
+  is not about the bootstrap.
+- Interfaces: the design named `CLI_VARIABLE` as an export, and it is exported. `withRunFiles` takes the shim as an optional
+  third argument, and its callback gets the path as an optional third argument. Existing callers are unchanged
+  (`tsc` → clean).
+- Not run here (D9): the by-hand check with a real agent CLI. It belongs to the review or the headless pilot. No real agent CLI
+  was launched.
+- T4: `git log --first-parent --no-merges --format=%h c8754fc2a..HEAD -- test/agent/execute.test.ts test/agent/fake-agent.test.ts
+  test/agent/launch-env.test.ts test/agent/launch.test.ts test/agent/session-salt.test.ts
+  test/cli/agent-execute-cli-shim.integration.test.ts test/cli/agent-execute-launch.integration.test.ts
+  test/cli/agent-execute.integration.test.ts test/fixtures/agents/fake-agent.cjs test/fixtures/run-logs/` → no output.
+
+### Pending amendments (approver)
+
+Edited in this worktree, left uncommitted (`git diff --stat` → the two bug files, 1 line changed each). Each replaces `None.`
+under its `### Retrospective`:
+- `bug-369-the-agent-execute-bootstrap-names-no-cli-so-the-launched-agent-ran-the-global-wingfoil-instead-of-the-build-under-test`
+  — `memory amend bug-369-the-agent-execute-bootstrap-names-no-cli-so-the-launched-agent-ran-the-global-wingfoil-instead-of-the-build-under-test --reason "Record the bug's retrospective entry for task-338: closed by the launching build's wingfoil shim first on the agent's PATH, WINGFOIL_CLI and the bootstrap's CLI line (dl-180 (c)); the decoy integration test reproduced it at red and passes at green."`
+- `bug-370-the-bootstrap-s-ai-model-placeholder-is-not-honoured-the-launched-agent-wrote-gpt-5-while-it-ran-as-gpt-5.6-terra`
+  — `memory amend bug-370-the-bootstrap-s-ai-model-placeholder-is-not-honoured-the-launched-agent-wrote-gpt-5-while-it-ran-as-gpt-5.6-terra --reason "Record the bug's retrospective entry for task-338: resolved under spec-018 section 2.4, the bootstrap no longer asks the agent to type its model into an amend, and a record whose model is not-reported marks the agent's AI-Model trailers as its own claim (design D3 (a))."`
+
+While these are pending, `test/cli/workflow-unbound-none.integration.test.ts` fails alone with one `W_UNCOMMITTED_INPUTS` per
+file (`bug-534`, quoted in the refactor section).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -365,3 +515,11 @@ integration asserts `leftInTmp` `[]` on the success path only).
      printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
      Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
      here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+
+- Two heavy runs where one would do: `bug-534` makes the full suite red whenever a task holds a pending amendment, so the
+  developer ran `npm test` on the clean tree (635/635) and then `npm run test:coverage` with the amendments in the tree
+  (1 failure, `W_UNCOMMITTED_INPUTS` × 2): about 16 minutes each (`Time: 942.437 s` for the first). Proposal: fix `bug-534`
+  before the next wave, or let the gate run name the expected diagnostic.
+- `session-salt.ts` has branch coverage 64.28 % (lines 47, 79, 94: the defensive error paths), well under the module average.
+  It would take fault injection (a failing `git`, a `link` error other than `EEXIST`) to reach them. Recorded here, not
+  added in the task.
