@@ -232,10 +232,28 @@ export const RoleEntry = z
   .object({
     name: z.string(),
     description: z.string().optional(),
+    // [SPEC: dl-202 item 1] no agent executes the role (spec-002 "Role binding", Human-only roles).
+    human_only: z.boolean().optional(),
   })
   .passthrough();
 /** Parsed shape of the {@link RoleEntry} schema. */
 export type RoleEntry = z.infer<typeof RoleEntry>;
+
+/**
+ * The one role that carries approval authority, uniformly across every Memory type (REQ-SEC-03, adr-006). It is
+ * declared here because `src/dna` owns the role catalogue and may not import `src/core`: the role is human-only
+ * whatever its entry says (`dl-202` item 1, spec-002 "Role binding"), and `src/core/approval-authority.ts`
+ * re-exports this value, so the name is spelled once.
+ */
+export const APPROVER_ROLE = 'approver' as const;
+
+/**
+ * Whether a `team.roles` entry names a human-only role (`dl-202` item 1, spec-002 "Role binding"): `approver`
+ * always, any other role exactly when its entry declares `human_only: true` (an absent key reads as `false`).
+ */
+export function isHumanOnlyRoleEntry(entry: Pick<RoleEntry, 'name' | 'human_only'>): boolean {
+  return entry.name === APPROVER_ROLE || entry.human_only === true;
+}
 
 /**
  * `team.roles` is the canonical role catalogue (REQ-SYS-08); every role name referenced by
@@ -253,6 +271,17 @@ export const Team = z
   .passthrough()
   .superRefine((value, ctx) => {
     const knownRoles = new Set(value.roles.map((role) => role.name));
+    const humanOnlyRoles = new Set(value.roles.filter(isHumanOnlyRoleEntry).map((role) => role.name));
+
+    value.roles.forEach((role, roleIndex) => {
+      if (role.name === APPROVER_ROLE && role.human_only === false) {
+        ctx.addIssue({
+          code: 'custom',
+          message: `team.roles[${roleIndex}] "${APPROVER_ROLE}" may not declare human_only: false (the approver role is always human-only, REQ-SEC-03)`,
+          path: ['roles', roleIndex, 'human_only'],
+        });
+      }
+    });
 
     value.members.forEach((member, memberIndex) => {
       member.roles.forEach((roleName, roleIndex) => {
@@ -272,6 +301,12 @@ export const Team = z
           ctx.addIssue({
             code: 'custom',
             message: `team.agents[${agentIndex}].executes_as references undefined role "${roleName}" (not in team.roles)`,
+            path: ['agents', agentIndex, 'executes_as', roleIndex],
+          });
+        } else if (humanOnlyRoles.has(roleName)) {
+          ctx.addIssue({
+            code: 'custom',
+            message: `team.agents[${agentIndex}] '${agent.name}' executes_as names the human-only role "${roleName}" (a human-only role is never executed by an agent)`,
             path: ['agents', agentIndex, 'executes_as', roleIndex],
           });
         }

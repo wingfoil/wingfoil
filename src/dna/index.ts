@@ -21,6 +21,7 @@ export {
   TeamMember,
   AgentEntry,
   RoleEntry,
+  isHumanOnlyRoleEntry,
   Team,
   Paths,
 } from './schema';
@@ -53,8 +54,11 @@ export type { DnaMutationRequest, DnaMutationResult, DnaMutationVerb } from './m
 export { applyDnaEditInText } from './edit';
 export type { DnaTextEdit, DnaTextStep } from './edit';
 
+// `isHumanOnlyRole` (task-340, `dl-202` item 1) is the one human-only predicate: `agent execute` and the workflow
+// check `W_WORKFLOW_AGENT_ROLE_UNEXECUTED` read it rather than comparing role names.
 export {
   isRoleDefined,
+  isHumanOnlyRole,
   assertRoleDefined,
   resolveRoleHolders,
   UnknownRoleError,

@@ -16,7 +16,8 @@
  *    that only waits refused without `--element` ({@link refuseWaitingStep}, task-335); the
  *    element (`--element`, else the step's, {@link stepTargetElement}) at `HEAD`; the role (`--role`, else
  *    the step's, {@link resolveStepRole}, else — stepless — the `developer` default with a warning,
- *    approver ruling R18); never `approver` (`REQ-SEC-03`); the agent ({@link selectAgent}); its adapter
+ *    approver ruling R18); never a human-only role — `approver` always (`REQ-SEC-03`), any role `dna.yaml` marks
+ *    `human_only` (`isHumanOnlyRole`, task-340, `HUMAN_ONLY_ROLE`); the agent ({@link selectAgent}); its adapter
  *    (`loadAdapter`, at `HEAD`); the launch kind ({@link resolveLaunchKind}, task-335): `--headless` /
  *    `--interactive`, else the phase's `launch`, else `interactive`, with a warning on a contradiction.
  * 4. The adapter declares that kind (`NO_LAUNCH_KIND`), then its `command` is on `PATH` or at its
@@ -69,11 +70,10 @@ import { formatDiagnostic, ValidationError, type Diagnostic } from '../validatio
 import { reportWarning, withDistinctWarnings } from '../validation/warning';
 import { ambiguousReferenceError, resolveElementReference } from '../memory/reference';
 import { findMemoryDocumentByTypeAndIdAtRev, loadMemoryDocumentsAtRev } from '../memory/query';
-import { isRoleDefined } from '../dna/roles';
+import { isHumanOnlyRole, isRoleDefined } from '../dna/roles';
 import type { AgentEntry, DnaYaml } from '../dna/schema';
 import type { MemoryYaml } from '../memory/schema';
 import { diagnosticWarning } from '../core/agent-list';
-import { APPROVER_ROLE } from '../core/approval-authority';
 import { assembleExecutionContext, type ExecutionContextElement } from '../core/context';
 import { requireGitIdentity } from '../core/git-identity';
 import { requireTeamMembership } from '../core/team-membership';
@@ -765,13 +765,15 @@ async function runPipeline<T>(
     role = stepRole.value;
   }
   if (!isRoleDefined(dna, role)) return coreErr({ code: 'VALIDATION', message: `unknown role '${role}' (not defined in dna.yaml)` });
-  if (role === APPROVER_ROLE) return coreErr({ code: 'VALIDATION', message: `role '${APPROVER_ROLE}' is never executed by an agent` });
+  // §3.7 HUMAN_ONLY_ROLE (task-340, `dl-202` item 1): a human-only role — `approver` always — is refused before any
+  // side effect, whatever the options; `approver`'s message is the one it always had (approver ruling D6).
+  if (isHumanOnlyRole(dna, role)) return coreErr({ code: 'VALIDATION', message: `role '${role}' is never executed by an agent` });
   const agent = selectAgent(dna, role, request.agent);
   if (!agent.ok) return agent;
   const adapter = loadAdapter(root, agent.value.adapter!, sha, 'HEAD');
   if (!adapter.ok) return adapter;
   const manifest = adapter.value.manifest;
-  // §3.2 step 7 — the launch kind, after the approver rule above, which no option relaxes.
+  // §3.2 step 7 — the launch kind, after the human-only rule above, which no option relaxes.
   const launchKind = resolveLaunchKind(step?.launch ?? null, request.launch, manifest);
   if (launchKind.warning !== undefined && step !== undefined) reportWarning(`phase '${step.workflow}.${step.phase}' ${launchKind.warning}`);
   const kind = launchKind.kind;

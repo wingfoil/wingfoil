@@ -21,7 +21,7 @@
  * No `CORE_MODULES` operation is registered here: this is the pure resolver later tasks (task-051/056
  * `directive assign`/role-based assignment) wire into their own CLI/MCP surfaces.
  */
-import type { AgentEntry, DnaYaml, TeamMember } from './schema';
+import { APPROVER_ROLE, isHumanOnlyRoleEntry, type AgentEntry, type DnaYaml, type TeamMember } from './schema';
 
 /**
  * Raised when a role name is referenced (e.g. a directive binding or an approval step) but is not
@@ -45,6 +45,18 @@ export class UnknownRoleError extends Error {
 /** Whether `role` is registered in `dna.team.roles` — the sole role catalogue (REQ-SYS-08). */
 export function isRoleDefined(dna: DnaYaml, role: string): boolean {
   return dna.team.roles.some((entry) => entry.name === role);
+}
+
+/**
+ * Whether `role` is human-only (`dl-202` item 1, spec-002 "Role binding"): a person executes it, never an agent.
+ * `approver` always is, a declaration or none; any other role exactly when its `team.roles` entry declares
+ * `human_only: true`. A role `team.roles` does not define is not human-only (it is unknown, which
+ * {@link isRoleDefined} answers). This says who may *execute* a role, nothing about who may approve.
+ */
+export function isHumanOnlyRole(dna: DnaYaml, role: string): boolean {
+  if (role === APPROVER_ROLE) return true;
+  const entry = dna.team.roles.find((candidate) => candidate.name === role);
+  return entry !== undefined && isHumanOnlyRoleEntry(entry);
 }
 
 /** Throws {@link UnknownRoleError} unless `role` is registered in `dna.team.roles`. */

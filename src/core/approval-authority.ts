@@ -33,7 +33,7 @@
  *   grant used to be enough to put `Approver: … (approver)` into a permanent commit that the
  *   repository's own record, at that very commit, contradicted.
  */
-import type { DnaYaml } from '../dna/schema';
+import { APPROVER_ROLE, type DnaYaml } from '../dna/schema';
 import { ValidationError } from '../validation';
 
 import { refuseAgentContext, type AgentContext } from './agent-context';
@@ -41,8 +41,12 @@ import type { GitIdentity } from './git-identity';
 import { DNA_YAML_PATH, loadDnaYaml, loadDnaYamlAtHead } from './loaders';
 import { coreErr, coreOk, type CoreResult } from './types';
 
-/** The one role that carries approval authority, uniformly across every Memory type (adr-006). */
-export const APPROVER_ROLE = 'approver' as const;
+/**
+ * The one role that carries approval authority, uniformly across every Memory type (adr-006). Its value is
+ * declared by `src/dna/schema.ts`, which owns the role catalogue and makes the role human-only (`dl-202` item 1);
+ * this module re-exports it, so the literal is spelled once.
+ */
+export { APPROVER_ROLE };
 
 /**
  * The roles held by the `dna.yaml` `team.members[]` entry whose `email` matches `email`
