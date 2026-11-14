@@ -597,6 +597,32 @@ PATH shim resolves `wingfoil`; `wingfoil --version` and `node dist/cli.js --vers
   Retrospective that the bug was absorbed into task-352 at its design gate and that the co-author-identity check
   reports a repeated attribution pair, the same agent named twice with its email in any letter case.
 
+### merge of main (developer, 2026-11-14)
+
+`git merge --no-edit main` brought in task-338 (`287486260`) as merge `cb57e4121`, which carries the §7 pair.
+- **Conflicts.** Four test files conflicted: `test/agent/execute.test.ts` (3 hunks), `test/agent/launch.test.ts` (2),
+  `test/cli/agent-execute.integration.test.ts` (1) and `test/cli/agent-execute-launch.integration.test.ts` (1).
+  - Each is resolved as main's text, with this branch's fixture emails (`0+fake-agent@…`, `0+a@…`, in the
+    `users.noreply.github.com` form) in place of `example.com`. Nothing else changed.
+  - `git diff --stat HEAD...main -- docs/04_memory/bugs/` listed none of the three bugs with pending amendments, which
+    stayed unstaged.
+- **Auto-merged.** `docs/cli-reference.md:388` and `docs/user-guide.md` §4.2 each keep their second-level-domain
+  sentence once (`grep -c` → 1).
+- **Follow-up `cd45a5034`.** Two lines task-338 added merged without conflict but still named `fake-agent@example.com`:
+  - `launch.test.ts:169`, the `attributionLine` input. Its assertion failed against the bootstrap, which now names the
+    moved address.
+  - `execute.test.ts:68`.
+  - Both moved the same way.
+- **Left as found, on both sides before the merge:** `launch.test.ts:176-177`, `second@example.com`, a
+  `renderBootstrap` input that never reaches `DnaYaml`.
+- **Runs.** `npm run -s build` after `waitslot.sh` → exit 0, `0.3.2 (cb57e4121…)`.
+  - `npx jest test/agent/execute.test.ts test/agent/launch.test.ts test/cli/agent-execute.integration.test.ts
+    test/cli/agent-execute-launch.integration.test.ts --maxWorkers=2` → `Tests: 1 failed, 101 passed, 102 total`, the
+    `launch.test.ts:170` failure above.
+  - After `cd45a5034`: `npx jest test/agent/execute.test.ts test/agent/launch.test.ts --maxWorkers=2` → `Tests: 56
+    passed, 56 total`. The two integration suites had already passed in the first run.
+  - `npx tsc -p tsconfig.build.json --noEmit` after `waitslot.sh` → exit 0.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
