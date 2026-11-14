@@ -586,18 +586,23 @@ function authorityFindings(commit, approval, dna, dist) {
   return findings;
 }
 
+/** The index of the first line of the final paragraph of `lines`: the line after the last blank one. */
+function finalParagraphStart(lines) {
+  let lastBlank = -1;
+  lines.forEach((line, index) => {
+    if (line.trim() === '') lastBlank = index;
+  });
+  return lastBlank + 1;
+}
+
 /**
  * The `WingFoil-*` keys a commit's body writes outside its final paragraph, each once, as first written
  * (`git-conventions` §8, `bug-391`): the final paragraph is the last blank-line-separated one.
  */
 function trailerKeysOutsideFinalParagraph(body) {
   const lines = body.split('\n');
-  let lastBlank = -1;
-  lines.forEach((line, index) => {
-    if (line.trim() === '') lastBlank = index;
-  });
   const keys = new Map();
-  for (const line of lines.slice(0, lastBlank + 1)) {
+  for (const line of lines.slice(0, finalParagraphStart(lines))) {
     const key = WINGFOIL_TRAILER_RE.exec(line)?.[1];
     if (key !== undefined && !keys.has(key.toLowerCase())) keys.set(key.toLowerCase(), key);
   }
@@ -607,11 +612,7 @@ function trailerKeysOutsideFinalParagraph(body) {
 /** The lines of a commit body's final paragraph: those after its last blank line (`git-conventions` §8). */
 function finalParagraphLines(body) {
   const lines = body.split('\n');
-  let lastBlank = -1;
-  lines.forEach((line, index) => {
-    if (line.trim() === '') lastBlank = index;
-  });
-  return lines.slice(lastBlank + 1);
+  return lines.slice(finalParagraphStart(lines));
 }
 
 /**
