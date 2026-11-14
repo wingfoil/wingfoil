@@ -238,6 +238,17 @@ carry the selected `team.agents` entry through `WINGFOIL_AGENT`; the record comm
 `task-340/341/342/359`: none found. After this merge, any `agent execute` launch (the pilot) runs with the new
 bootstrap; before it, the pilot's prompt must override the attribution line (task-334 D10).
 
+
+### design gate (approver, 2026-11-14)
+
+The approver's record `fcd7cbaf8` (`git log -1 --format=%B fcd7cbaf8`) approves the design as recommended, D1 to D9,
+after the amendments `eef58cd19` (`spec-016`) and `d3812b331` (`spec-011`). Consequences for the next phases:
+- AC 7 is pinned as characterization under D3 (a): no new record field; `model: "not-reported"` is the agent's claim.
+- AC 2 is split under D4: only `WINGFOIL_AGENT` at the spawn is red-first.
+- D8: green updates `docs/agents.md:70-72` (the launched agent no longer amends wingfoil's commits).
+- D7: the BDD scenarios and the three `PLANNED` allowlist entries are committed before red, in the commit right before
+  this note (`git log -2 --format='%h %s'`).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
