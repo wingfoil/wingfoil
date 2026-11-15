@@ -384,7 +384,7 @@ wingfoil dna add <path> --value <name-or-values> [--entry-<field> <value> ...] [
 | `stacks.technologies` | `category` (required), `version`, `notes` |
 | `stacks.methodologies` | `phase`, `notes` |
 | `team.members` | `email`, `roles` (comma-separated) |
-| `team.roles` | `description` |
+| `team.roles` | `description`, `human_only` (`true`/`false`: no agent executes the role; `approver` always is human-only and may not declare `false`) |
 | `team.agents` | `email` (one address, `local@domain.tld`: the agent's `Co-Authored-By:` identity, by default the vendor's published address; a GitHub noreply address must be id-qualified, `<id>+<login>@users.noreply.github.com`; not on a reserved top-level domain, `.test`/`.example`/`.invalid`/`.localhost`, nor on `example.com`/`example.net`/`example.org` or a subdomain of one, nor on git's guessed `.(none)` domain; required when the entry has an `adapter`), `executes_as` (comma-separated), `approval_authority` (`true`/`false`), `adapter` (the agent's adapter name: lowercase letters, digits, `-` and `.`) |
 
 ```console
@@ -1269,7 +1269,11 @@ The workflows are also checked against the rest of the configuration: a phase `r
 register (in `element`, `iterate_over`, `memory.add(type: …)` or a `produces` owner), an `iterate_over`
 collection that resolves to no list, and a `cadence` event that can never fire are errors (exit `1`).
 A `{<type>.<field>}` token outside its scope, a phase whose actions its element's state machine cannot
-apply, and a `fallback` that does not match the reject it answers are warnings. Without `dna.yaml` or
+apply, a `fallback` that does not match the reject it answers, and (new in 0.4) a phase whose actions
+hold an `agent.<x>` action, such as `agent.execute`, under a role no `team.agents` entry with an `adapter`
+executes — always so for a human-only role — (`W_WORKFLOW_AGENT_ROLE_UNEXECUTED`, `phase '<name>' declares
+agent.execute under role '<role>', but no team.agents entry with an adapter executes as '<role>'`) are
+warnings. Without `dna.yaml` or
 `memory.yaml` the checks that need it cannot run: each missing file is reported as a
 `W_WORKFLOW_CHECKS_NOT_RUN` warning naming the checks that were skipped. The command fails (exit `1`)
 when `dna.yaml` or `memory.yaml` is present but invalid.
@@ -1827,7 +1831,7 @@ At least one of `--next`, `--workflow`, `--step` and `--element` is required.
 | `--workflow <ref>` | Take the step from this workflow instead: a workflow name (its most recently started open instance) or an open instance id. Implies `--next`. |
 | `--step <key>` | Take this step, which must be on the frontier of the selected workflow (`--workflow`, else the active one), e.g. `dev-loop.red@task:task-042-login-form`; without its scope (`dev-loop.red`), the one frontier step of that workflow and phase (new in 0.4): when several steps are ready at once, it is how each one's agent launches on its own step. Implies `--next`. `wingfoil workflow next` prints each `agent` step as `wingfoil agent execute --workflow <instance> --step <key>`, which runs as written. |
 | `--element <type:id>` | The element the agent works on, as `<type>:<id>`, e.g. `task:task-042-login-form`; `<id>` may be a short reference (new in 0.3.2, see [Short element references](#short-element-references)) and the run records the full id. With a step, it replaces the step's element and keeps its phase and role. |
-| `--role <role>` | The role the agent runs as: a `team.roles` name in `dna.yaml`. Without it the role is the step's; with no step, it is `developer`, and a `warning:` line says so. `approver` is refused: an agent never runs as the role that approves. |
+| `--role <role>` | The role the agent runs as: a `team.roles` name in `dna.yaml`. Without it the role is the step's; with no step, it is `developer`, and a `warning:` line says so. A human-only role is refused: `approver` (an agent never runs as the role that approves) and every role `dna.yaml` marks `human_only: true`. |
 | `--agent <name>` | The `team.agents` entry to launch. Without it, the first entry, in `dna.yaml` order, that declares an `adapter` and lists the role in `executes_as`. |
 | `--headless` | Launch the agent without a terminal, as a work run (new in 0.4, see below), whatever the step's phase declares in `launch:`. |
 | `--interactive` | Launch the agent in this terminal, whatever the step's phase declares in `launch:`. It is this command's own flag, distinct from the global `--no-interactive`, which keeps its meaning. `--headless` with `--interactive` exits `2` with `error: invalid flag combination: --headless cannot be combined with --interactive`. |
@@ -1857,8 +1861,9 @@ It reads **as committed at `HEAD`** (see [Git side effects](#git-side-effects)):
 `.wingfoil/agents/custom/`, the run log, and, with a step, the workflows and the Memory they deduce from. That commit is the run's `state_ref`. The one read outside
 it: the WingFoil MCP server it starts for the pre-flight reads your working tree's `dna.yaml` when it
 starts, so an uncommitted change there can refuse the pre-flight. In order, it checks:
-the element exists; the role is defined and is not `approver` (whichever of `--headless` and
-`--interactive` is given); an agent with an adapter runs the role; the adapter is valid; it declares the
+the element exists; the role is defined and is not human-only — `approver`, or a role `dna.yaml` marks
+`human_only: true` — (`error: role '<role>' is never executed by an agent`, whichever of `--headless` and
+`--interactive` is given; new in 0.4 for a role other than `approver`); an agent with an adapter runs the role; the adapter is valid; it declares the
 launch kind (see below; for a headless launch without `launch.headless`, `error: adapter '<name>' declares no
 headless launch`); its `command` is on `PATH` (or at its path in the project); when the adapter declares
 `mcp.conflict_args` (`codex-cli`: `codex mcp get wingfoil`), the agent's own configuration declares no MCP server

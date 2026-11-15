@@ -40,7 +40,7 @@ team:
   agents:
     - name: Fake Agent
       email: 0+fake-agent@users.noreply.github.com
-      executes_as: [ developer, reviewer, approver ]
+      executes_as: [ developer, reviewer ]
       approval_authority: false
       adapter: fake
     - name: Plain Agent

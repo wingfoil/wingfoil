@@ -1,3 +1,5 @@
+# Revised 2026-11-13 (task-340, dl-202 item 1, spec-016 §3.7 HUMAN_ONLY_ROLE): a step whose role is human-only is
+# never executed by an agent.
 # Revised 2026-10-11 (task-235 D1, approver ruling 2026-10-11, option (a)): scenario 3's message is the
 # workflow registry's (E_PHASE_ROLE_UNKNOWN, spec-003), which refuses a phase whose role dna.yaml does not
 # define before any step is taken; "step role 'ghost' not defined in dna.yaml" cannot be reached through a
@@ -32,3 +34,10 @@ Feature: P5.3.2 (US-2-07) - Agent Role Selection per Step
     When an agent executes the "Implementation" step with "--role reviewer"
     Then the agent runs under role "reviewer"
     And the run keeps the step's phase
+
+  Scenario: Error - the step's role is human-only
+    Given role "tech-lead" is declared human-only in DNA
+    And the step "Deploy" declares role "tech-lead"
+    When an agent executes the "Deploy" step
+    Then execution does not start
+    And the message is "role 'tech-lead' is never executed by an agent"

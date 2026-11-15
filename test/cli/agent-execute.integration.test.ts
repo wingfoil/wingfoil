@@ -90,7 +90,7 @@ const ROWS: readonly RefusalRow[] = [
     message: "unknown role 'ghost' (not defined in dna.yaml)",
   },
   {
-    label: 'APPROVER_ROLE, though an agent lists approver in executes_as',
+    label: 'HUMAN_ONLY_ROLE (approver)',
     args: [...FULL, '--role', 'approver'],
     message: "role 'approver' is never executed by an agent",
   },

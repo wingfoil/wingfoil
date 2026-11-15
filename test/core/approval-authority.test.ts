@@ -247,6 +247,9 @@ describe('requireApprovalAuthority — git-identity-gated CoreResult (REQ-SEC-03
   // deliberately adversarial: `approval_authority: true`, a declarative `dna.yaml` marker NO code
   // anywhere reads (`task-034`'s second rejection) — so refusing here pins both halves at once.
   // Characterization (T1): the property already holds, so this passes on first run; no red fabricated.
+  // task-340 (dl-202 item 1, approver ruling D1 (A)): `approver` is human-only, so a committed `dna.yaml` whose agent
+  // `executes_as` it no longer loads — the committed half of the guarantee became structural. The unvalidated half
+  // (the pure functions on the object) is kept; the committed half pins the load refusal (red-first, task-340 AC 1).
   it('bug-017: an agent holding `approver` via `executes_as` — even with `approval_authority: true` — gets NO approval authority', () => {
     const agentOnlyDna: DnaYaml = {
       ...REVIEWER_ONLY_DNA,
@@ -267,7 +270,14 @@ describe('requireApprovalAuthority — git-identity-gated CoreResult (REQ-SEC-03
     setLocalConfig('user.email', 'ray@example.com');
     expect(requireApprovalAuthority(dir, 'task', readGitIdentity(dir), NO_AGENT, 'memory approve')).toMatchObject({
       ok: false,
-      error: { code: 'VALIDATION', message: "user not authorized to approve type 'task'" },
+      error: {
+        code: 'VALIDATION',
+        message:
+          "cannot resolve approval authority: the committed '.wingfoil/dna.yaml' (at HEAD) is not readable as DNA: " +
+          'E_VALIDATION team.agents.0.executes_as.0 (HEAD:.wingfoil/dna.yaml): team.agents[0] \'Claude\' executes_as names the human-only role "approver" ' +
+          '(a human-only role is never executed by an agent). Approval authority is read from the committed configuration, so the committed file ' +
+          'must be valid; fix it and commit the fix, then retry.',
+      },
     });
   });
 

@@ -33,7 +33,7 @@ does, because only one kind exists:
   work: `spec-003` makes `fresh` mandatory for every `reviewer` and `qa` phase (`E_PHASE_MODE_NOT_INDEPENDENT`,
   "Execution independence", lines 315-371) and `adr-012` fixes the verdict to the `gate.report` Tool. An approver
   step is never launched at all (`APPROVER_ROLE`, §3.7 line 581: `role 'approver' is never executed by an agent`,
-  REQ-SEC-03).
+  REQ-SEC-03; since `task-340` the `HUMAN_ONLY_ROLE` row, of which `approver` is one case, `dl-202` item 1).
 - **`--next` now stops at waits.** `dl-171` (ratified 2026-10-15, `f50cbc4e`, Q1 (c), v0.4): `agent execute --next`
   refuses a step whose `awaiting` is an approval, a record or another party, with the approval line as the message.
 
@@ -86,7 +86,7 @@ same holds here: a runner that meets an interactive phase stops and says so, it 
   fixes what independence requires. Each is a field or option someone can read, which is what determinism asks of
   context-building paths (REQ-SYS-07: explicit declared config over inferred behaviour).
 - The two fixed cases are already rules (`spec-003`'s mandatory `fresh` for `reviewer`/`qa`, `REQ-SEC-03`'s
-  `APPROVER_ROLE`); this decision only says that no launch option relaxes them.
+  `APPROVER_ROLE`, `HUMAN_ONLY_ROLE` since `task-340`); this decision only says that no launch option relaxes them.
 - Refusing up front keeps every refusal before the spawn, as §3.3 orders them, and before anything is written.
 
 ## Actions

@@ -53,3 +53,33 @@ describe('task-292 AC 2 — the Claude agent executes as facilitator (committed 
     expect(picked.ok).toBe(true);
   });
 });
+
+/**
+ * task-340 AC 5 (red-first; `dl-202` item 1, `spec-002` § "Role binding" Human-only roles, approver rulings D1 (A)
+ * and D3) — this repository's committed `dna.yaml` marks `approver`, `product-owner` and `tech-lead` human-only (the
+ * roles a person executes), no other role, and raises its `version:` (the `dna update` verb writes, `dl-174`; the pin
+ * is "≥" plus the history entry naming task-340, bug-314). `Claude`'s `executes_as` is unchanged (AC 2 (T1) above).
+ */
+describe('task-340 AC 5 — the committed dna.yaml declares the human-only roles', () => {
+  it('approver, product-owner and tech-lead carry human_only: true; no other role declares it true', () => {
+    const marked = committedDna()
+      .team.roles.filter((role) => (role as { human_only?: unknown }).human_only === true)
+      .map((role) => role.name)
+      .sort();
+    expect(marked).toEqual(['approver', 'product-owner', 'tech-lead']);
+  });
+
+  it('every role an agent executes stays agent-executable (none of Claude\'s roles is marked)', () => {
+    const claude = (committedDna().team.agents ?? []).find((agent) => agent.name === 'Claude');
+    const marked = new Set(committedDna().team.roles.filter((role) => (role as { human_only?: unknown }).human_only === true).map((role) => role.name));
+    expect(claude!.executes_as.filter((role) => marked.has(role))).toEqual([]);
+  });
+
+  it('`version:` is 2.2 or later, and its history comment names task-340', () => {
+    const raw = git(REPO_ROOT, ['show', 'HEAD:.wingfoil/dna.yaml']);
+    const match = /^version: "?(\d+\.\d+)"?(.*)$/m.exec(raw);
+    expect(match).not.toBeNull();
+    expect(Number(match![1])).toBeGreaterThanOrEqual(2.2);
+    expect(match![2]).toContain('task-340');
+  });
+});

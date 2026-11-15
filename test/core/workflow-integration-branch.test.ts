@@ -310,14 +310,16 @@ describe('task-288 D5 — sw-life-cycle.yaml (1.1 → 1.2) and release-cycle.yam
  * naming task-306 and bug-428 (bug-314).
  */
 describe('task-306 AC 1 — release-publishing ends with the merge-forward phase (2.0 → 2.1)', () => {
-  it('merge-forward is the last phase: optional, role tech-lead, the approver\'s approval, the merge and one agent step, no checks or produces', () => {
+  // task-340 (dl-202 item 2, approver ruling D2 (a)): no agent executes tech-lead, so the phase's agent step is
+  // dropped (release-publishing 2.2 → 2.3); the work is the human tech-lead's, as the description states.
+  it('merge-forward is the last phase: optional, role tech-lead, the approver\'s approval, the merge and no agent step, no checks or produces', () => {
     const wf = workflow('release-publishing');
     expect(wf.phases[wf.phases.length - 1]?.name).toBe('merge-forward');
     const phase = phaseOf(wf, 'merge-forward');
     expect(phase.optional).toBe(true);
     expect(phase.role).toBe('tech-lead');
     expect(phase.approval).toEqual({ by_role: 'approver' });
-    expect(phase.actions).toEqual(['git.merge(from: integration_branch, ff: false)', 'agent.execute']);
+    expect(phase.actions).toEqual(['git.merge(from: integration_branch, ff: false)']);
     expect(phase.checks).toBeUndefined();
     expect(phase.produces).toBeUndefined();
   });
@@ -389,5 +391,32 @@ describe('task-319 — on-integration-branch: the binding comment, the version a
     expect(releases.length).toBeGreaterThanOrEqual(8);
     const refused = releases.filter(({ kind, version }) => !pattern.test(version) || !integrationBranch({ kind, version }).ok);
     expect(refused).toEqual([]);
+  });
+});
+
+/**
+ * task-340 AC 5 (red-first; `dl-202` item 2, `spec-003` § "Diagnostics" `W_WORKFLOW_AGENT_ROLE_UNEXECUTED`, approver
+ * ruling D2 (a)) — the two `agent.execute` actions `release-publishing` held under `tech-lead`, a role no agent executes
+ * (this repository marks it human-only), are dropped: `publish` keeps the approver's action, `merge-forward` the merge
+ * (pinned above). Read at `HEAD`; the version pin is "≥" plus the history entry naming task-340 (bug-314).
+ */
+describe('task-340 AC 5 — release-publishing declares no agent step under tech-lead (2.2 → 2.3)', () => {
+  it('publish: role tech-lead, only the approver\'s action', () => {
+    const phase = phaseOf(workflow('release-publishing'), 'publish');
+    expect(phase.role).toBe('tech-lead');
+    expect(phase.actions).toEqual(['approver.execute(command: "npm stage approve <stage-id>")']);
+  });
+
+  it('no phase of release-publishing holds an agent.* action under tech-lead', () => {
+    const offenders = workflow('release-publishing').phases.filter(
+      (phase) => phase.role === 'tech-lead' && (phase.actions ?? []).some((action) => /^agent\./.test(action)),
+    );
+    expect(offenders.map((phase) => phase.name)).toEqual([]);
+  });
+
+  it('`version:` is 2.3 or later, with a 2.3 entry naming task-340', () => {
+    const { value, rest } = versionLine(atHead(PUBLISHING_FILE));
+    expect(value).toBeGreaterThanOrEqual(2.3);
+    expect(historyEntry(rest, '2.3', 'task-340')).toBeDefined();
   });
 });

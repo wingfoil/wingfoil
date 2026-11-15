@@ -148,6 +148,7 @@ const AgentEntry = z.object({
 const RoleEntry = z.object({
   name:        z.string(),              // [SPEC: REQ-SYS-08] canonical role name
   description: z.string().optional(),   // [AUTHORING]
+  human_only:  z.boolean().optional(),  // [SPEC: dl-202 item 1] no agent executes the role (Human-only roles)
 }).passthrough();
 
 const Team = z.object({
@@ -223,10 +224,27 @@ single source of truth for "what roles exist" (BDD `P4.20` — role not defined 
 execute under a role but never hold approval authority; `agents[].approval_authority`, when present,
 is always `false`.
 
+**Human-only roles** (`dl-202` item 1). Which roles an agent may execute is declared per role, not
+inferred: a `team.roles` entry with `human_only: true` names a role only a person executes. `approver` is
+human-only whatever its entry says — it is the role that holds approval authority (`REQ-SEC-03`, `dl-094`) —
+so it needs no declaration, and `human_only: false` on it is a load error at `team.roles[<j>].human_only`,
+message `team.roles[<j>] "approver" may not declare human_only: false (the approver role is always
+human-only, REQ-SEC-03)`. Every other role is human-only exactly when its entry declares `human_only:
+true`; an absent key reads as `false`. A `team.agents[].executes_as` naming a human-only role is a load
+error at `team.agents[<i>].executes_as[<k>]`, message `team.agents[<i>] '<name>' executes_as names the
+human-only role "<role>" (a human-only role is never executed by an agent)`; like the undefined-role rule
+above, it is part of `Team`'s same-document refinement. One predicate, `isHumanOnlyRole` (`src/dna/roles.ts`),
+answers the question for `agent execute`, which refuses a human-only role before any side effect (`spec-016` §3.2
+step 4, §3.7 `HUMAN_ONLY_ROLE`). The workflow check `W_WORKFLOW_AGENT_ROLE_UNEXECUTED` (`spec-003` § "Diagnostics")
+does not read it: it reports an `agent.<x>` action under a role no `team.agents` entry with an `adapter` executes, and
+since the load error above keeps a human-only role out of every `executes_as`, a human-only role is always reported. The field is additive and optional, so `format` stays `1`: a build that predates it loads a file
+carrying it and warns that the field is ignored (*Unknown keys* below).
+
 `team.roles` is **not** delegated to `.wingfoil/roles.yaml`: that file *binds directives to roles*
-(P3.2/P3.7) — it is keyed by role name but does not define the role set. It omits `facilitator` and
-`approver` (which carry no directive bindings) and carries no per-role `description`, so it cannot
-serve as the catalogue. `dna.yaml` therefore remains the authoritative role registry.
+(P3.2/P3.7) — it is keyed by role name but does not define the role set. It need not bind every role
+(it bound neither `facilitator` nor `approver` until `task-215`; today its `assignments` bind all eight
+`team.roles` names), and it carries no per-role `description`, so it
+cannot serve as the catalogue. `dna.yaml` therefore remains the authoritative role registry.
 
 ### Unknown keys: accepted on read, refused on write
 
@@ -529,3 +547,21 @@ the attribution audit (`isValidAttribution`, REQ-SEC-02) counts such an author a
 audit still agree. `team.members` emails are unaffected: no such rule applies to them. A document valid before stays
 valid unless an agent's email is on one of those domains. Edited in place without a supersede or a state change
 (`dl-047`).
+
+**Revision (2026-11-13, `task-340`)
+— Role binding: human-only roles, per `dl-202` item 1.** `RoleEntry` gains the optional `human_only` boolean; `approver`
+is human-only without a declaration and may not declare `false`; a `team.agents[].executes_as` naming a human-only role is
+a load error naming the entry and the role. The Zod listing gains the field. A document valid before stays valid unless
+an agent lists `approver` in `executes_as` (which `agent execute` already refused at launch, `spec-016` §3.7) or lists a
+role its project marks human-only. Role binding's sentence on `roles.yaml` no longer says it omits `facilitator` and
+`approver`, which it binds since `task-215`. No `format` bump: the pinned build 0.3.2 loads a `dna.yaml` carrying the key with
+`warning: .wingfoil/dna.yaml: unknown field(s) ignored: team.roles[<j>].human_only, …` and exit `0` (checked at
+`task-340`'s design, `dl-205` Q1 (a)). Edited in place without a supersede or a state change (`dl-047`), pending the
+approver's `memory amend` at `task-340`'s design gate.
+
+**Revision (2026-11-14, `task-340`)
+— Role binding: who reads `isHumanOnlyRole`.** The Human-only roles paragraph said the predicate answers the question
+for the workflow check `W_WORKFLOW_AGENT_ROLE_UNEXECUTED` too; that check reads `team.agents` (an entry with an
+`adapter` that lists the role), and reports a human-only role always because the load error keeps it out of every
+`executes_as`. The sentence now says so; no rule changes. Edited in place without a supersede or a state change
+(`dl-047`), pending the approver's `memory amend` at `task-340`'s review.
