@@ -45,7 +45,7 @@ function writeDoc(repo: string, status: string): void {
  */
 function makeAttributedRepo(): string {
   const dir = makeTempGitRepo();
-  git(dir, ['config', 'user.email', 'wf-test@example.org']);
+  git(dir, ['config', 'user.email', '0+wf-test@users.noreply.github.com']);
   return dir;
 }
 
@@ -71,7 +71,7 @@ describe('P1.2 — Every state change records author and timestamp (BDD scenario
     expect(entries.every((e) => e.valid)).toBe(true);
     for (const entry of entries) {
       expect(entry.authorName).toBe('WingFoil Test');
-      expect(entry.authorEmail).toBe('wf-test@example.org');
+      expect(entry.authorEmail).toBe('0+wf-test@users.noreply.github.com');
       expect(entry.date).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:Z|[+-]\d{2}:\d{2})$/);
     }
 

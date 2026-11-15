@@ -90,7 +90,7 @@ const ROWS: readonly RefusalRow[] = [
     message: "unknown role 'ghost' (not defined in dna.yaml)",
   },
   {
-    label: 'APPROVER_ROLE, though an agent lists approver in executes_as',
+    label: 'HUMAN_ONLY_ROLE (approver)',
     args: [...FULL, '--role', 'approver'],
     message: "role 'approver' is never executed by an agent",
   },
@@ -250,7 +250,7 @@ function bootstrapOf(role: string, element: string, runId: string, stateRef: str
     `registered for this session. Load it before any other action: Read the MCP resource "wingfoil://session/${role}/${element}/${stateRef}".`,
     `Run WingFoil commands as "wingfoil <command>": the build that launched you is first on your PATH, and "wingfoil --version" prints "${distBuildStamp()}"; if it prints anything else, run "$WINGFOIL_CLI" in place of "wingfoil".`,
     handoff,
-    `Commits wingfoil writes for you already end with "Co-Authored-By: Fake Agent <fake-agent@example.com>" and an "AI-Model:" trailer: pass --ai-model <your model identifier> to each wingfoil command that writes a commit, or that trailer records "AI-Model: not-reported"; end a commit you write yourself with git commit with the trailer paragraph "Co-Authored-By: Fake Agent <fake-agent@example.com>" and "AI-Model: <your model identifier>"; never run memory approve, memory reject or memory amend, which refuse in your session (git-conventions §7).`,
+    `Commits wingfoil writes for you already end with "Co-Authored-By: Fake Agent <0+fake-agent@users.noreply.github.com>" and an "AI-Model:" trailer: pass --ai-model <your model identifier> to each wingfoil command that writes a commit, or that trailer records "AI-Model: not-reported"; end a commit you write yourself with git commit with the trailer paragraph "Co-Authored-By: Fake Agent <0+fake-agent@users.noreply.github.com>" and "AI-Model: <your model identifier>"; never run memory approve, memory reject or memory amend, which refuse in your session (git-conventions §7).`,
     '',
   ].join('\n');
 }

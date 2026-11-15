@@ -171,6 +171,20 @@ above it to uncomment in its place, or run:
 wingfoil dna add team.agents --value claude --entry-executes_as developer,reviewer --entry-approval_authority false
 ```
 
+**Human-only roles** (new in 0.4). Some roles only a person executes. `approver` always is one; mark any
+other with `human_only: true`, and `dna.yaml` refuses to load if an agent's `executes_as` names it
+(`team.agents[<i>] '<name>' executes_as names the human-only role "<role>" …`). `wingfoil agent execute`
+refuses to launch an agent as such a role (`error: role '<role>' is never executed by an agent`), and
+`wingfoil workflow list` warns about a phase that gives an `agent.execute` action to a role no agent with an
+`adapter` executes (`W_WORKFLOW_AGENT_ROLE_UNEXECUTED`):
+
+```bash
+wingfoil dna update team.roles.tech-lead --entry-human_only true
+```
+
+`human_only` says who may *execute* a role, nothing about who may approve: approval stays with the
+`approver` role.
+
 **Agent commit identity.** An agent entry may also carry an `email`; with its
 `name`, it is the identity written in the `Co-Authored-By: <name> <<email>>` trailer of the commits the
 agent co-authors (WingFoil's own `git-conventions` directive adds an `AI-Model:` trailer with the model
@@ -191,7 +205,8 @@ ways to fill it:
 
 An agent's `name` may not be empty or blank, nor contain `<`, `>` or a line break, since it is written
 into the trailer. An `email` on a top-level domain RFC 2606 reserves (`.test`, `.example`, `.invalid`,
-`.localhost`), or carrying git's guessed `.(none)` domain, is refused: no mailbox exists there, and
+`.localhost`), on `example.com`, `example.net`, `example.org` or a subdomain of one, or carrying git's guessed
+`.(none)` domain, is refused: no mailbox exists there, and
 WingFoil's attribution audit treats such an identity as unattributed. The `email` is required on an entry that declares an `adapter`: that
 agent can be launched, and every commit it co-authors names it.
 

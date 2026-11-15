@@ -148,7 +148,7 @@ describe('the attribution line (§2.4 as amended by task-338, spec-018 Consequen
     runId: 'task-001-a/adhoc/1',
     stateRef: SHA,
     handoff: handoffLine(true),
-    agent: { name: 'Fake Agent', email: 'fake-agent@example.com' },
+    agent: { name: 'Fake Agent', email: '0+fake-agent@users.noreply.github.com' },
     build: '9.9.9 (0123abc)',
   };
 
@@ -160,13 +160,13 @@ describe('the attribution line (§2.4 as amended by task-338, spec-018 Consequen
     const lines = renderBootstrap(input).split('\n');
     expect(lines[lines.length - 1]).toBe('');
     expect(lines[lines.length - 2]).toBe(
-      `${ATTRIBUTION_LINE_PREFIX} "Co-Authored-By: Fake Agent <fake-agent@example.com>" and an "AI-Model:" trailer: pass --ai-model <your model identifier> to each wingfoil command that writes a commit, or that trailer records "AI-Model: not-reported"; end a commit you write yourself with git commit with the trailer paragraph "Co-Authored-By: Fake Agent <fake-agent@example.com>" and "AI-Model: <your model identifier>"; never run memory approve, memory reject or memory amend, which refuse in your session (git-conventions §7).`,
+      `${ATTRIBUTION_LINE_PREFIX} "Co-Authored-By: Fake Agent <0+fake-agent@users.noreply.github.com>" and an "AI-Model:" trailer: pass --ai-model <your model identifier> to each wingfoil command that writes a commit, or that trailer records "AI-Model: not-reported"; end a commit you write yourself with git commit with the trailer paragraph "Co-Authored-By: Fake Agent <0+fake-agent@users.noreply.github.com>" and "AI-Model: <your model identifier>"; never run memory approve, memory reject or memory amend, which refuse in your session (git-conventions §7).`,
     );
     expect(lines[lines.length - 3]).toBe(handoffLine(true));
   });
 
   it('task-338 AC 3 — attributionLine is that line, and never names the old placeholder or an amend (bug-370)', () => {
-    const line = attributionLine({ name: 'Fake Agent', email: 'fake-agent@example.com' });
+    const line = attributionLine({ name: 'Fake Agent', email: '0+fake-agent@users.noreply.github.com' });
     expect(renderBootstrap(input).split('\n')).toContain(line);
     expect(line).not.toContain('<the model identifier you run as>');
     expect(line).not.toContain('--amend');

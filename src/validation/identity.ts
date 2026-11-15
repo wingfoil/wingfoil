@@ -11,7 +11,7 @@
  * followed by {@link isAttributableIdentity}, and nothing else; `AgentEntry` refuses a blank name and every
  * email {@link attributionEmailIssue} reports, and its own address shape admits no whitespace. So an agent
  * identity `dna.yaml` accepts is one the audit accepts too — the schema may be stricter (angle brackets,
- * bare GitHub noreply logins), never looser — and a later refinement of this rule (`bug-193`: the RFC 2606
+ * bare GitHub noreply logins), never looser — and a refinement of this rule (`bug-193`, task-352: the RFC 2606
  * second-level domains) reaches both. It lives in `src/validation` because both modules already depend on
  * it and on nothing of each other's.
  *
@@ -39,14 +39,23 @@ const GIT_GUESSED_DOMAIN_MARKER = '.(none)';
 const RFC2606_RESERVED_TLDS: readonly string[] = ['invalid', 'example', 'test', 'localhost'];
 
 /**
- * Whether `email`'s domain is, or ends in, an RFC 2606 reserved top-level domain (case-insensitive).
- * Only the top-level label counts — `test.example.com` is an ordinary domain.
+ * RFC 2606 §3 reserves these three second-level domains for documentation and examples (`bug-193`, task-352). No
+ * mailbox exists under them nor under their subdomains, so an identity on one is a placeholder too.
+ */
+const RFC2606_RESERVED_SECOND_LEVEL_DOMAINS: readonly string[] = ['example.com', 'example.net', 'example.org'];
+
+/**
+ * Whether `email`'s domain is, or ends in, an RFC 2606 reserved top-level domain, or is one of the reserved
+ * second-level domains `example.com`, `example.net`, `example.org` or a subdomain of one (case-insensitive, a
+ * trailing dot ignored). The match is label-bounded: `mail.example.org` is reserved, `notexample.com` and
+ * `example.com.au` are not.
  */
 export function hasReservedDomain(email: string): boolean {
   // A trailing dot is the fully-qualified spelling of the same domain (`foo.test.` is `foo.test`).
   const domain = email.slice(email.lastIndexOf('@') + 1).toLowerCase().replace(/\.+$/, '');
   const tld = domain.slice(domain.lastIndexOf('.') + 1);
-  return RFC2606_RESERVED_TLDS.includes(tld);
+  if (RFC2606_RESERVED_TLDS.includes(tld)) return true;
+  return RFC2606_RESERVED_SECOND_LEVEL_DOMAINS.some((reserved) => domain === reserved || domain.endsWith(`.${reserved}`));
 }
 
 /** Whether `name` is empty or holds only whitespace — a name no identity is recognisable by. */
@@ -59,8 +68,8 @@ export type AttributionEmailIssue = 'guessed-domain' | 'malformed' | 'reserved-d
 
 /**
  * Why `email` is not an attributable address, checked in this order: git's guessed-domain marker
- * (`.(none)`), an address outside {@link ATTRIBUTION_EMAIL_RE}, an RFC 2606 reserved top-level domain
- * ({@link hasReservedDomain}). `null` when none applies.
+ * (`.(none)`), an address outside {@link ATTRIBUTION_EMAIL_RE}, an RFC 2606 reserved top-level or second-level
+ * domain ({@link hasReservedDomain}). `null` when none applies.
  */
 export function attributionEmailIssue(email: string): AttributionEmailIssue | null {
   if (email.includes(GIT_GUESSED_DOMAIN_MARKER)) return 'guessed-domain';

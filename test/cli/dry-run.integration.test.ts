@@ -92,7 +92,7 @@ function buildFixture(): string {
     dnaPath,
     dna.replace(
       '    - name: approver\n',
-      '    - name: approver\n  agents:\n    - name: Fake Agent\n      email: fake-agent@example.com\n      executes_as: [developer]\n      adapter: fake\n',
+      '    - name: approver\n  agents:\n    - name: Fake Agent\n      email: 0+fake-agent@users.noreply.github.com\n      executes_as: [developer]\n      adapter: fake\n',
     ),
   );
   const fixtures = join(__dirname, '..', 'fixtures', 'agents');

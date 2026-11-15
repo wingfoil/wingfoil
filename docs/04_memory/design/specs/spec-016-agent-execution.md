@@ -494,7 +494,7 @@ wingfoil agent execute [--next] [--workflow <ref>] [--step <key>] [--element <ty
 | `--workflow <ref>` | `spec-017` §3.3 (the shared selector), `REQ-STATE-03` | Selects the instance whose next step is taken: `<ref>` is a workflow name (its most recently started open instance) or an open instance id, exactly as `spec-017` §3.3 resolves the positional `<ref>` of `workflow next`. It implies `--next`, so the `agent` binding's argv `wingfoil agent execute --workflow <instance-id> --step <key>` (`spec-017` §6.1) is complete as written; giving `--next` as well changes nothing. `agent execute` has no positional to spare, so the selector is an option here; there is no `--name` spelling (`spec-017` OQ-2). |
 | `--step <key>` | approver ruling R16, 2026-09-30, `release-planning-rel-v0.3-plan`; `spec-017` §4.9, §6.1 | Selects the step: a `spec-017` §4.9 step key, which must be on the frontier of the instance `--workflow` selects, else of the active instance; a key without its scope names the one frontier step of that workflow and phase (`spec-017` §4.9, `bug-468`). It implies `--next`. Without it the step is `NextResult.next`. It is what lets each frontier step's `agent` binding launch on its own step when the frontier holds several (parallel `dev-loop`s, `dl-014`), mirroring `memory add --workflow <ref> --step <key>` (`spec-017` §7.10) and `workflow finalize --step <key>` (`spec-017` §7.9). |
 | `--element <type>:<id>` | P5.3.1, BDD sc. 2; element-ref per `spec-008` §7 | The target element. With `--next`, it overrides the step's element and keeps its phase and role. |
-| `--role <role>` | `X_cli-cmds.md` § "Agent Execution Commands" (the `wingfoil agent execute` row) and § "Parameters for Agent Execution" (the `--role` row) | Overrides the role. It must be a `dna.yaml` `team.roles` name (P5.4.1). |
+| `--role <role>` | `X_cli-cmds.md` § "Agent Execution Commands" (the `wingfoil agent execute` row) and § "Parameters for Agent Execution" (the `--role` row) | Overrides the role. It must be a `dna.yaml` `team.roles` name (P5.4.1), and not a human-only one (§3.2 step 4). |
 | `--agent <name>` | **new**; not in the BDD or in `X_cli-cmds` | Picks a `team.agents` entry. Default: the first entry, in declared order, whose `executes_as` contains the role and that declares an `adapter`. |
 | `--headless` | `dl-183` Q2 (a), `dl-181` (v0.4) | Launch the work run without a terminal (§3.5), whatever the phase's `launch` says (§3.2 step 7). |
 | `--interactive` | `dl-183` Q2 (a) (v0.4) | Launch interactively (§3.3, §3.4), whatever the phase's `launch` says. It is this command's launch kind, not the prompting behaviour of `spec-008` §2's negatable `--no-interactive`, which keeps its meaning here. |
@@ -586,9 +586,12 @@ In this order, each a gating read at `HEAD` (`spec-006` §6):
    (approver ruling R18, 2026-09-30, `release-planning-rel-v0.3-plan`; it keeps P5.3.1 scenario 2 passing as written):
    `warning: no --role given and no workflow step to take one from: running as the default role 'developer'`.
    The role must be in `team.roles`.
-4. **Agent**: per §3.1 `--agent`. The role `approver` is never executed by an agent, even when an
-   agent lists it in `executes_as`: it is the role that holds approval authority (`REQ-SEC-03`;
-   `team.agents[].approval_authority: false`, `.wingfoil/dna.yaml:123-128`) → `APPROVER_ROLE`. With
+4. **Agent**: per §3.1 `--agent`. A human-only role (`spec-002` § "Role binding", `dl-202` item 1: `approver`
+   always, the role that holds approval authority, `REQ-SEC-03`; and every role whose `team.roles` entry declares
+   `human_only: true`) is never executed by an agent → `HUMAN_ONLY_ROLE`, of which the `approver` case is the
+   former `APPROVER_ROLE`. It is decided before the agent is selected, so it holds whatever `--role`, `--agent` or
+   launch kind is given; and since `dna.yaml` refuses a `team.agents[].executes_as` that names a human-only role
+   (a load error, `spec-002`), no agent entry can claim one. With
    `--agent`, that agent's `executes_as` must contain the role; without it, the first agent with an
    `adapter` whose `executes_as` contains the role is taken, and if there is none → `NO_AGENT`.
    **The entry selected here is the identity that signs** (`dl-158` Rule 1 (a)): the launched agent
@@ -606,7 +609,7 @@ In this order, each a gating read at `HEAD` (`spec-006` §6):
    independence", release boundaries) and reads the records' `session` field. The record carries the
    mode that ran.
 7. **Launch kind** (`dl-183`, v0.4): `interactive` or `headless`. The two cases no option relaxes are checked
-   before it: an `approver` step is never launched (step 4, `APPROVER_ROLE`, whatever option is given), and a
+   before it: a step whose role is human-only is never launched (step 4, `HUMAN_ONLY_ROLE`, whatever option is given), and a
    verification run is always headless and fresh, chosen by the engine (v1.0, P4.12, §3.5). Then, in this order of
    precedence (`dl-183` Q2 (a)): `--headless` or `--interactive`; else the step's phase `launch` (`spec-003`
    Layer 2) when it is `interactive` or `headless`; else `interactive` — for a stepless run, for a phase that
@@ -633,7 +636,8 @@ repository.
    before any resolution refusal. The stepless form resolves no step, reads no workflow file and prints none. `roles.yaml` and the
    directives are read by the context builder at step 7, so a missing `roles.yaml` is step 7's
    `INVALID_CONTEXT`.
-3. Resolve (§3.2).
+3. Resolve (§3.2). A human-only role is refused here (§3.2 step 4), before the adapter is probed and before any
+   file is written.
 4. The adapter declares the launch kind §3.2 step 7 resolved (`launch.headless` for `headless`) → else
    `NO_LAUNCH_KIND` (`dl-183` Q3 (a): refused, never a fallback to the other kind); then the `command` of the
    adapter found on `PATH` (or at its repository path) → else `AGENT_NOT_FOUND`; then, when the adapter declares
@@ -779,6 +783,7 @@ in what ends them (`dl-181`):
 
 - **The work run** (v0.4, `dl-181`, `dl-183`): an agent does work alone — implements a task, writes a
   document, fixes a bug. It is selected by `--headless`, or by the step's phase `launch: headless` (§3.2 step 7).
+  A human-only role is refused for it as for an interactive launch (§3.2 step 4, `HUMAN_ONLY_ROLE`).
   It has no verdict: its outcome is the commits the agent made and the record's `exit_status`, and the
   record's `result` is `n/a`, as for an interactive launch (`dl-181` Q1 (a)). Its stdio is §3.3 step 14's
   and its signals step 15's; `--timeout` bounds it. On success stdout carries `{ "run": <record> }` as the
@@ -828,7 +833,7 @@ in what ends them (`dl-181`):
 | `NO_STEP_ROLE` | `VALIDATION` | `1` | `step '<key>' declares no role: give --role <role>` |
 | step role not in DNA | `VALIDATION` | `1` | `step role '<r>' not defined in dna.yaml` — a defence, reached only by a step deduced without `spec-003`'s role check: against the same committed `dna.yaml` the registry already refuses such a phase at step 2 (`E_PHASE_ROLE_UNKNOWN`, `unknown role '<r>' (not defined in dna.yaml)`, the row above), which is what a repository shows and what P5.3.2 sc. 3 expects (approver ruling 2026-10-11) |
 | `--role` not in DNA | `VALIDATION` | `1` | `unknown role '<r>' (not defined in dna.yaml)` (P5.4.2 sc. 3 text) |
-| `APPROVER_ROLE` | `VALIDATION` | `1` | `role 'approver' is never executed by an agent` (`REQ-SEC-03`) |
+| `HUMAN_ONLY_ROLE` (the role is human-only, `spec-002` § "Role binding"; its `approver` case was `APPROVER_ROLE`) | `VALIDATION` | `1` | `role '<r>' is never executed by an agent` (`dl-202` item 1) — for `approver`, `role 'approver' is never executed by an agent` (`REQ-SEC-03`), unchanged |
 | `NO_AGENT` (no `--agent`, and no agent with an adapter executes the role) | `VALIDATION` | `1` | `no agent in dna.yaml with an adapter executes as role '<r>'` |
 | `--agent` names no agent, or one whose `executes_as` lacks the role | `VALIDATION` | `1` | `unknown agent '<name>'` / `agent '<name>' does not execute as role '<r>'` |
 | `NO_ADAPTER` (`--agent` names an agent without `adapter`) | `VALIDATION` | `1` | `agent '<name>' declares no adapter` |
@@ -1530,6 +1535,14 @@ their ids as history; the record's `model` says whether WingFoil read a model, s
 `AI-Model:` trailers as its own claim (`bug-370`). The cross-references this needs: §3.3 step 14's environment
 sentence names §2.4's changes, §3.6 lists the salt, and the Consequences' determinism bullets follow. Edited in place
 without a supersede or a state change (`dl-047`), pending the approver's `memory amend` at `task-338`'s design gate.
+
+**Revision (2026-11-13, `task-340`)
+— §3.1, §3.2 steps 4 and 7, §3.3 step 3, §3.5, §3.7: the human-only refusal, per `dl-202` item 1.** The `approver` rule
+becomes a case of a rule on every human-only role (`spec-002` § "Role binding", the same revision): §3.7's
+`APPROVER_ROLE` row is `HUMAN_ONLY_ROLE`, message `role '<r>' is never executed by an agent`, which for `approver` is
+the message it had; it stays at §3.2 step 4, before the agent selection, so before any probe or file. §3.1's `--role`
+row, §3.3 step 3 and §3.5's work run name it. No other row, no exit code and no step order changes. Edited in place
+without a supersede or a state change (`dl-047`), pending the approver's `memory amend` at `task-340`'s design gate.
 
 **Revision (2026-11-13, `task-353-let-agent-execute-launch-in-a-task-worktree-and-report-an-agent-stopped-at-its-cli-s-folder-trust-prompt`)
 — §2.2, §2.8, §3.1, §3.2, §3.3, §3.5, §3.7, §4.2 and §5.** (1) `bug-499`: §3.1 says where the agent runs — the

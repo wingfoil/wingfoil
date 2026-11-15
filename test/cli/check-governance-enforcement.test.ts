@@ -68,6 +68,11 @@ team:
     - name: ${DEVELOPER.name}
       email: ${DEVELOPER.email}
       roles: [ developer ]
+  agents:
+    # task-352: the agent entry this repository's dna.yaml declares, so a Co-Authored-By: Claude trailer is known.
+    - name: Claude
+      email: noreply@anthropic.com
+      executes_as: [ developer ]
   roles:
     - name: approver
     - name: developer
@@ -336,6 +341,8 @@ describe('per-check introduction (dl-103 §1 starting mode, per check)', () => {
       'trailer-paragraph': 'governance-check:trailer-paragraph',
       // task-358 (bug-320, approver ruling D2 (a) (i)): a wf(plan): finalize whose plan has no ### Retrospective entry.
       'plan-retrospective': 'governance-check:plan-retrospective',
+      // task-352 (bug-475, bug-535): a Co-Authored-By outside team.agents and team.members, or a duplicated pair.
+      'co-author-identity': 'governance-check:co-author-identity',
     });
   });
 

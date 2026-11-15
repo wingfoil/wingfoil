@@ -285,8 +285,8 @@ function agentRunSteps(template) {
       commit: 'smoke: the fake adapter custom/fake (spec-016 §2.7)',
     },
     {
-      // `.invalid` is refused for an agent's email (bug-261), so the agent is not the smoke's own identity.
-      args: ['dna', 'add', 'team.agents', '--value', 'Fake Agent', '--entry-email', 'fake-agent@example.com', '--entry-executes_as', 'developer', '--entry-adapter', 'fake'],
+      // RFC 2606 domains are refused for an agent's email (bug-261, bug-193), so the agent is not the smoke's own identity.
+      args: ['dna', 'add', 'team.agents', '--value', 'Fake Agent', '--entry-email', '0+fake-agent@users.noreply.github.com', '--entry-executes_as', 'developer', '--entry-adapter', 'fake'],
       exit: 0,
     },
     { args: ['agent', 'execute', '--element', 'task:{agent.id}', '--role', 'developer'], exit: 0, fakeAgent: true },

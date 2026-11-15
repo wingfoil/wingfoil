@@ -139,6 +139,20 @@ assignments:
 global: []
 `;
 
+/**
+ * task-340 (`dl-202` item 2, `spec-003` § "Diagnostics"): `dev-loop.red` holds `agent.execute` under `qa`, which no
+ * agent with an adapter executes, so every deduction over this registry carries one `W_WORKFLOW_AGENT_ROLE_UNEXECUTED`
+ * warning (the message is `spec-003`'s row, as the design's prototype printed it).
+ */
+const RED_UNEXECUTED = {
+  code: 'W_WORKFLOW_AGENT_ROLE_UNEXECUTED',
+  severity: 'warning',
+  file: 'workflows/custom/dev-loop.yaml',
+  path: 'phases[1].actions[0]',
+  message: "phase 'red' declares agent.execute under role 'qa', but no team.agents entry with an adapter executes as 'qa'",
+};
+const RED_UNEXECUTED_WARNING = `${RED_UNEXECUTED.code} (${RED_UNEXECUTED.file}): ${RED_UNEXECUTED.message}`;
+
 function writeProject(root: string, runs: string | null = 'docs/runs/'): void {
   const workflows: Record<string, string> = {
     'workflows/custom/release-cycle.yaml': RELEASE_CYCLE,
@@ -346,7 +360,9 @@ describe('task-240 AC 2 — waiting: agent-role frontier steps of every open ins
   it('lists only the agent-role steps, in frontier order, each with the agents that execute the role and declare an adapter, in DNA order', async () => {
     const value = await listed(repo, { waiting: true });
     expect(value.baseline).toEqual({ rev: 'HEAD', commit: head(repo) });
-    expect(Object.keys(value)).toEqual(['baseline', 'waiting', 'diagnostics']);
+    expect(Object.keys(value)).toEqual(['baseline', 'waiting', 'diagnostics', 'warnings']);
+    expect(value.diagnostics).toEqual([RED_UNEXECUTED]);
+    expect(value.warnings).toEqual([RED_UNEXECUTED_WARNING]);
     expect(value.waiting).toEqual([
       {
         instance: 'pl-1',
@@ -406,7 +422,9 @@ describe('task-240 AC 3 — no flag, or both flags, shows both sections (spec-01
     ['both flags', { past: true, waiting: true }],
   ])('%s → baseline, past, waiting and diagnostics; console prints both sections, past first', async (_name, request) => {
     const value = await listed(repo, request);
-    expect(Object.keys(value)).toEqual(['baseline', 'past', 'waiting', 'diagnostics']);
+    expect(Object.keys(value)).toEqual(['baseline', 'past', 'waiting', 'diagnostics', 'warnings']);
+    expect(value.diagnostics).toEqual([RED_UNEXECUTED]);
+    expect(value.warnings).toEqual([RED_UNEXECUTED_WARNING]);
     expect(value.past!.map((record) => record.id)).toEqual(['task-a/green/1']);
     expect(value.waiting!.map((step) => step.key)).toEqual(['planning.commit-backlog@release:minor-2']);
     expect(render(value)).toBe(

@@ -1,7 +1,7 @@
 # CLI Commands Reference — WingFoil
 
-**Version:** 2.3
-**Date:** 2026-11-13  
+**Version:** 2.4
+**Date:** 2026-11-14  
 **Status:** Approved
 
 ---
@@ -94,7 +94,7 @@ decomposition, and `dl-082` fixed the spelling.
 |-----------|------|-------------|-------------|-------------|-------------|
 | `<path>` | path | **Positional**, and the only positional a write verb reads. The full dotted path to the target — `project.license`, `stacks.technologies`, `modules.core.path`. Never a bare field name: `team.roles` and `team.members.<name>.roles` are different fields | User specifies in the command | Resolved against the `dna.yaml` schema; an undeclared path is refused (exit `1`) | `.wingfoil/dna.yaml` nested keys |
 | `--value` | string/array | The new entry's **identity** when `<path>` ends at a collection; the new **value** when it ends at a leaf. Comma-separated where the field is a list of values | User input (flag) | Validated against DNA schema | `.wingfoil/dna.yaml` |
-| `--entry-<field>` | string/array | One option per field the entry schema declares — `--entry-description`, `--entry-path`, `--entry-category`, `--entry-version`, `--entry-notes`, `--entry-phase`, `--entry-email`, `--entry-roles`, `--entry-executes_as`, `--entry-approval_authority`, `--entry-adapter`. Accepted by `add` and `update` | User input (flag) | The `entry-` prefix is required; it keeps this derived namespace disjoint from the global flags (`spec-008` §9). `--entry-adapter` names a `team.agents` entry's adapter (`task-138`) | `.wingfoil/dna.yaml` entry fields |
+| `--entry-<field>` | string/array | One option per field the entry schema declares — `--entry-description`, `--entry-path`, `--entry-category`, `--entry-version`, `--entry-notes`, `--entry-phase`, `--entry-email`, `--entry-roles`, `--entry-executes_as`, `--entry-approval_authority`, `--entry-adapter`, `--entry-human_only`. Accepted by `add` and `update` | User input (flag) | The `entry-` prefix is required; it keeps this derived namespace disjoint from the global flags (`spec-008` §9). `--entry-adapter` names a `team.agents` entry's adapter (`task-138`) | `.wingfoil/dna.yaml` entry fields |
 | `--force` | flag | On `set`, `add`, `update`, `remove`: authorizes rewriting the whole `dna.yaml` when the in-place edit cannot express the change | User specifies via flag | Without it that case is refused; with it the success carries a warning (`spec-008` §12) | `.wingfoil/dna.yaml` |
 | `[<section>]` | enum | **Positional** on `dna show`: one top-level DNA key — `project`, `modules`, `stacks`, `team`, `paths` | User specifies, or omits to show all | Matches top-level keys in YAML; a dotted path is refused | `.wingfoil/dna.yaml` |
 | `category` | enum | Positional `[<category>]`: resource path category on `paths`: sources, tests, docs, config, governance, runs, health | User specifies, or omits for the whole map | Defined in DNA `paths:` section; `runs` holds exactly one directory | `.wingfoil/dna.yaml` under `paths:` |
@@ -397,6 +397,10 @@ Every command accepts these, except `--dry-run`, which only the commands that ch
 ---
 
 ## Revision history
+
+**Version 2.4 (2026-11-14) — `--entry-human_only` on `team.roles`, per `task-340` (`dl-202` item 1).**
+The `--entry-<field>` row lists `--entry-human_only`, the option derived from `team.roles` entries' new `human_only`
+boolean (`spec-002` § "Role binding"): a role no agent executes; `approver` is human-only without it.
 
 **Version 2.3 (2026-11-13) — the `--project <dir>` global option, per `task-350` (`spec-008` §2, `spec-011`, `dl-198` (a)).**
 Global Options gets a `--project <dir>` row: every command, `init` and `mcp` included, runs on the repository the option

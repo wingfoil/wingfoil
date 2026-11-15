@@ -80,6 +80,14 @@
  *   `wf(plan): finalize` into the last state of the plan's `sequence` (`[active → done]`) leaves, at that commit, a
  *   plan whose `### Retrospective` subsection holds an entry — a line outside HTML comments, `None` included (D2 (b)) —
  *   as `scripts/check-retrospective.cjs` (`hasRetrospectiveEntry`, shared) tests a task's at `dev-loop.done`.
+ * - `co-author-identity` (`bug-475`, `bug-535`, task-352; rule `body`): on every commit of the range, merges
+ *   included, except a non-merge commit with a line starting `Approver:` (`approval-agent-trailer`'s), each
+ *   `Co-Authored-By:` line (any case) of the body's final paragraph is `Name <email>` and names a `team.agents` or
+ *   `team.members` entry of the `.wingfoil/dna.yaml` committed at the commit's first parent — the name compared
+ *   exactly, the email ignoring case, an entry without an email matching nothing; no `dna.yaml` there, or one that
+ *   does not validate, is a finding (`git-conventions` §7). The same final paragraph carries no two
+ *   `Co-Authored-By:` lines naming the same co-author (name exact, email any case) and at most one `AI-Model:` line
+ *   (`bug-535`).
 
  * **Starting mode** (`dl-103` §1). A finding on a commit that is not the introduction commit nor one
  * of its ancestors is gated, and fails the check (exit 1). A finding on history — the introduction
@@ -138,12 +146,20 @@ const CHECKS = Object.freeze({
   'workflow-record-authority': 'governance-check:workflow-record-authority',
   'trailer-paragraph': 'governance-check:trailer-paragraph',
   'plan-retrospective': 'governance-check:plan-retrospective',
+  'co-author-identity': 'governance-check:co-author-identity',
 });
 
 /** A line that makes a commit an approval commit (`spec-018` §0): `Approver:`, any letter case. */
 const APPROVAL_LINE_RE = /^approver:/i;
 /** An agent trailer line (`spec-018` §0, `git-conventions` §7, `bug-307`): `Co-Authored-By:` or `AI-Model:`, any case. */
 const AGENT_TRAILER_RE = /^(co-authored-by|ai-model):/i;
+
+/** A `Co-Authored-By:` line, any case: its value is what follows the key. */
+const CO_AUTHOR_KEY_RE = /^co-authored-by:/i;
+/** A `Co-Authored-By:` line's value as `Name <email>` (`git-conventions` §7). */
+const CO_AUTHOR_VALUE_RE = /^co-authored-by:[ \t]*(.*?)[ \t]*<([^<>\s]+)>[ \t]*$/i;
+/** An `AI-Model:` line, any case. */
+const AI_MODEL_KEY_RE = /^ai-model:/i;
 
 /** The subject of a record written outside the `wf()` grammar by `workflow finalize|adopt|rekey` (`spec-017` §7.9, §7.11, §7.12). */
 const WORKFLOW_RECORD_RE = /^workflow: (?:finalize|adopt|rekey)(?: |$)/;
@@ -571,22 +587,95 @@ function authorityFindings(commit, approval, dna, dist) {
   return findings;
 }
 
+/** The index of the first line of the final paragraph of `lines`: the line after the last blank one. */
+function finalParagraphStart(lines) {
+  let lastBlank = -1;
+  lines.forEach((line, index) => {
+    if (line.trim() === '') lastBlank = index;
+  });
+  return lastBlank + 1;
+}
+
 /**
  * The `WingFoil-*` keys a commit's body writes outside its final paragraph, each once, as first written
  * (`git-conventions` §8, `bug-391`): the final paragraph is the last blank-line-separated one.
  */
 function trailerKeysOutsideFinalParagraph(body) {
   const lines = body.split('\n');
-  let lastBlank = -1;
-  lines.forEach((line, index) => {
-    if (line.trim() === '') lastBlank = index;
-  });
   const keys = new Map();
-  for (const line of lines.slice(0, lastBlank + 1)) {
+  for (const line of lines.slice(0, finalParagraphStart(lines))) {
     const key = WINGFOIL_TRAILER_RE.exec(line)?.[1];
     if (key !== undefined && !keys.has(key.toLowerCase())) keys.set(key.toLowerCase(), key);
   }
   return [...keys.values()];
+}
+
+/** The lines of a commit body's final paragraph: those after its last blank line (`git-conventions` §8). */
+function finalParagraphLines(body) {
+  const lines = body.split('\n');
+  return lines.slice(finalParagraphStart(lines));
+}
+
+/**
+ * Whether `name` <`email`> is a `team.agents` or `team.members` entry of `dna`: the name equal, the email equal
+ * ignoring case; an entry without an email matches nothing (task-352 D5).
+ */
+function isTeamIdentity(dna, name, email) {
+  const team = dna.team ?? {};
+  return [...(team.agents ?? []), ...(team.members ?? [])].some(
+    (entry) => entry.name === name && typeof entry.email === 'string' && entry.email.toLowerCase() === email.toLowerCase(),
+  );
+}
+
+/**
+ * The `co-author-identity` findings of one non-approval commit (`bug-475`, `bug-535`, task-352): `lines` are its
+ * final paragraph's, `dna` the `.wingfoil/dna.yaml` of its first parent as `configReader` reads it.
+ */
+function coAuthorFindings(lines, dna) {
+  const messages = [];
+  const coAuthors = lines.filter((line) => CO_AUTHOR_KEY_RE.test(line));
+  for (const line of coAuthors) {
+    const parsed = CO_AUTHOR_VALUE_RE.exec(line);
+    if (parsed === null) {
+      messages.push(`a Co-Authored-By: line of the final paragraph is not \`Name <email>\` (git-conventions §7): ${line.slice(line.indexOf(':') + 1).trim()}`);
+      continue;
+    }
+    const [, name, email] = parsed;
+    const who = `${name} <${email}>`;
+    if (dna === null) {
+      messages.push(`no ${DNA_YAML} is committed before this commit, so the co-author ${who} cannot be matched against team.agents or team.members`);
+    } else if (!dna.ok) {
+      messages.push(`the ${DNA_YAML} committed before this commit does not validate (${dna.error}), so the co-author ${who} cannot be matched`);
+    } else if (!isTeamIdentity(dna.value, name, email)) {
+      messages.push(
+        `the co-author ${who} is neither a team.agents nor a team.members entry of the ${DNA_YAML} committed before this commit ` +
+          '(name and email both; git-conventions §7, bug-475)',
+      );
+    }
+  }
+  // bug-535: the attribution pair written twice — one finding per commit, naming each repeated key. Two lines name
+  // the same co-author under D5's equivalence (the name exact, the email in any case); a line that does not parse is
+  // compared as written.
+  const repeated = [];
+  const values = new Map();
+  for (const line of coAuthors) {
+    const value = line.slice(line.indexOf(':') + 1).trim();
+    const parsed = CO_AUTHOR_VALUE_RE.exec(line);
+    const key = parsed === null ? `\0${value}` : `${parsed[1]}\0${parsed[2].toLowerCase()}`;
+    const entry = values.get(key) ?? { value, count: 0 };
+    entry.count += 1;
+    values.set(key, entry);
+  }
+  for (const { value, count } of values.values()) if (count > 1) repeated.push(`${count} Co-Authored-By: ${value} lines`);
+  const models = lines.filter((line) => AI_MODEL_KEY_RE.test(line)).length;
+  if (models > 1) repeated.push(`${models} AI-Model: lines`);
+  if (repeated.length > 0) {
+    messages.push(
+      `the final paragraph repeats the agent attribution: ${repeated.join(', ')} ` +
+        '(one Co-Authored-By: line per co-author and at most one AI-Model: line; git-conventions §7, bug-535)',
+    );
+  }
+  return messages;
 }
 
 /** A `TransitionFinding` of `verifyTransitionConsistency`, as one line. */
@@ -968,6 +1057,22 @@ function checkGovernance(root, options = {}) {
       });
     }
   }
+
+  // co-author-identity: a non-approval commit's co-authors are team entries of the dna.yaml before it, and its final
+  // paragraph carries the attribution pair once (bug-475, bug-535, task-352). Merges are judged: they carry the pair too.
+  // Only a non-merge approval is left out, the one approval-agent-trailer judges: a merge with an Approver: line is
+  // judged here, or it would escape both checks.
+  const attributed = allCommits
+    .filter((commit) => commit.merge || ![commit.subject, ...commit.body.split('\n')].some((line) => APPROVAL_LINE_RE.test(line)))
+    .map((commit) => ({ commit, lines: finalParagraphLines(commit.body) }))
+    .filter(({ lines }) => lines.some((line) => CO_AUTHOR_KEY_RE.test(line) || AI_MODEL_KEY_RE.test(line)));
+  const attributedDnaBlobs = readBlobIds(root, attributed.map(({ commit }) => `${commit.parent ?? commit.sha + '^'}:${DNA_YAML}`));
+  attributed.forEach(({ commit, lines }, index) => {
+    const dna = commit.parent === null ? null : readDnaYaml(attributedDnaBlobs[index]);
+    for (const message of coAuthorFindings(lines, dna)) {
+      findings.push({ sha: commit.sha, subject: commit.subject, rule: 'body', message, gated: isGated(commit.sha, 'co-author-identity'), check: 'co-author-identity' });
+    }
+  });
 
   // trailer-paragraph: a `WingFoil-*` trailer outside the final paragraph is lost to the deduction (bug-391).
   for (const commit of allCommits.filter((candidate) => !candidate.merge)) {
