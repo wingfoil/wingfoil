@@ -40,6 +40,13 @@ Only the `team.roles` roles are checked; a dangling binding under another role p
 
 ## Triage & Execution Notes
 - capture (2026-10-30, orchestrator of `w1` of `patch-v0.3.2`): severity proposed `low`; release proposed in the approval queue.
+- fix (2026-11-14, `task-340` AC 4): `scripts/check-role-directives.cjs` visits the ascending union of `dna.yaml`'s `team.roles` names
+  and the keys of `.wingfoil/roles.yaml`'s `assignments`; a role `dna.yaml` does not declare fails with `bound in roles.yaml but not
+  declared in dna.yaml team.roles`, before its listing's warnings (the pinned 0.3.2 already reports a dangling binding under an
+  undeclared role with `--role`, but nothing for an existing directive bound under one). Pinned by `test/cli/check-role-directives.test.ts`
+  (task-340 AC 4). Not changed: the script is still not in the npm package.
 
 ### Retrospective
-- None.
+- task-340: the sweep's undeclared-role case was found only by reading the pinned build's `--role` view, which reports a dangling binding
+  but says nothing of an existing directive bound under an undeclared role (`directives list --role ghost` → `warnings: []` on 0.3.2,
+  task-340 design); the explicit warning closes it. Shipping the check to adopters (the npm package) stays open.
