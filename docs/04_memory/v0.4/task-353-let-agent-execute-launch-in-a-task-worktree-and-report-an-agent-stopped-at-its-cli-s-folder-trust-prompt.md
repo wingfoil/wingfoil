@@ -757,6 +757,14 @@ The independent review: approve with fixes (0 blockers, 1 should-fix, 2 follow-u
 No full suite was run for this fix, as instructed; the task stays `in-review` (no resubmit), and the three pending bug
 amendments are untouched (`git status --short` → the three bug files only).
 
+### merge of main after task-352 and task-340 (orchestrator, 2026-11-15)
+
+`main` (`fa793f01f`) was merged into the branch (`14a1b2de5`), with the three pending bug amendments set aside during the
+merge and restored unchanged. The one conflict, spec-016's Revisions block, kept both 2026-11-13 entries word for word,
+task-340's (from `main`) before task-353's; the section 3.x hunks of task-340 (the `HUMAN_ONLY_ROLE` row and its
+references) and of this task (trust, the launch directory, the plan fallback) merged on their own. `docs/cli-reference.md`
+and `docs/user-guide.md` merged on their own.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
