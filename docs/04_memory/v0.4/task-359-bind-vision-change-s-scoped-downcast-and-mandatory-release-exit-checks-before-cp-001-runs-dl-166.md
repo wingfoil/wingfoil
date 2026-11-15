@@ -50,3 +50,154 @@ checks, the conformance test pins them, and a dated note on `dl-132` records the
 ## Execution Notes
 
 <!-- Filled by the dev-loop. -->
+
+### design (architect, 2026-11-15)
+
+**Inputs read.** `depends_on: []`, `bug: []` (no dl-015 gate, no bug sync). Base: `main` `fa793f01f` + the start commit
+`25b1bf941` (`git log --oneline -2`). PATH guard: `command -v wingfoil` → the task's PATH shim; `wingfoil --version` and
+`node dist/cli.js --version` → `0.3.2 (fa793f01f8d2d7f380679076c9feacb5924027cc)`. Contract: `dl-166` (`ready`,
+`7d14d122f`, approve Reason "both checks bind before cp-001 … so they measure that run"), its Actions 2–3 and its note of
+2026-10-12 (the `define-scope` sweep gap); `dl-132` (`ready`, its notes of 2026-10-12 and 2026-10-13: on a release past
+`draft` the sweep is the approver's `memory amend` of the release); `dl-090` and `spec-003` Layer 3 (`approved`;
+`{element.path}` from v0.4, `sed -n 660,668p docs/04_memory/design/specs/spec-003-workflows-yaml-schema.md`); `dl-205`
+Q1 (a); `dl-174`. `vision-change.yaml` is at 1.2 and `bindings.yaml` at 3.1 on this base (`grep -n "^version"`).
+
+**What exists.** `vision-change.yaml`'s downcast phases are `include:` phases with no `checks:`; `schedule` has
+`pre: ["change-proposal.target_release is not empty"]` (manual until a command, `task-358`) and `post:
+["vision-index.current"]`. An `include:` phase may carry `checks:` (`src/workflow/schema.ts` `Phase`), and
+`specification-downcast.yaml` already does so on its four include phases (a `js-yaml` scan of
+`.wingfoil/workflows/custom/*.yaml` for phases with both keys → those four only). No command decides either check today:
+`ls scripts/` holds no release-exit or downcast checker. Data the exit check reads: a change-proposal's `feature` and
+`release` (`.wingfoil/memory/templates/change-proposal.md`), the sequencer's per-release budget row
+(`docs/01_vision/07_sequencer.md`, `| v0.3.1 | 1 | ≈ 1 for P4.21; … |` names `cp-002`'s feature, `| v0.4 | 11 | ≈ 9 | … |`
+names none yet), the release element's `version`, `status`, `features:` (`docs/04_memory/planning/rl-v1/minor-v0.4.md` →
+`in-development`, `features: [P4.18, P4.19, P4.20, P4.21, P5.1.1, P5.1.4, P5.2.3]`).
+
+**The design.**
+- **Element 3, the scoped downcast (Q1 (b)):** `downcast-stories`, `downcast-scenarios`, `downcast-requirements` each get
+  `checks: { post: ["downcast.in-scope(layer: stories|scenarios|requirements)"] }` (`tokenName` → `downcast.in-scope`, one
+  binding), bound `{ manual: true }` in the "manual until a command" group, its comment naming the command owed (D2).
+- **Element 4, the mandatory exit (Q2 (ii)):** `schedule`'s `post` becomes `["vision-index.current",
+  "change-proposal.assigned"]`; `change-proposal.assigned: { run: [node, scripts/check-release-exit.cjs, "{element.path}"] }`
+  next to `vision-index.current` in `bindings.yaml`; green writes the script and its test (D3). `schedule`'s description
+  gains one sentence: on a release past `draft` the feature ids reach `features:` by the approver's `memory amend` of the
+  release (dl-132 note of 2026-10-12), and the post-check refuses the exit until stamp, sequencer row and `features:` agree.
+  The three downcast descriptions gain one clause naming their post-check.
+- **`scripts/check-release-exit.cjs <path>`** (read-only, no clock, no network; root = the working directory, as
+  `scripts/check-retrospective.cjs`): reads the change-proposal at `<path>`; its `release` must be non-empty; the release
+  element is the one file under `memory.yaml` `types.release.path` (placeholders matched per segment) with `type: release`
+  and `version` equal to that `release`; the change-proposal's feature ids are `feature` split on commas and whitespace (or
+  a YAML list); for each id, the first Markdown table row of `docs/01_vision/07_sequencer.md` whose first cell (`*` removed,
+  trimmed) equals the release must contain the id as a whole token (not preceded by `[A-Za-z0-9.]`, not followed by
+  `[A-Za-z0-9]` or `.<digit>`), and when the release's `status` is not `draft` its `features:` must hold the id. An empty
+  `feature` (a `kind: vision` change) checks only the stamp and the release element. Exit 0, stdout empty; exit 1, one
+  stdout line per failure, in this order: `<path>: release is empty` | `<path>: no release element has version <v>` (each
+  alone), else `<path>: docs/01_vision/07_sequencer.md has no row for <v>` (once, first), then per id in declared order
+  `<path>: <id> is not in the <v> row of docs/01_vision/07_sequencer.md` and `<path>: <id> is not in <release path>'s
+  features: (status <s>)`; exit 2, stdout empty and one stderr line `check-release-exit: <reason>` with reason `usage: node
+  scripts/check-release-exit.cjs <path>` (no argument or more than one) | `<path>: outside the repository` | `<path>: no
+  such file` | `<path>: not a change-proposal` | `release <v>: <n> release elements` (more than one) | `<file>: no such
+  file` for a missing `.wingfoil/memory.yaml` or sequencer.
+- **Prototype, scratch only** (a design scratch file outside the worktree, not committed): on this base, `node <proto>
+  docs/04_memory/change-proposals/cp-002-….md` → exit 0, stdout empty (`release: "v0.3.1"`, `patch-v0.3.1` `released`
+  with `features: [P4.21]`, the v0.3.1 row names P4.21); `cp-001-….md` → exit 1, `<path>: release is empty`; `cp-001`
+  with `release: "v0.4"` set in a scratch clone → exit 1, `<path>: P4.22 is not in the v0.4 row of
+  docs/01_vision/07_sequencer.md` then `<path>: P4.22 is not in docs/04_memory/planning/rl-v1/minor-v0.4.md's features:
+  (status in-development)`; no argument → exit 2; `minor-v0.4.md` → exit 2, `not a change-proposal`.
+
+**The configuration read with both builds (dl-205 Q1 (a), `pinned-build.reads`).** In a scratch clone of this branch
+(`25b1bf941` + the proposed `vision-change.yaml` 1.3 and `bindings.yaml` 3.2, committed there as `db3f370b5`):
+`node <worktree>/dist/cli.js workflow list --format json` and `node node_modules/wingfoil-released/dist/cli.js workflow
+list --format json` → exit 0, `diagnostics: []` on both (the same as on this base); the pinned build's one stderr line,
+`unknown field(s) ignored: team.roles[4].human_only, …`, is printed on this base too (`npm run -s wingfoil -- workflow list
+--format json` → same line, from `task-340`'s `dna.yaml`), so it is not this change's. `workflow show vision-change
+--format json` (both builds; `--format console` prints the same JSON) → `downcast-*` post `downcast.in-scope(layer: …)`
+`{kind: manual, source: project}`, `schedule` post `vision-index.current` (run) and `change-proposal.assigned` `{kind:
+run, argv: [node, scripts/check-release-exit.cjs, {element.path}], severity: reject}`, all `evaluated: false`.
+`node scripts/check-mcp-registration.cjs` in the same clone → exit 0 (pinned 0.3.2 and the build under development both
+serve `[prompts, resources, tools]`, every Resource read). No shape change, no break declared.
+
+**AC classification and what qa pins.** Red runs `npx tsc --noEmit -p tsconfig.json` and `npx jest test/lint
+--maxWorkers=2` before its commit. The registry assertions read `HEAD` (`loadWorkflowRegistryAtHead`, `workflowShowAtHead`,
+`resolveToken`, `tokenName`, as the files below already do), so they fail until green commits.
+
+| AC | Class | What qa pins (test file) |
+|----|-------|--------------------------|
+| 1 + 2 | red-first | `test/core/vision-change-workflow.test.ts` (new `describe` citing task-359 and dl-166): (a) each downcast phase's `checks.post` is exactly `['downcast.in-scope(layer: stories)']`, `…scenarios`, `…requirements`; (b) `schedule.checks.pre` unchanged, `schedule.checks.post` exactly `['vision-index.current', 'change-proposal.assigned']`; (c) `resolveToken('change-proposal.assigned', 'check', bindings)` → `{ kind: 'run', source: 'project', argv: ['node', 'scripts/check-release-exit.cjs', '{element.path}'], severity: 'reject' }`; (d) `resolveToken('downcast.in-scope(layer: stories)', 'check', bindings)` → `{ kind: 'manual', source: 'project' }`; (e) `workflowShowAtHead(ROOT, 'vision-change')` shows those bindings on those phases, `evaluated: false`; (f) `vision-change.yaml` ≥ 1.3 with a `1.3 … task-359` history segment, `bindings.yaml` ≥ 3.2 with a `3.2 … task-359` segment (≥ plus history, bug-314); (g) the existing "loader reports nothing on vision-change" stays `[]`. |
+| 1 | red-first | **Existing pins this change breaks, updated in red** (T4: green may not touch them): `test/core/vision-change-workflow.test.ts` line asserting `schedule.checks.post` `['vision-index.current']` → the two-entry list; `test/core/define-scope-sweep.test.ts` "keeps its actions and checks" → the two-entry `post` (its description regexes stay green with the sentence above); `test/core/helpers/manual-binding-groups.ts` `MANUAL_UNTIL_A_COMMAND` + `'downcast.in-scope'` (its comment 36 → 37); `test/core/workflow-bindings-complete.test.ts` (d) `36` → `37` and its header count; `test/core/workflow-manual-prose-checks.test.ts` title "55 names" → 56 (the assertion uses the lists). |
+| 1 | red-first | `test/cli/check-release-exit.test.ts` (new), through `spawnCapture(process.execPath, [SCRIPT, …args], { cwd: root })` (`test/cli/helpers/spawn-cli`), fixture roots from `fixtureDirPrefix` / `writeFixtureFile` (`test/storage/helpers/git-fixture`) holding `.wingfoil/memory.yaml` from `git show HEAD:`, a change-proposal built from `git show HEAD:.wingfoil/memory/templates/change-proposal.md` (frontmatter filled), release elements built from `docs/04_memory/planning/rl-v1/patch-v0.3.1.md` / `minor-v0.4.md` frontmatter shapes and a sequencer holding the real budget-table header and rows copied from `07_sequencer.md`. Cases, each with exit code and exact stdout/stderr per the interface above: 0 (release past draft, id in row and `features:`); 0 (release `draft`, id in row, not in `features:`); 0 (`kind: vision`, empty `feature`); 1 `release is empty`; 1 `no release element has version`; 1 no row; 1 id missing from row and `features:` (two lines, order); 1 id boundary (row names `P4.221`, the id is `P4.22`); 1 two ids `"P4.21, P4.22"`, one missing; 2 no argument; 2 `../x.md`; 2 missing file; 2 a release file as `<path>`; 2 two release elements with the same `version`. One live run at the worktree root: `cp-002-….md` → exit 0, stdout empty. |
+| 3 | characterization, by command | The note is prepared in this worktree, uncommitted (below). Evidence: `git diff --stat docs/04_memory/design/dls/dl-132-vision-change-and-feature-ingest.md` → `13 +++++++++++++`, `git diff … \| grep -c '^-[^-]'` → `0`; after the approver's amend, `npm run -s wingfoil -- memory history dl-132-vision-change-and-feature-ingest` shows `amend … [ready → ready]`. No jest test. |
+| 4 | characterization, by command | Merge order is the orchestrator's (w0 before the `w2` task running `cp-001`'s downcast). Evidence at refactor and review: `npm run -s wingfoil -- workflow show vision-change --format json` on the worktree shows the two checks bound, as the scratch run above; `npm run check:mcp`. No jest test. |
+
+**Files expected to change.** `.wingfoil/workflows/custom/vision-change.yaml` (1.2 → 1.3: three downcast `checks`, the
+`schedule` post-check, the descriptions); `.wingfoil/workflows/bindings.yaml` (3.1 → 3.2: `change-proposal.assigned` run
+binding, `downcast.in-scope` manual entry with the owed command); `scripts/check-release-exit.cjs` (new) and, if green
+exports helpers for a unit test, `scripts/check-release-exit.d.cts`; `test/cli/check-release-exit.test.ts` (new, red);
+`test/core/vision-change-workflow.test.ts`, `test/core/define-scope-sweep.test.ts`,
+`test/core/helpers/manual-binding-groups.ts`, `test/core/workflow-bindings-complete.test.ts`,
+`test/core/workflow-manual-prose-checks.test.ts` (red); `.wingfoil/WORKFLOW.md` (the vision-change diagram's V4–V7
+nodes and the paragraph under its table, D5; no `version:`); `docs/04_memory/design/dls/dl-132-…md` (the note,
+uncommitted). `version:` bumps: `vision-change.yaml` 1.3, `bindings.yaml` 3.2, one each (doc-versioning, baseline
+`main`); `test/lint/version-bump.test.ts` covers neither file (it pins the four configuration files).
+
+**Existing tests of the files to change, run on this base** (before the note was prepared, `bug-534`):
+under the heavy-gate slot, `npm test -- test/core/vision-change-workflow.test.ts test/core/define-scope-sweep.test.ts
+test/core/workflow-bindings-complete.test.ts test/core/workflow-manual-prose-checks.test.ts
+test/core/workflow-repository-conformance.test.ts test/lint/version-bump.test.ts
+test/cli/workflow-unbound-none.integration.test.ts test/core/change-proposal-type.test.ts
+test/cli/check-retrospective.test.ts --maxWorkers=2` → 9 suites, 231 tests passed. Tests naming `vision-change`
+(`grep -rln vision-change test/`): the five above plus `test/directives/dev-loop-practice.test.ts`,
+`test/docs/reported-by.test.ts`, `test/docs/vision-index.test.ts`, `test/core/workflow-pack-adoption.test.ts`,
+`test/cli/e2e-smoke-workflow-reads.test.ts`, which pin names, prose or the workflow list, not these phases' checks.
+`test/core/workflow-repository-conformance.test.ts`'s 18 checkpoint phases do not change (a check is no evidence).
+
+**Decisions for the approver** (each with a recommendation).
+- **D1 — the tokens and their phases.** `downcast.in-scope(layer: stories|scenarios|requirements)` as the post-check of
+  `downcast-stories`, `downcast-scenarios`, `downcast-requirements`; `change-proposal.assigned` as `schedule`'s second
+  post-check (after `vision-index.current`; the `pre` stays). *Recommendation: as proposed.*
+- **D2 — `downcast.in-scope` bound `manual: true` "until a command"** (contradiction to rule on: `dl-166` Q1 (b) reads "a
+  bound post-check … compares … and fails on anything outside them", which reads like a command). Why not `run` now: no
+  placeholder carries a phase's commits (`spec-003` Layer 3 has `{element.path}` only), and the downcast commits are hand
+  commits with no `WingFoil-*` trailer, so a script cannot tell them from the other edits of `docs/02_requirements/`
+  landing on `main` meanwhile (dev-loop tasks extend BDD feature files). Owed: a command taking the change-proposal and
+  the phase's commits (from the `update-vision` finalize record of the element, plus a trailer or a commit-subject
+  convention naming the element), comparing the US-*/REQ-* ids and feature files they add or change with the impact
+  analysis's subsection for the layer. Alternative (B): green writes `scripts/check-downcast-scope.cjs` now on that
+  convention (size S → M, and the convention becomes a rule `cp-001`'s run must follow). Nothing runs either binding before
+  P4.12 (v1.0), so in w2 a person runs the command or applies the check either way. *Recommendation: (A) manual until a
+  command; the dl-132 note states it.*
+- **D3 — `change-proposal.assigned` bound `run` to `scripts/check-release-exit.cjs` on `{element.path}`, written by green
+  with `test/cli/check-release-exit.test.ts`**, per the interface above; on a release past `draft` the check requires the
+  id in `features:`, which the approver's `memory amend` of the release writes (dl-132 note of 2026-10-12), so
+  `schedule`'s actions are unchanged (`task-277`'s ruling stands). *Recommendation: as proposed.* Consequence for `cp-001`
+  (target `v0.4`, `in-development`): its `schedule` passes only once its `release` is stamped, `07_sequencer.md`'s v0.4 row
+  names P4.22 and `minor-v0.4`'s `features:` holds P4.22 by an amend (the scratch run above shows both failures today).
+- **D4 — versions.** `vision-change.yaml` 1.2 → 1.3, `bindings.yaml` 3.1 → 3.2, each with a history segment naming
+  task-359 and dl-166. *Recommendation: as proposed.*
+- **D5 — `.wingfoil/WORKFLOW.md` updated in the task** (the V4–V7 nodes list the new checks, one sentence under the
+  table), so the diagram does not lag the file it draws until the next `align-agent-docs`. *Recommendation: yes.*
+- **D6 — the text of the `dl-132` note**, prepared below. *Recommendation: record it as written (adjusted if D2 or D3 is
+  ruled otherwise).*
+
+### Pending amendments (approver)
+
+- `dl-132-vision-change-and-feature-ingest` — the dated note at the end of the file (uncommitted in this worktree),
+  `--reason "Records dl-166's ruling (Q1 (b), Q2 (ii)): vision-change's downcast phases carry downcast.in-scope, bound
+  manual until a command, and schedule carries change-proposal.assigned, bound to scripts/check-release-exit.cjs, both
+  declared before cp-001 runs its downcast (task-359)."` Until it is recorded, `test/cli/workflow-unbound-none.integration.test.ts`
+  fails in this worktree with one `W_UNCOMMITTED_INPUTS` (`bug-534`).
+
+**Risks for the other open w0 tasks.** `git diff --name-only main...<branch>` over every local `task/*` branch → none
+touches `bindings.yaml`, `vision-change.yaml` or the five test files above. `task-341`'s files (its Implementation Notes:
+`dna.yaml`, `roles.yaml`, a new coordinator directive, `AGENTS.md` §4/§7) share none with this task; if it adds a role to
+`vision-change.yaml` phases, the two branches meet on that file's `version:` line, resolved at the second merge with a
+re-bump. `task-353` (`src/agent/`, spec-016): none. A later task adding a manual-until-a-command check must count 37 in
+`workflow-bindings-complete.test.ts`.
+
+### Retrospective
+
+<!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
+     reconstructed afterwards. One line per item: what happened, the evidence (a command and what it
+     printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
+     Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
+     here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
