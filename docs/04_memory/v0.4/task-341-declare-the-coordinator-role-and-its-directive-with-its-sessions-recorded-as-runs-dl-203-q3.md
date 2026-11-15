@@ -54,3 +54,262 @@ approves, rejects or amends.
 ## Execution Notes
 
 <!-- Filled by the dev-loop. -->
+
+### design (architect, 2026-11-15)
+
+**Inputs read.** Base: `main` `fa793f01f` + `c3c614dc6` (`wf(task): start`), `git log --oneline -2`; `bug: []`, so no
+bug sync. PATH guard: `command -v wingfoil` → the task's PATH shim; `wingfoil --version` and `node dist/cli.js
+--version` → `0.3.2 (fa793f01f8d2…)`. Plan rulings W0-R1…W0-R12 read (`git show
+design/dev_loop_v0.4:docs/05_plans/rl-v1/rel-v0.4/dev-loop-rel-v0.4-plan.md`, lines 70–171): W0-R7 resumes this design
+agent for green and refactor. `depends_on: [task-340]` (`done`, merged `fa793f01f`): its "For task-341" paragraph read
+(`human_only`, the `--entry-executes_as` entry form, `isHumanOnlyRole`, the pinned warning on `human_only` only).
+Contract status (`grep -m1 "^status:"`): `dl-203`, `dl-212`, `dl-135`, `dl-174`, `dl-205` `ready`; `spec-002`,
+`spec-016`, `spec-018` `approved`. `dl-203` was ratified Q1 (a), Q2 (a), Q3 (a), Q4 (a) (`git log -1 --format=%b
+6c17f75ef`). The `standing-approvals` directive already says "Neither a coordinator nor any other agent approves under
+a rule" (`grep -n coordinator .wingfoil/directives/custom/standing-approvals.md` → line 28). Every write below ran in a
+scratch clone of this branch outside the worktree, with this worktree's code build and pinned build; nothing in the
+worktree was built or written except the pending amendment listed at the end.
+
+**What exists today.** `team.roles` has eight entries, three `human_only: true` (`sed -n 151,170p .wingfoil/dna.yaml`);
+`Claude` executes `[ developer, reviewer, qa, architect, facilitator ]` (`:144`); `roles.yaml` is at `1.9` and binds
+the eight roles (`grep -n "^version" .wingfoil/roles.yaml`). No file, workflow or directive names a `coordinator` role
+(`grep -rn -i coordinator .wingfoil/` → only `standing-approvals.md:28` and two prose mentions in `git-conventions.md`
+`:97`, `:151`). `node dist/cli.js agent execute --element plan:release-planning-rel-v0.4-plan --role coordinator
+--dry-run` (worktree, a stub `claude` first on `PATH`) → exit 1, `error: unknown role 'coordinator' (not defined in
+dna.yaml)`.
+
+**The writes, measured in the scratch clone** (code build `node <worktree>/dist/cli.js`, exported model, each commit's
+`git log -1 --format='%(trailers:key=Co-Authored-By,valueonly)'` → one `Claude <noreply@anthropic.com>`, so nothing is
+amended):
+1. `dna add team.roles --value coordinator --entry-description "Coordinates a run between workflow steps; decides only
+   the judgement points the configuration leaves, never a gate (dl-203 D2)."` → exit 0, `wf(dna): add team.roles
+   coordinator`, `version:` 2.4 → 2.5, two lines added after `approver`. (A description holding `: ` or `'` is written
+   quoted: `--dry-run` with the first wording I tried showed `description: 'Drives … engine''s steps: …'`.)
+2. `dna update team.agents.Claude --entry-executes_as developer,reviewer,qa,architect,facilitator,coordinator` → exit 0,
+   `wf(dna): update team.agents.Claude`, 2.5 → 2.6; the line becomes `executes_as: [developer, reviewer, qa, architect,
+   facilitator, coordinator]` (the writer drops the inner spaces of the flow list). Run before step 1 it is refused:
+   exit 1, `error: E_VALIDATION team.agents.0.executes_as.5 (.wingfoil/dna.yaml): team.agents[0].executes_as references
+   undefined role "coordinator" (not in team.roles)`.
+3. `directive create --name coordinator` → exit 0, `wf(directive): create coordinator`, the 11-line scaffold (`id`,
+   `name`, `type`, `kind: custom`, `title: "Coordinator"`, one placeholder comment). The content is a hand commit after
+   it (as `task-343` did: `git log --format='%h %s' -- .wingfoil/directives/custom/standing-approvals.md` → `4ac4ca0ee
+   wf(directive): create`, then `e47404f0b feat(directives): …`).
+4. `directive assign --directive coordinator --role coordinator` → exit 0, `wf(directive): assign coordinator to
+   coordinator`, `roles.yaml` 1.9 → 2.0, `coordinator: [coordinator]` appended after `approver`. The version comment is
+   left as it was (`# 1.9 approver: …`): green rewrites it by hand, with no further raise (as `task-340` did for
+   `dna.yaml`).
+`--dry-run` of 1, 2 and 4, also with `--format console`, prints the same JSON plan (subject, paths, diff); no console
+renderer for these commands.
+
+**Order.** 3 → (content) → 1 → 2 → 4. Between 1 and 4, `npm run -s check:role-directives` fails: at the clone's commit
+of step 1 alone it printed `coordinator: 1 warning(s)`, `role-directives: 9 roles checked, 1 with warnings`, stderr
+`error: role 'coordinator': no directives assigned to role 'coordinator'`, exit 1; and `agent execute --role
+coordinator --dry-run` → exit 1, `error: no agent in dna.yaml with an adapter executes as role 'coordinator'` (step 2
+not yet run). After 2 and before 4 the dry run passes but prints `warning: no directives assigned to role
+'coordinator'`. The branch is green only from step 4 on; no other check reads the intermediate commits.
+
+**Proved on the pinned build (`dl-205` Q1 (a)), clone at step 4** (pinned `node node_modules/wingfoil-released/dist/cli.js`,
+`--version` → `0.3.2 (6de2e13c0…)`):
+- `dna show` → exit 0, 245 stdout lines (240 at the base), stderr only task-340's `warning: .wingfoil/dna.yaml: unknown
+  field(s) ignored: team.roles[4].human_only, team.roles[5].human_only, team.roles[7].human_only` (the same as at the
+  base): the `coordinator` entry adds no warning. `paths` → exit 0, 26 lines as at the base, the same warning.
+- `workflow list` → exit 0, 86 lines as at the base, the same warning labelled `<sha>:.wingfoil/dna.yaml`.
+- `directives list` → exit 0, 389 lines (374 at the base), stderr empty; `directives list --role coordinator` (its
+  default output is JSON) → exit 0, `warnings: []`, 8 entries: the 7 globals and `{"path":"directives/custom/coordinator.md",
+  …,"roles":["coordinator"],"global":false,"assignment":"coordinator"}`.
+- `npm run -s check:mcp` (clone, `node_modules` linked to this worktree's) → exit 0, `.mcp.json "wingfoil" runs the
+  pinned wingfoil 0.3.2, advertising [prompts, resources, tools] (prompts: 9, resources: 4, tools: 0)` and `the build
+  under development (dist/cli.js) serves [prompts, resources, tools] (prompts: 9, resources: 4, tools: 0); every
+  listed Resource read and Prompt get answered`. At the base (worktree) the same command prints `prompts: 8`: the
+  new role adds its `coordinator-session` Prompt.
+- `npm run -s check:role-directives` → exit 0, nine `<role>: ok` lines in ascending order, `role-directives: 9 roles
+  checked, 0 with warnings`.
+- code build `--format json workflow list` → 11 workflows, `diagnostics: []`, as at the base.
+- No workflow file changes (D3), so no `workflow show` differs; not run.
+So 0.3.2 reads the new role, directive and binding with no new warning: no STOP, no `pinned-build` bug.
+
+**The run record (AC 3), measured.** Clone at step 4, a stub `claude` (exit 1) first on `PATH` so that no agent CLI
+runs: `node dist/cli.js agent execute --element plan:release-planning-rel-v0.4-plan --role coordinator --dry-run` →
+exit 0, stderr `warning: interactive launch needs a terminal on stdin and stdout: a run without --dry-run is refused
+here`, plan `subject: "agent: record release-planning-rel-v0.4-plan/adhoc/1"`, `paths:
+["docs/06_runs/release-planning-rel-v0.4-plan.jsonl"]`, `run: {id: "release-planning-rel-v0.4-plan/adhoc/1",
+element: "plan:release-planning-rel-v0.4-plan", workflow: "n/a", phase: "adhoc", role: "coordinator", mode: "fresh",
+agent: "Claude", adapter: "built-in/claude-code", …}`, `launch: "interactive"`, bootstrap first line `WingFoil run
+release-planning-rel-v0.4-plan/adhoc/1: act as role "coordinator" on element plan:release-planning-rel-v0.4-plan.` and
+`Record your handoff in the element's "## Execution Notes" section.` (the `plan` template has the section, `spec-016`
+§2.4). `--format console` prints the same JSON. So the existing stepless form of `agent execute` already records a
+coordinator session (`spec-016` §4: one `agent: record <run-id>` commit at exit, on the branch then checked out):
+no new command, no `spec-016` amendment (D2).
+
+**AC classification and what qa pins.** Red runs `npx tsc --noEmit -p tsconfig.json` and `npx jest test/lint
+--maxWorkers=2` before its commit. No new export, so no TS2305 red. Every case reads this repository's files lazily
+(as `test/directives/standing-approvals.test.ts` does), so before green each fails on its own (ENOENT or an assertion).
+
+| AC | Class | Why |
+|---|---|---|
+| 1 `coordinator` in `team.roles`, `Claude` executes it, `version:` raised | red-first | no such role (`grep -c coordinator .wingfoil/dna.yaml` → 0) |
+| 2 directive: decides only D2's points, never approve/reject/amend/a gate | red-first | no file `.wingfoil/directives/custom/coordinator.md` |
+| 3 directive names the command that records a session as a run | red-first | the role is unknown today (exit 1 above) |
+| 4 `roles.yaml` binding, raised once, `check:role-directives` exit 0 | red-first | no `coordinator` key in `assignments` |
+| 5 pinned `directives list --role coordinator`, no warning | characterization | the pinned reader exists and reads it (above); its case fails at red only because the file is absent, a real absence, not a fabricated red |
+
+The directive's pinned sentences (green writes them verbatim; whitespace-flattened match, `task-276`):
+- **C1** `The coordinator decides only the judgement points \`dl-203\` D2 lists, which the configuration cannot decide:`
+- the three items, verbatim from `dl-203` D2: `which frontier steps to run in parallel, within the declared caps
+  (\`dl-170\`);`, `the triage of a failure the driver reports (rerun, open a bug, stop);`, `the content of an element
+  that no other role's step writes.`
+- **C2** `The coordinator never approves, rejects or amends, and never decides a gate.`
+- **C3** `A coordinator session is recorded as a run (\`dl-135\`): it is launched with \`wingfoil agent execute
+  --element <type>:<id> --role coordinator\`, which appends its record to the run log and commits it as \`agent: record
+  <run-id>\` when the session exits (\`spec-016\` §4).`
+
+- **AC 1** — extend `test/agent/repository-agent-roles.test.ts` (committed `dna.yaml`, `git show HEAD:`): (a)
+  `team.roles` has exactly one entry `coordinator`, with a non-empty `description` and no `human_only: true`
+  (`isHumanOnlyRole(dna, 'coordinator') === false`, `src/dna`); (b) `selectAgent(committedDna(), 'coordinator',
+  undefined)` and `(…, 'Claude')` pick `{ name: 'Claude', adapter: 'claude-code' }` (the task-292 T2/T3 shape);
+  (c) `version` ≥ 2.5 and its history comment names `task-341` (bug-314). Changed pins, in the red commit (the
+  developer never touches red's files, T4): task-292 T1 (`:32-38`) → `['developer', 'reviewer', 'qa', 'architect',
+  'facilitator', 'coordinator']` (D1 (a)); `test/directives/wingfoil-cli.test.ts:59-60` → the nine names in file order,
+  `coordinator` last, title "nine roles". task-340's "no other role declares it true" (`:65-72`) stays as it is and
+  covers `coordinator`.
+- **AC 2** — new file `test/directives/coordinator.test.ts`, modelled on `test/directives/standing-approvals.test.ts`
+  (`ROOT`, `flat`, lazy reads): (a) frontmatter `id: coordinator`, `kind: custom`, no `scope:`, `version` ≥ 1.0 whose
+  line names `task-341`; (b) a heading `## 1. What the coordinator decides` whose section, flattened, contains C1 and
+  the three items as a numbered list `1.`–`3.` and no fourth item; (c) a heading `## 2. What the coordinator never does`
+  whose section contains C2 and the literals `memory approve`, `memory reject`, `memory amend`, `E_AGENT_CONTEXT` and
+  `approval:`; (d) the file never names `npx`.
+- **AC 3** — same file: (a) a heading `## 3. A coordinator session is recorded as a run` whose section contains C3;
+  (b) the CLI: the code build `node dist/cli.js agent execute --element plan:release-planning-rel-v0.4-plan --role
+  coordinator --dry-run --format json`, `cwd` the repository root, `PATH` prefixed with a temp directory holding an
+  executable `claude` that exits 1 (no agent CLI runs; the dry run spawns none, `spec-016` §3.3), env scrubbed by
+  `test/agent-markers.cjs` → exit 0; stderr contains `warning: interactive launch needs a terminal on stdin and stdout:
+  a run without --dry-run is refused here` (jest has no TTY); the plan's `run` matches `{ element:
+  'plan:release-planning-rel-v0.4-plan', workflow: 'n/a', phase: 'adhoc', role: 'coordinator', agent: 'Claude',
+  adapter: 'built-in/claude-code' }`, `run.id` matches `^release-planning-rel-v0.4-plan/adhoc/[1-9][0-9]*$` and
+  `subject` is `agent: record ${run.id}` (the `n` is not pinned: it counts the records already in the plan's log);
+  `HEAD` and `git status --porcelain` unchanged.
+- **AC 4** — same file: `roles.yaml` `assignments.coordinator` equals `['coordinator']`; no other role and not
+  `global` binds it; `version` ≥ 2.0 and its line names `task-341`. `test/cli/check-role-directives.test.ts:212-220`
+  (task-215's "this repository passes the sweep") changes in red to `role-directives: 9 roles checked, 0 with
+  warnings` and "all nine" in its title.
+- **AC 5** — same file, the shape of `standing-approvals.test.ts:270-284`: the PINNED build's `directives list --role
+  coordinator --format json` → exit 0, `warnings: []`, exactly one entry with id `coordinator`:
+  `['directives/custom/coordinator.md', ['coordinator'], false, 'coordinator']` (copied from the clone run above).
+
+**Existing tests run.** (1) In the scratch clone at step 4 (own `dist/`, a local `main` at `fa793f01f`), under the slot
+(the heavy-gate slot first, then `npm test -- <18 files> --maxWorkers=2`): `test/directives/{wingfoil-cli,standing-approvals,schema}`,
+`test/cli/{check-role-directives,check-role-directives-errors,directives-list-bindings.integration,mcp-registration}`,
+`test/agent/repository-agent-roles`, `test/core/{directives-list,workflow-repository-conformance,project-directives,approval-authority}`,
+`test/mcp/{role-prompts,mcp-prompts.feature}`, `test/lint/version-bump`, `test/docs/{agents-md,workflow-md,name-resolvability}`
+→ `Test Suites: 4 failed, 14 passed, 18 total`, `Tests: 4 failed, 301 passed, 305 total`. The four failures are
+exactly the pins that change: `agents-md.test.ts` "§7 … equals roles.yaml's assignments" (AGENTS.md not yet edited in
+the clone: green edits it), `wingfoil-cli.test.ts:59` (eight roles), `repository-agent-roles.test.ts` task-292 T1
+(`executes_as`), `check-role-directives.test.ts:213` (`8 roles checked`). `version-bump.test.ts` passed with the three
+verb raises. (2) Those four files at the base, in the worktree (`npx jest <4 files> --maxWorkers=2`) → `Test Suites: 4
+passed`, `Tests: 47 passed`. (3) With the pending amendment in the worktree, `npx jest
+test/docs/name-resolvability.test.ts --maxWorkers=2` → first `1 failed`, the finding `spec-002-dna-yaml-schema.md|path|.wingfoil/directives/custom/coordinator.md`;
+after the `PLANNED` allowlist entry → `Tests: 11 passed, 11 total`. Not run here: the full suite (green and refactor
+run it); `test/cli/workflow-unbound-none.integration.test.ts` is expected to fail with one `W_UNCOMMITTED_INPUTS` while
+the amendment stays uncommitted (`bug-534`).
+
+**Files to touch** (green): `.wingfoil/dna.yaml` (steps 1–2, then a hand `chore(dna)` commit for the history comment
+`2.4 -> 2.6 at task-341 (team.roles coordinator; team.agents Claude executes_as coordinator, dl-203 Q3 (a); two writes,
+one raise each, dl-174)` and the `[SPEC: dl-203 D2, spec-002 Role binding]` comment on the new entry, no raise);
+`.wingfoil/directives/custom/coordinator.md` (step 3 + content commit; the full draft is ready for green); `.wingfoil/roles.yaml`
+(step 4, then the hand comment: the `2.0 coordinator: [coordinator] (task-341)` version note and a header paragraph
+like `standing-approvals`'s); `AGENTS.md` (hand-written region, `dl-137`), exactly: §3 directives row (`:128`) the
+WingFoil-specific list gains `, coordinator` after `standing-approvals`; §4 Roles (`:156-157`) gains `coordinator`, and
+"AI agents execute as `developer/reviewer/qa/architect/facilitator/coordinator`"; §7 table a new row `| coordinator |
+coordinator |` after `approver` (`test/docs/agents-md.test.ts` pins the table to `roles.yaml`'s `assignments`); §7
+paragraph (`:532`) one clause: "`coordinator` (`task-341`, `dl-203` D2) states the judgement points the coordinator
+role decides, that it never approves, rejects, amends or decides a gate, and how its session is recorded as a run";
+`.wingfoil/README.md:54` the directive list gains `coordinator` and `.wingfoil/WORKFLOW.md` Roles Summary a row
+`coordinator` ("No phase: the judgement points between steps, `dl-203` D2; never a gate") — same-class instances of the
+lists that change (D5); `test/docs/name-resolvability.allowlist.ts` (the `PLANNED` entry below goes stale once the
+directive exists: green deletes it). Version bumps: `dna.yaml` 2.4 → 2.6 (two verb raises), `roles.yaml` 1.9 → 2.0
+(one verb raise), the directive starts at 1.0; `AGENTS.md`, `.wingfoil/README.md`, `.wingfoil/WORKFLOW.md` carry no
+`version:` (`head -12 … | grep -i version` → none). No `src/` file, no workflow file, no BDD file. Tests as listed above
+(red's).
+
+**Decisions for the approver.**
+- **D1 — is `coordinator` human-only, and does `Claude` execute it?** (a) Not human-only (no `human_only` key), and
+  `Claude`'s `executes_as` lists it: `dna update team.agents.Claude --entry-executes_as
+  developer,reviewer,qa,architect,facilitator,coordinator` (step 2, a `wf(dna)` verb write raising 2.5 → 2.6, the
+  pattern of `task-340`'s D3). (b) Not human-only, not in `executes_as`: the role is declared but no agent can be
+  launched in it (`error: no agent in dna.yaml with an adapter executes as role 'coordinator'`, measured), so AC 3's
+  command never records anything. (c) `human_only: true`: contradicts `dl-203` D2 ("which an agent may execute") and
+  makes AC 3 a refusal (`HUMAN_ONLY_ROLE`). **Recommend (a):** in this repository the coordinator is an agent session
+  (the one that launches and supervises the phase agents); holding no gate does not need `human_only`, which says who
+  executes a role, not who approves (task-340's note): approvals stay the `approver`'s, and the verbs refuse an agent's
+  session (`spec-018` §3). The member `Roberto Pompermaier` is not given the role: without a coordinator the judgement
+  points fall to the routed human anyway (`dl-203` D2), and `agent execute` reads only the launching identity's
+  membership (`requireTeamMembership`), not its roles.
+- **D2 — the command that records a coordinator session (AC 3).** (a) The existing stepless form, `wingfoil agent
+  execute --element <type>:<id> --role coordinator`, the element being the plan of the run it coordinates; the run id
+  is `<plan-id>/adhoc/<n>` and the record commit `agent: record <run-id>` lands on the branch checked out at exit
+  (measured above). A session started otherwise (the agent's own CLI, a sub-agent) is a hand-driven run (`dl-203` D3),
+  its launch stated in the plan's Execution Notes; a run record is never written by hand. (b) A by-hand procedure that
+  appends a run-log line: rejected, the fields (session, tokens, duration, exit status) are the launcher's and the
+  readers refuse a line not in the serialized form (`spec-016` §4.5). (c) A new command (`agent record` of a session
+  launched elsewhere): out of scope, a follow-up DL if wanted. **Recommend (a)**, no `spec-016` amendment. Its limits
+  today: the launch is interactive and needs a terminal and the `claude` CLI (`bug-392`); a headless coordinator waits
+  for the headless work run (`task-335`); the phase segment is always `adhoc`, since no phase has the role (D3).
+- **D3 — which workflow phases gain `coordinator`.** (a) None: `dl-203` D2 gives the coordinator the points the
+  configuration cannot decide, which are by definition not phases; a phase under it would make it a step's doer.
+  Nothing in `.wingfoil/workflows/` changes, so `workflow list` keeps `diagnostics: []` (measured, code build) and no
+  `W_WORKFLOW_AGENT_ROLE_UNEXECUTED` can arise from this role (it has no `agent.execute` phase, and under D1 (a) an
+  agent executes it anyway). (b) Re-role the orchestration phases (`dev-loop.start`/`done`, `wave.re-plan`): rejected,
+  they are mechanical driver steps (`dl-203` D1) or the tech-lead's/approver's, and the change re-pins the phase tests.
+  **Recommend (a).**
+- **D4 — the directive's content.** The outline (draft ready for green): frontmatter `id: coordinator`, `kind: custom`,
+  no `scope`, `version: "1.0"`, `ref: [P3.2, P3.7, REQ-SYS-08]`; preamble (role, `dl-203` D2/Q3 (a)); **§1** What the
+  coordinator decides — C1 and D2's three items verbatim, each decision written in the element's Execution Notes with
+  the command it rests on; **§2** What the coordinator never does — C2; the approver-gated verbs it never runs
+  (`memory approve`/`reject`/`amend`, an approval `workflow finalize`, `workflow adopt --plan --apply`, `workflow
+  rekey`, refused with `E_AGENT_CONTEXT`, `dl-212` D1, `spec-018` §3), never removing a marker; never deciding a gate
+  (a phase with `approval:` or an `awaits:` party: it queues the gate with the evidence), a standing rule included
+  (it may run a rule's evidence commands and cite the id, `standing-approvals` preamble); never doing a step's work in
+  place of the step's role (`dl-134`), never launching under a human-only role; **§3** A coordinator session is
+  recorded as a run — C3, the element (the plan), the run id, where to launch it from, the hand-driven case, no
+  hand-written record; **§4** Until the driver exists (D5); **§5** a rule change raises `version:`. **Recommend as
+  outlined**; the alternative is §1–§3 only, with §4 left to `docs/agents.md` (`dl-203` Q4's task).
+- **D5 — the mechanical commands until the driver ships (v1.0).** `dl-203` D2 says the coordinator "runs no command
+  the driver can run", but the driver (D1) is P4.10/P4.12, v1.0, and D3 has the run driven by hand until then. (a) The
+  directive's §4 states that, until then, the coordinator may run the driver's mechanical commands as a hand-driven
+  run (`dl-203` D3), each exactly as the step declares it, which is not a judgement point and widens nothing of §2.
+  (b) Read D2 literally now: every mechanical command goes to the human. **Recommend (a):** it is what this
+  repository's orchestrator does today, and (b) would stop every wave at each record. Plus the same-class doc rows:
+  `.wingfoil/README.md:54` and the `.wingfoil/WORKFLOW.md` Roles Summary gain `coordinator` (recommend yes; no parity
+  test pins them, `grep -n -i "roles summary" test/docs/*.ts` → none).
+
+**Risks for the other open tasks.**
+- `task-353` (in review) and `task-336` (next) touch `src/agent/`, `src/core/agent-list.ts` and `spec-016`: this task
+  touches none of them (no `src/` change, no `spec-016` amendment). Their tests that read this repository's
+  `dna.yaml` role list or `Claude`'s `executes_as` would see the ninth role; `grep -rn "'facilitator'\]" test/` → only
+  `test/agent/repository-agent-roles.test.ts:36` (changed here). A test that pins `check:mcp`'s real prompt count would
+  see 9 (none does: the counts in `test/cli/mcp-registration.test.ts:60,139,215` are fixture observations).
+- `spec-002`: this task appends a Revision note at the end and edits Role binding; any other task amending `spec-002`
+  would conflict only on the Revision tail; no open task branch has committed a change to `spec-002`, `dna.yaml`,
+  `roles.yaml` or `AGENTS.md` (`git diff --name-only main...<branch> -- <those four>` over `git branch --list 'task/*'`
+  → empty for each; uncommitted edits in other worktrees were not read).
+- `.wingfoil/dna.yaml` / `roles.yaml`: a task merged before this one that writes either raises its `version:`; the
+  later merge resolves the version line by taking the higher value plus one more raise only if its own write follows.
+
+### Pending amendments (approver)
+
+Prepared in the worktree, left uncommitted (`dl-047`); the approver records it with `memory amend` before red. The
+name-resolvability allowlist change (`test/docs/name-resolvability.allowlist.ts`, one `PLANNED` entry for
+`.wingfoil/directives/custom/coordinator.md`, `plannedBy: ['task-341']`) is not Memory: the orchestrator commits it
+right after the amend.
+- `spec-002-dna-yaml-schema` — `--reason "Add the coordinator role to Role binding, per dl-203 Q3 (a): an ordinary team.roles entry with no field or load rule of its own, agent-executable unless declared human_only, holding no approval authority, its limits in a directive bound in roles.yaml and its session recorded as a run by agent execute --role coordinator (task-341 design gate)."`
+  (hunks: a two-line comment under `RoleEntry` in the Zod listing; the role enumeration of Role binding gains
+  `coordinator`; a new paragraph "The coordinator role" after Human-only roles; the `roles.yaml` sentence "all eight"
+  → "all nine"; a Revision note at the end.)
+
+### Retrospective
+
+<!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
+     reconstructed afterwards. One line per item: what happened, the evidence (a command and what it
+     printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
+     Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
+     here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
