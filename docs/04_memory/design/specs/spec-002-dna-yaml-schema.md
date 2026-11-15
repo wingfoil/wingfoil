@@ -234,10 +234,10 @@ true`; an absent key reads as `false`. A `team.agents[].executes_as` naming a hu
 error at `team.agents[<i>].executes_as[<k>]`, message `team.agents[<i>] '<name>' executes_as names the
 human-only role "<role>" (a human-only role is never executed by an agent)`; like the undefined-role rule
 above, it is part of `Team`'s same-document refinement. One predicate, `isHumanOnlyRole` (`src/dna/roles.ts`),
-answers the question for its readers: `agent execute` refuses a human-only role before any side effect
-(`spec-016` §3.2 step 4, §3.7 `HUMAN_ONLY_ROLE`), and the workflow check `W_WORKFLOW_AGENT_ROLE_UNEXECUTED`
-(`spec-003` § "Diagnostics") reports an `agent.<x>` action under a role no agent executes, a human-only one
-included. The field is additive and optional, so `format` stays `1`: a build that predates it loads a file
+answers the question for `agent execute`, which refuses a human-only role before any side effect (`spec-016` §3.2
+step 4, §3.7 `HUMAN_ONLY_ROLE`). The workflow check `W_WORKFLOW_AGENT_ROLE_UNEXECUTED` (`spec-003` § "Diagnostics")
+does not read it: it reports an `agent.<x>` action under a role no `team.agents` entry with an `adapter` executes, and
+since the load error above keeps a human-only role out of every `executes_as`, a human-only role is always reported. The field is additive and optional, so `format` stays `1`: a build that predates it loads a file
 carrying it and warns that the field is ignored (*Unknown keys* below).
 
 `team.roles` is **not** delegated to `.wingfoil/roles.yaml`: that file *binds directives to roles*
@@ -558,3 +558,10 @@ role its project marks human-only. Role binding's sentence on `roles.yaml` no lo
 `warning: .wingfoil/dna.yaml: unknown field(s) ignored: team.roles[<j>].human_only, …` and exit `0` (checked at
 `task-340`'s design, `dl-205` Q1 (a)). Edited in place without a supersede or a state change (`dl-047`), pending the
 approver's `memory amend` at `task-340`'s design gate.
+
+**Revision (2026-11-14, `task-340`)
+— Role binding: who reads `isHumanOnlyRole`.** The Human-only roles paragraph said the predicate answers the question
+for the workflow check `W_WORKFLOW_AGENT_ROLE_UNEXECUTED` too; that check reads `team.agents` (an entry with an
+`adapter` that lists the role), and reports a human-only role always because the load error keeps it out of every
+`executes_as`. The sentence now says so; no rule changes. Edited in place without a supersede or a state change
+(`dl-047`), pending the approver's `memory amend` at `task-340`'s review.
