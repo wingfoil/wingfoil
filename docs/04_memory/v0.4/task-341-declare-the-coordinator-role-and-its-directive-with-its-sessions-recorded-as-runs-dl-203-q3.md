@@ -306,6 +306,25 @@ right after the amend.
   `coordinator`; a new paragraph "The coordinator role" after Human-only roles; the `roles.yaml` sentence "all eight"
   → "all nine"; a Revision note at the end.)
 
+### design gate rulings (approver, 2026-11-16)
+
+The approver approved the design as recommended (finalize `f8a089d51`, after the amend of spec-002 `526e7d6d6`):
+
+- **D1 (a)** `coordinator` is not human-only and Claude's `executes_as` lists it: `dna add team.roles` then
+  `dna update team.agents.Claude` (`dna.yaml` 2.4 → 2.6), `roles.yaml` bound by `directive assign` (1.9 → 2.0); the
+  `version:` history comments are brought up to date by one hand commit with no further raise.
+- **D2** a coordinator session is recorded as a run by the existing `agent execute --element plan:<plan-id> --role
+  coordinator`, with no spec-016 amendment; a session started otherwise counts as a hand-driven run.
+- **D3** no workflow phase gains the `coordinator` role.
+- **D4** the directive as drafted: the dl-203 D2 judgement points verbatim, the never-list, the run record, the
+  interim period and versioning.
+- **D5** mechanical commands are allowed as a hand-driven run until the driver ships; `coordinator` is added to the
+  role lists of `.wingfoil/README.md` and `.wingfoil/WORKFLOW.md`.
+
+The name-resolvability allowlist's `PLANNED` entry for `.wingfoil/directives/custom/coordinator.md` is committed
+with this note; red removes nothing from it, and green removes it once the directive ships (the allowlist header's
+stale-entry rule).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
