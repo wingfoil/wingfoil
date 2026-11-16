@@ -325,6 +325,77 @@ The name-resolvability allowlist's `PLANNED` entry for `.wingfoil/directives/cus
 with this note; red removes nothing from it, and green removes it once the directive ships (the allowlist header's
 stale-entry rule).
 
+### red (qa, 2026-11-16)
+
+**Red commit `f3f0ddff0`** (`git log --oneline -1` → `f3f0ddff0 test(directives): 341 — failing test: the coordinator
+role, its directive and its run record (dl-203 Q3)`), test files only: `test/directives/coordinator.test.ts` (new, AC 2–5),
+`test/agent/repository-agent-roles.test.ts` (AC 1 appended; task-292 T1 re-pinned), `test/directives/wingfoil-cli.test.ts`
+("nine roles"), `test/cli/check-role-directives.test.ts` ("9 roles checked", "all nine"). No new export, no `.d.cts`; no
+BDD file (the design names none). `test/docs/agents-md.test.ts` untouched (green's). Base: `git rev-list --count
+HEAD..main` → `0` at start, no merge; head `83b06679a`. PATH guard: `command -v wingfoil` → the task's PATH shim;
+`wingfoil --version` → `0.3.2 (2332d3755…)`, and `node dist/cli.js --version` → the same stale pre-merge build, so the
+code build was rebuilt first (`npm run build` under the heavy-gate slot) → `0.3.2 (83b06679a…)`.
+
+**Run.** `npx jest test/directives/coordinator.test.ts test/agent/repository-agent-roles.test.ts
+test/directives/wingfoil-cli.test.ts test/cli/check-role-directives.test.ts --maxWorkers=2` → `Test Suites: 4 failed, 4
+total`, `Tests: 16 failed, 28 passed, 44 total` (coordinator 9 failed of 9, repository-agent-roles 5 of 10, wingfoil-cli 1,
+check-role-directives 1). `npx tsc --noEmit -p tsconfig.json` → exit 0, no error. `npx jest test/lint --maxWorkers=2` with
+the files in place → `Test Suites: 16 passed`, `Tests: 165 passed, 165 total`.
+
+**Green proof (scratch clone of this branch, outside the worktree).** The design's four writes with this worktree's code
+build (`directive create --name coordinator`, `dna add team.roles --value coordinator --entry-description "…"`, `dna update
+team.agents.Claude --entry-executes_as developer,reviewer,qa,architect,facilitator,coordinator`, `directive assign
+--directive coordinator --role coordinator`, each exit 0, one `Co-Authored-By:` each), then a directive draft holding C1,
+the three items, C2 and C3, and version comments naming task-341: the four files plus
+`test/directives/standing-approvals.test.ts` → `Test Suites: 5 passed`, `Tests: 60 passed, 60 total`. So every red case
+can pass. Note for green: `standing-approvals.test.ts` pins `roles.yaml`'s version line to name `task-343`, so the
+rewritten `2.0` comment keeps the `(prev 1.9 … (task-343))` part; the `directive create` scaffold has no `version:` line,
+which green adds (`version: "1.0"` with a comment naming task-341).
+
+**AC 3 command re-run on the post-353 code build** (scratch clone at the four writes, a `claude` exiting 1 first on
+`PATH`, markers unset, stdin `/dev/null`): `node <worktree>/dist/cli.js agent execute --element
+plan:release-planning-rel-v0.4-plan --role coordinator --dry-run --format json` → exit 0, stdout the plan (`dryRun: true`,
+`subject: "agent: record release-planning-rel-v0.4-plan/adhoc/1"`, `run: {… element, workflow: "n/a", phase: "adhoc",
+role: "coordinator", mode: "fresh", agent: "Claude", adapter: "built-in/claude-code", state_ref}`, `launch: {kind:
+"interactive", permissions: []}`), HEAD and `git status --porcelain` unchanged. Departures from the design's pins, none a
+design defect:
+- with `--format json` the warning is one JSON line on stderr, `{"warning":"interactive launch needs a terminal on stdin
+  and stdout: a run without --dry-run is refused here"}`; `--format console` prints `warning: interactive launch needs …`
+  and the same plan pretty-printed. The test pins the JSON line (`[{ warning: <text> }]`), the text unchanged;
+- `launch` is now an object `{kind, permissions}` (the design measured `"interactive"`): not pinned;
+- under jest the git configuration holds no identity (`test/git-isolation.cjs`, `useConfigOnly`): the same command with
+  that isolation → exit 1, `{"error":"git identity not configured (user.name/user.email)"}`. The case therefore passes
+  `GIT_AUTHOR_*`/`GIT_COMMITTER_*` of the committed `dna.yaml`'s first `team.members` entry (with them → exit 0, the output
+  above), on top of `withoutAgentMarkers(process.env)` and the stub `PATH`.
+
+**Per AC** (first failing assertion of each test):
+- **AC 1 (red-first)**, `repository-agent-roles.test.ts`, describe "task-341 AC 1 …":
+  - "team.roles holds exactly one coordinator entry, …" → `expect(entries).toHaveLength(1)`: received length 0.
+  - "without --agent, the selection for role coordinator picks Claude …" → received `{code: "VALIDATION", message: "no
+    agent in dna.yaml with an adapter executes as role 'coordinator'"}`.
+  - "with --agent Claude, …" → received `{code: "VALIDATION", message: "agent 'Claude' does not execute as role
+    'coordinator'"}`.
+  - "`version:` is 2.5 or later, and its history comment names task-341" → `Expected: >= 2005, Received: 2004`.
+  - changed pin task-292 "AC 2 (T1) … facilitator, coordinator …" → `executes_as` lacks `"coordinator"`.
+- **AC 2 (red-first)**, `coordinator.test.ts`: "the frontmatter is id coordinator, …", "## 1. … C1 and dl-203 D2's three
+  items as a numbered list 1.–3., no fourth", "## 2. … C2 and names the approver-gated verbs and the gate", "the directive
+  never names npx" → each `ENOENT: no such file or directory, open '<root>/.wingfoil/directives/custom/coordinator.md'`.
+- **AC 3 (red-first)**, `coordinator.test.ts`: "## 3. … states C3" → the same `ENOENT`; "exit 0, the no-terminal warning
+  on stderr, a coordinator run of Claude planned, nothing written" → `[status, stderr]` received `[1,
+  "{\"error\":\"unknown role 'coordinator' (not defined in dna.yaml)\"}\n"]`.
+- **AC 4 (red-first)**, `coordinator.test.ts`: "assignments.coordinator is [coordinator]; …" → `Expected: ["coordinator"],
+  Received: undefined`; "roles.yaml is at 2.0 or later and its version line names task-341" → `Expected: >= 2000,
+  Received: 1009`. Changed pin `check-role-directives.test.ts` "all nine dna.yaml roles checked" → `Expected: "role-directives:
+  9 roles checked, 0 with warnings"`, received `8 roles checked`. Changed pin `wingfoil-cli.test.ts` "dna.yaml declares the
+  nine roles" → the list lacks `"coordinator"`.
+- **AC 5 (characterization)**, `coordinator.test.ts` "`directives list --role coordinator --format json` on the pinned
+  build …" → `expect(out.warnings).toEqual([])`: received `["no directives assigned to role 'coordinator'"]` (`npm run -s
+  wingfoil -- directives list --role coordinator --format json` in the worktree → exit 0, that warning, 7 global entries).
+  It fails at red only because the binding and the file are really absent, not on a fabricated red; the expected entry
+  `["directives/custom/coordinator.md", ["coordinator"], false, "coordinator"]` and `warnings: []` are copied from the
+  pinned build (`node node_modules/wingfoil-released/dist/cli.js directives list --role coordinator --format json`,
+  `--version` → `0.3.2 (6de2e13c0…)`) in the scratch clone after the four writes: exit 0, 8 entries, stderr empty.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
