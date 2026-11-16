@@ -394,6 +394,124 @@ The approver then approved the design as recommended (finalize `ae1918f4c`, afte
 Order with task-336: task-336's green precedes this task's on the shared stdout code of `src/agent/launch.ts`; this
 task's green starts after task-336 is merged into `main`, with a merge of `main` first.
 
+### red (qa, 2026-11-16)
+
+**Base and guard.** Worktree on `task/task-337-…` at `03377728e` (`git rev-list --count HEAD..main` → `0`, no merge
+needed). The PATH guard ran first through the task's PATH shim (`command -v wingfoil && wingfoil --version && node
+dist/cli.js --version` → the shim, `0.3.2 (90c062c74d7ee85abd8659432e65bf28c33850c4)` twice). Red commit `e38e60dc0`:
+test files, fixtures and helpers only (`git show --stat e38e60dc0` → 32 files, all under `test/`); no `src/`,
+`scripts/` or `.wingfoil/` file.
+
+**Files.** New: `test/agent/usage.test.ts`, `test/agent/launch-usage.test.ts`, `test/agent/manifest-usage.test.ts`,
+`test/storage/builtin-adapters-usage.test.ts`, `test/cli/agent-execute-usage.integration.test.ts`,
+`test/cli/agent-execute-version.integration.test.ts`, `test/agent/run-log-legacy.test.ts`,
+`test/agent/fake-agent-usage.test.ts`, `test/fixtures/agents/transcripts/two-messages.jsonl`. Changed (the tests that
+pin what changes, per the design's list): `test/fixtures/agents/fake-agent.cjs` (three variables, below),
+`test/cli/helpers/agent-execute-cli.ts` (`launchEntry`, `launchArgv` through it), `test/agent/run-log.test.ts`,
+`test/agent/launch-process.test.ts`, `test/agent/manifest.test.ts` (the closed placeholder set gains `home`,
+`launch_dir_slug`), `test/agent/fake-agent.test.ts` (40 schema leaves, the nine `usage.transcript` leaves left out of
+the fake on purpose), `test/storage/builtin-adapters-headless.test.ts` (`claude-code` `output: json`),
+`test/cli/agent-execute-{launch,headless,worktree,step,cli-shim,signals,process-group}.integration.test.ts` (the launch
+is no longer the fake's first invocation; the two signal suites and `executeWaiting` wait for the launch's own record
+line, not the first one), and `agent_version_after` added after `notes` in the `RunRecord` literals of
+`test/agent/run-log-symlink.test.ts`, `test/cli/{agent-list-edges,agent-list,agent-run-log-symlink,agent-show,head-label}.integration.test.ts`,
+`test/core/{agent-list,agent-show}.test.ts`, `test/core/helpers/agent-list-fixture.ts`, with the `agent show` console
+line after `notes:` in the two show suites.
+
+**Fixtures.** The transcript is shaped from the approver's H1/H2 output in the gate note above (assistant lines with
+`message.id`, `message.model` `claude-opus-5-5` and `message.usage` carrying the four integer keys beside
+`output_tokens_details`, `server_tool_use`, `service_tier`, `cache_creation`), never copied from a real transcript: no
+file under `~/.claude` was read and no agent CLI was run. Its two messages' counts are chosen to sum to H2's totals
+(`input 4, output 73, cache_read 36139, cache_write 9580`); the split between the two messages and the inner values of
+the extra keys (`{}`) are the test's. The fake agent gains, in places apart from `task-336`'s additions (a header block
+after the `cwd` paragraph, a separate `require` block after `waitForSignal`, one call after `startChild()`, the
+`--version` line): `WINGFOIL_FAKE_AGENT_VERSION_FILE` (`--version` prints the file's first line when the file exists,
+else `fake-agent 1.0.0`), `WINGFOIL_FAKE_AGENT_UPDATE_TO` (a launch writes it and a newline to that file) and
+`WINGFOIL_FAKE_AGENT_TRANSCRIPT` (a launch with `--session-id <id>` copies the file to
+`<HOME>/.fake-agent/projects/<slug of the real cwd>/<id>.jsonl`). `test/cli/helpers/agent-execute-cli.ts` changes
+only `launchArgv` (`task-336` adds two fields to `FakeEntry`); `test/cli/agent-execute-headless.integration.test.ts`
+changes its import line and l.50 (`task-336` edits its header comment). The second merger resolves.
+
+**Per AC.**
+- **AC 1 (red-first).** `usage.test.ts` (`transcriptUsage`, `launchDirSlug`, `renderTranscriptPath`);
+  `launch-usage.test.ts` (in process, `LaunchHost.homeDir` a temporary directory, the session id
+  `assignedSessionId(sessionSalt(root), runId)`: transcript present / alone / absent / wrong type, and the list order
+  `[transcript, lookup]`, `[lookup, transcript]`); `manifest-usage.test.ts` (the list, a repeated source, `transcript`
+  without `usage.transcript`, D13, strictness, `{home}` / `{launch_dir_slug}` legality, the path rule, `{session_id}`
+  under `session.id: none`); `builtin-adapters-usage.test.ts` (`claude-code`'s `usage` and headless args exactly as
+  amended §2.8; `verified_with` `2.1.322 (Claude Code)` and `codex-cli` `from: none` pass today);
+  `agent-execute-usage.integration.test.ts` (a `fake-usage` adapter derived inline, `HOME` a temporary directory in the
+  CLI's environment: (a) interactive with a transcript, (b) headless with only the result document, (c) neither, (d)
+  headless with both). The headless output fallback is pinned through the CLI only, not through `runAgent`.
+- **AC 2 (red-first).** `run-log.test.ts` (19 keys ending `agent_version_after`; the serialized line; a new block: the
+  writer refuses a record without key 19, a 19-key line, an 18-key line read back with `agent_version_after:
+  "not-reported"`, a mixed log, the byte check in the line's own form, `missing key 'notes'`, out of order / extra
+  key, the `task-236` log read with `not-reported`); `launch-usage.test.ts` (changed version, same version, silent
+  version command with the before-warning ahead of the banner, no `version_args`); `launch-process.test.ts` (each
+  version warning now two, before and after); `agent-execute-version.integration.test.ts` (the exact changed-version
+  warning after the banner, the fake's invocations `version, launch, version, lookup`, the before-read warning ahead of
+  the banner, the after-read warning, `agent show`'s line after `notes:`, `agent list --past --format json` on the
+  18-key `task-236` log); the show suites' consoles.
+- **AC 3 (characterization).** `launch.ts` l.880 writes `result: 'n/a'` for both kinds;
+  `test/cli/agent-execute-headless.integration.test.ts` l.56 pins it for the headless work run. Added: the `it.each`
+  "the record of a run with [] / ["--headless"] has result n/a" in `agent-execute-version.integration.test.ts` —
+  passes on first run.
+- **AC 4 (characterization).** `run-log-legacy.test.ts`: `parseRunLog` of `test/fixtures/run-logs/task-236-…jsonl`
+  under `docs/runs/…` → both records as written, the fixture in the 18-key form, `agent list --past` exit `0` with both
+  runs — passes on first run (suite `PASS`).
+- **AC 5, AC 6 (characterization, no test).** H1/H2 and the amend `2d193b318` are recorded in the gate note above.
+- The fixture suite `fake-agent-usage.test.ts` (the three fake variables) passes on first run.
+
+**Runs.** The heavy-gate slot (waited 13:51:09Z–14:06:44Z UTC behind a full suite of another worktree), then
+`npm test -- <the 28 changed or new test files> --maxWorkers=2` → `Test Suites: 21 failed, 7 passed, 28 total`,
+`Tests: 164 failed, 319 passed, 483 total`. Passing suites: `run-log-legacy`, `fake-agent-usage`,
+`agent-execute-{headless,worktree,step,signals,process-group}.integration` (their launch lookups hold today). Failing
+cases per file: `run-log` 61, `core/agent-show` 15, `core/agent-list` 12, `launch-usage` 11, `manifest-usage` 10,
+`head-label` 9, `cli/agent-show` 9, `agent-execute-version` 6, `cli/agent-list` 6, `run-log-symlink` 6,
+`agent-execute-usage` 4, `agent-run-log-symlink` 3, `agent-execute-launch` 3, `builtin-adapters-usage` 2,
+`launch-process` 2, `cli-shim` 2, `agent-list-edges` 1, `fake-agent` 1, `manifest` 1, `builtin-adapters-headless` 1;
+`usage.test.ts` fails to run.
+
+First failing assertion of each red, by class:
+- every suite that writes a `RunRecord` with key 19 (`run-log`, `run-log-symlink`, the agent list / show / head-label
+  suites): `run record is not valid: unexpected key 'agent_version_after'` (thrown by `serializeRunRecord`, or
+  `fixture: recordRun refused: …`) — the 19-key record does not exist yet;
+- `usage.test.ts`: `Cannot find module '../../src/agent/usage' from 'test/agent/usage.test.ts'` (`tsc` TS2307);
+- `launch-usage` AC 1: `"model": "not-reported"` received for `"claude-opus-5-5"` and the counts `not-reported` for
+  `4/73/36139/9580`; absent transcript: `Expected length: 1, Received length: 0` (no warning); list order: `"input":
+  "not-reported"` for `7`; AC 2: `"agent_version": "1.0.1"` received for `"1.0.0"` (today's single read is after the
+  run), `agent_version_after` missing;
+- `launch-process`: `agent_version_after: "not-reported"` missing in the record;
+- `manifest-usage`: the list case `E_VALIDATION` issues for `[]`; the rule cases `Received length: 0` (no issue
+  yet), `{home}`: `Received length: 0` for the "not legal here" issue (today `unknown placeholder {home}`);
+- `manifest`: the closed set lacks `home`, `launch_dir_slug`; `fake-agent`: `Expected length: 40, Received length: 31`;
+- `builtin-adapters-usage`: `usage` is `{ from: 'none' }`; the headless args lack `--output-format, json`;
+  `builtin-adapters-headless`: `claude-code` output `none` for `json`;
+- `agent-execute-usage` (a)–(d): `errorLine` → `error: adapter 'fake-usage': usage.from: Invalid option: expected
+  one of "output"|"lookup"|"none"` (re-run alone: `npx jest test/cli/agent-execute-usage.integration.test.ts
+  --maxWorkers=2` → `Tests: 4 failed, 4 total`);
+- `agent-execute-version`: `"agent_version": "fake-agent 1.0.1"` received for `"fake-agent 1.0.0"`, key 19 missing;
+  `agent show`: `commit: …` where `agent_version_after: fake-agent 1.0.1` is expected; `agent list`: `undefined` for
+  `"not-reported"`;
+- `agent-execute-launch`: `run.fake[1]` is the post-run `--version`, not the launch (the argv and session-id cases),
+  and `agent_version_after` missing in the record; `cli-shim`: `['--version', '--lookup']` received for
+  `['--version', '--version', '--lookup']`.
+
+**Gates before the commit.** `npx tsc --noEmit -p tsconfig.json` → exit `2`, only the intended errors: TS2307 (1,
+`src/agent/usage`), TS2561 (14) / TS2551 (2) / TS2353 (1) on `agent_version_after` and `homeDir`, TS2322 (7) on a
+`usage.from` list or `transcript` in `launch-usage.test.ts`. `npx jest test/lint --maxWorkers=2` → `Tests: 1 failed,
+164 passed`: the one failure is `typecheck.clean`, whose diagnostics are exactly those intended errors (green clears
+it); `lint.clean` passes.
+
+**Interpretation stated, not silent.** `renderTranscriptPath`'s `launchDir` is passed an already-slugged value in
+`usage.test.ts`, which `launchDirSlug` leaves unchanged, so the case holds whether the function slugs `launchDir`
+itself or is handed the slug; the whole path is pinned by the in-process suite. The warning texts are pinned exactly
+where §2.6 fixes them (the version warnings) and by pattern where the amendment states only their parts (`adapter
+'<name>': usage.transcript: …absent`, `…input…not a non-negative integer`). D13's issue is pinned by its message
+(`launch.headless.output: json`), not its path.
+
+**Candidate findings (not filed).** None.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
