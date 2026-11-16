@@ -378,6 +378,53 @@ each answering at once with `SLOT`, no wait; `--maxWorkers=2`, foreground or a t
 None: the dl-132 note was recorded by the approver's `memory amend` (`84ca12e03`) before red, and no other element past
 its first state is edited (`git status --short` → clean before this notes commit).
 
+### review fix (qa, 2026-11-16)
+
+**Base.** Worktree head `c3307ab61`; `git rev-list --count HEAD..main` → `0`. The task stays `in-review`. Commit
+`75735a4b5` touches `test/cli/check-release-exit.test.ts` only (28 tests, 21 before).
+
+**The orchestrator's rulings on red's three ambiguities, pinned exactly.** All pass on first run against the shipped
+script:
+- (a) No sequencer row. The draft case is now exactly one line. A new in-development case (cp at v0.9,
+  `minor-v0.9` `in-development`, `features: []`) gives exit 1 and exactly two lines, the no-row line then
+  `… P4.22 is not in docs/04_memory/planning/rl-v1/minor-v0.9.md's features: (status in-development)`. There is no
+  per-id row line.
+- (b) A missing file is named by its path relative to the root. The missing sequencer gives
+  `check-release-exit: docs/01_vision/07_sequencer.md: no such file` exactly. A new case, a missing
+  `.wingfoil/memory.yaml`, gives `check-release-exit: .wingfoil/memory.yaml: no such file`. Both have exit 2 and an
+  empty stdout.
+- (c) `outcome()` now returns `stderr`, and every exit 0 / exit 1 case expects `stderr: ''`. That is 18 occurrences,
+  counted with `grep -c "stderr: ''"`.
+
+**The read confinement, red-first (orchestrator ruling).** Every file the script reads beyond `<path>` must be inside
+the root after realpath:
+- a release-element candidate of the walk whose realpath is outside is skipped, not counted;
+- a `.wingfoil/memory.yaml` or sequencer whose realpath is outside gives exit 2, an empty stdout, and
+  `check-release-exit: <relative path>: outside the repository`.
+
+The outside files live in a second temporary directory. The five cases, with the first failing assertion of each
+(all from the `toEqual` diff):
+1. `rl-v1/zz.md` is symlinked to an outside release (v0.4, in-development), beside the real `minor-v0.4.md`.
+   Expected exit 0, empty stdout and stderr. It received `"status": 2`, `"stderr": "check-release-exit: release v0.4:
+   2 release elements"`.
+2. The only v0.4 release is `rl-v1/zz.md`, symlinked outside. Expected exit 1, `… no release element has version
+   v0.4`. It received `"status": 0`, `"stdout": ""`.
+3. A release-line directory `rl-v9` is symlinked to an outside directory holding a v0.4 release. Expected exit 0. It
+   received `"status": 2`, `release v0.4: 2 release elements`.
+4. The sequencer is symlinked to an outside file. Expected exit 2,
+   `check-release-exit: docs/01_vision/07_sequencer.md: outside the repository`. It received `"status": 0`,
+   `"stderr": ""`.
+5. `.wingfoil/memory.yaml` is symlinked to an outside file. Expected exit 2,
+   `check-release-exit: .wingfoil/memory.yaml: outside the repository`. It received `"status": 0`, `"stderr": ""`.
+
+**Runs.**
+- `npx jest test/cli/check-release-exit.test.ts --maxWorkers=2` → 1 suite failed; 5 failed, 23 passed (28 tests).
+  The five failures are the confinement cases above.
+- `npx tsc --noEmit -p tsconfig.json` → exit 0.
+- `npx jest test/lint --maxWorkers=2` → 16 suites, 165 tests passed.
+- `npx eslint test/cli/check-release-exit.test.ts` → exit 0.
+- The invisible-character grep on the file found no hit.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
