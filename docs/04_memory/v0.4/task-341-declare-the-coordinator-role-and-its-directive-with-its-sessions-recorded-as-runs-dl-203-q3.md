@@ -396,6 +396,122 @@ design defect:
   pinned build (`node node_modules/wingfoil-released/dist/cli.js directives list --role coordinator --format json`,
   `--version` → `0.3.2 (6de2e13c0…)`) in the scratch clone after the four writes: exit 0, 8 entries, stderr empty.
 
+### green (developer, 2026-11-16)
+
+**Start.** `git rev-list --count HEAD..main` → `0` (no merge); head `10c16bb46`. PATH guard: `command -v wingfoil` → the
+task's PATH shim; `wingfoil --version` and `node dist/cli.js --version` → `0.3.2 (83b06679a…)` (a stale build), so the
+code build was rebuilt on the clean tree under the heavy-gate slot (`npm run -s build`) → `0.3.2 (10c16bb46…)`, and again
+before the `dna` writes → `0.3.2 (13a665485…)`. `WINGFOIL_AGENT_MODEL` exported with the shim; the worktree contains
+`11f1736de` (`git merge-base --is-ancestor 11f1736de HEAD` → true), so every verb wrote its own attribution pair
+(`git log -1 --format=%B <sha> | grep -c '^Co-Authored-By:'` → `1` for each of the four verb commits below) and none was
+amended.
+
+**Commits, in the design's order 3 → content → 1 → 2 → 4** (`git log --oneline 10c16bb46..HEAD`):
+- `5d3076f17 wf(directive): create coordinator` — `node dist/cli.js directive create --name coordinator` → exit 0, the
+  11-line scaffold.
+- `13a665485 feat(directives): task-341 — the coordinator directive …` — the content (approver rulings D4, D5):
+  frontmatter `version: "1.0"` with a comment naming task-341, `ref: [P3.2, P3.7, REQ-SYS-08]`, no `scope:`; §1 C1 and
+  `dl-203` D2's three items verbatim as `1.`–`3.`; §2 C2, the approver-gated verbs (`memory approve`/`reject`/`amend`,
+  an approval `workflow finalize`, `workflow adopt --plan --apply`, `workflow rekey`, `E_AGENT_CONTEXT`), no gate
+  (`approval:`, `awaits:`, standing rules), no step's work in place of its role (`dl-134`), no human-only launch; §3 C3,
+  the element (the plan), the run id `<plan-id>/adhoc/<n>`, the branch at exit, the hand-driven case, no hand-written
+  record (`spec-016` §4.5); §4 the mechanical commands allowed as a hand-driven run until the driver ships (D5); §5
+  versioning. `grep -c npx .wingfoil/directives/custom/coordinator.md` → `0`.
+- `f1b14913b wf(dna): add team.roles coordinator` — `dna add team.roles --value coordinator --entry-description
+  "Coordinates a run between workflow steps; decides only the judgement points the configuration leaves, never a gate
+  (dl-203 D2)."` → exit 0, `version:` 2.4 → 2.5, two lines after `approver`.
+- `2749f4511 wf(dna): update team.agents.Claude` — `dna update team.agents.Claude --entry-executes_as
+  developer,reviewer,qa,architect,facilitator,coordinator` → exit 0, 2.5 → 2.6, `executes_as: [developer, reviewer, qa,
+  architect, facilitator, coordinator]`.
+- `3e950f601 wf(directive): assign coordinator to coordinator` — `directive assign --directive coordinator --role
+  coordinator` → exit 0, `roles.yaml` 1.9 → 2.0, `coordinator: [coordinator]` after `approver`; the version comment left
+  at `# 1.9 …` by the verb.
+- `f5503b573 chore(dna): task-341 — …` — the history comment `2.4 -> 2.6 at task-341 (…)` and `# [SPEC: dl-203 D2,
+  spec-002 Role binding] …` on the new entry, no raise. `node -e` with js-yaml on the file → the entry parses as
+  `{"name":"coordinator","description":"Coordinates a run …(dl-203 D2)."}` (the trailing comment is not in the value),
+  `version` 2.6.
+- `5b67fb416 chore(roles): task-341 — …` — `version: 2.0 # 2.0 coordinator: [coordinator] (task-341) (prev 1.9 approver:
+  [code-review, standing-approvals] (task-343) (prev 1.8 …))` and a header paragraph for the binding, no raise.
+  `npx jest test/directives/standing-approvals.test.ts test/lint/version-bump.test.ts --maxWorkers=2` → `Tests: 47
+  passed, 47 total` (the `task-343` pin holds).
+- `1434832c5 docs(agents): task-341 — …` — AGENTS.md §3 directives row (`, coordinator`), §4 Roles and "AI agents execute
+  as `…/facilitator/coordinator`", §7 table row `| coordinator | coordinator |` and the §7 paragraph clause;
+  `.wingfoil/README.md` directive list and `.wingfoil/WORKFLOW.md` Roles Summary row (D5, the WORKFLOW.md hunk is that
+  one row only); the `PLANNED` allowlist entry for `.wingfoil/directives/custom/coordinator.md` deleted from
+  `test/docs/name-resolvability.allowlist.ts` (the allowlist header's stale-entry rule).
+
+**Red → green.** `npx jest test/directives/coordinator.test.ts test/agent/repository-agent-roles.test.ts
+test/directives/wingfoil-cli.test.ts test/cli/check-role-directives.test.ts --maxWorkers=2` → `Test Suites: 4 passed, 4
+total`, `Tests: 45 passed, 45 total` (per file, from `--json`: coordinator 9, repository-agent-roles 10, wingfoil-cli 18,
+check-role-directives 8). The red notes say `44 total` (16 failed + 28 passed); 9 + 10 + 18 + 8 = 45 at this head with no
+commit to those files since red (T4 check below), so red's count is off by one passing test, not a change of the tests.
+With the parity suites of the files touched: `npx jest test/docs/agents-md.test.ts test/docs/workflow-md.test.ts
+test/docs/name-resolvability.test.ts <the four red files> --maxWorkers=2` → `Test Suites: 7 passed`, `Tests: 78 passed,
+78 total`.
+
+**Per AC.**
+- **AC 1** — met: `git show HEAD:.wingfoil/dna.yaml` holds one `coordinator` entry with no `human_only`, `Claude`
+  executes it, `version: 2.6` naming task-341; `repository-agent-roles.test.ts` 10/10 above.
+- **AC 2** — met: `coordinator.test.ts` AC 2 cases (4) pass.
+- **AC 3** — met: §3 states C3; the case running the code build's `agent execute --element
+  plan:release-planning-rel-v0.4-plan --role coordinator --dry-run --format json` passes (exit 0, the no-terminal
+  warning, a `coordinator` run of `Claude`, HEAD and status unchanged).
+- **AC 4** — met: `npm run -s check:role-directives` → nine `<role>: ok` lines, `role-directives: 9 roles checked, 0
+  with warnings`, exit 0; `roles.yaml` `version: 2.0` naming task-341.
+- **AC 5** — met in the worktree (characterization): `npm run -s wingfoil -- directives list --role coordinator --format
+  json` (pinned 0.3.2) → `warnings: []`, 8 entries, the one with id `coordinator` =
+  `['directives/custom/coordinator.md', ['coordinator'], false, 'coordinator']`; `directives list --role coordinator`
+  (console) → exit 0.
+
+### refactor (developer, 2026-11-16)
+
+No code to refactor (no `src/` change, `git diff --name-only main...HEAD -- src` → empty). `git rev-list --count
+HEAD..main` → `0` before the gates and after them: no merge. Gates on the clean tree at `1434832c5`, each heavy one
+after the heavy-gate slot (it waited behind task-359's `jest --coverage`, `ps -eo pid,etime,args` → that jest at
+`07:47` elapsed while this task's slot waiter was at `03:18`; the typecheck's lock printed `heavy gate typecheck: waiting
+for the machine-wide lock …, held by pid 3119169 in …/task-359 …`):
+- `npm run -s build` then `npm test -- --maxWorkers=2` → exit 0, `Test Suites: 651 passed, 651 total`, `Tests: 11939
+  passed, 11939 total` (`Time: 1132.839 s`). No pending amendment in the tree, so `bug-534` did not arise.
+- `npm run test:coverage -- --maxWorkers=2` → exit 0, `All files | 99.09 | 96.96 | 98.65 | 99.62` (statements, branches,
+  functions, lines), 651 suites / 11939 tests passed.
+- `npm run lint` → exit 0, no output after `eslint .`. `npm run docs:api` → exit 0, no warning (`grep -i warn` on its
+  output → none). `npm run typecheck` → exit 0 (both `tsconfig.json` and `tsconfig.build.json`).
+- `docs.parity`: the `test/docs/` suites ran in the full suite above, all passing. No CLI or help change, so
+  `docs/cli-reference.md` is untouched; `test/docs/cli-reference.test.ts` passed in the full suite.
+- Pinned build (`dl-205`): `npm run -s check:mcp` → exit 0, both lines `prompts: 9, resources: 4, tools: 0` (the
+  `coordinator-session` Prompt is the ninth); `npm run -s wingfoil -- dna show` stderr only task-340's `unknown field(s)
+  ignored: team.roles[4].human_only, team.roles[5].human_only, team.roles[7].human_only` (the coordinator adds none);
+  `npm run -s wingfoil -- --format json workflow list` → 11 workflows, `diagnostics: []`.
+
+### self-review (developer, 2026-11-16)
+
+Against `code-review`, the design's "Files to touch" and the rulings D1 (a)–D5:
+- Scope: `git diff --name-only main...HEAD` → `.wingfoil/README.md`, `.wingfoil/WORKFLOW.md`,
+  `.wingfoil/directives/custom/coordinator.md`, `.wingfoil/dna.yaml`, `.wingfoil/roles.yaml`, `AGENTS.md`,
+  `docs/04_memory/design/specs/spec-002-dna-yaml-schema.md` (the approver's amend `526e7d6d6`), the task file and red's
+  four test files: the design's list, no `src/`, no workflow file, no BDD file. The allowlist is absent from that diff
+  because its `PLANNED` entry was added on this branch (`69bfd67c1`) and removed by `1434832c5`, a net zero against
+  `main`.
+- T4: `git log --first-parent --no-merges --format=%h f3f0ddff0..HEAD -- test/directives/coordinator.test.ts
+  test/agent/repository-agent-roles.test.ts test/directives/wingfoil-cli.test.ts test/cli/check-role-directives.test.ts`
+  → empty.
+- One operation per commit: each `wf()` commit touches one file (`git show --stat <sha>`), the hand comments are their
+  own `chore` commits with no raise; version raises: `dna.yaml` 2.4 → 2.6 (two verb raises), `roles.yaml` 1.9 → 2.0 (one),
+  the directive starts at 1.0; AGENTS.md, `.wingfoil/README.md`, `.wingfoil/WORKFLOW.md` carry no `version:`.
+- The directive agrees with `standing-approvals` (no agent approves under a rule; it may run evidence commands) and with
+  `spec-018` §3 (the refused verbs listed are the ones AGENTS.md §8 and the overrides of this release name). Positive case
+  of the absence claim "never names npx": `grep -c 'wingfoil agent execute' .wingfoil/directives/custom/coordinator.md`
+  → `1`, `grep -c npx` → `0`.
+- Same-class: every role list that the ninth role changes in the files touched was updated (`grep -n
+  'facilitator, approver' AGENTS.md .wingfoil/README.md .wingfoil/WORKFLOW.md` → only the updated §4 line now reading
+  `…, approver, coordinator`).
+- Invisible characters: the grep of the brief over every changed file → no hit before each commit.
+No finding.
+
+### Pending amendments (approver)
+
+None.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -403,3 +519,6 @@ design defect:
      printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
      Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
      here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+
+- Red's notes count `44` tests in its four files; the same files hold 45 at green with no commit to them since red (`npx jest <the four files> --maxWorkers=2 --json` → 9 + 10 + 18 + 8): a red count to recheck by command before it is written.
+- The heavy-gate slot dominated the wall clock: the full suite alone took `1132.839 s`, after waiting behind another task's coverage run.
