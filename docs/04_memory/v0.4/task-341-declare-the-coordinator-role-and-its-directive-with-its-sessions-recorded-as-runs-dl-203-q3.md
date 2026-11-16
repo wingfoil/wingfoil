@@ -535,6 +535,8 @@ passed, 51 total`; `npm run -s check:role-directives` → `role-directives: 9 ro
 `warnings: []`, 8 entries. Full suite not re-run: the fix changes only the directive text and these notes (`git diff
 --stat 3c6054766..HEAD` lists only those two files). T4: no red file touched.
 
+- Re-review note (a), folded in at `8041bc66e`: §4's merge item adds that a merge that conflicts is aborted and routed by `dev-loop` `done`'s `fallback` (`dl-014` G4), resolving the conflict being a step's work, not the coordinator's; `npx jest test/directives/coordinator.test.ts test/directives/standing-approvals.test.ts --maxWorkers=2` → `Tests: 24 passed, 24 total`.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
