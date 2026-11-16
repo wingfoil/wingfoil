@@ -67,6 +67,15 @@
  *   committed something since `state_ref` (task-353, `bug-500`; `spec-016` §3.3 step 16's start-up hint is not given
  *   then).
  *
+ * - `WINGFOIL_FAKE_AGENT_SAY` — a JSON array of `["out" | "err", "<text>"]` pairs; on a launch, after its record line and
+ *   before the headless document, the fake writes each text as is (no newline added) to its stdout (`out`) or its stderr
+ *   (`err`), in order, each write awaited before the next: the output a headless run forwards to the caller (task-336,
+ *   `dl-182` Q1 (a); `spec-016` §3.5).
+ * - `WINGFOIL_FAKE_AGENT_REGISTRY=1` — on a launch, before its record line, the fake records `pid` (its own
+ *   `process.pid`) and `registry`: one `{ path, entry }` per file under `<cwd>/.wingfoil/run/`, sorted by path, `path`
+ *   relative to `cwd` with `/` separators and `entry` the file's parsed JSON — the active registry while the agent runs
+ *   (task-336, `dl-181`; `spec-016` §7). An entry holds a pid, names and an instant, nothing secret (`REQ-SEC-08`).
+ *
  * Every launch record also carries `cwd`, the fake's working directory (`process.cwd()`): where `agent execute` launched
  * the agent (task-353, `bug-499`; `spec-016` §3.1, §3.3 step 14). A path, not a secret.
  *
@@ -79,7 +88,8 @@
 'use strict';
 
 const { execFileSync, spawn } = require('child_process');
-const { appendFileSync, readFileSync, statSync, writeFileSync } = require('fs');
+const { appendFileSync, existsSync, readdirSync, readFileSync, statSync, writeFileSync } = require('fs');
+const { join } = require('path');
 
 /** What `--version` prints, and what the manifests' `verified_with` names. */
 const VERSION = 'fake-agent 1.0.0';
@@ -292,6 +302,46 @@ function cliFacts() {
   };
 }
 
+/**
+ * `WINGFOIL_FAKE_AGENT_REGISTRY=1`: the fake's pid and every file under `<cwd>/.wingfoil/run/`, sorted by path, each
+ * parsed (a file that is not JSON is recorded as its text); an empty object otherwise.
+ */
+function registryFacts() {
+  if (process.env.WINGFOIL_FAKE_AGENT_REGISTRY !== '1') return {};
+  const base = '.wingfoil/run';
+  const files = [];
+  const walk = (relative) => {
+    const absolute = join(process.cwd(), relative);
+    if (!existsSync(absolute)) return;
+    for (const entry of readdirSync(absolute, { withFileTypes: true })) {
+      const path = `${relative}/${entry.name}`;
+      if (entry.isDirectory()) walk(path);
+      else files.push(path);
+    }
+  };
+  walk(base);
+  files.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  const registry = files.map((path) => {
+    const text = readFileSync(join(process.cwd(), path), 'utf-8');
+    try {
+      return { path, entry: JSON.parse(text) };
+    } catch {
+      return { path, entry: text };
+    }
+  });
+  return { pid: process.pid, registry };
+}
+
+/** `WINGFOIL_FAKE_AGENT_SAY`: write each declared text to stdout or stderr, in order, each write awaited. */
+async function say() {
+  const declared = process.env.WINGFOIL_FAKE_AGENT_SAY;
+  if (declared === undefined || declared === '') return;
+  for (const [stream, text] of JSON.parse(declared)) {
+    const target = stream === 'err' ? process.stderr : process.stdout;
+    await new Promise((resolve) => target.write(text, () => resolve()));
+  }
+}
+
 /** One launch: record, optionally connect, then print the headless document. Returns the exit code. */
 async function launch(argv, stdin) {
   const bootstrapFile = option(argv, '--prompt-file');
@@ -316,7 +366,8 @@ async function launch(argv, stdin) {
     }
   }
   const cli = cliFacts();
-  record({ argv, stdin, cwd: process.cwd(), env: Object.keys(process.env).sort(), mcp, ...cli, ...(failure === null ? {} : { failure }) });
+  const registry = registryFacts();
+  record({ argv, stdin, cwd: process.cwd(), env: Object.keys(process.env).sort(), mcp, ...cli, ...registry, ...(failure === null ? {} : { failure }) });
   if (failure !== null) {
     process.stderr.write(`fake-agent: ${failure}\n`);
     return 1;
@@ -324,6 +375,7 @@ async function launch(argv, stdin) {
   if (process.env.WINGFOIL_FAKE_AGENT_COMMIT === '1') {
     execFileSync('git', ['-c', 'commit.gpgsign=false', 'commit', '--allow-empty', '--no-verify', '--quiet', '-m', 'fake: work'], { stdio: 'ignore' });
   }
+  await say();
   if (argv.includes('--headless')) process.stdout.write(`${JSON.stringify(documentFor(sessionId))}\n`);
   return null;
 }

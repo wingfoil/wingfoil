@@ -6,7 +6,8 @@
  *
  * - the argv: `launch.headless.args` rendered, then `session.assign_args` (`renderLaunchArgv(manifest, values,
  *   'headless')`); `launch.interactive.args` for the interactive kind, as before;
- * - the spawn options: headless → stdin the null device, stdout piped (and drained), stderr inherited, the child
+ * - the spawn options: headless → stdin the null device, stdout and stderr piped (forwarded line by line to `agent
+ *   execute`'s stderr from task-336, `dl-182` Q1 (a); stderr was inherited before), the child
  *   in a session and process group of its own on POSIX (`detached`); interactive → stdio inherited, as before;
  * - the signals: headless forwards `SIGINT`, `SIGTERM` and `SIGHUP` and ignores `SIGQUIT`; the interactive sets
  *   are `launch-process.test.ts`'s (`SIGINT`/`SIGQUIT`/`SIGHUP` ignored, `SIGTERM` forwarded: task-355, `bug-318`);
@@ -86,7 +87,7 @@ describe('task-335 AC 4 — renderLaunchArgv(manifest, values, kind) (spec-016 �
 });
 
 describe('task-335 AC 4 — the work run spawns with no terminal (spec-016 §3.3 step 14, D6)', () => {
-  it('headless: the headless argv; stdin the null device, stdout piped and drained, stderr inherited, detached on POSIX; recorded result n/a', async () => {
+  it('headless: the headless argv; stdin the null device, stdout and stderr piped (task-336), detached on POSIX; recorded result n/a', async () => {
     const { root, input } = fixture('headless');
     const child = new FakeChild();
     const { run, calls } = launch(root, input, child);
@@ -95,7 +96,7 @@ describe('task-335 AC 4 — the work run spawns with no terminal (spec-016 §3.3
     const outcome = await settle(child, run);
     expect(calls).toHaveLength(1);
     expect(calls[0]!.args).toEqual(['scripts/agent-ok.cjs', '--work']);
-    expect(calls[0]!.options).toMatchObject({ cwd: root, env: process.env, stdio: ['ignore', 'pipe', 'inherit'] });
+    expect(calls[0]!.options).toMatchObject({ cwd: root, env: process.env, stdio: ['ignore', 'pipe', 'pipe'] });
     expect(calls[0]!.options.detached === true).toBe(POSIX);
     expect(flowing).toBe(true);
     if (!outcome.ok) throw new Error(outcome.error.message);

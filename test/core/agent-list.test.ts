@@ -11,7 +11,9 @@
  * - AC 1: past — two element files, element id byte order then append order; the console line; `no past runs`.
  * - AC 2: waiting — two open instances, parallel frontier steps, one with a non-agent role; agent-role steps
  *   only, in frontier order, each with the DNA-ordered agents that declare an adapter.
- * - AC 3: no flag or both flags → both sections (`--active` is the CLI suite's: Commander refuses it).
+ * - AC 3: no flag → every section, past, waiting and active (task-336, approver ruling D13 (a): `spec-016` §5 "none, or
+ *   all three, select all three"); `--past --waiting` → those two. The active section itself is
+ *   `test/core/agent-list-active.test.ts`'s.
  * - AC 4: a run log changed only in the working tree is not read; `W_UNCOMMITTED_INPUTS` names its path, once.
  * - AC 5: no `paths.runs` → empty past and a warning, exit 0; a §4.5 violation → `VALIDATION`, exit 1.
  */
@@ -263,11 +265,12 @@ const head = (root: string): string => git(root, ['rev-parse', 'HEAD']).trim();
 const render = (value: unknown): string => agentListOperation().renderConsole!(value);
 
 describe('task-240 — agent list is registered (spec-016 §5, §8; spec-006 §3)', () => {
-  it("is the agent module's read-only agentList: flags --past/--waiting, options --element/--phase, a console renderer, no positional", () => {
+  it("is the agent module's read-only agentList: flags --past/--waiting/--active, options --element/--phase, a console renderer, no positional", () => {
     const operation = agentListOperation();
     expect(operation.mutates).toBe(false);
     expect(operation.positional).toBeUndefined();
-    expect((operation.flags ?? []).map((flag) => flag.name)).toEqual(['past', 'waiting']);
+    // task-336 (`spec-008` §12, `spec-016` §5): `--active` is registered from v0.4.
+    expect((operation.flags ?? []).map((flag) => flag.name)).toEqual(['past', 'waiting', 'active']);
     expect((operation.options ?? []).map((option) => [option.name, option.valueName])).toEqual([
       ['element', 'type:id'],
       ['phase', 'name'],
@@ -406,7 +409,7 @@ describe('task-240 AC 2 — waiting: agent-role frontier steps of every open ins
   });
 });
 
-describe('task-240 AC 3 — no flag, or both flags, shows both sections (spec-016 §5)', () => {
+describe('task-240 AC 3 — no flag shows every section, both flags past and waiting (spec-016 §5; task-336 D13 (a))', () => {
   let repo: string;
   beforeAll(() => {
     repo = makeTempGitRepo();
@@ -417,18 +420,20 @@ describe('task-240 AC 3 — no flag, or both flags, shows both sections (spec-01
   });
   afterAll(() => removeTempDir(repo));
 
+  // task-336 (D13 (a)): with no flag the active section is shown too (empty here: no `.wingfoil/run/`); both flags
+  // stay the past and waiting sections.
   it.each([
-    ['no flag', {}],
-    ['both flags', { past: true, waiting: true }],
-  ])('%s → baseline, past, waiting and diagnostics; console prints both sections, past first', async (_name, request) => {
+    ['no flag', {}, ['baseline', 'past', 'waiting', 'active', 'diagnostics', 'warnings'], ['no active runs']],
+    ['both flags', { past: true, waiting: true }, ['baseline', 'past', 'waiting', 'diagnostics', 'warnings'], []],
+  ])('%s → its keys; console prints past first, then waiting (then active)', async (_name, request, keys, activeLines) => {
     const value = await listed(repo, request);
-    expect(Object.keys(value)).toEqual(['baseline', 'past', 'waiting', 'diagnostics', 'warnings']);
+    expect(Object.keys(value)).toEqual(keys);
     expect(value.diagnostics).toEqual([RED_UNEXECUTED]);
     expect(value.warnings).toEqual([RED_UNEXECUTED_WARNING]);
     expect(value.past!.map((record) => record.id)).toEqual(['task-a/green/1']);
     expect(value.waiting!.map((step) => step.key)).toEqual(['planning.commit-backlog@release:minor-2']);
     expect(render(value)).toBe(
-      ['past runs: 1', 'task-a/green/1  developer  Zed  0  5.1s  1200/340', 'waiting steps: 1', 'planning.commit-backlog@release:minor-2  developer  Zed, Amy', ''].join('\n'),
+      ['past runs: 1', 'task-a/green/1  developer  Zed  0  5.1s  1200/340', 'waiting steps: 1', 'planning.commit-backlog@release:minor-2  developer  Zed, Amy', ...activeLines, ''].join('\n'),
     );
   });
 });
