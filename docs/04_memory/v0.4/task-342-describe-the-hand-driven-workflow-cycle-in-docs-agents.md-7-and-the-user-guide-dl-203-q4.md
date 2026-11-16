@@ -49,3 +49,349 @@ guides only).
 ## Execution Notes
 
 <!-- Filled by the dev-loop. -->
+
+### design (architect, 2026-11-16)
+
+**Inputs read.** Base: `main` `a5ac982fc` + `1bfae7c26` (`wf(task): start`) + `2fedaa6ae` (`wf(bug): sync bug-502-…
+[planned → in-progress]`), `git log --oneline -3`. PATH guard: `command -v wingfoil` → the task's PATH shim;
+`wingfoil --version` and `node dist/cli.js --version` → `0.3.2 (a5ac982fcf07…)`; the pinned build (`npm run -s
+wingfoil -- --version`, `node node_modules/wingfoil-released/dist/cli.js --version`) → `0.3.2 (6de2e13c004b…)`.
+`depends_on: [task-341]` (`done`, merged `5f8aef7dd`): its design notes and the new
+`.wingfoil/directives/custom/coordinator.md` (`version: "1.0"`) read; §1 (the three judgement points), §2 (the
+never-list), §3 (the run record) and §4 (the mechanical steps until the driver) are the sentences this text must
+agree with. Contract status (`grep -m1 "^status:"`): `dl-203`, `dl-212`, `dl-135`, `dl-181`, `dl-171` `ready`;
+`dl-203` ratified Q1 (a), Q2 (a), Q3 (a), Q4 (a) (`git log -1 --format=%b 6c17f75ef`). `dl-212` D4 (`sed -n 91,93p`):
+L0 wording is "approvals with a name and a reason" and "agent commits are marked"; no "signed", no "human-approved".
+`minor-v1.0` carries `features: [P4.10, P4.12, P4.17]` (`grep -n "^features:" docs/04_memory/planning/rl-v1/minor-v1.0.md`),
+the version the guides name for the driver (`dl-203` Q2 (a)). Survey of the task: no spec amendment (`dl-203` Q4 is
+guides only); none is prepared. No `.wingfoil/` file changes, so `npm run check:mcp` and the pinned `workflow show`
+are not required (no workflow, directive or config is touched).
+
+**What exists today.**
+- `docs/agents.md` §7 (lines 154–166) is a four-item list (status/next, act in the role, record with the verbs, stop
+  at a gate) plus "Start or end a workflow only when the human asks you to.": no `memory add --workflow --step`, no
+  `workflow finalize`, no loop, no coordinator, no version per manual step (`sed -n 154,166p docs/agents.md`).
+- `bug-502` reproduced: `grep -n "memory search" docs/agents.md` → `:47` `wingfoil memory search --type <type>
+  [--status <s>]` (§2 table, "current work and decisions") and `:101`, `:102`, `:109`, `:190` (none recommends a
+  status); `grep -niE "pending|stays|until.*approv" docs/agents.md` → no match; no section says where a rule given
+  in a request goes (`grep -niE "request|decision-log" docs/agents.md` → only `:30`, the pillar table's "decision-logs").
+- `docs/user-guide.md` §7 (lines 389–490): the scaffold table (pinned by `test/docs/user-guide-scaffold.test.ts`), then
+  "A workflow is run in four steps:" (Start / Ask what comes next / Do the step / End it, lines 420–441), the
+  "WingFoil records and routes" paragraph and the `examples/06-workflow-approval` link (pinned by
+  `test/cli/e2e-smoke.test.ts:805-812`).
+- Neither file has a `version:` (`grep -n "version:" docs/agents.md` → none; `docs/user-guide.md` only `:483`, a YAML
+  example), so no doc-versioning bump. Neither cites an internal decision id (`grep -n "dl-[0-9]\|spec-[0-9]"` → only
+  example ids `dl-1`, `dl-001-use-postgresql`, `spec-001-storage-layout`).
+
+**AC 4 evidence: every command the new text names, run on the pinned build 0.3.2.** A scratch project outside the
+worktree: `git init`, a local identity, `node <worktree>/node_modules/wingfoil-released/dist/cli.js init --template
+Scrum` → exit 0; `dna add team.members --value "Ada Approver" --entry-email ada@example.com --entry-roles
+approver,developer` → exit 0. Then, pinned build, in order:
+1. `workflow status` → `no open workflows`, exit 0.
+2. `workflow start decision-log-ingest` → exit 0, `started decision-log-ingest as decision-log-ingest-1-plan
+   (active)`, `next step: decision-log-ingest.capture`, `role: product-owner`, the action line `memory.add(type:
+   decision-log) [wingfoil: wingfoil memory add --type decision-log --title <title> --workflow
+   decision-log-ingest-1-plan --step decision-log-ingest.capture]`, `evidence missing: produces`; commits `wf(plan):
+   add …`, `wf(plan): submit …`.
+3. `workflow next` → exit 0, the same step and action line under `workflow: decision-log-ingest
+   (decision-log-ingest-1-plan)`.
+4. `memory add --type decision-log --title "Prefer composition over inheritance" --workflow decision-log-ingest-1-plan
+   --step decision-log-ingest.capture` → exit 0, `{"id": "dl-001-prefer-composition-over-inheritance", …}`; the commit
+   body carries `WingFoil-Instance: decision-log-ingest-1-plan`, `WingFoil-Step: decision-log-ingest.capture`.
+5. body filled, `memory submit dl-001` → exit 0, `"from": "draft", "to": "pending"`.
+6. `workflow next` → exit 0, `next step: decision-log-ingest.approve@decision-log:dl-001-prefer-composition-over-inheritance`,
+   `role: approver — held by Ada Approver`, `evidence missing: state`, `human needed: approve or reject
+   dl-001-prefer-composition-over-inheritance — routed to Ada Approver <ada@example.com>`.
+7. `workflow status` → exit 0, `phases: capture complete, approve current`, `pending approvals: 1`, the same `human
+   needed:` line.
+8. `memory search --type decision-log` → exit 0, one match, `"status": "pending"`; `memory search --type
+   decision-log --status approved` → exit 0, `"matches": []`, `"message": "no documents matched the query"` (the
+   consumer's case of `bug-502`); `--format console` prints the same JSON; `--status pending --status draft` → no
+   match (the last value wins: `--status` keeps one state).
+9. `memory deprecate decision-log-ingest-1-2-plan --reason "Drop the second capture run."` (a second plan) → exit 0;
+   `memory search --type plan` lists only the two `active` plans; `--status deprecated` lists the deprecated one
+   (default = every state but `deprecated`, as `docs/agents.md` §9 says).
+10. `workflow end` (the DL run, approve pending) → exit 1, `error: workflow 'decision-log-ingest' is not complete:
+    current step decision-log-ingest.approve@decision-log:dl-001-prefer-composition-over-inheritance`, `hint: wingfoil
+    memory deprecate decision-log-ingest-1-plan abandons it`.
+11. `workflow start sw-life-cycle` → exit 0, `next step: sw-life-cycle.inception`, `evidence missing: record
+    (finalizable)`; `workflow finalize --dry-run` (and `--format console`, the same JSON) → subject `workflow: finalize
+    <instance> sw-life-cycle.inception`, `paths: []`; `workflow finalize` → exit 0, `finalized: sw-life-cycle.inception
+    (8e6e3c10…)`, `next step: sw-life-cycle.specification`.
+12. `workflow show`, `workflow list`, `directive create --help`, `agent execute --help` (`--next`, `--element`,
+    `--role`) → exit 0 (help texts read).
+13. `coordinator`: `agent execute --element plan:decision-log-ingest-1-plan --role coordinator --dry-run` → exit 1,
+    `error: unknown role 'coordinator' (not defined in dna.yaml)` (the scaffold declares none: a project declares
+    it). After `dna add team.roles --value coordinator` and `dna update team.agents.claude --entry-executes_as
+    developer,product-owner,coordinator` (both exit 0), with a stub `claude` that exits 1 first on `PATH`: the pinned
+    dry run without a terminal → exit 1, `error: interactive launch needs a terminal on stdin and stdout`; under
+    `script -qec … /dev/null` (a pty) → exit 0, `warning: no directives assigned to role 'coordinator'`, `"subject":
+    "agent: record decision-log-ingest-1-plan/adhoc/1"`, `"phase": "adhoc"`, `"role": "coordinator"`. The code build,
+    no pty → exit 0, the same subject, plus `warning: interactive launch needs a terminal on stdin and stdout: a run
+    without --dry-run is refused here`.
+
+**Where the builds differ** (decision D1):
+- `memory approve dl-001 --reason "Accept the rule." --dry-run` in this agent's shell: the code build → exit 1,
+  `error: E_AGENT_CONTEXT: 'memory approve' needs the approver and does not run in an agent's session
+  (CLAUDE_CODE_CHILD_SESSION is set): …`; the pinned build → exit 0, the dry-run plan `wf(decision-log): approve … [pending
+  → approved]`. The refusal is new in 0.4 (`task-333`).
+- `agent execute --help | grep -c -- --headless`: code build `1`, pinned `0` (`task-335`, new in 0.4).
+- `workflow status` on the code build adds `warning: kept by the pre-marker rule: restart it with workflow start` under
+  the plans the pinned build opened (`W_INSTANCE_PRE_MARKER`, expected); the new text quotes no `workflow status`
+  output beyond `human needed:`, printed by both.
+
+**AC classification and what qa pins.** Red runs `npx tsc --noEmit -p tsconfig.json` and `npx jest test/lint
+--maxWorkers=2` before its commit. No export changes (no TS2305 red). New test file
+`test/docs/hand-driven-cycle.test.ts`, shape of `test/docs/l0-attribution-text.test.ts` (`read`, `flat` — whitespace
+runs collapsed, blockquote markers dropped — and a section helper from a heading line to the next heading of the same
+or a higher level); words pinned verbatim, each absence beside its positive (`task-276`). Every case fails at red on
+an assertion (the sentences are absent: `grep -c "hand-driven" docs/agents.md docs/user-guide.md` → `0`, `0`).
+
+| AC | Class | Why |
+|---|---|---|
+| 1 agents.md §7: the cycle, the coordinator, the version per manual step | red-first | §7 has none of them (above) |
+| 2 user-guide §7: the same cycle for a human | red-first | §7 has a four-step list with no loop, no finalize-in-loop link, no table |
+| 3 agents.md: `--status`, own records pending, request knowledge, two levels | red-first | `bug-502` reproduced above |
+| 4 every command runs on the pinned build; `npm test -- test/docs` green | characterization | the commands exist and print what the text says (runs above); the CLI-surface case passes on its first run once the text exists, and fails at red only because the text is absent |
+
+- **AC 1** (`docs/agents.md`, section `## 7. Following a workflow`, heading kept verbatim):
+  (a) a sub-heading `### The cycle` whose section holds a numbered list `1.`–`5.` and no sixth item, and, flattened,
+  the sentences S1–S5 below; (b) `An agent following this cycle is a hand-driven run, not a coordinator.`;
+  (c) a sub-heading `### The coordinator` whose section contains, flattened: `which frontier steps to run in
+  parallel, within the declared caps;`, `the triage of a failure the driver reports (rerun, open a bug, stop);`,
+  `the content of an element that no other role's step writes.`, the sentence `The coordinator never approves, rejects
+  or amends, and never decides a gate.` — and the test also asserts that this sentence occurs in
+  `.wingfoil/directives/custom/coordinator.md` (a parity, so the two cannot drift) — and `A coordinator session is
+  recorded as a run: it is launched with \`wingfoil agent execute --element <type>:<id> --role coordinator\`, which
+  appends its record to the run log and commits it as \`agent: record <run-id>\` when the session exits.`, and
+  `Until the driver ships, the coordinator may run the driver's mechanical steps as a hand-driven run`;
+  (d) a sub-heading `### What removes each manual step` whose first table has exactly the eight body rows below, in
+  order, compared as (first cell, last cell) after trimming.
+- **AC 2** (`docs/user-guide.md`, section `## 7. Workflows`): (a) flattened, it contains U1–U3 below and a numbered
+  list `1.`–`5.` after U1 whose items begin (bold) `**Ask where the run stands.**`, `**Do the step, or have it
+  done.**`, `**Record it with the verbs.**`, `**Record what nothing else shows.**`, `**Decide the gates.**`; (b) it
+  contains `` `wingfoil memory add` `` together with `--workflow <instance> --step <step-key>` and `` `wingfoil
+  workflow finalize` `` and `` `wingfoil agent execute --next` ``; (c) a link `](agents.md#7-following-a-workflow)`;
+  (d) the first table after the bold lead `**What removes each manual step.**` (the guide has no `###` under §7) has
+  body rows equal to agents.md §7's (first cell, last cell) list (a parity case reading both files); (e) the scaffold
+  table stays the FIRST table of §7 (the existing `user-guide-scaffold.test.ts` keeps covering it: nothing to add) and the `06-workflow-approval` link
+  stays (`e2e-smoke.test.ts:805-812`, unchanged).
+- **AC 3** (`docs/agents.md`): (a) §2's table row whose first cell starts `current work and decisions` has the
+  command cell `` `wingfoil memory search --type <type>` (every state but `deprecated`; §6) `` and the old
+  `[--status <s>]` is gone from that row; (b) section `## 6. Writing: the verbs` contains, flattened, P1, P2 and P3
+  below; (c) section `## 7.` has a sub-heading `### Levels of process` containing L1–L3 below (`**Light:**` and
+  `**Strict:**` each lead a list item).
+- **AC 4**: (a) every inline code span starting `wingfoil ` inside agents.md §2's changed row, §6's three new
+  paragraphs, §7, and user-guide §7 names a command path that `buildProgram()` (`src/cli/program`, as
+  `test/docs/name-resolvability.test.ts` imports it) registers, and each `--flag` in the span is an option of that
+  command or a global option (placeholders `<…>` and `…` skipped). This is the code build's surface; the pinned runs
+  are this note's evidence (D1); (b) absences beside positives: neither file contains `signed` (as a word) or
+  `human-approved` (`grep -n -i "\bsigned\b\|human-approved" docs/agents.md docs/user-guide.md` → none today; the
+  positive: the coordinator sentence present); (c) no line of either §7 starts with `<` and a letter
+  (`pages-render.test.ts` already sweeps the site pages, both included: nothing to add, listed so green wraps lines
+  with care); (d) `npm test -- test/docs` green (run at refactor).
+
+**The proposed text** (decision D7: the approver confirms it at this gate before green writes it; green writes it
+verbatim, re-wrapped at 120 columns).
+
+*`docs/agents.md` §2, line 47, replaces the row:*
+`| current work and decisions, your own pending records included | \`wingfoil memory search --type <type>\` (every state but \`deprecated\`; §6) |`
+
+*`docs/agents.md` §6, three paragraphs appended after the error table:*
+- **P1** `**Your own records wait for the approver.** A document you add and submit stops at the first gate of its
+  type's state machine (\`pending\` in the one \`init\` scaffolds) and stays there until the approver approves or
+  rejects it: nothing you run moves it on. It is still current work: read it and build on it like any other document.`
+- **P2** `**Which states to read.** \`wingfoil memory search --type <type>\` with no \`--status\` lists every state
+  but \`deprecated\`, your pending records included: use it for current work and decisions. \`--status <state>\` keeps
+  one state; pass it only to narrow a read on purpose. \`--status approved\` alone hides everything still waiting for
+  the approver, your own records first.`
+- **P3** `**Knowledge given in a request.** A rule the human gives you in a request and means for later work is not
+  kept in your own notes or memory, where no other agent reads it: record it as a \`decision-log\` (\`wingfoil memory
+  add --type decision-log --title "<title>"\`, inside the \`decision-log-ingest\` workflow when the project runs one),
+  and submit it for the approver; once approved, it holds for every agent. A rule that changes what a role must do
+  becomes a directive (\`wingfoil directive create\`) only when your role and task call for changing governance. A
+  fact about one element goes in that element's body.`
+
+*`docs/agents.md` §7, the whole section replaced:*
+```
+## 7. Following a workflow
+
+WingFoil 0.3 records and routes workflows; it does not execute their steps. Until the workflow engine's driver runs
+them itself (planned for 1.0), a run is driven by hand, by a human or by you.
+
+### Levels of process
+
+L1 A project names the level of process its agents follow, in its own instructions to agents or in a global
+directive. Two levels:
+
+- L2 **Light:** Memory is the project's register. You add, submit, park and deprecate documents with the verbs in
+  §6 and read them back (§2); no workflow is opened, and each document waits for the approver on its own.
+- L3 **Strict:** the work runs inside an open workflow, through the cycle below: each element is added linked to its
+  step, each step is recorded, and the run stops at every gate.
+
+When the project names no level, follow the cycle for the work of a workflow `wingfoil workflow status` lists as
+open, and the light level otherwise.
+
+### The cycle
+
+1. S1 `wingfoil workflow status`, then `wingfoil workflow next`: the open workflows, then the next step of the active
+   one — its role and that role's directives, the element it works on, and the command or commit each action
+   expects. `wingfoil workflow show <name>` prints a whole workflow.
+2. S2 Act in the role the step names, with that role's directives loaded (§4, rule 3).
+3. S3 Record the outcome with the verbs in §6. An element the step adds is added linked to it, with the command
+   `workflow next` prints: `wingfoil memory add --type <type> --title "<title>" --workflow <instance> --step
+   <step-key>`. WingFoil deduces from the documents, as committed, that the step is done.
+4. S4 A step that nothing in the repository can show as done, such as a checkpoint, is recorded with `wingfoil
+   workflow finalize`; `workflow next` then moves past it.
+5. S5 At a gate — a step waiting for the approver, shown as `human needed:` by `workflow next` and `workflow
+   status` — stop and hand over to the human approver. The approver's verbs refuse to run in an agent's session
+   (`E_AGENT_CONTEXT`, new in 0.4).
+
+Then run `wingfoil workflow next` again, until the workflow's steps are complete. An agent following this cycle is
+a hand-driven run, not a coordinator. Start (`wingfoil workflow start <name>`) or end (`wingfoil workflow end`) a
+workflow only when the human asks you to.
+
+### The coordinator
+
+A project may declare a `coordinator` role, which an agent may execute. It decides only what the configuration
+cannot:
+
+1. which frontier steps to run in parallel, within the declared caps;
+2. the triage of a failure the driver reports (rerun, open a bug, stop);
+3. the content of an element that no other role's step writes.
+
+The coordinator never approves, rejects or amends, and never decides a gate. It never does a step's work in place
+of the step's role. A coordinator session is recorded as a run: it is launched with `wingfoil agent execute
+--element <type>:<id> --role coordinator`, which appends its record to the run log and commits it as `agent: record
+<run-id>` when the session exits; the element is the `plan` of the run it coordinates. Until the driver ships, the
+coordinator may run the driver's mechanical steps as a hand-driven run, each recorded exactly as the step declares
+it, with the subject or command `workflow next` prints.
+
+### What removes each manual step
+
+| Manual step | Done today by | Removed by |
+|---|---|---|
+| reading the run: `workflow status`, `workflow next` | you, or the human | the driver, 1.0 |
+| opening and ending a workflow: `workflow start`, `workflow end` | the human, or you when asked | the driver, 1.0 |
+| adding an element linked to its step: `memory add --workflow --step` | the step's role | the driver, 1.0 |
+| launching the agent of the step's role: `agent execute --next` | the human, or a coordinator | the driver, 1.0 (a launch without a terminal, `--headless`, is new in 0.4) |
+| running a phase's checks | the step's role, by hand | the driver, 1.0 |
+| recording a step no evidence completes: `workflow finalize` | you, or a coordinator | the driver, 1.0 |
+| writing an element's content and doing the step's work | the step's role | never: it stays the agent's |
+| deciding a gate | the human approver | never: a gate stays the approver's |
+```
+(The `L1`…`S5` labels are this note's handles for qa, not part of the text. The table's (first cell, last cell) pairs
+are the eight rows qa pins.)
+
+*`docs/user-guide.md` §7, the paragraph "Both read the workflow files…" through step 4 "End it." (lines 418–441)
+replaced; the rest of §7 unchanged:*
+```
+Both read the workflow files as committed at `HEAD`. U1 Until the workflow engine's driver runs a workflow itself
+(planned for 1.0), you drive it by hand: you start it, go round a cycle until its steps are complete, and end it.
+
+**Start it.** `wingfoil workflow start <name>` opens a workflow: it records it as a `plan` document (an `add` and a
+`submit` commit) and makes it the active workflow. `--element <type>:<id>` names the element it runs on.
+
+Then, until its steps are complete:
+
+1. **Ask where the run stands.** (the current step 2 text, unchanged)
+2. **Do the step, or have it done.** Do the phase's work in the role it names, with that role's directives loaded,
+   or launch the agent of that role on it with `wingfoil agent execute --next` (§9.4).
+3. **Record it with the verbs.** Move the outcome's Memory documents through their states with the verbs in §8. An
+   element the step adds is added linked to it: `workflow next` prints the `wingfoil memory add` command with
+   `--workflow <instance> --step <step-key>`. WingFoil deduces from those documents, as committed, that the step is
+   done.
+4. **Record what nothing else shows.** (the current step 3 sentence from "A step that nothing in the repository can
+   show as done" to "with `--reason`)", unchanged)
+5. **Decide the gates.** At a step waiting for the approver (`human needed:` in `workflow next` and `workflow
+   status`), the approver approves or rejects from a terminal of their own (§8.3); an agent stops there and hands
+   over.
+
+**End it.** `wingfoil workflow end` closes the active workflow once its steps are complete, and makes the previous
+one active again; before that it refuses and names the current step.
+
+U2 A run driven this way, by you or by an agent following [`agents.md` §7](agents.md#7-following-a-workflow), is a
+hand-driven run. U3 A project may also declare a `coordinator` role, executed by an agent, that decides only what
+the configuration cannot — which ready steps to run in parallel, the triage of a failure, the content of an element
+no other role's step writes — and never approves, rejects, amends or decides a gate; its session is recorded as a
+run with `wingfoil agent execute --element plan:<instance-id> --role coordinator`.
+
+**What removes each manual step.** (the same table as `docs/agents.md` §7, the same eight rows)
+```
+
+**Existing tests of the files changed, run.** Under the heavy-gate slot (the slot script returned with no output),
+`npm test -- test/docs --maxWorkers=2` (worktree, base `2fedaa6ae`) → `Test Suites: 35 passed, 35 total`, `Tests:
+391 passed, 391 total`. Pins of the two files (`grep -rln "agents.md\|user-guide" test/` plus the sweeps reading
+`docs/*.md`), and what this change does to each:
+- `test/docs/user-guide-scaffold.test.ts` — §7's FIRST table is the scaffold table: kept first (the new table comes
+  after it); unbroken.
+- `test/cli/e2e-smoke.test.ts:805-812` — §7 (from `\n## 7. ` to `\n## 8. `) links `examples/06-workflow-approval`:
+  the link paragraph is kept; unbroken. Not run here (its describe drives the e2e example).
+- `test/docs/l0-attribution-text.test.ts` — no `signed`/`human-approved` in `docs/user-guide.md`, and §8.3/§9 text:
+  this change edits neither §8.3 nor §9 and adds neither word; unbroken.
+- `test/docs/pages-render.test.ts` — no paragraph line starting `<` + letter in a site page (both files are pages,
+  `docs/site.yaml`): green must not wrap before `<type>:<id>`, `<instance>`, `<step-key>`, `<plan-id>`, `<run-id>`,
+  `<title>`, `<name>` or `<state>`.
+- `test/docs/memory-store-location-text.test.ts` — no `.wingfoil/memory` (other than `memory.yaml`/`memory/templates`)
+  in `docs/*.md`: the new text names none.
+- `test/docs/llms-txt.test.ts` — `docs/site.yaml` and the page list do not change, so `llms.txt` does not.
+- `test/docs/project-option-docs.test.ts` (user-guide `--project`, §10/§11) — not touched.
+- `test/docs/agents-md.test.ts` pins the root `AGENTS.md`, not `docs/agents.md`: unaffected.
+No test pins the text of `docs/agents.md` §6–§7 or of user-guide §7's four-step list (`grep -rn "four steps\|Ask what
+comes next\|Following a workflow" test/` → none), so nothing breaks. No other page links `#7-following-a-workflow`
+(`grep -n "7-following" docs/*.md README.md` → none), and the §7 heading is kept.
+
+**Files to touch** (green): `docs/agents.md` (§2 line 47; §6 after the error table; §7 replaced), `docs/user-guide.md`
+(§7 lines 418–441 replaced, and the table and two paragraphs added after the four-step block; the contents list is
+unchanged: §7 keeps its title and the list names no sub-sections). No `version:` bump (neither file has one). No
+`llms.txt`, `docs/site.yaml`, `src/`, `.wingfoil/`, spec or BDD change. Red adds `test/docs/hand-driven-cycle.test.ts`.
+
+**Decisions for the approver.**
+- **D1 — which build the new text names (AC 4).** (a) The commands that exist on 0.3.2 are named plainly and were run
+  on the pinned build (above); the two 0.4 behaviours are named with the guides' convention "(new in 0.4)" —
+  `E_AGENT_CONTEXT` (code build run above) and `--headless` (code build help) — and AC 4's case checks the code build's
+  command surface. (b) Leave both 0.4 sentences out until `user-docs`. **Recommend (a):** the user guide already says
+  "new in 0.4" on nine lines (`grep -c "new in 0.4" docs/user-guide.md` → `9`), and `user-docs` moves the guides' release
+  line to 0.4 at the release.
+- **D2 — naming `wingfoil workflow run` (`dl-203` Q1 (a)).** (a) Do not name a command that does not exist: the text
+  says "the workflow engine's driver (planned for 1.0)". (b) Name it as "a planned `workflow run` command". **Recommend
+  (a):** the surface belongs to the v1.0 tech-spec (`dl-203` Actions), and a backticked command the CLI lacks would
+  fail AC 4's surface case.
+- **D3 — the §2 row (outside §6–§7).** `bug-502`'s first step is the §2 row at line 47. (a) Change that one row, with a
+  pointer to §6. (b) Leave §2 and state the rule only in §6. **Recommend (a):** the row is the read the consumer
+  copied; one row, no overlap with task-336/task-337 (neither edits `docs/agents.md`).
+- **D4 — where a project names its level, and the default.** (a) In its own instructions to agents or a global
+  directive; when none, the cycle for the work of an open workflow (`workflow status` lists it), the light level
+  otherwise — decided from committed state, no inference. (b) When none, ask the human (an unattended agent cannot).
+  (c) A DNA field: new configuration, out of scope (the generated cheat sheet of `dl-211` may carry it later).
+  **Recommend (a).**
+- **D5 — where request-time knowledge goes.** (a) A `decision-log` submitted for the approver (inside
+  `decision-log-ingest` when run), a directive only when the role and task call for changing governance, an element's
+  body for a fact about that element. (b) Always a directive. **Recommend (a):** a decision-log is the type every
+  `init` scaffold carries (`MEMORY_TYPES` in `src/storage/templates.ts:200`) and keeps the approval on it.
+- **D6 — internal ids in the consumer guides.** The coordinator sentences come from `coordinator.md` word for word,
+  less the ids (`dl-170`, `dl-203`, `dl-135`, `spec-016`): neither guide cites an internal decision id today.
+  **Recommend dropping them**; the parity case pins the never-sentence in both files.
+- **D7 — the exact text above** (AGENTS.md §2: every edit of `docs/agents.md` is confirmed by the approver; the user
+  guide §7 likewise at this gate). **Recommend confirming it as drafted**, or naming the changes.
+
+**Candidate findings (not filed).** None from this design. One observation, outside the task: in the scratch project
+(pinned 0.3.2), `workflow start sw-life-cycle` run while `decision-log-ingest-1-plan` was active opened
+`sw-life-cycle-dl-001-prefer-composition-over-inheritance-plan`, inheriting the DL ingest run's element into its id
+(the inheritance AGENTS.md §6 describes for ingest mains, here applied to `sw-life-cycle`); not investigated, reported
+to the orchestrator.
+
+**Risks for the other open tasks.** `task-336` (in review) edits `docs/user-guide.md` §9.4 and `docs/cli-reference.md`;
+`task-337` (in red) will edit `docs/user-guide.md` and `docs/cli-reference.md`. This task edits user-guide §7 only
+(lines 418–441 plus additions before "**WingFoil records and routes**"), `docs/agents.md` §2/§6/§7: no hunk overlaps
+§9.4; a merge conflict can arise only if task-337 also edits §7. The new §7 text names `agent execute --next` and
+`--headless` only as they are on `main` now; task-336's output forwarding and `--log`, and task-337's record fields,
+are not named. This task's review is the candidate of the headless pilot (W0-R1).
+
+### Retrospective
+
+<!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
+     reconstructed afterwards. One line per item: what happened, the evidence (a command and what it
+     printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
+     Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
+     here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
