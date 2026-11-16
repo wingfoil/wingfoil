@@ -1,0 +1,2 @@
+# wingfoil agent execute's registry of running agents: local to this checkout, never committed.
+/run/

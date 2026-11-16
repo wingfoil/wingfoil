@@ -129,7 +129,7 @@ import { amendReservedFields, requireAmendableEdit, requireAmendableType, requir
 import { resolveAddType } from './memory-add-type';
 import { addLinkTrailers, resolveAddLink, type AddLink } from './memory-add-link';
 import { committedScopeError, requireAbsentTarget, requireUnmodifiedTarget } from './write-guard';
-import { agentExecuteFn, renderAgentExecuteStderr } from './agent-execute';
+import { AGENT_EXECUTE_LOG_OPTION, agentExecuteFn, renderAgentExecuteStderr } from './agent-execute';
 import { agentListFn, renderAgentListConsole } from './agent-list';
 import { agentShowFn, renderAgentShowConsole } from './agent-show';
 import { UsageError } from './usage-error';
@@ -2723,6 +2723,12 @@ export const CORE_MODULES: readonly CoreModule[] = [
             valueName: 'duration',
             description: 'stop the agent after this long: <n>s, <n>m or <n>h, at most 24h (SIGTERM, then SIGKILL 10 s later)',
           },
+          // task-336 (spec-016 §3.1, dl-182 Q2 (a), Q4 (a)): a copy of a headless run's output; refused on an interactive one.
+          {
+            name: AGENT_EXECUTE_LOG_OPTION,
+            valueName: 'path',
+            description: "append a copy of a headless run's output to this file (created mode 0600); the output may hold secrets and is never committed",
+          },
         ],
         example: 'wingfoil agent execute --next',
         fn: agentExecuteFn,
@@ -2732,15 +2738,17 @@ export const CORE_MODULES: readonly CoreModule[] = [
       // task-240 (`spec-016` §5): read-only, and a declared `HEAD` read (§5.1, `spec-006` §6 item 6): the
       // run log and the workflow deduction at one commit. Its console rendering is §5's sections
       // (`renderConsole`); each diagnostic is also a success warning, the console's `warning:` line.
-      // `--active` is v0.4 and not declared, so it is refused as an unknown option (exit 2). CLI only
-      // in v0.3 (spec-016 §7, §8).
+      // task-336 (`spec-016` §5, §5.1, §7): `--active` lists the running launches of the active registry, read from the
+      // working tree's git-ignored `.wingfoil/run/` outside that `HEAD` exception; pruning a stale entry writes nothing
+      // git tracks, so it stays `mutates: false` (§8). CLI only (spec-016 §7, §8).
       agentList: {
         name: 'agentList',
         mutates: false,
-        description: 'list the recorded agent runs and the workflow steps waiting for an agent, as committed at HEAD',
+        description: 'list the recorded agent runs, the workflow steps waiting for an agent (both as committed at HEAD) and the agents running now',
         flags: [
-          { name: 'past', description: 'list the recorded runs (the run log at HEAD); without --past or --waiting, both sections' },
-          { name: 'waiting', description: "list the open workflows' ready steps whose role an agent executes; without --past or --waiting, both sections" },
+          { name: 'past', description: 'list the recorded runs (the run log at HEAD); without --past, --waiting or --active, every section' },
+          { name: 'waiting', description: "list the open workflows' ready steps whose role an agent executes and that no agent is running; without --past, --waiting or --active, every section" },
+          { name: 'active', description: 'list the agents running now in this checkout (the registry .wingfoil/run/); without --past, --waiting or --active, every section' },
         ],
         options: [
           { name: 'element', valueName: 'type:id', description: 'keep the runs and steps of this element, e.g. task:task-042-login-form' },

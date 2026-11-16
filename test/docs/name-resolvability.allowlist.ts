@@ -47,6 +47,7 @@ export const UNTRIAGED =
 
 /** Every allowed unresolved name, sorted by `document|class|name`. */
 export const NAME_ALLOWLIST: readonly AllowlistEntry[] = [
+  { document: 'docs/02_requirements/03_sard/01_architecture.md', nameClass: 'path', name: '.wingfoil/run/', reason: 'process cache: the active run registry is git-ignored by design (spec-011 .gitignore policy, spec-016 section 7), so no tracked file ever holds the path' },
   { document: 'docs/02_requirements/03_sard/01_architecture.md', nameClass: 'path', name: '.wingfoil/state/', reason: 'retired on purpose: REQ-SYS-03 forbids a state index, and the document names the path to say there is none' },
   { document: 'docs/02_requirements/03_sard/02_performance-nfr.md', nameClass: 'command', name: 'wingfoil agent execute', reason: PLANNED, plannedBy: ['task-149', 'task-176', 'task-178', 'task-195', 'task-198', 'task-199', 'task-200', 'task-206', 'task-216', 'task-217', 'task-218', 'task-228', 'task-235', 'task-236', 'task-237', 'task-242', 'task-243', 'task-245'] },
   { document: 'docs/02_requirements/03_sard/03_state-context.md', nameClass: 'path', name: '.wingfoil/state/', reason: 'retired on purpose: REQ-SYS-03 forbids a state index, and the document names the path to say there is none' },
@@ -147,7 +148,6 @@ export const NAME_ALLOWLIST: readonly AllowlistEntry[] = [
   { document: 'docs/04_memory/design/specs/spec-010-memory-frontmatter-schema.md', nameClass: 'path', name: '.wingfoil/state/', reason: 'retired on purpose: REQ-SYS-03 forbids a state index, and the document names the path to say there is none' },
   { document: 'docs/04_memory/design/specs/spec-010-memory-frontmatter-schema.md', nameClass: 'path', name: 'F-04-frontmatter-schema.md', reason: 'retired on purpose: the prior-art draft the spec says it departs from' },
   { document: 'docs/04_memory/design/specs/spec-011-storage-layout.md', nameClass: 'path', name: '.assignments.yaml', reason: 'retired on purpose: the spec names the file to say `.wingfoil/` does not contain it' },
-  { document: 'docs/04_memory/design/specs/spec-011-storage-layout.md', nameClass: 'path', name: '.wingfoil/.gitignore', reason: PLANNED, plannedBy: ['task-336'] },
   { document: 'docs/04_memory/design/specs/spec-011-storage-layout.md', nameClass: 'path', name: '.wingfoil/run/', reason: 'process cache: the active run registry is git-ignored by design (spec-011 .gitignore policy, spec-016 section 7), so no tracked file ever holds the path' },
   { document: 'docs/04_memory/design/specs/spec-011-storage-layout.md', nameClass: 'path', name: 'agents.yaml', reason: 'retired on purpose: the spec names the file to say `.wingfoil/` does not contain it' },
   { document: 'docs/04_memory/design/specs/spec-011-storage-layout.md', nameClass: 'path', name: 'docs/self/', reason: 'historical: the pre-task-111 location, named where the document records that task-111 moved it (a dated Revision or Process note, or a "moved from" clause)' },
@@ -186,7 +186,6 @@ export const NAME_ALLOWLIST: readonly AllowlistEntry[] = [
   { document: 'docs/04_memory/design/specs/spec-016-agent-execution.md', nameClass: 'config', name: 'usage.fields', reason: UNTRIAGED },
   { document: 'docs/04_memory/design/specs/spec-016-agent-execution.md', nameClass: 'config', name: 'usage.from', reason: UNTRIAGED },
   { document: 'docs/04_memory/design/specs/spec-016-agent-execution.md', nameClass: 'config', name: 'usage.lookup_args', reason: PLANNED, plannedBy: ['task-177'] },
-  { document: 'docs/04_memory/design/specs/spec-016-agent-execution.md', nameClass: 'path', name: '.wingfoil/.gitignore', reason: PLANNED, plannedBy: ['task-336'] },
   { document: 'docs/04_memory/design/specs/spec-016-agent-execution.md', nameClass: 'path', name: '.wingfoil/agents.yaml', reason: UNTRIAGED },
   { document: 'docs/04_memory/design/specs/spec-016-agent-execution.md', nameClass: 'path', name: '.wingfoil/agents/', reason: PLANNED, plannedBy: ['task-177', 'task-196'] },
   { document: 'docs/04_memory/design/specs/spec-016-agent-execution.md', nameClass: 'path', name: '.wingfoil/run/', reason: UNTRIAGED },
