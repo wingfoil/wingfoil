@@ -425,6 +425,52 @@ The outside files live in a second temporary directory. The five cases, with the
 - `npx eslint test/cli/check-release-exit.test.ts` → exit 0.
 - The invisible-character grep on the file found no hit.
 
+### review fix (developer, 2026-11-16)
+
+**Base.** Head `b5cfbd582` (the qa's review-fix test `75735a4b5` and its notes); `git rev-list --count HEAD..main` → `0`,
+so no merge. PATH guard: `command -v wingfoil` → the task's PATH shim; `wingfoil --version` and `node dist/cli.js
+--version` → `0.3.2 (c3307ab61b8dd5975ab75362f5f51ac5bce021b1)`. Status stays `in-review`: no submit.
+
+**Fix commit `741d6c4f0`** (`scripts/check-release-exit.cjs`, `test/cli/check-release-exit-edges.test.ts`, new):
+- **Review finding 2, read confinement.** `confinedFile` now serves every read: `readRepositoryFile` (the reader of
+  `.wingfoil/memory.yaml` and `docs/01_vision/07_sequencer.md`) goes through it, so either file resolving outside the
+  root after `realpath` exits 2 with `check-release-exit: <relative path>: outside the repository`. The release walk
+  (`filesMatching`) skips a directory, and a release-element candidate, whose realpath is outside the root, so neither
+  is listed nor counted. `main` passes `realpathSync(process.cwd())` as the root, so every comparison is between real
+  paths. The module doc gains a **Confinement** item and the exit table names the new reasons.
+- **Same class (W0-R10).** The script's reads are `<path>` (already confined), `memory.yaml` and the sequencer (both
+  through `readRepositoryFile`, now confined), the walk's `readdirSync` of each directory (now only of a directory
+  resolving inside) and each candidate's `readFileSync` (now only of a file resolving inside):
+  `grep -n "readFileSync\|readdirSync" scripts/check-release-exit.cjs` → the import, `readRepositoryFile`'s read
+  through `confinedFile`, the walk's `readdirSync` after the directory check, the candidate read of a walk-confined
+  path, and `<path>`'s read through `confinedFile`. No other read escapes.
+- **The reviewer's nits.** (1) `.` is the root, so it is inside: `confinedFile` now accepts the root itself as inside
+  and refuses any directory as `no such file` (the design's exit-2 reason for a path naming no file). Before the fix,
+  `node scripts/.old-cre.cjs .` (the committed script copied to a scratch name, then removed) → `check-release-exit: .:
+  outside the repository`, exit 2; after it, `node scripts/check-release-exit.cjs .` → `check-release-exit: .: no such
+  file`, exit 2. (2) A release with no `status` counts as past `draft` for the `features:` rule and its line ends
+  `(no status)`, not `(status )`. Both pinned in the new `test/cli/check-release-exit-edges.test.ts` (4 tests: `.`, a
+  directory, no status, and the `(status in-development)` form kept).
+
+**Red → green.** The qa's red: `npx jest test/cli/check-release-exit.test.ts --maxWorkers=2` → 5 failed, 23 passed
+(28 tests; the qa's notes). After the fix: `npx jest test/cli/check-release-exit.test.ts
+test/cli/check-release-exit-edges.test.ts --maxWorkers=2` → 2 suites, 32 tests passed.
+
+**Gates.**
+- `npx jest test/core/vision-change-workflow.test.ts test/core/workflow-repository-conformance.test.ts --maxWorkers=2`
+  → 2 suites, 37 tests passed.
+- `npm run -s lint` → exit 0.
+- After the heavy-gate wait script (each answered `SLOT` at once): `npm run -s typecheck` → exit 0. Then
+  `npm run -s build && npm test -- --maxWorkers=2` → exit 0, 652 suites, 11972 tests passed.
+- `npm run -s check:governance -- --base origin/main` → exit 0, `gated: 0 findings on 0 commits`, `history: 0 findings
+  on 0 commits`.
+- Invisible-character grep on the two changed files → no hit (exit 1).
+
+**T4.** `git log --first-parent --no-merges --format=%h e674de678..HEAD -- test/cli/check-release-exit.test.ts
+test/core/define-scope-sweep.test.ts test/core/helpers/manual-binding-groups.ts test/core/vision-change-workflow.test.ts
+test/core/workflow-bindings-complete.test.ts test/core/workflow-manual-prose-checks.test.ts` → `75735a4b5` only, the
+qa's review-fix commit. No commit of the developer touches red's files.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
