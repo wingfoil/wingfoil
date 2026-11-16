@@ -719,6 +719,59 @@ still differ. No new key is added to §7.
 - `spec-016-agent-execution` — `--reason "Record task-336's review-fix amendment of spec-016: the registry entry's pid returns to agent execute's own when the agent exits and a launch rewrites or removes only its own entry, an entry's id must be three segments naming its file and started_ms a valid date, a --log under .wingfoil/run/ is refused with exit 2, and a failed removal while reading is a warning, never a failed read."`
 - `spec-008-cli-grammar` — `--reason "Record task-336's review-fix amendment of spec-008: section 12's agent execute --log row gains the usage error for a path under .wingfoil/run/, the active registry, refused with exit 2 before the project is read (spec-016 section 3.1)."`
 
+### review fix round (qa, 2026-11-16)
+
+**Setup.** Head `a0eca9d33` (spec-016 amended at `e998b6346`, spec-008 at `a0eca9d33`); the task's PATH shim first on
+`PATH` in every call. Test commit: `b9f07d6cc`. Contract: `### review fix round design (architect, 2026-11-16)` and the
+two amended specs.
+
+**Files.** New: `test/agent/launch-registry-exit.test.ts` (F2 in process), `test/agent/active-runs-review.test.ts`
+(F2 `removeRun`, F5, F6), `test/cli/agent-execute-log-registry.integration.test.ts` (F7). Extended:
+`test/agent/active-runs.test.ts` (F4, seven rows in the existing `it.each`), `test/cli/agent-list-active.integration.test.ts`
+(F5, F6 on the CLI).
+
+**Per finding** (first failing assertion of each red, from the runs below).
+- **F2, red-first.**
+  - `launch-registry-exit.test.ts`: the post-exit window is held open by the test (a `FakeChild` with pid 4242 that
+    exits with its pipes open, `exitKeepingStdout`, and `LaunchHost.lookupTimeoutMs: 60000`), so no timing is assumed.
+    "agent execute's own pid while recording" fails `toMatchObject` with `"pid": 4242` received where `process.pid` is
+    expected; "another launch's entry … byte for byte" fails `toBe(other)` with `null` received (the removal deleted it).
+  - `active-runs-review.test.ts`, against the design's signature `removeRun(root, entry, agentPid?)` (`tsc` TS2345 and
+    TS2554 today, the intended interface change): "its own entry, agent execute's pid: removed" and "…the agent's pid
+    given as agentPid: removed" fail `toBe(false)` with `true` (the file is still there). The two "another launch's
+    entry: left byte for byte" rows pass today, only because today's `removeRun` throws inside its own `try` on an
+    object argument; they stay as guards.
+  - The CLI window (a second process reading `agent list --active` while `agent execute` records) is **not** pinned:
+    the suites spawn the compiled CLI synchronously (`test/lint/cli-spawn-helper.test.ts` allows one asynchronous
+    spawn), and a timed window would depend on machine load. The unit tests above carry F2.
+- **F4, characterization.** JSON `null`, an extra key, an empty `workflow`, `pid` `0`, `-1`, `1.5`, `started_ms` `-1`:
+  all seven pass on first run (`test/agent/active-runs.test.ts` → `Tests: 16 passed`), each with the exact line
+  `.wingfoil/run/task-m/red/1.json: not an active run entry: removed`. None became a red.
+- **F5, red-first** (POSIX, skipped as root: a read-only directory makes the unlink fail with `EACCES`). Unit: a dead
+  entry in it → `expect(thrown).toBeUndefined()` fails with `Error: EACCES: permission denied, unlink …`. CLI
+  `agent list --active`: the `could not remove: ` prefix check fails (`false`; the command errors today).
+- **F6, red-first.** Unit: a top-level `x.json` naming itself, `<n>` `0`, `01`, `a`, and `started_ms`
+  `8640000000000001` each fail `toEqual([<the not-an-entry line>])` with `[]` received (listed today); `8640000000000000`
+  listed passes today (guard). CLI: `started_ms` `8640000000000001` → stderr `error: Invalid time value` where the
+  warning is expected; `x.json` → stderr `""` where the warning is expected. The CLI also pins `8640000000000000`
+  rendered as `+275760-09-13T00:00:00.000Z` (`node -e 'console.log(new Date(8640000000000000).toISOString())'`).
+- **F7, red-first.** `--headless --log .wingfoil/run/x.log` → `toBe(2)` received `0` (the run proceeds); `--log
+  <root>/.wingfoil/run` and `--log <root>/.wingfoil/run/a/b` → received `1`; in a git repository with no `.wingfoil/`
+  → received `1` (refused only as not initialized, after the project is read). The expected message is `spec-008` §12's
+  exact `error: invalid flag value: --log must not name a file under .wingfoil/run/, the active registry`.
+  `.wingfoil/runx.log` not refused passes today (guard).
+
+**Runs** (targeted, `npx jest <file> --maxWorkers=2`, after the last edit): launch-registry-exit 2 failed of 2;
+active-runs-review 8 failed, 3 passed; active-runs 16 passed; agent-list-active (CLI) 3 failed, 6 passed;
+agent-execute-log-registry 4 failed, 1 passed. `npx tsc --noEmit -p tsconfig.json` → only the intended errors in
+`test/agent/active-runs-review.test.ts` (TS2345 at l.62, TS2554 at l.69 and l.80: the `removeRun` signature). `npx jest
+test/lint --maxWorkers=2` → 15 suites passed, 1 failed: `typecheck-clean`, on exactly those errors; `lint-clean` passes.
+No invisible character in the changed files (the prompt's `grep -nP` → exit 1).
+
+**Ambiguity.** For F5, the design leaves open whether a malformed file that cannot be removed prints the not-an-entry
+line as well as the `could not remove` line; the tests use a dead entry (no not-an-entry line) and pin exactly one
+warning line.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
