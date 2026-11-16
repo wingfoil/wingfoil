@@ -388,6 +388,22 @@ to the orchestrator.
 `--headless` only as they are on `main` now; task-336's output forwarding and `--log`, and task-337's record fields,
 are not named. This task's review is the candidate of the headless pilot (W0-R1).
 
+### design gate rulings (approver, 2026-11-16)
+
+The approver approved the design as recommended (finalize `b8626f91b`, no amendment):
+
+- **D1** commands that exist in 0.3.2 are named plainly; the two 0.4 behaviours (`E_AGENT_CONTEXT`, `--headless`) are
+  marked "new in 0.4" and checked on the code build.
+- **D2** the driver is named "the workflow engine's driver, planned for 1.0"; no `workflow run` command is named.
+- **D3** the `docs/agents.md` §2 row of `memory search` is edited too, as bug-502's first step names it.
+- **D4** a project names its level of process in its own instructions to agents or in a global directive; with none
+  named, work inside an open workflow follows the cycle and other work the light level.
+- **D5** knowledge given in a request is recorded as a decision-log submitted for the approver, a directive only when
+  the role and task call for changing governance, a fact about one element in that element's body.
+- **D6** the coordinator sentences carry no internal decision ids, otherwise word for word the coordinator directive.
+- **D7** the proposed text of `docs/agents.md` §2, §6 and §7 and `docs/user-guide.md` §7 is confirmed as drafted in the
+  design notes above; green writes it verbatim.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
