@@ -1954,8 +1954,8 @@ that sets the agent's directory apart from the root. A `<dir>` that is not a git
 `.wingfoil/run/<element-id>/<phase>/<n>.json`, holding its run id, the agent's process id, its workflow, phase,
 element, role, agent, session id (or `not-reported`) and the instant it started, and removes it when the run ends,
 recorded or not; [`wingfoil agent list --active`](#wingfoil-agent-list) lists these files. A launch whose run id
-already has a file whose process is still alive exits `1` with `error: run <run-id> is already running (pid
-<pid>)`, nothing started and nothing recorded; a file whose process is gone is removed and the launch goes on.
+already has a file whose process is still alive exits `1` with
+`error: run <run-id> is already running (pid <pid>)`, nothing started and nothing recorded; a file whose process is gone is removed and the launch goes on.
 `.wingfoil/run/` is local to the checkout and never committed: `wingfoil init` writes `.wingfoil/.gitignore` with
 the line `/run/`. When git does not ignore the file (a project initialized before 0.4), every launch prints
 `warning: .wingfoil/run/ is not git-ignored: add "/run/" to .wingfoil/.gitignore, or a running launch can be
