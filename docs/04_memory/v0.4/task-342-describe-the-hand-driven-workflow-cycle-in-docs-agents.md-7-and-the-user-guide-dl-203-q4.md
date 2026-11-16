@@ -461,6 +461,142 @@ coordinates."
 
 **Red commit:** `5d30e3c6353bc7ebfb8287f94b6c26077a446085` (T4 is measured from it).
 
+### green (developer, 2026-11-16)
+
+**Base.** Branch head `2226f9294` (the red notes); `git rev-list --count HEAD..main` → `0`, so no merge of `main`.
+PATH guard: `command -v wingfoil` → the task's PATH shim; `wingfoil --version` and `node dist/cli.js --version` →
+`0.3.2 (5d30e3c6353b…)`. Contract: the design's proposed text (D7, confirmed verbatim at the gate) and red's note on
+the run-record sentence (it continues "; the element is the `plan` of the run it coordinates.").
+
+**Change** (`e9d6eeee6`, `docs(agents,user-guide): task-342 — describe the hand-driven workflow cycle (bug-502)`):
+- `docs/agents.md` §2: the `current work and decisions` row replaced by the D7 row; §6: P1 (**Your own records wait
+  for the approver.**), P2 (**Which states to read.**), P3 (**Knowledge given in a request.**) appended after the error
+  table; §7 replaced whole (intro, `### Levels of process`, `### The cycle`, `### The coordinator`, `### What removes
+  each manual step`).
+- `docs/user-guide.md` §7: "Both read the workflow files…" through the old step 4 replaced by U1, **Start it.**, the
+  five-step list, **End it.**, U2/U3 and the **What removes each manual step.** table, all before "**WingFoil records
+  and routes**"; item 1 keeps the old step 2 text after its new lead, item 4 the old step 3 finalize sentence. The
+  scaffold table stays §7's first table and the `examples/06-workflow-approval` link stays.
+- Words verbatim; only the line breaks differ from the design where a line would have begun with `<`: in agents.md the
+  cycle's step 3 breaks before `--step <step-key>` and the run-record sentence before `record <run-id>`.
+  `grep -n "^ *<[a-zA-Z]" docs/agents.md docs/user-guide.md` → no output; `awk 'length>120 && !/^\|/'` over
+  `docs/agents.md` → no output, and over `docs/user-guide.md` lists only lines outside the changed hunk.
+- No `version:` to bump: `grep -n "^version:" docs/agents.md docs/user-guide.md` → only `docs/user-guide.md:511`, the
+  `bindings.yaml` example inside a fence. No `llms.txt`/`docs/site.yaml` change (the page list is unchanged).
+
+**Red → green.** `npx jest test/docs/hand-driven-cycle.test.ts --maxWorkers=2`: red `Tests: 20 failed, 1 passed, 21
+total` (red's notes) → green `Tests: 21 passed, 21 total`. With the neighbouring pins: `npx jest
+test/docs/hand-driven-cycle.test.ts test/docs/user-guide-scaffold.test.ts test/docs/l0-attribution-text.test.ts
+test/docs/pages-render.test.ts test/docs/memory-store-location-text.test.ts test/docs/llms-txt.test.ts
+--maxWorkers=2` → `Test Suites: 6 passed, 6 total`, `Tests: 88 passed, 88 total`.
+
+**AC 4 evidence — every command the new text names, run.** A scratch project outside the worktree (`git init`, a
+local identity Ada Approver, the pinned build `node node_modules/wingfoil-released/dist/cli.js`, the same build
+`npm run -s wingfoil --` runs, `--version` → `0.3.2 (6de2e13c004b…)`): `init --template Scrum` → exit 0; `dna add
+team.members --value "Ada Approver" --entry-email ada@example.com --entry-roles approver,developer` → exit 0. Then:
+1. `workflow status` → `no open workflows`, exit 0.
+2. `workflow start decision-log-ingest` → exit 0: `started decision-log-ingest as decision-log-ingest-1-plan
+   (active)`, `next step: decision-log-ingest.capture`, `role: product-owner`, the action `memory.add(type:
+   decision-log) [wingfoil: wingfoil memory add --type decision-log --title <title> --workflow
+   decision-log-ingest-1-plan --step decision-log-ingest.capture]`, `evidence missing: produces`.
+3. `workflow next` → exit 0, `workflow: decision-log-ingest (decision-log-ingest-1-plan)` and the same step, role,
+   directives and action lines (cycle step 1: role, directives, the command each action expects).
+4. `workflow show decision-log-ingest` → exit 0, JSON with `"name": "decision-log-ingest"` and its `phases`.
+5. `memory add --type decision-log --title "Prefer composition over inheritance" --workflow decision-log-ingest-1-plan
+   --step decision-log-ingest.capture` → exit 0, `"id": "dl-001-prefer-composition-over-inheritance"`; commit body
+   `WingFoil-Instance: decision-log-ingest-1-plan`, `WingFoil-Step: decision-log-ingest.capture` (cycle step 3, P3).
+6. body filled, `memory submit dl-001` → exit 0, `"from": "draft"`, `"to": "pending"` (P1: `pending` in the one
+   `init` scaffolds).
+7. `workflow next` → exit 0, `next step: decision-log-ingest.approve@decision-log:dl-001-prefer-composition-over-inheritance`,
+   `role: approver — held by Ada Approver`, `evidence missing: state`, `human needed: approve or reject
+   dl-001-prefer-composition-over-inheritance — routed to Ada Approver <ada@example.com>`; `workflow status` → exit
+   0, `phases: capture complete, approve current`, `pending approvals: 1` and the same `human needed:` line (step 5,
+   U "Decide the gates").
+8. `memory search --type decision-log` → exit 0, `dl-001-…` with `"status": "pending"`; `--status approved` → exit 0,
+   `"matches": []`, `"message": "no documents matched the query"` (P2: `--status approved` alone hides your pending
+   records); `--status pending` → `dl-001-…`.
+9. `memory add --type decision-log --title "Drop this one"`, `memory deprecate dl-002 --reason "Drop the duplicate
+   rule."` → exit 0, `"from": "draft"`, `"to": "deprecated"`; `memory search --type decision-log` then lists only
+   `dl-001-…` (`pending`), `--status deprecated` only `dl-002-drop-this-one` (§2 row and P2: every state but
+   `deprecated`). `memory park --help` → exit 0 (the Light level's verbs).
+10. `workflow end` (approve pending) → exit 1, `error: workflow 'decision-log-ingest' is not complete: current step
+    decision-log-ingest.approve@decision-log:dl-001-prefer-composition-over-inheritance` (U **End it.**: "before that
+    it refuses and names the current step").
+11. `directive create --name rule-of-thumb` → exit 0, `.wingfoil/directives/custom/rule-of-thumb.md`, commit
+    `wf(directive): create rule-of-thumb` (P3).
+12. `memory deprecate decision-log-ingest-1-plan --reason "…"` → exit 0; `workflow start sw-life-cycle` → exit 0,
+    `next step: sw-life-cycle.inception`; `workflow next` → `evidence missing: record (finalizable)`; `workflow
+    finalize` → exit 0, `finalized: sw-life-cycle.inception (9564a40e…)`, `next step: sw-life-cycle.specification`
+    (cycle step 4: "`workflow next` then moves past it").
+13. `agent execute --element plan:sw-life-cycle-1-plan --role coordinator --dry-run` → exit 1, `error: unknown role
+    'coordinator' (not defined in dna.yaml)` (a project declares the role: "A project may declare a `coordinator`
+    role"). After `dna add team.roles --value coordinator` and `dna add team.agents --value claude --entry-adapter
+    claude-code --entry-email noreply@anthropic.com --entry-executes_as developer,product-owner,coordinator` (both
+    exit 0), a stub `claude` exiting 1 first on `PATH` (no real agent CLI launched): the dry run under `script -qec …
+    /dev/null` → `warning: no directives assigned to role 'coordinator'`, `"subject": "agent: record
+    sw-life-cycle-1-plan/adhoc/1"`, `"phase": "adhoc"`, `"role": "coordinator"` (the run-record sentence); without a
+    terminal → exit 1, `error: interactive launch needs a terminal on stdin and stdout`.
+14. `agent execute --next --dry-run` (pty) → `error: step 'sw-life-cycle.specification' has no element: give
+    --element <type>:<id>` (the `--next` path engaged on the active run's step); `agent execute --help` lists `--next`,
+    `--element <type:id>`, `--role <role>` and the example `$ wingfoil agent execute --next`.
+
+The two behaviours marked "new in 0.4", on the code build of the worktree (`node <worktree>/dist/cli.js`), same project:
+- `memory approve dl-001 --reason "Accept the rule." --dry-run` → exit 1, `error: E_AGENT_CONTEXT: 'memory approve'
+  needs the approver and does not run in an agent's session (CLAUDE_CODE_CHILD_SESSION is set): …`, `hint: run 'memory
+  approve' yourself, from a terminal no agent started — …`; the pinned build → exit 0, the dry-run subject
+  `wf(decision-log): approve dl-001-prefer-composition-over-inheritance [pending → approved]` (so the refusal is 0.4's,
+  as the text says; no marker was unset).
+- `agent execute --help | grep -- --headless` → the code build prints `--headless  launch the agent without a
+  terminal, as a work run;`; the pinned build `grep -c -- --headless` → `0`.
+
+Commands the text names that print no output it quotes (`workflow show <name>`, `workflow start <name>`) were run
+above with exit 0. AC 4's surface case (every `wingfoil …` span resolves on the code build's command tree) passes in
+the 21.
+
+### refactor (developer, 2026-11-16)
+
+No refactor of the text: the D7 words are confirmed verbatim; the re-wrap was done at green. `git rev-list --count
+HEAD..main` → `0` before and after the gates, so no merge of `main`.
+- `npm run -s build` then `npm run test:coverage -- --maxWorkers=2`, after the heavy-gate slot script returned
+  (`slot=0`, 16:56:17): `cov=0`, `Test Suites: 654 passed, 654 total`, `Tests: 12013 passed, 12013 total`, `All files
+  | 99.09 | 96.96 | 98.65 | 99.62` (statements, branches, functions, lines; > 80 %). This run is the whole suite,
+  `test/docs` (the `docs.parity` suites and `test/docs/cli-reference.test.ts`) included; a separate `npm test` was not
+  run, since `npm test` is the same runner without `--coverage` (`package.json`: `"test": "node
+  scripts/run-tests.cjs"`, `"test:coverage": "node scripts/run-tests.cjs --coverage"`).
+- `npm run -s lint` → exit 0, no output. `npm run -s docs:api` → exit 0, no output. `npm run -s typecheck` (slot) →
+  exit 0, no output (both tsc configs; the slot script waited behind another task's full run, `ps -eo pid,etime,args` showing it at `06:33`, then returned `slot=0`).
+- `git status --short` after the gates → empty (no generated file left).
+
+### self-review (developer, 2026-11-16)
+
+As reviewer against `code-review`, `claim-evidence`, `documentation`:
+- **AC 1** met: agents.md §7 holds the cycle (five steps then `workflow next` again), the coordinator (three judgement
+  points, the never-sentence word for word `coordinator.md`'s, the run record, the mechanical steps until the driver)
+  and the eight-row table, one version per manual step — the AC 1 cases pass (21/21 above).
+- **AC 2** met: user-guide §7 gives the same cycle to a human, links `agents.md#7-following-a-workflow`, and its table
+  equals agents.md's (parity case passes); the scaffold table is still §7's first (`user-guide-scaffold.test.ts` green
+  in the 88) and the `06-workflow-approval` link is kept (`grep -n "06-workflow-approval" docs/user-guide.md` → the
+  §7 line).
+- **AC 3** met (`bug-502` every clause): the §2 row names no `--status`; §6 P2 says which `--status` to pass, P1 that
+  own records stay pending until approved, P3 where request knowledge goes; §7 `### Levels of process` names Light and
+  Strict and the default (D4).
+- **AC 4** met: every command run above, on the pinned build, with the two 0.4 behaviours on the code build; `test/docs`
+  green inside the full run.
+- Wording (`dl-212` D4): `grep -n -i "\bsigned\b\|human-approved" docs/agents.md docs/user-guide.md` → no output,
+  beside the positive (the never-sentence present: AC 4 case passes). No internal decision id added
+  (`git diff main...HEAD -- docs/agents.md docs/user-guide.md | grep -E "^\+.*(dl|spec|task|bug)-[0-9]"` → no output).
+- Same-class check in the files touched: `grep -n -- "--status" docs/agents.md` → `:158`–`:160` (P2) and `:258`
+  (§9: "`memory search` excludes `deprecated` documents unless you pass `--status deprecated`", which agrees with P2);
+  the §2 row no longer names one. No line of either file begins with `<` + letter (grep above).
+- T4: `git log --first-parent --no-merges --format=%h 5d30e3c63..HEAD -- test/docs/hand-driven-cycle.test.ts` → no
+  output (red's one file untouched).
+- Invisible characters: the grep over `docs/agents.md`, `docs/user-guide.md` and this file → no hit (exit 1).
+
+### Pending amendments (approver)
+
+None. `bug-502`'s status sync to `in-review` is a hand commit of this task; its `### Retrospective` is owed when the
+bug is closed, after review.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -468,3 +604,6 @@ coordinates."
      printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
      Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
      here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+
+- The design's wrapping put `<step-key>` and `<run-id>` at the start of a line, which `pages-render` refuses; red caught it in a clone and green re-wrapped (`grep -n "^ *<[a-zA-Z]" docs/agents.md docs/user-guide.md` → no output). Proposal: a design that drafts site-page text wraps it as it will be committed, or marks it "words only".
+- `agent execute --next` could not be shown launching on a scratch project's step: `sw-life-cycle.specification` has no element (`error: step 'sw-life-cycle.specification' has no element: give --element <type>:<id>`), and the steps with an element in the ingest mains are the approver's.
