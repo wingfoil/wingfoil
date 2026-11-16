@@ -194,6 +194,21 @@ touches `bindings.yaml`, `vision-change.yaml` or the five test files above. `tas
 re-bump. `task-353` (`src/agent/`, spec-016): none. A later task adding a manual-until-a-command check must count 37 in
 `workflow-bindings-complete.test.ts`.
 
+### design gate rulings (approver, 2026-11-16)
+
+The approver approved the design as recommended (finalize `b8b91f6cd`, after the amend of dl-132 `84ca12e03`):
+
+- **D1** the three downcast phases carry the post-check `downcast.in-scope` with their layer, and `schedule`'s post
+  gains `change-proposal.assigned`.
+- **D2 (A)** `downcast.in-scope` is bound `manual: true` until a command: no placeholder carries a phase's commits and
+  the downcast commits are hand commits.
+- **D3** `change-proposal.assigned` is bound `run` to `scripts/check-release-exit.cjs`, written by green with its test,
+  so cp-001's `schedule` passes only once its release is stamped, the sequencer row names its features and the
+  release's `features:` list them.
+- **D4** `vision-change.yaml` 1.2 → 1.3 and `bindings.yaml` 3.1 → 3.2.
+- **D5** the `vision-change` diagram of `.wingfoil/WORKFLOW.md` is updated in this task.
+- **D6** the dl-132 note as prepared.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
