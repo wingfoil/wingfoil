@@ -15,6 +15,10 @@
  * - **The release's `features:`.** When the release's `status` is not `draft`, its `features:` holds each id: on a
  *   release past `draft` the approver's `memory amend` of the release writes them (`dl-132` note of 2026-10-12).
  * - An empty `feature` (a `kind: vision` change) checks only the stamp and the release element.
+ * - **Confinement** (task-359 review fix). Every file read — `<path>`, `.wingfoil/memory.yaml`, the sequencer and each
+ *   release-element candidate — must lie inside the root after `realpath` (symbolic links followed). `<path>`,
+ *   `memory.yaml` or the sequencer resolving outside stops the check (exit 2, `<relative path>: outside the
+ *   repository`); a directory of the walk or a release-element candidate resolving outside is skipped, not counted.
  *
  * Usage: node scripts/check-release-exit.cjs <path>   (relative to the working directory, the repository root;
  * confined to it)
@@ -22,10 +26,10 @@
  * `<path>: release is empty` | `<path>: no release element has version <v>` (each alone), else
  * `<path>: docs/01_vision/07_sequencer.md has no row for <v>` (once, first, and then no per-id row line), then per id
  * in declared order `<path>: <id> is not in the <v> row of docs/01_vision/07_sequencer.md` and
- * `<path>: <id> is not in <release path>'s features: (status <s>)` · 2 the check could not run, stdout empty and one
- * stderr line `check-release-exit: <reason>` (the usage line, a path outside the repository, a missing file, a file
- * that is not a change-proposal, several release elements of one version, a missing or unreadable
- * `.wingfoil/memory.yaml` or sequencer), as `spec-003` Layer 3's exit table states.
+ * `<path>: <id> is not in <release path>'s features: (status <s>)` (`(no status)` when the release has none) · 2 the check could not run, stdout empty and one
+ * stderr line `check-release-exit: <reason>` (the usage line, a path outside the repository, a missing file or a
+ * directory — `.`, the root, included — reported as no such file, a file that is not a change-proposal, several release elements of one version, a missing or unreadable
+ * `.wingfoil/memory.yaml` or sequencer, or one of them resolving outside the root), as `spec-003` Layer 3's exit table states.
  * Deterministic: ids in declared order, directories walked sorted; no clock, no network. Read-only.
  */
 'use strict';
@@ -54,25 +58,34 @@ function readFrontmatter(markdown) {
   }
 }
 
-/** `path` resolved against `root`, refused unless it names an existing file inside it (symbolic links followed). */
-function confinedFile(root, path) {
-  const realRoot = realpathSync(root);
+/** `true` when `candidate` (an absolute path) is `realRoot` itself or lies inside it. */
+function insideRoot(realRoot, candidate) {
+  const rel = relative(realRoot, candidate);
+  return rel === '' || (!rel.startsWith(`..${sep}`) && rel !== '..' && !isAbsolute(rel));
+}
+
+/** `true` when `absolute`, an existing path, resolves (symbolic links followed) inside `realRoot`. */
+function resolvesInside(realRoot, absolute) {
+  return insideRoot(realRoot, realpathSync(absolute));
+}
+
+/**
+ * `path` resolved against `realRoot`, refused unless it names an existing file inside it, symbolic links followed:
+ * a path that leaves the root, before or after `realpath`, is outside the repository; one naming nothing, or a
+ * directory (the root itself, `.`, included), is no such file.
+ */
+function confinedFile(realRoot, path) {
   const absolute = resolve(realRoot, path);
-  const inside = (candidate) => {
-    const rel = relative(realRoot, candidate);
-    return rel !== '' && !rel.startsWith(`..${sep}`) && rel !== '..' && !isAbsolute(rel);
-  };
-  if (!inside(absolute)) throw new UsageError(`${path}: outside the repository`);
-  if (!existsSync(absolute) || !statSync(absolute).isFile()) throw new UsageError(`${path}: no such file`);
-  if (!inside(realpathSync(absolute))) throw new UsageError(`${path}: outside the repository`);
+  if (!insideRoot(realRoot, absolute)) throw new UsageError(`${path}: outside the repository`);
+  if (!existsSync(absolute)) throw new UsageError(`${path}: no such file`);
+  if (!resolvesInside(realRoot, absolute)) throw new UsageError(`${path}: outside the repository`);
+  if (!statSync(absolute).isFile()) throw new UsageError(`${path}: no such file`);
   return absolute;
 }
 
-/** The text of the repository file `path` (relative to `root`), or a refusal naming it. */
-function readRepositoryFile(root, path) {
-  const absolute = join(root, path);
-  if (!existsSync(absolute) || !statSync(absolute).isFile()) throw new UsageError(`${path}: no such file`);
-  return readFileSync(absolute, 'utf-8');
+/** The text of the repository file `path` (relative to `realRoot`), confined as {@link confinedFile} confines it. */
+function readRepositoryFile(realRoot, path) {
+  return readFileSync(confinedFile(realRoot, path), 'utf-8');
 }
 
 /** `memory.yaml`'s `release.path` pattern. */
@@ -100,7 +113,10 @@ function segmentRegExp(segment) {
   return new RegExp(`^${source}$`);
 }
 
-/** The repository-relative files matching `pattern` (segment by segment, directories walked sorted). */
+/**
+ * The repository-relative files matching `pattern` (segment by segment, directories walked sorted); a directory or a
+ * file resolving outside `root` (symbolic links followed) is skipped.
+ */
 function filesMatching(root, pattern) {
   const segments = pattern.split('/').filter((segment) => segment !== '');
   let candidates = [''];
@@ -112,12 +128,13 @@ function filesMatching(root, pattern) {
     for (const directory of candidates) {
       const absolute = join(root, directory);
       if (!existsSync(absolute) || !statSync(absolute).isDirectory()) continue;
+      if (!resolvesInside(root, absolute)) continue;
       const names = literal ? [segment] : readdirSync(absolute).sort();
       for (const name of names) {
         if (!regexp.test(name)) continue;
         const path = directory === '' ? name : `${directory}/${name}`;
         const full = join(root, path);
-        if (!existsSync(full)) continue;
+        if (!existsSync(full) || !resolvesInside(root, full)) continue;
         const isFile = statSync(full).isFile();
         if (last ? isFile : !isFile) next.push(path);
       }
@@ -165,7 +182,8 @@ function namesId(text, id) {
 }
 
 /**
- * The failures of the change-proposal at `path` (relative to `root`), one line each, in the order of the module doc.
+ * The failures of the change-proposal at `path` (relative to `root`, the real path of the repository root), one line
+ * each, in the order of the module doc.
  * Throws a {@link UsageError} for anything that stops the check.
  * @param {string} root
  * @param {string} path
@@ -184,12 +202,13 @@ function releaseExitFailures(root, path) {
   const failures = [];
   const row = sequencerRow(readRepositoryFile(root, SEQUENCER), version);
   if (row === null) failures.push(`${path}: ${SEQUENCER} has no row for ${version}`);
-  const status = String(release.frontmatter.status ?? '');
+  const status = String(release.frontmatter.status ?? '').trim();
+  const statusText = status === '' ? 'no status' : `status ${status}`;
   const features = idList(release.frontmatter.features);
   for (const id of ids) {
     if (row !== null && !namesId(row, id)) failures.push(`${path}: ${id} is not in the ${version} row of ${SEQUENCER}`);
     if (status !== 'draft' && !features.includes(id)) {
-      failures.push(`${path}: ${id} is not in ${release.path}'s features: (status ${status})`);
+      failures.push(`${path}: ${id} is not in ${release.path}'s features: (${statusText})`);
     }
   }
   return failures;
@@ -199,7 +218,7 @@ function releaseExitFailures(root, path) {
 function main(argv) {
   try {
     if (argv.length !== 1) throw new UsageError(USAGE);
-    const failures = releaseExitFailures(process.cwd(), argv[0]);
+    const failures = releaseExitFailures(realpathSync(process.cwd()), argv[0]);
     for (const failure of failures) process.stdout.write(`${failure}\n`);
     return failures.length === 0 ? 0 : 1;
   } catch (error) {
