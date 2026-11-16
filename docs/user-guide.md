@@ -707,9 +707,15 @@ run with stdin or stdout redirected still plans it, with a `warning:` line sayin
 there.
 
 With `--headless` (or a phase declaring `launch: headless`), the agent runs as a work run, with no terminal:
-it does its work alone, its output is not shown, and `agent execute` prints `{"run": <record>}` on stdout
-when it ends. `--timeout 30m` (`<n>s`, `<n>m` or `<n>h`, at most `24h`) stops the agent if it runs longer;
-the run is still recorded. A step that only waits for an approval or another party is refused with the line
+it does its work alone, and `agent execute` prints `{"run": <record>}` on stdout when it ends. What the agent
+writes on its stdout and stderr is passed on to `agent execute`'s stderr line by line as it runs (new in 0.4), as
+it is under `--format console` and as one `{"output": <line>, "stream": "stdout" | "stderr"}` document per line
+under `json` and `yaml`. `--log <path>` also appends those lines to a file you name (created readable by you only,
+mode `0600`), with a `warning:` line when the file is inside the repository and not git-ignored; an interactive
+launch refuses it (exit `2`): its output is the terminal's. **The output may hold secrets** — a token a tool printed,
+a credential in an error message — and nothing filters it: WingFoil keeps no log of its own, and the output is
+never committed, neither to the run record nor anywhere else; where a copy goes is your choice. `--timeout 30m`
+(`<n>s`, `<n>m` or `<n>h`, at most `24h`) stops the agent if it runs longer; the run is still recorded. A step that only waits for an approval or another party is refused with the line
 `wingfoil workflow next` prints for it, unless `--element` names the target.
 
 A headless agent cannot be asked for permission, so the adapter says what each role may do without asking
@@ -732,8 +738,14 @@ worktree's branch, beside the task's own commits. A step with no element of its 
 checkpoints `init` scaffolds), runs on the workflow's plan, `plan:<instance-id>` (new in 0.4), as
 `wingfoil agent list --waiting` shows it.
 
+While an agent runs, `agent execute` keeps an entry for the run under `.wingfoil/run/` (its run id, the agent's
+process id, when it started), removed when the run ends: `wingfoil agent list --active` lists them, and a second
+launch of the same run id is refused while the first one runs (new in 0.4). `.wingfoil/run/` is local to the
+checkout and never committed: `wingfoil init` writes `.wingfoil/.gitignore` with the line `/run/`. A project
+initialized before 0.4 has no such file, and every launch prints a `warning:` line until you add it.
+
 ```bash
-wingfoil agent list            # the recorded runs, and the workflow steps waiting for an agent
+wingfoil agent list            # the recorded runs, the workflow steps waiting for an agent, and the agents running now
 wingfoil agent show task-001-my-first-task/adhoc/1
 ```
 
