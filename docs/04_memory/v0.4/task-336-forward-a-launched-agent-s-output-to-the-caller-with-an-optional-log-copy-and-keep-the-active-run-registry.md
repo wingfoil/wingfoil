@@ -618,6 +618,106 @@ option named `log` — for a `git log` reader and offers no exemption; suggested
 
 None.
 
+### review fix round design (architect, 2026-11-16)
+
+The fix round on head `f246efed0` covers the independent review's findings F1–F7, with the approver's rulings: F2 fixed
+in the task as ruled (a), F5–F7 fixed in the task, F7's refusal proposed below. PATH guard through the task's PATH
+shim: `command -v wingfoil && wingfoil --version && node dist/cli.js --version` → the shim's path, then
+`0.3.2 (f246efed01b7c78e8348df790e874abf6a0f6927)` twice.
+
+**The spec-016 amendment, prepared and left uncommitted** (`git status --short` → ` M
+docs/04_memory/design/specs/spec-016-agent-execution.md` only):
+- §3.1 and §3.7's parse row (F7): a `--log` path that resolves, against the current directory and without following
+  a symbolic link, to `.wingfoil/run/` under the project root or beneath it → exit `2`, `error: invalid flag value:
+  --log must not name a file under .wingfoil/run/, the active registry`, decided before the project is read.
+- §3.3 step 14 (F2): at the agent's exit the entry is rewritten, by a new file renamed over it, with `agent execute`'s
+  own `pid`, so it stays live through steps 16–17.
+- §3.3 step 17 (F2): the entry is removed "only while the file still holds this launch's entry".
+- §5's exit codes (F5): a file `agent list` reads but cannot remove prints §7's `could not remove` line and changes no
+  exit code; the listing is answered without that file.
+- §7 (F2, F4, F5, F6):
+  - the `pid` lifecycle: `agent execute`'s from step 13, the agent's from the spawn until its exit, then `agent
+    execute`'s again until removal;
+  - the `id`: three non-empty segments, `<n>` a positive decimal integer without a leading zero, naming the file's own
+    path;
+  - every string field non-empty;
+  - `started_ms` an integer from `0` to `8640000000000000`;
+  - **This launch's entry:** a launch rewrites or removes the file only while it holds the same `id` and
+    `started_ms` and a `pid` that is `agent execute`'s own or the agent it spawned; another launch's entry is left as
+    it is. The check-then-remove window is stated as a known limit;
+  - the malformed cases are listed: JSON `null`, a missing or extra key, an empty string, a non-positive-integer
+    `pid`, an out-of-range `started_ms`, a bad `id`;
+  - a removal that fails for any cause other than the file being gone already is one `warning:` line,
+    `.wingfoil/run/<path>: could not remove: <cause>`, and never fails the read;
+  - a Revision note.
+
+Name-resolvability with the amendment in the tree: `npx jest test/docs/name-resolvability.test.ts --maxWorkers=2` →
+`Tests: 11 passed`. No new name needs an allowlist row. The run lists `spec-016…|symbol|LOG_INTERACTIVE`,
+`LOG_UNWRITABLE` and `RUN_ACTIVE` as stale: F1.
+
+**The discriminator (F2).** `started_ms` together with a `pid` in {`agent execute`'s own, the spawned agent's}. A
+second launch of the same run id comes from another process: it has another `agent execute` pid and another agent
+pid. Its `started_ms` is its own as well, unless two processes register in the same millisecond, and then the pids
+still differ. No new key is added to §7.
+
+**What red pins (qa), red-first per finding:**
+- **F2**
+  - (a) Unit `launchAgent` with an injected `FakeChild` carrying a `pid`: after the child exits, and before the record
+    commit returns (for instance from a `host.spawn` child whose exit is followed by a pending lookup), the entry file
+    holds `pid` = `process.pid` and the same `id` and `started_ms`.
+  - (b) CLI: during the post-exit window (a fake agent that exits while a child it started holds stdout open, the
+    shape `WINGFOIL_FAKE_AGENT_CHILD` gives), `agent list --active --format json` from a second process lists the run
+    with `agent execute`'s pid. If (b) is too timing-dependent, pin (a) only and say so.
+  - (c) Unit `removeRun`: a file holding another launch's entry (same `id`, another `started_ms` or a `pid` that is
+    neither) is left byte for byte; its own entry is removed. The intended signature is `removeRun(root, entry:
+    ActiveRunEntry, agentPid?: number)`, or a developer-chosen equivalent named in green; the exit rewrite skips a
+    file that is not its own the same way.
+- **F4** — `readActiveRuns` prunes, each with the exact line `.wingfoil/run/<path>: not an active run entry: removed`:
+  JSON `null`, an extra key, an empty-string field, `pid` `0`, `-1` and `1.5`, `started_ms` `-1`. These are
+  characterization: the current `parseEntry` already refuses every one (`src/agent/active-runs.ts` l.92–100, read at
+  `f246efed0`). qa records each case's first-run result, and turns any that fails into a red.
+- **F5** — `readActiveRuns` on an entry whose unlink fails with `EACCES` or `EPERM` (a directory made read-only, POSIX
+  only, skipped as root; or an injected failure if the developer adds a seam) returns `ok`, prints `warning:
+  .wingfoil/run/<path>: could not remove: <cause>` (pin the prefix up to `: `), and does not list the file;
+  `agent list --active` exits `0`.
+- **F6**
+  - A top-level `.wingfoil/run/x.json` holding `id: "x"`, and an entry whose `n` is `0`, `01` or `a`, are pruned with
+    the not-an-entry line: no `TypeError`.
+  - `started_ms` `8640000000000001` is pruned; `8640000000000000` is listed, and `agent list --active` renders it
+    without a `RangeError`.
+- **F7** — `--headless --log .wingfoil/run/x.log`, `--log <root>/.wingfoil/run`, and `--log` under `.wingfoil/run/a/b`
+  each exit `2` with `error: invalid flag value: --log must not name a file under .wingfoil/run/, the active
+  registry`: nothing spawned, no file created, `HEAD` unchanged. A path `.wingfoil/runx.log` is not refused.
+
+**What the developer changes (green):**
+- **F1** — remove the three stale allowlist rows `LOG_INTERACTIVE`, `LOG_UNWRITABLE`, `RUN_ACTIVE` from
+  `test/docs/name-resolvability.allowlist.ts`.
+- **F2** — in `src/agent/launch.ts`, `runAgent`'s `onExit` (l.427/l.461, called from the `launchRun` call at l.970–980)
+  rewrites the entry to `process.pid` when the file is still this launch's; `removeRun` (`src/agent/active-runs.ts`
+  l.270) and the exit rewrite check `id`, `started_ms` and the pid pair before acting.
+- **F3** — in `launchAgent`'s `finally` (l.916–919), `removeRun` before `log?.close()`, or the close wrapped, so a
+  throwing close cannot leave the entry behind.
+- **F5** — `removeFile`'s non-`ENOENT` failure (l.118–125) inside `readActiveRuns` becomes the `could not remove`
+  warning; `registerRun` keeps its `IO` refusal.
+- **F6** — `parseEntry` (l.85–103) requires three segments and §7's `<n>`, and `started_ms ≤ 8640000000000000`.
+- **F7** — the parse check in `src/core/agent-execute.ts` next to the blank `--log` refusal, the path resolved against
+  the current directory and compared with `<root>/.wingfoil/run`; then `docs/cli-reference.md` gains the message.
+
+**Decisions for the approver, beyond the rulings:**
+- **F7's code.** Proposed: exit `2` in §3.7's parse row, a usage error with no upper-case label, because the path is
+  known before anything is read. Not `LOG_UNWRITABLE`, which stays `IO`, exit `1`, at step 13 for a file that cannot be
+  opened. **Recommend** the parse row.
+- **`spec-008` §12's `--log` row** lists `--log`'s usage errors and does not name this new one. **Recommend** a
+  one-line `spec-008` amendment in this round (not prepared, since this round's scope is spec-016), or accepting §12's
+  reference to `spec-016` §3.1 as sufficient.
+- **The race window.** The check-then-remove and check-then-rewrite are not atomic; §7 states it as a known limit.
+  The alternative is an entry that never changes its `pid` and gains an `agent_pid` key (liveness = either pid alive),
+  which removes the exit rewrite entirely but changes §7's keys. **Recommend** the ruling as specified.
+
+### Pending amendments (approver) — review fix round
+
+- `spec-016-agent-execution` — `--reason "Record task-336's review-fix amendment of spec-016: the registry entry's pid returns to agent execute's own when the agent exits and a launch rewrites or removes only its own entry, an entry's id must be three segments naming its file and started_ms a valid date, a --log under .wingfoil/run/ is refused with exit 2, and a failed removal while reading is a warning, never a failed read."`
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
