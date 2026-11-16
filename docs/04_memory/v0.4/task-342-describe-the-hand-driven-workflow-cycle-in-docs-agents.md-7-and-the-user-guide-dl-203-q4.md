@@ -404,6 +404,63 @@ The approver approved the design as recommended (finalize `b8626f91b`, no amendm
 - **D7** the proposed text of `docs/agents.md` §2, §6 and §7 and `docs/user-guide.md` §7 is confirmed as drafted in the
   design notes above; green writes it verbatim.
 
+### red (qa, 2026-11-16)
+
+**Base.** Branch head `12d2f4e47` (the design gate rulings); `git rev-list --count HEAD..main` → `0`, so no merge of
+`main`. PATH guard: `command -v wingfoil` → the task's PATH shim; `wingfoil --version` and `node dist/cli.js
+--version` → `0.3.2 (2fedaa6ae31e…)`. Contract: the design above and the gate rulings (D1–D7 as recommended, the
+proposed text confirmed verbatim, D7). No `src/`, `scripts/`, docs or `.wingfoil/` change; no new export, so no
+`.d.cts` and no TS2305 red.
+
+**File.** `test/docs/hand-driven-cycle.test.ts` (new; 21 cases), shape of `test/docs/l0-attribution-text.test.ts`:
+`read`, `flat` (whitespace runs collapsed, blockquote markers dropped), a `section` helper from a heading line to the
+next heading of the same or a higher level (`''` when the heading is absent, so a pin fails on its assertion), and
+`firstTableRows` (first cell, last cell). It reuses `inlineCodeSpans` from `test/docs/support/name-resolvability.ts`
+and builds the command tree with `buildProgram(CORE_MODULES, …)` as `test/docs/name-resolvability.test.ts` does.
+Every pin is a sentence of the D7 text, verbatim (the design's `L1`…`S5`/`U1`…`U3` handles stripped).
+
+**Per AC.**
+
+| AC | Class | Cases (describe › it) |
+|---|---|---|
+| 1 | red-first | `task-342 AC 1 — …` › §7 opens with what drives a run until the driver ships; `### The cycle` is a numbered list of exactly five steps; the five steps hold S1–S5; the loop on `workflow next`, "a hand-driven run, not a coordinator" and start/end only when asked; `### The coordinator` (intro, the three judgement points as items 1–3, "never does a step's work", the run-record sentence, the "Until the driver ships" sentence); the never-sentence in both `coordinator.md` and §7 (parity); `### What removes each manual step` — its first table equals the eight (first cell, last cell) rows, in order |
+| 2 | red-first | `task-342 AC 2 — …` › U1, `**Start it.**` and `**End it.**` (with "before that it refuses and names the current step"); the list between "Then, until its steps are complete:" and `**End it.**` is items 1–5 led by the five bold names; steps 2, 3, 5 verbatim and step 4's lead with the kept finalize sentence; the `](agents.md#7-following-a-workflow)` link, U2 and U3; the table after `**What removes each manual step.**` equals the eight rows and agents.md §7's (parity) |
+| 3 | red-first | `task-342 AC 3 — …` › the §2 `current work and decisions` row is exactly the D7 row and has no `[--status <s>]`; §6 holds P1, P2, P3 verbatim; `### Levels of process` holds L1, a `- **Light:**` and a `- **Strict:**` item with their text, and the default sentence (D4) |
+| 4 | characterization | `task-342 AC 4 — …` › the new spans carry the seven commands the design names (not vacuous); every `wingfoil …` inline code span of the §2 row, the three §6 paragraphs, agents.md §7 and user-guide §7 names a registered command path whose `--flag`s are options of that command or global options; each file carries neither `signed` nor `human-approved`, beside the coordinator sentence (`dl-212` D4) |
+
+AC 4 is characterization: the command surface it checks exists today. At the red commit its "not vacuous" case and
+its two `dl-212` D4 cases fail only because the new text, and so its spans and the coordinator sentence, are absent;
+the span-resolution case passes on its first run (it checks the spans the files hold today). No red is fabricated:
+the `signed`/`human-approved` absences hold today (`grep -n -i "\bsigned\b\|human-approved" docs/agents.md
+docs/user-guide.md` → no output, per the design), and each fails only on its positive.
+
+**Runs.**
+- `npx jest test/docs/hand-driven-cycle.test.ts --maxWorkers=2` (worktree, red commit) → `Tests: 20 failed, 1 passed,
+  21 total`. First failing assertion line of each case (test file line): AC 1 → `:114`, `:120`, `:131`, `:136`,
+  `:153`, `:159`, `:163`; AC 2 → `:176`, `:189`, `:207`, `:211`, `:223`; AC 3 → `:233`, `:241`, `:247`, `:253`,
+  `:261`; AC 4 → `:338` (`Expected value: "wingfoil memory search --type <type>"`), `:353` (twice: the coordinator
+  sentence absent). Each is a `toContain`/`toEqual` on absent text (`Received string: ""` for an absent sub-heading,
+  or §7's current text), never a crash.
+- Proof the cases pass once green writes the D7 text: a local clone of this branch outside the worktree, with
+  `docs/agents.md` §2/§6/§7 and `docs/user-guide.md` §7 rewritten from the design's proposed text exactly as
+  wrapped there (items 1 and 4 of the guide's list keep the current sentences, as the design says), `npx jest
+  test/docs/hand-driven-cycle.test.ts --maxWorkers=2` → `Tests: 21 passed, 21 total`. In the same clone `npx jest
+  test/docs/user-guide-scaffold.test.ts test/docs/l0-attribution-text.test.ts test/docs/pages-render.test.ts
+  test/docs/memory-store-location-text.test.ts test/docs/llms-txt.test.ts --maxWorkers=2` → `Tests: 1 failed, 66
+  passed, 67 total`: the one failure is `pages-render` ("no page of docs/site.yaml has a paragraph line beginning with
+  `<` and a letter"), caused by the design's own line breaks before `<step-key>` and `<run-id>` — the wrapping the
+  design already tells green to avoid; green re-wraps at 120 columns and keeps no line starting with `<`.
+- `npx tsc --noEmit -p tsconfig.json` → exit `0`, no output. `npx jest test/lint --maxWorkers=2` with the file in
+  place → `Test Suites: 16 passed, 16 total`, `Tests: 165 passed, 165 total`. The invisible-character grep over the
+  test file → no hit (exit `1`).
+
+**Note for green.** The design's (c) list quotes the run-record sentence ending "when the session exits."; the D7 text
+continues it with "; the element is the `plan` of the run it coordinates." The test pins the D7 text (the approver
+confirmed it verbatim), so the sentence reads "…when the session exits; the element is the `plan` of the run it
+coordinates."
+
+**Red commit:** `5d30e3c6353bc7ebfb8287f94b6c26077a446085` (T4 is measured from it).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
