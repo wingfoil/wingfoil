@@ -59,3 +59,354 @@ work run with `spec-016` §7's active registry (a headless run has no terminal t
 ## Execution Notes
 
 <!-- Filled by the dev-loop. -->
+
+
+### design (architect, 2026-11-16)
+
+**Setup.** Worktree on `task/task-336-…` cut from `main` `ded5351ce`, head `bb05c58b4` (`wf(task): start`); `bug:` is
+empty, so no bug sync. PATH guard, first command of the session, through the task's PATH shim:
+`command -v wingfoil && wingfoil --version && node dist/cli.js --version` → the shim's path, then
+`0.3.2 (ded5351ce97918deedc365c97f420f396a6f7ecb)` twice.
+
+**Read.** AGENTS.md §1–§8; the plan `dev-loop-rel-v0.4-plan` (W0-R1…W0-R12, from `design/dev_loop_v0.4`);
+`.wingfoil/workflows/custom/dev-loop.yaml`; `dl-182` (`ready`, Q1–Q5 (a)) and `dl-181` (`ready`; its Rationale: the
+registry "makes it visible (`agent list --active`) and refuses a second launch on the same run id"); `spec-016`
+(`approved`) §3.1–§3.7, §5, §5.1, §7, §8, Consequences and the Revisions of task-335, task-338, task-340 and task-353;
+`spec-008` (`approved`) §5, §10, §11, §12; `spec-011` (`approved`) § Directory layout and § `.gitignore` policy with
+task-338's paragraph; `spec-005` §2 and §3.2; REQ-SYS-03 (`docs/02_requirements/03_sard/01_architecture.md`); the
+`command-baseline`, `determinism`, `security-secrets` and `testing` directives.
+
+**`depends_on: [task-335]` (`dl-015`).** Its paragraph "What the tasks built on this one must read" names, for this
+task: D6 (headless stdin the null device, stdout piped and drained, stderr inherited, the child in its own process
+group) — this task replaces the drain with `dl-182` Q1's line forwarding of both streams and adds `--log`; the success
+payload `{ "run": <record> }` on stdout and the summary as a stderr notice — both kept; and `spec-016` §7's
+`agent.execute` Tool sentence ("refuses every call until headless launch exists (v1.0)") — left to `w1`'s MCP surface
+task (P5.2.3), with §7's MCP bullet and §8's MCP cells, as AC 8 says ("the MCP rows stay w1"; D6 below). task-335's D6
+also says the registry "which records the pid" is what makes an agent orphaned by a `SIGKILL` of `agent execute`
+visible: §7 below keeps that (the entry carries the agent's pid and stays live while the agent runs).
+
+**The task file's references, re-read at `ded5351ce`** (it cites `ddadc1251`; task-338 and task-353 merged since):
+`git show ded5351ce:src/agent/launch.ts | grep -n "stdio: 'inherit'"` → l.341 (`spawnOptions`, l.340–343, whose
+headless branch is l.342 `stdio: ['ignore', 'pipe', 'inherit']`); `StdoutSink` l.350; `runAgent` l.362 (positional
+parameters `spawnAgent, command, args, options, onSpawn, onExit, stdout?` — there is no option object: task-335's
+"`runAgent`'s option object" means `spawnOptions`); `postRunFacts` l.597; `launchAgent` l.779, the banner l.798, the
+headless summary notice l.905, `signals.restore()` l.911. `src/agent/execute.ts`: `AgentExecuteRequest` l.515,
+`PreparedLaunch` l.550, `resolveLaunchKind` call l.777, step 12 l.862, `return launch({` l.869.
+`src/core/agent-execute.ts`: the `--headless`/`--interactive` refusal l.78, `--timeout` l.80.
+`src/core/agent-list.ts`: the "v0.3 limit" comment l.18, `Selection` l.99, `agentListAtHead` l.136, `agentListFn`
+l.196, `renderAgentListConsole` l.243. `src/core/index.ts`: `agentExecute`'s `timeout` option l.2722, `agentList`
+l.2737 (its `waiting` flag l.2743). `src/core/init.ts` writes no `.gitignore` at all (`grep -n gitignore
+src/core/init.ts` → nothing): `wingfoil init`'s files come from `templateScaffold` (`src/storage/templates.ts` l.786),
+so AC 5 is a new scaffold file, not a change to an existing write. `docs/user-guide.md` §9.4 is l.680–721
+(`grep -n "^### 9.4" docs/user-guide.md` → 680); its l.710 says a headless run's "output is not shown", and
+`docs/cli-reference.md` l.1963 "stdout is captured and not shown": both become false with AC 1.
+
+#### Per-AC classification and what red must pin
+
+New exports named below are the intended interface; red on them is `tsc` TS2305/TS2307 and, under Jest's
+`isolatedModules`, a runtime `TypeError` or "Cannot find module" (the B9 lesson). Fixtures of command output are
+copied from a real run of the fake agent or the CLI, with the producing command in the red notes; never an invented
+stderr. Every run goes through `test/fixtures/agents/fake-agent.cjs`, extended additively (below).
+
+| AC | Class | Why |
+|---|---|---|
+| 1 | red-first | `spawnOptions` l.342 inherits stderr and drains stdout to nowhere (`launch.ts` l.380–391): nothing is forwarded today |
+| 2 | red-first | `--log` is not registered: Commander refuses it (`error: unknown option '--log'`, exit 2) |
+| 3 | red-first | a property of the new forwarding and `--log`; today no output is kept anywhere, so the test passes only with AC 1–2's code in place — it is written against them (with the marker reaching stderr as its positive case, `dl-097` (a)) |
+| 4 | red-first | nothing writes `.wingfoil/run/` (`grep -rn "wingfoil/run" src` → nothing) |
+| 5 | red-first | `templateScaffold` has no `.wingfoil/.gitignore` |
+| 6 | red-first | `agent list --active` is refused (`test/cli/agent-list.integration.test.ts` l.93–98 pins exit 2) |
+| 7 | red-first | the two documents say nothing of secrets in the output (`grep -n "secret" docs/user-guide.md` → no line in §9.4) |
+| 8 | characterization | the approver's `memory amend` of `spec-008`, `spec-011`, `spec-016` before red; checked by `git log` |
+
+**What red pins, AC by AC.**
+
+- **AC 1 — forwarding** (`spec-016` §3.3 step 14 and 16, §3.5 as amended).
+  - *CLI*, new `test/cli/agent-execute-output.integration.test.ts`, on `seed()` of
+    `test/agent/helpers/agent-execute-fixture.ts` and `execute()` of `test/cli/helpers/agent-execute-cli.ts`:
+    `--element task:task-202-explicit-override --role developer --headless` with `WINGFOIL_FAKE_AGENT_SAY` writing
+    lines on both streams. Pin: exit 0; stdout exactly `{ "run": <the committed record> }` (`--format json`); under
+    `--format console` every fake line appears on stderr verbatim followed by a newline, **per-stream order only**
+    (the two pipes interleave as the OS delivers them: never pin a cross-stream order); the banner notice precedes
+    every forwarded line and the summary notice follows every one; under `--format json` every stderr line parses as
+    JSON, each fake line being exactly `{"output":"<line>","stream":"stdout"|"stderr"}` (keys in that order); a last
+    line written without a newline arrives with one; the fake's headless JSON document (`launch.headless.output:
+    json`) is itself forwarded as a `stream: stdout` line.
+  - *Unit*, new `test/agent/launch-output.test.ts`, `launchAgent(root, input, host, release)` with the injected
+    `FakeChild` of `test/agent/helpers/fake-child.ts` (extended additively with an optional `stderr` PassThrough) and
+    `withOutputSink(sink, run)`: the exact `(line, stream)` sequence for chunks split mid-line and mid-UTF-8 sequence,
+    an invalid byte → U+FFFD, a CR kept before the newline, a 64 KiB line without newline delivered as one line, the
+    tail after exit flushed. Interface (new, `src/validation/warning.ts`, beside `withNoticeSink`):
+    `type OutputStream = 'stdout' | 'stderr'`, `type OutputSink = (line: string, stream: OutputStream) => void`,
+    `withOutputSink<T>(sink: OutputSink, run: () => T): T`, `reportOutput(line: string, stream: OutputStream): void`;
+    `line` excludes the newline.
+- **AC 2 — `--log`** (`spec-016` §3.1, §3.2 step 7, §3.3 step 13, §3.7; `spec-008` §12), new
+  `test/cli/agent-execute-log.integration.test.ts`. Pin: (a) `--headless --log <tmp dir outside the repo>/run.log`:
+  the file is created, its content is exactly the forwarded lines in console form (no banner, no summary, no
+  `warning:` line), the same lines still on stderr; mode `0600` (`statSync(p).mode & 0o777`) on POSIX; (b) a
+  pre-existing file keeps its first bytes and gains the lines (append), its mode unchanged; (c) `--log
+  <repo>/out.log` (inside, not ignored) → one stderr line exactly `warning: --log <path as given> is inside the
+  repository and not git-ignored: the agent's output may hold secrets`; a path under a directory the fixture's
+  committed `.gitignore` ignores → no such line; an outside path → none; (d) `--interactive --log x` → exit 2,
+  `error: invalid flag combination: --log needs a headless launch, and this run launches interactive`, the repository
+  untouched (same `HEAD`, nothing spawned); (e) `--element … --log x` with no `--headless` (the stepless default is
+  interactive; adapter `fake`, `terminal: optional`, so no TTY is needed) → the same message, exit 2, nothing spawned,
+  no record; (f) `--log ''` → exit 2, `error: invalid flag value: --log must not be blank`; (g) `--log
+  <a directory>` → exit 1, `error: cannot write the log <path>: <cause>` (pin the prefix up to `: `), no record, no
+  registry entry left; (h) `--dry-run --headless --log <path>` → exit 0, the file not created.
+- **AC 3 — nothing kept** (`dl-182` Q3 (a)), in the AC 1 test file: with a marker string written by the fake on both
+  streams, the marker is on stderr (positive case) and is absent from `git log -p --all`, from the run-log file, and
+  from every file under the repository (`git grep --no-index -l <marker>` → nothing); after the run `git status
+  --porcelain --ignored --untracked-files=all` is empty (the fixture is otherwise clean) and `.wingfoil/run/` holds
+  no file.
+- **AC 4 — the registry** (`spec-016` §3.3 steps 13–14 and 17, §7), new `test/cli/agent-execute-registry.integration.test.ts`
+  and unit `test/agent/active-runs.test.ts`.
+  - *CLI*: with `WINGFOIL_FAKE_AGENT_REGISTRY=1`, the fake's record shows, during the run, exactly one entry at
+    `.wingfoil/run/task-202-explicit-override/adhoc/1.json` whose parsed content has the keys `id, pid, workflow,
+    phase, element, role, agent, session, started_ms` in that order, `pid` equal to the fake's own `pid` (rewritten
+    at step 14), `id` the run id, `session` the assigned id (adapter `fake`, `session.id: assign`), `started_ms` a
+    positive integer; after the run the directory holds no file — for an interactive launch too; a run whose agent
+    exits 1 also leaves none. `RUN_ACTIVE`: a hand-written entry for `…/adhoc/1.json` with `pid` the Jest worker's
+    own `process.pid` → exit 1, `error: run task-202-explicit-override/adhoc/1 is already running (pid <pid>)`, no
+    spawn, no record commit, the hand-written entry untouched; the same entry with the `pid` of a process that has
+    exited (from `spawnSync(process.execPath, ['-e', ''])`) → pruned, the run proceeds and records `…/adhoc/1`. The
+    not-ignored warning: in a fixture without `.wingfoil/.gitignore`, one line exactly `warning: .wingfoil/run/ is
+    not git-ignored: add "/run/" to .wingfoil/.gitignore, or a running launch can be committed`; with the file
+    (`/run/`), none (per D8 (a)).
+  - *Unit* (new module `src/agent/active-runs.ts`): `ACTIVE_RUNS_DIR = '.wingfoil/run'`; `interface ActiveRunEntry
+    { id: string; pid: number; workflow: string; phase: string; element: string; role: string; agent: string;
+    session: string; started_ms: number }`; `readActiveRuns(root: string): CoreResult<ActiveRunEntry[]>` — live
+    entries in element-id byte order, then phase, then `n` numerically (`…/2` before `…/10`), a dead pid's file
+    removed, a malformed file removed with the `warning:` line `.wingfoil/run/<relative path>: not an active run
+    entry: removed` (through `withWarningSink`), emptied directories removed, `.wingfoil/run/` itself kept; an
+    absent directory → `ok([])`.
+- **AC 5 — init** (`spec-011` § `.gitignore` policy), in `test/core/init-project.test.ts` (or a new
+  `test/core/init-gitignore.test.ts`): after `initWingfoilProject(repo, <each of TEMPLATES>)`, `.wingfoil/.gitignore`
+  holds exactly `# wingfoil agent execute's registry of running agents: local to this checkout, never committed.\n/run/\n`,
+  is in the init commit (`git show --name-only --format= HEAD`), `git check-ignore -q .wingfoil/run/x/adhoc/1.json`
+  exits 0, and no root `.gitignore` is written. Existing test to change with it: `test/core/format-init-scaffold.test.ts`
+  l.64–67 ("every scaffolded file is a known kind, or a .gitkeep") — `.wingfoil/.gitignore` must be accepted there
+  by name.
+- **AC 6 — `agent list --active`** (`spec-016` §5, §5.1, §7; `spec-008` §12), new
+  `test/cli/agent-list-active.integration.test.ts` and core `test/core/agent-list-active.test.ts`
+  (`agentListFn({ root, active: true, … })`). Pin: entries written by the test (live `process.pid`; two elements,
+  phases, `n` 2 and 10) listed in §5's order; console heading `active runs: <n>` and lines `<id>  <role>  <agent>  <pid>
+  <started>` (two spaces between fields, `<started>` = `new Date(started_ms).toISOString()`), `no active runs` when
+  empty; JSON keys `baseline, active, diagnostics` for `--active` alone, `baseline, past, waiting, active, diagnostics`
+  for no flag (per D13 (a)); `--element` / `--phase` filter it; a stale entry is gone from disk after the call; a step
+  of the waiting section with a live entry of the same `workflow`, `phase` and `element` is not listed (D4 (a)).
+  Existing tests to change: `test/cli/agent-list.integration.test.ts` l.74–79 (default console: gains `no active
+  runs`) and l.93–98 (`--active` no longer an unknown option); `test/core/agent-list.test.ts` l.420–430 (the `no
+  flag` case gains `active`; `both flags` stays past + waiting) and its header comment l.9–14.
+- **AC 7 — documents**, new `test/docs/agent-output-secrets.test.ts`: in `docs/user-guide.md` §9.4 and in the
+  `### wingfoil agent execute` entry of `docs/cli-reference.md`, the phrases "may hold secrets" and "never
+  committed"; the entry has a `` | `--log <path>` | `` option row; the `### wingfoil agent list` entry has an
+  `` `--active` `` row. `test/docs/cli-reference.test.ts` already fails if the entry lacks the registered options.
+- **AC 8** — no Jest test: red checks `git log --format=%s -3 -- docs/04_memory/design/specs/` shows the three
+  `wf(tech-spec): amend …` commits before the red commit.
+
+**Fake agent, additive** (`test/fixtures/agents/fake-agent.cjs`, header list extended): `WINGFOIL_FAKE_AGENT_SAY` —
+a JSON array of `["out" | "err", "<text>"]` pairs written in order, each text as is (no newline added), on a launch
+after its record line and before the headless document, each write awaited before the next; `WINGFOIL_FAKE_AGENT_REGISTRY=1`
+— on a launch, before its record line, record `pid: process.pid` and `registry: [{ path, entry }]` for every file
+under `<cwd>/.wingfoil/run/`, sorted by path (an entry is the parsed JSON, not secret). Nothing else in the fake
+changes, so every existing record line keeps its keys.
+
+**Shared fixtures** (qa, in red, because D8 (a) makes every launch in a fixture without the file print a warning):
+`seed()` in `test/agent/helpers/agent-execute-fixture.ts` (l.102) and `seedStep()` in
+`test/agent/helpers/agent-execute-step-fixture.ts` (l.160) commit `.wingfoil/.gitignore` (`/run/`), so the
+`warningLines(…).toEqual([])` assertions of real launches (`agent-execute-launch-kind.integration.test.ts` l.56–205,
+`agent-execute-awaiting.integration.test.ts` l.56, l.93) keep passing; the AC 4 warning test builds its own fixture
+without it.
+
+#### Files to touch, and the overlap with task-337
+
+Code (green/refactor):
+- `src/agent/launch.ts` — header comment l.13–17 and l.28–30 (steps 14 and 16); `spawnOptions` l.340–343 (headless
+  stderr `pipe`); `StdoutSink`/`runAgent` l.345–415 (both pipes into a line splitter that feeds `reportOutput` and the
+  log, the session reader kept as one more consumer of stdout, the post-exit drain for both streams bounded by
+  `LOOKUP_TIMEOUT_MS` then the pipes destroyed, a `FakeChild` without `stderr` tolerated); `LaunchInput` l.695–722
+  (`log?: string`, the resolved path); `LaunchHost` l.659–677 (`now?: () => number` for `started_ms`); `launchAgent`
+  l.779–913 (step 13 before the banner l.798: registry create and log open; step 14's pid rewrite in the `onSpawn`
+  callback l.835–838; removal and log close in the `finally` l.907–912). **Not touched:** `postRunFacts` l.592–656,
+  `noTokens`, the record literal l.863–882 and every §4.2 key — task-337's ground.
+- `src/agent/output.ts` (new): the line splitter (64 KiB cap), the `--log` writer (`'a'`, mode `0o600`), the
+  `git check-ignore` helper shared by step 13's two warnings.
+- `src/agent/active-runs.ts` (new): the registry (create exclusive, rewrite by rename, remove, read with prune).
+- `src/agent/index.ts` — exports.
+- `src/agent/execute.ts` — `AgentExecuteRequest` l.515–533 (`log?: string`), `PreparedLaunch` l.550–583 (`log`), the
+  `LOG_INTERACTIVE` throw right after `resolveLaunchKind` l.777–779 (a `UsageError`, so exit 2 through
+  `exitCodeForThrow`), and the launch input l.869–890.
+- `src/core/agent-execute.ts` — l.68–83: `--log` blank and `--log` with `--interactive` as `UsageError`s.
+- `src/core/index.ts` — `agentExecute.options` l.2717–2727 (`log`, valueName `path`, its description stating that the
+  output may hold secrets); `agentList.flags` l.2741–2744 (`active`) and the comment l.2733–2736.
+- `src/core/agent-list.ts` — header l.1–20, `AgentListParams`, `AgentListResult`, `Selection`, `agentListAtHead`
+  (the active section; the waiting filter), `agentListFn`, `renderAgentListConsole`.
+- `src/validation/warning.ts` (the output sink), `src/cli/warning.ts` (`emitOutput`: console the line and `\n`,
+  `json`/`yaml` the `{ output, stream }` document as `emitNotice` writes a notice), `src/cli/registrar.ts` l.214–217
+  (`withOutputSink` around the call, beside `withNoticeSink`).
+- `src/storage/templates.ts` — `templateScaffold` l.786–812 gains `.wingfoil/.gitignore` (D2 (a); `scaffoldFiles` in
+  `src/storage/layout.ts` is not `wingfoil init`'s list — `grep -rn initWingfoilStorage src --include=*.ts` names no
+  caller outside `src/core/init.ts` — and stays as it is).
+- `.wingfoil/.gitignore` (new, this repository's own, the same two lines), `test/fixtures/agents/fake-agent.cjs`
+  (qa, red).
+
+Documents (developer commits them): `docs/user-guide.md` §9.4 (l.680–721, AC 7, and l.710's "output is not shown");
+`docs/cli-reference.md` `### wingfoil agent execute` (l.1816–2001: grammar, a `--log` row, l.1962–1975's headless
+paragraph) and `### wingfoil agent list` (l.2003–2063: `--active`, l.2024's "comes later (v0.4)", l.2061);
+`docs/02_requirements/03_sard/01_architecture.md` REQ-SYS-03's fit criterion (l.41–42, D7).
+
+**task-337 overlap, hunk by hunk** (its ACs: tokens from the transcript or the headless output, `agent_version` before
+and after, `result`, `parseRunLog`): in `src/agent/launch.ts` this task changes `spawnOptions` l.340–343,
+`StdoutSink`/`runAgent` l.345–415, `LaunchInput` l.695–722, `LaunchHost` l.659–677 and `launchAgent` l.779–842 and
+l.904–912; task-337 is expected in `postRunFacts` l.592–656 and the record l.863–882 — and, for AC 1's "from the
+headless output", it needs to read the headless stdout too: after this task that is one more consumer of the stdout
+tee in `runAgent`, the place the session reader already plugs in. `src/agent/run-log.ts`: this task touches nothing
+(it may import `NOT_REPORTED`). `spec-016`: this task amends §3.1, §3.2 step 7, §3.3 (opening, steps 13, 14, 16, 17,
+`--dry-run`), §3.4, §3.5 (the work-run bullet), §3.6, §3.7, §5, §5.1, §7, §8, the Consequences' known limits and a
+Revision note — none of §2.2, §2.8, §4.2. **Order:** either can go first; the second rebases its `runAgent`/stdout
+hunk on the first's (recommended: this task's green first, since it restructures `runAgent` and task-337 only adds a
+reader to it).
+
+**task-341 and task-359** (`git diff --stat ded5351ce...<branch>`): task-341 touches
+`.wingfoil/directives/custom/coordinator.md`, `spec-002`, `test/agent/repository-agent-roles.test.ts`,
+`test/cli/check-role-directives.test.ts`, `test/directives/*`, `test/docs/name-resolvability.allowlist.ts` (+1 line);
+task-359 touches `.wingfoil/WORKFLOW.md`, `bindings.yaml`, `vision-change.yaml`, `dl-132`, `scripts/check-release-exit.cjs`
+and its tests. None is in this task's list except the allowlist (different lines, sorted inserts). task-342's
+declared files are `docs/agents.md` §6–§7 and `docs/user-guide.md` §7: the same file as AC 7, a different section.
+
+**`version:` bumps: none.** No touched file declares a version (`grep -n -i "^version\|\*\*version"` on
+`docs/user-guide.md`, `docs/cli-reference.md`, `docs/02_requirements/03_sard/01_architecture.md` and the three specs →
+no version line; tech-specs declare none, `doc-versioning` § Scope); none of the four `.wingfoil/*.yaml` changes.
+
+#### Existing tests, run before the amendments were prepared
+
+After the `dl-170` slot was granted (08:27:48 UTC), `npm test -- test/agent/launch.test.ts
+test/agent/launch-headless.test.ts test/agent/launch-session-output.test.ts test/agent/launch-session-output-bounds.test.ts
+test/agent/launch-process.test.ts test/agent/fake-agent.test.ts test/cli/agent-execute-headless.integration.test.ts
+test/cli/agent-execute-session-output.integration.test.ts test/cli/agent-execute-process-group.integration.test.ts
+test/core/agent-list.test.ts test/core/agent-list-edges.test.ts test/core/agent-list-gate.test.ts
+test/cli/agent-list.integration.test.ts test/cli/agent-list-edges.integration.test.ts test/core/agent-execute.test.ts
+test/core/format-init-scaffold.test.ts test/core/init-project.test.ts test/storage/git-backed-storage.test.ts
+test/docs/cli-reference.test.ts test/docs/name-resolvability.test.ts test/storage/snapshot.test.ts --maxWorkers=2` →
+`Test Suites: 21 passed, 21 total`, `Tests: 319 passed, 319 total`.
+
+**Tests pinning behaviour that changes** (`grep -rn "\-\-active" test`, `grep -rln "no waiting steps" test`,
+`grep -rn "headless" test/cli/*.ts | grep stderr`): `test/cli/agent-list.integration.test.ts` l.74–79 and l.93–98;
+`test/core/agent-list.test.ts` l.420–430; `test/core/format-init-scaffold.test.ts` l.64–67;
+`test/cli/agent-execute-headless.integration.test.ts` l.61–71 parses every stderr line as JSON — it keeps passing under
+D1 (a), since a forwarded line is a JSON document, and would pass under (b) only because the fake's output happens to
+be JSON. No test pins a workflow's phase list or step count: this task changes no workflow. Every
+`git status --porcelain` assertion after a launch (`agent-execute-launch.integration.test.ts` l.230,
+`agent-execute-cli-shim` l.307, `agent-execute-step` l.110, `agent-execute-worktree` l.94–95, l.142) stays green only
+if the entry and its emptied directories are removed (§7).
+
+**`.wingfoil/` checked against the pinned build** (`dl-205`; the change is the new `.wingfoil/.gitignore`), with the
+file written in the working tree for the check and removed after: `npm run -s check:mcp` → exit 0 (".mcp.json
+"wingfoil" runs the pinned wingfoil 0.3.2 … every listed Resource read and Prompt get answered");
+`npm run -s wingfoil -- workflow list` → exit 0, its `W_UNCOMMITTED_INPUTS` naming only the three amended specs, not
+the new file; `npm run -s wingfoil -- workflow show dev-loop` → exit 0; `git check-ignore -v
+.wingfoil/run/task-x/red/1.json` → `.wingfoil/.gitignore:2:/run/`. `git check-ignore` itself, in a scratch repository
+outside the worktree: an ignored path → exit 0, a tracked file → 1, an untracked unignored file → 1, a path outside
+the repository → 128 (`fatal: … is outside repository`) — which is why §3.1 checks only a path inside the root.
+
+#### Decisions for the approver
+
+The prepared amendments follow each recommendation.
+
+- **D1 — the forwarded output under `--format json|yaml`.** (a) one `{ "output": <line>, "stream": "stdout" |
+  "stderr" }` document per line, the console form being the line and a newline; (b) the raw bytes in every format.
+  **Recommend (a)**: `spec-005` §3.2 makes a structured stderr "only" documents, and a caller that set `--format json`
+  (the WingFoil UI consumer `dl-182` names) must not meet arbitrary agent text among them; the `--log` copy is always
+  the console form. (b) is what an interactive launch's inherited stderr already does, but there WingFoil cannot
+  interpose.
+- **D2 — where `.wingfoil/run/` is ignored.** (a) `.wingfoil/.gitignore` with `/run/` (and a comment line), a file of
+  `wingfoil init`'s scaffold, committed with it, plus the same file in this repository; (b) a line appended to the
+  root `.gitignore`; (c) the registry moved into the git directory like task-338's salt, needing no ignore rule.
+  **Recommend (a)**: init never rewrites a user's file (the scaffold writes whole files and refuses a dirty target),
+  the rule sits next to what it excludes, and `.wingfoil/` itself stays tracked. (c) contradicts `dl-135` Q1 (a),
+  `spec-016` §7 and AC 5, and a linked worktree would need `--git-dir` rather than the common dir; spec-011's new
+  closing paragraph says why the two scopes differ.
+- **D3 — a second launch on a running run id.** (a) step 13 creates the entry exclusively (`agent execute`'s pid),
+  refuses a live one (`RUN_ACTIVE`, exit 1), prunes a dead one, and step 14 rewrites the pid to the agent's;
+  (b) a check at step 9 and the write at step 14, as §7's "written at step 14" read literally, with the race between
+  them left to §4.3's duplicate-record refusal (after the second agent has run); (c) no refusal. **Recommend (a)**:
+  §7 already says `agent execute` refuses such a launch, and only an exclusive create closes the window the MCP
+  pre-flight (up to 30 s) leaves open in (b).
+- **D4 — `waiting` minus the steps with a live entry** (§7's second bullet). (a) in this task, matching an entry to
+  a step by `workflow`, `phase` and `element`; (b) left for later, §5's "v0.3 limit" sentence kept. **Recommend
+  (a)**: one filter over data this task already reads, and §5 would otherwise list as waiting the step an agent is
+  running, the case `dl-135` point 1 names.
+- **D5 — `--log`'s details.** A relative path resolves against the current directory (like any shell path; the global
+  `--project` names the root, not where the caller's files go); the file is created with mode `0600` (it may hold
+  secrets); the not-ignored warning only for a path inside the root (git answers 128 outside); the copy holds only the
+  agent's lines, never WingFoil's; the refusal on a resolved interactive run is exit 2 at §3.2 step 7, after the
+  project was read (`dl-182` Q4 (a) says exit 2; it is still a malformed combination, decided as soon as the kind is
+  known). **Recommend** as stated.
+- **D6 — `spec-016` §7's `agent.execute` Tool sentence.** (a) left to `w1`'s MCP surface task (P5.2.3) with §7's MCP
+  bullet and §8's MCP cells; (b) revised here to "refuses a verification run only" (`dl-181` Actions 2). **Recommend
+  (a)**: AC 8 keeps the MCP rows in `w1`, and no MCP Tool of the `agent` module is served before then
+  (`src/mcp/server.ts` does not run `registerCoreModules`).
+- **D7 — REQ-SYS-03's fit criterion.** `spec-016` Consequences gives "the task that ships" the registry the sentence
+  "`.wingfoil/run/` is a process cache, not state" (`dl-135` Action 3). (a) amended in this task, by the developer (a
+  SARD document, not a Memory element), e.g. "No `.wingfoil/state/` artifact exists (`.wingfoil/run/`, the git-ignored
+  registry of running launches, is a process cache, not state); …"; (b) left. **Recommend (a)**.
+- **D8 — a project initialized before 0.4.** (a) step 13 prints one `warning:` line when the new entry is not
+  git-ignored; (b) nothing, the user guide says to add the file. **Recommend (a)**: it reuses `--log`'s helper and
+  is what stops an entry being committed by a `git add -A` during a run; the cost is the shared fixtures' new file
+  (red) and one `git check-ignore` per launch.
+- **D9 — `spec-008` §10 `--set`, cited by AC 2.** As task-335's D11: nothing of `memory add --set` changes; `--log`'s
+  errors reuse §10's message forms, and §12 carries them. **Recommend** accepting that reading.
+- **D10 — a malformed registry file.** (a) pruned like a stale one, with a `warning:` line; (b) kept and reported
+  each time. **Recommend (a)**: the registry is a cache; a file no reader can interpret answers nothing.
+- **D11 — line forwarding mechanics.** A 64 KiB cap on a pending line; a last unterminated line forwarded with a
+  newline; after the agent exits, both streams read until they end for at most 10 s (`LOOKUP_TIMEOUT_MS`, the drain
+  task-356 already uses for the session reader), then closed, so nothing is forwarded after the summary.
+  **Recommend** as stated.
+- **D12 — the entry's `session`.** The assigned id under `session.id: assign`, else `not-reported` (the other forms
+  are known only after the run). **Recommend** as stated.
+- **D13 — `agent list` with no section flag.** (a) all three sections ("all three together = none", the rule §5 had
+  for two); (b) past and waiting only, `--active` on request. **Recommend (a)**: one call answers what the agents are
+  doing; the cost is the two default-output tests listed above.
+
+#### Risks for the other open `w0` tasks
+
+- **task-337** (design, same base): `runAgent`'s stdout handling is shared ground (above); whichever lands second
+  merges `main` and re-applies its hunk. Its `result`/version keys are untouched here.
+- **task-341** (red): `test/docs/name-resolvability.allowlist.ts` — both add sorted lines; a textual conflict is
+  possible only if both insert at the same anchor (this task's anchors are spec-011 and spec-016 rows).
+- **task-342** (after task-341): `docs/user-guide.md` — this task edits §9.4, task-342 §7; no shared lines.
+- **task-359** (red): no shared file.
+- Every task whose tests launch an agent in a hand-built fixture meets D8's warning once this task merges, unless its
+  fixture comes from `seed()`/`seedStep()` (fixed in red) or from `wingfoil init`.
+- `computeStateSnapshot` (`src/storage/snapshot.ts` l.62–77) reads every file under `.wingfoil/`, so during a run it
+  would include the registry entry (a pid, a wall-clock instant); it has no production caller (`grep -rn
+  computeStateSnapshot src --include=*.ts` → only `src/storage/index.ts`'s export), so nothing breaks — noted for
+  whoever gives it one.
+
+### Pending amendments (approver)
+
+Prepared in the worktree, left uncommitted (`git status --short` → ` M` on the three spec files and on
+`test/docs/name-resolvability.allowlist.ts`), to be recorded with `memory amend` before red:
+- `spec-016-agent-execution` — `--reason "Record task-336's design-gate amendment of spec-016: a headless run's stdout and stderr are forwarded to the caller's stderr line by line, one output document per line under json and yaml, and --log appends a copy to a file the caller names, refused on an interactive launch; WingFoil keeps no log and nothing of the output reaches the record; the active registry under .wingfoil/run/ ships with its entry, exclusive creation, pid rewrite, removal, pruning and order, RUN_ACTIVE and LOG_UNWRITABLE refuse, and agent list --active lists it while waiting leaves out a running step (dl-182, dl-181, dl-135)."`
+- `spec-008-cli-grammar` — `--reason "Record task-336's design-gate amendment of spec-008: section 12 adds agent execute --log with its usage errors and registers agent list --active, and section 11 says the active section reads the git-ignored registry in the working tree (dl-182, dl-181)."`
+- `spec-011-storage-layout` — `--reason "Record task-336's design-gate amendment of spec-011: .wingfoil/run/ becomes the one git-ignored subpath of .wingfoil/, through the .wingfoil/.gitignore that wingfoil init writes, and a closing paragraph says how it reads beside the per-clone session salt (spec-016 section 7, dl-181)."`
+
+Name-resolvability (`a23c91413` lesson): with the three amendments in the working tree, `npx jest
+test/docs/name-resolvability.test.ts --maxWorkers=2` failed on six unlisted findings: `spec-011…|path|.wingfoil/.gitignore`,
+`spec-011…|path|.wingfoil/run/`, `spec-016…|path|.wingfoil/.gitignore`, `spec-016…|symbol|LOG_INTERACTIVE`,
+`|LOG_UNWRITABLE`, `|RUN_ACTIVE`. They are added to `test/docs/name-resolvability.allowlist.ts` in the same
+uncommitted change, sorted: the two `.wingfoil/.gitignore` rows `PLANNED` by task-336 (green commits the file, then
+removes the two rows, which would otherwise be stale), spec-011's `.wingfoil/run/` with the reason that the path is
+git-ignored by design, and the three §3.7 labels as spec labels, as `START_UP_HINT` is. The allowlist is a test file,
+not a Memory element: `memory amend` commits only the spec, so the orchestrator commits it on the task branch right
+after the three amends (or red does), before anything else runs the suite. While the amendments are uncommitted,
+`test/cli/workflow-unbound-none.integration.test.ts` fails with one `W_UNCOMMITTED_INPUTS` per spec file (`bug-534`).
+
+### Retrospective
+
+<!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
+     reconstructed afterwards. One line per item: what happened, the evidence (a command and what it
+     printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
+     Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
+     here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
