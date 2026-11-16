@@ -8,7 +8,7 @@
 #   [AUTHORING] = authoring addition: coherent with the specs but not mandated by them.
 # Spec-required top-level sections: modules, stacks, team (BDD P2.4-project-dna-config); paths (P2.5).
 # Sections/fields without a [SPEC] ref are [AUTHORING].
-version: 2.4                     # [AUTHORING] content revision (WingFoil convention, dl-047), bumped on every content change — 1.3 -> 1.4 at task-251 (this annotation, dl-149; north_star worded as a goal, dl-131); 1.4 -> 1.5 at task-188 (the six paths categories, bug-191); 1.5 -> 1.6 at task-256 (team.agents name + email, bug-240); 1.6 -> 1.7 at task-206 (paths.runs, the run log, spec-016 §4.1); 1.7 -> 1.8 at task-260 (the team.agents comment: email required with an adapter, identities the attribution audit rejects refused, dl-158, bug-261); 1.8 -> 1.9 at task-222 (paths.health, the release-health reports, dl-089 §1 (A); the docs/NN_* numbering, bug-299); 1.9 -> 2.0 at task-236 (team.agents Claude: adapter claude-code, spec-016 §2.1, §2.8); 2.0 -> 2.1 at task-292 (team.agents Claude executes_as facilitator, dl-202 item 3, retro-v0.3 P-02); 2.1 -> 2.4 at task-340 (team.roles approver, product-owner, tech-lead human_only: true, dl-202 item 1; three dna update writes, one raise each, dl-174). The file's FORMAT is the separate `format:` key [SPEC: spec-002, dl-149], absent here and so read as 1
+version: 2.6                     # [AUTHORING] content revision (WingFoil convention, dl-047), bumped on every content change — 1.3 -> 1.4 at task-251 (this annotation, dl-149; north_star worded as a goal, dl-131); 1.4 -> 1.5 at task-188 (the six paths categories, bug-191); 1.5 -> 1.6 at task-256 (team.agents name + email, bug-240); 1.6 -> 1.7 at task-206 (paths.runs, the run log, spec-016 §4.1); 1.7 -> 1.8 at task-260 (the team.agents comment: email required with an adapter, identities the attribution audit rejects refused, dl-158, bug-261); 1.8 -> 1.9 at task-222 (paths.health, the release-health reports, dl-089 §1 (A); the docs/NN_* numbering, bug-299); 1.9 -> 2.0 at task-236 (team.agents Claude: adapter claude-code, spec-016 §2.1, §2.8); 2.0 -> 2.1 at task-292 (team.agents Claude executes_as facilitator, dl-202 item 3, retro-v0.3 P-02); 2.1 -> 2.4 at task-340 (team.roles approver, product-owner, tech-lead human_only: true, dl-202 item 1; three dna update writes, one raise each, dl-174); 2.4 -> 2.6 at task-341 (team.roles coordinator; team.agents Claude executes_as coordinator, dl-203 Q3 (a); two writes, one raise each, dl-174). The file's FORMAT is the separate `format:` key [SPEC: spec-002, dl-149], absent here and so read as 1
 
 # [AUTHORING] section — not required by P2.4; identity/strategy values sourced from the Product Brief.
 project:
@@ -141,7 +141,7 @@ team:
     # attribution audit rejects it (bug-261).
     - name: Claude
       email: noreply@anthropic.com
-      executes_as: [ developer, reviewer, qa, architect, facilitator ]
+      executes_as: [developer, reviewer, qa, architect, facilitator, coordinator]
       approval_authority: false
       adapter: claude-code     # [SPEC: spec-016 §2.1] the built-in adapter agent execute launches it with (task-236)
   # Available agent roles (P5.4.1); nested under `team` so `dna show team` surfaces them.
@@ -168,6 +168,8 @@ team:
     - name: approver
       description: Holds approval authority for deliverables and releases.
       human_only: true         # [SPEC: dl-202 item 1, spec-002 Role binding] no agent executes this role
+    - name: coordinator
+      description: Coordinates a run between workflow steps; decides only the judgement points the configuration leaves, never a gate (dl-203 D2).   # [SPEC: dl-203 D2, spec-002 Role binding] an agent may execute it; no approval authority
 
 # Conventions — the former `conventions:` section (documentation / engineering / process rules) was
 # removed in v1.1 and its rules relocated to .wingfoil/directives/custom/ (per spec-002 Consequences):

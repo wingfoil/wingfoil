@@ -56,8 +56,9 @@ describe('AC 2 — wingfoil-cli is bound globally (task-270, dl-163 S3e)', () =>
     expect(roles.global).toContain(ID);
   });
 
-  it('dna.yaml declares the eight roles this suite walks', () => {
-    expect(dnaRoles()).toEqual(['developer', 'reviewer', 'qa', 'architect', 'product-owner', 'tech-lead', 'facilitator', 'approver']);
+  // task-341 (dl-203 Q3 (a)) appends `coordinator`: the pin changes in task-341's red.
+  it('dna.yaml declares the nine roles this suite walks', () => {
+    expect(dnaRoles()).toEqual(['developer', 'reviewer', 'qa', 'architect', 'product-owner', 'tech-lead', 'facilitator', 'approver', 'coordinator']);
   });
 
   it.each(dnaRoles())('directives list --role %s lists wingfoil-cli as a global binding', async (role) => {

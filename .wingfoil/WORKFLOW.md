@@ -818,3 +818,4 @@ stateDiagram-v2
 | `qa` | BDD specification, the dev-loop `red` phase (black-box tests, `dl-134`), end-to-end smoke (`e2e-smoke`, and per wave in `wave-checks`), pre-release checks, release-health measurement (`measure`) |
 | `facilitator` | Lean inception sessions, release-health comparison and proposals (`compare`, `propose`), retrospective exploration, consumer feedback collection and capture |
 | `approver` | All approval gates (bug triage, vision-change acceptance, governance reconcile, wave re-sweep and re-plan, backlog commit, task review, documentation, e2e smoke, release, retrospective, end-of-life, service verification) |
+| `coordinator` | No phase: the judgement points between steps (`dl-203` D2); never a gate |
