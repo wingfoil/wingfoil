@@ -150,6 +150,8 @@ const RoleEntry = z.object({
   description: z.string().optional(),   // [AUTHORING]
   human_only:  z.boolean().optional(),  // [SPEC: dl-202 item 1] no agent executes the role (Human-only roles)
 }).passthrough();
+  // A `coordinator` entry (dl-203 D2, Q3 (a)) is an ordinary RoleEntry: no field and no rule of its own
+  // (Role binding, The coordinator role).
 
 const Team = z.object({
   members: uniquelyNamed(TeamMember),   // [SPEC: P2.4]
@@ -217,7 +219,7 @@ Beyond navigation, `stacks` is what lets an engine select which directive conten
 
 `team.roles` is the **canonical role catalogue**: each entry is `{ name, description? }`, and it
 enumerates every role the project recognises (`developer, reviewer, qa, architect, product-owner,
-tech-lead, facilitator, approver`). Role names referenced elsewhere — `team.members[].roles`,
+tech-lead, facilitator, approver, coordinator` in this repository). Role names referenced elsewhere — `team.members[].roles`,
 `team.agents[].executes_as`, and the bindings in `.wingfoil/roles.yaml` and workflow/directive
 definitions — are **referenced by name** and semantically validated against this list. This keeps a
 single source of truth for "what roles exist" (BDD `P4.20` — role not defined in `dna.yaml`). Agents
@@ -240,9 +242,21 @@ does not read it: it reports an `agent.<x>` action under a role no `team.agents`
 since the load error above keeps a human-only role out of every `executes_as`, a human-only role is always reported. The field is additive and optional, so `format` stays `1`: a build that predates it loads a file
 carrying it and warns that the field is ignored (*Unknown keys* below).
 
+**The coordinator role** (`dl-203` D2, Q3 (a)). A project may declare a `coordinator` role: the party that drives a
+run between the engine's steps and decides only the judgement points the configuration leaves (which ready steps run
+in parallel within the declared caps, the triage of a reported failure, the content of an element no other role's step
+writes), never a gate. It is an ordinary `team.roles` entry: the schema reserves no name for it, gives it no field and
+no load rule, and it is agent-executable unless its entry declares `human_only: true`, like any other role; an agent
+executes it when a `team.agents[].executes_as` lists it. It needs no schema rule against approvals, which it never
+holds by construction: approval authority is the `approver` role's, always human-only (above), and the approver-gated
+verbs refuse an agent's session (`spec-018` §3, `dl-212` D1). Its limits are a directive's, bound to the role in
+`.wingfoil/roles.yaml` (P3.2/P3.7); this repository's is `.wingfoil/directives/custom/coordinator.md`. A session in
+the role is recorded as a run when `wingfoil agent execute --element <type>:<id> --role coordinator` launches it
+(`dl-135`; a run with no step, phase `adhoc`, `spec-016` §4.3).
+
 `team.roles` is **not** delegated to `.wingfoil/roles.yaml`: that file *binds directives to roles*
 (P3.2/P3.7) — it is keyed by role name but does not define the role set. It need not bind every role
-(it bound neither `facilitator` nor `approver` until `task-215`; today its `assignments` bind all eight
+(it bound neither `facilitator` nor `approver` until `task-215`; today its `assignments` bind all nine
 `team.roles` names), and it carries no per-role `description`, so it
 cannot serve as the catalogue. `dna.yaml` therefore remains the authoritative role registry.
 
@@ -565,3 +579,15 @@ for the workflow check `W_WORKFLOW_AGENT_ROLE_UNEXECUTED` too; that check reads 
 `adapter` that lists the role), and reports a human-only role always because the load error keeps it out of every
 `executes_as`. The sentence now says so; no rule changes. Edited in place without a supersede or a state change
 (`dl-047`), pending the approver's `memory amend` at `task-340`'s review.
+
+**Revision (2026-11-15, `task-341`)
+— Role binding: the coordinator role, per `dl-203` Q3 (a).** Role binding gains The coordinator role paragraph: a
+project may declare a `coordinator` role, an ordinary `team.roles` entry with no field, no reserved name and no load
+rule of its own, agent-executable unless its entry declares `human_only: true`, holding no approval authority because
+that authority is the always human-only `approver`'s and the approver-gated verbs refuse an agent's session; its limits
+live in a directive bound in `roles.yaml`, and a session in it is recorded as a run when `agent execute --role
+coordinator` launches it (`dl-135`). The Zod listing gains a comment under `RoleEntry`, the role enumeration names
+`coordinator`, and the `roles.yaml` sentence counts nine bound roles. No schema change and no `format` bump: a
+`coordinator` entry carries only `name` and `description`, which the pinned build 0.3.2 reads with no new warning
+(checked at `task-341`'s design, `dl-205` Q1 (a)). Edited in place without a supersede or a state change (`dl-047`),
+pending the approver's `memory amend` at `task-341`'s design gate.
