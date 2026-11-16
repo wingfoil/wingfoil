@@ -56,3 +56,306 @@ is read before and after the run, both recorded, a difference flagged in the rec
 ## Execution Notes
 
 <!-- Filled by the dev-loop. -->
+
+### design (architect, 2026-11-16)
+
+**Base and guard.** Worktree on `task/task-337-…` at `17b72282e` (`main` `ded5351ce` plus the `wf(task): start` and the
+`bug-366` sync). `src/` and `.wingfoil/` are those of `main`: `git diff --quiet ded5351ce -- src .wingfoil` → exit `0`.
+The PATH guard ran first through the task's PATH shim (`command -v wingfoil && wingfoil --version && node dist/cli.js
+--version` → the shim, `0.3.2 (ded5351ce97918deedc365c97f420f396a6f7ecb)` twice). Every line number below is read at
+that base.
+
+**Contract read.** `spec-016` `approved`; `dl-180`, `dl-181`, `dl-188` `ready`; `task-335`, `task-338`, `task-353`
+`done` (`grep -m1 '^status:'` on each). `depends_on` (`dl-015`): `task-335`'s "What the tasks built on this one must
+read" — §4.2's `result` row is already amended (`n/a` for a headless work run, row 17), the built-ins declare
+`output: none`, `verified_with` per its D7 (the version the by-hand pass ran); `task-338` D3 (a) — no new §4.2 key for
+the model, `model: "not-reported"` marks the agent's `AI-Model:` trailers as its own claim, and
+`test/cli/agent-execute-cli-shim.integration.test.ts` l.392-397 pins §2.6's two sentences on it verbatim (kept verbatim
+in the amendment below). `task-338` salted the session id per clone (`src/agent/launch.ts` l.102 `assignedSessionId(salt,
+runId)`, called at l.786): that id is the transcript's name (`dl-188` "keyed by the id WingFoil assigns"); `task-353`
+made the launch directory the root `--project` names, a linked worktree included (`spawnOptions`, l.340-343: `cwd:
+root`). `bug-366`'s Expected Behavior: the record names the version that ran, read before the launch, and after the run
+too, both recorded, so a mismatch with `verified_with` is visible (D14).
+
+**What exists today** (`main` `ded5351ce`):
+- `src/agent/launch.ts`: `postRunFacts` (l.597-656) reads `version_args` after the run only (l.609-615) and the usage
+  only under `usage.from: lookup` (l.632-654); `usage.from: output` is declared by the schema but read nowhere. The
+  record is built at l.863-881 with `result: 'n/a'` (l.880) for both launch kinds. The banner is l.798; the session
+  salt is read before it (l.781-787).
+- `src/agent/run-log.ts`: `RUN_RECORD_KEYS` (l.55-74, 18 keys, unchanged since `3f7706544`: `git log -L` on that range
+  lists only that commit), `RunRecord` (l.91-123), `keyOrderDefect` / `fieldDefect` / `recordDefect` (l.187-260: a
+  line must hold exactly the 18 keys), `ordered` / `serializeRunRecord` (l.264-286), `parseRunLog` (l.304-333, the
+  byte-for-byte check against `serializeRunRecord`).
+- `src/agent/schema.ts`: `UsageFields` (l.78-84), `usage` (l.125-129: `from` one of `output`, `lookup`, `none`);
+  `src/agent/manifest.ts` l.82-86 (Pass 2 of `usage`); `src/agent/placeholders.ts` l.57, l.145-190 (where each
+  placeholder is legal).
+- `src/storage/builtin-adapters.ts` l.61-130 (`claude-code`, `usage.from: none` at l.109-110) and, byte for byte,
+  `.wingfoil/agents/built-in/claude-code.yaml` (`test/storage/builtin-adapter-claude-code.test.ts` l.117).
+- `src/core/agent-show.ts` l.191 renders every key of `RUN_RECORD_KEYS`, so a new key reaches `agent show` without a
+  change there.
+- The repository's one run log, `docs/06_runs/task-236-ship-verify-hand-builtin-claude-code-adapter-point.jsonl`
+  (commits `a19338c5e`, `94377e43a`), is in the 18-key form; its line 2 is `bug-366`'s own case
+  (`"agent_version":"2.1.299 (Claude Code)"` for a session that ran 2.1.296). `cmp` with
+  `test/fixtures/run-logs/task-236-…jsonl` (copied by `task-338`, `c8754fc2a`) → identical. The pinned build reads
+  it: `npm run -s wingfoil -- agent list --past --format json` → exit `0`, both runs listed.
+- Where the transcript lives, from what the repository records: `dl-188` Context (Claude Code 2.1.301: `~/.claude/
+  projects/<project folder>/<session-id>.jsonl`, assistant messages carrying `usage` with `input_tokens`,
+  `cache_creation_input_tokens`, `cache_read_input_tokens`, `output_tokens`, and `model`); `task-236`'s Execution
+  Notes (the session file of a run launched in `…/.wf2-wt/task-236` found under
+  `-home-robypomper-Workspaces--wf2-wt-task-236/`, its name the assigned session id); `dl-210` Context (transcripts in
+  `~/.claude/projects/<project>/*.jsonl`). No agent read the transcript or ran an agent CLI for this design.
+
+**Design.**
+1. *The version, before and after (AC 2; D1, D2).* In `launchAgent`, after the salt (l.781-787) and before the banner
+   (l.798), `version_args` runs once as a lookup runs (`runLookup`, the root, WingFoil's environment, the 10 s limit):
+   its first non-blank line is `agent_version`. `postRunFacts` keeps its after-run read, never merged with the first
+   (the `runs` dedup map of l.601-607 is per post-run call), and that line becomes the new record key
+   `agent_version_after`. Warnings, exact (amended §2.6): `adapter '<name>': version_args <cause> before the launch:
+   agent_version recorded as not-reported` and `adapter '<name>': version_args <cause> after the run:
+   agent_version_after recorded as not-reported` (`<cause>` `printed nothing` or `failed (<reason>)`, today's two
+   causes, l.614); when both are reported and differ, `adapter '<name>': the agent CLI changed during the run:
+   version_args printed '<before>' before the launch and '<after>' after it`. A dry run reads neither (it stops before
+   step 13). Neither read refuses or fails anything.
+2. *The record format (AC 2, AC 4; D1, D7).* `RUN_RECORD_KEYS` gains `agent_version_after` as key 19, after `notes`:
+   keys are appended, never inserted, so the 18-key form is a prefix. `RunRecord` gains `agent_version_after: string`
+   (required). The reader accepts a line whose keys are exactly the 19, or exactly the first 18 (the 18-key form);
+   the byte check compares the line with the serialization of its own form; the returned record of an 18-key line
+   carries `agent_version_after: 'not-reported'`. The writer always writes 19 keys (`serializeRunRecord` keeps
+   refusing an absent key). A line missing any key but the last is refused as today (`missing key '<k>'`). Intended
+   shape (green may rename internals, not observables): a list of key generations, `[first 18, all 19]`, which `w4`'s
+   `directives` key extends by one more.
+3. *The usage sources (AC 1; D3–D6, D12, D13).* `usage.from` takes one source or a list (`output`, `lookup`,
+   `transcript`, each at most once), tried in order after the session id is known; the first source that yields a
+   value (a count or the model) supplies the model and the four counts; nothing is mixed. New module
+   `src/agent/usage.ts`, pure where it can be:
+   - `launchDirSlug(dir: string): string` — every character outside `[A-Za-z0-9]` replaced by `-` (the caller passes
+     `realpathSync(root)`, the directory the agent's own `getcwd()` reports); `launchDirSlug('/home/u/Workspaces/.wf2-wt/task-236')`
+     → `-home-u-Workspaces--wf2-wt-task-236`.
+   - `renderTranscriptPath(template, { home, launchDir, sessionId }): string | undefined` — `{home}`,
+     `{launch_dir_slug}`, `{session_id}` filling whole `/` segments, the last allowed `{session_id}.<ext>`;
+     `undefined` when the result is not absolute or a segment is `.`/`..`.
+   - `transcriptUsage(lines: Iterable<string>, declaration): { model: string; tokens: RunTokens; warnings: string[] }`
+     — non-JSON lines passed over; selected lines (`select.field` equals `select.equals`); one per
+     `message_id` value, the last read; each count the sum over messages of the integers at its path, absent in every
+     message → `not-reported`; a value of the wrong type → that count `not-reported` and one warning; the model the
+     distinct non-empty strings, sorted, joined with `, ` (D3).
+   - `outputUsage(document: unknown, fields)` / the lookup's existing field reading (l.638-652), shared.
+   - The transcript is streamed line by line after the agent exits, under `LOOKUP_TIMEOUT_MS`; the home directory
+     comes from a new `LaunchHost.homeDir?: string` (default the operating system's), so in-process tests set it and
+     no test mutates `HOME`.
+   Warnings name the adapter, `usage.transcript` and the cause, never the path (amended §2.6); intended texts:
+   `adapter '<name>': usage.transcript: the transcript of session <id> is absent`, `… is unreadable (<code>)`, `…
+   was not read within 10000 ms`, `… the session id is not-reported`, `… the path does not render as an absolute
+   path`, `adapter '<name>': usage.transcript: <key> is not a non-negative integer in a message: recorded as
+   not-reported`. The `output` source reads a headless run's stdout under `launch.headless.output: json` (one
+   document, at most 1 MiB, as the session reader keeps it, l.466-560): `launchAgent` captures stdout when either the
+   session id or the usage reads it (today only the session id does, l.822-827).
+4. *Manifest rules.* `src/agent/schema.ts`: `usage.from` = the enum or a non-empty array of `output|lookup|transcript`;
+   `usage.transcript = { path, select: { field, equals }, message_id?, fields }` strict. Pass 2 (`manifest.ts`): a
+   duplicated source; `transcript` without `usage.transcript`; `lookup` without `usage.lookup_args`; `output` or
+   `lookup` without `usage.fields`; `output` without `launch.headless.output: json` (D13). `placeholders.ts`:
+   `{home}` (first segment only) and `{launch_dir_slug}` legal in `usage.transcript.path` only, `{session_id}` there
+   under any `session.id` but `none`. The manifest `format` stays 1 (additive optional field, as `task-353`, `dl-149`).
+5. *The built-in (AC 1, AC 5; D6, D11).* `claude-code` declares `usage.from: [transcript, output]`, the transcript
+   block of amended §2.8 (`path: "{home}/.claude/projects/{launch_dir_slug}/{session_id}.jsonl"`, `select: { field:
+   type, equals: assistant }`, `message_id: message.id`, fields `message.model`, `message.usage.input_tokens`,
+   `message.usage.output_tokens`, `message.usage.cache_read_input_tokens`,
+   `message.usage.cache_creation_input_tokens`), `usage.fields` for the headless result (`usage.input_tokens`,
+   `usage.output_tokens`, `usage.cache_read_input_tokens`, `usage.cache_creation_input_tokens`, no model path), and its
+   headless args gain `--output-format, json` after `-p, "{bootstrap}"` with `output: json` — all contingent on the
+   approver's by-hand checks H1/H2 (D11). `codex-cli` unchanged (`usage.from: none`). The YAML header comment and the
+   TSDoc say where each declaration was read; `verified_with` moves to the version H1/H2 ran, if every flag of the
+   manifest is re-read in that version's `--help` (`task-335` D7 practice); otherwise it stays `2.1.322 (Claude Code)`.
+6. *Determinism.* The transcript is read after the agent exits, by `postRunFacts` only: nothing of it enters the
+   bootstrap, the context or the run id (`determinism`, "context assembly"); only the four counts and the model reach
+   the record. The host path is never recorded nor printed.
+7. *Docs (green).* `docs/cli-reference.md` (the `agent execute` entry l.1918-1922: the version read before and after,
+   the transcript and the headless result as usage sources; the `agent show` example l.2080-2104 gains
+   `agent_version_after: not-reported` after `notes:`), `docs/user-guide.md` §9 (near l.745-752: what a `claude-code`
+   record carries). No document touched has a `version:` field (`grep -m3 -i "^version"` on each → none), so there
+   is no version bump; `test/lint/version-bump.test.ts` pins only the four configuration files, none of which changes.
+
+**AC classification and what qa pins.** qa runs `npx tsc --noEmit -p tsconfig.json` and `npx jest test/lint
+--maxWorkers=2` before the red commit. Expected reds: `tsc` TS2307 (`src/agent/usage.ts` does not exist) and TS2353 /
+TS2741 (`agent_version_after`, `homeDir`, a `usage.from` list); jest a runtime failure (`isolatedModules`) or the
+assertion. Fixtures of the transcript are built from `dl-188`'s description and `task-236`'s folder observation (cited
+in the test's header), never from a real transcript, which no agent may read; H1 checks them against the CLI.
+
+| AC | Class | What qa pins (observable · interface · test file) |
+|---|---|---|
+| 1 | red-first | (a) `test/agent/usage.test.ts` (new): `transcriptUsage` over lines `{"type":"user",…}`, `{"type":"assistant","message":{"id":"msg_1","model":"m-1","usage":{"input_tokens":10,"cache_creation_input_tokens":3,"cache_read_input_tokens":100,"output_tokens":5}}}`, a later line with the same `msg_1` (different `output_tokens`: the last counts), `msg_2`, and one line that is not JSON → the sums of the two messages; a count no message carries → `not-reported`, never `0`; a string count → `not-reported` and one warning; two models → `"m-1, m-2"`; `launchDirSlug` on `task-236`'s path; `renderTranscriptPath` (absolute, `..` → `undefined`). (b) `test/agent/launch-usage.test.ts` (new, in process, `launchFixture` of `test/agent/helpers/launch-input.ts` with `usage.from: ['transcript', 'output']` and a `usage.transcript` whose path is under `host.homeDir` = a temp dir; the salt pre-written to `<git common dir>/wingfoil/session-salt` so the test computes `assignedSessionId(salt, runId)` and writes the transcript at the rendered path) → record `tokens` and `model`; transcript absent → all `not-reported` and one warning matching `/^adapter '[^']+': usage\.transcript: .*absent/` that does not contain the temp home. (c) `test/cli/agent-execute-usage.integration.test.ts` (new): a fixture adapter derived from `custom/fake.yaml` (`usage.from: [transcript, output]`, path `{home}/.fake-agent/projects/{launch_dir_slug}/{session_id}.jsonl`, `launch.headless.output: json`), `HOME` set to a temp dir in the child's environment, the fake writing its transcript (fixture change below): interactive with a transcript → its sums; `--headless` with no transcript and `WINGFOIL_FAKE_AGENT_DOCUMENT` `{"usage":{"input_tokens":7,…}}` → the document's counts; interactive with neither → every count `not-reported`; `--headless` with both → the transcript's. (d) `test/agent/manifest-usage.test.ts` (new): the list accepted; a repeated source, `transcript` without `usage.transcript`, `output` without `launch.headless.output: json`, `{home}` outside `usage.transcript.path` → each a validation issue naming its field. (e) `test/storage/builtin-adapters-usage.test.ts` (new): `claude-code`'s `usage` and headless `output: json` / `--output-format json` exactly as amended §2.8; `codex-cli` `from: none` (under D6's positive outcome; else only the transcript half). |
+| 2 | red-first | Fake fixture (`test/fixtures/agents/fake-agent.cjs`, header documented): `WINGFOIL_FAKE_AGENT_VERSION_FILE=<file>` — `--version` prints that file's first line when it exists, else today's `fake-agent 1.0.0`; `WINGFOIL_FAKE_AGENT_UPDATE_TO=<v>` — a launch writes `<v>` and a newline to that file before it exits; `WINGFOIL_FAKE_AGENT_TRANSCRIPT=<file>` — a launch carrying `--session-id <id>` copies that file to `<home>/.fake-agent/projects/<launchDirSlug(realpath cwd)>/<id>.jsonl`. `test/cli/agent-execute-version.integration.test.ts` (new): with `UPDATE_TO` → record `agent_version: "fake-agent 1.0.0"`, `agent_version_after: "<v>"`, the exact changed-version warning on stderr, exit `0`; without → both `fake-agent 1.0.0`, no such warning; the fake's record shows `--version` before the launch entry, and the before-read warning (if any) precedes the banner. `test/agent/run-log.test.ts`: `RUN_RECORD_KEYS` is the 19 keys ending `agent_version_after`; `serializeRunRecord` writes it last; a 19-key line parses; an 18-key line parses with `agent_version_after: "not-reported"` (D7); a line missing `notes` still refused. `test/cli/agent-show.integration.test.ts`: the console gains `agent_version_after: <v>` after `notes:`. |
+| 3 | characterization | Already true: `launch.ts` l.880 writes `result: 'n/a'` for both kinds, and §4.2 row 17 was amended by `task-335`; `test/cli/agent-execute-headless.integration.test.ts` l.53-55 pins it for the headless work run. qa adds one assertion in the AC 2 integration test (`result: "n/a"`), passing on first run. |
+| 4 | characterization | `test/agent/run-log-legacy.test.ts` (new): `parseRunLog` of `test/fixtures/run-logs/task-236-ship-verify-hand-builtin-claude-code-adapter-point.jsonl` (the committed copy of `docs/06_runs/…`, D9) under the path `docs/runs/task-236-ship-verify-hand-builtin-claude-code-adapter-point.jsonl` → ok, 2 records, `agent_version` `2.1.296 (Claude Code)` and `2.1.299 (Claude Code)` as written, sessions as written; `agent list --past` on a fixture repo holding that file → exit `0`. Passes at red; the `agent_version_after` value of those records is AC 2's red (D7). |
+| 5 | characterization | No test: the approver's by-hand checks H1 and H2 (D11), their output and the CLI version pasted into these notes before red relies on them. |
+| 6 | characterization | No test: the approver's `memory amend` of `spec-016` at this gate (below). |
+
+**Existing tests of the files to change, and the tests that pin what changes.** Run on this base, before the
+amendments were prepared, through the heavy-gate slot (`waitslot.sh` then `npm test -- <17 paths> --maxWorkers=2`,
+08:26:24Z–08:27:36Z UTC): `test/agent/{run-log,run-log-symlink,launch,launch-process,launch-headless,launch-session-output,manifest,fake-agent,session-salt}.test.ts`,
+`test/storage/{builtin-adapter-claude-code,builtin-adapters-headless}.test.ts`, `test/core/agent-show.test.ts`,
+`test/cli/{agent-show,agent-list,agent-execute-launch,agent-execute-headless}.integration.test.ts`,
+`test/docs/name-resolvability.test.ts` → `Test Suites: 17 passed, 17 total`, `Tests: 402 passed, 402 total`, exit `0`.
+Tests that pin the behaviour that changes, which red updates (T4 then protects them):
+- the 18 keys and the exact line: `test/agent/run-log.test.ts` l.83-101; the record literals that type as `RunRecord`
+  (TS2741 once the key is required): `grep -rln "agent_version:" test/` → `test/agent/{launch-process,run-log-symlink,run-log}.test.ts`,
+  `test/cli/{agent-execute-launch,agent-list-edges,agent-list,agent-run-log-symlink,agent-show,head-label}.integration.test.ts`,
+  `test/core/{agent-execute,agent-list,agent-show}.test.ts`, `test/core/helpers/agent-list-fixture.ts`
+  (`test/release-health/measure.test.ts` l.208 builds a plain JSON string the loose reader of
+  `scripts/release-health/measure.cjs` l.982-990 parses: unaffected);
+- the version warnings: `test/agent/launch-process.test.ts` l.56-60 and l.91 (`version_args printed nothing:
+  agent_version recorded as not-reported` becomes two warnings, before and after);
+- the launch as the fake's first invocation (the pre-launch `--version` now comes first, since `custom/fake.yaml`
+  declares `version_args`): `test/cli/agent-execute-launch.integration.test.ts` l.193-198 and l.287,
+  `test/cli/agent-execute-worktree.integration.test.ts` l.82 and l.103, `test/cli/agent-execute-step.integration.test.ts`
+  l.98, `test/cli/agent-execute-headless.integration.test.ts` l.50, and `test/cli/helpers/agent-execute-cli.ts` l.26
+  and l.75 (`launchArgv`, used by the `-awaiting`, `-headless`, `-launch-kind`, `-permissions` and
+  `-session-output` integration tests: `grep -rln "launchArgv(" test/cli`). `test/agent/execute-mcp-conflict.test.ts`
+  l.130 and l.139 (the probe, before the launch) and `scripts/e2e-smoke.cjs` l.559 (which filters `--version` out) are
+  unaffected;
+- the agent show console: `test/cli/agent-show.integration.test.ts` l.85-105, `test/core/agent-show.test.ts`;
+- the manifest bytes: `test/storage/builtin-adapter-claude-code.test.ts` l.94 and l.117 compare the shipped text with
+  `.wingfoil/agents/built-in/claude-code.yaml`, so green changes both together.
+The full suite with the pending amendment in the tree fails `test/cli/workflow-unbound-none.integration.test.ts`
+alone with `W_UNCOMMITTED_INPUTS` (`bug-534`): expected until the amend.
+
+**Files to touch** (green): `src/agent/run-log.ts` (module TSDoc l.1-19; l.55-74; l.91-123; l.187-260; l.264-286;
+l.304-333), `src/agent/launch.ts` (module TSDoc l.1-49, steps 13 and 16; `PostRunFacts` / `PostRunInput` /
+`postRunFacts` l.566-656; `LaunchHost` l.659-677; `launchAgent` l.779-800 — the pre-launch read before the banner —,
+l.820-844 — the stdout capture for the usage —, l.847-881 — facts and record), `src/agent/usage.ts` (new),
+`src/agent/schema.ts` (l.78-84, l.125-129), `src/agent/manifest.ts` (l.36-37, l.82-86), `src/agent/placeholders.ts`
+(l.57, l.145-190), `src/agent/index.ts` (exports, if any are public), `src/storage/builtin-adapters.ts` (TSDoc l.18-22
+and l.48-55, `CLAUDE_CODE` l.61-130), `.wingfoil/agents/built-in/claude-code.yaml` (byte for byte),
+`docs/cli-reference.md`, `docs/user-guide.md`. Red: the test files above and `test/fixtures/agents/fake-agent.cjs`.
+Uncommitted at this gate: `spec-016` (pending amendment), `docs/02_requirements/02_bdd/features/p5-interaction/P5.3.1-agent-execute.feature`
+(four scenarios and a revision header) and `test/docs/name-resolvability.allowlist.ts` (five `PLANNED` entries:
+`usage.transcript`, `usage.transcript.fields`, `usage.transcript.message_id`, `usage.transcript.path`,
+`usage.transcript.select`, planned by `task-337`), committed after the amend (D10). A modified `.wingfoil/` (the
+built-in manifest, at green) is checked with `npm run check:mcp` (at this base → exit `0`, the pinned `wingfoil 0.3.2`
+and `dist/cli.js` both serving `prompts: 8, resources: 4, tools: 0`); no workflow file changes, so the workflow reads
+are unaffected.
+
+**Overlap with `task-336`** (same base, in design): hunks this task touches — `src/agent/launch.ts` module TSDoc
+l.27-37 (step 16), `postRunFacts` l.566-656, `LaunchHost` l.659-677, `launchAgent` l.779-800 and l.847-881 (disjoint
+from `task-336`'s output forwarding) and **l.820-844 plus `StdoutSink` / `runAgent` l.350-415, the same code
+`task-336` rewrites** (it replaces the drain with line forwarding; this task needs the headless stdout kept as one
+document when `usage.from` names `output`); `src/agent/run-log.ts` l.1-333 as listed (`task-336`'s AC 3 writes nothing
+to the record); `spec-016` §2.2, §2.3, §2.6, §2.7, §2.8, §4.2, §4.5 and a Process Notes revision (`task-336`: §3.1-§3.7,
+§7-§8, and its own revision note — the two notes both append at the end of the file). Order: `task-336`'s green
+first is the simpler merge (its forwarding becomes the base, and this task adds a collector beside it, a tee); either
+order works if the second generalises `StdoutSink` to several readers. The test helpers `test/cli/helpers/agent-execute-cli.ts`
+and `test/cli/agent-execute-headless.integration.test.ts` may be edited by both reds.
+
+**Decisions for the approver.**
+- **D1 — which key holds which read.** (a) `agent_version` = the read before the launch, the version that ran; new key
+  19 `agent_version_after` = the read after (prepared); (b) `agent_version` keeps today's after-run read, new key 19
+  `agent_version_before`. *Recommend (a)*: `bug-366` asks that the record name the version that ran, and every reader
+  of `agent_version` (`agent show`, the docs' example) then gets it; an 18-key line's field 9 stays history, stated in
+  §4.2.
+- **D2 — the flag in the record.** (a) the two values side by side, plus the warning (prepared); (b) a key 20
+  `agent_version_changed`, a boolean — a new value type in the record. *Recommend (a)*: the flag is derivable without
+  redundancy, and `dl-180` (b) asks for both values and a warning.
+- **D3 — several models in one transcript.** (a) the distinct values sorted and joined with `, ` (prepared); (b)
+  `not-reported` and a warning; (c) the most frequent. *Recommend (a)*: complete and deterministic; H1 reports whether a
+  second value (a synthetic one, for instance) appears, and the declaration can then narrow `select`.
+- **D4 — source order for a headless run.** AC 1 reads the transcript first and the headless output only when it
+  yields none; `dl-188` (c)'s text reads (b) "for a headless launch when its output carries the counts, (a) for every
+  other run". *Recommend AC 1's order* (prepared): one source for both launch kinds makes their records comparable, and
+  the output stays the fallback `dl-188` wanted where the transcript is missing.
+- **D5 — the source's name.** `dl-188` (a) words it "`usage.from: lookup` over the session transcript"; the
+  amendment adds a value `transcript`, since `lookup` means "run `usage.lookup_args`". *Recommend the new value*; §2.6
+  calls the read "the lookup over the agent's session transcript", and `task-338`'s pinned sentence ("a value WingFoil
+  read from the adapter's declared lookup") stays true.
+- **D6 — the built-in's headless result.** (a) `claude-code` adds `--output-format json`, `output: json` and the
+  headless `usage.fields` (prepared), if H2 shows `.usage` carrying the run's totals; if H2 shows otherwise, the
+  prepared rows change before the amend to `from: transcript`, no `fields`, the headless row unchanged, and AC 1's
+  output branch is pinned on the fake only. Cost of (a): with `task-336`'s forwarding, a headless `claude-code` run
+  forwards one JSON document at its end instead of the reply's text. *Recommend running H1 and H2 at this gate*, and
+  (a) on a positive H2.
+- **D7 — an 18-key line read.** (a) returned with `agent_version_after: "not-reported"` (prepared); (b) returned as
+  read, the key absent. *Recommend (a)*: `RunRecord` keeps one shape for every reader and `agent show`, and
+  `not-reported` is literally true of a build that did not read it; the byte check still compares the line in its own
+  form.
+- **D8 — the amendment's reach.** Beyond the sections the ACs name (§2.2, §2.6, §2.8, §4.2), it edits §2.3 (the two
+  placeholders and the path rule), §2.7 (one bullet: the fake writes a transcript and changes its version), §4.5 (one
+  phrase each: the 18-key form, "in the line's own form"). §3 is not edited, to stay off `task-336`'s sections: §2.6
+  places the first read "right before §3.3 step 13's banner", and step 16's `agent_version (§2.2)` stands. *Recommend
+  accept*; a one-phrase cross-reference in §3.3 can follow `task-336`'s merge if wanted.
+- **D9 — the AC 4 fixture.** No run log written by 0.3.2 exists in this repository: `ls docs/06_runs/` → the one
+  `task-236` file, written by builds stamped `0.2.2 (20b0794d…)` and `0.2.2 (7a04ad33…)` on the v0.3 line, in the
+  18-key form every build up to 0.3.2 writes (the key list unchanged since `3f7706544`) and read by the pinned 0.3.2.
+  *Recommend* that file, through its committed copy `test/fixtures/run-logs/…` (`cmp` identical), as the legacy
+  fixture.
+- **D10 — BDD and allowlist.** The four scenarios and the five `PLANNED` entries are prepared uncommitted; the
+  orchestrator commits them in one commit after the amend, before red (as `task-338` D7). *Recommend accept.*
+- **D11 — the by-hand checks (approver, from a terminal no agent started; agents launch no agent CLI and read no
+  transcript).** In a scratch directory whose path holds `.` and `_`:
+  ```
+  cd "$(mktemp -d /tmp/wf_slug.check-XXXXXX)" && git init -q && printf 'hello\n' > README && claude --version
+  claude --help | grep -E -- '--print|--output-format|--session-id|--mcp-config|--permission-mode|--allowedTools|--resume'
+  SLUG=$(pwd -P | sed 's/[^A-Za-z0-9]/-/g')
+  # H1 — the transcript of a headless run (task-236 saw an interactive one at 2.1.296)
+  SID=$(uuidgen | tr A-Z a-z)
+  claude -p "Read README, then reply with its first word" --session-id "$SID" --allowedTools Read < /dev/null > /dev/null
+  F=~/.claude/projects/$SLUG/$SID.jsonl; ls -l "$F"; ls ~/.claude/projects/$SLUG/
+  jq -c 'select(.type=="assistant") | {id: .message.id, model: .message.model, u: .message.usage}' "$F"
+  jq -r 'select(.type=="assistant") | .message.id' "$F" | sort | uniq -c
+  # H2 — the headless JSON result, against the transcript of the same session
+  SID2=$(uuidgen | tr A-Z a-z)
+  claude -p "Read README, then reply with its first word" --output-format json --session-id "$SID2" --allowedTools Read < /dev/null > out.json
+  jq '{type, session_id, usage: (.usage | {input_tokens, output_tokens, cache_read_input_tokens, cache_creation_input_tokens}), models: (.modelUsage | keys?)}' out.json
+  jq -s '[.[] | select(.type=="assistant")] | group_by(.message.id) | map(last.message.usage) | {input: (map(.input_tokens) | add), output: (map(.output_tokens) | add), cache_read: (map(.cache_read_input_tokens) | add), cache_write: (map(.cache_creation_input_tokens) | add)}' ~/.claude/projects/$SLUG/$SID2.jsonl
+  ```
+  What each must show. H1: the file exists at `$F` (so the folder rule holds for `.` and `_`, and `-p` writes a
+  transcript); each assistant line has `.message.model` a string and `.message.usage` with the four keys as integers;
+  `uniq -c` says whether an id repeats (if repeated lines carry different `usage`, say so: the last-line rule of
+  `message_id` is then revisited); whether a model other than the run's appears (D3); whether a `$SID/` folder exists
+  beside the file (sub-agent transcripts in separate files are not counted by this design). H2: `out.json` is one
+  document whose `.usage` has the four keys as integers, equal to the H1-style sums of `$SID2`'s transcript (then the
+  result carries the run's totals: D6 (a)); different values, or no `.usage`, mean D6's fallback. The orchestrator
+  pastes the commands' output and `claude --version` into these notes (AC 5). H3, at review: one interactive and one
+  headless `agent execute --element task:<id> --role developer` with the built-in in a scratch project → each record's
+  `tokens` equal to its transcript's sums, `agent_version` and `agent_version_after` both reported.
+- **D12 — the folder rule and its limits.** `{launch_dir_slug}` replaces every character outside `[A-Za-z0-9]`: one
+  observation backs it (`task-236`: `/` and `.` became `-`), H1 adds `_`. Not covered, and recorded as
+  `not-reported` with a warning: a `CLAUDE_CONFIG_DIR` that moves Claude Code's directory, and any change of the
+  vendor's layout. *Recommend accept*, `verified_with` pinning the layout as every other declaration (`dl-188`).
+- **D13 — a new manifest refusal.** `usage.from` naming `output` without `launch.headless.output: json` becomes a
+  Pass-2 issue; no manifest in the repository declares `usage.from: output` (`grep -rn "from: 'output'\|from: output"
+  test/ src/` → none). *Recommend accept*: a declared source that can never be read is a manifest defect.
+- **D14 — `bug-366`'s "mismatch with `verified_with` is visible".** Met by the record naming the version that ran
+  (`agent_version`) beside the manifest's `verified_with`; no warning compares the two, since a self-updating CLI would
+  print it on every run. *Recommend accept.*
+
+### Pending amendments (approver)
+
+- `spec-016-agent-execution` (§2.2, §2.3, §2.6, §2.7, §2.8, §4.2, §4.5 and a dated revision in Process Notes,
+  uncommitted in this worktree) — `memory amend spec-016-agent-execution --reason "Record the agent CLI version read before the launch and after the run, add the transcript usage source and the headless result source with claude-code's declarations, and append run record field 19 while the 18-key form stays readable, for task-337 (dl-180 version (b), dl-188 part 1 (c), bug-366)."`
+  Before the amend: the allowlist entries sit in the same uncommitted change; after H2, D6's fallback edit if H2 is
+  negative. With the amendment, the BDD file and the allowlist in the tree: `npx jest test/docs/name-resolvability.test.ts
+  test/docs/bdd-dna-sections.test.ts test/docs/l0-traceability.test.ts --maxWorkers=2` → `Tests: 34 passed, 34 total`
+  (without the five entries, name-resolvability failed listing exactly those five names); `npx jest
+  test/cli/agent-execute-cli-shim.integration.test.ts --maxWorkers=2 -t "spec-016 §2.6 defines"` → `1 passed` (the
+  two §2.6 sentences `task-338` pins are kept).
+
+**Risks for the other open `w0` tasks.** `task-336`: above (the stdout code, the two revision notes, two test files).
+`task-341` (red): its files are `.wingfoil/dna.yaml`, `.wingfoil/roles.yaml`, `spec-002`, the directive tests and
+`test/docs/name-resolvability.allowlist.ts` (`git diff --stat main...task/task-341-…` at `f3f0ddff0`): the allowlist is
+shared — both add lines in different places, a textual merge; no `src/agent`, `spec-016` or built-in manifest.
+`task-359` (red): `dl-132` and its task file at `82967c42a`, and in its design `bindings.yaml`, `vision-change.yaml`:
+none of this task's files. `task-342` (after `task-341`): no file of this task named in its design so far. The
+`W0-R1` headless pilot: once this task is merged, a pilot run records a 19-key line, which the pinned build 0.3.2
+refuses (`unexpected key 'agent_version_after'`, exit `1`) in `agent list` and `agent show` until the pin advances;
+the supervision's reads of `docs/06_runs/` then use the code build. The pre-launch `version_args` read adds at most
+the 10 s lookup limit before the spawn, inside REQ-PERF-01's 30 s (`test/agent/agent-execute-latency.test.ts`, run only
+by `npm run test:latency`).
+
+**Candidate findings (not filed).** None.
+
+### Retrospective
+
+<!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
+     reconstructed afterwards. One line per item: what happened, the evidence (a command and what it
+     printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
+     Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
+     here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
