@@ -129,6 +129,14 @@ describe('task-336 AC 4 — readActiveRuns (spec-016 §7)', () => {
     ['a JSON array', '[]\n'],
     ['a key missing (started_ms)', `${JSON.stringify(entry('task-m', 'red', 1, process.pid)).replace(/,"started_ms":\d+/, '')}\n`],
     ['a pid that is not a number', `${JSON.stringify({ ...entry('task-m', 'red', 1, process.pid), pid: String(process.pid) })}\n`],
+    // task-336 review fix round, F4 (characterization; spec-016 §7's listed malformed cases, e998b6346).
+    ['JSON null', 'null\n'],
+    ['an extra key', `${JSON.stringify({ ...entry('task-m', 'red', 1, process.pid), extra: 'x' })}\n`],
+    ['an empty-string field (workflow)', `${JSON.stringify({ ...entry('task-m', 'red', 1, process.pid), workflow: '' })}\n`],
+    ['a pid of 0', `${JSON.stringify({ ...entry('task-m', 'red', 1, process.pid), pid: 0 })}\n`],
+    ['a pid of -1', `${JSON.stringify({ ...entry('task-m', 'red', 1, process.pid), pid: -1 })}\n`],
+    ['a pid of 1.5', `${JSON.stringify({ ...entry('task-m', 'red', 1, process.pid), pid: 1.5 })}\n`],
+    ['a started_ms of -1', `${JSON.stringify({ ...entry('task-m', 'red', 1, process.pid), started_ms: -1 })}\n`],
   ])('a file that is %s: removed with one warning line, not listed', (_name, content) => {
     const base = root();
     putEntry(base, entry('task-a', 'red', 1, process.pid));

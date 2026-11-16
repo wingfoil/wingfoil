@@ -14,7 +14,7 @@
  * Today `--active` is an unknown option (exit 2), and no section reads `.wingfoil/run/`.
  */
 import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 import { commitAll, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
@@ -140,5 +140,49 @@ describe('task-336 AC 6 — pruning on read (spec-016 §7; D10 (a))', () => {
     expect(result.status).toBe(0);
     expect(result.stdout).toBe('no active runs\n');
     expect(existsSync(join(repo, '.wingfoil/run/task-z/green/1.json'))).toBe(false);
+  });
+});
+
+const POSIX_NOT_ROOT = process.platform !== 'win32' && process.getuid?.() !== 0;
+
+describe('task-336 review fix round — agent list --active, F5 and F6 (spec-016 §5, §7, e998b6346)', () => {
+  (POSIX_NOT_ROOT ? it : it.skip)('F5: a dead entry that cannot be removed (read-only directory): one "could not remove" line, exit 0, not listed', () => {
+    const { repo } = project();
+    putEntry(repo, entry('task-z', 'red', 1, 999999999));
+    const dir = join(repo, '.wingfoil', 'run', 'task-z', 'red');
+    chmodSync(dir, 0o555);
+    try {
+      const result = runCliEntry(repo, ['agent', 'list', '--active']);
+      expect(result.stderr.startsWith('warning: .wingfoil/run/task-z/red/1.json: could not remove: ')).toBe(true);
+      expect(result.stderr.split('\n').filter((line) => line !== '')).toHaveLength(1);
+      expect(result.status).toBe(0);
+      expect(result.stdout).toBe('no active runs\n');
+    } finally {
+      chmodSync(dir, 0o755);
+    }
+  });
+
+  it('F6: started_ms 8640000000000001 is no entry (warning, exit 0); 8640000000000000 is listed and rendered', () => {
+    const { repo } = project();
+    put(repo, 'task-m/red/1.json', `${JSON.stringify({ ...entry('task-m', 'red', 1), started_ms: 8640000000000001 })}\n`);
+    const pruned = runCliEntry(repo, ['agent', 'list', '--active']);
+    expect(pruned.stderr).toBe('warning: .wingfoil/run/task-m/red/1.json: not an active run entry: removed\n');
+    expect(pruned.status).toBe(0);
+    expect(pruned.stdout).toBe('no active runs\n');
+    put(repo, 'task-m/red/1.json', `${JSON.stringify({ ...entry('task-m', 'red', 1), started_ms: 8640000000000000 })}\n`);
+    const listed = runCliEntry(repo, ['agent', 'list', '--active']);
+    expect(listed.stderr).toBe('');
+    expect(listed.status).toBe(0);
+    // The ISO 8601 form of the largest ECMAScript date, as Date#toISOString prints it (an expanded year).
+    expect(listed.stdout).toBe(['active runs: 1', `task-m/red/1  developer  claude  ${process.pid}  +275760-09-13T00:00:00.000Z`, ''].join('\n'));
+  });
+
+  it('F6: a top-level x.json naming itself is no entry: warning, exit 0, no crash', () => {
+    const { repo } = project();
+    put(repo, 'x.json', `${JSON.stringify({ ...entry('task-x', 'red', 1), id: 'x' })}\n`);
+    const result = runCliEntry(repo, ['agent', 'list', '--active']);
+    expect(result.stderr).toBe('warning: .wingfoil/run/x.json: not an active run entry: removed\n');
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe('no active runs\n');
   });
 });
