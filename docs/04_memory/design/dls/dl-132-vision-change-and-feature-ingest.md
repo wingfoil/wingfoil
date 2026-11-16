@@ -179,3 +179,16 @@ the 2026-10-12 Note allows "while `memory amend` refuses a release with no `kind
 `memory.yaml`'s `release` `template.frontmatter.exempt` (3.5). On every release already past `draft` the
 `define-scope` sweep writes `features:` through a `memory amend` by the approver (`release-planning.yaml` 2.1). The
 Decision above is unchanged.
+
+**Note (2026-11-15, `dl-166` Q1 (b) and Q2 (ii), ratified 2026-11-05; `task-359`).** Elements 3 and 4 are declared
+checks of `vision-change.yaml` (1.3), bound in `.wingfoil/workflows/bindings.yaml` (3.2) before `cp-001` runs its
+downcast. Element 3: each downcast phase (`downcast-stories`, `downcast-scenarios`, `downcast-requirements`) carries
+the post-check `downcast.in-scope(layer: …)`, which holds the phase to the ids and files the change-proposal's impact
+analysis names for that layer; it is bound `manual: true` until a command can tell the phase's commits from other
+edits of `docs/02_requirements/`, so the phase's role compares them by hand. Element 4: `schedule` carries the
+post-check `change-proposal.assigned`, bound to `scripts/check-release-exit.cjs` on the change-proposal's path: its
+`release` is set, each of its feature ids is in that release's row of `docs/01_vision/07_sequencer.md` and, on a
+release already past `draft`, in the release's `features:`, written there by the approver's `memory amend` of the
+release as the 2026-10-12 Note says. The check closes, where the scheduling happens, the gap `dl-166`'s note of
+2026-10-12 records for a change scheduled after `define-scope` ran. No binding runs before P4.12 (v1.0): the role
+named on the phase runs the command, or applies the manual check. The Decision above is unchanged.

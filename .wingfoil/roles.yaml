@@ -38,7 +38,11 @@
 # `approver` also loads `standing-approvals` (release-planning v0.4 R1 L7, dl-212 D1, task-343): the rules under which
 # a gate's command-checked evidence suffices, each with the exact command the approver runs. Bound to `approver` only:
 # no rule lets an agent run an approver verb, and the verbs refuse an agent's session.
-version: 1.9                      # 1.9 approver: [code-review, standing-approvals] (task-343) (prev 1.8 approver: [code-review], facilitator: [traceability] (task-215))
+#
+# `coordinator` loads `coordinator` (dl-203 D2 and Q3 (a), task-341): the judgement points the coordinator role decides,
+# that it never approves, rejects, amends or decides a gate, and how its session is recorded as a run. Bound to
+# `coordinator` only.
+version: 2.0                      # 2.0 coordinator: [coordinator] (task-341) (prev 1.9 approver: [code-review, standing-approvals] (task-343) (prev 1.8 approver: [code-review], facilitator: [traceability] (task-215)))
 
 assignments:
   developer:
@@ -71,6 +75,8 @@ assignments:
   approver:
     - code-review
     - standing-approvals
+  coordinator:
+    - coordinator
 
 # Global directives apply to every role.
 global:
