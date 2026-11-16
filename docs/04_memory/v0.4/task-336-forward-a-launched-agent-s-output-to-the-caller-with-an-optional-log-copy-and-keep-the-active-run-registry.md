@@ -717,6 +717,7 @@ still differ. No new key is added to §7.
 ### Pending amendments (approver) — review fix round
 
 - `spec-016-agent-execution` — `--reason "Record task-336's review-fix amendment of spec-016: the registry entry's pid returns to agent execute's own when the agent exits and a launch rewrites or removes only its own entry, an entry's id must be three segments naming its file and started_ms a valid date, a --log under .wingfoil/run/ is refused with exit 2, and a failed removal while reading is a warning, never a failed read."`
+- `spec-008-cli-grammar` — `--reason "Record task-336's review-fix amendment of spec-008: section 12's agent execute --log row gains the usage error for a path under .wingfoil/run/, the active registry, refused with exit 2 before the project is read (spec-016 section 3.1)."`
 
 ### Retrospective
 
