@@ -508,8 +508,11 @@ combination: --headless cannot be combined with --interactive`. A `--timeout` th
 exit `2`, `error: invalid flag value: --timeout expects <n>s, <n>m or <n>h, got "<raw>"`; one over `24h` → exit `2`,
 `error: invalid flag value: --timeout must be at most 24h, got "<raw>"` (`spec-008` §12). A blank `--log` → exit `2`,
 `error: invalid flag value: --log must not be blank`; `--log` with `--interactive` → exit `2`, `error: invalid flag
-combination: --log needs a headless launch, and this run launches interactive` (`dl-182` Q4 (a)). All five are
-decided before the project is read. A `--log` on a run whose kind §3.2 step 7 resolves to `interactive` is refused
+combination: --log needs a headless launch, and this run launches interactive` (`dl-182` Q4 (a)); a `--log` whose
+path, resolved against the current directory, is `.wingfoil/run/` under the project root or lies beneath it → exit
+`2`, `error: invalid flag value: --log must not name a file under .wingfoil/run/, the active registry` (the path is
+compared as resolved, without following a symbolic link: a file there would be git-ignored, so no warning would name
+it, and the next reader would prune it as no entry, §7). All six are decided before the project is read. A `--log` on a run whose kind §3.2 step 7 resolves to `interactive` is refused
 there, with the same message and exit `2`.
 
 **The launch directory** (`bug-499`, `task-353`). The agent runs in the project root (§3.3 step 14): the directory
@@ -704,7 +707,10 @@ output anywhere but stderr and that file (§3.5).
     to `agent execute`'s stderr line by line (§3.5), and the agent runs in a session and process group of its own
     (POSIX), so it has no controlling terminal to open and receives no keyboard signal but the ones step 15
     forwards. Once the agent is spawned, its registry entry (step 13) is rewritten in place (a new file renamed
-    over it) with the agent's `pid`; a spawn that fails removes it. This is
+    over it) with the agent's `pid`; a spawn that fails removes it. When the agent exits (step 15), the entry is
+    rewritten again, the same way, with `agent execute`'s own `pid`, so it stays live through steps 16–17 — the
+    post-exit read of the output, the lookups and the record commit — and no reader prunes it, and no second launch
+    takes its run id, while the run is still being recorded (§7). This is
     the **"agent ready"** instant of `REQ-PERF-01`. Steps 1–14 must complete in < 30,000 ms p95
     (`02_performance-nfr.md:16-22`). The agent's own start-up is outside WingFoil's control and
     outside the budget (`adr-012` Consequences).
@@ -760,7 +766,7 @@ output anywhere but stderr and that file (§3.5).
     prompt)`. Under `implied`, a fragment, or no `trust`, neither is given. The run's outcome and exit code are
     unchanged.
 17. Append the record and commit it (§4.4). Then, whatever the commit's outcome, remove the run's registry entry
-    (§7) and close the log.
+    (§7) — only while the file still holds this launch's entry — and close the log.
 18. Exit: `0` if the agent exited `0`, the time bound did not expire, and step 17 succeeded; otherwise `1`
     (§3.7). An expired bound is reported as `agent timed out after <duration>; run <run-id> recorded`,
     `<duration>` as given, whatever the exit status.
@@ -857,7 +863,7 @@ in what ends them (`dl-181`):
 
 | Case | `CoreError.code` | Exit | Message (`error: …`) |
 |---|---|---|---|
-| None of `--next`, `--workflow`, `--step`, `--element`; bad element-ref; `--headless` with `--interactive`; a malformed or too long `--timeout`; a blank `--log`; `--log` with `--interactive`; unknown option (incl. `--resume` and `--ref`) | — (parse) | `2` | `missing required argument: --next or --element` / `spec-008` §7 message / `invalid flag combination: --headless cannot be combined with --interactive` / §3.1's two `--timeout` messages / `invalid flag value: --log must not be blank` / `invalid flag combination: --log needs a headless launch, and this run launches interactive` / Commander's |
+| None of `--next`, `--workflow`, `--step`, `--element`; bad element-ref; `--headless` with `--interactive`; a malformed or too long `--timeout`; a blank `--log`; `--log` with `--interactive`; a `--log` under `.wingfoil/run/`; unknown option (incl. `--resume` and `--ref`) | — (parse) | `2` | `missing required argument: --next or --element` / `spec-008` §7 message / `invalid flag combination: --headless cannot be combined with --interactive` / §3.1's two `--timeout` messages / `invalid flag value: --log must not be blank` / `invalid flag combination: --log needs a headless launch, and this run launches interactive` / `invalid flag value: --log must not name a file under .wingfoil/run/, the active registry` / Commander's |
 | any `spec-003` load error in the workflow registry (step 2) | `VALIDATION` | `1` | as `spec-017` §10's first row: the first error in `spec-003`'s order, every diagnostic in `details` |
 | `--workflow` names no workflow | `NOT_FOUND` | `1` | `unknown workflow: <name>` (`spec-017` §10) |
 | `--workflow` names no open instance | `NOT_FOUND` | `1` | `workflow is not open: <ref>` (`spec-017` §10) |
@@ -1100,7 +1106,8 @@ wingfoil agent list [--past] [--waiting] [--active] [--element <type>:<id>] [--p
   is not an error for `list`: `past` is empty, with `warning: dna.yaml declares no run log
   (paths.runs)`. A missing `.wingfoil/run/` is an empty `active`; one that cannot be read is `IO`, exit `1`,
   `cannot read the active registry .wingfoil/run/: <cause>`. An entry pruned as unreadable or malformed (§7)
-  prints its `warning:` line and changes no exit code.
+  prints its `warning:` line and changes no exit code; so does a file `agent list` reads but cannot remove (§7's
+  `could not remove` line): the listing is still answered, without that file.
 
 #### 5.1 Baseline of `agent list` and `agent show` — a declared exception
 
@@ -1155,19 +1162,32 @@ alive); the rest of this section is fixed here so that v0.3 does not foreclose i
 - **Active registry** (`dl-135` Q1 (a), `dl-181`): one file per running launch,
   `.wingfoil/run/<element-id>/<phase>/<n>.json` under the project root — the working tree's, so each linked worktree
   has its own — its path the run id's three segments (§4.3). Its content is one JSON object and a newline, the keys
-  in this order: `id` (the run id), `pid` (a positive integer: `agent execute`'s own from §3.3 step 13 until the
-  agent is spawned, then the agent's, step 14), `workflow`, `phase`, `element`, `role` and `agent` (the record's
-  values, §4.2), `session` (the assigned session id under `session.id: assign`, else `not-reported`: the other
-  forms are known only after the run) and `started_ms` (the wall-clock instant of step 13, milliseconds since the
-  epoch: a record of what happened, never part of a context). Nothing of the agent's output, no environment value,
+  in this order: `id` (the run id: three non-empty segments `<element-id>/<phase>/<n>`, `<n>` a positive decimal
+  integer without a leading zero, naming the file's own path), `pid` (a positive integer: `agent execute`'s own from
+  §3.3 step 13 until the agent is spawned, then the agent's from the spawn until the agent exits, step 14, then
+  `agent execute`'s own again until the entry is removed, step 15), `workflow`, `phase`, `element`, `role` and
+  `agent` (the record's values, §4.2, each a non-empty string), `session` (the assigned session id under
+  `session.id: assign`, else `not-reported`: the other forms are known only after the run) and `started_ms` (the
+  wall-clock instant of step 13, milliseconds since the epoch, an integer from `0` to `8640000000000000`, the
+  range of an ECMAScript date: a record of what happened, never part of a context). Nothing of the agent's output, no environment value,
   argv or path outside the root is written in it (`REQ-SEC-08`). It is created exclusively at step 13 and removed
   after step 17, on every exit path once created; an `agent execute` killed by `SIGKILL` leaves it behind, and it
   stays live while the agent it names runs.
+  **This launch's entry.** A launch removes the file, and rewrites its `pid` at the agent's exit, only while the file
+  still holds its own entry: the same `id` and `started_ms`, and a `pid` that is `agent execute`'s own or the agent it
+  spawned. A file that holds another launch's entry — one created after this launch's was pruned — is left as it is.
+  The check and the removal are two steps, not one atomic operation: a reader that prunes, and a launch that creates,
+  between them is a known limit.
   **Liveness and pruning.** An entry is live while a process with its `pid` exists (`kill(pid, 0)` succeeds or
   fails with `EPERM`); a pid the system has reused for another process keeps an entry live — a known limit. Every
   reader — `agent list` and step 13 — prunes what it reads: an entry whose process is gone is removed, and so is a
-  file that is not one JSON object of these keys and types, with one `warning:` line, `.wingfoil/run/<path>: not an
+  file that is not one JSON object of exactly these keys with these types and ranges (JSON `null`, a missing or an
+  extra key, an empty string, a `pid` that is not a positive integer, a `started_ms` out of its range, an `id` that is
+  not three segments or does not name the file's path), with one `warning:` line, `.wingfoil/run/<path>: not an
   active run entry: removed`; a directory left empty by a removal is removed too, up to `.wingfoil/run/` exclusive.
+  A removal that fails for another cause than the file being gone already leaves the file, and the reader goes on
+  with one `warning:` line, `.wingfoil/run/<path>: could not remove: <cause>`, listing nothing of that file; it
+  never fails the read (§5).
   Readers list entries in §5's active order, never directory order.
   **Git.** `.wingfoil/run/` is the one git-ignored subpath of `.wingfoil/`: `wingfoil init` writes
   `.wingfoil/.gitignore` with the line `/run/` (`spec-011` § `.gitignore` policy). `agent execute` warns when the
@@ -1653,3 +1673,17 @@ changes. §3.3's opening sentence and §3.6 name the two new writes. §7's MCP b
 included, and §8's MCP cells are unchanged: they are the MCP surface's (P5.2.3), not this task's. No placeholder,
 no key of §4.2 and no rule of §4.3 changes. Edited in place without a supersede or a state change (`dl-047`), pending
 the approver's `memory amend` at `task-336`'s design gate.
+
+**Revision (2026-11-16, `task-336-forward-a-launched-agent-s-output-to-the-caller-with-an-optional-log-copy-and-keep-the-active-run-registry`,
+review) — § 3.1 grammar, § 3.3 steps 14 and 17, § 3.7, § 5's exit codes and § 7's registry entry.** The independent
+review found four gaps in the registry rules as amended at the design gate. (1) After the agent exited, its entry still
+named the agent's dead pid while `agent execute` read the output, ran the lookups and committed the record, so a reader
+pruned it, a second launch could take the same run id, and the first launch's removal then deleted the second's
+entry: the `pid` now returns to `agent execute`'s own at the agent's exit (§3.3 step 14, §7), and a launch rewrites or
+removes the file only while it holds its own entry, by `id`, `started_ms` and `pid` (§3.3 step 17, §7, with the
+residual check-then-remove window stated as a known limit). (2) An entry's `id` must be three segments naming the
+file's path, and `started_ms` stays within an ECMAScript date's range; the malformed cases are listed (§7). (3) A
+`--log` path under `.wingfoil/run/` is refused at parse time, exit `2` (§3.1, §3.7's parse row): such a file would be
+git-ignored and then pruned as no entry. (4) A removal that fails while reading is one `warning:` line, never a failed
+read (§5, §7). No key of §4.2, no rule of §4.3 and no other exit code changes. Edited in place without a supersede or a
+state change (`dl-047`), pending the approver's `memory amend` at `task-336`'s review fix round.
