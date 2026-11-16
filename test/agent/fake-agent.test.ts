@@ -109,6 +109,19 @@ function at(raw: unknown, path: string): unknown {
   return path.split('.').reduce<unknown>((value, key) => (value !== null && typeof value === 'object' ? (value as Raw)[key] : undefined), raw);
 }
 
+/** The leaves `usage.transcript` adds to the schema (task-337, `spec-016` §2.2 as amended). */
+const TRANSCRIPT_LEAVES = [
+  'usage.transcript.path',
+  'usage.transcript.select.field',
+  'usage.transcript.select.equals',
+  'usage.transcript.message_id',
+  'usage.transcript.fields.model',
+  'usage.transcript.fields.input',
+  'usage.transcript.fields.output',
+  'usage.transcript.fields.cache_read',
+  'usage.transcript.fields.cache_write',
+];
+
 describe('AC 1 — custom/fake.yaml declares every §2.2 field and validates', () => {
   const raw = load(readFileSync(FAKE_YAML, 'utf-8')) as Raw;
 
@@ -120,8 +133,11 @@ describe('AC 1 — custom/fake.yaml declares every §2.2 field and validates', (
     // task-356 (`bug-372`) adds `mcp.conflict_args`: 27 leaves.
     // task-339 (`dl-223` (b)) adds `launch.interactive.permissions` and `launch.headless.permissions`: 29 leaves.
     // task-353 (`bug-500`, `spec-016` §2.2) adds `launch.interactive.trust` and `launch.headless.trust`: 31 leaves.
-    expect(paths).toHaveLength(31);
+    // task-337 (`dl-188` part 1 (c), `spec-016` §2.2 as amended at `2d193b318`) adds `usage.transcript` — `path`,
+    // `select.field`, `select.equals`, `message_id` and the five `fields` — 40 leaves.
+    expect(paths).toHaveLength(40);
     expect(paths).toEqual(expect.arrayContaining(['launch.interactive.trust', 'launch.headless.trust']));
+    expect(paths).toEqual(expect.arrayContaining(TRANSCRIPT_LEAVES));
   });
 
   // `mcp.conflict_args` is the one field the fixture leaves out on purpose (task-356): declared, it would run the
@@ -134,7 +150,10 @@ describe('AC 1 — custom/fake.yaml declares every §2.2 field and validates', (
   // `launch.interactive.trust` and `launch.headless.trust` are left out on purpose (task-353, design D3 (a)): absent,
   // nothing is appended to the argv and no start-up hint is given, so every suite's pins stay as they are; the
   // `fake-trust` adapter of `test/cli/agent-execute-trust.integration.test.ts` is derived inline and declares them.
-  const LEFT_OUT = ['mcp.conflict_args', 'launch.interactive.permissions', 'launch.headless.permissions', 'launch.interactive.trust', 'launch.headless.trust'];
+  // `usage.transcript` is left out on purpose (task-337): the fixture reads its usage from `--lookup`
+  // (`usage.from: lookup`), which the suites pin; the `fake-usage` adapter of
+  // `test/cli/agent-execute-usage.integration.test.ts` is derived inline and declares it.
+  const LEFT_OUT = ['mcp.conflict_args', 'launch.interactive.permissions', 'launch.headless.permissions', 'launch.interactive.trust', 'launch.headless.trust', ...TRANSCRIPT_LEAVES];
   it.each(leafPaths(AdapterManifest).filter((path) => !LEFT_OUT.includes(path)).map((path) => [path]))('declares `%s`', (path) => {
     expect(at(raw, path)).toBeDefined();
   });

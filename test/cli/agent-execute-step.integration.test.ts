@@ -95,7 +95,8 @@ function records(repo: string, elementId: string): Record<string, unknown>[] {
 
 /** The launch's `--prompt` value: the bootstrap (§2.4). */
 function bootstrapOf(run: Run): string {
-  const launch = run.fake[0];
+  // task-337: the launch is the invocation carrying --prompt, no longer fake[0] (version_args runs before it too).
+  const launch = run.fake.find((argv) => argv.includes('--prompt'));
   if (launch === undefined) throw new Error(`the fake never launched: ${run.stderr}`);
   return launch[launch.indexOf('--prompt') + 1]!;
 }

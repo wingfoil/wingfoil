@@ -10,7 +10,7 @@
  * the stdio transport written by hand: newline-delimited JSON-RPC 2.0 on the server's stdin/stdout.
  *
  * Invocations (the argv the manifests declare):
- * - `--version` — prints {@link VERSION} (`version_args`).
+ * - `--version` — prints {@link VERSION} (`version_args`), or `WINGFOIL_FAKE_AGENT_VERSION_FILE`'s first line (below).
  * - `--lookup <session-id>` — prints the declared JSON document for that session (`session.lookup_args`,
  *   `usage.lookup_args`).
  * - `--summary` — prints a one-line summary (`summary.export_args`).
@@ -70,6 +70,19 @@
  * Every launch record also carries `cwd`, the fake's working directory (`process.cwd()`): where `agent execute` launched
  * the agent (task-353, `bug-499`; `spec-016` §3.1, §3.3 step 14). A path, not a secret.
  *
+ * The run record's usage and versions (task-337, `spec-016` §2.6, §2.7; `dl-180` version (b), `dl-188` part 1 (c),
+ * `bug-366`):
+ * - `WINGFOIL_FAKE_AGENT_VERSION_FILE` — a file; `--version` prints that file's first line when the file exists (an
+ *   empty first line prints nothing), else {@link VERSION}.
+ * - `WINGFOIL_FAKE_AGENT_UPDATE_TO` — a version; a launch writes it and a newline to `WINGFOIL_FAKE_AGENT_VERSION_FILE`
+ *   before it exits: an agent CLI that updates itself during a session, so the post-run `--version` prints another
+ *   version than the pre-launch one.
+ * - `WINGFOIL_FAKE_AGENT_TRANSCRIPT` — a file; a launch carrying `--session-id <id>` copies it to
+ *   `<home>/.fake-agent/projects/<slug>/<id>.jsonl`, `<home>` the operating system's home directory (`HOME`) and
+ *   `<slug>` the launch directory, its symbolic links resolved, with every character other than `A`–`Z`, `a`–`z` and
+ *   `0`–`9` replaced by `-` (§2.3 `{launch_dir_slug}`): the session transcript an agent CLI writes, as §2.6's
+ *   `transcript` source reads it. The test chooses the file; the fake never reads a real agent's transcript.
+ *
  * `EXIT` and `WAIT` apply to a launch only. `agent execute` passes its environment to every child it
  * starts (§2.2), so the post-run `--version` and `--lookup` (§3.3 step 16) see the same variables, and
  * must still answer.
@@ -122,6 +135,36 @@ function documentFor(sessionId) {
 /** Keep the process alive until a signal ends it; the timer only keeps the event loop busy. */
 function waitForSignal() {
   setInterval(() => undefined, 60000);
+}
+
+// task-337: the version file, the self-update and the transcript (see the header). Required here, apart from the
+// requires above, so the additions stay in one place.
+const fsUsage = require('fs');
+const osUsage = require('os');
+const pathUsage = require('path');
+
+/** What `--version` prints: `WINGFOIL_FAKE_AGENT_VERSION_FILE`'s first line when that file exists, else {@link VERSION}. */
+function currentVersion() {
+  const file = process.env.WINGFOIL_FAKE_AGENT_VERSION_FILE;
+  if (file === undefined || file === '' || !fsUsage.existsSync(file)) return VERSION;
+  return fsUsage.readFileSync(file, 'utf-8').split('\n')[0];
+}
+
+/**
+ * On a launch: `WINGFOIL_FAKE_AGENT_UPDATE_TO` written to the version file, and `WINGFOIL_FAKE_AGENT_TRANSCRIPT` copied
+ * to the transcript of the session id the launch carries, under the home directory and the launch directory's slug.
+ */
+function updateAndWriteTranscript(argv) {
+  const updateTo = process.env.WINGFOIL_FAKE_AGENT_UPDATE_TO;
+  const versionFile = process.env.WINGFOIL_FAKE_AGENT_VERSION_FILE;
+  if (updateTo !== undefined && versionFile !== undefined && versionFile !== '') fsUsage.writeFileSync(versionFile, `${updateTo}\n`);
+  const transcript = process.env.WINGFOIL_FAKE_AGENT_TRANSCRIPT;
+  const sessionId = option(argv, '--session-id');
+  if (transcript === undefined || transcript === '' || sessionId === undefined) return;
+  const slug = fsUsage.realpathSync(process.cwd()).replace(/[^A-Za-z0-9]/g, '-');
+  const dir = pathUsage.join(osUsage.homedir(), '.fake-agent', 'projects', slug);
+  fsUsage.mkdirSync(dir, { recursive: true });
+  fsUsage.copyFileSync(transcript, pathUsage.join(dir, `${sessionId}.jsonl`));
 }
 
 /** Stdin to its end, as UTF-8 text. */
@@ -301,6 +344,7 @@ async function launch(argv, stdin) {
   let failure = null;
   trackSignals();
   startChild();
+  updateAndWriteTranscript(argv);
   if (process.env.WINGFOIL_FAKE_AGENT_CONNECT === '1') {
     const instruction = bootstrap === undefined || bootstrap === null ? null : CONTEXT_INSTRUCTION_RE.exec(bootstrap);
     const configFile = option(argv, '--mcp-config');
@@ -334,7 +378,7 @@ async function main() {
 
   if (argv.includes('--version')) {
     record({ argv, stdin, env: Object.keys(process.env).sort(), mcp: null });
-    process.stdout.write(`${VERSION}\n`);
+    process.stdout.write(`${currentVersion()}\n`);
   } else if (argv.includes('--lookup')) {
     record({ argv, stdin, env: Object.keys(process.env).sort(), mcp: null });
     const lookup = process.env.WINGFOIL_FAKE_AGENT_LOOKUP;

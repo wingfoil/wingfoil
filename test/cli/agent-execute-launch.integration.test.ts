@@ -113,8 +113,11 @@ async function executeWaiting(repo: string, args: readonly string[], act: (pid: 
   const closed = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve) => child.on('close', (code, signal) => resolve({ code, signal })));
   let exited = false;
   void closed.then(() => (exited = true));
-  for (let attempt = 0; attempt < 1200 && fakeEntries(setup.recordFile).length === 0 && !exited; attempt += 1) await pause(50);
-  if (fakeEntries(setup.recordFile).length === 0) throw new Error(`the fake never launched: ${stderr}`);
+  // task-337 (`spec-016` §2.6 as amended at `2d193b318`): version_args runs before the launch, so the first record line
+  // may be `--version`; wait for the launch's own line.
+  const launched = (): boolean => fakeEntries(setup.recordFile).some((entry) => !entry.argv.includes('--version') && !entry.argv.includes('--lookup'));
+  for (let attempt = 0; attempt < 1200 && !launched() && !exited; attempt += 1) await pause(50);
+  if (!launched()) throw new Error(`the fake never launched: ${stderr}`);
   await act(child.pid!, () => !exited);
   const { code, signal } = await closed;
   return { status: code, signal, stdout, stderr, leftInTmp: readdirSync(setup.tmp), fake: fakeEntries(setup.recordFile) };
@@ -190,12 +193,16 @@ describe('task-228 AC 1 — the full adhoc run with the terminal: optional fake 
   });
 
   it('the fake receives exactly the argv its manifest renders, with no shell', () => {
-    const launch = run.fake[0]!;
+    // task-337 (`spec-016` §2.6 as amended at `2d193b318`): version_args runs before the launch, so the launch is the
+    // second invocation.
+    const launch = run.fake[1]!;
     // The fake records the argv after `node <script>`: launch.interactive.args[1..] + session.assign_args.
     expect(launch.argv).toEqual(['--mcp-config', expect.any(String), '--prompt', bootstrapOf(RUN_1, before), '--session-id', sessionOf(repo, RUN_1)]);
     expect(launch.argv[1]).toMatch(/wingfoil-run-[^/]+\/mcp-config\.json$/);
-    // Post-run (§3.3 step 16): version_args, then usage.lookup_args with the assigned session id.
-    expect(run.fake.slice(1).map((entry) => entry.argv)).toEqual([['--version'], ['--lookup', sessionOf(repo, RUN_1)]]);
+    // Before the launch (task-337, §2.6): version_args. Post-run (§3.3 step 16): version_args again, then
+    // usage.lookup_args with the assigned session id.
+    expect(run.fake[0]!.argv).toEqual(['--version']);
+    expect(run.fake.slice(2).map((entry) => entry.argv)).toEqual([['--version'], ['--lookup', sessionOf(repo, RUN_1)]]);
   });
 
   it('one record is appended: fresh, n/a, adhoc, n/a, with the fake\'s session, model and tokens', () => {
@@ -220,6 +227,8 @@ describe('task-228 AC 1 — the full adhoc run with the terminal: optional fake 
       exit_status: 0,
       result: 'n/a',
       notes: 'none',
+      // task-337: spec-016 §4.2 key 19, read after the run (the fake's version does not change here).
+      agent_version_after: 'fake-agent 1.0.0',
     });
   });
 
@@ -284,7 +293,8 @@ describe('task-228 AC 3 — the assigned session id, and a lookup that fails', (
     const second = execute(repo, FULL);
     expect([first.status, second.status]).toEqual([0, 0]);
     const runTwo = `${TASK_ID}/adhoc/2`;
-    expect(second.fake[0]!.argv.slice(-2)).toEqual(['--session-id', sessionOf(repo, runTwo)]);
+    // task-337: the launch is the invocation after the pre-launch version_args.
+    expect(second.fake[1]!.argv.slice(-2)).toEqual(['--session-id', sessionOf(repo, runTwo)]);
     expect(recordsAtHead(repo).map((record) => record['session'])).toEqual([sessionOf(repo, RUN_1), sessionOf(repo, runTwo)]);
     expect(sessionOf(repo, RUN_1)).not.toBe(sessionOf(repo, runTwo));
     expect(recordsAtHead(repo).map((record) => record['session'])).not.toContain(rootSessionOf(repo, RUN_1));

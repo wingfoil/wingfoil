@@ -15,7 +15,7 @@
  */
 import { git, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
 import { DNA_YAML, seed, TASK_ID, TASK_REF } from '../agent/helpers/agent-execute-fixture';
-import { errorLine, execute, expectNothingRan, headOf, launchArgv, records, removeRunScratch } from './helpers/agent-execute-cli';
+import { errorLine, execute, expectNothingRan, headOf, launchArgv, launchEntry, records, removeRunScratch } from './helpers/agent-execute-cli';
 
 const repos: string[] = [];
 afterAll(() => {
@@ -47,7 +47,8 @@ describe('task-335 AC 4 — the headless work run (spec-016 §3.5)', () => {
   });
 
   it("the agent's stdin is not connected: the fake read it to its end and found nothing", () => {
-    expect(run.fake[0]?.stdin).toBe('');
+    // task-337: the launch entry, no longer fake[0] (version_args runs before the launch too).
+    expect(launchEntry(run).stdin).toBe('');
   });
 
   it('stdout is exactly { "run": <record> }, the committed record; result n/a, exit_status 0', () => {

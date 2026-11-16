@@ -99,7 +99,9 @@ function start(extra: readonly string[]): { live: LiveCliRun; recordFile: string
 async function hangUpThenTerminate(extra: readonly string[]): Promise<{ code: number | null; signal: NodeJS.Signals | null; stderr: string; signals: string[] }> {
   const { live, recordFile, signalsFile } = start(extra);
   const pid = live.child.pid!;
-  await waitFor(() => lines(recordFile).length > 0, 30000, 'the fake to record its launch');
+  // task-337 (`spec-016` §2.6 as amended at `2d193b318`): version_args runs before the launch, so the first record line
+  // may be `--version`; wait for the launch's own line.
+  await waitFor(() => lines(recordFile).some((line) => line.startsWith('{"argv":[') && !line.startsWith('{"argv":["--version"]')), 30000, 'the fake to record its launch');
   process.kill(-pid, 'SIGHUP');
   await waitFor(() => lines(signalsFile).includes('SIGHUP'), 30000, 'the fake to record a SIGHUP');
   // Room for a forwarded copy to land before SIGTERM, so a second SIGHUP is recorded before it if one is sent.

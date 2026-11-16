@@ -174,6 +174,7 @@ export function run(elementId: string, phase: string, n: number, overrides: Part
     exit_status: 0,
     result: 'n/a',
     notes: 'none',
+    agent_version_after: NOT_REPORTED, // task-337: spec-016 §4.2 key 19
     ...overrides,
   };
 }
