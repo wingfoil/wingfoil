@@ -209,6 +209,72 @@ The approver approved the design as recommended (finalize `b8b91f6cd`, after the
 - **D5** the `vision-change` diagram of `.wingfoil/WORKFLOW.md` is updated in this task.
 - **D6** the dl-132 note as prepared.
 
+### red (qa, 2026-11-16)
+
+**Base.** Branch head `82967c42a` (the merge of `main` bringing in task-353); `git rev-list --count HEAD..main` → `0`, so
+no merge. PATH guard: `command -v wingfoil` → the task's PATH shim; `wingfoil --version` and `node dist/cli.js
+--version` → `0.3.2 (5431cb2c34f073efcf676fb70ec3a129851d38f8)`. Contract: the design above and the gate rulings
+(D1–D6, D2 (A): `downcast.in-scope` bound `manual: true` until a command, so no downcast script is pinned).
+
+**Red commit `e674de678`** (test files only, `git show --stat e674de678`):
+- `test/core/vision-change-workflow.test.ts` — new `describe` "task-359 AC 1 + 2" (header cites task-359 and dl-166):
+  (a) each downcast phase's `checks.post` is exactly `downcast.in-scope(layer: stories|scenarios|requirements)`, no
+  `pre`; (b) `schedule` keeps its `pre`, its `post` is `['vision-index.current', 'change-proposal.assigned']`; (c)
+  `resolveToken('change-proposal.assigned', 'check', …)` → `{ kind: 'run', source: 'project', argv: ['node',
+  'scripts/check-release-exit.cjs', '{element.path}'], severity: 'reject' }`; (d) each layer's token cuts to
+  `downcast.in-scope` and resolves `{ kind: 'manual', source: 'project' }`; (e) `workflowShowAtHead(ROOT,
+  'vision-change')` lists those bindings on those phases, `evaluated: false` (`vision-index.current` compared with its
+  own resolved binding); (f) `vision-change.yaml` ≥ 1.3 and `bindings.yaml` ≥ 3.2 at `HEAD`, each with a `;`-segment
+  naming task-359 numbered ≥ 1.3 / 3.2 (bug-314); (g) no loader diagnostic on `vision-change.yaml`. Plus task-212's
+  existing `schedule` pin updated to the two-entry list.
+- `test/cli/check-release-exit.test.ts` (new) — spawns `scripts/check-release-exit.cjs` through `spawnCapture` on
+  git-less fixture roots (`fixtureDirPrefix` / `writeFixtureFile`): `.wingfoil/memory.yaml`, the change-proposal
+  template and `minor-v0.4.md` / `patch-v0.3.1.md` read with `git show HEAD:` and their frontmatter filled; the
+  sequencer is the "Active-day budgets per release" heading, header and rows copied from `git show
+  82967c42a:docs/01_vision/07_sequencer.md` (lines 65–75), the v0.4 row's last cell edited per case. 21 tests: the
+  script exists; exit 0 (past draft, in row and `features:`; `draft`, in row only; `kind: vision`, empty `feature`;
+  the released-patch shape of cp-002; `feature` as a YAML list); exit 1 (`release is empty`; `no release element has
+  version v0.5`; no row for v0.9, that line once and first; the id in neither row nor `features:`, two lines, row
+  first; whole-token `P4.221` ≠ `P4.22`; `"P4.21, P4.22"` with P4.22 missing from the row, one line; two ids missing
+  from both, four lines in declared order); exit 2 with stdout empty and the exact stderr line (no argument; two
+  arguments; `../x.md`; a missing file; a release file as `<path>`; two release elements of version v0.4); a missing
+  sequencer (stderr matched as `…docs/01_vision/07_sequencer.md: no such file`, see Ambiguities); one live run at the
+  repository root on `cp-002-…md` → exit 0, stdout empty. Exit 0/1 cases compare `{status, stdout}` only (the design
+  fixes no stderr for them). The script is spawned, never imported: no `.d.cts`.
+- Existing pins the change breaks, updated here (T4): `test/core/define-scope-sweep.test.ts` "keeps its actions and
+  checks" → the two-entry `post`; `test/core/helpers/manual-binding-groups.ts` `MANUAL_UNTIL_A_COMMAND` +
+  `'downcast.in-scope'` (comment 36 → 37); `test/core/workflow-bindings-complete.test.ts` (d) `36` → `37` and its
+  header; `test/core/workflow-manual-prose-checks.test.ts` "55 names" → 56 and its header.
+
+**Per AC.**
+
+| AC | Class | Tests | Red evidence |
+|----|-------|-------|--------------|
+| 1 + 2 | red-first | `vision-change-workflow.test.ts` task-359 (a)–(f), task-212's `schedule` pin; `define-scope-sweep.test.ts` "keeps its actions and checks"; `workflow-bindings-complete.test.ts` (d) `downcast.in-scope` resolves manual, (d) group placement; `workflow-manual-prose-checks.test.ts` "56 names" | (a) `Expected: ["downcast.in-scope(layer: stories)"] Received: undefined`; (b) and the two `schedule` pins: `- "change-proposal.assigned"` missing from the received list; (c) received lacks `argv`/`kind: run`/`severity` (unbound); (d) `+ "kind": "unbound", + "source": "none"`; group placement: `["downcast.in-scope", null, "until"]`; "56 names": `- Expected - 1` (the name absent); (e) `downcast-stories` received with an empty `post` (`- Expected - 10, + Received + 1`); (f) `Expected: >= 1.3, Received: 1.2`. (g) passes (no diagnostic today). |
+| 1 | red-first | `test/cli/check-release-exit.test.ts`, 21 tests | first test `expect(existsSync(SCRIPT)).toBe(true)` → `Received: false` (the script is a real absence, the stated reason); every spawn: node exits 1 with `Cannot find module`, so exit 0 cases fail on `- "status": 0, + "status": 1`, exit 1 cases on `+ "stdout": ""`, exit 2 cases on `- "status": 2` and the expected stderr line. |
+| 3 | characterization, by command | none | The approver's amend is committed: `npm run -s wingfoil -- memory history dl-132-vision-change-and-feature-ingest` → last entry `84ca12e03`, `operation: "amend"`, `ready → ready`, approver Roberto Pompermaier (approver), the reason recording dl-166's ruling (task-359); `git show --stat --format= 84ca12e03` → the dl-132 file, `13 +++++++++++++`. |
+| 4 | characterization, by command | none | Merge order is the orchestrator's. Command for refactor/review: `npm run -s wingfoil -- workflow show vision-change --format json`; at red (configuration unchanged) it prints the downcast phases' `post` as `[]` and `schedule`'s as `[["vision-index.current","run"]]` only (projected with a `node -e` over the JSON), i.e. not yet bound. |
+
+**Runs** (dist/ rebuilt by jest's global setup):
+- `npx jest test/core/vision-change-workflow.test.ts test/cli/check-release-exit.test.ts test/core/define-scope-sweep.test.ts --maxWorkers=2`
+  → 3 suites failed; 33 failed, 20 passed, 53 tests (check-release-exit 21 failed; vision-change 11 failed: task-359
+  (a)×3, (b), (c), (d)×3, (e), (f) and task-212's `schedule` pin; define-scope-sweep 1 failed).
+- `npx jest test/core/workflow-bindings-complete.test.ts test/core/workflow-manual-prose-checks.test.ts test/core/workflow-repository-conformance.test.ts test/cli/workflow-unbound-none.integration.test.ts --maxWorkers=2`
+  → 2 suites failed, 2 passed; 3 failed, 151 passed, 154 tests (the three named above). The conformance suite and
+  `workflow-unbound-none` pass: the repository is unchanged at red, so it stays at zero `workflow list` diagnostics;
+  no red case fails for a conformance reason.
+- `npx tsc --noEmit -p tsconfig.json` → exit 0 (no new export is imported). `npx jest test/lint --maxWorkers=2` → 16
+  suites, 165 tests passed. `npx eslint` on the six files → exit 0. Invisible-character grep on them → no hit.
+
+**Ambiguities (for green and review, not reinterpreted).** (1) The no-row case: the design says the no-row line is
+printed "once, first, then per id …"; whether the per-id row lines follow it is not stated, so the test pins exit 1,
+the first line and a single no-row line, and nothing about the rest. (2) A missing sequencer or `memory.yaml`: the
+design's `<file>` does not say relative or absolute, so the test matches the sequencer case with an optional directory
+prefix. No missing-`memory.yaml` case is written.
+
+**Overlap.** None of task-341's files is touched; the shared helper `manual-binding-groups.ts` gained one entry
+(additive).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
