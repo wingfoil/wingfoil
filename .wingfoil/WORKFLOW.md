@@ -570,10 +570,10 @@ flowchart TD
         V1["**capture** *(product-owner)*\nmemory.add(type: change-proposal)\nmemory.submit\n✔ P4.12: [title, kind]\ndraft → in-analysis"]
         V2["**impact-analysis** *(architect)*\nagent.execute (reverse walk of the traceability chain)\nmemory.approve\n🔑 *approver*\nin-analysis → accepted (reject → draft, back to capture)"]
         V3["**update-vision** *(product-owner)*\nvision documents + doc-versioning bumps\n00_index.md in the same commit\n✔ vision-index.current"]
-        V4["**downcast-stories** *(optional)*\n`user-story-mapping`"]
-        V5["**downcast-scenarios** *(optional)*\n`specification-by-examples`"]
-        V6["**downcast-requirements** *(optional)*\n`volere-requirements`"]
-        V7["**schedule** *(product-owner)*\nfills target_release (✔ pre: not empty)\nsequencer entry (the release features: are define-scope's sweep)\nelement.set_release · element.set_state(scheduled)\n✔ vision-index.current\naccepted → scheduled"]
+        V4["**downcast-stories** *(optional)*\n`user-story-mapping`\n✔ downcast.in-scope(layer: stories) (manual until a command)"]
+        V5["**downcast-scenarios** *(optional)*\n`specification-by-examples`\n✔ downcast.in-scope(layer: scenarios) (manual until a command)"]
+        V6["**downcast-requirements** *(optional)*\n`volere-requirements`\n✔ downcast.in-scope(layer: requirements) (manual until a command)"]
+        V7["**schedule** *(product-owner)*\nfills target_release (✔ pre: not empty)\nsequencer entry (the release features: are define-scope's sweep)\nelement.set_release · element.set_state(scheduled)\n✔ vision-index.current · change-proposal.assigned\naccepted → scheduled"]
         V1 --> V2 --> V3 --> V4 --> V5 --> V6 --> V7
         V2 -. reject .-> V1
     end
@@ -585,7 +585,11 @@ flowchart TD
 
 `schedule` stamps the element's `release` and writes the sequencer entry; the release's `features:` gain the
 change's feature ids at that release's `release-planning` `define-scope`, which sweeps its `scheduled`
-change-proposals (`task-277`).
+change-proposals (`task-277`). Its post-check `change-proposal.assigned` (`scripts/check-release-exit.cjs`,
+`dl-166` Q2 (ii)) refuses the exit until the stamp, the sequencer row and, on a release past `draft`, the release's
+`features:` (written then by the approver's `memory amend` of the release) agree; each downcast phase's
+`downcast.in-scope` (`dl-166` Q1 (b)) holds its delta to the analysis's subsection for its layer, applied by hand
+until a command decides it.
 
 A downcast phase whose layer the analysis marks "no impact" is skipped once `schedule` completes
 (`spec-017` §4.10). The included subs are the same ones `specification-downcast` runs at inception,
