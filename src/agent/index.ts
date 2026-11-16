@@ -40,6 +40,7 @@ export {
   runLogDirPrefix,
   runLogPreflight,
   serializeRunRecord,
+  START_UP_HINT_NOTES,
   W_RUN_LOG_SYMLINK,
 } from './run-log';
 export type {
@@ -58,6 +59,7 @@ export {
   launchAgent,
   launchBanner,
   launchPermissions,
+  launchTrust,
   LOOKUP_TIMEOUT_MS,
   readJsonPath,
   renderLaunchArgv,

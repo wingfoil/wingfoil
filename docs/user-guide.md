@@ -718,6 +718,20 @@ a `default` entry for every other role. The built-in adapters let `developer`, `
 tests and commit but never push or publish, let `reviewer` read and run the tests, and let any other role only
 read. `--dry-run` prints the arguments the run's role would get, under `launch.permissions`.
 
+An agent CLI launched in a directory it has never opened may stop at its start-up to ask whether to trust it.
+The built-in adapters declare it (`launch.<kind>.trust`, new in 0.4): their interactive launch asks, and you answer
+at the terminal; their headless launch does not ask. When a run of a launch that may ask ends without success and
+without a commit, `agent execute` records a hint in the run's `notes` and prints a `warning:` line naming the
+folder-trust step as the likely cause: open the directory once with the agent CLI and answer it.
+
+**In a worktree.** To run an agent on a task checked out in a linked worktree (`git worktree add ../wt-task-1
+task/task-1`), name the worktree with the global `--project` (new in 0.4):
+`wingfoil --project ../wt-task-1 agent execute --element task:task-001-my-first-task`. The run reads the
+worktree's `HEAD`, the agent starts in the worktree, the MCP server serves it, and the record is committed on the
+worktree's branch, beside the task's own commits. A step with no element of its own, on a workflow with none (the
+checkpoints `init` scaffolds), runs on the workflow's plan, `plan:<instance-id>` (new in 0.4), as
+`wingfoil agent list --waiting` shows it.
+
 ```bash
 wingfoil agent list            # the recorded runs, and the workflow steps waiting for an agent
 wingfoil agent show task-001-my-first-task/adhoc/1

@@ -103,9 +103,24 @@ describe('stepTargetElement — spec-016 §3.2 step 2', () => {
     expect(stepTargetElement(itemStep, INSTANCE, undefined)).toEqual({ ok: true, value: { type: 'release', id: 'minor-1' } });
   });
 
-  it('none of the three → NO_STEP_ELEMENT', () => {
+  // task-353 AC 3 (red-first; `spec-016` §3.2 step 2 as amended at the design gate `c0ac033df`; `bug-418`; ruling D6 (a)):
+  // the instance's own `plan` element, `plan:<instance-id>`, is the last fallback; NO_STEP_ELEMENT stays a defence.
+  it('none of the three on an open instance → the instance\'s plan element, plan:<instance-id> (task-353, bug-418)', () => {
     const itemStep = step('sweep.entry@modules#core', { item: { collection: 'modules', key: 'core' } }, 'developer');
-    expect(stepTargetElement(itemStep, { ...INSTANCE, element: null }, undefined)).toEqual({
+    expect(stepTargetElement(itemStep, { ...INSTANCE, element: null }, undefined)).toEqual({ ok: true, value: { type: 'plan', id: INSTANCE.id } });
+    expect(stepTargetElement(step('solo.go', null, 'developer'), { ...INSTANCE, element: null }, undefined)).toEqual({ ok: true, value: { type: 'plan', id: INSTANCE.id } });
+  });
+
+  it('the plan fallback never overrides --element, the scope element or the bound element (task-353)', () => {
+    const unbound = { ...INSTANCE, element: null };
+    expect(stepTargetElement(FIRST, unbound, override)).toEqual({ ok: true, value: override });
+    expect(stepTargetElement(FIRST, unbound, undefined)).toEqual({ ok: true, value: { type: 'task', id: 'task-1' } });
+    expect(stepTargetElement(step('solo.go', null, 'developer'), unbound, override)).toEqual({ ok: true, value: override });
+  });
+
+  it('no instance at all → NO_STEP_ELEMENT (the defence, spec-016 §3.7)', () => {
+    const itemStep = step('sweep.entry@modules#core', { item: { collection: 'modules', key: 'core' } }, 'developer');
+    expect(stepTargetElement(itemStep, null, undefined)).toEqual({
       ok: false,
       error: { code: 'VALIDATION', message: "step 'sweep.entry@modules#core' has no element: give --element <type>:<id>" },
     });

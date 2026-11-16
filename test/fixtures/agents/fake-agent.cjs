@@ -32,7 +32,8 @@
  * - `WINGFOIL_FAKE_AGENT_CONNECT=1` — on a launch, connect to the `wingfoil` server named in the MCP
  *   config, complete `initialize`, and read the session Resource the bootstrap's context instruction
  *   names, by its full URI (§2.4; task-236, approver ruling (a) 2026-10-13: a real agent's model can read
- *   Resources but not get Prompts). The Resource's text is recorded verbatim.
+ *   Resources but not get Prompts). The Resource's text is recorded verbatim, and so is the server's `args`
+ *   from the MCP config (task-353: which root the registered server serves).
  * - `WINGFOIL_FAKE_AGENT_STDIN=1` — read stdin to its end and record it. Off by default: an interactive
  *   agent owns stdin, and an inherited pipe nobody closes would never end.
  * - `WINGFOIL_FAKE_AGENT_DOCUMENT` — the JSON document to print for `--lookup` and a headless launch,
@@ -60,6 +61,14 @@
  *   shell reaches as `wingfoil` (task-338, `spec-016` §2.4, `bug-369`). It also records `launcher`: the value of
  *   `WINGFOIL_AGENT`, or `null` (`spec-018` §1.1). That value is a `team.agents` entry name, not a secret
  *   (`REQ-SEC-08`): the one variable value the fake ever records, and only when asked to.
+ *
+ * - `WINGFOIL_FAKE_AGENT_COMMIT=1` — on a launch, after its record line and before it exits, the fake makes one
+ *   empty commit in its working directory (`git commit --allow-empty --no-verify -m "fake: work"`): an agent that
+ *   committed something since `state_ref` (task-353, `bug-500`; `spec-016` §3.3 step 16's start-up hint is not given
+ *   then).
+ *
+ * Every launch record also carries `cwd`, the fake's working directory (`process.cwd()`): where `agent execute` launched
+ * the agent (task-353, `bug-499`; `spec-016` §3.1, §3.3 step 14). A path, not a secret.
  *
  * `EXIT` and `WAIT` apply to a launch only. `agent execute` passes its environment to every child it
  * starts (§2.2), so the post-run `--version` and `--lookup` (§3.3 step 16) see the same variables, and
@@ -209,7 +218,8 @@ function fetchResource(source, uri) {
       if (initialized.error) return finish(null, { initialize: initialized.error });
       send({ method: 'notifications/initialized' });
       const answer = await request(2, 'resources/read', { uri });
-      const result = { server: initialized.result.serverInfo, resource: { uri } };
+      // `args`: the server's argv as the MCP config declares it (task-353: the root it serves, `--project <root>`).
+      const result = { server: initialized.result.serverInfo, args: server.args, resource: { uri } };
       if (answer.error) return finish(null, { ...result, error: { code: answer.error.code, message: answer.error.message } });
       const [first] = answer.result.contents;
       finish(null, {
@@ -306,10 +316,13 @@ async function launch(argv, stdin) {
     }
   }
   const cli = cliFacts();
-  record({ argv, stdin, env: Object.keys(process.env).sort(), mcp, ...cli, ...(failure === null ? {} : { failure }) });
+  record({ argv, stdin, cwd: process.cwd(), env: Object.keys(process.env).sort(), mcp, ...cli, ...(failure === null ? {} : { failure }) });
   if (failure !== null) {
     process.stderr.write(`fake-agent: ${failure}\n`);
     return 1;
+  }
+  if (process.env.WINGFOIL_FAKE_AGENT_COMMIT === '1') {
+    execFileSync('git', ['-c', 'commit.gpgsign=false', 'commit', '--allow-empty', '--no-verify', '--quiet', '-m', 'fake: work'], { stdio: 'ignore' });
   }
   if (argv.includes('--headless')) process.stdout.write(`${JSON.stringify(documentFor(sessionId))}\n`);
   return null;

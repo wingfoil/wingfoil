@@ -52,7 +52,10 @@ export interface WaitingStep {
   readonly key: string;
   readonly workflow: string;
   readonly phase: string;
-  /** `<type>:<id>`: the step's scope element, else its instance's bound element; `null` when it has neither. */
+  /**
+   * `<type>:<id>`: the step's scope element, else its instance's bound element, else the instance's own `plan`
+   * element (`spec-016` §3.2 step 2, task-353); a waiting step always has one, `null` stays for a renderer's input.
+   */
   readonly element: string | null;
   readonly role: string;
   readonly allowedModes: readonly PhaseMode[];
@@ -108,9 +111,11 @@ function waitingSteps(root: string, snapshot: ReturnType<typeof readDeductionSna
     for (const deduced of entry.frontier) {
       const step = buildStep(deduced, inputs);
       if (!step.agentRole) continue;
-      // `spec-016` §3.2 step 2 (task-235's `stepTargetElement`): the scope element, else the bound element.
-      const target = step.scope !== null && 'element' in step.scope ? step.scope.element : entry.instance.element;
-      const element = target === null ? null : `${target.type}:${target.id}`;
+      // `spec-016` §3.2 step 2 (task-235's `stepTargetElement`): the scope element, else the bound element, else the
+      // instance's own `plan` element (task-353, `bug-418`), so a step listed here is one `agent execute --next` runs.
+      const bound = step.scope !== null && 'element' in step.scope ? step.scope.element : entry.instance.element;
+      const target = bound ?? { type: 'plan', id: entry.instance.id };
+      const element = `${target.type}:${target.id}`;
       if (selection.element !== undefined && element !== selection.element) continue;
       if (selection.phase !== undefined && step.phase !== selection.phase) continue;
       const role = step.role!; // an agent role is a role: `agentRole` is false for a step with none

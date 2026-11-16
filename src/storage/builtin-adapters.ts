@@ -27,6 +27,12 @@
  * `reviewer` reads and runs the tests; no entry bypasses the CLI's permission checks or sandbox. Neither declares
  * `launch.interactive.permissions`: at a terminal a person answers the CLI's own prompts.
  *
+ * Each declares `trust` on both launches (`spec-016` §2.8's folder-trust table, `bug-500`, task-353), checked by hand
+ * in a directory the CLI had never opened (`2.1.322 (Claude Code)`, `codex-cli 0.167.2`): `prompt` on the interactive
+ * launch, where the CLI asks whether to trust the directory and a person answers, `implied` on the headless one,
+ * which never stops to ask. Neither declares a fragment: neither help shows an option that trusts the launch
+ * directory. Only `prompt` gives `agent execute`'s start-up hint (§3.3 step 16).
+ *
  * With an empty list, `init` reserves the directory with a `.gitkeep` (the seam's empty case).
  */
 
@@ -67,10 +73,15 @@ launch:
     # The prompt first: --mcp-config takes several values and would read a following prompt as one.
     args: [ "{bootstrap}", --mcp-config, "{mcp_config_file}" ]
     terminal: required
+    # Folder trust (task-353): in a directory it has not seen, a trust dialog comes before any
+    # prompt, and the person at the terminal answers it; no option of the help skips it here.
+    trust: prompt
   headless:
     # -p (--print) prints the response and exits; the prompt first, for the reason above.
     args: [ -p, "{bootstrap}", --mcp-config, "{mcp_config_file}" ]
     output: none
+    # The help says the workspace trust dialog is skipped under -p (task-353).
+    trust: implied
     # The posture of each role (dl-223 (b), task-339), appended after args: --permission-mode
     # dontAsk denies every tool no rule allows, so a headless agent never waits on a prompt;
     # --allowedTools and --disallowedTools take a list, closed by the next option. default, the
@@ -133,11 +144,16 @@ launch:
     # -c takes one key=value; the prompt comes last and nothing is appended after it.
     args: [ -c, "{mcp_config}", "{bootstrap}" ]
     terminal: required
+    # Folder trust (task-353): it asks whether to trust a folder it has not seen, and the person
+    # at the terminal answers; no option of the help trusts the launch directory.
+    trust: prompt
   headless:
     # codex exec runs non-interactively; --json prints its events to stdout as JSONL; the same -c
     # override, the prompt as its positional.
     args: [ exec, --json, -c, "{mcp_config}", "{bootstrap}" ]
     output: jsonl
+    # codex exec runs in a git repository it has not seen with no trust step (task-353).
+    trust: implied
     # The posture of each role (dl-223 (b), task-339), appended after the prompt, where codex exec
     # still reads an option: --sandbox. default, the posture of every role not named here, reads
     # only; the roles that edit, and the reviewer, who runs the tests and so writes the build, get
