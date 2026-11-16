@@ -52,8 +52,8 @@ export const AGENT_EXECUTE_MISSING_TARGET = 'missing required argument: --next o
 export const AGENT_EXECUTE_BOTH_KINDS = 'invalid flag combination: --headless cannot be combined with --interactive';
 
 /**
- * `--log`'s option name (task-336, §3.1). Spelled from the flag, not as a quoted word on its own:
- * `test/lint/git-log-readers.test.ts` reads every quoted `log` token in `src/` as an argument of a `git log` reader.
+ * `--log`'s option name (task-336, §3.1). A workaround: `test/lint/git-log-readers.test.ts` has no exemption and reads
+ * every quoted `log` token in `src/` as a `git log` reader, a false positive on an option name; remove it with that fix.
  */
 export const AGENT_EXECUTE_LOG_OPTION = '--log'.slice('--'.length);
 
