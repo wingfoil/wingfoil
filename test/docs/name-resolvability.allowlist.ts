@@ -201,6 +201,7 @@ export const NAME_ALLOWLIST: readonly AllowlistEntry[] = [
   { document: 'docs/04_memory/design/specs/spec-016-agent-execution.md', nameClass: 'symbol', name: 'NO_STEP_ELEMENT', reason: PLANNED, plannedBy: ['task-235'] },
   { document: 'docs/04_memory/design/specs/spec-016-agent-execution.md', nameClass: 'symbol', name: 'NO_STEP_ROLE', reason: PLANNED, plannedBy: ['task-235'] },
   { document: 'docs/04_memory/design/specs/spec-016-agent-execution.md', nameClass: 'symbol', name: 'NO_TERMINAL', reason: PLANNED, plannedBy: ['task-200', 'task-218'] },
+  { document: 'docs/04_memory/design/specs/spec-016-agent-execution.md', nameClass: 'symbol', name: 'START_UP_HINT', reason: 'spec label: the row label of spec-016 section 3.7 for the start-up hint (task-353, bug-500), naming a condition, not a symbol: the run keeps the error and exit code of the row above, and the code carries the hint as START_UP_HINT_NOTES and a warning line' },
   { document: 'docs/04_memory/design/specs/spec-016-agent-execution.md', nameClass: 'symbol', name: 'agentAdvanceStep', reason: UNTRIAGED },
   { document: 'docs/04_memory/design/specs/spec-016-agent-execution.md', nameClass: 'symbol', name: 'agentExecute', reason: PLANNED, plannedBy: ['task-218'] },
   { document: 'docs/04_memory/design/specs/spec-016-agent-execution.md', nameClass: 'symbol', name: 'agentResolveNext', reason: UNTRIAGED },

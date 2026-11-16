@@ -20,7 +20,7 @@
  *   `WINGFOIL_AGENT` value (`launcher`); without it, and on `--version` or `--lookup`, it records neither.
  */
 import { spawn, spawnSync } from 'child_process';
-import { copyFileSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'fs';
+import { copyFileSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { delimiter, dirname, join, relative } from 'path';
 import { load } from 'js-yaml';
@@ -119,7 +119,9 @@ describe('AC 1 — custom/fake.yaml declares every §2.2 field and validates', (
     );
     // task-356 (`bug-372`) adds `mcp.conflict_args`: 27 leaves.
     // task-339 (`dl-223` (b)) adds `launch.interactive.permissions` and `launch.headless.permissions`: 29 leaves.
-    expect(paths).toHaveLength(29);
+    // task-353 (`bug-500`, `spec-016` §2.2) adds `launch.interactive.trust` and `launch.headless.trust`: 31 leaves.
+    expect(paths).toHaveLength(31);
+    expect(paths).toEqual(expect.arrayContaining(['launch.interactive.trust', 'launch.headless.trust']));
   });
 
   // `mcp.conflict_args` is the one field the fixture leaves out on purpose (task-356): declared, it would run the
@@ -129,7 +131,10 @@ describe('AC 1 — custom/fake.yaml declares every §2.2 field and validates', (
   // declared, they would add a fragment to every launch argv the suites pin. The `perm` adapter of the permissions
   // suites (`test/agent/launch-permissions.test.ts`, `test/cli/agent-execute-permissions.integration.test.ts`) is
   // derived inline from this fixture and declares them.
-  const LEFT_OUT = ['mcp.conflict_args', 'launch.interactive.permissions', 'launch.headless.permissions'];
+  // `launch.interactive.trust` and `launch.headless.trust` are left out on purpose (task-353, design D3 (a)): absent,
+  // nothing is appended to the argv and no start-up hint is given, so every suite's pins stay as they are; the
+  // `fake-trust` adapter of `test/cli/agent-execute-trust.integration.test.ts` is derived inline and declares them.
+  const LEFT_OUT = ['mcp.conflict_args', 'launch.interactive.permissions', 'launch.headless.permissions', 'launch.interactive.trust', 'launch.headless.trust'];
   it.each(leafPaths(AdapterManifest).filter((path) => !LEFT_OUT.includes(path)).map((path) => [path]))('declares `%s`', (path) => {
     expect(at(raw, path)).toBeDefined();
   });
@@ -597,6 +602,35 @@ describe('review fixes — the fake is usable by agent execute (F1–F4)', () =>
 
 describe('task-338 — WINGFOIL_FAKE_AGENT_CLI=1: the fake records what its shell reaches as wingfoil, and WINGFOIL_AGENT', () => {
   /** A directory holding an executable `sh` script `name` that prints `line`. */
+  it('a launch records cwd, its working directory (task-353, bug-499); --version does not', () => {
+    const dir = scratchDir();
+    const launch = runFake(['--mcp-config', '/unused.json', '--prompt', 'p'], {}, { cwd: dir });
+    const version = runFake(['--version'], {}, { cwd: dir });
+    expect(launch.status).toBe(0);
+    expect((launch.records[0] as unknown as Record<string, unknown>)['cwd']).toBe(realpathSync(dir));
+    expect(Object.keys(version.records[0]!)).not.toContain('cwd');
+  });
+
+  it('WINGFOIL_FAKE_AGENT_COMMIT=1: a launch makes one empty commit "fake: work" in its working directory, then exits with the declared code (task-353, bug-500)', () => {
+    const repo = makeTempGitRepo();
+    try {
+      writeFixtureFile(repo, 'README.md', 'x\n');
+      commitAll(repo, 'seed');
+      const before = git(repo, ['rev-parse', 'HEAD']).trim();
+      const run = runFake(['--mcp-config', '/unused.json', '--prompt', 'p'], { WINGFOIL_FAKE_AGENT_COMMIT: '1', WINGFOIL_FAKE_AGENT_EXIT: '1' }, { cwd: repo });
+      expect(run.status).toBe(1);
+      expect(git(repo, ['log', '-1', '--format=%s']).trim()).toBe('fake: work');
+      expect(git(repo, ['rev-parse', 'HEAD~1']).trim()).toBe(before);
+      expect(git(repo, ['status', '--porcelain']).trim()).toBe('');
+      const off = runFake(['--mcp-config', '/unused.json', '--prompt', 'p'], {}, { cwd: repo });
+      expect(off.status).toBe(0);
+      expect(git(repo, ['log', '-1', '--format=%s']).trim()).toBe('fake: work');
+      expect(git(repo, ['rev-list', '--count', 'HEAD']).trim()).toBe('2');
+    } finally {
+      removeTempDir(repo);
+    }
+  });
+
   function scriptDir(name: string, line: string): string {
     const dir = scratchDir();
     writeFileSync(join(dir, name), `#!/bin/sh\necho '${line}'\n`, { mode: 0o700 });
