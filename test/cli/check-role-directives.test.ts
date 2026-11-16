@@ -211,12 +211,13 @@ describe('task-340 AC 4 — a roles.yaml binding under a role dna.yaml does not 
 });
 
 describe('task-215 AC 1 — this repository passes the sweep (D-A (a): approver and facilitator bound)', () => {
-  it('AC 1 (exit 0 on this repository): all eight dna.yaml roles checked, none with warnings', () => {
+  // task-341 (dl-203 Q3 (a)) adds the ninth role, `coordinator`, bound to its directive: the pin changes in task-341's red.
+  it('AC 1 (exit 0 on this repository): all nine dna.yaml roles checked, none with warnings', () => {
     const run = runCheck(['--root', REPO_ROOT]);
 
     expect(run.status).toBe(0);
     expect(run.stderr).toBe('');
     const lines = run.stdout.trimEnd().split('\n');
-    expect(lines[lines.length - 1]).toBe('role-directives: 8 roles checked, 0 with warnings');
+    expect(lines[lines.length - 1]).toBe('role-directives: 9 roles checked, 0 with warnings');
   });
 });
