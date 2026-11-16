@@ -352,6 +352,48 @@ by `npm run test:latency`).
 
 **Candidate findings (not filed).** None.
 
+### design gate rulings (approver, 2026-11-16)
+
+**By-hand checks H1 and H2 (D11, AC 5)**, run by the approver from a terminal no agent started, with the commands of
+D11 in a fresh `mktemp -d /tmp/wf_slug.check-XXXXXX` directory (`/tmp/wf_slug.check-1zq2Bq`); the output, trimmed to
+what the design asks:
+
+- `claude --version` → `2.1.322 (Claude Code)`. `SLUG` → `-tmp-wf-slug-check-1zq2Bq`: `/`, `_` and `.` all became `-`.
+- **H1** (`claude -p … --session-id "$SID" --allowedTools Read`, exit 0): the transcript exists at
+  `~/.claude/projects/-tmp-wf-slug-check-1zq2Bq/4f4d7684-d54a-4948-8c15-8b0414c8b6d8.jsonl` (mode 0600); the folder
+  holds that file and a `memory` directory, and no `<session-id>/` sub-agent folder. Two assistant lines, each with
+  `.message.model` `"claude-opus-5-5"` and `.message.usage` carrying `input_tokens`, `output_tokens`,
+  `cache_read_input_tokens` and `cache_creation_input_tokens` as integers (beside other keys:
+  `output_tokens_details`, `server_tool_use`, `service_tier`, `cache_creation`, …); `uniq -c` on the message ids →
+  `1 msg_011Ch6KKGtAK8c9AGraTuxER`, `1 msg_011Ch6KKYARcJSRrqTB6VrvE` (no id repeats); one model.
+- **H2** (`claude -p … --output-format json --session-id "$SID2" --allowedTools Read`, exit 0): `out.json` is one
+  document, `type: "result"`, `session_id` the assigned id, `usage` `{input_tokens: 4, output_tokens: 73,
+  cache_read_input_tokens: 36139, cache_creation_input_tokens: 9580}`, `modelUsage` keys `["claude-opus-5-5"]`; the
+  same session's transcript sums (last line per message id) → `{input: 4, output: 73, cache_read: 36139, cache_write:
+  9580}`: equal, so the result carries the run's totals.
+
+The approver then approved the design as recommended (finalize `ae1918f4c`, after the amend of spec-016 `2d193b318`):
+
+- **D1 (a)** `agent_version` holds the read before the launch; the new key 19 `agent_version_after` the read after.
+- **D2 (a)** the change is shown by the two values and a warning, with no boolean key.
+- **D3 (a)** several models are recorded sorted and joined.
+- **D4** the transcript is read first and the headless output only when it yields nothing, as AC 1 says.
+- **D5** a new usage source value `transcript`.
+- **D6 (a)** `claude-code`'s headless launch adds `--output-format json` and declares `output: json` with its headless
+  usage fields, H2 being positive; `verified_with` moves to `2.1.322`, the version H1 and H2 ran.
+- **D7 (a)** an 18-key line reads back with `agent_version_after: "not-reported"`.
+- **D8** the amendment's reach over §2.3, §2.7 and §4.5, off §3.
+- **D9** the `task-236` run log as the legacy fixture.
+- **D10** the BDD scenarios and the allowlist entries are committed with this note, before red.
+- **D11** H1 and H2 recorded above; H3 at review.
+- **D12** the folder rule replacing every character outside `[A-Za-z0-9]`; a `CLAUDE_CONFIG_DIR` run records
+  `not-reported` with a warning.
+- **D13** the new manifest refusal of `usage.from: output` without `launch.headless.output: json`.
+- **D14** `bug-366`'s visibility is met by recording the version that ran.
+
+Order with task-336: task-336's green precedes this task's on the shared stdout code of `src/agent/launch.ts`; this
+task's green starts after task-336 is merged into `main`, with a merge of `main` first.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
