@@ -74,8 +74,9 @@ each is recorded exactly as the step declares it, with the subject or command `w
 - adding an element linked to its step: `memory add --workflow <instance> --step <step-key>`;
 - launching the agent of the step's role;
 - the Memory transitions of the mechanical phases that `workflow next` prints, such as `dev-loop`'s `start` and `done`:
-  the `wf(task): start` commit, the `wf(task): finalize` commit `[approved → done]` and the merge of the task branch,
-  and the `wf(bug): sync` subjects of the task's bugs;
+  the `wf(task): start` commit, the `wf(task): finalize` commit `[approved → done]` and the merge of the task branch
+  (a merge that conflicts is aborted and routed by the phase's fallback, `dev-loop` `done`'s `fallback`, `dl-014` G4:
+  resolving the conflict is a step's work, not the coordinator's), and the `wf(bug): sync` subjects of the task's bugs;
 - recording a step that no evidence completes and that declares no `approval:`, with `workflow finalize`;
 - ending the instance: `workflow end`.
 
