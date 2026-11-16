@@ -403,6 +403,32 @@ not a Memory element: `memory amend` commits only the spec, so the orchestrator 
 after the three amends (or red does), before anything else runs the suite. While the amendments are uncommitted,
 `test/cli/workflow-unbound-none.integration.test.ts` fails with one `W_UNCOMMITTED_INPUTS` per spec file (`bug-534`).
 
+### design gate rulings (approver, 2026-11-16)
+
+The approver approved the design as recommended (finalize `f85f32a98`, after the amends of spec-016 `8ac2f6a3b`,
+spec-008 `36625540a` and spec-011 `5e8c143e4`):
+
+- **D1** under `json` and `yaml` each forwarded line is one `{output, stream}` document; console forwards the line as is.
+- **D2** a `.wingfoil/.gitignore` holding `/run/`, written by `init`'s scaffold and committed in this repository.
+- **D3** the registry entry is created exclusively at step 13; a live entry is refused with `RUN_ACTIVE`, a dead one
+  pruned; the pid is rewritten to the agent's at step 14.
+- **D4** `waiting` leaves out a step with a live entry, in this task.
+- **D5** `--log` resolves against the current directory, creates the file 0600, warns only inside the root on a path not
+  ignored, copies only the agent's lines; an interactive launch is refused with exit 2.
+- **D6** the §7 `agent.execute` Tool sentence is left to w1 with the MCP rows.
+- **D7** the REQ-SYS-03 fit criterion is amended in this task.
+- **D8** step 13 warns when the registry entry is not git-ignored; the shared fixtures commit `.wingfoil/.gitignore`.
+- **D9** spec-008 §10 is unchanged.
+- **D10** a malformed registry file is pruned with a warning.
+- **D11** a 64 KiB cap on a pending line, a newline added to a final unterminated line, both streams read for at most
+  10 s after exit.
+- **D12** the entry's `session` is the assigned id or `not-reported`.
+- **D13** `agent list` with no section flag shows all three sections.
+
+Order with task-337: this task's green precedes task-337's on the shared stdout code of `src/agent/launch.ts`. The
+name-resolvability allowlist entries the amendments need are committed with this note; green removes the two `PLANNED`
+`.wingfoil/.gitignore` rows once the file is tracked.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
