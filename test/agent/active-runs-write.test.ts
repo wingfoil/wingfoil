@@ -11,10 +11,12 @@
  * - `removeRun`: the file and the directories it leaves empty are removed, `.wingfoil/run/` kept; a sibling keeps its
  *   directories; removing what is not there is no error;
  * - `readActiveRuns`: an entry whose `id` is not the run id its path names is no entry; a temporary file of a rewrite
- *   (a name starting with `.`) is not read; a `.wingfoil/run` that is a file is `IO`.
+ *   (a name starting with `.`) is not read; a `.wingfoil/run` that is a file is `IO`; a file that is no entry and cannot
+ *   be removed prints the not-an-entry line, then the could-not-remove line (review fix round, F5);
+ * - another launch's entry is neither rewritten nor removed (review fix round, F2).
  */
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
@@ -118,12 +120,12 @@ describe('task-336 — rewriteRunPid and removeRun (spec-016 §3.3 steps 14 and 
     const base = root();
     registerRun(base, entry('task-a/red/1'));
     registerRun(base, entry('task-b/red/1'));
-    removeRun(base, 'task-a/red/1');
+    removeRun(base, entry('task-a/red/1'));
     expect(existsSync(join(base, '.wingfoil/run/task-a'))).toBe(false);
     expect(existsSync(activeRunPath(base, 'task-b/red/1'))).toBe(true);
-    removeRun(base, 'task-b/red/1');
+    removeRun(base, entry('task-b/red/1'));
     expect(readdirSync(join(base, '.wingfoil/run'))).toEqual([]);
-    removeRun(base, 'task-b/red/1');
+    removeRun(base, entry('task-b/red/1'));
   });
 });
 
@@ -152,6 +154,34 @@ describe('task-336 — readActiveRuns, the edges (spec-016 §7, D10 (a))', () =>
     writeFileSync(join(base, '.wingfoil', 'run'), 'x\n');
     const result = readActiveRuns(base);
     expect(result.ok ? '' : `${result.error.code} ${result.error.message}`).toMatch(/^IO cannot read the active registry \.wingfoil\/run\/: /);
+  });
+
+  (process.platform !== 'win32' && process.getuid?.() !== 0 ? it : it.skip)(
+    'a file that is no entry and cannot be removed: the not-an-entry line, then the could-not-remove line (review F5)',
+    () => {
+      const base = root();
+      put(base, 'task-m/red/1.json', 'garbage\n');
+      const dir = join(base, '.wingfoil', 'run', 'task-m', 'red');
+      chmodSync(dir, 0o555);
+      try {
+        const { value, warnings } = captured(() => readActiveRuns(base));
+        expect(value).toEqual({ ok: true, value: [] });
+        expect(warnings).toHaveLength(2);
+        expect(warnings[0]).toBe('.wingfoil/run/task-m/red/1.json: not an active run entry: removed');
+        expect(warnings[1]!.startsWith('.wingfoil/run/task-m/red/1.json: could not remove: ')).toBe(true);
+      } finally {
+        chmodSync(dir, 0o755);
+      }
+    },
+  );
+
+  it("removeRun and rewriteRunPid leave another launch's entry alone (review F2)", () => {
+    const base = root();
+    const other = `${JSON.stringify({ ...entry('task-a/red/1'), started_ms: 1 })}\n`;
+    put(base, 'task-a/red/1.json', other);
+    expect(rewriteRunPid(base, entry('task-a/red/1'), 4242)).toBe(false);
+    removeRun(base, entry('task-a/red/1'), 4242);
+    expect(readFileSync(activeRunPath(base, 'task-a/red/1'), 'utf-8')).toBe(other);
   });
 
   it('processAlive: this process is alive, an exited one is not', () => {

@@ -20,7 +20,8 @@
  *     line to the caller's stderr (`reportOutput`, `dl-182` Q1 (a), task-336) and, with `--log`, appended to that
  *     file — stdout also read for the session id under `session.id: output`, step 16 — and on POSIX it runs in a
  *     session and process group of its own (approver ruling D6 (a)). Once spawned, the registry entry is rewritten
- *     with the agent's pid. This is REQ-PERF-01's "agent ready".
+ *     with the agent's pid, and at the agent's exit with `agent execute`'s own again, each time only while the file
+ *     still holds this launch's entry (§7). This is REQ-PERF-01's "agent ready".
  * 15. The wait. From the spawn until the record is committed, for an interactive launch `SIGINT`,
  *     `SIGQUIT` and `SIGHUP` are ignored (the terminal delivers them to the agent itself, in the same
  *     foreground process group: a forwarded `SIGHUP` reached it twice, task-355, `bug-318`) and only
@@ -44,7 +45,7 @@
  *     `launch.<kind>.trust: prompt`, records {@link START_UP_HINT_NOTES} as its `notes` and, once committed, prints
  *     one `warning:` line naming the agent CLI's folder-trust step.
  * 17. The record (§4.2), appended and committed by `recordRun` (task-206): `agent: record <run-id>`; then, whatever
- *     its outcome, the registry entry removed and the log closed.
+ *     its outcome, the registry entry removed (only while it is still this launch's) and the log closed.
  * 18. The outcome: success only when the agent exited `0`, the bound did not expire and the record was
  *     committed. An expired bound is `agent timed out after <duration>; run <run-id> recorded`, whatever
  *     the exit status. A headless success also prints the summary line as a notice (§3.5).
@@ -900,7 +901,9 @@ export async function launchAgent(root: string, input: LaunchInput, host: Launch
   };
   const registered = registerRun(root, entry);
   if (!registered.ok) return registered;
-  // From here every exit path removes the entry and closes the log (§3.3 step 13).
+  // From here every exit path removes the entry and closes the log (§3.3 step 13). `spawned.pid` is the agent's, once
+  // spawned: the second pid an entry of this launch may hold (§7 "This launch's entry").
+  const spawned: { pid: number | undefined } = { pid: undefined };
   let log: OpenLog | undefined;
   try {
     // D8 (a): a project initialized before v0.4 has no `.wingfoil/.gitignore`; warned of, never refused.
@@ -912,10 +915,16 @@ export async function launchAgent(root: string, input: LaunchInput, host: Launch
       log = opened.log;
       if (notIgnoredInRepository(root, input.log)) reportWarning(logNotIgnoredWarning(input.log));
     }
-    return await launchRun(root, input, host, releaseSignals, { assigned, values, argv, log, entry });
+    return await launchRun(root, input, host, releaseSignals, { assigned, values, argv, log, entry, spawned });
   } finally {
-    log?.close();
-    removeRun(root, input.runId);
+    // The entry first, only while it is still this launch's (§7), then the log: a close that throws can neither
+    // leave the entry behind nor replace the run's result (review F2, F3).
+    removeRun(root, entry, spawned.pid);
+    try {
+      log?.close();
+    } catch (error) {
+      reportWarning(`cannot close the log ${input.log ?? ''}: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 }
 
@@ -929,10 +938,10 @@ async function launchRun(
   input: LaunchInput,
   host: LaunchHost,
   releaseSignals: () => void,
-  launch: { readonly assigned: string | undefined; readonly values: LaunchValues; readonly argv: string[]; readonly log: OpenLog | undefined; readonly entry: ActiveRunEntry },
+  launch: { readonly assigned: string | undefined; readonly values: LaunchValues; readonly argv: string[]; readonly log: OpenLog | undefined; readonly entry: ActiveRunEntry; readonly spawned: { pid: number | undefined } },
 ): Promise<CoreResult<RecordedLaunch>> {
   const { manifest } = input.adapter;
-  const { assigned, values, argv, log, entry } = launch;
+  const { assigned, values, argv, log, entry, spawned } = launch;
   // Step 13 — the banner; step 14 — the spawn; step 15 — the wait, with the signals taken over.
   reportNotice(launchBanner(input));
   // The launch's listeners go in before the pre-launch cleanup's come out: no signal finds neither.
@@ -973,11 +982,18 @@ async function launchRun(
       spawnOptions(input.kind, root, agentEnvironment(process.env, input.cliShim, input.agent.name)),
       (child) => {
         // Step 14 — the registry entry names the agent from now on (§7); a child with no pid keeps `agent execute`'s.
-        if (typeof child.pid === 'number') rewriteRunPid(root, { ...entry, pid: child.pid });
+        if (typeof child.pid === 'number') {
+          spawned.pid = child.pid;
+          rewriteRunPid(root, { ...entry, pid: child.pid }, child.pid);
+        }
         signals.attach(child);
         armBound();
       },
-      stopBound,
+      () => {
+        stopBound();
+        // Step 14 — at the agent's exit the entry names `agent execute` again, live through steps 16–17 (§7, review F2).
+        if (spawned.pid !== undefined) rewriteRunPid(root, entry, spawned.pid);
+      },
       input.kind === 'headless' ? forwardOutput(log === undefined ? undefined : { file: log, given: input.log ?? '' }, reader === undefined ? [] : [reader.write], lookupTimeoutMs) : undefined,
     );
     if (!ran.ok) {

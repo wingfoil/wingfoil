@@ -7,11 +7,15 @@
  *   agent's output, no environment value, argv or path outside the root (`REQ-SEC-08`).
  * - **Created exclusively** at step 13 ({@link registerRun}): an entry already there whose process is alive refuses
  *   the launch (`RUN_ACTIVE`, approver ruling D3 (a)); one whose process is gone, or a file that is no entry, is pruned
- *   and the entry created. **Rewritten** at step 14 with the agent's pid ({@link rewriteRunPid}: a new file renamed
- *   over it). **Removed** after step 17, on every exit path once created ({@link removeRun}).
+ *   and the entry created. **Rewritten** at step 14 with the agent's pid, and at the agent's exit with `agent execute`'s
+ *   own again ({@link rewriteRunPid}: a new file renamed over it). **Removed** after step 17, on every exit path once
+ *   created ({@link removeRun}). A rewrite or a removal acts only while the file still holds this launch's entry (§7:
+ *   the same `id` and `started_ms`, a `pid` that is `agent execute`'s or its agent's).
  * - **Read with pruning** ({@link readActiveRuns}): an entry is live while a process with its `pid` exists
  *   (`kill(pid, 0)` succeeds or fails with `EPERM`); a dead one is removed silently, a file that is not one JSON object
- *   of §7's keys and types with one `warning:` line (D10 (a)); a directory a removal left empty is removed, up to
+ *   of §7's keys and types (an `id` of three segments naming its own path, `started_ms` a valid date) with one `warning:`
+ *   line (D10 (a)); a removal that fails is one `could not remove` line, never a failed read; a directory a removal left
+ *   empty is removed, up to
  *   `.wingfoil/run/` exclusive; the live entries are listed in §5's active order, never directory order.
  *
  * It is a process cache git never holds (`.wingfoil/.gitignore`'s `/run/`, `spec-011` § `.gitignore` policy), so it is
@@ -45,12 +49,23 @@ export interface ActiveRunEntry {
   readonly started_ms: number;
 }
 
+/** The largest `started_ms` (§7): the latest instant an ECMAScript `Date` holds, so every entry renders. */
+const MAX_STARTED_MS = 8640000000000000;
+
+/** A run id's `<n>` (§4.3, §7): a positive decimal integer without a leading zero. */
+const RUN_NUMBER = /^[1-9][0-9]*$/;
+
 /** §7's keys, in order. */
 const ENTRY_KEYS = ['id', 'pid', 'workflow', 'phase', 'element', 'role', 'agent', 'session', 'started_ms'] as const;
 
 /** §7's line for a file pruned as no entry, without the `warning: ` prefix. */
 export function notAnEntryWarning(relativePath: string): string {
   return `${ACTIVE_RUNS_DIR}/${relativePath}: not an active run entry: removed`;
+}
+
+/** §7's line for a file a reader could not remove, without the `warning: ` prefix (review F5). */
+export function couldNotRemoveWarning(relativePath: string, cause: string): string {
+  return `${ACTIVE_RUNS_DIR}/${relativePath}: could not remove: ${cause}`;
 }
 
 /** §3.3 step 13's warning when the entry is not git-ignored, without the `warning: ` prefix (D8 (a)). */
@@ -97,7 +112,10 @@ function parseEntry(text: string, relativePath: string): ActiveRunEntry | undefi
   const strings = [id, workflow, phase, element, role, agent, session];
   if (!strings.every((field) => typeof field === 'string' && field !== '')) return undefined;
   if (typeof pid !== 'number' || !Number.isSafeInteger(pid) || pid <= 0) return undefined;
-  if (typeof started_ms !== 'number' || !Number.isSafeInteger(started_ms) || started_ms < 0) return undefined;
+  if (typeof started_ms !== 'number' || !Number.isSafeInteger(started_ms) || started_ms < 0 || started_ms > MAX_STARTED_MS) return undefined;
+  // The run id: three non-empty segments, `<n>` a positive decimal without a leading zero, naming the file's own path.
+  const segments = (id as string).split('/');
+  if (segments.length !== 3 || segments.some((segment) => segment === '') || !RUN_NUMBER.test(segments[2]!)) return undefined;
   if (`${id as string}.json` !== relativePath) return undefined;
   return { id: id as string, pid, workflow: workflow as string, phase: phase as string, element: element as string, role: role as string, agent: agent as string, session: session as string, started_ms };
 }
@@ -186,13 +204,16 @@ export function readActiveRuns(root: string): CoreResult<ActiveRunEntry[]> {
       text = undefined;
     }
     const entry = text === undefined ? undefined : parseEntry(text, relativePath);
-    if (entry === undefined) {
-      removeFile(root, path);
-      reportWarning(notAnEntryWarning(relativePath));
-    } else if (processAlive(entry.pid)) {
+    if (entry !== undefined && processAlive(entry.pid)) {
       live.push(entry);
-    } else {
+      continue;
+    }
+    // Pruned: a file that is no entry says so first; a removal that fails is a warning, never a failed read (§7, F5).
+    if (entry === undefined) reportWarning(notAnEntryWarning(relativePath));
+    try {
       removeFile(root, path);
+    } catch (error) {
+      reportWarning(couldNotRemoveWarning(relativePath, error instanceof Error ? error.message : String(error)));
     }
   }
   return coreOk(live.sort(activeOrder));
@@ -245,12 +266,30 @@ export function registerRun(root: string, entry: ActiveRunEntry): CoreResult<voi
 }
 
 /**
- * §3.3 step 14: rewrite run `entry.id`'s file with `entry` (the agent's pid), as a new file renamed over it, so a reader
- * never sees it half-written. A rewrite that fails leaves the file as it was (`agent execute`'s pid, alive as long as
- * the run), and returns `false`.
+ * Whether the file at `path` still holds this launch's entry (§7 "This launch's entry"): the same `id` and `started_ms`
+ * as `entry`, and a `pid` that is `agent execute`'s own or `agentPid`, the agent it spawned. Another launch's entry, a
+ * file that is no entry and a file that is gone are not.
  */
-export function rewriteRunPid(root: string, entry: ActiveRunEntry): boolean {
+function holdsOwnEntry(path: string, entry: ActiveRunEntry, agentPid: number | undefined): boolean {
+  let current: ActiveRunEntry | undefined;
+  try {
+    current = parseEntry(readFileSync(path, 'utf-8'), `${entry.id}.json`);
+  } catch {
+    return false;
+  }
+  return current !== undefined && current.id === entry.id && current.started_ms === entry.started_ms && (current.pid === process.pid || (agentPid !== undefined && current.pid === agentPid));
+}
+
+/**
+ * §3.3 step 14: rewrite run `entry.id`'s file with `entry` — the agent's pid at the spawn, `agent execute`'s at the
+ * agent's exit — as a new file renamed over it, so a reader never sees it half-written; only while the file holds this
+ * launch's entry (`agentPid` the spawned agent's). A rewrite skipped or failed leaves the file as it was and returns
+ * `false`.
+ */
+export function rewriteRunPid(root: string, entry: ActiveRunEntry, agentPid?: number): boolean {
   const path = activeRunPath(root, entry.id);
+  // Only this launch's entry (§7): another launch's, written meanwhile, is left as it is (review F2).
+  if (!holdsOwnEntry(path, entry, agentPid)) return false;
   const temporary = join(dirname(path), `.${entry.id.slice(entry.id.lastIndexOf('/') + 1)}.json.${process.pid}.tmp`);
   try {
     writeFileSync(temporary, serialize(entry));
@@ -266,10 +305,17 @@ export function rewriteRunPid(root: string, entry: ActiveRunEntry): boolean {
   }
 }
 
-/** §3.3 step 17 (and every exit path after step 13): remove run `runId`'s file and the directories it leaves empty. */
-export function removeRun(root: string, runId: string): void {
+/**
+ * §3.3 step 17 (and every exit path after step 13): remove run `entry.id`'s file and the directories it leaves empty,
+ * only while the file still holds this launch's entry (§7: the same `id` and `started_ms`, a `pid` that is `agent
+ * execute`'s own or `agentPid`); another launch's entry is left byte for byte. The check and the removal are two steps,
+ * a window §7 states as a known limit.
+ */
+export function removeRun(root: string, entry: ActiveRunEntry, agentPid?: number): void {
+  const path = activeRunPath(root, entry.id);
+  if (!holdsOwnEntry(path, entry, agentPid)) return;
   try {
-    removeFile(root, activeRunPath(root, runId));
+    removeFile(root, path);
   } catch {
     // An entry that cannot be removed is pruned by the next reader once its process is gone.
   }
