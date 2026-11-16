@@ -1839,14 +1839,18 @@ At least one of `--next`, `--workflow`, `--step` and `--element` is required.
 
 With a step (`--next`, `--workflow` or `--step`), the run's workflow and phase are the step's, so its run
 id is `<element-id>/<phase>/<n>`, `n` counting the runs of that element in that phase; the element is the
-step's (or, for a step with none of its own, the workflow's element), and the role the phase's. Every run
+step's (or, for a step with none of its own, the workflow's element, else — new in 0.4 — the workflow's own plan,
+`plan:<instance-id>`, whose run log is `<paths.runs>/<instance-id>.jsonl`: a step `wingfoil agent list --waiting`
+lists is one `--next` can run), and the role the phase's. Every run
 in this release starts a fresh agent session, whatever the phase allows (`--resume` and `--ref` are
 planned, and refused as unknown options); a phase's `distinct_from` is not checked. The step's refusals
 come first, each exit `1`: `error: no next step to execute` (no open workflow, or none of its steps is
 ready), `error: unknown workflow: <name>`, `error: workflow is not open: <ref>`,
 `error: step '<key>' is not on the frontier of <instance>`, `error: step '<key>' names <N> steps
-of <instance>: give --step, one of: <key>, <key>` (a key without its scope, new in 0.4), `error: step '<key>' has no element: give
---element <type>:<id>`, `error: step '<key>' declares no role: give --role <role>`. A step that only waits
+of <instance>: give --step, one of: <key>, <key>` (a key without its scope, new in 0.4),
+`error: step '<key>' declares no role: give --role <role>`. A step with no element of its own on a workflow
+with none no longer exits `1` with `error: step '<key>' has no element: give --element <type>:<id>` (changed in
+0.4): it runs on the workflow's plan. A step that only waits
 (new in 0.4) is refused too, exit `1`, with the line `wingfoil workflow next` prints for it —
 `error: human needed: approve or reject <id> — routed to <members>`,
 `error: human needed: finalize <key> — routed to <members>`, or
@@ -1923,6 +1927,28 @@ another code, or was ended by a signal, gives exit `1` and
 record that could not be committed gives exit `1` and `error: run <run-id> not recorded: <cause>` (or the
 run-log refusal), with the record itself as a detail line so the run is not lost.
 
+**The start-up hint** (new in 0.4). An agent CLI may stop at its start-up to ask whether to trust the
+directory it was launched in, and an agent that never got past that question exits without doing anything. An
+adapter declares it with `launch.interactive.trust` and `launch.headless.trust`: `prompt` (the CLI may stop to
+ask), `implied` (that launch never asks), or a list of arguments, the CLI's own option that trusts the directory,
+appended after the permission arguments. When a run under `prompt` did not succeed (an exit other than `0`, a
+signal, or an expired `--timeout`) and the agent committed nothing, the record's `notes` is `none (no commit since
+state_ref: the agent CLI may have stopped at its folder-trust step)` and, after the record is committed and before
+the `error:` line, one line says so:
+`warning: run <run-id>: the agent exited <status> with no commit since state_ref: its CLI may have stopped at its
+folder-trust step (adapter '<name>' declares launch.<kind>.trust: prompt)`. The exit code and the error are
+unchanged. Both built-in adapters declare `prompt` on their interactive launch (at a terminal you answer the
+question) and `implied` on their headless one (`claude -p` skips the trust dialog; `codex exec` does not ask in a
+git repository). A build before 0.4 refuses a manifest that declares the field.
+
+**In a worktree** (new in 0.4, with the global `--project`). The agent's working directory is the
+project root. To launch it in a linked worktree of the repository (`git worktree add`), name the worktree with
+the global `--project`: `wingfoil --project ../wt-task-42 agent execute --element task:task-042-login-form`. Every
+read is then made at the worktree's `HEAD` (its `state_ref`), the MCP server is registered for the worktree, the
+agent starts there, and the record is committed on the branch the worktree has checked out. There is no option
+that sets the agent's directory apart from the root. A `<dir>` that is not a git root exits `1` with
+`error: E_NOT_AT_GIT_ROOT: --project is not a git root: <absolute dir>` before anything is read or written.
+
 **Nothing is written on stdout** by an interactive launch, whose stdout belongs to the agent: every line
 `agent execute` prints goes to stderr, and `--format json` / `yaml` only reshape those lines, one document each
 — `{"warning": …}`, `{"notice": "run …: launching …"}`, `{"error": …, "hint"?, "details"?}`, and
@@ -1994,7 +2020,7 @@ Read-only. It has two sections:
 
 Without `--past` or `--waiting`, or with both, it prints both sections, past first.
 `--element <type>:<id>` keeps the runs and steps of one element (a step's element is the element it works on, else
-its workflow's), and `--phase <name>` those of one phase. Nothing tracks running agents yet: a step an
+its workflow's, else the workflow's own plan, `plan:<instance-id>`, new in 0.4), and `--phase <name>` those of one phase. Nothing tracks running agents yet: a step an
 agent is working on right now is still listed as waiting, and `--active` comes later (v0.4); today it is an
 unknown option, exit `2`.
 
@@ -2022,7 +2048,9 @@ section prints `no past runs` or `no waiting steps`.
 `--format json` and `--format yaml` print `{"baseline": {"rev": "HEAD", "commit": "<sha>"}, "past":
 […records…], "waiting": [{"instance", "key", "workflow", "phase", "element", "role", "allowedModes",
 "agents"}…], "diagnostics": […]}`, with only the sections selected: each record is the run log's line, as
-[`agent show`](#wingfoil-agent-show) prints it; `element` is `<type>:<id>` or `null`.
+[`agent show`](#wingfoil-agent-show) prints it; `element` is `<type>:<id>`, the element `agent execute --next`
+runs the step on (changed in 0.4: a step with no element of its own on a workflow with none names the workflow's
+plan, `plan:<instance-id>`, where it was `null`).
 
 - **Exit `0`** on every result, an empty one included. A `dna.yaml` with no `paths.runs` lists no past
   runs and prints `warning: dna.yaml declares no run log (paths.runs)`.

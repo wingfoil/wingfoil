@@ -1,3 +1,8 @@
+# Revised 2026-11-14 (task-353, spec-016 §2.2, §2.8, §3.1, §3.2 step 2, §3.3 steps 14 and 16, §3.7, §4.2 and §5;
+# bug-499, bug-500, bug-418): the launch in a linked worktree named by --project, the step that runs on its
+# workflow's plan, and the start-up hint are added. They are implemented by
+# test/cli/agent-execute-worktree, -plan-element, -trust and -trust-json.integration.test.ts. Earlier scenarios are
+# unchanged.
 # Revised 2026-11-13 (task-338, spec-016 §2.4, §2.6 and §3.3 step 14, spec-018 §1.1 and §6 T-22; dl-180 invocation
 # (c), dl-168 Q1 (b), bug-369, bug-370): the --agent scenario's attribution step is reworded to the new
 # {attribution_line}; the CLI the agent runs, WINGFOIL_AGENT for the spawned agent only, the record commit without an
@@ -177,3 +182,27 @@ Feature: P5.3.1 (US-1-03) - wingfoil agent execute [--next]
     Then the first run creates the session salt in the git directory and the second reuses it
     And each record's session is the version 5 UUID of the salt and the run id, whatever the repository's path
     And a run from a linked worktree of the clone uses the same salt
+
+  Scenario: Launch in a linked worktree named by --project
+    Given a linked worktree "../wt" of the repository with branch "task/wt" checked out
+    When I run "wingfoil --project ../wt agent execute --element task:202 --role developer" from the main checkout
+    Then the agent's working directory is the worktree and the MCP server registered for it serves the worktree
+    And the record's state_ref is the worktree's HEAD and "agent: record <run-id>" is committed on "task/wt"
+    And with "--project" naming a directory that is not a git root, nothing is read, launched or committed
+    And that command exits with code 1 and message "E_NOT_AT_GIT_ROOT: --project is not a git root: <absolute dir>"
+
+  Scenario: A step with no element of its own on an unbound workflow runs on the workflow's plan
+    Given the workflow "sw-life-cycle" was started as "sw-life-cycle-1-plan" with no element, and its next step has no scope
+    When I run "wingfoil agent execute --next --dry-run --format json"
+    Then the launch plan's run element is "plan:sw-life-cycle-1-plan" and its run log "docs/runs/sw-life-cycle-1-plan.jsonl"
+    And "wingfoil agent list --waiting --format json" lists that step with element "plan:sw-life-cycle-1-plan"
+    And the command exits with code 0
+
+  Scenario: An agent stopped at its CLI's folder-trust step is reported with a hint
+    Given the agent's adapter declares "launch.interactive.trust: prompt"
+    And the agent exits with code 1 without committing anything
+    When I run "wingfoil agent execute --element task:202 --role developer"
+    Then the record's notes is "none (no commit since state_ref: the agent CLI may have stopped at its folder-trust step)"
+    And stderr has, before the error line, "warning: run <run-id>: the agent exited 1 with no commit since state_ref: its CLI may have stopped at its folder-trust step (adapter '<name>' declares launch.interactive.trust: prompt)"
+    And the command exits with code 1 and message "agent exited 1; run <run-id> recorded"
+    And under "trust: implied", or after the agent committed, neither the hint nor the warning is given

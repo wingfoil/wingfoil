@@ -595,6 +595,13 @@ export function notesField(elementId: string, input: NotesFieldInput): string {
   return before === after ? 'none' : `${elementId}#execution-notes`;
 }
 
+/**
+ * The record's `notes` for a run that may never have got past its agent CLI's folder-trust step (§4.2 key 18,
+ * §3.3 step 16's start-up hint, `bug-500`, task-353): the run did not succeed, `HEAD` is still `state_ref`, `notes`
+ * would be `none`, and the adapter declares `launch.<kind>.trust: prompt`. Every reader accepts any string here.
+ */
+export const START_UP_HINT_NOTES = 'none (no commit since state_ref: the agent CLI may have stopped at its folder-trust step)';
+
 /** Where {@link deriveNotesField} reads. */
 export interface DeriveNotesFieldInput {
   readonly elementId: string;

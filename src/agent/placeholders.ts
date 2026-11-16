@@ -126,10 +126,24 @@ function permissionsIssues(
 }
 
 /**
+ * The issues of an optional `launch.<kind>.trust` (§2.2, task-353): a fragment, one element at a time
+ * (`<path>.<index>`); `implied` and `prompt` are keywords, never argv, and hold nothing to check.
+ */
+function trustIssues(
+  trust: string | readonly string[] | undefined,
+  path: string,
+  file: string,
+  legal: ReadonlySet<AdapterPlaceholder>,
+): ValidationIssue[] {
+  return Array.isArray(trust) ? argvIssues(trust as readonly string[], path, file, legal) : [];
+}
+
+/**
  * Every §2.3 violation in `manifest`, in field order: an unknown placeholder, a placeholder concatenated
  * inside an argv element, and a placeholder used outside the fields — or under the conditions — §2.3
  * lists. Fields §2.3 does not list (`command`, `verified_with`, `version_args`, `launch.*.permissions`,
- * `mcp.conflict_args`, `session.field`, `usage.fields`, `summary.export_args`) hold no placeholder at all.
+ * `launch.*.trust`, `mcp.conflict_args`, `session.field`, `usage.fields`, `summary.export_args`) hold no placeholder
+ * at all.
  *
  * @param manifest - A manifest Pass 1 has accepted.
  * @param file - The label every issue carries (`<rev>:<path>`).
@@ -157,8 +171,10 @@ export function placeholderIssues(manifest: ManifestInput, file: string): Valida
     ...argvIssues(manifest.version_args, 'version_args', file, none),
     ...argvIssues(manifest.launch.interactive.args, 'launch.interactive.args', file, launch),
     ...permissionsIssues(manifest.launch.interactive.permissions, 'launch.interactive.permissions', file, none),
+    ...trustIssues(manifest.launch.interactive.trust, 'launch.interactive.trust', file, none),
     ...argvIssues(manifest.launch.headless?.args, 'launch.headless.args', file, launch),
     ...permissionsIssues(manifest.launch.headless?.permissions, 'launch.headless.permissions', file, none),
+    ...trustIssues(manifest.launch.headless?.trust, 'launch.headless.trust', file, none),
     ...(manifest.mcp.template === undefined ? [] : fieldIssues(manifest.mcp.template, 'mcp.template', file, template, false, true)),
     ...argvIssues(manifest.mcp.conflict_args, 'mcp.conflict_args', file, none),
     ...argvIssues(manifest.session.assign_args, 'session.assign_args', file, sessionId),

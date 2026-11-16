@@ -9,7 +9,8 @@
  *   diagnostic in `details`, as `workflow next` refuses it (§3.7's second row).
  * - {@link selectFrontierStep}: `--step <key>` on that instance's frontier, else `NextResult.next`.
  * - {@link refuseWaitingStep}: without `--element`, a step that only waits is refused (task-335, `dl-171` (c)).
- * - {@link stepTargetElement}: `--element`, else the step's scope element, else the instance's bound element.
+ * - {@link stepTargetElement}: `--element`, else the step's scope element, else the instance's bound element, else
+ *   the instance's own `plan` element (task-353, `bug-418`).
  * - {@link resolveStepRole}: `--role`, else the step's role, which `dna.yaml` must define.
  *
  * All four are pure but the first, which reads `HEAD` only (`dl-080` (B)): the step a run takes is a
@@ -92,13 +93,16 @@ export function refuseWaitingStep(step: Step): CoreResult<Step> {
 
 /**
  * §3.2 step 2: `--element` if given, else the step's scope element, else the instance's bound element
- * (`spec-017` §3.4). A step with none of the three — a collection-entry or empty scope on an instance with no
- * bound element — is `NO_STEP_ELEMENT`. Whether the element exists at `HEAD` is the pipeline's check.
+ * (`spec-017` §3.4), else the instance's own `plan` element, `plan:<instance-id>` (`bug-418`, task-353): an open
+ * instance is a `plan` element whose id is the instance id (`spec-017` §3.1), so a collection-entry or empty scope
+ * on an unbound instance runs on that plan. With no instance at all — a defence: every step form selects one —
+ * the step is `NO_STEP_ELEMENT`. Whether the element exists at `HEAD` is the pipeline's check.
  */
 export function stepTargetElement(step: Step, instance: Instance | null, override: ExecutionContextElement | undefined): CoreResult<ExecutionContextElement> {
   if (override !== undefined) return coreOk(override);
   const scope = step.scope !== null && 'element' in step.scope ? step.scope.element : (instance?.element ?? null);
   if (scope !== null) return coreOk({ type: scope.type, id: scope.id });
+  if (instance !== null) return coreOk({ type: 'plan', id: instance.id });
   return coreErr({ code: 'VALIDATION', message: `step '${step.key}' has no element: give --element <type>:<id>` });
 }
 

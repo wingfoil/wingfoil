@@ -123,7 +123,7 @@ describe('Journey 0a (v0.1-scoped slice) — real CLI, fresh throwaway project (
     expect(show.stderr).toBe('');
   });
 
-  it('Journey 0a step 3 — `wingfoil workflow start <workflow>` starts the kickoff workflow (task-217); the step form `agent execute --next` ships (task-235) and the first step has no element (NO_STEP_ELEMENT)', () => {
+  it('Journey 0a step 3 — `wingfoil workflow start <workflow>` starts the kickoff workflow (task-217); the step form `agent execute --next` ships (task-235) and the first step runs on the instance\'s plan (task-353), refused here only because no agent executes as its role (NO_AGENT)', () => {
     expect(runCliInRoot(repo, 'init', '--template', 'Scrum').status).toBe(0);
 
     // task-217 ships `workflow start` with the positional `<workflow>` (no `--name`, spec-017 §7): the
@@ -133,11 +133,15 @@ describe('Journey 0a (v0.1-scoped slice) — real CLI, fresh throwaway project (
     expect(workflowStart.stdout).toContain('started sw-life-cycle as sw-life-cycle-1-plan (active)');
 
     // task-235 ships the step form `--next`: it takes the started instance's next step,
-    // `sw-life-cycle.inception`, whose phase binds no element, so the step form is refused
-    // (NO_STEP_ELEMENT): exit 1, the message names the `--element` to give, and no agent is launched.
+    // `sw-life-cycle.inception`, whose phase binds no element. Since task-353 (`bug-418`, `spec-016` §3.2 step 2) the
+    // step runs on the instance's own plan, `plan:sw-life-cycle-1-plan`, so the element refusal is gone; the fresh
+    // scaffold declares no `team.agents`, so the run stops at agent selection (NO_AGENT): exit 1, no agent launched.
+    // The message is copied from a real run (`agent execute --next --element plan:sw-life-cycle-1-plan` on a fresh
+    // Scrum scaffold, task-353's red notes).
     const agentExecute = runCliInRoot(repo, 'agent', 'execute', '--next');
     expect(agentExecute.status).toBe(1);
-    expect(agentExecute.stderr).toContain("error: step 'sw-life-cycle.inception' has no element: give --element <type>:<id>");
+    expect(agentExecute.stderr).toContain("error: no agent in dna.yaml with an adapter executes as role 'product-owner'");
+    expect(agentExecute.stderr).not.toContain('has no element');
   });
 
   it('`dna set` still writes scalars only — but it now names the verb that reaches an array-typed field, and that verb works (bug-083, task-093)', () => {

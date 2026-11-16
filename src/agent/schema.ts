@@ -41,12 +41,24 @@ const Permissions = z.union([Argv, z.record(z.string(), Argv)]);
 /** A declared `launch.<kind>.permissions`: a fragment, or a role map with a `default` entry (`spec-016` §2.2). */
 export type LaunchPermissions = z.infer<typeof Permissions>;
 
+/**
+ * `launch.<kind>.trust` — how the agent CLI treats a launch directory it has not been told to trust (§2.2, `bug-500`,
+ * task-353): `implied`, that launch never stops to ask; `prompt`, the CLI may stop at its start-up to ask; or an argv
+ * fragment, the CLI's own option that trusts the launch directory, which §3.3 step 14 appends after the permission
+ * fragment. A fragment holds no placeholder (§2.3). Only `prompt` gives §3.3 step 16's start-up hint.
+ */
+const Trust = z.union([z.enum(['implied', 'prompt']), Argv]);
+
+/** A declared `launch.<kind>.trust`: `implied`, `prompt`, or an argv fragment (`spec-016` §2.2). */
+export type LaunchTrust = z.infer<typeof Trust>;
+
 /** `launch.interactive` — the v0.3 launch, the agent owning the terminal (`adr-012` point 4). */
 const InteractiveLaunch = z.strictObject({
   args: Argv,
   /** Whether the launch needs a terminal on stdin and stdout (§3.3 step 12); `required` when absent. */
   terminal: z.enum(['required', 'optional']).default('required'),
   permissions: Permissions.optional(),
+  trust: Trust.optional(),
 });
 
 /**
@@ -59,6 +71,7 @@ const HeadlessLaunch = z.strictObject({
   args: Argv,
   output: z.enum(['json', 'jsonl', 'none']),
   permissions: Permissions.optional(),
+  trust: Trust.optional(),
 });
 
 /** The JSON paths `usage.fields` may declare (§2.2); an undeclared one yields `not-reported`. */
