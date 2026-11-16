@@ -30,7 +30,7 @@
  * states it). Deterministic: fixed file names and contents, no clock.
  */
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readdirSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { fixtureDirPrefix, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
@@ -112,11 +112,11 @@ function minorV04(status: string, features: string): string {
 const dirs: string[] = [];
 afterAll(() => dirs.forEach(removeTempDir));
 
-/** A git-less project root with this repository's memory.yaml, the sequencer (unless null) and the given files. */
-function project(files: Readonly<Record<string, string>>, sequencerContent: string | null = sequencer()): string {
+/** A git-less project root with this repository's memory.yaml (unless `withMemoryYaml` is false), the sequencer (unless null) and the given files. */
+function project(files: Readonly<Record<string, string>>, sequencerContent: string | null = sequencer(), withMemoryYaml = true): string {
   const root = mkdtempSync(fixtureDirPrefix());
   dirs.push(root);
-  writeFixtureFile(root, '.wingfoil/memory.yaml', MEMORY_YAML);
+  if (withMemoryYaml) writeFixtureFile(root, '.wingfoil/memory.yaml', MEMORY_YAML);
   if (sequencerContent !== null) writeFixtureFile(root, SEQUENCER, sequencerContent);
   for (const [path, content] of Object.entries(files)) writeFixtureFile(root, path, content);
   return root;
@@ -126,8 +126,15 @@ function check(root: string, ...args: string[]): ReturnType<typeof spawnCapture>
   return spawnCapture(process.execPath, [SCRIPT, ...args], { cwd: root });
 }
 
-/** What the interface fixes for exit 0 and 1: the status and stdout (stderr is not part of that contract). */
-const outcome = (run: ReturnType<typeof spawnCapture>): { status: number; stdout: string } => ({ status: run.status, stdout: run.stdout });
+/**
+ * What a run did on exit 0 and 1: status, stdout and stderr. The orchestrator's ruling on red's ambiguity 3 (task-359
+ * review fix): stderr is empty on both, so every exit 0 / 1 case expects `stderr: ''`.
+ */
+const outcome = (run: ReturnType<typeof spawnCapture>): { status: number; stdout: string; stderr: string } => ({
+  status: run.status,
+  stdout: run.stdout,
+  stderr: run.stderr,
+});
 const lines = (...out: string[]): string => out.map((line) => `${line}\n`).join('');
 const usage = 'check-release-exit: usage: node scripts/check-release-exit.cjs <path>\n';
 
@@ -142,7 +149,7 @@ describe('task-359 AC 1 — scripts/check-release-exit.cjs <path> (red-first, dl
         [CP_PATH]: changeProposal({ feature: '"P4.22"', release: '"v0.4"' }),
         [MINOR_PATH]: minorV04('in-development', `${V04_FEATURES}, P4.22`),
       }, sequencer(V04_NAMES_P4_22));
-      expect(outcome(check(root, CP_PATH))).toEqual({ status: 0, stdout: '' });
+      expect(outcome(check(root, CP_PATH))).toEqual({ status: 0, stdout: '', stderr: '' });
     });
 
     it('a draft release: the row names the id, features: does not yet (not required before the release leaves draft)', () => {
@@ -150,7 +157,7 @@ describe('task-359 AC 1 — scripts/check-release-exit.cjs <path> (red-first, dl
         [CP_PATH]: changeProposal({ feature: '"P4.22"', release: '"v0.4"' }),
         [MINOR_PATH]: minorV04('draft', V04_FEATURES),
       }, sequencer(V04_NAMES_P4_22));
-      expect(outcome(check(root, CP_PATH))).toEqual({ status: 0, stdout: '' });
+      expect(outcome(check(root, CP_PATH))).toEqual({ status: 0, stdout: '', stderr: '' });
     });
 
     it('a kind: vision change with an empty feature: only the stamp and the release element are checked', () => {
@@ -158,7 +165,7 @@ describe('task-359 AC 1 — scripts/check-release-exit.cjs <path> (red-first, dl
         [CP_PATH]: changeProposal({ kind: '"vision"', feature: '""', release: '"v0.4"' }),
         [MINOR_PATH]: minorV04('in-development', V04_FEATURES),
       });
-      expect(outcome(check(root, CP_PATH))).toEqual({ status: 0, stdout: '' });
+      expect(outcome(check(root, CP_PATH))).toEqual({ status: 0, stdout: '', stderr: '' });
     });
 
     it('a released patch (the shape of cp-002 and patch-v0.3.1): its row names P4.21 and its features: holds it', () => {
@@ -166,7 +173,7 @@ describe('task-359 AC 1 — scripts/check-release-exit.cjs <path> (red-first, dl
         [CP_PATH]: changeProposal({ feature: '"P4.21"', release: '"v0.3.1"' }),
         [PATCH_PATH]: PATCH_V031,
       });
-      expect(outcome(check(root, CP_PATH))).toEqual({ status: 0, stdout: '' });
+      expect(outcome(check(root, CP_PATH))).toEqual({ status: 0, stdout: '', stderr: '' });
     });
 
     it('feature as a YAML list, every id in the row and in features:', () => {
@@ -174,7 +181,7 @@ describe('task-359 AC 1 — scripts/check-release-exit.cjs <path> (red-first, dl
         [CP_PATH]: changeProposal({ feature: '[P4.21, P4.22]', release: '"v0.4"' }),
         [MINOR_PATH]: minorV04('in-development', `${V04_FEATURES}, P4.22`),
       }, sequencer('proxy, 11 ÷ 14 × 12; P4.21 and P4.22 (`cp-001`)'));
-      expect(outcome(check(root, CP_PATH))).toEqual({ status: 0, stdout: '' });
+      expect(outcome(check(root, CP_PATH))).toEqual({ status: 0, stdout: '', stderr: '' });
     });
   });
 
@@ -184,7 +191,7 @@ describe('task-359 AC 1 — scripts/check-release-exit.cjs <path> (red-first, dl
         [CP_PATH]: changeProposal({ feature: '"P4.22"', release: '""' }),
         [MINOR_PATH]: minorV04('in-development', V04_FEATURES),
       });
-      expect(outcome(check(root, CP_PATH))).toEqual({ status: 1, stdout: lines(`${CP_PATH}: release is empty`) });
+      expect(outcome(check(root, CP_PATH))).toEqual({ status: 1, stdout: lines(`${CP_PATH}: release is empty`), stderr: '' });
     });
 
     it('no release element has the stamped version', () => {
@@ -192,19 +199,34 @@ describe('task-359 AC 1 — scripts/check-release-exit.cjs <path> (red-first, dl
         [CP_PATH]: changeProposal({ feature: '"P4.22"', release: '"v0.5"' }),
         [MINOR_PATH]: minorV04('in-development', V04_FEATURES),
       });
-      expect(outcome(check(root, CP_PATH))).toEqual({ status: 1, stdout: lines(`${CP_PATH}: no release element has version v0.5`) });
+      expect(outcome(check(root, CP_PATH))).toEqual({ status: 1, stdout: lines(`${CP_PATH}: no release element has version v0.5`), stderr: '' });
     });
 
-    it('the sequencer has no row for the release: that line once, first', () => {
+    // The orchestrator's ruling on red's ambiguity 1 (task-359 review fix): with no row, the no-row line is printed
+    // once, first, then only the features: lines, never a per-id row line.
+    it('the sequencer has no row for the release (draft): exactly the no-row line', () => {
       const v09 = fill(MINOR_V04, { id: '"minor-v0.9"', version: '"v0.9"', status: 'draft', features: '[]' });
       const root = project({
         [CP_PATH]: changeProposal({ feature: '"P4.22"', release: '"v0.9"' }),
         'docs/04_memory/planning/rl-v1/minor-v0.9.md': v09,
       });
-      const run = check(root, CP_PATH);
-      const out = run.stdout.split('\n').filter((line) => line !== '');
-      expect([run.status, out[0]]).toEqual([1, `${CP_PATH}: ${SEQUENCER} has no row for v0.9`]);
-      expect(out.filter((line) => line.includes('has no row for'))).toHaveLength(1);
+      expect(outcome(check(root, CP_PATH))).toEqual({ status: 1, stdout: lines(`${CP_PATH}: ${SEQUENCER} has no row for v0.9`), stderr: '' });
+    });
+
+    it('the sequencer has no row for the release (in-development): the no-row line, then only the features: line', () => {
+      const v09 = fill(MINOR_V04, { id: '"minor-v0.9"', version: '"v0.9"', status: 'in-development', features: '[]' });
+      const root = project({
+        [CP_PATH]: changeProposal({ feature: '"P4.22"', release: '"v0.9"' }),
+        'docs/04_memory/planning/rl-v1/minor-v0.9.md': v09,
+      });
+      expect(outcome(check(root, CP_PATH))).toEqual({
+        status: 1,
+        stdout: lines(
+          `${CP_PATH}: ${SEQUENCER} has no row for v0.9`,
+          `${CP_PATH}: P4.22 is not in docs/04_memory/planning/rl-v1/minor-v0.9.md's features: (status in-development)`,
+        ),
+        stderr: '',
+      });
     });
 
     it('the id is in neither the row nor features: (cp-001 once stamped v0.4, today): two lines, row first', () => {
@@ -218,6 +240,7 @@ describe('task-359 AC 1 — scripts/check-release-exit.cjs <path> (red-first, dl
           `${CP_PATH}: P4.22 is not in the v0.4 row of ${SEQUENCER}`,
           `${CP_PATH}: P4.22 is not in ${MINOR_PATH}'s features: (status in-development)`,
         ),
+        stderr: '',
       });
     });
 
@@ -226,7 +249,7 @@ describe('task-359 AC 1 — scripts/check-release-exit.cjs <path> (red-first, dl
         [CP_PATH]: changeProposal({ feature: '"P4.22"', release: '"v0.4"' }),
         [MINOR_PATH]: minorV04('in-development', `${V04_FEATURES}, P4.22`),
       }, sequencer('proxy, 11 ÷ 14 × 12; ≈ 1 for P4.221 (`cp-901`)'));
-      expect(outcome(check(root, CP_PATH))).toEqual({ status: 1, stdout: lines(`${CP_PATH}: P4.22 is not in the v0.4 row of ${SEQUENCER}`) });
+      expect(outcome(check(root, CP_PATH))).toEqual({ status: 1, stdout: lines(`${CP_PATH}: P4.22 is not in the v0.4 row of ${SEQUENCER}`), stderr: '' });
     });
 
     it('two ids "P4.21, P4.22", the second missing from the row: one line, for P4.22 only', () => {
@@ -234,7 +257,7 @@ describe('task-359 AC 1 — scripts/check-release-exit.cjs <path> (red-first, dl
         [CP_PATH]: changeProposal({ feature: '"P4.21, P4.22"', release: '"v0.4"' }),
         [MINOR_PATH]: minorV04('in-development', `${V04_FEATURES}, P4.22`),
       }, sequencer('proxy, 11 ÷ 14 × 12; ≈ 1 for P4.21'));
-      expect(outcome(check(root, CP_PATH))).toEqual({ status: 1, stdout: lines(`${CP_PATH}: P4.22 is not in the v0.4 row of ${SEQUENCER}`) });
+      expect(outcome(check(root, CP_PATH))).toEqual({ status: 1, stdout: lines(`${CP_PATH}: P4.22 is not in the v0.4 row of ${SEQUENCER}`), stderr: '' });
     });
 
     it('two ids, both missing from both: the lines per id in declared order, row before features:', () => {
@@ -250,6 +273,7 @@ describe('task-359 AC 1 — scripts/check-release-exit.cjs <path> (red-first, dl
           `${CP_PATH}: P4.22 is not in the v0.4 row of ${SEQUENCER}`,
           `${CP_PATH}: P4.22 is not in ${MINOR_PATH}'s features: (status in-development)`,
         ),
+        stderr: '',
       });
     });
   });
@@ -296,15 +320,84 @@ describe('task-359 AC 1 — scripts/check-release-exit.cjs <path> (red-first, dl
         [CP_PATH]: changeProposal({ feature: '"P4.22"', release: '"v0.4"' }),
         [MINOR_PATH]: minorV04('in-development', `${V04_FEATURES}, P4.22`),
       }, null);
-      const run = check(root, CP_PATH);
-      expect([run.status, run.stdout]).toEqual([2, '']);
-      expect(run.stderr).toMatch(/^check-release-exit: (?:.*\/)?docs\/01_vision\/07_sequencer\.md: no such file\n$/);
+      // The orchestrator's ruling on red's ambiguity 2 (task-359 review fix): named by its path relative to the root.
+      expect(check(root, CP_PATH)).toEqual({ status: 2, stdout: '', stderr: `check-release-exit: ${SEQUENCER}: no such file\n` });
+    });
+
+    it('a missing .wingfoil/memory.yaml, named by its path relative to the root', () => {
+      const root = project({
+        [CP_PATH]: changeProposal({ feature: '"P4.22"', release: '"v0.4"' }),
+        [MINOR_PATH]: minorV04('in-development', `${V04_FEATURES}, P4.22`),
+      }, sequencer(V04_NAMES_P4_22), false);
+      expect(check(root, CP_PATH)).toEqual({ status: 2, stdout: '', stderr: 'check-release-exit: .wingfoil/memory.yaml: no such file\n' });
+    });
+  });
+
+  /*
+   * The read confinement (task-359 review fix, orchestrator ruling): every file the script reads beyond `<path>` is
+   * inside the root after realpath. A release-element candidate of the walk whose realpath is outside the root is
+   * skipped, not counted; `.wingfoil/memory.yaml` or the sequencer whose realpath is outside gives exit 2, stdout
+   * empty, stderr `check-release-exit: <relative path>: outside the repository` (the message `<path>` already uses).
+   * The outside files live in a second temporary directory, beside the root.
+   */
+  describe('the read confinement: no file outside the root is read through a symbolic link', () => {
+    /** A temporary directory outside every fixture root, holding `files`. */
+    function outside(files: Readonly<Record<string, string>>): string {
+      const dir = mkdtempSync(fixtureDirPrefix());
+      dirs.push(dir);
+      for (const [path, content] of Object.entries(files)) writeFixtureFile(dir, path, content);
+      return dir;
+    }
+
+    /** A root that passes: v0.4 in-development, its row and its features: naming P4.22. */
+    const passing = (seq: string | null = sequencer(V04_NAMES_P4_22), withMemoryYaml = true): string =>
+      project({
+        [CP_PATH]: changeProposal({ feature: '"P4.22"', release: '"v0.4"' }),
+        [MINOR_PATH]: minorV04('in-development', `${V04_FEATURES}, P4.22`),
+      }, seq, withMemoryYaml);
+
+    it('a release .md in the walk symlinked to an outside release of the same version is skipped, not counted', () => {
+      const root = passing();
+      const out = outside({ 'zz.md': minorV04('in-development', `${V04_FEATURES}, P4.22`) });
+      symlinkSync(join(out, 'zz.md'), join(root, 'docs/04_memory/planning/rl-v1/zz.md'));
+      expect(outcome(check(root, CP_PATH))).toEqual({ status: 0, stdout: '', stderr: '' });
+    });
+
+    it('the only release of the version reached through a symlink to an outside file: skipped, so no release element', () => {
+      const root = project({ [CP_PATH]: changeProposal({ feature: '"P4.22"', release: '"v0.4"' }) }, sequencer(V04_NAMES_P4_22));
+      const out = outside({ 'zz.md': minorV04('in-development', `${V04_FEATURES}, P4.22`) });
+      mkdirSync(join(root, 'docs/04_memory/planning/rl-v1'), { recursive: true });
+      symlinkSync(join(out, 'zz.md'), join(root, 'docs/04_memory/planning/rl-v1/zz.md'));
+      expect(outcome(check(root, CP_PATH))).toEqual({ status: 1, stdout: lines(`${CP_PATH}: no release element has version v0.4`), stderr: '' });
+    });
+
+    it('a release-line directory in the walk symlinked to an outside directory: its release is skipped, not counted', () => {
+      const root = passing();
+      const out = outside({ 'minor-v0.4.md': minorV04('in-development', `${V04_FEATURES}, P4.22`) });
+      symlinkSync(out, join(root, 'docs/04_memory/planning/rl-v9'));
+      expect(outcome(check(root, CP_PATH))).toEqual({ status: 0, stdout: '', stderr: '' });
+    });
+
+    it('the sequencer symlinked to an outside file: exit 2, outside the repository', () => {
+      const root = passing(null);
+      const out = outside({ 'sequencer.md': sequencer(V04_NAMES_P4_22) });
+      mkdirSync(join(root, 'docs/01_vision'), { recursive: true });
+      symlinkSync(join(out, 'sequencer.md'), join(root, SEQUENCER));
+      expect(check(root, CP_PATH)).toEqual({ status: 2, stdout: '', stderr: `check-release-exit: ${SEQUENCER}: outside the repository\n` });
+    });
+
+    it('.wingfoil/memory.yaml symlinked to an outside file: exit 2, outside the repository', () => {
+      const root = passing(sequencer(V04_NAMES_P4_22), false);
+      const out = outside({ 'memory.yaml': MEMORY_YAML });
+      mkdirSync(join(root, '.wingfoil'), { recursive: true });
+      symlinkSync(join(out, 'memory.yaml'), join(root, '.wingfoil/memory.yaml'));
+      expect(check(root, CP_PATH)).toEqual({ status: 2, stdout: '', stderr: 'check-release-exit: .wingfoil/memory.yaml: outside the repository\n' });
     });
   });
 
   it('live, at the repository root: cp-002 (release v0.3.1, released, features: [P4.21]) passes', () => {
     const [cp002] = readdirSync(join(ROOT, 'docs/04_memory/change-proposals')).filter((name) => name.startsWith('cp-002-'));
     expect(cp002).toBeDefined();
-    expect(outcome(check(ROOT, `docs/04_memory/change-proposals/${cp002}`))).toEqual({ status: 0, stdout: '' });
+    expect(outcome(check(ROOT, `docs/04_memory/change-proposals/${cp002}`))).toEqual({ status: 0, stdout: '', stderr: '' });
   });
 });
