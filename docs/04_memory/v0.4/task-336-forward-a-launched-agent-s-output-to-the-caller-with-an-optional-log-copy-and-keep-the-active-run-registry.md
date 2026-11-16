@@ -429,6 +429,83 @@ Order with task-337: this task's green precedes task-337's on the shared stdout 
 name-resolvability allowlist entries the amendments need are committed with this note; green removes the two `PLANNED`
 `.wingfoil/.gitignore` rows once the file is tracked.
 
+### red (qa, 2026-11-16)
+
+**Setup.** Worktree on the task branch at `dc02f6d30`; `git rev-list --count HEAD..main` → `0`, so no merge of `main`.
+PATH guard through the task's PATH shim: `command -v wingfoil && wingfoil --version && node dist/cli.js --version` → the
+shim's path, then `0.3.2 (f088185cdfb1bc71eae878dd410028c965470c50)` twice. Red commit: `efb088991`.
+
+**AC 8 (characterization, no test).** `git log --format='%h %s' -3 -- docs/04_memory/design/specs/` → `5e8c143e4 wf(tech-spec):
+amend spec-011-storage-layout`, `36625540a … amend spec-008-cli-grammar`, `8ac2f6a3b … amend spec-016-agent-execution`, all
+`[approved → approved]`, before the red commit.
+
+**Files.** New: `test/agent/launch-output.test.ts`, `test/agent/launch-registry.test.ts`, `test/agent/active-runs.test.ts`,
+`test/cli/agent-execute-output.integration.test.ts`, `test/cli/agent-execute-log.integration.test.ts`,
+`test/cli/agent-execute-registry.integration.test.ts`, `test/cli/agent-list-active.integration.test.ts`,
+`test/core/agent-list-active.test.ts`, `test/core/init-gitignore.test.ts`, `test/docs/agent-output-secrets.test.ts`.
+Shared fixtures (additive): `test/fixtures/agents/fake-agent.cjs` (`WINGFOIL_FAKE_AGENT_SAY`, `WINGFOIL_FAKE_AGENT_REGISTRY=1`,
+header list extended; the registry `path` is relative to the agent's cwd, `/`-separated), `test/agent/helpers/fake-child.ts`
+(third constructor parameter `{ stderr?: boolean }`, an optional `stderr` PassThrough ended with stdout),
+`test/agent/helpers/agent-execute-fixture.ts` (exported `WINGFOIL_GITIGNORE`, committed by `seed()`, so by `seedStep()`,
+`seedAwaiting()` and `seedFullContext()` too), `test/agent/helpers/launch-input.ts` (`launchFixture()` commits the same file:
+D8's warning is raised inside `launchAgent`, and `launch-session-output*.test.ts`, `launch-trust-trap.test.ts`, … assert
+`warnings).toEqual([])` on that fixture — not in the design's list). For task-337: `test/cli/helpers/agent-execute-cli.ts`
+only gains the optional `pid` and `registry` fields of `FakeEntry`; `test/cli/agent-execute-headless.integration.test.ts`
+only has its header comment's "captured, not echoed" rewritten (no assertion touched).
+Existing pins changed: `test/core/format-init-scaffold.test.ts` (accepts `.wingfoil/.gitignore` by name; passes now);
+`test/cli/agent-list.integration.test.ts` (default console gains `no active runs`; `--active` → `no active runs`, exit 0);
+`test/core/agent-list.test.ts` (header; the `no flag` case gains `active` and `no active runs`, `both flags` stays past +
+waiting; and the registration case's flag list `['past', 'waiting', 'active']`, l.270 — not in the design's list);
+`test/agent/launch-headless.test.ts` (headless `stdio: ['ignore', 'pipe', 'pipe']` — not in the design's list, but §3.3 step
+14 as amended pipes stderr, so green would otherwise break it).
+
+**Per AC** (first failing assertion of each red, from the runs below).
+- **AC 1, red-first.** `launch-output.test.ts` (10, all red: `TypeError: (0 , warning_1.withOutputSink) is not a function`,
+  the missing export; `tsc` TS2305 on `withOutputSink` and `OutputStream`): spawn options, chunks split mid-line, split UTF-8,
+  U+FFFD, CR kept, the 64 KiB pending line (65536 bytes then `tail\n` → two lines), unterminated tail, per-stream order,
+  notices around the forwarding, and (AC 2) `LaunchInput.log`. `agent-execute-output.integration.test.ts` console: a fake
+  stdout line found 0 times (`expected [line, 1]`, received `0`), the headless document line absent (`toHaveLength(1)`,
+  got 0), the banner-before-lines check (`> 0`, got `-1`); json: 5 unparsable stderr lines (the raw agent stderr), no
+  `{"output":…}` documents, and the summary notice lost (the raw unterminated `fake err last, no newline` runs into it).
+- **AC 2, red-first.** `agent-execute-log.integration.test.ts` (a)–(h): `error: unknown option '--log'`, exit `2` where `0`/`1`
+  is expected, the file absent, the usage-error messages differing. In process: the `LaunchInput.log` case of
+  `launch-output.test.ts`. `--log '   '` is pinned as blank too (this repository reads "blank" as empty or whitespace only).
+- **AC 3, red-first.** In `agent-execute-output.integration.test.ts`: the positive case fails (`fake out WF336-OUTPUT-MARKER`
+  found 0 times); the two "nothing kept" cases pass today and stay as guards.
+- **AC 4, red-first.** `active-runs.test.ts`: suite fails to run, `Cannot find module '../../src/agent/active-runs'` (`tsc`
+  TS2307). `launch-registry.test.ts` (in process, `LaunchHost.now` passed in a variable): `registryFiles` → `[]` where the one
+  entry is expected. `agent-execute-registry.integration.test.ts`: the fake saw no entry; `RUN_ACTIVE` exit `0` where `1` is
+  expected; the stale-entry case sees the hand-written entry unpruned (pid not rewritten); no not-ignored warning.
+- **AC 5, red-first.** `init-gitignore.test.ts` (both templates): the scaffold has no `.wingfoil/.gitignore`, `ENOENT`,
+  `check-ignore` exit `1`; "no root `.gitignore`" passes today.
+- **AC 6, red-first.** `agent-list-active.test.ts`: keys `baseline, past, waiting, diagnostics` where `baseline, active,
+  diagnostics` is expected; no `active` section; the D4 case fails on its third assertion (the step still waiting with a
+  live entry). The three "keeps its keys" cases pass today (guards). `agent-list-active.integration.test.ts`:
+  `error: unknown option '--active'`, exit 2. Plus the changed pins above.
+- **AC 7, red-first.** `agent-output-secrets.test.ts`: "may hold secrets"/"never committed" absent from §9.4 and the
+  `agent execute` entry, no `| \`--log <path>\` |` row, the `agent list` entry still says "`--active` comes later". Reading
+  of "an `--active` row": the `agent list` entry has no option table, so the test pins that it names `` `--active` `` and
+  drops "comes later", not a table row.
+
+**Runs** (targeted, `npx jest <file> --maxWorkers=2`, after the last edit): launch-output 10 failed/10; launch-registry 3/3
+failed; active-runs suite failed to run (0 tests); init-gitignore 8 failed, 2 passed; agent-list-active (core) 8 failed,
+3 passed; agent-output-secrets 5 failed, 1 passed; agent-list (core) 2 failed, 16 passed; launch-headless 1 failed, 11
+passed; format-init-scaffold 69 passed; fake-agent 59 passed; agent-execute-output 8 failed, 4 passed; agent-execute-log
+14 failed, 1 passed; agent-execute-registry 6 failed, 1 passed; agent-list-active (CLI) 6/6 failed; agent-list (CLI) 2
+failed, 6 passed. The shared-fixture change against the existing suites, after the `dl-170` slot was granted (11:11:23 UTC):
+`npm test --` the 19 suites `agent-execute-{launch,step,launch-kind,awaiting,headless,worktree,session-output,cli-shim}`
+and `agent-execute` integration, `launch-session-output`, `launch-session-output-bounds`, `launch-process`, `launch`,
+`launch-trust-trap`, `launch-permissions`, `execute-config-arg`, core `agent-execute`, `agent-execute-step`,
+`agent-execute-full-context` → `Test Suites: 19 passed`, `Tests: 277 passed`.
+`npx tsc --noEmit -p tsconfig.json` → only the three intended errors (TS2307 `src/agent/active-runs`, TS2305
+`withOutputSink`, `OutputStream`). `npx jest test/lint --maxWorkers=2` → 15 suites passed, 1 failed: `typecheck-clean`, on
+exactly those three errors (it turns green with the exports); `lint-clean` passes (`npx eslint` on the changed files → no
+problem). No invisible character in the changed files (the prompt's `grep -nP` → exit 1).
+
+**For green.** A `FakeChild` built without a `pid` (most in-process launch tests) gives step 14 no agent pid to rewrite; the
+entry then keeps `agent execute`'s own. The CLI fixtures now carry `.wingfoil/.gitignore`; a hand-built fixture that
+launches without it will meet D8's warning.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
