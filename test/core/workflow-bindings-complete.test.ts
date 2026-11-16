@@ -5,10 +5,10 @@
  * approver ruling D1 (B)), so the registry raises no `W_WORKFLOW_UNBOUND_TOKEN`.
  *
  * - AC 1 (red-first): (a) the registry's diagnostics at `HEAD` are `[]`; (b) every check occurrence and every action
- *   of every workflow resolves to a kind other than `unbound`; (c) the four `run` bindings, exactly; (d) the 36 names
- *   "manual until a command" and the 19 "manual on purpose" resolve `{ kind: 'manual', source: 'project' }`, the two
- *   lists disjoint, each under its own group comment in `bindings.yaml`; (f) `bindings.yaml` is at least 3.1, with a
- *   history segment naming task-358. The CLI half (e) is `test/cli/workflow-unbound-none.integration.test.ts`.
+ *   of every workflow resolves to a kind other than `unbound`; (c) the four `run` bindings, exactly; (d) the 37 names
+ *   "manual until a command" (36 at task-358, 37 with task-359's `downcast.in-scope`) and the 19 "manual on
+ *   purpose" resolve `{ kind: 'manual', source: 'project' }`, the two lists disjoint, each under its own group
+ *   comment in `bindings.yaml`; (f) `bindings.yaml` is at least 3.1, with a history segment naming task-358. The CLI half (e) is `test/cli/workflow-unbound-none.integration.test.ts`.
  * - AC 2 (a) (red-first): `dev-loop`'s `done` check `retrospective.present` runs `scripts/check-retrospective.cjs` on
  *   `{element.path}`; `design` reads the decision-logs a task's `ref:` names (D2 (c)); `dev-loop.yaml` at least 2.5.
  * - AC 3 (red-first, `bug-435`): `e2e-smoke`'s checks are `e2e-smoke.scenario` and `mcp.registered` (D3 (a));
@@ -117,8 +117,8 @@ describe('task-358 AC 1 — every token of this repository is bound (red-first, 
     expect(resolveToken(name as string, 'check', bindings)).toEqual({ kind: 'run', source: 'project', argv, severity: 'reject' });
   });
 
-  it('(d) the two manual lists hold 36 and 19 distinct names and are disjoint', () => {
-    expect(new Set(MANUAL_UNTIL_A_COMMAND).size).toBe(36);
+  it('(d) the two manual lists hold 37 and 19 distinct names and are disjoint', () => {
+    expect(new Set(MANUAL_UNTIL_A_COMMAND).size).toBe(37); // 36 at task-358; task-359 adds downcast.in-scope
     expect(new Set(MANUAL_ON_PURPOSE).size).toBe(19);
     expect(MANUAL_UNTIL_A_COMMAND.filter((name) => (MANUAL_ON_PURPOSE as readonly string[]).includes(name))).toEqual([]);
   });
