@@ -130,7 +130,7 @@ without its MCP registration.
 | `format` | integer | yes | Manifest format version; `1` in this spec. A manifest in a newer format is refused for its format alone, before the structural pass: the one issue `E_INVALID_FORMAT` on `format`, with `dl-149`'s message (`this file is written in format <n>; this WingFoil reads up to format 1: upgrade WingFoil`). An absent `format`, or one that is not a positive integer, is a structural error. |
 | `command` | string | yes | Executable name or repository-relative path. It is resolved on `PATH` and never run through a shell. |
 | `verified_with` | string | built-in: yes | The agent CLI version the built-in was checked against by hand (`adr-012` Consequences). Informational. |
-| `version_args` | string[] | no | Argv that prints the agent CLI's version on stdout, recorded as `agent_version`. Absent → `not-reported`. |
+| `version_args` | string[] | no | Argv that prints the agent CLI's version on stdout, run before the launch and again after the agent exits (§2.6), recorded as `agent_version` and `agent_version_after` (§4.2). Absent → both `not-reported`. |
 | `launch.interactive.args` | string[] | yes | Argv template for the interactive launch (§2.3). |
 | `launch.interactive.terminal` | `required` \| `optional` | no (default `required`) | Whether the interactive launch needs a terminal on stdin and stdout (§3.3 step 12, `NO_TERMINAL`). `required` for every agent CLI that owns a terminal session, and for every built-in. `optional` declares an executable that runs to completion on inherited, non-terminal stdio; the fake adapter declares it, which is how the interactive success path runs under Jest and CI with no pseudo-terminal (§2.7). |
 | `launch.headless.args` | string[] | no | Argv template for the headless launch (§2.3). Read from v0.4 by the work run (§3.5, `dl-181`); an adapter without it cannot launch headless (§3.7 `NO_LAUNCH_KIND`, `dl-183` Q3 (a)). |
@@ -147,9 +147,13 @@ without its MCP registration.
 | `session.lookup_args` | string[] | `lookup`: yes | Argv run after the agent exits. Its stdout is one JSON value. |
 | `session.field` | JSON path | `output`/`lookup`: yes | Where the id sits in that JSON. |
 | `session.resume` | `{ supported: bool, args?: string[] }` | yes | Resume support and argv, with `{session_id}` (`dl-135` point 5). `args` is required with `supported: true`. Read from v0.4 (§7). |
-| `usage.from` | `output` \| `lookup` \| `none` | yes | Where token usage and model come from (`dl-114` Q3 (i)). |
-| `usage.lookup_args` | string[] | `lookup`: yes | As `session.lookup_args`; may be the same argv. |
-| `usage.fields` | map | `output`/`lookup`: yes | JSON paths for `model`, `input`, `output`, `cache_read`, `cache_write`. A path not declared, or absent in the JSON, yields `not-reported`, never `0`. |
+| `usage.from` | `output` \| `lookup` \| `transcript` \| `none`, or a list of `output`, `lookup` and `transcript`, each at most once | yes | Where token usage and model come from (`dl-114` Q3 (i), `dl-188` part 1 (c)): one source, or several tried in the list's order (§2.6). `output` is legal only with `launch.headless.output: json`. |
+| `usage.lookup_args` | string[] | with `lookup`: yes | As `session.lookup_args`; may be the same argv. |
+| `usage.fields` | map | with `output` or `lookup`: yes | JSON paths, in the lookup's document or the headless output's, for `model`, `input`, `output`, `cache_read`, `cache_write`. A path not declared, or absent in the JSON, yields `not-reported`, never `0`. |
+| `usage.transcript.path` | string | with `transcript`: yes | Where the agent CLI writes its session transcript on the host, a JSON Lines file (`dl-188` part 1 (a)): an absolute path once its placeholders `{home}`, `{launch_dir_slug}` and `{session_id}` are rendered (§2.3). Read after the agent exits (§2.6); never committed, and never named in the record or in a message. |
+| `usage.transcript.select` | `{ field: <JSON path>, equals: <string> }` | with `transcript`: yes | Which lines of the transcript are the agent's messages: those whose value at `field` is the string `equals`. |
+| `usage.transcript.message_id` | JSON path | no | The id of one message, for an agent CLI that writes one message over several lines: selected lines with the same id count as one message, the last of them read. Absent: every selected line is one message. |
+| `usage.transcript.fields` | map | with `transcript`: yes | JSON paths, within a selected line, for `model`, `input`, `output`, `cache_read`, `cache_write`, with `usage.fields`' rules. |
 | `summary.export_args` | string[] | no | Argv exporting a session summary (`dl-135` point 5). Read from v0.4 for `reference` (§7). |
 
 There is deliberately no `env:` field. Credentials stay inside the agent CLI (`adr-012` point 1).
@@ -171,7 +175,14 @@ error (`dl-090` Q3 (a): "argv, no shell. … Interpolation fills whole arguments
 | `{mcp_config}` | the rendered `mcp.template` itself, verbatim, as one argv element | `launch.*.args` when `mcp.via: config-arg` |
 | `{mcp_command}` | the MCP server executable (§2.5) | `mcp.template`; `launch.*.args` when `mcp.via: args` |
 | `{mcp_args}` | the MCP server's argv; expands to **several** elements in `args`, to a JSON array in `mcp.template` | same as `{mcp_command}` |
-| `{session_id}` | the assigned or recorded session id | `session.assign_args`, `session.resume.args`; `session.lookup_args` and `usage.lookup_args` only when `session.id: assign` (under `lookup` or `output` the id is not known before the lookup, and using it there is a manifest validation error) |
+| `{session_id}` | the assigned or recorded session id | `session.assign_args`, `session.resume.args`; `session.lookup_args` and `usage.lookup_args` only when `session.id: assign` (under `lookup` or `output` the id is not known before the lookup, and using it there is a manifest validation error); `usage.transcript.path`, under any `session.id` but `none`, since the transcript is read after the session id is known |
+| `{home}` | the home directory of the user who runs `agent execute`, as the operating system reports it | `usage.transcript.path`, as its first segment |
+| `{launch_dir_slug}` | the launch directory (§3.1: the project root, a linked worktree included), its symbolic links resolved, with every character other than `A`–`Z`, `a`–`z` and `0`–`9` replaced by `-`: the name Claude Code gives a project's folder of transcripts (`task-236`'s pass, launched in `…/.wf2-wt/task-236`, found its session file under `-…--wf2-wt-task-236/`) | `usage.transcript.path` |
+
+`usage.transcript.path` is a path, not an argv: each of its placeholders fills one whole segment between two `/`,
+except that the last segment may be `{session_id}` followed by a literal extension (`{session_id}.jsonl`). A path that
+is not absolute once rendered, or a segment that renders as `.` or `..`, yields `not-reported` and a `warning:` line
+(§2.6); it never launches anything.
 
 In `mcp.template`, `{mcp_command}` renders as JSON string content (the template quotes it) and `{mcp_args}` as a
 JSON array of strings, with every U+007F written as the escape `\u007f`: the rendered text is valid JSON (for
@@ -358,10 +369,44 @@ component (`dl-131`).
   is valid but whose stderr exceeds the limit loses its values too) or prints no JSON, and a value present in its JSON with the wrong type (a `model` that is not a non-empty
   string, a count that is not a non-negative integer, a session id that is not a non-empty string),
   yield `not-reported` and one `warning:` line naming the adapter, the lookup and the cause; an absent
-  value yields `not-reported` silently. `agent_version` is the first non-blank line `version_args`
-  prints.
+  value yields `not-reported` silently.
+- **The agent CLI's version** (`dl-180` version (b), `bug-366`). `version_args` runs twice, each time as a lookup
+  runs: once before the launch, right before §3.3 step 13's banner, and once with the post-run lookups of step 16.
+  The first non-blank line the first prints is `agent_version`, the version that ran; the first non-blank line the
+  second prints is `agent_version_after` (§4.2). The two runs are never merged into one. A read that fails or prints
+  nothing yields `not-reported` and one `warning:` line, `adapter '<name>': version_args <cause> before the launch:
+  agent_version recorded as not-reported` or `adapter '<name>': version_args <cause> after the run:
+  agent_version_after recorded as not-reported`, `<cause>` being `printed nothing` or `failed (<reason>)`; neither
+  refuses the launch nor fails the run. When both are reported and differ, the agent CLI changed during the run (a
+  CLI that updates itself mid-session): the record keeps both, and one `warning:` line says so, `adapter '<name>':
+  the agent CLI changed during the run: version_args printed '<agent_version>' before the launch and
+  '<agent_version_after>' after it`. A dry run reads neither.
 - **`none`**: `not-reported`.
-- Usage and model follow the same rules through `usage.from`. The record's `model` is a value WingFoil read
+- **Usage and model** (`dl-114` Q3 (i), `dl-188` part 1 (c)) come from the sources `usage.from` names, after the
+  session id is known. A list is tried in its order: the first source that yields at least one value — a count or
+  the model — supplies the model and all four counts, its unreported ones staying `not-reported`; the sources after
+  it are not read, and values of two sources are never mixed. A source that yields nothing passes to the next; when
+  none yields, the model and the counts are `not-reported`.
+  - **`lookup`**: `usage.lookup_args`, run and read as a lookup, its values at the paths `usage.fields` declares.
+  - **`output`**: the stdout of a headless run whose adapter declares `launch.headless.output: json`, kept as for
+    the session id (at most 1 MiB, one JSON document), its values at the paths `usage.fields` declares. An
+    interactive launch yields nothing from it, silently, because stdout belongs to the agent; invalid JSON or more
+    than 1 MiB yield nothing and one `warning:` line.
+  - **`transcript`**: the lookup over the agent's session transcript (`dl-188` part 1 (a)), the file at
+    `usage.transcript.path`, rendered with the session id the record holds, read after the agent exits, line by
+    line, under the same 10 s limit. A line that is not JSON is passed over; the selected lines
+    (`usage.transcript.select`), one per message under `usage.transcript.message_id`, are the messages. Each count is
+    the sum of the integers found at its path over the messages; a count no message carries is `not-reported`, never
+    `0`. The model is the distinct non-empty strings found at its path, sorted and joined with `, `, or
+    `not-reported` when there is none. A session id that is `not-reported`, a file that is absent or unreadable, a
+    path that does not render as an absolute path, a read that exceeds the limit, and a value of the wrong type (a
+    count that is not a non-negative integer, a model that is not a string) yield nothing for that source, or that
+    value, and one `warning:` line naming the adapter, `usage.transcript` and the cause, never the path. The file is
+    the agent vendor's, not a declared interface: the adapter pins its shape by `verified_with`, as every other
+    declaration, and a mismatch degrades the record to `not-reported`, never corrupts it. The transcript is read
+    after the run only: nothing of it enters the bootstrap or the context (`determinism`), and only the counts and
+    the model reach the record.
+- The record's `model` is a value WingFoil read
   from the adapter's declared lookup; `not-reported` says it read none. WingFoil never knows the model before the
   launch (`spec-018` §2.4), so the `AI-Model:` trailers on the commits the agent wrote during the run carry what the
   agent passed (`--ai-model`, `WINGFOIL_AGENT_MODEL`) or `not-reported`: the agent's own claim, never a value
@@ -384,6 +429,9 @@ that the path tests exercise is the one every project adapter takes:
     fetch with `element` and `state`);
   - optionally calls the headless result Tool (v1.0);
   - prints a declared JSON document (session id, model, usage) for `output`/`lookup`;
+  - optionally writes a declared transcript for the session id it was launched with, under the home directory and
+    the launch directory's folder name, as §2.6's `transcript` reads it, and optionally prints, after its launch, a
+    version other than the one it printed before, as an agent CLI that updates itself during a session (`bug-366`);
   - exits with a declared code, or waits to be killed by a signal;
   - optionally records each signal it receives, so a test can count the deliveries of one signal
     (§3.3 step 15, `task-355`), and starts a long-running process of its own, whose pid it records, so a
@@ -415,7 +463,7 @@ needs:
 
 | `name` (file basename) | Agent CLI | `command`, `launch.interactive.args`, `prompt.via`, `mcp.*`, `session.*`, `usage.*` | `verified_with` |
 |---|---|---|---|
-| `claude-code` | Claude Code | `command: claude`; `launch.interactive.args: ["{bootstrap}", --mcp-config, "{mcp_config_file}"]`; `prompt.via: arg`; `mcp.via: config-file`; `session.id: assign` with `[--session-id, "{session_id}"]`, resume `[--resume, "{session_id}"]`; `usage.from: none` (`task-236`; launch, MCP and session id checked by hand on 2026-10-14 with 2.1.296, resume from `--help` only) | the pass ran on `2.1.296 (Claude Code)` (`task-236`); the manifest has one `verified_with`, the headless table's |
+| `claude-code` | Claude Code | `command: claude`; `launch.interactive.args: ["{bootstrap}", --mcp-config, "{mcp_config_file}"]`; `prompt.via: arg`; `mcp.via: config-file`; `session.id: assign` with `[--session-id, "{session_id}"]`, resume `[--resume, "{session_id}"]`; `usage.from: [transcript, output]` (v0.4, `task-337`: the usage table below); launch, MCP and session id checked by hand on 2026-10-14 with 2.1.296 (`task-236`), resume from `--help` only | the pass ran on `2.1.296 (Claude Code)` (`task-236`); the manifest has one `verified_with`, the headless table's |
 | `codex-cli` | Codex CLI | `command: codex`; `launch.interactive.args: [-c, "{mcp_config}", "{bootstrap}"]`; `prompt.via: arg`; `mcp.via: config-arg` with the template `mcp_servers.wingfoil={command = "{mcp_command}", args = {mcp_args}, enabled = true, required = true}` and `mcp.conflict_args: [mcp, get, wingfoil]` (`task-356`, §2.5); `session.id: output` with `session.field: thread_id`, read from the headless launch's `--json` events (the first event, `thread.started`, carries it; `codex exec resume <id>` accepts it) (§2.6; an interactive run records `not-reported`), resume not supported until §7's resume ships; `usage.from: none` (`task-237`; from `codex --help` of `codex-cli 0.145.0`; checked by hand on 2026-10-14 with codex-cli 0.145.0 (ChatGPT sign-in); the conflict check and the session field by hand with `codex-cli 0.145.0`, `task-356`) | `codex-cli 0.145.0` |
 
 Each built-in declares `launch.interactive.terminal: required` (§2.2) and carries `verified_with`,
@@ -436,11 +484,12 @@ the implementing task stops and returns the choice to the approver; R17 is not s
 `verified_with` names, keeping `prompt.via: arg` (the bootstrap is the CLI's positional prompt in both launches) and
 the MCP registration of its interactive launch, and declaring `output: none`, since the work run reads nothing
 from stdout (§2.2), except `codex-cli`, which declares `output: jsonl`: its work run's stdout is read for the session
-id only (§2.6, `task-356`):
+id only (§2.6, `task-356`), and `claude-code`, which declares `output: json` from `task-337` on: its work run's stdout
+is one JSON result document, read for the usage when the transcript yields none (§2.6, the usage table below):
 
 | `name` | `launch.headless` | Read from | `verified_with` |
 |---|---|---|---|
-| `claude-code` | `args: [-p, "{bootstrap}", --mcp-config, "{mcp_config_file}"]`, `output: none` (`-p`/`--print`, "print response and exit"; the prompt before `--mcp-config` for the reason of the interactive launch; `session.assign_args` still closes the list) | `claude --help` of `2.1.310 (Claude Code)`, which still lists every flag of the interactive launch, `--session-id` and `--resume` | `2.1.322 (Claude Code)`, the version the by-hand pass of the headless role map ran (`task-339`) |
+| `claude-code` | `args: [-p, "{bootstrap}", --output-format, json, --mcp-config, "{mcp_config_file}"]`, `output: json` (`-p`/`--print`, "print response and exit"; `--output-format json`, which works only with `--print`, added by `task-337`; the prompt before `--mcp-config` for the reason of the interactive launch; `session.assign_args` still closes the list) | `claude --help` of `2.1.310 (Claude Code)`, which still lists every flag of the interactive launch, `--session-id` and `--resume` | `2.1.322 (Claude Code)`, the version the by-hand pass of the headless role map ran (`task-339`) |
 | `codex-cli` | `args: [exec, --json, -c, "{mcp_config}", "{bootstrap}"]`, `output: jsonl` (`codex exec`, "run Codex non-interactively", which takes `-c` and the prompt as its positional; `--json` prints its events to stdout as JSONL, the source of the session id, `task-356`) | `codex exec --help` of `codex-cli 0.145.0` | `codex-cli 0.145.0` |
 
 The by-hand pass of a headless launch, as `task-236` and `task-237` made for the interactive one (the agent starts
@@ -477,6 +526,19 @@ a directory the CLI has never opened, the pass recorded in `task-353`'s Executio
 
 No built-in declares a fragment: neither CLI's help at those versions shows an option that tells it to trust the launch
 directory. A built-in whose by-hand pass finds one declares it, and the row says so.
+
+**The usage of the built-ins (v0.4, `task-337`; `dl-188` part 1 (c)).** `claude-code` reads its run's token counts and
+model from the session transcript first, which every launch kind writes and whose name the assigned session id fixes,
+and from a headless run's JSON result only when the transcript yields none (§2.6). `codex-cli` keeps `usage.from:
+none`: no source of its usage was checked.
+
+| `name` | `usage` | Read from |
+|---|---|---|
+| `claude-code` | `from: [transcript, output]`; `transcript`: `path: "{home}/.claude/projects/{launch_dir_slug}/{session_id}.jsonl"`, `select: { field: type, equals: assistant }`, `message_id: message.id`, `fields: { model: message.model, input: message.usage.input_tokens, output: message.usage.output_tokens, cache_read: message.usage.cache_read_input_tokens, cache_write: message.usage.cache_creation_input_tokens }`; `fields` (the headless result): `{ input: usage.input_tokens, output: usage.output_tokens, cache_read: usage.cache_read_input_tokens, cache_write: usage.cache_creation_input_tokens }`, no model path | the transcript's place and its assistant messages' `usage` keys as `dl-188` describes them, checked with Claude Code 2.1.301; both, and the headless result's `usage`, re-checked by hand at the version `verified_with` names, the pass recorded in `task-337`'s Execution Notes |
+| `codex-cli` | `from: none` | — |
+
+The transcript's folder follows the launch directory (`{launch_dir_slug}`), so a run launched in a linked worktree
+(§3.1) is read from that worktree's folder, not the main checkout's.
 
 ### 3. `wingfoil agent execute`
 
@@ -903,8 +965,8 @@ record with its keys in that order (`bug-288`). JSON Lines is chosen because:
 | 6 | `mode` | string | The mode that ran, not the modes the phase allows: `fresh` in v0.3 (§3.2 step 6). |
 | 7 | `agent` | string | `team.agents[].name`. |
 | 8 | `adapter` | string | `<built-in\|custom>/<name>`. |
-| 9 | `agent_version` | string | Per `version_args`, or `not-reported`. |
-| 10 | `model` | string | As the agent reports it, or `not-reported`. |
+| 9 | `agent_version` | string | Per `version_args` read before the launch, the version that ran (§2.6), or `not-reported`. In a line of the 18-key form (below) it was read after the run. |
+| 10 | `model` | string | As the adapter's usage source reports it (§2.6), or `not-reported`. |
 | 11 | `session` | string | Session id (`dl-135` point 2), or `not-reported`. |
 | 12 | `tokens` | object | `{ "input", "output", "cache_read", "cache_write" }`, each an integer or `not-reported` (`dl-114` Q2 (b), Q3 (i)). |
 | 13 | `wingfoil` | string | The launching build, `"<semver> (<sha>)"`, as `dl-111`'s `WingFoil-Version:` trailer. |
@@ -913,10 +975,16 @@ record with its keys in that order (`bug-288`). JSON Lines is chosen because:
 | 16 | `exit_status` | integer \| string | The agent's exit code, an integer from `0` to `255`, or `signal:<NAME>` (`bug-288`). |
 | 17 | `result` | string | `n/a` for an interactive launch and for a headless work run (`dl-181` Q1 (a)); `PASS`/`FAIL`/`ERROR` for a verification run (§3.5, v1.0). |
 | 18 | `notes` | string | `<element-id>#execution-notes` if the element's `## Execution Notes` section at `HEAD` after the run differs from its text at `state_ref`, else `none` (`dl-135` Q2 (c)). Notes the agent wrote but did not commit are not seen, and yield `none`; for a type whose template has no such section (§2.4) the value is always `none`. A run that §3.3 step 16 finds stopped before any commit, under `launch.<kind>.trust: prompt`, records instead the fixed text `none (no commit since state_ref: the agent CLI may have stopped at its folder-trust step)` (`bug-500`, `task-353`). |
+| 19 | `agent_version_after` | string | Per `version_args` read again after the agent exits (§2.6), or `not-reported`. When `agent_version` and `agent_version_after` are both reported and differ, the agent CLI changed during the run: the two values side by side are the record's flag, and a `warning:` line said so (`dl-180` version (b), `bug-366`). |
 
-A field is never omitted and never `null`. Adding a field is a revision of this spec. Readers
-refuse a line with an unknown key, so a record from a newer build is reported, not silently
-truncated (§4.5).
+A field is never omitted and never `null`. Adding a field is a revision of this spec, and a new field is appended
+after the last one, never placed between two others. Writers write every field. Readers refuse a line with an
+unknown key, so a record from a newer build is reported, not silently truncated (§4.5).
+
+**The 18-key form.** A line written before field 19 existed holds fields 1–18 only, in their order: every build up
+to 0.3.x wrote that form. Readers accept it, read its absent `agent_version_after` as `not-reported`, and keep its
+`agent_version` as written (read after that run, `bug-366`); it is history, never rewritten. A line holding field 18
+and not field 19 is in this form; a line missing any other field is refused as before.
 
 #### 4.3 Run id
 
@@ -986,9 +1054,9 @@ more caller of both.
 #### 4.5 Reading the log
 
 Every reader (`agent execute` for `n`, `agent list`, `agent show`) validates each line it reads: it
-must be JSON, have exactly the §4.2 keys in order with valid types, have an `id` whose element
+must be JSON, have exactly the §4.2 keys in order — or the keys of §4.2's 18-key form — with valid types, have an `id` whose element
 segment equals the file's basename, and be byte for byte the §4.2 serialization of the record it parses
-to — a CR before the newline, whitespace outside a string, or another spelling of a value (`1.0` for
+to, in the line's own form — a CR before the newline, whitespace outside a string, or another spelling of a value (`1.0` for
 `1`, an escaped character the writer writes as is) is refused (`bug-288`), with the detail `not in the
 serialized form of spec-016 §4.2 (a CR, whitespace outside a string, or another spelling of a value)`.
 Every reader reads the blob's kind: a run log committed as a symbolic link is not
@@ -1556,3 +1624,22 @@ does not know the key refuses a manifest that declares it. (3) `bug-418`: §3.2 
 own `plan` element, so `NO_STEP_ELEMENT` is a defence only (§3.7), and §5's waiting `element` follows step 2. No
 placeholder, record key or exit code changes. Edited in place without a supersede or a state change (`dl-047`),
 pending the approver's `memory amend` at `task-353`'s design gate.
+
+**Revision (2026-11-16, `task-337-record-token-counts-result-n-a-and-the-agent-version-before-and-after-in-a-claude-code-run-record`)
+— §2.2, §2.3, §2.6, §2.7, §2.8, §4.2 and §4.5.** (1) `dl-180` version (b), `bug-366`: `version_args` runs before the
+launch and again after the agent exits (§2.6); `agent_version` (§4.2 field 9) is the version read before, the one that
+ran, and the new field 19 `agent_version_after` the one read after; when both are reported and differ, the two values
+are the record's flag and a `warning:` line says so. A failed read on either side is `not-reported` and a warning, as
+before. (2) `dl-188` part 1 (c): `usage.from` takes a new source, `transcript` — the agent's session transcript, a JSON
+Lines file at `usage.transcript.path`, its messages chosen by `usage.transcript.select` and counted once per
+`usage.transcript.message_id`, each count summed over them — and a list of sources tried in order (§2.2, §2.6); the
+`output` source is defined for a headless run under `launch.headless.output: json`. §2.3 gains `{home}` and
+`{launch_dir_slug}`, legal only in that path, whose placeholders fill whole path segments. §2.8: `claude-code` reads
+`[transcript, output]`, its headless launch adding `--output-format json` and declaring `output: json`; `codex-cli`
+keeps `none`. §2.7: the fake can write a transcript and change its version during a launch. (3) The record format
+(§4.2, §4.5): fields are appended, never inserted; the 18-key form every build up to 0.3.x wrote stays readable, its
+`agent_version_after` read as `not-reported`, and an older reader refuses a 19-key line as it refuses any unknown key.
+The `result` row is unchanged: a work run's `result` is already `n/a` (`dl-181` Q1 (a), `task-335`). §3 is not edited:
+§3.3 step 16's `agent_version` reference stands, read with §2.6. The manifest `format` stays 1, an additive optional
+field (`dl-149`). Edited in place without a supersede or a state change (`dl-047`), pending the approver's `memory
+amend` at `task-337`'s design gate.
