@@ -506,6 +506,118 @@ problem). No invisible character in the changed files (the prompt's `grep -nP` �
 entry then keeps `agent execute`'s own. The CLI fixtures now carry `.wingfoil/.gitignore`; a hand-built fixture that
 launches without it will meet D8's warning.
 
+### green (developer, 2026-11-16)
+
+**Setup.** Worktree on the task branch at `1075c72dd`; `git rev-list --count HEAD..main` → `0` (no merge of `main`, at
+the start and after refactor). PATH guard through the task's PATH shim: `command -v wingfoil && wingfoil --version &&
+node dist/cli.js --version` → the shim's path, then `0.3.2 (dc02f6d305e22b45fec813d34f05b38911171550)` twice.
+
+**Commits.** `f84f870a4` (code, `.wingfoil/.gitignore`, the allowlist, two suites of my own), `fc097e6ef` (user guide
+§9.4, CLI reference, REQ-SYS-03's fit criterion, D7), `8b2c68df8` (a wrapped reference line began with `<pid>)`, which
+`test/docs` site-markdown reads as HTML), `d260a23b4` and `079c5f995` (the CLI command list and the vision index, below), `d3f63b0f0` (the lint workaround's
+comment).
+
+**What green built, AC by AC.**
+- AC 1: `spawnOptions` pipes headless stderr (`['ignore', 'pipe', 'pipe']`). `runAgent` feeds both pipes through
+  `lineSplitter` of the new `src/agent/output.ts` (64 KiB cap, cut before a UTF-8 sequence the cap would split, U+FFFD,
+  the tail flushed) into `reportOutput` (`src/validation/warning.ts`, beside `withNoticeSink`: `OutputStream`,
+  `OutputSink`, `withOutputSink`, `reportOutput`), rendered by `emitOutput` (`src/cli/warning.ts`) and installed in
+  `src/cli/registrar.ts`. After the exit both streams are read until they end, at most `LOOKUP_TIMEOUT_MS`, then
+  destroyed (D11). The stream listeners are bound with `AsyncResource.bind`: without it a line emitted from another
+  async context (the `FakeChild` writes of `launch-output.test.ts`) missed the sink — the first targeted run printed
+  `Array []` for every line case.
+- AC 2: `--log` registered (`src/core/index.ts`); blank → `invalid flag value: --log must not be blank`, with
+  `--interactive` → `LOG_INTERACTIVE`, both `UsageError`s before the project is read (`src/core/agent-execute.ts`);
+  `LOG_INTERACTIVE` again right after `resolveLaunchKind` (`src/agent/execute.ts`, §3.2 step 7). `openLog` opens `'a'`,
+  mode `0600`, resolved against the current directory; `LOG_UNWRITABLE` is `cannot write the log <path>: <cause>`, the
+  entry removed. The not-ignored warning (`notIgnoredInRepository`, `git check-ignore -q`) only inside the root; a dry
+  run prints it and opens nothing.
+- AC 3: nothing of the output is written but stderr and the `--log` file.
+- AC 4: new `src/agent/active-runs.ts` (`ACTIVE_RUNS_DIR`, `ActiveRunEntry`, `readActiveRuns`, `registerRun`,
+  `rewriteRunPid`, `removeRun`, `processAlive`). `launchAgent` registers after the salt and before the banner, warns when
+  the entry is not ignored (D8), opens the log, then calls the new `launchRun` (the former body, unchanged), whose
+  `onSpawn` rewrites the pid; a `finally` closes the log and removes the entry.
+- AC 5: `WINGFOIL_GITIGNORE` in `templateScaffold` (`src/storage/templates.ts`); this repository's `.wingfoil/.gitignore`
+  committed (`git check-ignore -v .wingfoil/run/x/y/1.json` → `.wingfoil/.gitignore:2:/run/`); the two `PLANNED`
+  `.wingfoil/.gitignore` rows removed from `test/docs/name-resolvability.allowlist.ts`, and a row added for
+  `01_architecture.md|path|.wingfoil/run/` (the D7 sentence names the git-ignored path, as spec-011's row says).
+- AC 6: `agent list --active` (`src/core/agent-list.ts`): the active section, all three with no flag (D13), `waiting`
+  minus a step with a live entry of its workflow, phase and element (D4).
+- AC 7: both documents say "may hold secrets" and "never committed"; a `--log <path>` row; `--active` in `agent list`.
+- AC 8: the amendments `8ac2f6a3b`, `36625540a`, `5e8c143e4` precede red (red's notes).
+
+**Red → green.** `npx jest test/agent/launch-output.test.ts test/agent/launch-registry.test.ts test/agent/active-runs.test.ts
+test/core/init-gitignore.test.ts test/core/agent-list-active.test.ts test/core/agent-list.test.ts --maxWorkers=2` →
+`Tests: 61 passed` (after the `AsyncResource.bind` fix; before it, 9 failed in launch-output). `npx jest
+test/cli/agent-execute-output.integration.test.ts test/cli/agent-execute-log.integration.test.ts
+test/cli/agent-execute-registry.integration.test.ts test/cli/agent-list-active.integration.test.ts
+test/cli/agent-list.integration.test.ts --maxWorkers=2` → `Tests: 48 passed`. `test/docs/agent-output-secrets.test.ts`,
+`test/agent/launch-headless.test.ts`, `test/core/format-init-scaffold.test.ts` pass in the targeted docs run below.
+
+**My own suites** (not red's): `test/agent/output.test.ts` (the cap's UTF-8 back-off, a newline at the cap, stray
+continuation bytes, `openLog` mode and append, `EISDIR`, `notIgnoredInRepository` inside/outside/no repository) and
+`test/agent/active-runs-write.test.ts` (`registerRun` live/dead/malformed/unwritable, the rewrite, `removeRun`, an `id`
+its path does not name, a rewrite's dot-file, a `.wingfoil/run` file). My first run of the first failed on its own
+expectation (a stray-continuation cut backed off to byte 1): `boundary()` now backs off only to a lead byte whose
+sequence the cap would split.
+
+### refactor (developer, 2026-11-16)
+
+- **The lint workaround.** `test/lint/git-log-readers.test.ts` failed on `src/core/index.ts:2728`, `'log' not followed
+  by '--no-show-signature'`: it reads every quoted `log` token in `src/` as a `git log` argument, and has no exemption
+  mechanism (`grep -n "EXEMPT\|allow\|exempt" test/lint/git-log-readers.test.ts` → nothing). So
+  `AGENT_EXECUTE_LOG_OPTION = '--log'.slice('--'.length)` (`src/core/agent-execute.ts` l.58), with a comment naming the
+  false positive; the lint test is outside this task (candidate finding below).
+- **The CLI command list.** The full suite failed `test/docs/x-cli-cmds.test.ts` (rows 231 and 232 missing `--log` and
+  `--active`). With the orchestrator's ruling (same-class parity, W0-R10; precedent task-340), `docs/01_vision/X_cli-cmds.md`
+  2.4 → 2.5 (dated 2026-11-16; `git diff main -- docs/01_vision/X_cli-cmds.md` was empty before), its two rows and a
+  Revision-history entry (`d260a23b4`); the vision index then failed (`test/docs` → 4 failed, version/date/lines/range of
+  `X_cli-cmds.md`) and follows it as task-340's `3895a312f` did: `docs/01_vision/00_index.md` (`079c5f995`).
+  `npx jest test/docs --maxWorkers=2` → `Tests: 397 passed, 397 total`.
+- **Gates** (heavy ones after `waitslot.sh`, which printed nothing: no wait):
+  - first full run, `npm test -- --maxWorkers=2` → `Tests: 2 failed, 12071 passed, 12073 total` (x-cli-cmds, site-markdown;
+    both fixed above); the final full run is recorded under the self-review;
+  - `npm run test:coverage -- --maxWorkers=2` (the same tree) → `All files | 98.9 | 96.54 | 98.59 | 99.54` (statements,
+    branches, functions, lines), over 80 % in every column; `src/agent/active-runs.ts` 92.08 / 78.08 / 100 / 95.76,
+    `src/agent/output.ts` 100 / 88.88 / 100 / 100;
+  - `npm run lint` → exit 0; `npm run docs:api` → exit 0; `npm run typecheck` (both configs) → exit 0.
+- **`version:` bumps:** `docs/01_vision/X_cli-cmds.md` 2.4 → 2.5 (once on this branch); no other touched file declares
+  a version, and no `.wingfoil/*.yaml` changed.
+- **Invisible characters:** the prompt's `grep -nP` over each commit's files → exit 1 every time.
+
+**For task-337** (`src/agent/launch.ts`). `postRunFacts` and the record literal are untouched: `launchAgent`'s body after
+the argv moved, at the same indentation, into `launchRun` (l.927), so those hunks do not move. A reader of the whole
+headless stdout (the usage read of an `output: json` run) is one more raw-chunk consumer: `HeadlessOutput.stdout`
+(l.366) is the array `runAgent` hands every stdout chunk to, filled at the `forwardOutput(…)` call (l.981) with
+`[reader.write]` today; add the new reader beside it and read its result after `runAgent` returns, as `reader.end()` is
+read for `postRunFacts`.
+
+### self-review (developer, 2026-11-16)
+
+Against `code-review`: every AC has its red suite passing (above) and its code; the absence claims have their positive
+case (AC 3's marker on stderr, the not-ignored warning's ignored and outside cases). T4: `git log --first-parent
+--no-merges --format=%h efb088991..HEAD -- <the 20 files red added or changed>` → empty. Same-class: every stale sentence
+of the files touched ("output is not shown", "captured and not echoed", "`--active` comes later", the `drained` comment)
+rewritten (`grep -rn "not shown\|captured and not\|comes later (v0.4)" docs/*.md` → nothing).
+
+**Final full run** (after `waitslot.sh`, at `079c5f995`, a clean tree): `npm run -s build` then `npm test --
+--maxWorkers=2` → exit 0, `Test Suites: 662 passed, 662 total`, `Tests: 12073 passed, 12073 total`.
+
+**Decisions for the approver** (the spec does not settle them):
+1. A `--log` write that fails mid-run prints one `warning:` line, `cannot write the log <path>: <cause>; the rest of the
+   output is not copied`, and stops copying; the run goes on (`src/agent/launch.ts` l.850).
+2. The post-exit read no longer ends early once the session id is found: both streams are read to their end, at most
+   `LOOKUP_TIMEOUT_MS` (D11; `src/agent/launch.ts` l.469); the session reader's `found`, then dead, was removed.
+3. `AGENT_EXECUTE_LOG_OPTION = '--log'.slice('--'.length)` (`src/core/agent-execute.ts` l.58), a workaround for the lint
+   false positive below, to be removed with its fix.
+
+**Candidate finding (not filed):** `test/lint/git-log-readers.test.ts` takes any quoted `log` token in `src/` — a CLI
+option named `log` — for a `git log` reader and offers no exemption; suggested severity low.
+
+### Pending amendments (approver)
+
+None.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -513,3 +625,13 @@ launches without it will meet D8's warning.
      printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
      Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
      here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+
+- An event listener on a stream another context writes runs outside the surface's `AsyncLocalStorage` sinks: the
+  forwarded lines missed `withOutputSink` until the listeners were bound with `AsyncResource.bind` (the first targeted
+  run of `test/agent/launch-output.test.ts`: 9 failed, `Array []`). Proposal: say it in `src/validation/warning.ts`'s sink
+  doc for any later event-driven reporter.
+- Two doc-parity suites outside the design's file list failed only in the full suite (`test/docs/x-cli-cmds.test.ts`,
+  then the vision index): the design's "Files to touch" missed `docs/01_vision/X_cli-cmds.md` and `00_index.md`, which a
+  new flag always reaches. Proposal: the design checklist greps `test/docs` for the command name.
+- `test/lint/git-log-readers.test.ts` flagged an option named `log` (a false positive with no exemption): worked around
+  in `src/core/agent-execute.ts`, candidate finding above.
