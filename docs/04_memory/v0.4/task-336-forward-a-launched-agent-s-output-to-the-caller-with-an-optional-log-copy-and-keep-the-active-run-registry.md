@@ -772,6 +772,60 @@ No invisible character in the changed files (the prompt's `grep -nP` → exit 1)
 line as well as the `could not remove` line; the tests use a dead entry (no not-an-entry line) and pin exactly one
 warning line.
 
+### review fix round (developer, 2026-11-16)
+
+**Setup.** Head `57bd43e3b`; `git rev-list --count HEAD..main` → `0` (no merge). The task's PATH shim first on `PATH`
+in every call. Contract: `### review fix round design (architect, 2026-11-16)`, spec-016 (`e998b6346`) and spec-008
+(`a0eca9d33`) as amended, and qa's test commit `b9f07d6cc`.
+
+**Commits.** `7760e96b4` fix(agent): F2, F3, F5–F7 (and my own suite `test/agent/active-runs-write.test.ts`, its
+`removeRun` calls moved to the new signature, two cases added); `701ff5d2b` test(docs): F1; `24f003c04` docs: F7's
+message in `docs/cli-reference.md`'s `--log` row. The user guide lists none of `--log`'s usage errors, so it is unchanged.
+
+**Per finding.**
+- **F1.** The rows `LOG_INTERACTIVE`, `LOG_UNWRITABLE`, `RUN_ACTIVE` removed from
+  `test/docs/name-resolvability.allowlist.ts`; `test/docs/name-resolvability.test.ts` passes in the targeted run below.
+- **F2.** `removeRun(root, entry, agentPid?)` and `rewriteRunPid(root, entry, agentPid?)` act only while the file holds
+  this launch's entry (`holdsOwnEntry`, `src/agent/active-runs.ts` l.273: the same `id` and `started_ms`, a `pid` that
+  is `process.pid` or `agentPid`). `launchRun` keeps the agent's pid in `spawned.pid` (`src/agent/launch.ts` l.986);
+  `runAgent`'s exit callback rewrites the entry to `agent execute`'s own pid (l.995); the `finally` removes it with
+  `spawned.pid` (l.922).
+- **F3.** The `finally` removes the entry first, then closes the log inside a `try`; a close that throws prints one
+  `warning:` line, `cannot close the log <path>: <cause>` (l.926), and leaves the result as it was. No test drives a
+  throwing close: `openLog` offers no seam, and adding one only for that was out of the round's file list.
+- **F5.** `readActiveRuns` catches a removal that fails for another cause than `ENOENT` and prints `.wingfoil/run/<path>:
+  could not remove: <cause>` (`couldNotRemoveWarning`, l.216); nothing of the file is listed and the read stays `ok`.
+  qa's ambiguity, settled as the orchestrator said: a file that is no entry and cannot be removed prints the not-an-entry
+  line, then the could-not-remove line, each once — pinned in my suite (`a file that is no entry and cannot be
+  removed…`, a read-only directory, POSIX, not as root; `id -u` → `1000`, so it ran).
+- **F6.** `parseEntry` requires `started_ms` from `0` to `8640000000000000` (l.115) and an `id` of three non-empty
+  segments whose `<n>` matches `^[1-9][0-9]*$` (l.118), still naming the file's own path.
+- **F7.** `src/core/agent-execute.ts` l.114, right after the blank check, before the project is read: a `--log`
+  resolving (lexically, against the current directory) to `<root>/.wingfoil/run` or beneath it throws a `UsageError`,
+  `invalid flag value: --log must not name a file under .wingfoil/run/, the active registry` (exit `2`).
+
+**Runs.** Targeted, `npx jest test/agent/launch-registry-exit.test.ts test/agent/active-runs-review.test.ts
+test/agent/active-runs.test.ts test/agent/active-runs-write.test.ts test/agent/launch-registry.test.ts
+test/agent/launch-output.test.ts test/cli/agent-execute-log-registry.integration.test.ts
+test/cli/agent-list-active.integration.test.ts test/cli/agent-execute-registry.integration.test.ts
+test/cli/agent-execute-log.integration.test.ts test/docs/name-resolvability.test.ts test/docs/cli-reference.test.ts
+test/docs/agent-output-secrets.test.ts --maxWorkers=2` → `Test Suites: 13 passed`, `Tests: 111 passed` (before my two
+added cases); `npx jest test/agent/active-runs-write.test.ts --maxWorkers=2` → `Tests: 14 passed` after them.
+
+**Gates** (heavy ones after `waitslot.sh`, which printed nothing: no wait): `npm run lint` → exit 0; `npm run docs:api` →
+exit 0; `npm run typecheck` → exit 0; `npm run build` then `npm test -- --maxWorkers=2` → exit 0, `Test Suites: 668
+passed, 668 total`, `Tests: 12179 passed, 12179 total`; `npm run test:coverage -- --maxWorkers=2` → exit 0, `All files
+| 98.86 | 96.46 | 98.55 | 99.46`, `src/agent/active-runs.ts` 92.4 / 83.87 / 100 / 93.18, `src/agent/output.ts` 100 /
+88.88 / 100 / 100.
+
+**T4.** `git log --first-parent --no-merges --format=%h b9f07d6cc..HEAD -- <qa's five files>` → empty. `… efb088991..HEAD
+-- <red's 20 files>` → `b9f07d6cc` only: qa's own commit of this round (it extends `test/agent/active-runs.test.ts` and
+`test/cli/agent-list-active.integration.test.ts`), none of mine.
+
+**For task-337.** `src/agent/launch.ts` changes only in `launchAgent`'s `finally` and in the `launchRun` call's spawn and
+exit callbacks (`git diff --stat 57bd43e3b..HEAD -- src/agent/launch.ts` → 26 insertions, 10 deletions); `postRunFacts`,
+the record literal and `HeadlessOutput.stdout` did not move.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
