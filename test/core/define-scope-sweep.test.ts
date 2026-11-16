@@ -53,7 +53,7 @@ describe('task-277 AC 1 — vision-change `schedule` stamps the element and the 
   it('keeps its actions and checks', () => {
     expect(schedule().actions).toEqual(['element.set_release("{change-proposal.target_release}")', 'element.set_state(scheduled)']);
     expect(schedule().checks?.pre).toEqual(['change-proposal.target_release is not empty']);
-    expect(schedule().checks?.post).toEqual(['vision-index.current']);
+    expect(schedule().checks?.post).toEqual(['vision-index.current', 'change-proposal.assigned']); // task-359 (dl-166 Q2 (ii)): the release-exit post-check
   });
 
   it('vision-change.yaml is at least 1.1, with a task-277 history entry', () => {

@@ -11,7 +11,8 @@
  *   prose checks `e2e-smoke.scenario`, `mcp.registered` and `agents-md.current` replace, `bug-435`).
  * - AC 2 (task-358 edit): of the 17 names task-303 bound manual, the 15 still declared resolve manual and the two mixed
  *   keys, split into their halves, occur in no workflow; the check occurrences resolving manual at `HEAD` carry exactly
- *   the 55 names of the two groups; the registry raises no warning (68 → 0); `bindings.yaml` keeps task-303's 2.6 entry.
+ *   the 56 names of the two groups (55 at task-358, 56 with task-359's `downcast.in-scope`); the registry raises no
+ *   warning (68 → 0); `bindings.yaml` keeps task-303's 2.6 entry.
  * - AC 3 (characterization): `demo.rendered` is pinned in `test/docs/presentation.test.ts` and
  *   `test/core/workflow-manual-check.test.ts`; here it is one of the "manual on purpose" names.
  *
@@ -184,7 +185,7 @@ describe('task-303 AC 2, as task-358 changed it — the manual bindings (dl-186 
     expect(SPLIT_BY_TASK_358.filter((name) => used.has(name))).toEqual([]);
   });
 
-  it('the check occurrences resolving manual at HEAD carry exactly the 55 names of the two groups', () => {
+  it('the check occurrences resolving manual at HEAD carry exactly the 56 names of the two groups', () => {
     expect(manualCheckNames()).toEqual([...MANUAL_UNTIL_A_COMMAND, ...MANUAL_ON_PURPOSE].sort());
   });
 

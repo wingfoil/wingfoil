@@ -15,9 +15,10 @@ export const RUN_BINDINGS: readonly (readonly [string, readonly string[]])[] = [
 ];
 
 /**
- * The 36 checks a command could decide but none does yet, bound `manual: true` until it exists (D1 (B), D4; design
+ * The 37 checks a command could decide but none does yet, bound `manual: true` until it exists (D1 (B), D4; design
  * rows M1–M15): the 44 of task-303's unbound list minus the 13 now bound `run`, plus `gate.slot-free` (task-349), the
- * two `100% …` halves of the split checks and the two mechanical halves of `bug-435` item 4.
+ * two `100% …` halves of the split checks and the two mechanical halves of `bug-435` item 4, plus `downcast.in-scope`
+ * (task-359, `dl-166` Q1 (b), approver ruling D2 (A): vision-change's scoped-downcast post-check).
  */
 export const MANUAL_UNTIL_A_COMMAND = [
   'frontmatter.required',
@@ -56,6 +57,7 @@ export const MANUAL_UNTIL_A_COMMAND = [
   '100% of MVP Canvas features included',
   'feedback-notes.recorded',
   'proposals.disposed',
+  'downcast.in-scope',
 ] as const;
 
 /**
