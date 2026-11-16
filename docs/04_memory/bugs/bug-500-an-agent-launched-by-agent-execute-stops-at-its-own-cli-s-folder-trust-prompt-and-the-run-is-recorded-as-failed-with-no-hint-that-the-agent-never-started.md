@@ -50,3 +50,14 @@ cause.
   first recorded in.
 - Related: `dl-181` Q2 (a) (the headless permission posture in the adapter), `task-237` (the hand-verified Codex CLI
   adapter), `dl-209`.
+
+### Retrospective
+
+<!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
+     reconstructed afterwards. One line per item: what happened, the evidence (a command and what it
+     printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
+     An item met while fixing goes in the fix task's own subsection; this one holds what belongs to
+     the bug itself (its finding, its triage, why it took more than one task). The retrospective's
+     `explore` reads this subsection first. -->
+
+- Fixed by `task-353`: the optional adapter field `launch.<kind>.trust` (`implied`, `prompt` or an argv fragment) and the start-up hint — the record's `notes` and one `warning:` line — for a failed run with no commit since `state_ref` under `prompt`. The built-ins' values came from the approver's by-hand pass of 2026-11-14 in a fresh directory (`claude` interactive asks, `claude -p` does not; `codex` interactive asks, `codex exec` did not), which changed `codex-cli`'s headless value from the design's proposed `prompt` to `implied`; neither CLI's help offers an option that trusts the launch directory, so no built-in declares a fragment.
