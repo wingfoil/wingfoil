@@ -69,4 +69,4 @@ spec as much as in the code.
 
 ### Retrospective
 
-- None.
+- Fixed by `task-353`: `stepTargetElement` (`src/agent/step.ts`) and `agent list --waiting` (`src/core/agent-list.ts`) fall back to the instance's own plan element, `plan:<instance-id>`, so the `init` scaffold's checkpoints run under `agent execute --next`; `NO_STEP_ELEMENT` remains a defence for a call with no instance. The fallback is duplicated in the two modules because `src/core` may not import `src/agent` (`test/lint/import-graph.test.ts`).
