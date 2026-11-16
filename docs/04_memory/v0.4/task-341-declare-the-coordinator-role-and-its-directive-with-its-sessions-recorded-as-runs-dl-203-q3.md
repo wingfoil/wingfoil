@@ -512,6 +512,29 @@ No finding.
 
 None.
 
+### review fix (developer, 2026-11-16)
+
+Review finding 1 (should-fix-in-task): `.wingfoil/directives/custom/coordinator.md` §4 read as a closed list that left
+out part of `dl-203` D1's mechanical sequence, so §2's `dl-134` clause forbade what D5 (a) rests on. Fixed in
+`9b295ba44` (ruling consistent with D3 (b) and D5 (a), no new decision):
+- §4 lists the driver's mechanical steps in full: `workflow status`/`workflow next`; opening the instance (`workflow
+  start`, or a phase plan by `memory add --type plan`); `memory add --workflow <instance> --step <step-key>`; the launch
+  of the step's role; the Memory transitions of the mechanical phases `workflow next` prints (`wf(task): start`, the
+  `wf(task): finalize` `[approved → done]` and the merge, the `wf(bug): sync` subjects); a `workflow finalize` of a
+  step with no evidence and no `approval:`; `workflow end`; each recorded with the subject or command `workflow next`
+  prints, and none an approver-gated verb (`grep -n 'rekey\|adopt\|memory approve' <directive>` → only §2's lines
+  38–39).
+- §2's `dl-134` clause says a step's work is its content (design, red tests, green, refactor, review, an element's
+  content), not those mechanical driver steps.
+- `version: "1.0"` unchanged: the file is new on this branch (`doc-versioning`).
+
+Gates: `npx jest test/directives/coordinator.test.ts test/directives/standing-approvals.test.ts
+test/docs/name-resolvability.test.ts test/docs/agents-md.test.ts --maxWorkers=2` → `Test Suites: 4 passed`, `Tests: 51
+passed, 51 total`; `npm run -s check:role-directives` → `role-directives: 9 roles checked, 0 with warnings`, exit 0;
+`npm run lint` → exit 0; `npm run -s wingfoil -- directives list --role coordinator --format json` (pinned) →
+`warnings: []`, 8 entries. Full suite not re-run: the fix changes only the directive text and these notes (`git diff
+--stat 3c6054766..HEAD` lists only those two files). T4: no red file touched.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
