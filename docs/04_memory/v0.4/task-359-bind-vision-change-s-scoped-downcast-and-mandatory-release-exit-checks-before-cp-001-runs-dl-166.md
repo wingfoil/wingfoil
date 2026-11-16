@@ -275,6 +275,109 @@ prefix. No missing-`memory.yaml` case is written.
 **Overlap.** None of task-341's files is touched; the shared helper `manual-binding-groups.ts` gained one entry
 (additive).
 
+### green (developer, 2026-11-16)
+
+**Base.** Branch head `beb8ced4c` (red recorded); `git rev-list --count HEAD..main` → `0` at the start and at the end of
+refactor, so no merge. PATH guard: `command -v wingfoil` → the task's PATH shim; `wingfoil --version` and `node
+dist/cli.js --version` → `0.3.2 (82967c42a9dd691e21e346b48c83ba9f6f231ba6)`. `git merge-base --is-ancestor 11f1736de
+HEAD` → exit 0 (the verbs write the attribution pair themselves).
+
+**Green commit `41b01ecf8`** (`git show --stat 41b01ecf8`: four files, the ones the design lists):
+- `.wingfoil/workflows/custom/vision-change.yaml` 1.2 → 1.3 (one bump, history segment `1.3 task-359 (dl-166 …)`): the
+  three downcast phases carry `checks: { post: ["downcast.in-scope(layer: stories|scenarios|requirements)"] }` and a
+  description clause naming the post-check; `schedule`'s `post` is `[vision-index.current, change-proposal.assigned]`
+  and its description gains the amend path of a release past `draft` (dl-132 note of 2026-10-12) and the exit the
+  post-check refuses. `define-scope-sweep.test.ts`'s description regexes stay green (run below).
+- `.wingfoil/workflows/bindings.yaml` 3.1 → 3.2 (one bump, history segment `3.2 task-359 …`):
+  `change-proposal.assigned: { run: [node, scripts/check-release-exit.cjs, "{element.path}"] }` after
+  `vision-index.current`, with its comment; `downcast.in-scope: { manual: true }` at the end of the "manual until a
+  command" group, its comment naming the command owed (D2 (A)). No `check-downcast-scope` script (D2 (A)).
+- `scripts/check-release-exit.cjs` (new, module doc stating the rules, usage and exit table): read-only, no clock, no
+  network, root = the working directory, directories walked sorted; the release element found by matching
+  `memory.yaml`'s `release.path` segment by segment (a placeholder matches within one segment). Spawned, never
+  imported, so no `module.exports` and no `.d.cts` (as red's header states).
+- `.wingfoil/WORKFLOW.md`, the `vision-change` diagram only (D5): V4–V6 draw `✔ downcast.in-scope(layer: …) (manual
+  until a command)`, V7 `✔ vision-index.current · change-proposal.assigned`, and one paragraph under the table. No
+  `version:` field in that file (`grep -n "^version:" .wingfoil/WORKFLOW.md` → nothing, exit 1). task-341's role list untouched.
+
+**The interface choices red left open.**
+- Orchestrator ruling on red's ambiguity 1: with no sequencer row, the no-row line is printed once, first, and no
+  per-id row line follows; the per-id `features:` lines still follow when the release is past `draft` (the design lists
+  them per id).
+- Orchestrator ruling on red's ambiguity 2: a missing `.wingfoil/memory.yaml` or sequencer is named by its path
+  relative to the project root (`check-release-exit: docs/01_vision/07_sequencer.md: no such file`).
+- Orchestrator ruling on red's ambiguity 3: the ruling said exit 0 prints "the design's success line"; the design says
+  "Exit 0, stdout empty", so the design wins and exit 0 prints nothing on stdout or stderr; on exit 1 the findings go to
+  stdout and stderr is empty.
+
+**Red → green.** Red (red notes): 33 failed in three suites, 3 failed in two more. After the green commit (the
+registry assertions read `HEAD`): `npx jest test/core/vision-change-workflow.test.ts test/cli/check-release-exit.test.ts
+test/core/define-scope-sweep.test.ts test/core/workflow-bindings-complete.test.ts
+test/core/workflow-manual-prose-checks.test.ts test/core/workflow-repository-conformance.test.ts
+test/cli/workflow-unbound-none.integration.test.ts test/docs/workflow-md.test.ts --maxWorkers=2` → 8 suites, 213 tests
+passed.
+
+**Live runs at the worktree root.** `node scripts/check-release-exit.cjs docs/04_memory/change-proposals/cp-002-….md`
+→ exit 0, no output; `… cp-001-….md` → exit 1, `docs/04_memory/change-proposals/cp-001-….md: release is empty` (cp-001
+is not stamped yet: its `schedule` cannot pass today, as D3 states).
+
+**AC 4, read with the pinned build (dl-205 Q1 (a)).** `npm run -s wingfoil -- workflow show vision-change --format
+json` → exit 0; projected with `node -e` over the JSON: `downcast-stories`, `-scenarios`, `-requirements` each
+`[["downcast.in-scope(layer: …)",{"kind":"manual","source":"project"},false]]`; `schedule`
+`[["vision-index.current",{"kind":"run",…,"severity":"reject"},false],["change-proposal.assigned",{"kind":"run","source":"project","argv":["node","scripts/check-release-exit.cjs","{element.path}"],"severity":"reject"},false]]`.
+Its one stderr line, the warning `….dna.yaml: unknown field(s) ignored: team.roles[4].human_only, …`, is the base's
+(the design records it on `main` too), not this change's. `npm run -s wingfoil -- workflow list --format json` →
+`diagnostics []` (task-358's pin holds). `--format console` prints the same JSON. `npm run -s check:mcp` → exit 0
+(pinned 0.3.2 and the build under development both serve `[prompts, resources, tools]`, every Resource read and Prompt
+get answered).
+
+### refactor (developer, 2026-11-16)
+
+No code change after green: the script follows `scripts/check-retrospective.cjs`'s shape (`UsageError`, `confinedFile`,
+`main`), and `npx eslint scripts/check-release-exit.cjs` → exit 0. Gates (heavy ones after the heavy-gate wait script,
+each answering at once with `SLOT`, no wait; `--maxWorkers=2`, foreground or a tracked background command):
+- `npm run -s build` → exit 0 (clean tree, before the suite).
+- `npm run test:coverage -- --maxWorkers=2` → exit 0, 651 suites, 11958 tests passed; All files: Stmts 99.09 %,
+  Branch 96.96 %, Funcs 98.65 %, Lines 99.62 % (the script is spawned, outside jest's coverage, like the other
+  `scripts/*.cjs`).
+- `npm test -- --maxWorkers=2` → exit 0, 651 suites, 11958 tests passed. It includes the document-parity suites
+  `docs.parity` names (`grep -n "docs.parity:" .wingfoil/workflows/bindings.yaml`: `agents-md`, `cli-reference`,
+  `command-surface-specs`, `commands-parity`, `enumeration-parity.allowlist`, `exit-codes-parity`, `llms-txt`,
+  `mcp-surface-parity`, `memory-types-parity`, `name-resolvability`, `workflow-md`) and
+  `test/cli/workflow-unbound-none.integration.test.ts`, green here because no amendment is pending (bug-534 does not
+  apply: dl-132's note is already recorded, `84ca12e03`).
+- `npm run -s lint` → exit 0. `npm run -s docs:api` → exit 0, no warning. `npm run -s typecheck` → exit 0 (both tsc
+  configs).
+- No CLI, help or `docs/cli-reference.md` change (`git diff --name-only main...HEAD` lists none of `src/`, `docs/`
+  outside `04_memory`).
+
+### self-review (developer, 2026-11-16)
+
+- **AC 1** met: `vision-change.yaml` declares both checks with one bump to 1.3, `bindings.yaml` binds both with one bump
+  to 3.2 (`git diff main...HEAD -- .wingfoil/workflows/` → one `version:` line changed per file). **AC 2** met: the red
+  suites pin the checks and bindings and pass (run above). **AC 3** met by the approver's amend `84ca12e03` (red notes,
+  `memory history`); the note's text matches what green built (`git show 84ca12e03` read against the diff: 1.3, 3.2,
+  `manual: true` until a command, `scripts/check-release-exit.cjs` on the path, the `features:` rule past `draft`).
+  **AC 4**: the pinned-build read above; the merge order stays the orchestrator's.
+- **T4**: `git log --first-parent --no-merges --format=%h e674de678..HEAD -- test/cli/check-release-exit.test.ts
+  test/core/define-scope-sweep.test.ts test/core/helpers/manual-binding-groups.ts test/core/vision-change-workflow.test.ts
+  test/core/workflow-bindings-complete.test.ts test/core/workflow-manual-prose-checks.test.ts` → empty.
+- **Determinism**: no `Date`, no randomness in the script (`grep -nE "Date|Math.random|process.env" scripts/check-release-exit.cjs`
+  → nothing); `readdirSync(…).sort()`; ids in declared order.
+- **Same class in the files touched**: the `bindings.yaml` header's counts were checked — it names no count of `run`
+  or manual entries that this change makes stale (`grep -nE "four|\b36\b|\b55\b" .wingfoil/workflows/bindings.yaml` →
+  nothing). The WORKFLOW.md paragraph on the manual groups (around "manual until a command") names examples,
+  not a list, so it stays true.
+- **Absence claims with their positive case**: "no `.d.cts`" — red's header says spawned, never imported, and
+  `grep -rn "check-release-exit" test/ src/` lists only `test/cli/check-release-exit.test.ts`
+  (which spawns it) and the argv pins of `test/core/vision-change-workflow.test.ts`.
+- Invisible-character grep on the four changed files → no hit (exit 1), before the green commit and this one.
+
+### Pending amendments (approver)
+
+None: the dl-132 note was recorded by the approver's `memory amend` (`84ca12e03`) before red, and no other element past
+its first state is edited (`git status --short` → clean before this notes commit).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -282,3 +385,5 @@ prefix. No missing-`memory.yaml` case is written.
      printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
      Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
      here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+
+- The orchestrator's ruling on red's ambiguity 3 (exit 0 prints "the design's success line") met a design that prints nothing on exit 0; the design won, as the ruling foresaw. Evidence: the design's "Exit 0, stdout empty" and `test/cli/check-release-exit.test.ts` expecting `stdout: ''`. Proposal: a ruling that quotes the design line it reads avoids the mismatch.
