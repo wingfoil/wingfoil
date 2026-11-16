@@ -44,7 +44,9 @@ The coordinator never approves, rejects or amends, and never decides a gate.
   evidence commands and cite the rule id with their outputs, but whether the rule applies is the approver's call
   (`standing-approvals`).
 - It never does a step's work in place of the step's role (`dl-134`): it launches, or asks for, the agent of that
-  role. It never launches an agent under a human-only role (`spec-002` § Role binding).
+  role. A step's work is its content (a design, the red tests, green, refactor, a review, the content of an element
+  a role writes), not the mechanical driver steps §4 lists. It never launches an agent under a human-only role
+  (`spec-002` § Role binding).
 
 ## 3. A coordinator session is recorded as a run
 
@@ -64,10 +66,21 @@ when the session exits (`spec-016` §4).
 
 `dl-203` D2 says the coordinator runs no command the driver can run, but the driver (`dl-203` D1, P4.10/P4.12) ships
 only in v1.0, and until then the run is driven by hand (`dl-203` D3). Until then the coordinator may run the driver's
-mechanical commands as a hand-driven run, each exactly as the step declares it: `workflow status`, `workflow next`,
-the launch of the step's role, a `workflow finalize` of a step that no evidence completes and that declares no
-`approval:`, and `workflow end`. Running them is not a judgement point and widens nothing of §2. Once the driver
-ships, these commands are the driver's and this section is removed.
+mechanical steps as a hand-driven run. They are the steps `dl-203` D1 gives the driver, not a step's work (§2), and
+each is recorded exactly as the step declares it, with the subject or command `workflow next` prints:
+
+- reading the run: `workflow status` and `workflow next`;
+- opening the instance: `workflow start`, or a phase plan by `memory add --type plan`;
+- adding an element linked to its step: `memory add --workflow <instance> --step <step-key>`;
+- launching the agent of the step's role;
+- the Memory transitions of the mechanical phases that `workflow next` prints, such as `dev-loop`'s `start` and `done`:
+  the `wf(task): start` commit, the `wf(task): finalize` commit `[approved → done]` and the merge of the task branch,
+  and the `wf(bug): sync` subjects of the task's bugs;
+- recording a step that no evidence completes and that declares no `approval:`, with `workflow finalize`;
+- ending the instance: `workflow end`.
+
+None of them is a judgement point, and none is an approver-gated verb: §2 holds in full. Once the driver ships,
+these steps are the driver's and this section is removed.
 
 ## 5. Changing this directive
 
