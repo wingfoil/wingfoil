@@ -65,6 +65,8 @@ function record(overrides: Partial<RunRecord> = {}): RunRecord {
     exit_status: 0,
     result: 'n/a',
     notes: 'none',
+    // task-337 (`spec-016` §4.2 key 19, as amended at `2d193b318`): appended after `notes`.
+    agent_version_after: NOT_REPORTED,
     ...overrides,
   };
 }
@@ -80,10 +82,10 @@ const without = <T extends object>(object: T, key: string): Record<string, unkno
   Object.fromEntries(Object.entries(object).filter(([name]) => name !== key));
 
 describe('run record serialization (spec-016 §4.2)', () => {
-  it('declares the 18 keys in §4.2 order and the four token keys', () => {
+  it('declares the 19 keys in §4.2 order, agent_version_after appended last (task-337), and the four token keys', () => {
     expect(RUN_RECORD_KEYS).toEqual([
       'id', 'element', 'workflow', 'phase', 'role', 'mode', 'agent', 'adapter', 'agent_version', 'model',
-      'session', 'tokens', 'wingfoil', 'state_ref', 'duration_ms', 'exit_status', 'result', 'notes',
+      'session', 'tokens', 'wingfoil', 'state_ref', 'duration_ms', 'exit_status', 'result', 'notes', 'agent_version_after',
     ]);
     expect(RUN_TOKEN_KEYS).toEqual(['input', 'output', 'cache_read', 'cache_write']);
     expect(NOT_REPORTED).toBe('not-reported');
@@ -97,7 +99,8 @@ describe('run record serialization (spec-016 §4.2)', () => {
       `{"id":"${ELEMENT_ID}/design/1","element":"${ELEMENT}","workflow":"dev-loop","phase":"design","role":"architect",` +
         '"mode":"fresh","agent":"claude","adapter":"custom/fake","agent_version":"not-reported","model":"not-reported",' +
         '"session":"not-reported","tokens":{"input":10,"output":"not-reported","cache_read":0,"cache_write":"not-reported"},' +
-        `"wingfoil":"0.3.0 (unknown)","state_ref":"${SHA}","duration_ms":1234,"exit_status":0,"result":"n/a","notes":"none"}\n`,
+        `"wingfoil":"0.3.0 (unknown)","state_ref":"${SHA}","duration_ms":1234,"exit_status":0,"result":"n/a","notes":"none",` +
+        '"agent_version_after":"not-reported"}\n',
     );
   });
 
@@ -737,5 +740,76 @@ describe('bug-288 — the run log holds exactly the writer\'s form (spec-016 §4
     } finally {
       removeTempDir(repo);
     }
+  });
+});
+
+/**
+ * task-337 AC 2 (red-first; `spec-016` §4.2 key 19 and "The 18-key form", §4.5 "in the line's own form", as amended at
+ * `2d193b318`; `dl-180` version (b), `bug-366`; approver rulings D1 (a), D7 (a)): the writer writes 19 keys, the reader
+ * accepts a line of exactly the 19 keys or of exactly the first 18, an 18-key line reading back with
+ * `agent_version_after: "not-reported"` and its `agent_version` as written; every other shape is refused as before.
+ */
+describe('task-337 AC 2 — key 19 agent_version_after and the 18-key form (spec-016 §4.2, §4.5; D7 (a))', () => {
+  const refusal = (text: string): string => {
+    const result = parseRunLog(text, LOG);
+    if (result.ok) throw new Error('expected a refusal');
+    return result.error.message;
+  };
+  const invalid = (k: number, detail: string): string => `run log ${LOG}: line ${k} is not a valid run record: ${detail}`;
+  /** The 18-key form of `line(overrides)`: the same line without its last key. */
+  const line18 = (overrides: Partial<RunRecord> = {}): string => JSON.stringify(without(JSON.parse(line(overrides)) as Record<string, unknown>, 'agent_version_after'));
+
+  it('the writer writes agent_version_after as the last key, and refuses a record without it', () => {
+    expect(serializeRunRecord(record({ agent_version_after: '1.0.1' }))).toMatch(/,"notes":"none","agent_version_after":"1\.0\.1"\}\n$/);
+    expect(() => serializeRunRecord(without(record(), 'agent_version_after') as unknown as RunRecord)).toThrow(/missing key 'agent_version_after'/);
+    expect(() => serializeRunRecord({ ...record(), agent_version_after: null } as unknown as RunRecord)).toThrow(/'agent_version_after' must be a string/);
+  });
+
+  it('a 19-key line reads back as written', () => {
+    const written = record({ agent_version: '1.0.0', agent_version_after: '1.0.1' });
+    expect(parseRunLog(serializeRunRecord(written), LOG)).toEqual({ ok: true, value: [written] });
+  });
+
+  it('an 18-key line reads back with agent_version_after "not-reported" and its agent_version as written', () => {
+    const text = `${line18({ agent_version: '2.1.299 (Claude Code)' })}\n`;
+    expect(text).not.toContain('agent_version_after');
+    expect(parseRunLog(text, LOG)).toEqual({ ok: true, value: [record({ agent_version: '2.1.299 (Claude Code)', agent_version_after: 'not-reported' })] });
+  });
+
+  it('a log mixing the two forms reads every line, in order', () => {
+    const text = `${line18({ id: `${ELEMENT_ID}/design/1` })}\n${line({ id: `${ELEMENT_ID}/design/2`, agent_version_after: '1.0.1' })}\n`;
+    const result = parseRunLog(text, LOG);
+    expect(result.ok ? result.value.map((run) => [run.id, run.agent_version_after]) : result.error.message).toEqual([
+      [`${ELEMENT_ID}/design/1`, 'not-reported'],
+      [`${ELEMENT_ID}/design/2`, '1.0.1'],
+    ]);
+  });
+
+  it('an 18-key line is still held to the byte check, in its own form', () => {
+    expect(refusal(`${line18().replace('{"id"', '{ "id"')}\n`)).toBe(
+      invalid(1, 'not in the serialized form of spec-016 §4.2 (a CR, whitespace outside a string, or another spelling of a value)'),
+    );
+  });
+
+  it('a line missing notes (and so agent_version_after) is refused, missing key notes', () => {
+    expect(refusal(`${JSON.stringify(without(JSON.parse(line18()) as Record<string, unknown>, 'notes'))}\n`)).toBe(invalid(1, "missing key 'notes'"));
+  });
+
+  it('agent_version_after anywhere but last, or a key after it, is refused', () => {
+    const { notes, agent_version_after, ...head } = asObject();
+    expect(refusal(`${JSON.stringify({ ...head, agent_version_after, notes })}\n`)).toBe(
+      invalid(1, "key 'agent_version_after' out of order: expected 'notes' at position 18"),
+    );
+    expect(refusal(`${JSON.stringify({ ...asObject(), cost: 1 })}\n`)).toBe(invalid(1, "unexpected key 'cost'"));
+    expect(refusal(`${JSON.stringify({ ...asObject(), agent_version_after: 3 })}\n`)).toBe(invalid(1, "'agent_version_after' must be a string"));
+  });
+
+  it("the repository's task-236 run log, written in the 18-key form, reads with agent_version_after not-reported (D7, D9)", () => {
+    const fixture = join(__dirname, '..', 'fixtures', 'run-logs', 'task-236-ship-verify-hand-builtin-claude-code-adapter-point.jsonl');
+    const result = parseRunLog(readFileSync(fixture, 'utf-8'), 'docs/runs/task-236-ship-verify-hand-builtin-claude-code-adapter-point.jsonl');
+    expect(result.ok ? result.value.map((run) => [run.agent_version, run.agent_version_after]) : result.error.message).toEqual([
+      ['2.1.296 (Claude Code)', 'not-reported'],
+      ['2.1.299 (Claude Code)', 'not-reported'],
+    ]);
   });
 });

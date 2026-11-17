@@ -4,8 +4,9 @@
  *
  * This is the library `agent execute` (task-228), `agent list` (task-240) and `agent show` (task-220)
  * build on. It owns:
- * - the 18-key record of §4.2, written in a fixed key order with no insignificant whitespace, where an
- *   unreported value is the literal {@link NOT_REPORTED}, never `0` or `null` (`dl-114` Q2 (b), Q3 (i));
+ * - the 19-key record of §4.2, written in a fixed key order with no insignificant whitespace, where an
+ *   unreported value is the literal {@link NOT_REPORTED}, never `0` or `null` (`dl-114` Q2 (b), Q3 (i)); the
+ *   reader also accepts §4.2's 18-key form, written before key 19 existed (task-337, D7 (a));
  * - the run id `<element-id>/<phase>/<n>` of §4.3, `n` counted at `state_ref` (`dl-135` Q3 (a)), so
  *   every clone derives the same id from the same history (`REQ-SYS-07`);
  * - the strict reader of §4.5, which every reader goes through;
@@ -71,7 +72,18 @@ export const RUN_RECORD_KEYS = [
   'exit_status',
   'result',
   'notes',
+  'agent_version_after',
 ] as const;
+
+/** One key of {@link RUN_RECORD_KEYS}. */
+type RunRecordKey = (typeof RUN_RECORD_KEYS)[number];
+
+/**
+ * The key lists a line read back may hold (§4.2, §4.5; task-337): exactly the first 18 keys (the 18-key form, every
+ * build up to 0.3.x) or exactly all of {@link RUN_RECORD_KEYS}. A later key extends this list by one more form; the
+ * writer writes the last one only.
+ */
+const RUN_RECORD_FORMS: readonly (readonly RunRecordKey[])[] = [RUN_RECORD_KEYS.slice(0, 18), RUN_RECORD_KEYS];
 
 /** The keys of the record's `tokens` object, in order (§4.2 key 12). */
 export const RUN_TOKEN_KEYS = ['input', 'output', 'cache_read', 'cache_write'] as const;
@@ -120,6 +132,11 @@ export interface RunRecord {
   readonly result: string;
   /** `<element-id>#execution-notes`, or `none` (§4.2 key 18). */
   readonly notes: string;
+  /**
+   * The agent CLI's version read after the agent exits, or {@link NOT_REPORTED} (§4.2 key 19, task-337); `agent_version`
+   * is the one read before the launch. A line of the 18-key form reads back with {@link NOT_REPORTED} here.
+   */
+  readonly agent_version_after: string;
 }
 
 /** A phase segment: `spec-003`'s phase-name class. */
@@ -196,7 +213,7 @@ function keyOrderDefect(actual: readonly string[], expected: readonly string[], 
 }
 
 /** The defect of one field's value, or `null` (§4.2 types). The token object's key order is checked here too. */
-function fieldDefect(key: (typeof RUN_RECORD_KEYS)[number], value: unknown, ordered: boolean): string | null {
+function fieldDefect(key: RunRecordKey, value: unknown, ordered: boolean): string | null {
   switch (key) {
     case 'tokens': {
       if (!isPlainObject(value)) return "'tokens' must be an object";
@@ -227,22 +244,28 @@ function fieldDefect(key: (typeof RUN_RECORD_KEYS)[number], value: unknown, orde
 }
 
 /**
- * The first defect of `value` as a run record, or `null`. Its id must be the one its own `element` and
- * `phase` produce.
+ * The first defect of `value` as a run record, or `null`, and the key list it was held to. Its id must be the one its
+ * own `element` and `phase` produce.
  *
  * @param fileElementId - The log file's basename, which the id's element segment must equal (§4.5);
  *   `null` for a record not read from a file.
- * @param ordered - `true` for a line read back (§4.5: keys in the declared order); `false` for an
- *   object a caller built, whose key order the writer fixes itself.
+ * @param ordered - `true` for a line read back (§4.5: keys in the declared order), which may hold any of
+ *   {@link RUN_RECORD_FORMS} (§4.2 "The 18-key form") and is otherwise held to the last; `false` for an object a
+ *   caller built, held to all of {@link RUN_RECORD_KEYS}, whose key order the writer fixes itself.
  */
-function recordDefect(value: unknown, fileElementId: string | null, ordered: boolean): string | null {
-  if (!isPlainObject(value)) return 'not a JSON object';
+function recordDefect(value: unknown, fileElementId: string | null, ordered: boolean): { defect: string | null; keys: readonly RunRecordKey[] } {
+  if (!isPlainObject(value)) return { defect: 'not a JSON object', keys: RUN_RECORD_KEYS };
   const keys = Object.keys(value);
+  const form = (ordered && RUN_RECORD_FORMS.find((candidate) => keyOrderDefect(keys, candidate) === null)) || RUN_RECORD_KEYS;
   const order = ordered
-    ? keyOrderDefect(keys, RUN_RECORD_KEYS)
-    : keyOrderDefect([...keys].sort(), [...RUN_RECORD_KEYS].sort());
-  if (order !== null) return order;
-  for (const key of RUN_RECORD_KEYS) {
+    ? keyOrderDefect(keys, form)
+    : keyOrderDefect([...keys].sort(), [...form].sort());
+  return { defect: order ?? fieldsDefect(value, form, fileElementId, ordered), keys: form };
+}
+
+/** The first defect of the fields `keys` names in `value`, then of its id, or `null`. */
+function fieldsDefect(value: Record<string, unknown>, keys: readonly RunRecordKey[], fileElementId: string | null, ordered: boolean): string | null {
+  for (const key of keys) {
     const defect = fieldDefect(key, value[key], ordered);
     if (defect !== null) return defect;
   }
@@ -259,11 +282,10 @@ function recordDefect(value: unknown, fileElementId: string | null, ordered: boo
   return null;
 }
 
-
-/** `record` as an object whose keys, and whose token keys, are in §4.2 order. */
-function ordered(record: RunRecord): Record<string, unknown> {
+/** `record` as an object holding the keys `keys` (all of §4.2's by default) and its token keys, in §4.2 order. */
+function ordered(record: RunRecord, keys: readonly RunRecordKey[] = RUN_RECORD_KEYS): Record<string, unknown> {
   const out: Record<string, unknown> = {};
-  for (const key of RUN_RECORD_KEYS) {
+  for (const key of keys) {
     out[key] = key === 'tokens' ? Object.fromEntries(RUN_TOKEN_KEYS.map((token) => [token, record.tokens[token]])) : record[key];
   }
   return out;
@@ -280,7 +302,7 @@ function ordered(record: RunRecord): Record<string, unknown> {
  * @throws Error `run record is not valid: <detail>` — a caller defect.
  */
 export function serializeRunRecord(record: RunRecord): string {
-  const defect = recordDefect(record, null, false);
+  const { defect } = recordDefect(record, null, false);
   if (defect !== null) throw new Error(`run record is not valid: ${defect}`);
   return `${JSON.stringify(ordered(record))}\n`;
 }
@@ -290,10 +312,11 @@ const invalidLine = (path: string, k: number, detail: string): CoreResult<never>
   coreErr({ code: 'VALIDATION', message: `run log ${path}: line ${k} is not a valid run record: ${detail}` });
 
 /**
- * Read a run log strictly (§4.5): every line JSON, exactly the §4.2 keys in order with valid types, an
- * `id` whose element segment is the file's basename (`<runs>/<element-id>.jsonl`), no id twice, and each
- * line byte for byte the writer's serialization of its record — no CR, no whitespace outside a string
- * (bug-288).
+ * Read a run log strictly (§4.5): every line JSON, exactly the §4.2 keys in order with valid types — all 19, or
+ * the first 18 (§4.2 "The 18-key form", task-337), whose record reads back with `agent_version_after`
+ * {@link NOT_REPORTED} —, an `id` whose element segment is the file's basename (`<runs>/<element-id>.jsonl`), no id
+ * twice, and each line byte for byte the writer's serialization of its record in the line's own form — no CR, no
+ * whitespace outside a string (bug-288).
  * The last line must be `\n`-terminated, since an append to an unterminated line would corrupt both.
  *
  * @param text - The file's content.
@@ -316,13 +339,14 @@ export function parseRunLog(text: string, path: string): CoreResult<RunRecord[]>
     } catch {
       return invalidLine(path, i + 1, 'not JSON');
     }
-    const defect = recordDefect(value, elementId, true);
+    const { defect, keys } = recordDefect(value, elementId, true);
     if (defect !== null) return invalidLine(path, i + 1, defect);
-    const record = value as RunRecord;
-    // The line must be exactly what the writer produces for the record it parses to (§4.2, bug-288):
-    // no CR before the newline, no whitespace outside a string. Key order is checked above, with its own
-    // message, so the comparison can only fail on those.
-    if (`${lines[i]!}\n` !== serializeRunRecord(record)) {
+    // A line of the 18-key form reads back with key 19 not-reported (§4.2, D7 (a)): one record shape for every reader.
+    const record = (keys === RUN_RECORD_KEYS ? value : { ...(value as object), agent_version_after: NOT_REPORTED }) as RunRecord;
+    // The line must be exactly what the writer produces for the record it parses to, in the line's own form (§4.2,
+    // §4.5, bug-288): no CR before the newline, no whitespace outside a string. Key order is checked above, with its
+    // own message, so the comparison can only fail on those.
+    if (`${lines[i]!}\n` !== `${JSON.stringify(ordered(record, keys))}\n`) {
       return invalidLine(path, i + 1, 'not in the serialized form of spec-016 §4.2 (a CR, whitespace outside a string, or another spelling of a value)');
     }
     if (seen.has(record.id)) return coreErr({ code: 'VALIDATION', message: `run log ${path}: run id ${record.id} recorded twice` });

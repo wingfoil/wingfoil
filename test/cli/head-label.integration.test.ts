@@ -52,6 +52,7 @@ const RUN: RunRecord = {
   exit_status: 0,
   result: 'n/a',
   notes: `${TASK_ID}#execution-notes`,
+  agent_version_after: NOT_REPORTED, // task-337: spec-016 §4.2 key 19
 };
 
 /** The compiled CLI in `repo`, with the test's environment minus any fake-agent or git identity override. */

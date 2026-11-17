@@ -26,7 +26,7 @@ import { join } from 'node:path';
 
 import { git, removeTempDir } from '../storage/helpers/git-fixture';
 import { seed, TASK_ID, TASK_REF } from '../agent/helpers/agent-execute-fixture';
-import { cli, headOf, records, removeRunScratch } from './helpers/agent-execute-cli';
+import { cli, headOf, launchEntry, records, removeRunScratch } from './helpers/agent-execute-cli';
 
 const RUN_1 = `${TASK_ID}/adhoc/1`;
 const LOG = `docs/runs/${TASK_ID}.jsonl`;
@@ -79,7 +79,8 @@ describe('task-353 AC 1 — agent execute in a linked worktree through --project
 
     const run = executeIn(main, wt, ['--element', TASK_REF, '--role', 'developer']);
     expect([run.status, run.stdout]).toEqual([0, '']);
-    expect((run.fake[0] as unknown as Record<string, unknown> | undefined)?.['cwd']).toBe(realpathSync(wt));
+    // task-337: the launch entry, no longer fake[0] (version_args runs before the launch too).
+    expect((launchEntry(run) as unknown as Record<string, unknown>)['cwd']).toBe(realpathSync(wt));
 
     expect(git(wt, ['log', '-1', '--format=%s']).trim()).toBe(`agent: record ${RUN_1}`);
     expect(git(wt, ['rev-parse', 'HEAD~1']).trim()).toBe(wtHead);
@@ -100,7 +101,7 @@ describe('task-353 AC 1 — agent execute in a linked worktree through --project
     const wtHead = headOf(wt);
     const run = executeIn(main, wt, ['--element', TASK_REF, '--role', 'developer'], { WINGFOIL_FAKE_AGENT_CONNECT: '1' });
     expect(run.status).toBe(0);
-    const launch = run.fake[0] as unknown as { mcp: { args?: string[]; resource?: { uri: string }; error?: unknown; text?: string | null } | null; failure?: string };
+    const launch = launchEntry(run) as unknown as { mcp: { args?: string[]; resource?: { uri: string }; error?: unknown; text?: string | null } | null; failure?: string };
     expect(launch.failure).toBeUndefined();
     const tail = (launch.mcp?.args ?? []).slice(-3);
     expect([tail[0], tail[2]]).toEqual(['--project', 'mcp']);

@@ -23,6 +23,8 @@ export const ADAPTER_PLACEHOLDERS = [
   'mcp_command',
   'mcp_args',
   'session_id',
+  'home',
+  'launch_dir_slug',
 ] as const;
 
 /** One of {@link ADAPTER_PLACEHOLDERS}. */
@@ -54,7 +56,9 @@ const LEGAL_IN: Readonly<Record<AdapterPlaceholder, string>> = {
   mcp_command: 'mcp.template, and launch.*.args when mcp.via is args',
   mcp_args: 'mcp.template, and launch.*.args when mcp.via is args',
   session_id:
-    'session.assign_args and session.resume.args, and session.lookup_args or usage.lookup_args only when session.id is assign',
+    'session.assign_args and session.resume.args, session.lookup_args or usage.lookup_args only when session.id is assign, and usage.transcript.path unless session.id is none',
+  home: 'usage.transcript.path, as its first segment',
+  launch_dir_slug: 'usage.transcript.path',
 };
 
 /** The manifest as Pass 1 accepted it (defaults not yet applied; they change nothing checked here). */
@@ -139,11 +143,36 @@ function trustIssues(
 }
 
 /**
+ * The issues of `usage.transcript.path` (§2.3, task-337), a path, not an argv: its placeholders are legal there as
+ * `legal` says, each fills one whole `/`-separated segment — the last may be `{session_id}` followed by a literal
+ * extension — and `{home}` is its first segment only.
+ */
+function transcriptPathIssues(path: string, file: string, legal: ReadonlySet<AdapterPlaceholder>): ValidationIssue[] {
+  const where = 'usage.transcript.path';
+  const issues = fieldIssues(path, where, file, legal, false);
+  const segments = path.split('/');
+  segments.forEach((segment, index) => {
+    const tokens = tokensOf(segment, FIELD_TOKEN_RE);
+    if (tokens.length === 0) return;
+    const whole = segment === `{${tokens[0]!}}`;
+    const withExtension = index === segments.length - 1 && tokens.length === 1 && tokens[0] === 'session_id' && /^\{session_id\}\.[^{}/]+$/.test(segment);
+    if (!whole && !withExtension) {
+      issues.push({ code: E_ADAPTER_PLACEHOLDER, path: where, file, message: `a placeholder fills a whole path segment, never part of one, except {session_id}.<ext> as the last: ${JSON.stringify(segment)} (spec-016 §2.3)` });
+    }
+    if (tokens.includes('home') && index !== 0) {
+      issues.push({ code: E_ADAPTER_PLACEHOLDER, path: where, file, message: `{home} is legal as the path's first segment only: ${JSON.stringify(path)} (spec-016 §2.3)` });
+    }
+  });
+  return issues;
+}
+
+/**
  * Every §2.3 violation in `manifest`, in field order: an unknown placeholder, a placeholder concatenated
  * inside an argv element, and a placeholder used outside the fields — or under the conditions — §2.3
- * lists. Fields §2.3 does not list (`command`, `verified_with`, `version_args`, `launch.*.permissions`,
- * `launch.*.trust`, `mcp.conflict_args`, `session.field`, `usage.fields`, `summary.export_args`) hold no placeholder
- * at all.
+ * lists, and `usage.transcript.path`'s segment rules ({@link transcriptPathIssues}). Fields §2.3 does not list
+ * (`command`, `verified_with`, `version_args`, `launch.*.permissions`, `launch.*.trust`, `mcp.conflict_args`,
+ * `session.field`, `usage.fields`, `usage.transcript`'s other fields, `summary.export_args`) hold no placeholder at
+ * all.
  *
  * @param manifest - A manifest Pass 1 has accepted.
  * @param file - The label every issue carries (`<rev>:<path>`).
@@ -164,6 +193,12 @@ export function placeholderIssues(manifest: ManifestInput, file: string): Valida
   const lookup = manifest.session.id === 'assign' ? sessionId : none;
   const template = new Set<AdapterPlaceholder>(['mcp_command', 'mcp_args']);
   const fields = manifest.usage.fields ?? {};
+  const transcript = manifest.usage.transcript;
+  // The transcript is read after the session id is known, whatever how it was obtained; under `none` there is none.
+  const transcriptPath = new Set<AdapterPlaceholder>(manifest.session.id === 'none' ? ['home', 'launch_dir_slug'] : ['home', 'launch_dir_slug', 'session_id']);
+  const scalar = (value: string | undefined, path: string): ValidationIssue[] => (value === undefined ? [] : fieldIssues(value, path, file, none, false));
+  const fieldPaths = (paths: Partial<Record<'model' | 'input' | 'output' | 'cache_read' | 'cache_write', string>>, prefix: string): ValidationIssue[] =>
+    (['model', 'input', 'output', 'cache_read', 'cache_write'] as const).flatMap((key) => scalar(paths[key], `${prefix}.${key}`));
 
   return [
     ...fieldIssues(manifest.command, 'command', file, none, false),
@@ -182,10 +217,16 @@ export function placeholderIssues(manifest: ManifestInput, file: string): Valida
     ...(manifest.session.field === undefined ? [] : fieldIssues(manifest.session.field, 'session.field', file, none, false)),
     ...argvIssues(manifest.session.resume.args, 'session.resume.args', file, sessionId),
     ...argvIssues(manifest.usage.lookup_args, 'usage.lookup_args', file, lookup),
-    ...(['model', 'input', 'output', 'cache_read', 'cache_write'] as const).flatMap((key) => {
-      const value = fields[key];
-      return value === undefined ? [] : fieldIssues(value, `usage.fields.${key}`, file, none, false);
-    }),
+    ...fieldPaths(fields, 'usage.fields'),
+    ...(transcript === undefined
+      ? []
+      : [
+          ...transcriptPathIssues(transcript.path, file, transcriptPath),
+          ...scalar(transcript.select.field, 'usage.transcript.select.field'),
+          ...scalar(transcript.select.equals, 'usage.transcript.select.equals'),
+          ...scalar(transcript.message_id, 'usage.transcript.message_id'),
+          ...fieldPaths(transcript.fields, 'usage.transcript.fields'),
+        ]),
     ...argvIssues(manifest.summary?.export_args, 'summary.export_args', file, none),
   ];
 }

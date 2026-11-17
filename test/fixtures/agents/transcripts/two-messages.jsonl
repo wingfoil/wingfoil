@@ -1,0 +1,4 @@
+{"type":"user","message":{"role":"user","content":"Read README, then reply with its first word"}}
+{"type":"assistant","message":{"id":"msg_test_a","type":"message","role":"assistant","model":"claude-opus-5-5","content":[{"type":"tool_use","name":"Read"}],"usage":{"input_tokens":2,"cache_creation_input_tokens":9580,"cache_read_input_tokens":18000,"output_tokens":31,"output_tokens_details":{},"server_tool_use":{},"service_tier":"standard","cache_creation":{}}}}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","content":"hello"}]}}
+{"type":"assistant","message":{"id":"msg_test_b","type":"message","role":"assistant","model":"claude-opus-5-5","content":[{"type":"text","text":"hello"}],"usage":{"input_tokens":2,"cache_creation_input_tokens":0,"cache_read_input_tokens":18139,"output_tokens":42,"output_tokens_details":{},"server_tool_use":{},"service_tier":"standard","cache_creation":{}}}}

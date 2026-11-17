@@ -1,3 +1,7 @@
+# Revised 2026-11-16 (task-337, spec-016 §2.2, §2.6, §2.8 and §4.2; dl-188 part 1 (c), dl-180 version (b), dl-181
+# Q1 (a), bug-366): the token counts read from the session transcript and from a headless run's result, the agent
+# CLI's version read before the launch and after it, and the 18-key run log still read are added. They are
+# implemented by the integration tests task-337's red names. Earlier scenarios are unchanged.
 # Revised 2026-11-14 (task-353, spec-016 §2.2, §2.8, §3.1, §3.2 step 2, §3.3 steps 14 and 16, §3.7, §4.2 and §5;
 # bug-499, bug-500, bug-418): the launch in a linked worktree named by --project, the step that runs on its
 # workflow's plan, and the start-up hint are added. They are implemented by
@@ -206,3 +210,33 @@ Feature: P5.3.1 (US-1-03) - wingfoil agent execute [--next]
     And stderr has, before the error line, "warning: run <run-id>: the agent exited 1 with no commit since state_ref: its CLI may have stopped at its folder-trust step (adapter '<name>' declares launch.interactive.trust: prompt)"
     And the command exits with code 1 and message "agent exited 1; run <run-id> recorded"
     And under "trust: implied", or after the agent committed, neither the hint nor the warning is given
+
+  Scenario: A run's token counts are read from the agent's session transcript
+    Given the agent's adapter declares "usage.from: [transcript, output]" and "session.id: assign"
+    And the agent writes its session transcript, with two assistant messages, under the folder of the launch directory
+    When I run "wingfoil agent execute --element task:202 --role developer"
+    Then the record's tokens are the sums of the two messages' input, output, cache read and cache write counts
+    And the record's model is the messages' model
+    And nothing of the transcript but those values reaches the record, and its path is in no message
+
+  Scenario: A headless run with no transcript takes its counts from its result document
+    Given the agent's adapter declares "usage.from: [transcript, output]" and "launch.headless.output: json"
+    And the agent writes no session transcript and prints a result document carrying its usage
+    When I run "wingfoil agent execute --element task:202 --role developer --headless"
+    Then the record's tokens are the result document's counts
+    And an interactive run of the same agent records every count as "not-reported", never 0
+
+  Scenario: An agent CLI that updates itself during the run is recorded at the version that ran
+    Given the agent's adapter declares "version_args"
+    And the agent CLI prints version "1.0.0" before the launch and "1.0.1" after it
+    When I run "wingfoil agent execute --element task:202 --role developer"
+    Then the record's agent_version is "1.0.0" and its agent_version_after is "1.0.1"
+    And stderr has "warning: adapter '<name>': the agent CLI changed during the run: version_args printed '1.0.0' before the launch and '1.0.1' after it"
+    And the record's result is "n/a"
+    And the command exits with code 0
+
+  Scenario: A run log written before agent_version_after existed is still read
+    Given the run log of "task:202" holds lines of the 18-key form written by WingFoil 0.3
+    When I run "wingfoil agent list --past --element task:202"
+    Then every line is listed, its agent_version_after read as "not-reported"
+    And the command exits with code 0

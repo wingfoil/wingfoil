@@ -62,6 +62,7 @@ function record(overrides: Partial<RunRecord> = {}): RunRecord {
     exit_status: 0,
     result: 'n/a',
     notes: 'none',
+    agent_version_after: '1.2.4', // task-337: spec-016 §4.2 key 19
     ...overrides,
   };
 }
@@ -175,6 +176,7 @@ describe('task-220 — agent show <run-id> (spec-016 §6)', () => {
           'exit_status: 0',
           'result: n/a',
           'notes: none',
+          'agent_version_after: 1.2.4', // task-337: spec-016 §4.2 key 19, after notes
           `commit: ${sha}`,
           '',
         ].join('\n'),

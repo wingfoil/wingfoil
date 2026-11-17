@@ -1,6 +1,6 @@
 # Claude Code, a built-in adapter (spec-016 section 2.8). Every flag below is read from the
 # --help output of the version in verified_with, checked by hand (task-236; headless, task-335;
-# the headless permissions, task-339).
+# the headless permissions, task-339; the usage, task-337).
 name: claude-code
 format: 1
 command: claude
@@ -16,8 +16,10 @@ launch:
     trust: prompt
   headless:
     # -p (--print) prints the response and exits; the prompt first, for the reason above.
-    args: [ -p, "{bootstrap}", --mcp-config, "{mcp_config_file}" ]
-    output: none
+    # --output-format json (with -p only) prints one JSON result document, read for the usage
+    # when the transcript yields none (task-337).
+    args: [ -p, "{bootstrap}", --output-format, json, --mcp-config, "{mcp_config_file}" ]
+    output: json
     # The help says the workspace trust dialog is skipped under -p (task-353).
     trust: implied
     # The posture of each role (dl-223 (b), task-339), appended after args: --permission-mode
@@ -45,4 +47,23 @@ session:
     supported: true
     args: [ --resume, "{session_id}" ]
 usage:
-  from: none
+  # The session transcript first, which every launch writes under the launch directory's folder
+  # and the assigned session id; then a headless run's JSON result (task-337, checked by hand
+  # with the version in verified_with: each assistant message's usage, and the result's usage
+  # equal to the transcript's sums).
+  from: [ transcript, output ]
+  transcript:
+    path: "{home}/.claude/projects/{launch_dir_slug}/{session_id}.jsonl"
+    select: { field: type, equals: assistant }
+    message_id: message.id
+    fields:
+      model: message.model
+      input: message.usage.input_tokens
+      output: message.usage.output_tokens
+      cache_read: message.usage.cache_read_input_tokens
+      cache_write: message.usage.cache_creation_input_tokens
+  fields:
+    input: usage.input_tokens
+    output: usage.output_tokens
+    cache_read: usage.cache_read_input_tokens
+    cache_write: usage.cache_creation_input_tokens
