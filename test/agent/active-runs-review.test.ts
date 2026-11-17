@@ -7,6 +7,9 @@
  *   is `agent execute`'s own (`process.pid`) or `agentPid` — and leaves another launch's entry byte for byte;
  * - F5: an entry whose removal fails for another cause than `ENOENT` (a read-only directory, POSIX, not as root) is one
  *   `warning:` line `.wingfoil/run/<path>: could not remove: <cause>`; the read is still `ok` and lists nothing of it;
+ * - FU1 (review fix round 2, `c9bcaa577`): a file that is no entry and cannot be removed is reported by one line,
+ *   `.wingfoil/run/<path>: not an active run entry: could not remove: <cause>`, never a line saying `removed`; a dead
+ *   entry that cannot be removed keeps `.wingfoil/run/<path>: could not remove: <cause>`;
  * - F6: a top-level `x.json`, an `<n>` of `0`, `01` or `a`, and a `started_ms` of `8640000000000001` are no entry
  *   (pruned with the not-an-entry line, no `TypeError`); `8640000000000000` is listed.
  */
@@ -131,5 +134,41 @@ describe('task-336 F6 — the id and started_ms ranges (spec-016 §7)', () => {
     expect(thrown).toBeUndefined();
     expect(warnings).toEqual([]);
     expect(result?.ok ? result.value.map((item) => [item.id, item.started_ms]) : null).toEqual([['task-m/red/1', 8640000000000000]]);
+  });
+});
+
+describe('task-336 FU1 — a file that cannot be removed is reported by one line (spec-016 §7, c9bcaa577)', () => {
+  /** Read with `relative`'s directory read-only, so its removal fails with EACCES. */
+  function readLocked(base: string, relative: string): ReturnType<typeof read> {
+    const dir = dirname(join(base, '.wingfoil', 'run', relative));
+    chmodSync(dir, 0o555);
+    try {
+      return read(base);
+    } finally {
+      chmodSync(dir, 0o755);
+    }
+  }
+
+  (POSIX_NOT_ROOT ? it : it.skip)('a malformed file: exactly one "not an active run entry: could not remove: <cause>" line, no ": removed", ok, not listed', () => {
+    const base = root();
+    put(base, 'task-a/red/1.json', text(entry('task-a/red/1')));
+    put(base, 'task-m/red/1.json', '{"id":"x"}\n');
+    const { result, warnings, thrown } = readLocked(base, 'task-m/red/1.json');
+    expect(thrown).toBeUndefined();
+    expect(warnings.filter((line) => line.includes(': removed'))).toEqual([]);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]!.startsWith('.wingfoil/run/task-m/red/1.json: not an active run entry: could not remove: ')).toBe(true);
+    expect(result?.ok ? result.value.map((item) => item.id) : null).toEqual(['task-a/red/1']);
+    expect(existsSync(join(base, '.wingfoil/run/task-m/red/1.json'))).toBe(true);
+  });
+
+  (POSIX_NOT_ROOT ? it : it.skip)('a dead entry (guard): exactly one "could not remove: <cause>" line, without the not-an-entry words', () => {
+    const base = root();
+    put(base, 'task-z/red/1.json', text(entry('task-z/red/1', { pid: 999999999 })));
+    const { result, warnings, thrown } = readLocked(base, 'task-z/red/1.json');
+    expect(thrown).toBeUndefined();
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]!.startsWith('.wingfoil/run/task-z/red/1.json: could not remove: ')).toBe(true);
+    expect(result?.ok ? result.value : null).toEqual([]);
   });
 });
