@@ -59,7 +59,7 @@ describe('launchAgent — post-run lookups that fail record not-reported and say
       "adapter 'hand': version_args printed nothing before the launch: agent_version recorded as not-reported",
       "adapter 'hand': version_args printed nothing after the run: agent_version_after recorded as not-reported",
       "adapter 'hand': the session lookup failed (printed no JSON): session recorded as not-reported",
-      "adapter 'hand': the usage lookup failed (ended by SIGKILL): model and tokens recorded as not-reported",
+      "adapter 'hand': the usage lookup failed (ended by SIGKILL): model and tokens not read from it",
     ]);
   }, 60000);
 
@@ -291,7 +291,7 @@ describe('launchAgent — the re-review branches (re-review 4)', () => {
     child.finish(0);
     const outcome = await run;
     expect(outcome.ok).toBe(true);
-    expect(warnings).toEqual(["adapter 'hand': the usage lookup failed (could not start: ENOENT): model and tokens recorded as not-reported"]);
+    expect(warnings).toEqual(["adapter 'hand': the usage lookup failed (could not start: ENOENT): model and tokens not read from it"]);
   }, 60000);
 });
 
@@ -304,14 +304,14 @@ describe('launchAgent — a lookup that prints more than 1 MiB (review fix 2)', 
     repos.push(root);
     const outcome = await launch(input, root);
     expect(record(outcome)).toMatchObject({ model: 'not-reported' });
-    expect(outcome.warnings).toEqual(["adapter 'hand': the usage lookup failed (printed more than 1 MiB on stdout or stderr): model and tokens recorded as not-reported"]);
+    expect(outcome.warnings).toEqual(["adapter 'hand': the usage lookup failed (printed more than 1 MiB on stdout or stderr): model and tokens not read from it"]);
   }, 60000);
 
   it('is reported as such, not as a command that could not start', async () => {
     const { root, input } = launchFixture((manifest: AdapterManifest) => ({ ...manifest, usage: { from: 'lookup', lookup_args: ['scripts/flood.cjs'] } }));
     repos.push(root);
     const outcome = await launch(input, root);
-    expect(outcome.warnings).toEqual(["adapter 'hand': the usage lookup failed (printed more than 1 MiB on stdout or stderr): model and tokens recorded as not-reported"]);
+    expect(outcome.warnings).toEqual(["adapter 'hand': the usage lookup failed (printed more than 1 MiB on stdout or stderr): model and tokens not read from it"]);
   }, 60000);
 });
 

@@ -163,7 +163,7 @@ describe('task-337 AC 1 — the transcript source, in process (spec-016 §2.6)',
     const outcome = await launch(root, input, home);
     expect(record(outcome)).toMatchObject({ model: 'claude-opus-5-5', tokens: { input: 'not-reported', output: 31, cache_read: 18000, cache_write: 9580 } });
     expect(outcome.warnings).toHaveLength(1);
-    expect(outcome.warnings[0]).toMatch(/^adapter 'hand': usage\.transcript: .*input.*not a non-negative integer/);
+    expect(outcome.warnings[0]).toMatch(/^adapter 'hand': usage\.transcript: input is not a non-negative integer in a message: not read from it$/);
   }, 60000);
 });
 
@@ -191,7 +191,7 @@ describe('task-337 AC 1 — a list of sources: the first that yields, nothing mi
     placeTranscript(home, root, sessionId, TRANSCRIPT);
     const outcome = await launch(root, input, home);
     expect(record(outcome)).toMatchObject({ model: 'claude-opus-5-5', tokens: { input: 4, output: 73, cache_read: 36139, cache_write: 9580 } });
-    expect(outcome.warnings).toEqual(["adapter 'hand': the usage lookup failed (printed no JSON): model and tokens recorded as not-reported"]);
+    expect(outcome.warnings).toEqual(["adapter 'hand': the usage lookup failed (printed no JSON): model and tokens not read from it"]);
   }, 60000);
 });
 

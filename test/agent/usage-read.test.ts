@@ -82,7 +82,7 @@ describe('transcriptUsage — the remaining value rules (spec-016 §2.6 transcri
 
   it('a model of the wrong type: the model not-reported and one warning; the counts still summed', () => {
     const result = transcriptUsage([line({ id: 'a', model: 7, usage: { input_tokens: 1, output_tokens: 2 } }), line({ id: 'b', model: 'm-1', usage: { input_tokens: 3 } })], DECLARATION);
-    expect(result).toEqual({ model: 'not-reported', tokens: { input: 4, output: 2, cache_read: 'not-reported', cache_write: 'not-reported' }, warnings: ['model is not a string in a message: recorded as not-reported'] });
+    expect(result).toEqual({ model: 'not-reported', tokens: { input: 4, output: 2, cache_read: 'not-reported', cache_write: 'not-reported' }, warnings: ['model is not a string in a message: not read from it'] });
   });
 
   it('an empty model string is passed over, silently', () => {
@@ -113,7 +113,7 @@ describe('documentUsage and yieldsUsage (spec-016 §2.6 lookup, output)', () => 
     expect(result).toEqual({
       model: 'not-reported',
       tokens: { input: 4, output: 'not-reported', cache_read: 9, cache_write: 'not-reported' },
-      warnings: ["the headless output's model is not a non-empty string: recorded as not-reported", "the headless output's output is not a non-negative integer: recorded as not-reported"],
+      warnings: ["the headless output's model is not a non-empty string: not read from it", "the headless output's output is not a non-negative integer: not read from it"],
     });
   });
 

@@ -82,7 +82,7 @@ describe('task-337 — the output source of a headless output: json run (spec-01
     const { root, input } = headless({ from: 'output', fields: FIELDS }, 'wrong.cjs', `process.stdout.write(${JSON.stringify(JSON.stringify(document))});\n`);
     const outcome = await launch(root, input);
     expect(outcome.record).toMatchObject({ tokens: { input: 'not-reported', output: 8, cache_read: 9, cache_write: 10 } });
-    expect(outcome.warnings).toEqual(["adapter 'hand': the headless output's input is not a non-negative integer: recorded as not-reported"]);
+    expect(outcome.warnings).toEqual(["adapter 'hand': the headless output's input is not a non-negative integer: not read from it"]);
   }, 60000);
 });
 

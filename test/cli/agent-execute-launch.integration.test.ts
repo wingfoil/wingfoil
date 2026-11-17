@@ -304,7 +304,7 @@ describe('task-228 AC 3 — the assigned session id, and a lookup that fails', (
     const repo = fixture();
     const run = execute(repo, FULL, { WINGFOIL_FAKE_AGENT_LOOKUP: 'fail' });
     expect(run.status).toBe(0);
-    expect(run.stderr).toContain("warning: adapter 'fake': the usage lookup failed (exited 1): model and tokens recorded as not-reported\n");
+    expect(run.stderr).toContain("warning: adapter 'fake': the usage lookup failed (exited 1): model and tokens not read from it\n");
     expect(recordsAtHead(repo)[0]).toMatchObject({
       model: 'not-reported',
       tokens: { input: 'not-reported', output: 'not-reported', cache_read: 'not-reported', cache_write: 'not-reported' },

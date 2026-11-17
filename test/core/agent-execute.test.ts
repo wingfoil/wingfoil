@@ -261,7 +261,7 @@ describe('agentExecuteFn — the launch half in process (task-228, spec-016 §3.
     );
     if (!outcome.result.ok) throw new Error(outcome.result.error.message);
     expect((outcome.result.value as { run: Record<string, unknown> }).run).toMatchObject({ model: 'not-reported', agent_version: 'fake-agent 1.0.0' });
-    expect(outcome.warnings).toEqual(["adapter 'fake': the usage lookup failed (timed out after 1500 ms): model and tokens recorded as not-reported"]);
+    expect(outcome.warnings).toEqual(["adapter 'fake': the usage lookup failed (timed out after 1500 ms): model and tokens not read from it"]);
   }, 60000);
 
   it('session.id: lookup reads session.field from the lookup document; session.id: output is not-reported for an interactive launch', async () => {
@@ -309,8 +309,8 @@ describe('agentExecuteFn — the launch half in process (task-228, spec-016 §3.
       tokens: { input: 'not-reported', output: 2, cache_read: 'not-reported', cache_write: 'not-reported' },
     });
     expect(outcome.warnings).toEqual([
-      "adapter 'fake': the usage lookup's model is not a non-empty string: recorded as not-reported",
-      "adapter 'fake': the usage lookup's input is not a non-negative integer: recorded as not-reported",
+      "adapter 'fake': the usage lookup's model is not a non-empty string: not read from it",
+      "adapter 'fake': the usage lookup's input is not a non-negative integer: not read from it",
     ]);
   }, 60000);
 
