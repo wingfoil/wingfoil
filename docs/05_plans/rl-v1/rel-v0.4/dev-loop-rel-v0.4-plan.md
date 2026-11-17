@@ -211,6 +211,21 @@ re-plan checkpoint (W0.4), after `w0`'s last task, the wave-checks (W0.2) and th
 - **W1-R13 — the wave themes are those of the release-planning's S7 note:** `w1` MCP and the Interaction Layer; `w2`
   the Memory model and the engine (the migration is `v1.0`); `w3` templates and packs; `w4` generator, plugins, scoped
   directives and docs. The R7 table's "migration" theme for `w2` is superseded.
+- **W1-R14 — two later inputs (approver, 2026-11-17).**
+  - An evaluation page for agents outside the project, `docs/evaluate.md` (eight fixed sections in order: what it does;
+    the problems it solves and does not; when it fits and when not; prerequisites and adoption cost; a five-minute try;
+    known limits at this version; compare and measure; where it sits in the system), listed first in `llms.txt`, a
+    "For AI agents" line near the top of `README.md` pointing to `llms.txt`, and a CI check of the `llms.txt` shape, its
+    first link, relative links resolving at the commit, the eight headings in order and the README line: a `w4` task,
+    filed at the `w3 → w4` re-plan in or beside `dl-140` Action 2's task, worded by `dl-140` D5.
+  - External tool integrations. A provider profile in the adapter manifest (base URL, a credential reference never a
+    secret, the model, an optional task-id header; the run record states provider and model) and opencode and Gemini
+    CLI at L1 with `AGENTS.md` move unchanged to `v1.0`: they belong to the agent module, the theme of no `v0.4` wave.
+    An MCP packaging note for mcpd and a Docker MCP gateway is an acceptance criterion of W1-09, no new task: the note
+    configures the gateway to expose the verbs that are not approver-gated, while the server keeps exposing every verb
+    (W1-R2). A decision-log on lock-in — every integration that needs a new function goes through an interface whose
+    default works locally with no external tool, and no integration makes WingFoil unusable without that tool — is
+    filed in `w0`'s closing ingest, for the approver's ruling.
 
 **The `w1` tasks** (filed by the orchestrator, in series, after the checkpoint; ids from the CLI, titles below as
 proposed):
@@ -225,7 +240,7 @@ proposed):
 | W1-06 | Ship `wingfoil verify` with the generic authority and state checks (`spec-020`) | feature |
 | W1-07 | Make `check-governance.cjs` the extension of `wingfoil verify` and install the pre-push gate (`dl-190`) | feature |
 | W1-08 | Register the Memory Tools on the production MCP server and refuse the approver-gated verbs over MCP | feature |
-| W1-09 | Register the DNA, directive, workflow and agent Tools and hold REQ-SYS-05's bijection | feature |
+| W1-09 | Register the DNA, directive, workflow and agent Tools and hold REQ-SYS-05's bijection; the MCP packaging note (W1-R14) | feature |
 | W1-10 | Serve the element-less role Resource `wingfoil://session/{role}` (`dl-192`) | feature |
 | W1-11 | Render `--format console` through one generic renderer (`dl-043`) | feature |
 | W1-12 | Print listings one line per record by default with `--full`, and add `directive show` (`dl-215`) | feature |
@@ -358,6 +373,7 @@ Secret sweep from a checkout with `dist/` (the known false positives of `bug-402
 - 2026-11-17: `main` merged into this branch (`638e4e312`, carrying `spec-019`/`spec-020` at `018141cd8`). Rulings
   W1-R1 … W1-R13 proposed from the `w1` survey and approved by the approver as proposed; `backlog_committed` comes to 49,
   not 50, since W1-R9 moves W1-21 to `w2`. Still owed before the checkpoint: `task-337`'s close, W0.2 and W0.3.
+- 2026-11-17: W1-R14 (two inputs forwarded for the re-plan) proposed and approved as proposed.
 
 #### W0 measures
 
