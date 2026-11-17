@@ -660,6 +660,66 @@ None.
   test/docs/cli-reference.test.ts --maxWorkers=2` → `Test Suites: 4 passed, 4 total`, `Tests: 48 passed, 48 total`.
 - F2 (the lookup-failure text in `src/agent/launch.ts`) left as it is, for the approver to rule on.
 
+
+### review fix round 2 design (architect, 2026-11-17)
+
+**Finding F2 (review, introduced by the task; the approver ruled it fixed in the task).** With `usage.from` a list
+(amended `spec-016` §2.6, design D4: sources tried in order, the first that yields a value wins, nothing mixed), a usage
+source's warning that says what the *record* holds can be contradicted by a later source. Read at `a10baf2f2`
+(`src/agent/launch.ts` l.751-787 `source` and the loop; `src/agent/usage.ts` l.58-60 `yieldsUsage`, l.69-86
+`documentUsage`, l.131-162 `messagesUsage`): every source's warnings are printed before the yield check (launch.ts
+l.779-782), and a source with no value passes to the next.
+
+**Each same-class text, judged against D4.**
+- *The failed usage lookup* (launch.ts l.758) — contradictory: the lookup yields nothing, so a later `transcript` or
+  `output` may supply the model and the counts. Old: `adapter '<name>': the usage lookup failed (<cause>): model and
+  tokens recorded as not-reported`. New: `adapter '<name>': the usage lookup failed (<cause>): model and tokens not
+  read from it` (the form of the headless output's failure, l.767).
+- *The wrong-type values of a document source* (usage.ts l.75, l.82: `<label> model is not a non-empty string:
+  recorded as not-reported`, `<label> <key> is not a non-negative integer: recorded as not-reported`, `<label>` `the
+  usage lookup's` or `the headless output's`) — contradictory when the source yields no other value: it then does not
+  win, and a later source may supply that very key. When it does win, the value stays `not-reported` (no mixing), and
+  "not read from it" is true then too. New: `<label> model is not a non-empty string: not read from it`, `<label> <key>
+  is not a non-negative integer: not read from it`.
+- *The transcript's wrong-type values* (usage.ts l.141, l.159: `usage.transcript: <key> is not a non-negative integer
+  in a message: recorded as not-reported`, `usage.transcript: model is not a string in a message: recorded as
+  not-reported`) — contradictory for the same reason: with `claude-code`'s `[transcript, output]`, a transcript whose
+  only values are wrong yields nothing and the headless result may supply them. New: `… in a message: not read from
+  it` for both.
+- *Unchanged, because no later source can contradict them:* the transcript's source-level warnings (`the session id is
+  not-reported: the transcript is not read`, `the path does not render as an absolute path: the transcript is not
+  read`, `the transcript of session <id> <reason>`, launch.ts l.802, l.813, l.819) and the headless output's
+  `…: model and tokens not read from it` (l.767) speak of the source only; the session lookup's two texts (l.743,
+  l.747) and the version texts (l.697, l.730, l.733) name fields no usage source supplies.
+
+**The spec.** `spec-008-cli-grammar` §2's warnings table, row "`agent execute`, per post-run lookup …" (l.512), pins
+the failed usage lookup and the usage lookup's wrong-type texts; it also still carried the version texts this task
+replaced (`version_args failed (<cause>): agent_version recorded as not-reported`, `version_args printed nothing: …`),
+stale since green: a same-class defect of this task, fixed in the same row (`version_args <read> before the launch:
+agent_version recorded as not-reported`, `… after the run: agent_version_after recorded as not-reported`, the texts of
+launch.ts l.697 and l.730). The row now says why a usage source's warning names the source. `spec-008` has no
+`version:` field (`sed -n 1,9p`) and was not edited on this branch (`git diff --stat main...HEAD --
+docs/04_memory/design/specs/spec-008-cli-grammar.md` → empty), so the change is a dated Revision entry at its end.
+`spec-016` pins none of these texts literally (`grep -n "usage lookup" docs/04_memory/design/specs/spec-016-agent-execution.md`
+→ none; §2.6 says only that such a value yields `not-reported` and one warning naming the adapter, the source and the
+cause), so it is not edited. `npx jest test/docs/name-resolvability.test.ts --maxWorkers=2` with the edit → `Tests:
+11 passed`.
+
+**What pins the old texts, and who changes it** (`grep -rn "recorded as not-reported" src/ test/ docs/` at
+`a10baf2f2`, session and version lines excluded; T4: tests are the qa's, code and docs the developer's):
+- qa — `test/agent/launch-usage.test.ts:194`; `test/agent/launch-process.test.ts:62, 294, 307, 314`;
+  `test/core/agent-execute.test.ts:264, 312, 313`; `test/cli/agent-execute-launch.integration.test.ts:307`;
+  `test/agent/usage-read.test.ts:85, 116`; `test/agent/launch-usage-sources.test.ts:85`. Each expected string takes
+  the new ending; nothing else in those assertions changes.
+- developer — `src/agent/launch.ts:758`; `src/agent/usage.ts:65` (the TSDoc of `documentUsage`), `:75`, `:82`,
+  `:141`, `:159`. No user document quotes these texts (`grep -rn "recorded as not-reported" docs/cli-reference.md
+  docs/user-guide.md` → none).
+
+### Pending amendments (approver) — review fix round 2
+
+- `spec-008-cli-grammar` (§2's warnings table, one row, and a dated revision at its end; uncommitted) — `memory amend
+  spec-008-cli-grammar --reason "Word the agent execute usage-source warnings as what was not read from the source, since a later source of usage.from may supply the value, and align the version_args texts with the reads before the launch and after the run, for task-337 review finding F2 (spec-016 section 2.6)."`
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
