@@ -420,6 +420,15 @@ Secret sweep from a checkout with `dist/` (the known false positives of `bug-402
   for `task-337`'s merge and the closing ingest.
 - 2026-11-17: `task-337` merged (`02ffe01ca`): `w0` 27/27 `done`. Closing ingest merged (`a74464ae2`); its 9 elements
   swept and ruled as proposed. `docs.examples.passing` PASS 6/6 on `02ffe01ca`, run by the approver (W0.2).
+- 2026-11-17: W0.2 wave-checks on `cff227eb4` (`main` `a778b7d3e` merged), one heavy step at a time: `npm run build`,
+  `npx tsc --noEmit`, `npm run lint`, `npm run docs:api` and `npm run check:governance -- --base origin/main` exit `0`
+  (governance: 0 findings); `node scripts/e2e-smoke.cjs --candidate --report docs/07_gates/rl-v1/rel-v0.4-w0-e2e-smoke.md`
+  PASS 85/85 (committed `39a771c27`); `npm run test:coverage -- --maxWorkers=2` 678/679 suites, 12318/12319 tests,
+  coverage 98.84 % statements, 96.45 % branches; `npm run test:latency` alone 6/6 suites, 34/34 tests. The one failure,
+  `test/cli/workflow-unbound-none.integration.test.ts` ("no N diagnostic(s) line"), came from the smoke report still
+  untracked when the suite ran (`workflow next … --format json` → `W_UNCOMMITTED_INPUTS` on that file): `bug-534`'s
+  class, the test reading the working tree, from a new source. With the report committed the suite passes
+  (`npx jest test/cli/workflow-unbound-none.integration.test.ts` → 4/4). `docs.parity` runs inside the full suite.
 
 #### W0 measures
 
