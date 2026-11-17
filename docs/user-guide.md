@@ -797,9 +797,9 @@ updated itself during the run shows two different values, and `agent execute` pr
 `claude-code` run records its model and token counts from Claude Code's own session transcript on your machine
 (`~/.claude/projects/<launch directory>/<session id>.jsonl`, the launch directory written with every character other
 than a letter or a digit replaced by `-`), read after the run and never committed; a headless run whose transcript
-is missing takes them from its `--output-format json` result. A count nothing reported is `not-reported`, never `0`, with a `warning:` line that
-names the adapter and `usage.transcript`, never the file's path. Run logs written by 0.3.x carry no
-`agent_version_after`, and are read with `not-reported` there.
+is missing takes them from its `--output-format json` result. A count nothing reported is `not-reported`, never `0`.
+A transcript that is missing or unreadable gives a `warning:` line naming the adapter and `usage.transcript`, never
+the file's path. Run logs written by 0.3.x carry no `agent_version_after`, and are read with `not-reported` there.
 
 ## 10. CI and scripting
 
