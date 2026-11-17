@@ -85,16 +85,21 @@ export function documentUsage(document: unknown, fields: UsageFieldPaths, label:
   return { model, tokens: { input: count('input'), output: count('output'), cache_read: count('cache_read'), cache_write: count('cache_write') }, warnings };
 }
 
+/** The transcript source being read: {@link transcriptAccumulator}'s. */
+export interface TranscriptAccumulator {
+  /** Feed one line of the transcript, in file order. */
+  readonly add: (line: string) => void;
+  /** The model and the counts over the messages fed so far. */
+  readonly result: () => SourceUsage;
+}
+
 /**
  * The transcript source fed line by line (§2.6 `transcript`): `add` each line in file order, then `result` once. A line
  * that is not JSON, or not a selected line (its value at `select.field` is not the string `select.equals`), is passed
  * over; under `message_id` the selected lines with the same id are one message, the last of them kept (a line whose id
  * is not a string or a number is a message of its own); without it every selected line is one message.
  */
-export function transcriptAccumulator(declaration: Pick<TranscriptDeclaration, 'select' | 'message_id' | 'fields'>): {
-  readonly add: (line: string) => void;
-  readonly result: () => SourceUsage;
-} {
+export function transcriptAccumulator(declaration: Pick<TranscriptDeclaration, 'select' | 'message_id' | 'fields'>): TranscriptAccumulator {
   const byId = new Map<string, unknown>();
   const unkeyed: unknown[] = [];
   return {

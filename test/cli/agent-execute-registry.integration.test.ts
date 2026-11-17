@@ -22,7 +22,7 @@ import { dirname, join } from 'node:path';
 
 import { removeTempDir } from '../storage/helpers/git-fixture';
 import { seed, TASK_ID, TASK_REF } from '../agent/helpers/agent-execute-fixture';
-import { errorLine, execute, expectNothingRan, headOf, launchArgv, records, removeRunScratch, warningLines, type AgentRun } from './helpers/agent-execute-cli';
+import { errorLine, execute, expectNothingRan, headOf, launchArgv, launchEntry, records, removeRunScratch, warningLines, type AgentRun } from './helpers/agent-execute-cli';
 
 const repos: string[] = [];
 afterAll(() => {
@@ -59,8 +59,8 @@ function registryFiles(repo: string): string[] {
 
 /** What the fake saw of the registry while it ran, and its pid. */
 function seen(run: AgentRun): { pid: number | undefined; registry: { path: string; entry: unknown }[] | undefined } {
-  const launch = run.fake[0];
-  if (launch === undefined) throw new Error(`the fake never launched: status ${run.status}, stderr ${run.stderr}`);
+  // task-337: version_args runs before the launch too (spec-016 §2.6), so the launch is the fake's launch entry, not fake[0].
+  const launch = launchEntry(run);
   return { pid: launch.pid, registry: launch.registry };
 }
 
