@@ -511,8 +511,10 @@ exit `2`, `error: invalid flag value: --timeout expects <n>s, <n>m or <n>h, got 
 combination: --log needs a headless launch, and this run launches interactive` (`dl-182` Q4 (a)); a `--log` whose
 path, resolved against the current directory, is `.wingfoil/run/` under the project root or lies beneath it → exit
 `2`, `error: invalid flag value: --log must not name a file under .wingfoil/run/, the active registry` (the path is
-compared as resolved, without following a symbolic link: a file there would be git-ignored, so no warning would name
-it, and the next reader would prune it as no entry, §7). All six are decided before the project is read. A `--log` on a run whose kind §3.2 step 7 resolves to `interactive` is refused
+compared as resolved, without following a symbolic link, with the registry directory both under the project root as
+given and under the root's real path, its symbolic links resolved, so a `--project` given through a link still meets
+the check: a file there would be git-ignored, so no warning would name it, and the next reader would prune it as no
+entry, §7). All six are decided before the project is read. A `--log` on a run whose kind §3.2 step 7 resolves to `interactive` is refused
 there, with the same message and exit `2`.
 
 **The launch directory** (`bug-499`, `task-353`). The agent runs in the project root (§3.3 step 14): the directory
@@ -1186,8 +1188,10 @@ alive); the rest of this section is fixed here so that v0.3 does not foreclose i
   not three segments or does not name the file's path), with one `warning:` line, `.wingfoil/run/<path>: not an
   active run entry: removed`; a directory left empty by a removal is removed too, up to `.wingfoil/run/` exclusive.
   A removal that fails for another cause than the file being gone already leaves the file, and the reader goes on
-  with one `warning:` line, `.wingfoil/run/<path>: could not remove: <cause>`, listing nothing of that file; it
-  never fails the read (§5).
+  with one `warning:` line, listing nothing of that file and never failing the read (§5): for a file that is no
+  entry, `.wingfoil/run/<path>: not an active run entry: could not remove: <cause>`, in place of the line above; for
+  an entry whose process is gone, `.wingfoil/run/<path>: could not remove: <cause>`. A file is reported by one line,
+  never two.
   Readers list entries in §5's active order, never directory order.
   **Git.** `.wingfoil/run/` is the one git-ignored subpath of `.wingfoil/`: `wingfoil init` writes
   `.wingfoil/.gitignore` with the line `/run/` (`spec-011` § `.gitignore` policy). `agent execute` warns when the
@@ -1687,3 +1691,13 @@ file's path, and `started_ms` stays within an ECMAScript date's range; the malfo
 git-ignored and then pruned as no entry. (4) A removal that fails while reading is one `warning:` line, never a failed
 read (§5, §7). No key of §4.2, no rule of §4.3 and no other exit code changes. Edited in place without a supersede or a
 state change (`dl-047`), pending the approver's `memory amend` at `task-336`'s review fix round.
+
+**Revision (2026-11-17, `task-336-forward-a-launched-agent-s-output-to-the-caller-with-an-optional-log-copy-and-keep-the-active-run-registry`,
+second review fix round) — § 3.1 grammar and § 7's pruning lines.** The re-review found two gaps. (1) A file that is
+no entry and cannot be removed printed the not-an-entry line, which says `removed`, and then the could-not-remove
+line: §7 now gives such a file one line, `.wingfoil/run/<path>: not an active run entry: could not remove: <cause>`,
+and keeps `.wingfoil/run/<path>: could not remove: <cause>` for a dead entry. (2) §3.1's refusal of a `--log` under
+`.wingfoil/run/` compared it with the registry under the root as given only, so a `--project` given through a symbolic
+link let a log under the real registry through: the registry directory is now also taken under the root's real path.
+No exit code, key or other message changes. Edited in place without a supersede or a state change (`dl-047`), pending
+the approver's `memory amend` at `task-336`'s second review fix round.
