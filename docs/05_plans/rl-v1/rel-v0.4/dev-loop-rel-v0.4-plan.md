@@ -166,6 +166,102 @@ that writes this plan — monitors and measures without doing the orchestrator's
   needs (the capabilities query and the shipped governance check, `release-planning-rel-v0.4-plan` S6) are written and
   approved, in a session of their own opened when `w0` is about two thirds done.
 
+## Rulings W1 (approver, 2026-11-17)
+
+Proposed by supervision from a read-only survey of every `release: v0.4` element `w0` does not close, on `main` at
+`018141cd8`: 67 decision-logs `ready` and 113 bugs `triaged` (`grep -lE '^release: *"?v0\.4"?([[:space:]]|$)'` over
+`docs/04_memory/design/dls/*.md` and `docs/04_memory/bugs/*.md`, then the `status:` of each). Every one is assigned a
+wave: 18 decision-logs are covered by `w0`'s tasks; the bugs go 39 to `w1`, 39 to `w2`, 9 to `w3`, 26 to `w4`; `dl-010`,
+`dl-147` and `dl-201` need no task. The two tech-specs of W0-R12 are approved (`spec-019`, `4b6b9bb9f`; `spec-020`,
+`69b25574d`) and merged (`018141cd8`). The approver approved the rulings below as proposed. They take effect at the
+re-plan checkpoint (W0.4), after `w0`'s last task, the wave-checks (W0.2) and the re-sweep (W0.3).
+
+- **W1-R1 — growth is planned, and re-baselined at each re-plan.** Commit-backlog listed only `w0` on purpose, so
+  `release.growth_threshold` (fires at the 34th task) would fire at every re-plan by construction. The `w1` tasks are
+  recorded as planned growth in `minor-v0.4`'s `## Scope changes`, and `backlog_committed` is re-baselined to the tasks
+  of the listed waves (27 + 22 = 49, W1-R9) in the same `memory amend`, which also sets `waves: [w0, w1]` and stamps
+  `bug-506`'s release. Within a wave the threshold keeps measuring unplanned growth (W0-R10).
+- **W1-R2 — the approver-gated verbs are MCP Tools that always refuse.** `approve`, `reject` and `amend` are exposed
+  (REQ-SYS-05's bijection holds, `spec-004` §4.2) and every MCP call is an agent context, so they refuse
+  (`E_AGENT_CONTEXT`, `dl-212` D1, `spec-018` §1.2), as `agent.execute` already does. The vision-change of W1-01 drops
+  "approve" from P5.2.3's row; the BDD "approve without reason" scenario's order (argument check before the agent
+  refusal) is settled at W1-08's design gate.
+- **W1-R3 — an MCP Tool commit is an agent's commit.** Every Tool call runs as an agent context; `AI-Model:` comes from
+  `WINGFOIL_AGENT_MODEL` in the server's environment, else `not-reported` (`spec-018` §2). The mechanism is settled at
+  W1-08's design gate.
+- **W1-R4 — production Tools are derived from `CORE_MODULES`**, not hand-registered, so the verbs `w2` adds get their
+  Tool with no further work (W1-05's parameter metadata is the foundation).
+- **W1-R5 — `memory validate` ships in `w1`** (W1-13), implemented as a call into the same checks `memory submit`
+  runs, so `w2`'s changes to those checks (`dl-214`, `bug-503`, `bug-504`) reach it unchanged.
+- **W1-R6 — `dl-184` (frozen body after submit) is `w2`**, with `memory approve`; `wingfoil verify` gains its check as
+  a check added later (`spec-020` §5.3).
+- **W1-R7 — `dl-220` Q1 and `dl-221` are `w2`**, and by `spec-020` AC-12 the `w2` task that implements them updates
+  `wingfoil verify`'s authority check in the same task.
+- **W1-R8 — `init` polish (`bug-460`, `bug-461`, `bug-480`) is `w3`**, with the packs, since pack adoption may replace
+  the built-in scaffold.
+- **W1-R9 — fix share.** W1-21 (`dna show` dotted paths) moves to `w2`, bringing `w1`'s fix share from 30.4 % (7 of 23)
+  to 27.3 % (6 of 22); W1-02 (`dl-179`) stays optional, last in the order.
+- **W1-R10 — the command count is written by `align-agent-docs`** at `user-docs` (AGENTS.md §1, `spec-008`); each
+  command task keeps `docs/cli-reference.md` current, which `test/docs/cli-reference.test.ts` already enforces. The
+  "second of the two tasks" sentence of `spec-019`/`spec-020` is met by that phase.
+- **W1-R11 — no cut to `v1.0` now.** The candidates (`dl-145`, `dl-148`, W1-15's closed-run read, W1-09's non-Memory
+  Tools) are reconsidered only if the budget tightens.
+- **W1-R12 — `bug-487` is reproduced first.** Its task (W1-15) reproduces it before the design; if it does not
+  reproduce, the bug is closed by the usual route.
+- **W1-R13 — the wave themes are those of the release-planning's S7 note:** `w1` MCP and the Interaction Layer; `w2`
+  the Memory model and the engine (the migration is `v1.0`); `w3` templates and packs; `w4` generator, plugins, scoped
+  directives and docs. The R7 table's "migration" theme for `w2` is superseded.
+
+**The `w1` tasks** (filed by the orchestrator, in series, after the checkpoint; ids from the CLI, titles below as
+proposed):
+
+| # | Task | Kind |
+|---|------|------|
+| W1-01 | Run one vision-change for the `w1` feature rows: the capabilities query, `wingfoil verify` and P5.2.3's approval Tools (W1-R2) | feature |
+| W1-02 | Count a test file as BDD only when it declares a checked BDD tag (`dl-179`) — optional | feature |
+| W1-03 | Add `wingfoil capabilities` and the `wingfoil://capabilities` Resource (`spec-019` Task A) | feature |
+| W1-04 | Write the Formats read and Capabilities lines into every CHANGELOG release section (`spec-019` Task B) | feature |
+| W1-05 | Give `CoreOperation` parameter metadata so the registrar derives Resource templates and Tool input schemas (`dl-040`) | feature |
+| W1-06 | Ship `wingfoil verify` with the generic authority and state checks (`spec-020`) | feature |
+| W1-07 | Make `check-governance.cjs` the extension of `wingfoil verify` and install the pre-push gate (`dl-190`) | feature |
+| W1-08 | Register the Memory Tools on the production MCP server and refuse the approver-gated verbs over MCP | feature |
+| W1-09 | Register the DNA, directive, workflow and agent Tools and hold REQ-SYS-05's bijection | feature |
+| W1-10 | Serve the element-less role Resource `wingfoil://session/{role}` (`dl-192`) | feature |
+| W1-11 | Render `--format console` through one generic renderer (`dl-043`) | feature |
+| W1-12 | Print listings one line per record by default with `--full`, and add `directive show` (`dl-215`) | feature |
+| W1-13 | Add `memory show`, `memory types` and `memory validate` (`dl-200`, W1-R5) | feature |
+| W1-14 | Report the deduction readers' diagnostics as stderr warning lines (`dl-176`) | feature |
+| W1-15 | Read a workflow run: closed runs, an instance's phase tree, what a start would deduce (`bug-485`, `bug-487`, W1-R12) | feature |
+| W1-16 | Tell an operator with no approver how to grant it, and render every error detail with one warning prefix (`dl-071`) | feature |
+| W1-17 | Make `workflow next` and `workflow show` offer complete, honest commands | fix |
+| W1-18 | Close the governance-check rule gaps in the shipped verb and the extension | fix |
+| W1-19 | Mark the `memory history` entries no check verified and check `Carries content:` | fix |
+| W1-20 | Make the context payload's markers unique, keep scalars verbatim, resolve the commit once | fix |
+| W1-22 | Fix `help` with a second operand, `help help`, and `paths --help`'s category list | fix |
+| W1-23 | Write the user stories P5.3.4/P5.3.5 lack and align Journey 5 and the vision's reader commands | fix |
+
+W1-21 (`dna show` dotted paths, fix) is filed for `w2` (W1-R9). Each task's bugs and acceptance criteria are those of
+the survey, re-read by the task's design. The command count goes from 35 to 41.
+
+**Order** (at most 3 in progress, 4 while one waits at a design gate, W0-R4):
+
+| Lane | Chain |
+|------|-------|
+| A — registry and MCP | W1-05 → W1-08 → W1-09; W1-20 → W1-10 (W1-10 also after W1-08) |
+| B — commands and governance | W1-01 → W1-03 → W1-04; W1-03 → W1-22; W1-05 + W1-01 → W1-06 → W1-07 → W1-18; W1-06 → W1-19 |
+| C — CLI output | W1-16 → W1-11 → W1-12 → W1-13 |
+| D — workflow readers | W1-17 → W1-14 → W1-15 |
+| Free | W1-23 (after W1-01), W1-02 last |
+
+Start set: W1-05, W1-01 (waits at `impact-analysis`: the fourth slot), W1-17 and W1-20. Not at once: W1-03 ∥ W1-06
+(same registry and count: the second writes the count and the `governance-check` capability), W1-04 ∥ W1-07
+(`release-publishing.yaml`), W1-05 ∥ W1-12/W1-13 (`src/core/index.ts`), W1-11 with any task pinning console output.
+
+**Owed outside the tasks.** The approver: the `dl-103` amendment (`spec-020`), the `dl-213` body amendment
+(`spec-019` §8), the capability names told to the template repository (`spec-019`), the vision-change gates (W1-01).
+`user-docs`: AGENTS.md §1–§3 and §6, `.wingfoil/README.md`, `WORKFLOW.md`, `COLLABORATION.md`, `docs/agents.md`
+(`bug-537`), the user-guide sections for the two new commands, CHANGELOG 0.4.0.
+
 ## Phases / Steps
 
 ### W0 — wave `w0`
@@ -259,6 +355,9 @@ Secret sweep from a checkout with `dist/` (the known false positives of `bug-402
   a throwaway clone (removed): `start` deduced from the task's state; `design` offered as finalizable on the task
   branch; after the merge `review` and `done` deduced once `design`, `red`, `green` and `refactor` were recorded.
 - 2026-11-06: plan added (`wf(plan): add dev-loop-rel-v0.4-plan`, `f72728802`); body written.
+- 2026-11-17: `main` merged into this branch (`638e4e312`, carrying `spec-019`/`spec-020` at `018141cd8`). Rulings
+  W1-R1 … W1-R13 proposed from the `w1` survey and approved by the approver as proposed; `backlog_committed` comes to 49,
+  not 50, since W1-R9 moves W1-21 to `w2`. Still owed before the checkpoint: `task-337`'s close, W0.2 and W0.3.
 
 #### W0 measures
 
