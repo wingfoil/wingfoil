@@ -179,8 +179,8 @@ re-plan checkpoint (W0.4), after `w0`'s last task, the wave-checks (W0.2) and th
 - **W1-R1 — growth is planned, and re-baselined at each re-plan.** Commit-backlog listed only `w0` on purpose, so
   `release.growth_threshold` (fires at the 34th task) would fire at every re-plan by construction. The `w1` tasks are
   recorded as planned growth in `minor-v0.4`'s `## Scope changes`, and `backlog_committed` is re-baselined to the tasks
-  of the listed waves (27 + 22 = 49, W1-R9) in the same `memory amend`, which also sets `waves: [w0, w1]` and stamps
-  `bug-506`'s release. Within a wave the threshold keeps measuring unplanned growth (W0-R10).
+  of the listed waves (27 + 22 = 49, W1-R9) in the same `memory amend`, which also sets `waves: [w0, w1]`;
+  `bug-506`'s release is stamped with the W0.3 series. Within a wave the threshold keeps measuring unplanned growth (W0-R10).
 - **W1-R2 — the approver-gated verbs are MCP Tools that always refuse.** `approve`, `reject` and `amend` are exposed
   (REQ-SYS-05's bijection holds, `spec-004` §4.2) and every MCP call is an agent context, so they refuse
   (`E_AGENT_CONTEXT`, `dl-212` D1, `spec-018` §1.2), as `agent.execute` already does. The vision-change of W1-01 drops
