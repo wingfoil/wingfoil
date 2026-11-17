@@ -5,7 +5,8 @@
  * 13. The run's entry in the active registry (`./active-runs.ts`, §7, task-336): created exclusively, a live entry
  *     for the run id refusing the launch (`RUN_ACTIVE`), with a `warning:` line when git does not ignore it; then,
  *     for a headless run with `--log`, the file opened for appending (`./output.ts`; `LOG_UNWRITABLE`), with a
- *     `warning:` line when it is inside the repository and not ignored. Then the banner,
+ *     `warning:` line when it is inside the repository and not ignored. Then the agent CLI's version, read before the
+ *     launch as a post-run lookup runs (§2.6, task-337, `bug-366`): `agent_version`. Then the banner,
  *     `run <run-id>: launching <agent> (<adapter>) as <role> on <type>:<id>`, as a notice on stderr
  *     (`reportNotice`): the CLI renders it in the active `--format`. From here every exit path removes the entry
  *     and closes the log.
@@ -18,7 +19,8 @@
  *     first on `PATH`, `WINGFOIL_CLI` naming it, and `spec-018` §1.1's launcher marker set to the agent's name. An interactive agent inherits stdin, stdout and stderr; a headless one (the
  *     work run, §3.5, task-335) reads the null device, its stdout and stderr are both piped and forwarded line by
  *     line to the caller's stderr (`reportOutput`, `dl-182` Q1 (a), task-336) and, with `--log`, appended to that
- *     file — stdout also read for the session id under `session.id: output`, step 16 — and on POSIX it runs in a
+ *     file — stdout also read for the session id under `session.id: output` and for the usage under `usage.from` naming
+ *     `output`, step 16 — and on POSIX it runs in a
  *     session and process group of its own (approver ruling D6 (a)). Once spawned, the registry entry is rewritten
  *     with the agent's pid, and at the agent's exit with `agent execute`'s own again, each time only while the file
  *     still holds this launch's entry (§7). This is REQ-PERF-01's "agent ready".
@@ -36,11 +38,14 @@
  *     {@link LOOKUP_TIMEOUT_MS}, then closed, a last line without a newline forwarded with one (approver ruling
  *     D11). The session id a headless run's stdout carried, under `session.id: output` (§2.6, task-356: one JSON
  *     document under `launch.headless.output: json`, the first line carrying it under `jsonl`; none found is
- *     `not-reported` and a `warning:` line). The post-run lookups (§2.6): `version_args`, `session.lookup_args`,
- *     `usage.lookup_args`, each run as
+ *     `not-reported` and a `warning:` line). The post-run lookups (§2.6): `version_args` again
+ *     (`agent_version_after`, a version other than the one read before the launch said in a `warning:` line,
+ *     task-337), `session.lookup_args`, `usage.lookup_args`, each run as
  *     `command` + argv with a time limit ({@link LOOKUP_TIMEOUT_MS}); one argv declared twice runs once.
  *     A lookup that fails, times out or prints no JSON, and a value of the wrong type, yield
- *     `not-reported` and a `warning:` line; the lookup never fails the run. The start-up hint (task-353,
+ *     `not-reported` and a `warning:` line; the lookup never fails the run. The usage sources `usage.from` names
+ *     (`./usage.ts`, task-337) are tried in order — the lookup, a headless `output: json` run's stdout, the agent's
+ *     session transcript — the first that yields a value supplying the model and the counts. The start-up hint (task-353,
  *     `bug-500`): a run that did not succeed, with `HEAD` still at `state_ref` and `notes` `none`, under
  *     `launch.<kind>.trust: prompt`, records {@link START_UP_HINT_NOTES} as its `notes` and, once committed, prints
  *     one `warning:` line naming the agent CLI's folder-trust step.
@@ -53,13 +58,16 @@
  * **Determinism.** The argv, the session id and every record field but `duration_ms` are pure functions
  * of committed state, the run's inputs and, for an assigned session id, the clone's session salt (§2.6,
  * `./session-salt.ts`), the one random value of a launch; the temporary-file paths and the Node executable are host
- * values that never reach the context (`spec-016` Consequences). `duration_ms` is wall-clock by design:
+ * values that never reach the context (`spec-016` Consequences). The agent version and the usage are read before and
+ * after the run, never into the context; the transcript's host path is neither recorded nor printed (task-337). `duration_ms` is wall-clock by design:
  * a record of what happened, never part of a context (`dl-114` Q2); so is the registry entry's `started_ms` (§7,
  * {@link LaunchHost.now}), which never reaches the record.
  */
 import { AsyncLocalStorage, AsyncResource } from 'node:async_hooks';
 import { execFile, spawn, type ChildProcess, type SpawnOptions } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { realpathSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { isAbsolute, posix, resolve, win32 } from 'node:path';
 import { performance } from 'node:perf_hooks';
 
@@ -70,10 +78,11 @@ import { coreErr, coreOk, type CoreResult } from '../core/types';
 
 import type { TimeBound } from './duration';
 import type { AdapterManifest } from './schema';
-import { deriveNotesField, NOT_REPORTED, recordRun, START_UP_HINT_NOTES, type ReportedCount, type RunRecord, type RunTokens } from './run-log';
+import { deriveNotesField, NOT_REPORTED, recordRun, START_UP_HINT_NOTES, type RunRecord, type RunTokens } from './run-log';
 import { sessionSalt } from './session-salt';
 import { activeRunPath, registerRun, REGISTRY_NOT_IGNORED_WARNING, removeRun, rewriteRunPid, type ActiveRunEntry } from './active-runs';
 import { lineSplitter, logNotIgnoredWarning, notIgnoredInRepository, openLog, type OpenLog } from './output';
+import { documentUsage, readJsonPath, readTranscriptLines, renderTranscriptPath, transcriptAccumulator, yieldsUsage, type SourceUsage } from './usage';
 
 /**
  * How much one post-run lookup may print before it is stopped (§2.6): `execFile`'s `maxBuffer`, which
@@ -223,19 +232,7 @@ export function renderLaunchArgv(manifest: AdapterManifest, values: LaunchValues
   return [...renderArgv(args, values), ...launchPermissions(manifest, kind, role), ...launchTrust(manifest, kind), ...renderArgv(assign, values)];
 }
 
-/**
- * The value at the dotted `path` of a JSON value (§2.2 `session.field`, `usage.fields`): each segment a
- * key of a plain object; `undefined` when a segment is absent or the value on the way is not an object.
- */
-export function readJsonPath(document: unknown, path: string): unknown {
-  let value: unknown = document;
-  for (const key of path.split('.')) {
-    if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
-    if (!Object.prototype.hasOwnProperty.call(value, key)) return undefined;
-    value = (value as Record<string, unknown>)[key];
-  }
-  return value;
-}
+export { readJsonPath };
 
 /** What starts the agent: `child_process.spawn`'s shape, overridable by an in-process caller (tests). */
 export type SpawnAgent = (command: string, args: readonly string[], options: SpawnOptions) => ChildProcess;
@@ -359,8 +356,8 @@ function spawnOptions(kind: LaunchKindRun, root: string, env: NodeJS.ProcessEnv)
 /**
  * What a headless run's output feeds (§3.5, task-336): every line of either stream (the forwarding to the caller's
  * stderr and the `--log` copy), every raw chunk of stdout to each of `stdout`'s consumers in order (the session-id
- * reader of `session.id: output`, task-356 — another reader of the whole stdout, such as a usage read of a headless
- * `output: json` run, is one more entry here), and how long to wait after the agent exits for both streams to end.
+ * reader of `session.id: output`, task-356, and the usage's document reader of `usage.from` naming `output`,
+ * task-337), and how long to wait after the agent exits for both streams to end.
  */
 interface HeadlessOutput {
   readonly line: (line: string, stream: OutputStream) => void;
@@ -530,10 +527,47 @@ const OUTPUT_MAX_BYTES = 1024 * 1024;
 /** The session id a headless run's stdout carried, or why there is none (one phrase, for a warning). */
 type OutputSession = { ok: true; id: string } | { ok: false; reason: string };
 
-/** A reader of a headless run's stdout for the session id: fed chunk by chunk, asked once the stream is over. */
-interface SessionOutputReader {
+/** A headless run's stdout as one JSON document (§2.6 `json`), or why it is not one (one phrase, for a warning). */
+type OutputDocument = { ok: true; document: unknown } | { ok: false; reason: string };
+
+/** A reader of a headless run's stdout: fed chunk by chunk, asked once the stream is over. */
+interface OutputReader<T> {
   readonly write: (chunk: Buffer) => void;
-  readonly end: () => OutputSession;
+  readonly end: () => T;
+}
+
+/** A reader of a headless run's stdout for the session id. */
+type SessionOutputReader = OutputReader<OutputSession>;
+
+/**
+ * Under `launch.headless.output: json` (§2.6): the whole stdout, at most {@link OUTPUT_MAX_BYTES}, is one JSON
+ * document — the session id's source under `session.id: output` (task-356) and the usage's under `usage.from` naming
+ * `output` (task-337). A pure function of the bytes written, in their order.
+ */
+function jsonDocumentReader(): OutputReader<OutputDocument> {
+  const chunks: Buffer[] = [];
+  let size = 0;
+  return {
+    write: (chunk) => {
+      size += chunk.length;
+      if (size <= OUTPUT_MAX_BYTES) chunks.push(chunk);
+      else chunks.length = 0;
+    },
+    end: () => {
+      if (size > OUTPUT_MAX_BYTES) return { ok: false, reason: `the headless output is over ${OUTPUT_MAX_BYTES / 1024 / 1024} MiB` };
+      try {
+        return { ok: true, document: JSON.parse(Buffer.concat(chunks).toString('utf-8')) as unknown };
+      } catch {
+        return { ok: false, reason: 'the headless output is not one JSON document' };
+      }
+    },
+  };
+}
+
+/** The non-empty string at `field` of `document`, else `undefined` (no such value, another type). */
+function sessionIdAt(document: unknown, field: string): string | undefined {
+  const value = readJsonPath(document, field);
+  return typeof value === 'string' && value !== '' ? value : undefined;
 }
 
 /** The non-empty string at `field` of the JSON `text`, else `undefined` (not JSON, no such value, another type). */
@@ -544,8 +578,7 @@ function sessionIdIn(text: string, field: string): string | undefined {
   } catch {
     return undefined;
   }
-  const value = readJsonPath(document, field);
-  return typeof value === 'string' && value !== '' ? value : undefined;
+  return sessionIdAt(document, field);
 }
 
 const NO_SESSION_ID = 'the headless output carries no session id';
@@ -553,28 +586,18 @@ const NO_SESSION_ID = 'the headless output carries no session id';
 /**
  * §2.6 `session.id: output` (task-356, `bug-375`): under `jsonl` each line is one JSON value, read in order, and the
  * first non-empty string at `field` is the id (a line that is not JSON, has no such value or is over
- * {@link OUTPUT_MAX_BYTES} is passed over); under `json` the whole stdout, at most {@link OUTPUT_MAX_BYTES}, is one
- * document and the id is at `field`. A pure function of the bytes written, in their order.
+ * {@link OUTPUT_MAX_BYTES} is passed over); under `json` the whole stdout is one document ({@link jsonDocumentReader})
+ * and the id is at `field`. A pure function of the bytes written, in their order.
  */
 function sessionOutputReader(output: 'json' | 'jsonl', field: string): SessionOutputReader {
   if (output === 'json') {
-    const chunks: Buffer[] = [];
-    let size = 0;
+    const document = jsonDocumentReader();
     return {
-      write: (chunk) => {
-        size += chunk.length;
-        if (size <= OUTPUT_MAX_BYTES) chunks.push(chunk);
-        else chunks.length = 0;
-      },
+      write: document.write,
       end: () => {
-        if (size > OUTPUT_MAX_BYTES) return { ok: false, reason: `the headless output is over ${OUTPUT_MAX_BYTES / 1024 / 1024} MiB` };
-        const text = Buffer.concat(chunks).toString('utf-8');
-        try {
-          JSON.parse(text);
-        } catch {
-          return { ok: false, reason: 'the headless output is not one JSON document' };
-        }
-        const id = sessionIdIn(text, field);
+        const read = document.end();
+        if (!read.ok) return read;
+        const id = sessionIdAt(read.document, field);
         return id === undefined ? { ok: false, reason: NO_SESSION_ID } : { ok: true, id };
       },
     };
@@ -622,7 +645,8 @@ function sessionOutputReader(output: 'json' | 'jsonl', field: string): SessionOu
 
 /** The facts §3.3 step 16 reads after the agent exited. */
 interface PostRunFacts {
-  readonly agent_version: string;
+  /** `version_args` read after the agent exited (§4.2 key 19). */
+  readonly agent_version_after: string;
   readonly model: string;
   readonly session: string;
   readonly tokens: RunTokens;
@@ -645,12 +669,46 @@ interface PostRunInput {
   readonly timeoutMs: number;
   /** What the headless run's stdout carried under `session.id: output` (§2.6); `undefined` when it was not read. */
   readonly output: OutputSession | undefined;
+  /** The headless run's stdout as one JSON document, for the `output` usage source (§2.6); `undefined` when not kept. */
+  readonly outputDocument: OutputDocument | undefined;
+  /** `agent_version`, read before the launch (§2.6): compared with the read after the run. */
+  readonly agentVersion: string;
+  /** The home directory `{home}` renders to (§2.3). */
+  readonly homeDir: string;
+}
+
+/** The first non-blank line `version_args` printed, or the warning cause (§2.6: `printed nothing`, `failed (<reason>)`). */
+async function readAgentVersion(outcome: Promise<LookupOutcome>): Promise<{ ok: true; version: string } | { ok: false; cause: string }> {
+  const read = await outcome;
+  const first = read.ok ? read.stdout.split('\n').map((line) => line.trim()).find((line) => line !== '') : undefined;
+  if (first !== undefined) return { ok: true, version: first };
+  return { ok: false, cause: read.ok ? 'printed nothing' : `failed (${read.reason})` };
 }
 
 /**
- * §3.3 step 16: `agent_version`, the session id, the model and the tokens, from the adapter's
+ * §2.6 "The agent CLI's version", the read before the launch (task-337, `dl-180` version (b), `bug-366`): `version_args`
+ * run as a lookup runs, right before §3.3 step 13's banner, its first non-blank line `agent_version`. Absent
+ * `version_args` is `not-reported` silently; a read that fails or prints nothing is `not-reported` and one warning.
+ */
+async function agentVersionBefore(root: string, adapterName: string, manifest: AdapterManifest, values: LaunchValues, timeoutMs: number): Promise<string> {
+  if (manifest.version_args === undefined) return NOT_REPORTED;
+  const read = await readAgentVersion(runLookup(commandToSpawn(root, manifest.command), renderArgv(manifest.version_args, values), root, timeoutMs));
+  if (read.ok) return read.version;
+  reportWarning(`adapter '${adapterName}': version_args ${read.cause} before the launch: agent_version recorded as not-reported`);
+  return NOT_REPORTED;
+}
+
+/** The sources `usage.from` names, in order (§2.6): none for `none`. */
+function usageSources(from: AdapterManifest['usage']['from']): readonly ('output' | 'lookup' | 'transcript')[] {
+  if (from === 'none') return [];
+  return Array.isArray(from) ? from : [from];
+}
+
+/**
+ * §3.3 step 16: `agent_version_after`, the session id, the model and the tokens, from the adapter's
  * declarations (§2.2, §2.6). Every lookup runs after the agent exited; an argv declared for both the
- * session and the usage runs once. A failure is `not-reported` and one warning; never a refusal.
+ * session and the usage runs once. The usage sources are tried in `usage.from`'s order, the first that yields a value
+ * supplying the model and the counts (task-337). A failure is `not-reported` and one warning; never a refusal.
  */
 async function postRunFacts(input: PostRunInput): Promise<PostRunFacts> {
   const { manifest, adapterName } = input;
@@ -664,12 +722,15 @@ async function postRunFacts(input: PostRunInput): Promise<PostRunFacts> {
     return runs.get(key)!;
   };
 
-  let agentVersion: string = NOT_REPORTED;
+  // The read after the run (§2.6, task-337): never merged with the read before the launch.
+  let agentVersionAfter: string = NOT_REPORTED;
   if (manifest.version_args !== undefined) {
-    const outcome = await lookup(manifest.version_args);
-    const first = outcome.ok ? outcome.stdout.split('\n').map((line) => line.trim()).find((line) => line !== '') : undefined;
-    if (first !== undefined) agentVersion = first;
-    else warn(`version_args ${outcome.ok ? 'printed nothing' : `failed (${outcome.reason})`}: agent_version recorded as not-reported`);
+    const read = await readAgentVersion(lookup(manifest.version_args));
+    if (read.ok) agentVersionAfter = read.version;
+    else warn(`version_args ${read.cause} after the run: agent_version_after recorded as not-reported`);
+  }
+  if (input.agentVersion !== NOT_REPORTED && agentVersionAfter !== NOT_REPORTED && input.agentVersion !== agentVersionAfter) {
+    warn(`the agent CLI changed during the run: version_args printed '${input.agentVersion}' before the launch and '${agentVersionAfter}' after it`);
   }
 
   let session: string = input.assigned ?? NOT_REPORTED;
@@ -687,30 +748,78 @@ async function postRunFacts(input: PostRunInput): Promise<PostRunFacts> {
     }
   }
 
-  let model: string = NOT_REPORTED;
-  let tokens: RunTokens = noTokens();
-  if (manifest.usage.from === 'lookup' && manifest.usage.lookup_args !== undefined) {
-    const parsed = parseLookup(await lookup(manifest.usage.lookup_args));
-    if (!parsed.ok) warn(`the usage lookup failed (${parsed.reason}): model and tokens recorded as not-reported`);
-    else {
-      const fields = manifest.usage.fields ?? {};
-      if (fields.model !== undefined) {
-        const value = readJsonPath(parsed.document, fields.model);
-        if (typeof value === 'string' && value !== '') model = value;
-        else if (value !== undefined) warn("the usage lookup's model is not a non-empty string: recorded as not-reported");
+  // The usage (§2.6): the first source that yields a value supplies the model and the counts; nothing is mixed.
+  const source = async (name: 'output' | 'lookup' | 'transcript'): Promise<SourceUsage | undefined> => {
+    switch (name) {
+      case 'lookup': {
+        if (manifest.usage.lookup_args === undefined) return undefined;
+        const parsed = parseLookup(await lookup(manifest.usage.lookup_args));
+        if (!parsed.ok) {
+          warn(`the usage lookup failed (${parsed.reason}): model and tokens recorded as not-reported`);
+          return undefined;
+        }
+        return documentUsage(parsed.document, manifest.usage.fields ?? {}, "the usage lookup's");
       }
-      const count = (key: keyof RunTokens): ReportedCount => {
-        const path = fields[key];
-        if (path === undefined) return NOT_REPORTED;
-        const value = readJsonPath(parsed.document, path);
-        if (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0) return value;
-        if (value !== undefined) warn(`the usage lookup's ${key} is not a non-negative integer: recorded as not-reported`);
-        return NOT_REPORTED;
-      };
-      tokens = { input: count('input'), output: count('output'), cache_read: count('cache_read'), cache_write: count('cache_write') };
+      case 'output': {
+        // An interactive launch's stdout belongs to the agent: nothing, silently (`outputDocument` is not kept).
+        if (input.outputDocument === undefined) return undefined;
+        if (!input.outputDocument.ok) {
+          warn(`${input.outputDocument.reason}: model and tokens not read from it`);
+          return undefined;
+        }
+        return documentUsage(input.outputDocument.document, manifest.usage.fields ?? {}, "the headless output's");
+      }
+      case 'transcript':
+        return transcriptSource(input, session, (text) => warn(`usage.transcript: ${text}`));
+    }
+  };
+  let usage: Pick<SourceUsage, 'model' | 'tokens'> = { model: NOT_REPORTED, tokens: noTokens() };
+  for (const name of usageSources(manifest.usage.from)) {
+    const read = await source(name);
+    if (read === undefined) continue;
+    for (const warning of read.warnings) {
+      if (name === 'transcript') warn(`usage.transcript: ${warning}`);
+      else warn(warning);
+    }
+    if (yieldsUsage(read)) {
+      usage = read;
+      break;
     }
   }
-  return { agent_version: agentVersion, model, session, tokens };
+  return { agent_version_after: agentVersionAfter, model: usage.model, session, tokens: usage.tokens };
+}
+
+/**
+ * §2.6 `transcript` (task-337, `dl-188` part 1 (a)): the file at `usage.transcript.path`, rendered with the record's
+ * session id, the home directory and the launch directory's slug (its symbolic links resolved), streamed line by line
+ * under the lookup's limit. A session id that is not reported, a path that does not render as an absolute path, a file
+ * absent, unreadable or not read in time yield nothing and one warning (through `warn`), which never names the path.
+ */
+async function transcriptSource(input: PostRunInput, session: string, warn: (text: string) => void): Promise<SourceUsage | undefined> {
+  const declaration = input.manifest.usage.transcript;
+  if (declaration === undefined) return undefined;
+  if (session === NOT_REPORTED) {
+    warn('the session id is not-reported: the transcript is not read');
+    return undefined;
+  }
+  let launchDir = input.root;
+  try {
+    launchDir = realpathSync(input.root);
+  } catch {
+    // The root as given: a launch directory that cannot be resolved still names a folder, which may be absent.
+  }
+  const path = renderTranscriptPath(declaration.path, { home: input.homeDir, launchDir, sessionId: session });
+  if (path === undefined) {
+    warn('the path does not render as an absolute path: the transcript is not read');
+    return undefined;
+  }
+  const accumulator = transcriptAccumulator(declaration);
+  const read = await readTranscriptLines(path, input.timeoutMs, accumulator.add);
+  if (!read.ok) {
+    warn(`the transcript of session ${session} ${read.reason}`);
+    return undefined;
+  }
+  return accumulator.result();
 }
 
 /** The host facts the launch reads, each overridable by an in-process caller (tests). */
@@ -737,6 +846,11 @@ export interface LaunchHost {
    * task-336), a record of what happened, never part of a context. `Date.now` by default; a test injects a fixed one.
    */
   readonly now?: () => number;
+  /**
+   * The home directory `usage.transcript.path`'s `{home}` renders to (§2.3, task-337): the operating system's
+   * (`os.homedir()`) by default; a test injects a temporary one, so no test changes `HOME`.
+   */
+  readonly homeDir?: string;
 }
 
 /** {@link LaunchHost.signalGroup}'s default: the signal to every process of the group, none left being no error. */
@@ -835,7 +949,8 @@ function startUpHintWarning(record: RunRecord, input: LaunchInput): string {
 
 /**
  * A headless run's output wiring (§3.5, task-336): each line forwarded to the caller (`reportOutput`) and, with
- * `--log`, appended to the file in the console form; `stdout` the raw-chunk consumers (the session-id reader). A log
+ * `--log`, appended to the file in the console form; `stdout` the raw-chunk consumers (the session-id reader, the
+ * usage's document reader). A log
  * that fails mid-run is reported once, as a `warning:` line, and no longer written: the run goes on.
  */
 function forwardOutput(log: { readonly file: OpenLog; readonly given: string } | undefined, stdout: readonly ((chunk: Buffer) => void)[], drainMs: number): HeadlessOutput {
@@ -942,6 +1057,9 @@ async function launchRun(
 ): Promise<CoreResult<RecordedLaunch>> {
   const { manifest } = input.adapter;
   const { assigned, values, argv, log, entry, spawned } = launch;
+  const lookupTimeoutMs = host.lookupTimeoutMs ?? LOOKUP_TIMEOUT_MS;
+  // §2.6 — the agent CLI's version, read before the launch, right before the banner (task-337, `bug-366`).
+  const agentVersion = await agentVersionBefore(root, input.adapter.name, manifest, values, lookupTimeoutMs);
   // Step 13 — the banner; step 14 — the spawn; step 15 — the wait, with the signals taken over.
   reportNotice(launchBanner(input));
   // The launch's listeners go in before the pre-launch cleanup's come out: no signal finds neither.
@@ -972,7 +1090,9 @@ async function launchRun(
     manifest.session.id === 'output' && manifest.session.field !== undefined && (headlessOutput === 'json' || headlessOutput === 'jsonl')
       ? sessionOutputReader(headlessOutput, manifest.session.field)
       : undefined;
-  const lookupTimeoutMs = host.lookupTimeoutMs ?? LOOKUP_TIMEOUT_MS;
+  // §2.6 `output`: a headless `output: json` run's stdout, kept whole for the usage when `usage.from` names it (task-337).
+  const document = headlessOutput === 'json' && usageSources(manifest.usage.from).includes('output') ? jsonDocumentReader() : undefined;
+  const stdoutReaders = [reader?.write, document?.write].filter((write): write is (chunk: Buffer) => void => write !== undefined);
   try {
     const ran = await runAgent(
       host.spawn ?? spawn,
@@ -994,7 +1114,7 @@ async function launchRun(
         // Step 14 — at the agent's exit the entry names `agent execute` again, live through steps 16–17 (§7, review F2).
         if (spawned.pid !== undefined) rewriteRunPid(root, entry, spawned.pid);
       },
-      input.kind === 'headless' ? forwardOutput(log === undefined ? undefined : { file: log, given: input.log ?? '' }, reader === undefined ? [] : [reader.write], lookupTimeoutMs) : undefined,
+      input.kind === 'headless' ? forwardOutput(log === undefined ? undefined : { file: log, given: input.log ?? '' }, stdoutReaders, lookupTimeoutMs) : undefined,
     );
     if (!ran.ok) {
       return coreErr({ code: 'IO', message: `agent command '${manifest.command}' could not be started (adapter '${input.adapter.name}'): ${ran.reason}` });
@@ -1009,6 +1129,9 @@ async function launchRun(
       values,
       timeoutMs: lookupTimeoutMs,
       output: reader?.end(),
+      outputDocument: document?.end(),
+      agentVersion,
+      homeDir: host.homeDir ?? homedir(),
     });
     const elementId = input.element.slice(input.element.indexOf(':') + 1);
     const notes =
@@ -1026,7 +1149,7 @@ async function launchRun(
       mode: input.mode,
       agent: input.agent.name,
       adapter: `${input.adapter.kind}/${input.adapter.name}`,
-      agent_version: facts.agent_version,
+      agent_version: agentVersion,
       model: facts.model,
       session: facts.session,
       tokens: facts.tokens,
@@ -1036,6 +1159,7 @@ async function launchRun(
       exit_status: ran.exitStatus,
       result: 'n/a',
       notes: hint ? START_UP_HINT_NOTES : notes,
+      agent_version_after: facts.agent_version_after,
     };
 
     // Step 17 — append and commit.

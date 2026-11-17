@@ -1916,11 +1916,21 @@ adapter that assigns the session id, the id hashes a random salt created once pe
 run id; a salt file that is not 64 lowercase hexadecimal digits and a line feed is refused before the launch, exit
 `1`, nothing recorded. While the agent runs,
 Ctrl-C, Ctrl-\ and a hang-up of the terminal reach the agent and do not stop `agent execute`; `SIGTERM` sent to
-`agent execute` is passed on to the agent, and a `SIGHUP` sent to `agent execute` alone is not. When the agent exits, it asks the adapter's declared
-commands for the agent's version, session, model and token counts (each within 10 seconds; one that
-fails is recorded as `not-reported`, with a `warning:` line), appends one record to the element's run
+`agent execute` is passed on to the agent, and a `SIGHUP` sent to `agent execute` alone is not. Right before the
+banner it asks the adapter's declared command for the agent's version (new in 0.4), recorded as `agent_version`, the
+version that ran. When the agent exits, it asks the adapter's declared
+commands for the agent's version again (`agent_version_after`), session, model and token counts (each within 10
+seconds; one that fails is recorded as `not-reported`, with a `warning:` line; when the two versions differ, the agent
+CLI updated itself during the run, and a `warning:` line says so), appends one record to the element's run
 log (`<paths.runs>/<element-id>.jsonl`) and commits it alone, then prints
-`run <run-id>: agent exited <status> after <seconds> s (recorded in <sha7>)`.
+`run <run-id>: agent exited <status> after <seconds> s (recorded in <sha7>)`. The model and the token counts come
+from the sources the adapter's `usage.from` names, tried in order, the first that yields a value supplying them all
+(new in 0.4): a lookup command, a headless run's JSON result, or the agent's own session transcript on this machine,
+read after the run and never committed (`claude-code` reads its transcript under `~/.claude/projects/`, then, for a
+headless run, its `--output-format json` result). A transcript that is absent or unreadable records `not-reported`
+with a `warning:` line naming the adapter and `usage.transcript`, never the file's path. A run log written by an
+earlier version has no `agent_version_after` (its `agent_version` was read after the run): it is read with
+`agent_version_after: not-reported`.
 
 It exits `0` only when the agent exited `0` and the record was committed. An agent that exited with
 another code, or was ended by a signal, gives exit `1` and
@@ -1983,7 +1993,7 @@ tool printed, a credential in an error message), and nothing redacts it: WingFoi
 output is never committed — not to the run record, not to the run log, not to any file but the one `--log` names. Ctrl-C, `SIGTERM` and `SIGHUP` sent to `agent execute` are passed on to it; Ctrl-\ is
 ignored. On Linux and macOS a passed-on signal and the `--timeout` signals reach the processes the agent
 started too, and once an agent a signal reached has exited, what is left of them is killed: nothing of a
-signalled or timed-out headless run outlives `agent execute`. Both built-in adapters declare a headless launch (`claude -p …`, `codex exec --json …`). An
+signalled or timed-out headless run outlives `agent execute`. Both built-in adapters declare a headless launch (`claude -p … --output-format json …`, `codex exec --json …`). An
 adapter whose `session.id` is `output` has its session id read from the run's stdout (`launch.headless.output`:
 `json`, one document; `jsonl`, the first line carrying it): `codex-cli` records the `thread_id` of the first
 `codex exec --json` event; a stdout that carries none records `not-reported`, with a `warning:` line. The record's
@@ -2136,6 +2146,7 @@ duration_ms: 61000
 exit_status: 130
 result: n/a
 notes: task-042-login-form#execution-notes
+agent_version_after: not-reported
 commit: 3c5d7e9f1a2b4c6d8e0f1a3b5c7d9e1f2a4b6c8d
 ```
 

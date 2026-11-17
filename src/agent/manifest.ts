@@ -34,7 +34,8 @@ type ManifestInput = z.input<typeof AdapterManifest>;
  * §2.1's basename rule and §2.2's "Req." column where it depends on another value: `mcp.template` with
  * `mcp.via: config-file` or `config-arg`; `session.assign_args` with `session.id: assign`; `session.lookup_args` with
  * `lookup` and `session.field` with `output` or `lookup`; the same pair under `usage.from`
- * (`usage.lookup_args`, `usage.fields`); `verified_with` on a built-in. Then §2.2's one exclusion,
+ * (`usage.lookup_args`, `usage.fields`), `usage.transcript` with `transcript`, each source named at most once, and
+ * `output` only with `launch.headless.output: json` (task-337); `verified_with` on a built-in. Then §2.2's one exclusion,
  * `prompt.via: stdin` beside an interactive launch. Then `launch.<kind>.permissions`: a role map declares `default`.
  */
 function crossFieldIssues(manifest: ManifestInput, source: AdapterSource): ValidationIssue[] {
@@ -79,10 +80,20 @@ function crossFieldIssues(manifest: ManifestInput, source: AdapterSource): Valid
     }
   }
 
+  // `usage.from`: one source or a list (§2.2, §2.6, task-337), each source at most once and each with its declaration.
   const usage = manifest.usage;
-  if (usage.from === 'lookup') required(usage.lookup_args !== undefined, 'usage.lookup_args', 'usage.from: lookup');
-  if (usage.from === 'output' || usage.from === 'lookup') {
-    required(usage.fields !== undefined, 'usage.fields', `usage.from: ${usage.from}`);
+  const sources = usage.from === 'none' ? [] : Array.isArray(usage.from) ? usage.from : [usage.from];
+  const named = (source: string): string => (Array.isArray(usage.from) ? `usage.from naming ${source}` : `usage.from: ${source}`);
+  const repeated = sources.filter((source, index) => sources.indexOf(source) !== index);
+  for (const source of [...new Set(repeated)]) issue('usage.from', `names '${source}' more than once: each source at most once (spec-016 §2.2)`);
+  if (sources.includes('lookup')) required(usage.lookup_args !== undefined, 'usage.lookup_args', named('lookup'));
+  for (const source of ['output', 'lookup'] as const) {
+    if (sources.includes(source)) required(usage.fields !== undefined, 'usage.fields', named(source));
+  }
+  if (sources.includes('transcript')) required(usage.transcript !== undefined, 'usage.transcript', named('transcript'));
+  // D13: a declared source that can never be read is a manifest defect — `output` is a headless JSON document (§2.6).
+  if (sources.includes('output') && manifest.launch.headless?.output !== 'json') {
+    issue('usage.from', "'output' is legal only with launch.headless.output: json: the usage is read from a headless run's one JSON document (spec-016 §2.2, §2.6)");
   }
   return issues;
 }
