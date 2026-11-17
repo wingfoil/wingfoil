@@ -99,6 +99,14 @@ ends at an approval gate (`npm run -s wingfoil -- workflow show release-planning
     sort order (`0948e8fe6`); the docs suites then green (`npx jest test/docs/ test/lint/version-bump.test.ts
     --maxWorkers=2` → 38 suites, 450 tests passed).
 - 2026-11-17, step 4: `memory submit` of `spec-019` (`ff3c72331`) and `spec-020` (`72d75bcfb`), `draft → pending`.
+- 2026-11-17, step 5: gate packets with the approver; both reasons checked recordable beforehand
+  (`reasonRefusalMessage` from `dist/memory/commit-message.js` → `null` for each). The approver approved `spec-019`
+  (`4b6b9bb9f`) and `spec-020` (`69b25574d`), `pending → approved`, each open question ruled as recommended, (a): `spec-019`
+  OQ-1–OQ-4 (OQ-4: a `governance-check` capability requiring `spec-020`'s command), `spec-020` OQ-1–OQ-7 (OQ-1: the name
+  `verify`; OQ-6 open again at the first pin advance past 0.4.0). `git log -2 --format=%B` shows an `Approver:` line and
+  no agent trailer on either.
+- 2026-11-17, step 6: this plan closed by a hand `finalize` (`active → done`), since it is the plan of one phase, not a
+  workflow instance; the governance check run over the branch before the hand-over.
 
 ### Retrospective
 
