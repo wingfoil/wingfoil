@@ -512,6 +512,137 @@ where §2.6 fixes them (the version warnings) and by pattern where the amendment
 
 **Candidate findings (not filed).** None.
 
+### green (developer, 2026-11-17)
+
+**Base and guard.** Worktree on `task/task-337-…` at `b3dcabaa0` (the orchestrator's merge of `main` after `task-336`
+closed); `git rev-list --count HEAD..main` → `0` at the start and at the end of refactor, so no merge of `main`. The PATH
+guard ran first through the task's PATH shim (`command -v wingfoil && wingfoil --version && node dist/cli.js --version`
+→ the shim, `0.3.2 (03377728e83a0e516cbead75015ad9238688f6e0)` twice).
+
+**Red after the merge, before any code.** Heavy-gate slot, `npm run -s build`, then `npm test -- <red's 28 test files>
+--maxWorkers=2` → `Test Suites: 21 failed, 7 passed, 28 total`, `Tests: 164 failed, 319 passed, 483 total`: the counts
+red recorded. Every first failing assertion is red's intended one (`unexpected key 'agent_version_after'`; `Cannot find
+module '../../src/agent/usage'`; `"agent_version": "fake-agent 1.0.1"` for `"fake-agent 1.0.0"`; `run.fake[1]` the
+post-run `--version`; `['--version', '--lookup']` for `['--version', '--version', '--lookup']`; `usage.from: Invalid
+option`; the 40 / 31 schema leaves). No red test failed for a reason the merge with `task-336` introduced.
+
+**Implementation** (commit `60d31ae7b`, `feat(agent): task-337 — …`):
+- `src/agent/run-log.ts`: `RUN_RECORD_KEYS` gains `agent_version_after` as key 19; `RunRecord.agent_version_after`
+  (required). `RUN_RECORD_FORMS` (the first 18 keys, all 19) is the design's list of key generations: a line read back
+  whose keys are exactly one form is held to it, any other line to the last; the writer (`serializeRunRecord`) holds a
+  record to all 19. `parseRunLog` returns an 18-key line with `agent_version_after: "not-reported"` (appended last, so
+  the JSON a reader prints keeps §4.2's order) and runs the byte check against the line's own form.
+- `src/agent/usage.ts` (new): `readJsonPath` (moved from `launch.ts`, which re-exports it, so `src/agent/index.ts` is
+  unchanged), `documentUsage` (the `lookup` and `output` sources' value reading, shared), `transcriptAccumulator` /
+  `transcriptUsage` (selected lines, one per `message_id` string or number, the last line of an id read; each count
+  summed, `not-reported` when no message carries it; one warning per key of the wrong type; the model the distinct
+  non-empty strings sorted and joined, D3 (a)), `launchDirSlug`, `renderTranscriptPath` (it slugs `launchDir` itself;
+  red's case passes either way, as its notes say), `readTranscriptLines` (streamed with `readline`, `is absent`,
+  `is unreadable (<code>)`, `was not read within <ms> ms`), `yieldsUsage`.
+- `src/agent/launch.ts`: `agentVersionBefore` runs `version_args` as a lookup runs, in `launchRun` right before the
+  banner (after the registry entry and the `--log` file of `task-336`'s step 13); `postRunFacts` keeps its after-run
+  read as `agent_version_after` (its own `runs` map, so never merged with the first) and prints §2.6's changed-version
+  warning; the usage sources are tried in `usage.from`'s order, the first whose values hold a count or the model
+  supplying all (D4). The headless stdout: `jsonDocumentReader` (the `json` half of `sessionOutputReader`, now shared)
+  is one more raw-chunk consumer beside `reader.write` in the `forwardOutput(...)` call, only for a headless
+  `output: json` run whose `usage.from` names `output`; the forwarding is unchanged, so every line still reaches the
+  caller. `LaunchHost.homeDir` (default `os.homedir()`). `task-336`'s `onExit` / `stopBound` and registry rewrite are
+  untouched.
+- `src/agent/schema.ts`: `usage.from` one of `output|lookup|transcript|none` or a non-empty list of the first three;
+  `usage.transcript` strict (`path`, `select { field, equals }`, `message_id?`, `fields`). `src/agent/manifest.ts`:
+  a source named twice, `transcript` without `usage.transcript`, `lookup`/`output` without their declarations (the
+  single-source messages kept verbatim), and D13's refusal on `usage.from`. `src/agent/placeholders.ts`: `{home}` and
+  `{launch_dir_slug}` join the closed set; `usage.transcript.path`'s segment rules (whole segments, the last may be
+  `{session_id}.<ext>`, `{home}` first only, `{session_id}` unless `session.id: none`); the transcript's other fields
+  hold no placeholder.
+- `src/storage/builtin-adapters.ts` and `.wingfoil/agents/built-in/claude-code.yaml`, byte for byte: `usage.from:
+  [transcript, output]` with amended §2.8's transcript block and headless `fields`, the headless args gaining
+  `--output-format, json` after `-p, "{bootstrap}"`, `output: json`; `verified_with` stays `2.1.322 (Claude Code)`, the
+  version H1/H2 ran (gate ruling D6 (a)); the header comment and the TSDoc say where each declaration was read.
+  `codex-cli` unchanged.
+- `docs/cli-reference.md` (the `agent execute` entry: the two version reads, the usage sources, the 18-key form; the
+  headless built-in launch; the `agent show` example's `agent_version_after: not-reported` after `notes:`) and
+  `docs/user-guide.md` §9.4 ("What a run record says about the agent"). Neither document has a `version:` field (as
+  the design recorded), so no bump.
+- `test/docs/name-resolvability.allowlist.ts`: the five `PLANNED` rows of `usage.transcript.*` removed —
+  `npx jest test/docs/name-resolvability.test.ts --maxWorkers=2` listed all five as `stale` once the names were in
+  `src/` (`Tests: 11 passed`).
+
+**Red → green.** The same 28 files through the slot → `Test Suites: 28 passed, 28 total`, `Tests: 494 passed, 494
+total` (11 more than red's 483: `usage.test.ts`, which did not run at red).
+
+### refactor (developer, 2026-11-17)
+
+- **Developer's tests** (`81cb783e5`): `test/agent/usage-read.test.ts` (the three read failures — the time limit through
+  a FIFO a `sh` child holds open, so the wait is deterministic —, a model of the wrong type, a numeric and an object
+  message id, `documentUsage`'s warnings, `yieldsUsage`) and `test/agent/launch-usage-sources.test.ts` (in process: the
+  headless `output` source's counts with every line still forwarded, a stdout that is not one JSON document, a wrong
+  type, a transcript with no session id, a path that does not render as absolute). `npx jest <each> --maxWorkers=2` →
+  `11 passed`, `5 passed`.
+- **The full suite** (slot, `npm run -s build`, `npm test -- --maxWorkers=2`, 10:23Z–10:57Z UTC) → `Tests: 4 failed,
+  12315 passed, 12319 total`, all four in `test/cli/agent-execute-registry.integration.test.ts` (`task-336`'s suite, not
+  a red file): its `seen()` read `run.fake[0]` as the launch, which the pre-launch `version_args` read now precedes
+  (`Expected: [".wingfoil/run/…/adhoc/1.json"]`, `Received: undefined`). A defect this change causes, of the class red
+  fixed in `test/cli/helpers/agent-execute-cli.ts` (`launchEntry`): fixed in the task (`61616b365`), `seen()` taking
+  `launchEntry(run)`. `npx jest test/cli/agent-execute-registry.integration.test.ts --maxWorkers=2` → `7 passed`. The
+  other `fake[0]` readers (`grep -rln "fake\[0\]" test/`) passed in that full run.
+- **TypeDoc** flagged the inline return type of `transcriptAccumulator` (`… __type.add (Property) … does not have any
+  documentation`): it is now the documented interface `TranscriptAccumulator` (`61616b365`).
+- **Gates**, all after `61616b365`: `npm run -s docs:api` → exit `0`; `npm run -s lint` → exit `0`; `npm run -s
+  typecheck` (both tsc configs, slot) → exit `0`; `npm run test:coverage -- --maxWorkers=2` (slot, 11:00Z–11:34Z UTC) →
+  `Test Suites: 679 passed, 679 total`, `Tests: 12319 passed, 12319 total`, `All files | 98.84 | 96.45 | 98.53 | 99.45`
+  (statements, branches, functions, lines); `usage.ts 100 | 96.25 | 100 | 100`, `launch.ts 96.39 | 90.62 | 98.8 |
+  98.22`, `run-log.ts 99.29 | 94.7 | 100 | 99.57`, `manifest.ts`, `placeholders.ts`, `schema.ts` 100 in all four. The
+  document-parity suites (`test/docs/`, `test/docs/cli-reference.test.ts` among them) ran inside that coverage run and
+  passed. `npm run -s check:mcp` → exit `0`, the pinned `wingfoil 0.3.2` and `dist/cli.js` both `prompts: 9, resources:
+  4, tools: 0`.
+- **The pinned build and a 19-key line** (design risk, accepted): in a scratch repository holding the `task-236` log's
+  first line with `"agent_version_after":"2.1.296 (Claude Code)"` appended, `node node_modules/wingfoil-released/dist/cli.js
+  agent list --past` (it prints `0.3.2 (6de2e13c0…)` for `--version`) → exit `1`, `error: run log
+  docs/runs/task-236-ship-verify-hand-builtin-claude-code-adapter-point.jsonl: line 1 is not a valid run record:
+  unexpected key 'agent_version_after'`. `agent show` reads through the same strict reader. Until the pin advances,
+  reads of a run log this build writes go through the code build.
+- No pending amendment: the worktree held none (`git status --short` empty before each heavy gate), so `bug-534` did
+  not apply.
+
+### self-review (developer, 2026-11-17)
+
+- **AC 1** — met. Transcript first, then the headless result, else `not-reported`: `test/agent/launch-usage.test.ts`
+  (in process), `test/cli/agent-execute-usage.integration.test.ts` (a)–(d) on the compiled CLI, the manifest rules
+  (`manifest-usage.test.ts`), the built-in (`builtin-adapters-usage.test.ts`), all passing in the coverage run above.
+  Absence of the path in a warning, with its positive case: (a) of the CLI suite asserts no `usage.transcript` warning
+  when the transcript is read, (b) one warning naming no path when it is absent.
+- **AC 2** — met. `agent_version` read before the launch (its warning before the banner), `agent_version_after` after,
+  the changed-version warning after the banner: `agent-execute-version.integration.test.ts`, `launch-usage.test.ts`,
+  `launch-process.test.ts`, `run-log.test.ts`, the `agent show` suites.
+- **AC 3** — met (characterization): `result: 'n/a'` for both kinds, `agent-execute-version.integration.test.ts` `it.each`.
+- **AC 4** — met (characterization): `run-log-legacy.test.ts` and `agent list --past --format json` on the `task-236` log.
+- **AC 5, AC 6** — the approver's H1/H2 and the amend `2d193b318`, recorded in the gate note; nothing for green.
+- **Determinism**: every source is read in `postRunFacts`, after the exit; nothing reaches the bootstrap or the
+  context; only the counts and the model reach the record; the transcript's path is neither recorded nor printed.
+- **T4**: `git log --first-parent --no-merges --format=%h e38e60dc0..HEAD -- <the 32 files of e38e60dc0>` → empty.
+- **Scope**: the design's files, the five allowlist rows the prompt names, two new test files and
+  `test/cli/agent-execute-registry.integration.test.ts` (a test red did not touch, broken by this change, above). The
+  fake agent's documentation the design lists lives in `test/fixtures/agents/fake-agent.cjs`, which red wrote (its
+  header documents the three variables); green did not touch it (T4).
+- **Same class**: the other `fake[0]` readers checked (above); the `json` stdout reading now has one implementation for
+  the session id and the usage.
+- **Decisions stated, not silent**: the warning texts §2.6 leaves to the implementation are `adapter '<name>':
+  usage.transcript: the session id is not-reported: the transcript is not read`, `… the path does not render as an
+  absolute path: the transcript is not read`, `… the transcript of session <id> is absent` / `is unreadable (<code>)` /
+  `was not read within <ms> ms`, `… <key> is not a non-negative integer in a message: recorded as not-reported`,
+  `… model is not a string in a message: recorded as not-reported`, and for the `output` source `adapter '<name>': the
+  headless output is not one JSON document: model and tokens not read from it` (or `… is over 1 MiB …`), `… the headless
+  output's <key> is not …`. The lookup's failure text is kept verbatim (`… model and tokens recorded as not-reported`),
+  which `launch-usage.test.ts` pins even when the transcript then yields. A message id that is neither a string nor a
+  number makes its line a message of its own. A model of the wrong type in any message makes the transcript's model
+  `not-reported`.
+- **Candidate findings**: none.
+
+### Pending amendments (approver)
+
+None.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -519,3 +650,8 @@ where §2.6 fixes them (the version warnings) and by pattern where the amendment
      printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
      Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
      here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+
+- The pre-launch `version_args` read broke `task-336`'s `test/cli/agent-execute-registry.integration.test.ts` (four
+  cases read `run.fake[0]` as the launch): red's list of `fake[0]` readers was written before `task-336` added that
+  suite, and the auto-merge could not see it. Found only by the full suite (`Tests: 4 failed, 12315 passed`), fixed in
+  `61616b365`. Proposal: a test helper that names the launch (`launchEntry`) as the one way a suite reads it.
