@@ -76,7 +76,34 @@ ends at an approval gate (`npm run -s wingfoil -- workflow show release-planning
 - 2026-11-17, step 1: worktree `../.wf2-wt/w1-tech-specs` on `design/w1-tech-specs` cut from local `main`
   `fa9d5d6e2`; `npm ci` and `npm run build`; the three `memory add` commits `741c866da`, `1669b5a39`, `2b2a21100`
   (`git log --all --oneline | grep -E "spec-019|spec-020"` → those two only). Ids sent to the supervision.
+- 2026-11-17, step 1: plan submitted `draft → active` (`b688a7ca7`).
+- 2026-11-17, step 2: each spec drafted by a sub-agent with a written brief (sources, the `spec-018` model, the
+  sections the brief requires); the architect read each draft and owns it.
+- 2026-11-17, step 3 — `dl-022` spec-review gate, one independent reviewer sub-agent per spec, given the spec and its
+  sources, not the author's conclusions. Each round's findings are answered one by one in the spec's own Process Notes.
+  - `spec-019`: round 1 **not ready**, 14 findings (1 must-fix, 5 should-fix, 8 nits); the must-fix was the
+    name-resolvability gate failing on the spec's new names (`npx jest test/docs/name-resolvability.test.ts` → 21
+    unlisted). All 14 applied. Round 2 **ready**, 4 nits (N1–N3 fixed by the architect, N4 a finding on `spec-020`).
+  - `spec-020`: round 1 **not ready**, 21 findings (3 must-fix, 11 should-fix, 7 nits): T-24 inverted, the
+    pre-`.wingfoil/` history contradicting the gating, and an unsound switch of CI to the pinned build. Architect's
+    ruling on the last: in v0.4 the script runs the verb on the code build, the switch is the spec's OQ-6. All 21
+    applied. Round 2 **not ready**, 5 should-fix and 2 nits (the allowlist, `spec-005` and `wingfoil-cli` amendments
+    owed, the child's JSON stderr, historical-blob warnings). All applied. Round 3 **ready**, 2 nits (N8, N9), fixed by
+    the architect.
+  - Cross-spec: whether the governance check command gets a capability of its own was left to neither spec (`spec-020`
+    round 2, N6); made `spec-019`'s open question OQ-4, for the approver, recommendation (a). The supervision first
+    read it as an exclusion from the derived `commands` list; it is not: `commands` is derived with no exception and
+    OQ-4 asks only whether `CAPABILITIES` gains an entry.
+  - Name resolvability: the 37 names the two specs introduce (`npx jest test/docs/name-resolvability.test.ts` → 37
+    unlisted, all in the two specs) allowlisted with written reasons in a commit of their own, inserted in the file's
+    sort order (`0948e8fe6`); the docs suites then green (`npx jest test/docs/ test/lint/version-bump.test.ts
+    --maxWorkers=2` → 38 suites, 450 tests passed).
+- 2026-11-17, step 4: `memory submit` of `spec-019` (`ff3c72331`) and `spec-020` (`72d75bcfb`), `draft → pending`.
 
 ### Retrospective
 
-- None yet.
+- A spec drafted alone misses the sibling spec of the same wave: both drafts claimed "the command count becomes 36"
+  and neither decided the capability of the other's command (`spec-019` round 1 F4, `spec-020` round 2 N6). Proposal:
+  when `identify-specs` writes several specs for one wave, brief each drafter with the others' scope.
+- The name-resolvability gate fails on any new spec that names what it specifies (`spec-019` round 1 F1). Proposal:
+  say so in the `tech-spec` template's Consequences comment, so the allowlist edit is planned, not found by review.
