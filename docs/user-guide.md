@@ -791,6 +791,16 @@ A headless `codex-cli` run (`--headless`) records its session id: `codex exec --
 and the first one carries the id, which `codex exec resume <id>` accepts. An interactive run records
 `not-reported` (new in 0.4).
 
+**What a run record says about the agent** (new in 0.4). `agent_version` is the agent CLI's version read right
+before the launch, the one that ran, and `agent_version_after` the one read after it exits: an agent CLI that
+updated itself during the run shows two different values, and `agent execute` prints a `warning:` line saying so. A
+`claude-code` run records its model and token counts from Claude Code's own session transcript on your machine
+(`~/.claude/projects/<launch directory>/<session id>.jsonl`, the launch directory written with every character other
+than a letter or a digit replaced by `-`), read after the run and never committed; a headless run whose transcript
+is missing takes them from its `--output-format json` result. A count nothing reported is `not-reported`, never `0`.
+A transcript that is missing or unreadable gives a `warning:` line naming the adapter and `usage.transcript`, never
+the file's path. Run logs written by 0.3.x carry no `agent_version_after`, and are read with `not-reported` there.
+
 ## 10. CI and scripting
 
 - `--format json` prints compact JSON and nothing else; `--format yaml` prints YAML. Errors become

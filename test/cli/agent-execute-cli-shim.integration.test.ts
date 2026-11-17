@@ -230,9 +230,10 @@ describe('task-338 AC 2 — WINGFOIL_AGENT for the spawned agent only; the recor
       expect(launchEntry(run).launcher).toBe('Fake Agent');
     });
 
-    it('(characterization) the post-run --version and --lookup run without WINGFOIL_AGENT', () => {
+    it('(task-337, red-first) the pre-launch --version, the post-run --version and --lookup run without WINGFOIL_AGENT', () => {
       const post = run.fake.filter((entry) => entry.argv.includes('--version') || entry.argv.includes('--lookup'));
-      expect(post.map((entry) => entry.argv[0])).toEqual(['--version', '--lookup']);
+      // task-337 (`spec-016` §2.6 as amended at `2d193b318`): version_args runs before the launch too, as a lookup runs.
+      expect(post.map((entry) => entry.argv[0])).toEqual(['--version', '--version', '--lookup']);
       for (const entry of post) expect(entry.env).not.toContain('WINGFOIL_AGENT');
     });
 

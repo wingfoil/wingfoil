@@ -154,10 +154,10 @@ describe('AC 1 — strict schema: unknown key, missing required field, format �
 });
 
 describe('AC 2 — §2.3 placeholders', () => {
-  it('the placeholder set is closed and exactly §2.3’s (task-237 D-1 (a) adds {mcp_config}; its place in the table is not pinned)', () => {
+  it('the placeholder set is closed and exactly §2.3’s (task-237 D-1 (a) adds {mcp_config}; task-337 adds {home} and {launch_dir_slug}; their place in the table is not pinned)', () => {
     const byName = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
     expect([...ADAPTER_PLACEHOLDERS].sort(byName)).toEqual(
-      ['bootstrap', 'bootstrap_file', 'mcp_config_file', 'mcp_config', 'mcp_command', 'mcp_args', 'session_id'].sort(byName),
+      ['bootstrap', 'bootstrap_file', 'mcp_config_file', 'mcp_config', 'mcp_command', 'mcp_args', 'session_id', 'home', 'launch_dir_slug'].sort(byName),
     );
   });
 

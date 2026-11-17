@@ -64,8 +64,8 @@ const InteractiveLaunch = z.strictObject({
 /**
  * `launch.headless` — no terminal; read from v0.4 by the work run (§3.5, `dl-181`, task-335), whose stdout is
  * captured: `output` says how it is read — `json`, one JSON document; `jsonl`, one JSON value per line; `none`, not
- * read. The v0.4 work run reads from it only the session id under `session.id: output` (§2.6, task-356); the rest is
- * `dl-182`/`dl-188`'s tasks, and the v1.0 verification run.
+ * read. The v0.4 work run reads from it the session id under `session.id: output` (§2.6, task-356) and the usage under
+ * `usage.from` naming `output` (§2.6, task-337), which needs `json`; the rest is the v1.0 verification run's.
  */
 const HeadlessLaunch = z.strictObject({
   args: Argv,
@@ -81,6 +81,25 @@ const UsageFields = z.strictObject({
   output: NonEmpty.optional(),
   cache_read: NonEmpty.optional(),
   cache_write: NonEmpty.optional(),
+});
+
+/** A usage source a list may name (§2.2 `usage.from`, task-337): each at most once, a Pass-2 rule. */
+const UsageSource = z.enum(['output', 'lookup', 'transcript']);
+
+/**
+ * `usage.transcript` — the agent's session transcript, a JSON Lines file on the host (§2.2, §2.6, `dl-188` part 1 (c),
+ * task-337): where it is (`path`, with `{home}`, `{launch_dir_slug}` and `{session_id}`, §2.3), which lines are the
+ * agent's messages (`select`), what identifies one message written over several lines (`message_id`), and the paths
+ * of the model and the counts within a selected line (`fields`).
+ */
+const UsageTranscript = z.strictObject({
+  path: NonEmpty,
+  select: z.strictObject({
+    field: NonEmpty,
+    equals: z.string(),
+  }),
+  message_id: NonEmpty.optional(),
+  fields: UsageFields,
 });
 
 /**
@@ -123,9 +142,11 @@ export const AdapterManifest = z.strictObject({
     }),
   }),
   usage: z.strictObject({
-    from: z.enum(['output', 'lookup', 'none']),
+    // One source, `none`, or a non-empty list of sources tried in order (§2.6, task-337).
+    from: z.union([z.enum(['output', 'lookup', 'transcript', 'none']), z.array(UsageSource).nonempty('must not be empty')]),
     lookup_args: Argv.optional(),
     fields: UsageFields.optional(),
+    transcript: UsageTranscript.optional(),
   }),
   summary: z
     .strictObject({

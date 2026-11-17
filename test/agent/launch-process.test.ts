@@ -52,11 +52,14 @@ describe('launchAgent — post-run lookups that fail record not-reported and say
     }));
     repos.push(root);
     const outcome = await launch(input, root);
-    expect(record(outcome)).toMatchObject({ agent_version: 'not-reported', session: 'not-reported', model: 'not-reported', exit_status: 0 });
+    expect(record(outcome)).toMatchObject({ agent_version: 'not-reported', agent_version_after: 'not-reported', session: 'not-reported', model: 'not-reported', exit_status: 0 });
+    // task-337 (`spec-016` §2.6 as amended at `2d193b318`, `dl-180` version (b)): version_args runs before the launch
+    // and again after the run, each read said on its own.
     expect(outcome.warnings).toEqual([
-      "adapter 'hand': version_args printed nothing: agent_version recorded as not-reported",
+      "adapter 'hand': version_args printed nothing before the launch: agent_version recorded as not-reported",
+      "adapter 'hand': version_args printed nothing after the run: agent_version_after recorded as not-reported",
       "adapter 'hand': the session lookup failed (printed no JSON): session recorded as not-reported",
-      "adapter 'hand': the usage lookup failed (ended by SIGKILL): model and tokens recorded as not-reported",
+      "adapter 'hand': the usage lookup failed (ended by SIGKILL): model and tokens not read from it",
     ]);
   }, 60000);
 
@@ -87,8 +90,13 @@ describe('launchAgent — one argv declared for the session and the usage runs o
       model: 'not-reported',
       tokens: { input: 7, output: 'not-reported', cache_read: 'not-reported', cache_write: 'not-reported' },
       agent_version: 'not-reported',
+      agent_version_after: 'not-reported',
     });
-    expect(outcome.warnings).toEqual(["adapter 'hand': version_args failed (exited 1): agent_version recorded as not-reported"]);
+    // task-337 (`spec-016` §2.6 as amended): the read before the launch and the read after the run each fail on their own.
+    expect(outcome.warnings).toEqual([
+      "adapter 'hand': version_args failed (exited 1) before the launch: agent_version recorded as not-reported",
+      "adapter 'hand': version_args failed (exited 1) after the run: agent_version_after recorded as not-reported",
+    ]);
     expect(readFileSync(join(root, 'lookups.log'), 'utf-8')).toBe('run\n');
   }, 60000);
 });
@@ -283,7 +291,7 @@ describe('launchAgent — the re-review branches (re-review 4)', () => {
     child.finish(0);
     const outcome = await run;
     expect(outcome.ok).toBe(true);
-    expect(warnings).toEqual(["adapter 'hand': the usage lookup failed (could not start: ENOENT): model and tokens recorded as not-reported"]);
+    expect(warnings).toEqual(["adapter 'hand': the usage lookup failed (could not start: ENOENT): model and tokens not read from it"]);
   }, 60000);
 });
 
@@ -296,14 +304,14 @@ describe('launchAgent — a lookup that prints more than 1 MiB (review fix 2)', 
     repos.push(root);
     const outcome = await launch(input, root);
     expect(record(outcome)).toMatchObject({ model: 'not-reported' });
-    expect(outcome.warnings).toEqual(["adapter 'hand': the usage lookup failed (printed more than 1 MiB on stdout or stderr): model and tokens recorded as not-reported"]);
+    expect(outcome.warnings).toEqual(["adapter 'hand': the usage lookup failed (printed more than 1 MiB on stdout or stderr): model and tokens not read from it"]);
   }, 60000);
 
   it('is reported as such, not as a command that could not start', async () => {
     const { root, input } = launchFixture((manifest: AdapterManifest) => ({ ...manifest, usage: { from: 'lookup', lookup_args: ['scripts/flood.cjs'] } }));
     repos.push(root);
     const outcome = await launch(input, root);
-    expect(outcome.warnings).toEqual(["adapter 'hand': the usage lookup failed (printed more than 1 MiB on stdout or stderr): model and tokens recorded as not-reported"]);
+    expect(outcome.warnings).toEqual(["adapter 'hand': the usage lookup failed (printed more than 1 MiB on stdout or stderr): model and tokens not read from it"]);
   }, 60000);
 });
 

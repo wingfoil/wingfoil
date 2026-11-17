@@ -74,11 +74,22 @@ export const warningLines = (stderr: string): string[] => stderr.split('\n').fil
 /** The first `error:` line of a console-format stderr, or `undefined`. */
 export const errorLine = (stderr: string): string | undefined => stderr.split('\n').find((line) => line.startsWith('error:'));
 
+/** The argv flags of the fake's non-launch invocations (`version_args`, the lookups, the conflict probe, the summary). */
+const NOT_A_LAUNCH = ['--version', '--lookup', '--mcp-get', '--summary'];
+
+/**
+ * The fake's launch entry: its first invocation that is none of {@link NOT_A_LAUNCH}. task-337 (`spec-016` §2.6, as
+ * amended at `2d193b318`): `version_args` also runs before the launch, so the launch is no longer `fake[0]`.
+ */
+export function launchEntry(run: AgentRun): FakeEntry {
+  const launch = run.fake.find((entry) => !entry.argv.some((arg) => NOT_A_LAUNCH.includes(arg)));
+  if (launch === undefined) throw new Error(`the fake never launched: status ${run.status}, stderr ${run.stderr}`);
+  return launch;
+}
+
 /** The launch's argv as the fake recorded it (after `node <script>`). */
 export function launchArgv(run: AgentRun): string[] {
-  const launch = run.fake[0];
-  if (launch === undefined) throw new Error(`the fake never launched: status ${run.status}, stderr ${run.stderr}`);
-  return launch.argv;
+  return launchEntry(run).argv;
 }
 
 /** The records of an element's run log, parsed. */

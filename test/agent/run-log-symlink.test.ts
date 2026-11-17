@@ -38,6 +38,7 @@ const RECORD: RunRecord = {
   exit_status: 0,
   result: 'n/a',
   notes: 'none',
+  agent_version_after: NOT_REPORTED, // task-337: spec-016 §4.2 key 19
 };
 
 describe('task-330 — a symlinked run log is skipped with a warning (bug-354, spec-016 §4.5)', () => {

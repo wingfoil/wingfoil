@@ -151,9 +151,15 @@ describe('task-355 AC 5 — no child of a timed-out or signalled headless agent 
     };
     const live = spawnCliLive(repo, ['agent', 'execute', '--element', TASK_REF, '--role', 'developer', '--headless'], { env, detached: true });
     running = live;
-    // The record line follows the child's pid file: once it exists, the child runs.
-    for (let waited = 0; waited < 30000 && !existsSync(recordFile); waited += 50) await pause(50);
-    if (!existsSync(recordFile)) throw new Error('the fake never recorded its launch');
+    // The launch's record line follows the child's pid file: once it exists, the child runs. task-337 (`spec-016` §2.6
+    // as amended at `2d193b318`): version_args runs before the launch, so the first record line may be `--version`.
+    const launched = (): boolean =>
+      existsSync(recordFile) &&
+      readFileSync(recordFile, 'utf-8')
+        .split('\n')
+        .some((line) => line.startsWith('{"argv":[') && !line.startsWith('{"argv":["--version"]'));
+    for (let waited = 0; waited < 30000 && !launched(); waited += 50) await pause(50);
+    if (!launched()) throw new Error('the fake never recorded its launch');
     const pid = childPid(pidFile);
     process.kill(live.child.pid!, 'SIGTERM');
     const outcome = await live.closed;

@@ -55,6 +55,7 @@ const RUN: RunRecord = {
   exit_status: 130,
   result: 'n/a',
   notes: `${ELEMENT_ID}#execution-notes`,
+  agent_version_after: NOT_REPORTED, // task-337: spec-016 §4.2 key 19
 };
 
 describe('task-220 — wingfoil agent show on the compiled CLI', () => {
@@ -101,6 +102,7 @@ describe('task-220 — wingfoil agent show on the compiled CLI', () => {
         'exit_status: 130',
         'result: n/a',
         `notes: ${ELEMENT_ID}#execution-notes`,
+        'agent_version_after: not-reported', // task-337: spec-016 §4.2 key 19, after notes
         `commit: ${sha}`,
         '',
       ].join('\n'),

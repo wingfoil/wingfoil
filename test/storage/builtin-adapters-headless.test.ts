@@ -16,9 +16,10 @@ describe('task-335 AC 4 — every shipped built-in adapter declares a headless l
   });
 
   // task-356 (`bug-375`, approver ruling D2 (a)): codex-cli's work run prints JSONL events (`codex exec --json`),
-  // whose first carries the session id; claude-code's output stays unread.
+  // whose first carries the session id. task-337 (`dl-188` part 1 (c), `spec-016` §2.8 as amended at `2d193b318`,
+  // approver ruling D6 (a)): claude-code's work run prints one JSON result document, read for the usage.
   it.each([
-    ['claude-code', 'none'],
+    ['claude-code', 'json'],
     ['codex-cli', 'jsonl'],
   ])('%s: validates as a built-in, launch.headless.output is %s, its args non-empty', (name, output) => {
     const entry = BUILTIN_ADAPTERS.find((adapter) => adapter.name === name)!;

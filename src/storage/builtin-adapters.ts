@@ -19,8 +19,9 @@
  * - `codex-cli` — Codex CLI (task-237; its headless block, task-335; its conflict check and session id, task-356).
  *
  * Each declares a `launch.headless` block for the work run (`spec-016` §2.8, §3.5; `dl-181` Q3 (c)), read
- * from its CLI's help at `verified_with`: `claude-code`'s with `output: none` (its stdout is not read), `codex-cli`'s
- * with `output: jsonl`, its stdout read for the session id only (`session.id: output`, task-356).
+ * from its CLI's help at `verified_with`: `claude-code`'s with `output: json` (`--output-format json`, one result
+ * document, read for the usage when the transcript yields none, task-337), `codex-cli`'s with `output: jsonl`, its
+ * stdout read for the session id only (`session.id: output`, task-356).
  *
  * Each `launch.headless` also declares `permissions`, a role map (`spec-016` §2.8's posture table, `dl-223` (b),
  * task-339): `default` reads only, `developer`, `qa` and `architect` edit, run the tests and commit but never publish,
@@ -50,8 +51,12 @@ export interface BuiltinAdapterManifest {
  * without a terminal. The prompt comes first in both launch argvs because `--mcp-config <configs...>` takes
  * several values: placed after it, the bootstrap would be read as a second MCP configuration. The
  * `--session-id` option `session.assign_args` appends closes that list. No command of this CLI prints a past
- * session's model or token counts, so `usage.from` is `none` and both are recorded `not-reported`
- * (`spec-016` §2.6). The headless role map (task-339) is read from the same help of 2.1.310: `--permission-mode
+ * session's model or token counts; they are read after the run (`spec-016` §2.6, §2.8, `dl-188` part 1 (c), task-337)
+ * from the session transcript first, `~/.claude/projects/<launch directory slug>/<session id>.jsonl`, where each
+ * assistant line carries `message.id`, `message.model` and `message.usage` (the place and the keys as `dl-188`
+ * describes them for 2.1.301), then from a headless run's `--output-format json` result, whose `usage` holds the
+ * run's totals: both checked by hand on 2.1.322, the version `verified_with` names, the result's four counts equal to
+ * the same session's transcript sums (task-337's design gate, H1 and H2). The headless role map (task-339) is read from the same help of 2.1.310: `--permission-mode
  * <mode>` with its choice `dontAsk`, and `--allowedTools` / `--disallowedTools` ("Comma or space-separated list of
  * tool names", the example `"Bash(git *) Edit"`). Its by-hand pass, one headless run per role, ran on 2.1.322, the
  * version `verified_with` names (task-339). The write roles' `"Bash(wingfoil *)"`, `"Bash(npx *)"` and
@@ -62,7 +67,7 @@ const CLAUDE_CODE: BuiltinAdapterManifest = {
   name: 'claude-code',
   content: `# Claude Code, a built-in adapter (spec-016 section 2.8). Every flag below is read from the
 # --help output of the version in verified_with, checked by hand (task-236; headless, task-335;
-# the headless permissions, task-339).
+# the headless permissions, task-339; the usage, task-337).
 name: claude-code
 format: 1
 command: claude
@@ -78,8 +83,10 @@ launch:
     trust: prompt
   headless:
     # -p (--print) prints the response and exits; the prompt first, for the reason above.
-    args: [ -p, "{bootstrap}", --mcp-config, "{mcp_config_file}" ]
-    output: none
+    # --output-format json (with -p only) prints one JSON result document, read for the usage
+    # when the transcript yields none (task-337).
+    args: [ -p, "{bootstrap}", --output-format, json, --mcp-config, "{mcp_config_file}" ]
+    output: json
     # The help says the workspace trust dialog is skipped under -p (task-353).
     trust: implied
     # The posture of each role (dl-223 (b), task-339), appended after args: --permission-mode
@@ -107,7 +114,26 @@ session:
     supported: true
     args: [ --resume, "{session_id}" ]
 usage:
-  from: none
+  # The session transcript first, which every launch writes under the launch directory's folder
+  # and the assigned session id; then a headless run's JSON result (task-337, checked by hand
+  # with the version in verified_with: each assistant message's usage, and the result's usage
+  # equal to the transcript's sums).
+  from: [ transcript, output ]
+  transcript:
+    path: "{home}/.claude/projects/{launch_dir_slug}/{session_id}.jsonl"
+    select: { field: type, equals: assistant }
+    message_id: message.id
+    fields:
+      model: message.model
+      input: message.usage.input_tokens
+      output: message.usage.output_tokens
+      cache_read: message.usage.cache_read_input_tokens
+      cache_write: message.usage.cache_creation_input_tokens
+  fields:
+    input: usage.input_tokens
+    output: usage.output_tokens
+    cache_read: usage.cache_read_input_tokens
+    cache_write: usage.cache_creation_input_tokens
 `,
 };
 
