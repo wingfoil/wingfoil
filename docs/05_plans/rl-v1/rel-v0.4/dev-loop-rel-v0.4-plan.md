@@ -339,6 +339,34 @@ the example. The other wave-checks stay with supervision.
 The elements with an empty `release`, the bugs filed during `w0` first: each proposed for `v0.4`, `v0.4.1`, `v1.0` or
 an exit; the approver rules.
 
+**Ruling (approver, 2026-11-17, as proposed).** Swept on `main` at `018141cd8`: every bug and decision-log not
+`closed`, `deprecated` or `done` whose `release:` is empty (the frontmatter of `docs/04_memory/bugs/*.md` and
+`docs/04_memory/design/dls/*.md`, comments stripped; the filing commit from `git log --diff-filter=A 67e35dc34..HEAD`):
+34 bugs, all `triaged`, none with a `task:` (33 filed during `w0`, plus `bug-506`), and 5 decision-logs.
+
+| Release | Wave / home | Elements |
+|---------|-------------|----------|
+| `v0.4` | `w1`, joining a task's `bug:` list | `bug-513` → W1-03; `bug-514` → W1-22; `bug-518` → W1-17; `bug-530`, `bug-538` → W1-08; `bug-536` → W1-16; `bug-537` → W1-10 (and `user-docs`); `bug-540` → W1-18 |
+| `v0.4` | `w2` | `bug-506`, `bug-509`, `bug-512`, `bug-517`, `bug-532`, `bug-534`, `bug-542` |
+| `v0.4` | `w3` | `bug-521` (W1-R8), `dl-235` |
+| `v0.4` | `w4` | `bug-507`, `bug-508`, `bug-510`, `bug-511`, `bug-519` (before `v0.4`'s retrospective), `bug-529` and `bug-533` (with `bug-337`) |
+| `v0.4.1` | the agent-execute group (W1-R14) | `bug-520`, `bug-522`, `bug-523`, `bug-524`, `bug-525`, `bug-526`, `bug-527` (ruled with `dl-237`), `bug-528`, `bug-539`, `bug-541`, `dl-237` |
+| `v1.0` | — | `bug-515` (its own condition: after every `sw-life-cycle-1-plan` restart), `dl-236`, `dl-238` |
+
+No exit. `dl-207` (a benchmark finding, `draft`, filed before `w0`) is not swept. The 8 `w1` bugs join existing tasks,
+so W1-R9's fix share is unchanged. `v0.4.1` has no release element yet; its 19 bugs already stamped
+(`grep -lE '^release: *"?v0\.4\.1"?([[:space:]]|$)' docs/04_memory/bugs/*.md`) set the convention, and the patch's
+release-planning creates it. `dl-236`, `dl-237` and `dl-238` stay `in-discussion` for the approver's own ruling.
+
+- **Interim for `bug-532`:** before every `workflow end <plan>`, `node scripts/check-retrospective.cjs <plan file>`
+  exits `0`.
+- **`bug-534`:** if it breaks a `w1` gate, it is a stop-the-line (W0-R10) and moves forward.
+- **Execution:** after `task-337`'s merge and `w0`'s closing ingest. The elements that ingest files with an empty
+  `release` are proposed by supervision under the same rule and added to this table. Then the orchestrator writes the
+  stamps in one series, one `assign` commit per element (`element.set_release`, the canonical subject, the §7 trailers),
+  with `check:governance --base origin/main` after. The `w1` absorptions are recorded in the `bug:` lists when the `w1`
+  tasks are filed.
+
 #### W0.4 — `re-plan` · tech-lead · approver checkpoint
 
 `## Scope changes` rows for any task admitted since commit-backlog, the count against `backlog_committed`, the `w1`
@@ -374,6 +402,8 @@ Secret sweep from a checkout with `dist/` (the known false positives of `bug-402
   W1-R1 … W1-R13 proposed from the `w1` survey and approved by the approver as proposed; `backlog_committed` comes to 49,
   not 50, since W1-R9 moves W1-21 to `w2`. Still owed before the checkpoint: `task-337`'s close, W0.2 and W0.3.
 - 2026-11-17: W1-R14 (two inputs forwarded for the re-plan) proposed and approved as proposed.
+- 2026-11-17: W0.3 re-sweep (34 bugs, 5 decision-logs) proposed and ruled by the approver as proposed; its stamps wait
+  for `task-337`'s merge and the closing ingest.
 
 #### W0 measures
 
