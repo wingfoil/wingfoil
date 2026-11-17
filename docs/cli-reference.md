@@ -2056,8 +2056,10 @@ directory is neither read nor reported. A run log committed as a symbolic link i
 
 The active section is the one read outside `HEAD`: `.wingfoil/run/` is a git-ignored cache that no commit holds,
 so it is read from the working tree. A file whose process is gone is removed as it is read; a file that is not a
-registry entry is removed too, with `warning: .wingfoil/run/<path>: not an active run entry: removed`. Neither
-changes the exit code, and nothing git tracks is written.
+registry entry is removed too, with `warning: .wingfoil/run/<path>: not an active run entry: removed`. A file that
+cannot be removed stays, and is not listed: `warning: .wingfoil/run/<path>: could not remove: <cause>`, or, for a file
+that is not a registry entry, `warning: .wingfoil/run/<path>: not an active run entry: could not remove: <cause>`.
+None of these changes the exit code, and nothing git tracks is written.
 
 ```console
 $ wingfoil agent list
