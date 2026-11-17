@@ -1,8 +1,9 @@
 /**
  * task-240 — `wingfoil agent list` on the compiled CLI (`spec-016` §5; BDD
  * `p5-interaction/P5.3.4-agent-list.feature`): the bytes a user sees — the console sections, the
- * `warning:` lines on stderr, the `json` / `yaml` payload — and the exit codes, `--active` included. The
- * operation's own cases (ordering, waiting steps, filters) are `test/core/agent-list.test.ts`.
+ * `warning:` lines on stderr, the `json` / `yaml` payload — and the exit codes. The operation's own cases (ordering,
+ * waiting steps, filters) are `test/core/agent-list.test.ts`. task-336: with no flag the active section prints too
+ * (`no active runs` here), and `--active` is registered (`test/cli/agent-list-active.integration.test.ts`).
  */
 import { execFileSync } from 'node:child_process';
 import { appendFileSync } from 'node:fs';
@@ -72,11 +73,11 @@ describe('task-240 — wingfoil agent list on the compiled CLI', () => {
 
   afterAll(() => removeTempDir(repo));
 
-  it('console (the default), no flag: both sections, nothing on stderr, exit 0', () => {
+  it('console (the default), no flag: every section, past, waiting, active; nothing on stderr, exit 0', () => {
     const result = runCliEntry(repo, ['agent', 'list']);
     expect(result.stderr).toBe('');
     expect(result.status).toBe(0);
-    expect(result.stdout).toBe(['past runs: 1', 'task-042-login-form/red/1  developer  claude  0  61.0s  1200/340', 'no waiting steps', ''].join('\n'));
+    expect(result.stdout).toBe(['past runs: 1', 'task-042-login-form/red/1  developer  claude  0  61.0s  1200/340', 'no waiting steps', 'no active runs', ''].join('\n'));
   });
 
   it('--format json --past: one object with baseline, past and diagnostics only', () => {
@@ -91,11 +92,11 @@ describe('task-240 — wingfoil agent list on the compiled CLI', () => {
     expect(yamlLoad(result.stdout)).toEqual({ baseline: { rev: 'HEAD', commit: sha }, waiting: [], diagnostics: [] });
   });
 
-  it('--active is v0.4: an unknown option, exit 2', () => {
+  it('--active is registered from v0.4 (task-336): no registry, "no active runs", exit 0', () => {
     const result = runCliEntry(repo, ['agent', 'list', '--active']);
-    expect(result.status).toBe(2);
-    expect(result.stdout).toBe('');
-    expect(result.stderr).toMatch(/^error: unknown option '--active'/);
+    expect(result.stderr).toBe('');
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe('no active runs\n');
   });
 
   it('a malformed --element: exit 2', () => {

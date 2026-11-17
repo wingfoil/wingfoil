@@ -80,6 +80,7 @@ import { requireTeamMembership } from '../core/team-membership';
 import { DNA_YAML_PATH, loadDnaYamlAtRev, loadMemoryYamlAtRev, MEMORY_YAML_PATH } from '../core/loaders';
 import { resolveRevision, RevisionError } from '../core/revision';
 import { coreErr, coreOk, type CoreResult } from '../core/types';
+import { UsageError } from '../core/usage-error';
 
 import type { Step } from '../core/workflow-next';
 import type { LaunchKind } from '../workflow/schema';
@@ -88,6 +89,7 @@ import type { TimeBound } from './duration';
 import { launchPermissions, LOOKUP_TIMEOUT_MS, runConflictProbe, type LaunchHost, type LaunchKindRun } from './launch';
 import type { AdapterManifest } from './schema';
 import { adapterTreeDiagnosticsAtRev, duplicateAdapterRefusal, loadAdapter, type LoadedAdapter } from './discovery';
+import { LOG_INTERACTIVE } from './output';
 import { ADHOC_PHASE, executionNotesSection, nextRunId, NO_WORKFLOW, recordSubject, runLogPreflight } from './run-log';
 import { readNextAtHead, refuseWaitingStep, resolveStepRole, selectFrontierStep, stepTargetElement, type StepSelector } from './step';
 
@@ -528,6 +530,8 @@ export interface AgentExecuteRequest {
   readonly launch?: LaunchKindRun;
   /** `--timeout`, parsed (§3.1); absent → unbounded. */
   readonly timeout?: TimeBound;
+  /** `--log <path>` as given (§3.1, task-336); a run §3.2 step 7 resolves `interactive` refuses it (`LOG_INTERACTIVE`). */
+  readonly log?: string;
   /** `--dry-run` is active: step 12 warns instead of refusing, since nothing is spawned (`bug-392`). */
   readonly dryRun?: boolean;
 }
@@ -580,6 +584,8 @@ export interface PreparedLaunch {
   readonly timeout?: TimeBound | undefined;
   /** Absolute path of the launching build's `wingfoil` shim (§2.4, task-338), valid as long as {@link files}. */
   readonly cliShim?: string | undefined;
+  /** `--log <path>` as given (§3.1, task-336): a headless run's only. */
+  readonly log?: string | undefined;
 }
 
 /** The process's own terminals: stdin and stdout both. */
@@ -777,6 +783,9 @@ async function runPipeline<T>(
   const launchKind = resolveLaunchKind(step?.launch ?? null, request.launch, manifest);
   if (launchKind.warning !== undefined && step !== undefined) reportWarning(`phase '${step.workflow}.${step.phase}' ${launchKind.warning}`);
   const kind = launchKind.kind;
+  // §3.2 step 7 — `--log` on a run that resolves interactive: its output is the terminal's, and nothing copies it
+  // (task-336, `dl-182` Q4 (a)). A usage error, exit 2, as `--log` with `--interactive` is at step 1.
+  if (request.log !== undefined && kind === 'interactive') throw new UsageError(LOG_INTERACTIVE);
 
   // Step 4 — the adapter declares the kind (NO_LAUNCH_KIND, never a fallback to the other), and its CLI can be started.
   if (kind === 'headless' && manifest.launch.headless === undefined) {
@@ -887,6 +896,7 @@ async function runPipeline<T>(
       kind,
       timeout: request.timeout,
       cliShim: shimPath,
+      log: request.log,
     }, releaseSignals);
   }, cliShim(host.cli ?? runningBuildCli()));
 }

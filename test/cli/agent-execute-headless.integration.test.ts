@@ -6,7 +6,8 @@
  * - AC 4: `--headless` launches `launch.headless.args` rendered + `session.assign_args`; the agent's stdin is not
  *   connected (the fake reads it to its end and records `""`, although `agent execute`'s own stdin was given
  *   text); a `terminal: required` adapter (`fake-terminal.yaml`) still runs; under `--format json` stdout is
- *   exactly the one document `{ "run": <record> }` (the fake's own stdout document is captured, not echoed) and
+ *   exactly the one document `{ "run": <record> }` (the fake's own stdout document is not on stdout: from task-336 it is
+ *   forwarded to stderr as one `{ "output", "stream" }` document, `test/cli/agent-execute-output.integration.test.ts`) and
  *   the summary is a notice on stderr; the committed record has `result: "n/a"`, `exit_status: 0`.
  * - AC 5: a malformed or too long `--timeout` is exit `2` with `spec-008` §12's messages, before the project is
  *   read; one real run with a 1 s bound and a fake that waits for a signal (`WINGFOIL_FAKE_AGENT_WAIT=signal`)

@@ -61,8 +61,10 @@ function declaredFormat(path: string, content: string): unknown {
 describe.each(TEMPLATES.map((def) => [def.name, def] as const))('init scaffold (%s template) — the format key', (_name, def) => {
   const files = templateScaffold(def);
 
-  it('every scaffolded file is a known kind, or a .gitkeep', () => {
-    const unclassified = files.filter((file) => expectedFormat(file.path) === undefined && !file.path.endsWith('.gitkeep'));
+  // task-336 (spec-011 § `.gitignore` policy): `.wingfoil/.gitignore`, which git-ignores the active run registry, is a
+  // git file with no `format` key, accepted by name.
+  it('every scaffolded file is a known kind, a .gitkeep, or .wingfoil/.gitignore', () => {
+    const unclassified = files.filter((file) => expectedFormat(file.path) === undefined && !file.path.endsWith('.gitkeep') && file.path !== '.wingfoil/.gitignore');
     expect(unclassified.map((file) => file.path)).toEqual([]);
   });
 

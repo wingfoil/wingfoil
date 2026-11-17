@@ -34,6 +34,8 @@ tool uses.
 ```
 .wingfoil/                            ← WingFoil root for the dogfooding setup, at the repository root
 │                                        (moved from docs/self/.wingfoil/ by task-111 — see README.md)
+├── .gitignore                        ← `/run/`: the active run registry of `spec-016` §7, the one
+│                                        excluded subpath (§ `.gitignore` policy; written by `wingfoil init`)
 ├── README.md                         ← human-facing layout doc + rationale (this spec formalizes it)
 ├── WORKFLOW.md                       ← human-facing workflow reference (diagrams, phase by phase)
 ├── dna.yaml                          ← Project DNA (P2.4): modules, stack, team & roles, paths
@@ -281,13 +283,25 @@ responsibility (REQ-SYS-02: isolated load/validate per artifact), not the init-m
 ### `.gitignore` policy
 
 `.wingfoil/` must **never** appear in `.gitignore` — it is intentionally git-tracked in full (REQ-SYS-01:
-git is the single source of truth; there is no external state store to fall back to). No subpath
-within `.wingfoil/` is excluded.
+git is the single source of truth; there is no external state store to fall back to). One subpath within
+`.wingfoil/` is excluded, from v0.4: `.wingfoil/run/`, the active run registry of `spec-016` §7 (`dl-135` Q1 (a),
+`dl-181`). It is a process cache, not state — one file per running `agent execute` launch, removed when the launch
+ends — so committing it would record a process id and a wall-clock instant, never a fact about the project
+(REQ-SYS-03). `wingfoil init` excludes it with the file `.wingfoil/.gitignore`, holding a comment line and the line
+`/run/`, which it writes and commits with the rest of the scaffold; the project's own root `.gitignore` is never
+written. A project initialized before v0.4 has no such file: `agent execute` warns when the entry it creates is not
+ignored (`spec-016` §3.3 step 13), and adding the file is the user's commit. Nothing else under `.wingfoil/` is
+excluded.
 
 Per-clone state that must never be committed is kept in the repository's git directory, outside the working tree,
 not under `.wingfoil/`: it then needs no `.gitignore` entry and cannot be committed by mistake. The one such file is
 the session salt of `spec-016` §2.6, `wingfoil/session-salt` in the common git directory (`git rev-parse
 --git-common-dir`), shared by the clone's linked worktrees (`dl-168` Q1 (b)).
+
+The two rules answer two scopes. The salt is per clone and lives as long as the clone, so it sits in the common git
+directory, which every linked worktree shares. The active registry is per checkout: an agent runs in one working tree
+(`spec-016` §3.1), and `agent list --active` answers for the processes of that checkout, so it sits in the working
+tree, under `.wingfoil/run/`, git-ignored rather than outside it, where the ratified `spec-016` §7 placed it.
 
 ## Consequences
 
@@ -416,3 +430,13 @@ state lives in the common git directory, outside the working tree and not under 
 `.gitignore` entry, and names the one file, `wingfoil/session-salt`. The rule that `.wingfoil/` is tracked is
 unchanged. Edited in place without a supersede or a state change (`dl-047`), pending the approver's `memory amend` at
 `task-338`'s design gate.
+
+**Revision (2026-11-16, `task-336-forward-a-launched-agent-s-output-to-the-caller-with-an-optional-log-copy-and-keep-the-active-run-registry`)
+— § `.gitignore` policy: the one excluded subpath; § Directory layout.** `spec-016` §7 ships the active run registry
+in v0.4 (`dl-135` Q1 (a), `dl-181`) and named this policy as the one to amend: `.wingfoil/run/` becomes the one
+excluded subpath of `.wingfoil/`, through `.wingfoil/.gitignore` (`/run/`), which `wingfoil init` writes and commits;
+the user's root `.gitignore` is never written, and a project initialized before v0.4 is warned by `agent execute`. A
+closing paragraph says how this reads beside `task-338`'s rule on per-clone state: the salt is per clone, in the
+common git directory; the registry is per checkout, in the working tree. The layout tree gains the file. The rule
+that `.wingfoil/` is tracked is otherwise unchanged. Edited in place without a supersede or a state change
+(`dl-047`), pending the approver's `memory amend` at `task-336`'s design gate.

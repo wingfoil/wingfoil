@@ -17,6 +17,10 @@ export interface FakeEntry {
   readonly argv: string[];
   /** Its stdin to the end, when `WINGFOIL_FAKE_AGENT_STDIN=1`; `null` otherwise. */
   readonly stdin: string | null;
+  /** The fake's own pid, under `WINGFOIL_FAKE_AGENT_REGISTRY=1` (task-336). */
+  readonly pid?: number;
+  /** Every file under `.wingfoil/run/` while the agent ran, sorted by path, under `WINGFOIL_FAKE_AGENT_REGISTRY=1` (task-336). */
+  readonly registry?: { readonly path: string; readonly entry: unknown }[];
 }
 
 export interface AgentRun {

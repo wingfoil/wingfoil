@@ -411,26 +411,54 @@ wingfoil workflow list                 # the workflows you can run now (--all: e
 wingfoil workflow show sw-life-cycle   # one workflow: its phases, roles, directives, actions, checks
 ```
 
-Both read the workflow files as committed at `HEAD`. A workflow is run in four steps:
+Both read the workflow files as committed at `HEAD`. Until the workflow engine's driver runs a workflow itself
+(planned for 1.0), you drive it by hand: you start it, go round a cycle until its steps are complete, and end it.
 
-1. **Start it.** `wingfoil workflow start <name>` opens a workflow: it records it as a `plan` document
-   (an `add` and a `submit` commit) and makes it the active workflow. `--element <type>:<id>` names the
-   element it runs on.
-2. **Ask what comes next.** `wingfoil workflow next` names the next step of the active workflow: its role
+**Start it.** `wingfoil workflow start <name>` opens a workflow: it records it as a `plan` document (an `add` and a
+`submit` commit) and makes it the active workflow. `--element <type>:<id>` names the element it runs on.
+
+Then, until its steps are complete:
+
+1. **Ask where the run stands.** `wingfoil workflow next` names the next step of the active workflow: its role
    and that role's directives, the element it works on, and for each action the command to run or the
    commit subject it expects (`--assigned-to me` keeps the steps your role holds). `wingfoil workflow
    status` lists every open workflow with its phases and ready steps, the approvals waiting for a
    decision and who they are routed to, and the documents sitting at a gate that no open workflow carries,
    each as a "human needed" line.
-3. **Do the step.** Do that phase's work in the role it names, with that role's directives loaded, and
-   record the outcome as Memory documents moved through their states with the verbs in §8. WingFoil
-   deduces from those documents, as committed, that the step is done. A step that nothing in the
-   repository can show as done — a checkpoint, a wait for a third party, an approval no element carries —
-   is recorded with `wingfoil workflow finalize`, an empty commit that `workflow next` then moves past (on
-   a phase with `approval:`, only an approver can, with `--reason`). An agent can be launched on a step
-   with `wingfoil agent execute --next` (§9.4).
-4. **End it.** `wingfoil workflow end` closes the active workflow once its steps are complete, and makes
-   the previous one active again.
+2. **Do the step, or have it done.** Do the phase's work in the role it names, with that role's directives loaded,
+   or launch the agent of that role on it with `wingfoil agent execute --next` (§9.4).
+3. **Record it with the verbs.** Move the outcome's Memory documents through their states with the verbs in §8. An
+   element the step adds is added linked to it: `workflow next` prints the `wingfoil memory add` command with
+   `--workflow <instance> --step <step-key>`. WingFoil deduces from those documents, as committed, that the step is
+   done.
+4. **Record what nothing else shows.** A step that nothing in the repository can show as done — a checkpoint, a wait
+   for a third party, an approval no element carries — is recorded with `wingfoil workflow finalize`, an empty commit
+   that `workflow next` then moves past (on a phase with `approval:`, only an approver can, with `--reason`).
+5. **Decide the gates.** At a step waiting for the approver (`human needed:` in `workflow next` and `workflow
+   status`), the approver approves or rejects from a terminal of their own (§8.3); an agent stops there and hands
+   over.
+
+**End it.** `wingfoil workflow end` closes the active workflow once its steps are complete, and makes the previous
+one active again; before that it refuses and names the current step.
+
+A run driven this way, by you or by an agent following [`agents.md` §7](agents.md#7-following-a-workflow), is a
+hand-driven run. A project may also declare a `coordinator` role, executed by an agent, that decides only what the
+configuration cannot — which ready steps to run in parallel, the triage of a failure, the content of an element no
+other role's step writes — and never approves, rejects, amends or decides a gate; its session is recorded as a run
+with `wingfoil agent execute --element plan:<instance-id> --role coordinator`.
+
+**What removes each manual step.**
+
+| Manual step | Done today by | Removed by |
+|---|---|---|
+| reading the run: `workflow status`, `workflow next` | you, or the human | the driver, 1.0 |
+| opening and ending a workflow: `workflow start`, `workflow end` | the human, or you when asked | the driver, 1.0 |
+| adding an element linked to its step: `memory add --workflow --step` | the step's role | the driver, 1.0 |
+| launching the agent of the step's role: `agent execute --next` | the human, or a coordinator | the driver, 1.0 (a launch without a terminal, `--headless`, is new in 0.4) |
+| running a phase's checks | the step's role, by hand | the driver, 1.0 |
+| recording a step no evidence completes: `workflow finalize` | you, or a coordinator | the driver, 1.0 |
+| writing an element's content and doing the step's work | the step's role | never: it stays the agent's |
+| deciding a gate | the human approver | never: a gate stays the approver's |
 
 **WingFoil records and routes; it does not execute.** Nothing runs a step or its checks for you: the
 workflow files describe your process so that people and agents read the same one, and the commands above
@@ -707,9 +735,15 @@ run with stdin or stdout redirected still plans it, with a `warning:` line sayin
 there.
 
 With `--headless` (or a phase declaring `launch: headless`), the agent runs as a work run, with no terminal:
-it does its work alone, its output is not shown, and `agent execute` prints `{"run": <record>}` on stdout
-when it ends. `--timeout 30m` (`<n>s`, `<n>m` or `<n>h`, at most `24h`) stops the agent if it runs longer;
-the run is still recorded. A step that only waits for an approval or another party is refused with the line
+it does its work alone, and `agent execute` prints `{"run": <record>}` on stdout when it ends. What the agent
+writes on its stdout and stderr is passed on to `agent execute`'s stderr line by line as it runs (new in 0.4), as
+it is under `--format console` and as one `{"output": <line>, "stream": "stdout" | "stderr"}` document per line
+under `json` and `yaml`. `--log <path>` also appends those lines to a file you name (created readable by you only,
+mode `0600`), with a `warning:` line when the file is inside the repository and not git-ignored; an interactive
+launch refuses it (exit `2`): its output is the terminal's. **The output may hold secrets** — a token a tool printed,
+a credential in an error message — and nothing filters it: WingFoil keeps no log of its own, and the output is
+never committed, neither to the run record nor anywhere else; where a copy goes is your choice. `--timeout 30m`
+(`<n>s`, `<n>m` or `<n>h`, at most `24h`) stops the agent if it runs longer; the run is still recorded. A step that only waits for an approval or another party is refused with the line
 `wingfoil workflow next` prints for it, unless `--element` names the target.
 
 A headless agent cannot be asked for permission, so the adapter says what each role may do without asking
@@ -732,8 +766,14 @@ worktree's branch, beside the task's own commits. A step with no element of its 
 checkpoints `init` scaffolds), runs on the workflow's plan, `plan:<instance-id>` (new in 0.4), as
 `wingfoil agent list --waiting` shows it.
 
+While an agent runs, `agent execute` keeps an entry for the run under `.wingfoil/run/` (its run id, the agent's
+process id, when it started), removed when the run ends: `wingfoil agent list --active` lists them, and a second
+launch of the same run id is refused while the first one runs (new in 0.4). `.wingfoil/run/` is local to the
+checkout and never committed: `wingfoil init` writes `.wingfoil/.gitignore` with the line `/run/`. A project
+initialized before 0.4 has no such file, and every launch prints a `warning:` line until you add it.
+
 ```bash
-wingfoil agent list            # the recorded runs, and the workflow steps waiting for an agent
+wingfoil agent list            # the recorded runs, the workflow steps waiting for an agent, and the agents running now
 wingfoil agent show task-001-my-first-task/adhoc/1
 ```
 

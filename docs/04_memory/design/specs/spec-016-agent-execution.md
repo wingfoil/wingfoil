@@ -547,7 +547,7 @@ The transcript's folder follows the launch directory (`{launch_dir_slug}`), so a
 ```
 wingfoil agent execute [--next] [--workflow <ref>] [--step <key>] [--element <type>:<id>]
                        [--role <role>] [--agent <name>] [--headless | --interactive]
-                       [--timeout <duration>] [--format console|json|yaml]
+                       [--timeout <duration>] [--log <path>] [--format console|json|yaml]
 ```
 
 | Flag / option | Source | Meaning |
@@ -561,14 +561,23 @@ wingfoil agent execute [--next] [--workflow <ref>] [--step <key>] [--element <ty
 | `--headless` | `dl-183` Q2 (a), `dl-181` (v0.4) | Launch the work run without a terminal (§3.5), whatever the phase's `launch` says (§3.2 step 7). |
 | `--interactive` | `dl-183` Q2 (a) (v0.4) | Launch interactively (§3.3, §3.4), whatever the phase's `launch` says. It is this command's launch kind, not the prompting behaviour of `spec-008` §2's negatable `--no-interactive`, which keeps its meaning here. |
 | `--timeout <duration>` | `dl-181` Q4 (a) (v0.4) | Bound the agent's run: `<n>s`, `<n>m` or `<n>h`, `<n>` a positive integer without a leading zero, at most `24h`. At expiry the agent receives `SIGTERM`, and `SIGKILL` 10 s later if it has not exited (§3.3 step 15). Absent: unbounded. Either launch kind takes it. |
+| `--log <path>` | `dl-182` Q2 (a), Q4 (a) (v0.4) | Append a copy of a headless run's output (§3.5) to the file `<path>`, a path resolved against the current directory, created owner-only (mode `0600` on POSIX) when absent; the output still reaches stderr. When `<path>` is inside the project root and `git check-ignore` does not report it ignored (a file git tracks, or one no ignore rule covers), one `warning:` line says so (§3.3 step 13); a path outside the root is not checked. Only a headless launch takes it (§3.2 step 7). The output may hold secrets: WingFoil never commits it, and the caller chooses where the copy goes. |
 | `--format` | `REQ-INT-05`, `spec-005` §2 | See §3.4. |
 
 At least one of `--next`, `--workflow`, `--step` and `--element` is required. None → exit `2`, `error: missing
 required argument: --next or --element`. `--headless` with `--interactive` → exit `2`, `error: invalid flag
 combination: --headless cannot be combined with --interactive`. A `--timeout` that is not a duration of that form →
 exit `2`, `error: invalid flag value: --timeout expects <n>s, <n>m or <n>h, got "<raw>"`; one over `24h` → exit `2`,
-`error: invalid flag value: --timeout must be at most 24h, got "<raw>"` (`spec-008` §12). All three are decided
-before the project is read.
+`error: invalid flag value: --timeout must be at most 24h, got "<raw>"` (`spec-008` §12). A blank `--log` → exit `2`,
+`error: invalid flag value: --log must not be blank`; `--log` with `--interactive` → exit `2`, `error: invalid flag
+combination: --log needs a headless launch, and this run launches interactive` (`dl-182` Q4 (a)); a `--log` whose
+path, resolved against the current directory, is `.wingfoil/run/` under the project root or lies beneath it → exit
+`2`, `error: invalid flag value: --log must not name a file under .wingfoil/run/, the active registry` (the path is
+compared as resolved, without following a symbolic link, with the registry directory both under the project root as
+given and under the root's real path, its symbolic links resolved, so a `--project` given through a link still meets
+the check: a file there would be git-ignored, so no warning would name it, and the next reader would prune it as no
+entry, §7). All six are decided before the project is read. A `--log` on a run whose kind §3.2 step 7 resolves to `interactive` is refused
+there, with the same message and exit `2`.
 
 **The launch directory** (`bug-499`, `task-353`). The agent runs in the project root (§3.3 step 14): the directory
 the global `--project <dir>` names (`spec-008` §2, `dl-198` (a)), else the current directory. A linked worktree of
@@ -680,13 +689,16 @@ In this order, each a gating read at `HEAD` (`spec-006` §6):
    option names the other kind than the one the phase declares, one `warning:` line says so: `phase
    '<workflow>.<phase>' declares launch: <declared>; launching <kind> (--<kind>)`. A phase that declares no
    `launch`, or `any`, contradicts no option, and no warning is printed. The adapter must declare
-   `launch.<kind>` (§3.3 step 4).
+   `launch.<kind>` (§3.3 step 4). A run that resolves to `interactive` and was given `--log` is refused here, a
+   usage error (exit `2`), with §3.1's `invalid flag combination: --log needs a headless launch, and this run launches
+   interactive` (`dl-182` Q4 (a)): its output belongs to the terminal, and nothing copies it.
 
 #### 3.3 Pipeline
 
-A fixed sequence. The first failure stops it. Before step 14, `agent execute` has written only its
-temporary files outside the repository (step 10); before step 17, it has written nothing to the
-repository.
+A fixed sequence. The first failure stops it. Before step 13, `agent execute` has written only its
+temporary files outside the repository (step 10); step 13 adds the run's entry in the git-ignored active registry
+(§7) and opens the file `--log` names; before step 17, it has written nothing git tracks, and nothing of the agent's
+output anywhere but stderr and that file (§3.5).
 
 1. Parse arguments → exit `2` on usage errors.
 2. Load `dna.yaml` and `memory.yaml` and, when a step is resolved (`--next`, `--workflow`, `--step`),
@@ -736,8 +748,18 @@ repository.
     terminals → else `NO_TERMINAL`. With `optional`, the check is skipped (§2.2, §2.7). Placing it
     last keeps every earlier refusal reachable, and testable, without a terminal. A headless launch needs
     no terminal and has no step 12.
-13. Print `run <run-id>: launching <agent> (<adapter>) as <role> on <type>:<id>` on stderr, `<adapter>`
-    in the record's `<built-in|custom>/<name>` form. It is a **notice** (§3.4).
+13. **Register the run** (§7, `dl-181`): create its entry `.wingfoil/run/<element-id>/<phase>/<n>.json`
+    exclusively (it must not exist), its `pid` `agent execute`'s own until step 14. An entry already there whose
+    process is alive → `RUN_ACTIVE`; one whose process is gone is pruned and the entry created. When
+    `git check-ignore` does not report the entry ignored, one `warning:` line says so (a project initialized
+    before v0.4 has no `.wingfoil/.gitignore`, `spec-011` § `.gitignore` policy): `.wingfoil/run/ is not
+    git-ignored: add "/run/" to .wingfoil/.gitignore, or a running launch can be committed`. Then, for a headless
+    run with `--log` (§3.5): open the file for appending, creating it owner-only when absent → else
+    `LOG_UNWRITABLE`, the entry removed; when it is inside the project root and `git check-ignore` does not report
+    it ignored, one `warning:` line: `--log <path> is inside the repository and not git-ignored: the agent's output
+    may hold secrets`, `<path>` as given. Then print `run <run-id>: launching <agent> (<adapter>) as <role> on
+    <type>:<id>` on stderr, `<adapter>` in the record's `<built-in|custom>/<name>` form. It is a **notice** (§3.4).
+    From here to step 18, every exit path removes the entry and closes the log.
 14. **Spawn** the agent's `command` (a name is looked up on `PATH`, a path resolved against the project
     root) with `launch.<kind>.args`, then the permission fragment of the run's role (`launch.<kind>.permissions`:
     the fragment itself, or the map's entry for the role, else its `default`; nothing when the field is absent;
@@ -745,9 +767,14 @@ repository.
     `session.assign_args` when `assign`, no shell, the project root as its working directory (the directory
     `--project` names, a linked worktree included, §3.1), WingFoil's environment passed through with §2.4's three
     changes (the `wingfoil` shim first on `PATH`, `WINGFOIL_CLI`, `WINGFOIL_AGENT`). Interactive: stdio inherited.
-    Headless (§3.5): stdin is not connected (the null device), stdout is captured and not echoed, stderr is
-    `agent execute`'s own, and the agent runs in a session and process group of its own (POSIX), so it has no
-    controlling terminal to open and receives no keyboard signal but the ones step 15 forwards. This is
+    Headless (§3.5): stdin is not connected (the null device), stdout and stderr are both captured and forwarded
+    to `agent execute`'s stderr line by line (§3.5), and the agent runs in a session and process group of its own
+    (POSIX), so it has no controlling terminal to open and receives no keyboard signal but the ones step 15
+    forwards. Once the agent is spawned, its registry entry (step 13) is rewritten in place (a new file renamed
+    over it) with the agent's `pid`; a spawn that fails removes it. When the agent exits (step 15), the entry is
+    rewritten again, the same way, with `agent execute`'s own `pid`, so it stays live through steps 16–17 — the
+    post-exit read of the output, the lookups and the record commit — and no reader prunes it, and no second launch
+    takes its run id, while the run is still being recorded (§7). This is
     the **"agent ready"** instant of `REQ-PERF-01`. Steps 1–14 must complete in < 30,000 ms p95
     (`02_performance-nfr.md:16-22`). The agent's own start-up is outside WingFoil's control and
     outside the budget (`adr-012` Consequences).
@@ -789,8 +816,10 @@ repository.
     **Before the spawn**, from step 10 on — its listeners installed before the temporary directory is
     created — a `SIGINT`, `SIGTERM` or `SIGHUP` removes the temporary files and then ends `agent execute`
     by that same signal, so an interrupted pre-flight leaves nothing behind (§2.3).
-16. Post-run lookups (§2.6), the session id of a headless run's stdout under `session.id: output` (§2.6),
-    `agent_version` (§2.2), `notes` (§4.2).
+16. The end of a headless run's output (§3.5): after the agent exits, its two streams are forwarded until each
+    ends, for at most 10 s (§2.6's lookup limit; a process the agent left behind may hold a pipe open), then
+    closed, and a last line without a newline is forwarded with one. Post-run lookups (§2.6), the session id of a
+    headless run's stdout under `session.id: output` (§2.6), `agent_version` (§2.2), `notes` (§4.2).
     **The start-up hint** (`bug-500`, `task-353`): when the run did not succeed (the agent exited non-zero or
     by a signal, or the time bound expired), `HEAD` is still `state_ref` (the agent committed nothing), `notes`
     would be `none`, and the adapter declares `launch.<kind>.trust: prompt` for the kind that ran, the agent may
@@ -800,7 +829,8 @@ repository.
     state_ref: its CLI may have stopped at its folder-trust step (adapter '<name>' declares launch.<kind>.trust:
     prompt)`. Under `implied`, a fragment, or no `trust`, neither is given. The run's outcome and exit code are
     unchanged.
-17. Append the record and commit it (§4.4).
+17. Append the record and commit it (§4.4). Then, whatever the commit's outcome, remove the run's registry entry
+    (§7) — only while the file still holds this launch's entry — and close the log.
 18. Exit: `0` if the agent exited `0`, the time bound did not expire, and step 17 succeeded; otherwise `1`
     (§3.7). An expired bound is reported as `agent timed out after <duration>; run <run-id> recorded`,
     `<duration>` as given, whatever the exit status.
@@ -816,13 +846,17 @@ record commit's subject and run-log path, the record's fields known before the s
 `[]` when the adapter declares none (`dl-223` Action 3) — and §2.4's bootstrap. The fragment is not part of the
 record (§4.2): it is the manifest's at `state_ref`, for the record's `role`.
 It has no `message` or `diff`: the record holds the run's exit, which no plan can know. Nothing is
-spawned but the pre-flight's server, and nothing is written to the repository.
+spawned but the pre-flight's server, and nothing is written to the repository. `--log` is checked as a real run
+checks it — its spelling at step 1, its refusal on an interactive run at §3.2 step 7 — and its not-ignored `warning:`
+line is printed, but the file is neither created nor opened, and no registry entry is written or checked.
 
 #### 3.4 Interactive launch: stdio
 
 - The agent inherits stdin, stdout and stderr. **WingFoil writes nothing to stdout**, before, during
   or after the run. Its own lines (warnings, the step-13 banner, the post-run summary, errors) go to
   stderr, before step 14 and after step 15.
+- The agent's output is the terminal's, and WingFoil neither reads nor copies it: `--log` is refused for an
+  interactive launch (§3.2 step 7, `dl-182` Q4 (a)), since a copy would mean interposing on the agent's terminal.
 - `warning: <text>` is the warning prefix, beside `spec-005` §3.1's `error: `. The post-run summary
   is one line: `run <run-id>: agent exited <exit_status> after <duration> (recorded in <sha7>)`.
 - The step-13 banner is a **notice**: neither a warning nor an error, an informational line printed
@@ -850,9 +884,20 @@ in what ends them (`dl-181`):
   record's `result` is `n/a`, as for an interactive launch (`dl-181` Q1 (a)). Its stdio is §3.3 step 14's
   and its signals step 15's; `--timeout` bounds it. On success stdout carries `{ "run": <record> }` as the
   `spec-005` §2 payload, and the §3.4 summary line is printed on stderr as a notice, so the record commit's
-  sha is still shown; a failure is §3.4's `error` with the summary as its `details` line. The agent's own
-  stdout is captured and not echoed; where it goes is `dl-182`'s. Under `session.id: output` the session id is
-  read from it (§2.6); nothing else is parsed from it yet.
+  sha is still shown; a failure is §3.4's `error` with the summary as its `details` line.
+  **Its output** (`dl-182` Q1–Q5 (a)): the agent's stdout and stderr are both forwarded to `agent execute`'s
+  stderr, line by line as they arrive (a line ends at a newline; one still pending at 64 KiB is forwarded as it
+  stands). Each stream keeps its own order; how lines of the two streams interleave is the order they reach
+  `agent execute`. A line is its bytes up to the newline, decoded as UTF-8 with U+FFFD for an invalid sequence
+  (a carriage return before the newline stays in the line). Under `--format console` it is written followed by a
+  newline; under `json` / `yaml` it is one document among §3.4's, `{ "output": <the line>, "stream": "stdout" |
+  "stderr" }`, so stderr stays one document per message (`spec-005` §3.2). With `--log <path>`, every forwarded line is also appended to that file, in the
+  console form whatever `--format` says, after the step-13 banner and before the summary; WingFoil's own lines are
+  not copied there. WingFoil keeps no log of its own, and nothing of the output enters the run record, the
+  run log, the registry entry or any file but the one `--log` names: the output may hold secrets (a token a tool
+  printed, a credential in an error message), and it is stated, not filtered — nothing is redacted (Q5 (a)).
+  Under `session.id: output` the session id is read from its stdout, the same bytes that are forwarded (§2.6);
+  nothing else is parsed from them yet.
   A headless agent CLI that would stop to ask whether to trust the launch directory has nobody to answer it
   (`bug-500`): its adapter declares `launch.headless.trust` (§2.2), and a run that ends there is recorded with
   §3.3 step 16's start-up hint.
@@ -873,7 +918,8 @@ in what ends them (`dl-181`):
   file (§4.4). Nothing else: no Memory transition, no workflow state (step execution is P4.10,
   v1.0). Temporary files are outside the repository and removed at exit.
 - **v0.4**: also, once per clone, the session salt in the git directory, outside the working tree (§2.6).
-- **v0.4**: also the git-ignored `.wingfoil/run/` entry for the run's lifetime (§7).
+- **v0.4**: also the git-ignored `.wingfoil/run/` entry for the run's lifetime (§7), and, with `--log`, the
+  lines appended to the file the caller names (§3.5); that file is the caller's, never committed by WingFoil.
 - The Memory transitions a run causes are made **by the agent**, through the Memory verbs or MCP
   Tools, under its own commits. They are not part of `agent execute`'s write set.
 
@@ -881,7 +927,7 @@ in what ends them (`dl-181`):
 
 | Case | `CoreError.code` | Exit | Message (`error: …`) |
 |---|---|---|---|
-| None of `--next`, `--workflow`, `--step`, `--element`; bad element-ref; `--headless` with `--interactive`; a malformed or too long `--timeout`; unknown option (incl. `--resume` and `--ref`) | — (parse) | `2` | `missing required argument: --next or --element` / `spec-008` §7 message / `invalid flag combination: --headless cannot be combined with --interactive` / §3.1's two `--timeout` messages / Commander's |
+| None of `--next`, `--workflow`, `--step`, `--element`; bad element-ref; `--headless` with `--interactive`; a malformed or too long `--timeout`; a blank `--log`; `--log` with `--interactive`; a `--log` under `.wingfoil/run/`; unknown option (incl. `--resume` and `--ref`) | — (parse) | `2` | `missing required argument: --next or --element` / `spec-008` §7 message / `invalid flag combination: --headless cannot be combined with --interactive` / §3.1's two `--timeout` messages / `invalid flag value: --log must not be blank` / `invalid flag combination: --log needs a headless launch, and this run launches interactive` / `invalid flag value: --log must not name a file under .wingfoil/run/, the active registry` / Commander's |
 | any `spec-003` load error in the workflow registry (step 2) | `VALIDATION` | `1` | as `spec-017` §10's first row: the first error in `spec-003`'s order, every diagnostic in `details` |
 | `--workflow` names no workflow | `NOT_FOUND` | `1` | `unknown workflow: <name>` (`spec-017` §10) |
 | `--workflow` names no open instance | `NOT_FOUND` | `1` | `workflow is not open: <ref>` (`spec-017` §10) |
@@ -901,6 +947,7 @@ in what ends them (`dl-181`):
 | `NO_ADAPTER` (`--agent` names an agent without `adapter`) | `VALIDATION` | `1` | `agent '<name>' declares no adapter` |
 | the agent's `adapter` is in neither directory at `HEAD` | `NOT_FOUND` | `1` | `adapter '<name>': no .wingfoil/agents/built-in/<name>.yaml or .wingfoil/agents/custom/<name>.yaml at HEAD` |
 | manifest invalid | `VALIDATION` | `1` | `adapter '<name>': <zod issue>` (`dl-055` detail lines) |
+| `LOG_INTERACTIVE` (§3.2 step 7: `--log` given and the kind resolved `interactive` from the phase's `launch` or the default; `dl-182` Q4 (a)) | — (usage) | `2` | `invalid flag combination: --log needs a headless launch, and this run launches interactive` |
 | `NO_LAUNCH_KIND` (step 4: the adapter declares no `launch.headless` for a headless launch; `dl-183` Q3 (a)) | `VALIDATION` | `1` | `adapter '<name>' declares no headless launch` — and its interactive counterpart, `adapter '<name>' declares no interactive launch`, once a format makes `launch.interactive` optional |
 | `AGENT_NOT_FOUND` | `IO` | `1` | `agent command '<command>' not found (adapter '<name>')` |
 | `MCP_SERVER_DECLARED` (step 4: `mcp.conflict_args` exited `0`; §2.5, `bug-372`) | `CONFLICT` | `1` | `adapter '<name>': the agent's own configuration declares an MCP server named 'wingfoil', which it would merge into the server agent execute registers: remove or rename it`; `details` holds `adapter` and `argv` |
@@ -911,6 +958,8 @@ in what ends them (`dl-181`):
 | the MCP server's command or an argument holds an unpaired surrogate (step 10, §2.3) | `VALIDATION` | `1` | `mcp.template cannot carry the MCP server's command: it holds an unpaired surrogate (U+<XXXX>)` / `… the MCP server's argument <n>: …`, `<n>` counted from 1, `<XXXX>` the first unpaired code unit in upper-case hex (`task-355`, `bug-371`) |
 | `MCP_UNREACHABLE` | `IO` | `1` | `context pre-load failed: MCP server unreachable` (P5.4.3 sc. 3, verbatim) |
 | `NO_TERMINAL` (step 12, an interactive launch that is not a dry run; a dry run prints it as a warning, §3.3) | `VALIDATION` | `1` | `interactive launch needs a terminal on stdin and stdout` |
+| `RUN_ACTIVE` (step 13: the run id has a registry entry whose process is alive, §7; `dl-181`) | `CONFLICT` | `1` | `run <run-id> is already running (pid <pid>)`; `details` holds `run_id` and `pid` — nothing spawned, nothing recorded |
+| `LOG_UNWRITABLE` (step 13: the file `--log` names cannot be opened for appending) | `IO` | `1` | `cannot write the log <path>: <cause>`, `<path>` as given — the registry entry removed, nothing spawned, nothing recorded |
 | the agent's command cannot be started at step 14 (it vanished from `PATH` after step 4, the OS refuses it) | `IO` | `1` | `agent command '<command>' could not be started (adapter '<name>'): <cause>` — no run, no record (§0) |
 | `TIMED_OUT` (`--timeout` expired, step 15; whatever the exit status) | `IO` | `1` | `agent timed out after <duration>; run <run-id> recorded` (`dl-181` Q4 (a)), `<duration>` as given; `details` as the row below, plus `timeout` |
 | agent exited non-zero or by signal | `IO` | `1` | `agent exited <exit_status>; run <run-id> recorded` |
@@ -1069,7 +1118,7 @@ read, ids must be unique. A violation is
 ### 5. `wingfoil agent list`
 
 ```
-wingfoil agent list [--past] [--waiting] [--element <type>:<id>] [--phase <name>] [--format console|json|yaml]
+wingfoil agent list [--past] [--waiting] [--active] [--element <type>:<id>] [--phase <name>] [--format console|json|yaml]
 ```
 
 - **Sources** (`dl-135` point 1):
@@ -1078,22 +1127,26 @@ wingfoil agent list [--past] [--waiting] [--element <type>:<id>] [--phase <name>
     `StatusResult.open[].frontier` whose `agentRole` is true (`spec-017` §6.3, §8, and its
     Consequences, "`dl-135`'s `agent list --waiting`"), i.e. every frontier step (`spec-017` §4.9) of
     every open instance (§3.2), not only each instance's first. `agentRole` is `spec-017`'s
-    predicate: the step's role is listed in some `team.agents[].executes_as`. **v0.3 limit, stated:**
-    with no active registry, a step that has an agent running on it right now is still listed as
-    waiting (`dl-135` point 1's "with no active run on it" is v0.4, §7).
-- **Flags.** `--past` selects the past section and `--waiting` the waiting section. Without either,
-  both sections are shown; both flags together are the same as neither. `--active` is v0.4, and in
-  v0.3 it is rejected as an unknown option, exit `2`.
-- `--element` and `--phase` filter both sources: a past record by its `element` and `phase` fields,
+    predicate: the step's role is listed in some `team.agents[].executes_as`. From v0.4 a step with an
+    agent running on it is not waiting (`dl-135` point 1's "with no active run on it"): a step is left out
+    when the active registry (§7) holds a live entry whose `workflow`, `phase` and `element` are the step's.
+  - **active** (v0.4, `dl-181`) = the live entries of the active registry (§7), read from the working tree's
+    `.wingfoil/run/` (§5.1), stale entries pruned as they are read.
+- **Flags.** `--past` selects the past section, `--waiting` the waiting section and `--active` the active
+  section. Without any of them, all three are shown; all three together are the same as none.
+- `--element` and `--phase` filter every source: an active entry, like a past record, by its `element` and
+  `phase` fields,
   a waiting step by its element (its scope element, else its instance's bound element, else
   `plan:<instance-id>`, as §3.2 step 2 resolves it, `bug-418`) and its `phase`.
 - **Order.** past: element id ascending (byte order), then line order within the file, which is
   append order. waiting: `spec-017` §1.3's frontier order (instance order, then depth-first phase
-  order, then iteration order), unchanged by filtering.
+  order, then iteration order), unchanged by filtering. active: element id ascending (byte order), then
+  phase (byte order), then `n` as a number — never directory order (`determinism`).
 - **JSON / YAML** (`REQ-INT-05`): a single object with `baseline` and `diagnostics` always, and only
   the selected source keys: `{ "baseline": { "rev": "HEAD", "commit": <sha> }, "past": [<record>…],
   "waiting": [{ "instance", "key", "workflow", "phase", "element", "role", "allowedModes", "agents"
-  }…], "diagnostics": [<Diagnostic>…] }`. `baseline` and `Diagnostic` are `spec-017` §8's shapes
+  }…], "active": [<entry>…], "diagnostics": [<Diagnostic>…] }`, an `<entry>` being §7's object, keys in
+  §7's order. `baseline` and `Diagnostic` are `spec-017` §8's shapes
   (`dl-084` (A): every payload carries the baseline it answered from). `key` is the step key
   (`spec-017` §4.9); `element` is `<type>:<id>`, the element §3.2 step 2 resolves, so a step `agent list --waiting` lists is one `agent execute --next` can run (`bug-418`); `agents` lists, in DNA order, the agents
   that execute the role and declare an adapter. `diagnostics` carries `spec-017`'s deduction
@@ -1104,10 +1157,13 @@ wingfoil agent list [--past] [--waiting] [--element <type>:<id>] [--phase <name>
   - past: `<id>  <role>  <agent>  <exit_status>  <duration>  <tokens>`, where `<duration>` is
     `duration_ms` in seconds with one decimal and an `s` (`61.0s`, as `agent execute`'s run summary
     rounds it) and `<tokens>` is `in/out`, or `not-reported` when both are;
-  - waiting: `<key>  <role>  <agents>`, the agents joined by `, `, or `none`.
+  - waiting: `<key>  <role>  <agents>`, the agents joined by `, `, or `none`;
+  - active: `<id>  <role>  <agent>  <pid>  <started>`, where `<started>` is `started_ms` as an ISO 8601
+    UTC instant with milliseconds (`2026-11-16T08:30:00.000Z`).
 
-  A non-empty section opens with the heading `past runs: <n>` or `waiting steps: <n>`; an empty one
-  prints `no past runs` or `no waiting steps` instead. Diagnostics print on stderr as `warning:` lines,
+  A non-empty section opens with the heading `past runs: <n>`, `waiting steps: <n>` or `active runs: <n>`; an
+  empty one prints `no past runs`, `no waiting steps` or `no active runs` instead. Sections print in the order
+  past, waiting, active. Diagnostics print on stderr as `warning:` lines,
   `<code> (<file>): <message>` (`spec-008` §6's form), carried as success warnings, so `json`/`yaml`
   print them on stderr too, beside the payload's `diagnostics`.
 - **Exit codes.** `0` on a result, including an empty one. `1` on a §4.5 violation, or when the
@@ -1118,7 +1174,10 @@ wingfoil agent list [--past] [--waiting] [--element <type>:<id>] [--phase <name>
   `--phase` select: the filters choose what is listed, not what is checked, so a §4.5 violation in another
   element's log still exits `1`. `2` on a usage error only. A missing `paths.runs`
   is not an error for `list`: `past` is empty, with `warning: dna.yaml declares no run log
-  (paths.runs)`.
+  (paths.runs)`. A missing `.wingfoil/run/` is an empty `active`; one that cannot be read is `IO`, exit `1`,
+  `cannot read the active registry .wingfoil/run/: <cause>`. An entry pruned as unreadable or malformed (§7)
+  prints its `warning:` line and changes no exit code; so does a file `agent list` reads but cannot remove (§7's
+  `could not remove` line): the listing is still answered, without that file.
 
 #### 5.1 Baseline of `agent list` and `agent show` — a declared exception
 
@@ -1146,6 +1205,13 @@ commands, at the cost of `agent list --waiting` (at `HEAD`) and `--past` (at the
 answering from two baselines in one payload. `spec-006` §6 gains the sentence declaring the
 exception in the implementing task (Consequences).
 
+**The active section is not in that exception** (v0.4). The active registry (§7) is a process cache that git never
+holds: it has no `HEAD` to read, and what it answers — which launches are running now — is a fact about this
+checkout's processes, so it is read from the working tree's `.wingfoil/run/`, as the `command-baseline` directive's
+rule that a read predicting a filesystem effect resolves on the filesystem has it. The payload's `baseline` still
+names the `HEAD` the other two sections answered from. Pruning a stale entry is the only write `agent list` makes, to
+that git-ignored cache; it changes nothing git tracks, so `agentList` stays `mutates: false` (§8).
+
 ### 6. `wingfoil agent show <run-id>`
 
 - Positional `<run-id>`, required. A malformed id (§4.3) → exit `2`,
@@ -1158,18 +1224,47 @@ exception in the implementing task (Consequences).
   **Console**: `key: value` lines in §4.2 order, `tokens` flattened to `tokens.input` and so on, then
   `commit: <sha>`.
 
-### 7. v0.4, shape only
+### 7. v0.4: the active registry, and the shape of the rest
 
-Fixed here so that v0.3 does not foreclose it (`dl-135` release split, plan R5):
+The active registry ships with the headless work run (`dl-181`: a run with no terminal has nothing else to show it is
+alive); the rest of this section is fixed here so that v0.3 does not foreclose it (`dl-135` release split, plan R5):
 
-- **Active registry** (`dl-135` Q1 (a)): `.wingfoil/run/<element-id>/<phase>/<n>.json`, written at
-  step 14 and deleted at exit. The fields are `{ id, pid, workflow, phase, element, role, agent,
-  session, started_ms }`. It is git-ignored through a line that `wingfoil init` adds. Entries whose
-  `pid` is gone are pruned on every read. `agent execute` refuses a launch whose run id already has a
-  live entry. The task that ships it amends `spec-011`'s `.gitignore` policy, which today states "No
-  subpath within `.wingfoil/` is excluded" (`spec-011-storage-layout.md:199-203`); nothing in v0.3
-  writes `.wingfoil/run/`.
-- `agent list --active`, and `waiting` minus the steps with a live entry.
+- **Active registry** (`dl-135` Q1 (a), `dl-181`): one file per running launch,
+  `.wingfoil/run/<element-id>/<phase>/<n>.json` under the project root — the working tree's, so each linked worktree
+  has its own — its path the run id's three segments (§4.3). Its content is one JSON object and a newline, the keys
+  in this order: `id` (the run id: three non-empty segments `<element-id>/<phase>/<n>`, `<n>` a positive decimal
+  integer without a leading zero, naming the file's own path), `pid` (a positive integer: `agent execute`'s own from
+  §3.3 step 13 until the agent is spawned, then the agent's from the spawn until the agent exits, step 14, then
+  `agent execute`'s own again until the entry is removed, step 15), `workflow`, `phase`, `element`, `role` and
+  `agent` (the record's values, §4.2, each a non-empty string), `session` (the assigned session id under
+  `session.id: assign`, else `not-reported`: the other forms are known only after the run) and `started_ms` (the
+  wall-clock instant of step 13, milliseconds since the epoch, an integer from `0` to `8640000000000000`, the
+  range of an ECMAScript date: a record of what happened, never part of a context). Nothing of the agent's output, no environment value,
+  argv or path outside the root is written in it (`REQ-SEC-08`). It is created exclusively at step 13 and removed
+  after step 17, on every exit path once created; an `agent execute` killed by `SIGKILL` leaves it behind, and it
+  stays live while the agent it names runs.
+  **This launch's entry.** A launch removes the file, and rewrites its `pid` at the agent's exit, only while the file
+  still holds its own entry: the same `id` and `started_ms`, and a `pid` that is `agent execute`'s own or the agent it
+  spawned. A file that holds another launch's entry — one created after this launch's was pruned — is left as it is.
+  The check and the removal are two steps, not one atomic operation: a reader that prunes, and a launch that creates,
+  between them is a known limit.
+  **Liveness and pruning.** An entry is live while a process with its `pid` exists (`kill(pid, 0)` succeeds or
+  fails with `EPERM`); a pid the system has reused for another process keeps an entry live — a known limit. Every
+  reader — `agent list` and step 13 — prunes what it reads: an entry whose process is gone is removed, and so is a
+  file that is not one JSON object of exactly these keys with these types and ranges (JSON `null`, a missing or an
+  extra key, an empty string, a `pid` that is not a positive integer, a `started_ms` out of its range, an `id` that is
+  not three segments or does not name the file's path), with one `warning:` line, `.wingfoil/run/<path>: not an
+  active run entry: removed`; a directory left empty by a removal is removed too, up to `.wingfoil/run/` exclusive.
+  A removal that fails for another cause than the file being gone already leaves the file, and the reader goes on
+  with one `warning:` line, listing nothing of that file and never failing the read (§5): for a file that is no
+  entry, `.wingfoil/run/<path>: not an active run entry: could not remove: <cause>`, in place of the line above; for
+  an entry whose process is gone, `.wingfoil/run/<path>: could not remove: <cause>`. A file is reported by one line,
+  never two.
+  Readers list entries in §5's active order, never directory order.
+  **Git.** `.wingfoil/run/` is the one git-ignored subpath of `.wingfoil/`: `wingfoil init` writes
+  `.wingfoil/.gitignore` with the line `/run/` (`spec-011` § `.gitignore` policy). `agent execute` warns when the
+  entry it creates is not ignored (§3.3 step 13); it never refuses for it.
+- `agent list --active`, and `waiting` minus the steps with a live entry (§5).
 - `agent execute --resume <run-id>` and `--ref <run-id>`, each refused unless the step's
   `allowedModes` contains the mode (`dl-135` point 4; `spec-003` § "Execution independence").
   `--resume` also needs `session.resume.supported` and the same element and role, and passes
@@ -1202,6 +1297,10 @@ reaches MCP in v0.3 and `spec-006` §4's parity rule needs no exception for them
 the mutation. `spec-006` §Consequences' possible split into `agentResolveNext` / `agentAdvanceStep`
 (`spec-006:285-289`) is not needed while nothing advances a step, and the `spec-006` revision deletes
 that bullet.
+
+The active registry (§7, v0.4) changes neither row's `mutates`: `agentExecute` also creates and removes its run's
+entry, and `agentList` prunes stale entries as it reads them (§5.1), both in a git-ignored process cache that no
+commit holds; the record commit stays `agentExecute`'s one mutation of the repository.
 
 ### Open questions
 
@@ -1312,7 +1411,9 @@ that bullet.
   - A new manifest field bumps `format`.
 - **Known limits, stated rather than hidden.**
   - An interactive launch often yields `not-reported` for model, tokens and session.
-  - v0.3's `waiting` includes steps already being worked on.
+  - v0.3's `waiting` includes steps already being worked on; from v0.4 it leaves out the steps with a live
+    registry entry in this checkout (§5, §7), never one a colleague, or another worktree, is running.
+  - A registry entry stays live while its `pid` names any process, a reused pid included (§7).
   - A colleague's runs appear only after they push (`dl-135` Decision 1).
   - No automated test exercises a real agent's terminal handling; the built-ins' `verified_with` pass
     is by hand (§2.7, `adr-012` Consequences).
@@ -1624,6 +1725,50 @@ does not know the key refuses a manifest that declares it. (3) `bug-418`: §3.2 
 own `plan` element, so `NO_STEP_ELEMENT` is a defence only (§3.7), and §5's waiting `element` follows step 2. No
 placeholder, record key or exit code changes. Edited in place without a supersede or a state change (`dl-047`),
 pending the approver's `memory amend` at `task-353`'s design gate.
+
+**Revision (2026-11-16, `task-336-forward-a-launched-agent-s-output-to-the-caller-with-an-optional-log-copy-and-keep-the-active-run-registry`)
+— § 3.1 grammar, § 3.2 resolution, § 3.3 pipeline, § 3.4, § 3.5 headless, § 3.6, § 3.7 refusals, § 5, § 5.1, § 7, § 8
+and the Consequences' known limits.** (1) `dl-182` Q1–Q5 (a): a headless run's stdout and stderr are both forwarded
+to `agent execute`'s stderr line by line, as written under `--format console` and one `{ "output", "stream" }`
+document per line under `json` / `yaml`, stdout staying the `{ "run": <record> }` payload (§3.3 steps 14 and 16,
+§3.5); `--log <path>` appends a copy in the console form, the file created owner-only, with a `warning:` line when
+it is inside the root and not git-ignored (§3.1, §3.3 step 13, §3.6); WingFoil keeps no log of its own and nothing of
+the output reaches the record or the repository, which §3.5 states together with the secrets the output may hold;
+an interactive launch keeps its terminal and refuses `--log` with exit `2`, at parse time with `--interactive` and at
+§3.2 step 7 otherwise (`LOG_INTERACTIVE`, §3.4, §3.7). (2) `dl-181` with `dl-135` Q1 (a): the active registry of
+§7 ships — its entry's content, its exclusive creation at the new start of §3.3 step 13 with `agent execute`'s pid
+rewritten to the agent's at step 14, its removal after step 17, liveness, pruning (malformed files included) and its
+order; a live entry for the run id refuses the launch (`RUN_ACTIVE`), an unwritable log too (`LOG_UNWRITABLE`);
+`agent list --active` lists the entries, from the working tree's `.wingfoil/run/` and outside §5.1's `HEAD`
+exception, and `waiting` leaves out a step with a live entry (§5, §5.1); §8 says why neither row's `mutates`
+changes. §3.3's opening sentence and §3.6 name the two new writes. §7's MCP bullet, the `agent.execute` Tool sentence
+included, and §8's MCP cells are unchanged: they are the MCP surface's (P5.2.3), not this task's. No placeholder,
+no key of §4.2 and no rule of §4.3 changes. Edited in place without a supersede or a state change (`dl-047`), pending
+the approver's `memory amend` at `task-336`'s design gate.
+
+**Revision (2026-11-16, `task-336-forward-a-launched-agent-s-output-to-the-caller-with-an-optional-log-copy-and-keep-the-active-run-registry`,
+review) — § 3.1 grammar, § 3.3 steps 14 and 17, § 3.7, § 5's exit codes and § 7's registry entry.** The independent
+review found four gaps in the registry rules as amended at the design gate. (1) After the agent exited, its entry still
+named the agent's dead pid while `agent execute` read the output, ran the lookups and committed the record, so a reader
+pruned it, a second launch could take the same run id, and the first launch's removal then deleted the second's
+entry: the `pid` now returns to `agent execute`'s own at the agent's exit (§3.3 step 14, §7), and a launch rewrites or
+removes the file only while it holds its own entry, by `id`, `started_ms` and `pid` (§3.3 step 17, §7, with the
+residual check-then-remove window stated as a known limit). (2) An entry's `id` must be three segments naming the
+file's path, and `started_ms` stays within an ECMAScript date's range; the malformed cases are listed (§7). (3) A
+`--log` path under `.wingfoil/run/` is refused at parse time, exit `2` (§3.1, §3.7's parse row): such a file would be
+git-ignored and then pruned as no entry. (4) A removal that fails while reading is one `warning:` line, never a failed
+read (§5, §7). No key of §4.2, no rule of §4.3 and no other exit code changes. Edited in place without a supersede or a
+state change (`dl-047`), pending the approver's `memory amend` at `task-336`'s review fix round.
+
+**Revision (2026-11-17, `task-336-forward-a-launched-agent-s-output-to-the-caller-with-an-optional-log-copy-and-keep-the-active-run-registry`,
+second review fix round) — § 3.1 grammar and § 7's pruning lines.** The re-review found two gaps. (1) A file that is
+no entry and cannot be removed printed the not-an-entry line, which says `removed`, and then the could-not-remove
+line: §7 now gives such a file one line, `.wingfoil/run/<path>: not an active run entry: could not remove: <cause>`,
+and keeps `.wingfoil/run/<path>: could not remove: <cause>` for a dead entry. (2) §3.1's refusal of a `--log` under
+`.wingfoil/run/` compared it with the registry under the root as given only, so a `--project` given through a symbolic
+link let a log under the real registry through: the registry directory is now also taken under the root's real path.
+No exit code, key or other message changes. Edited in place without a supersede or a state change (`dl-047`), pending
+the approver's `memory amend` at `task-336`'s second review fix round.
 
 **Revision (2026-11-16, `task-337-record-token-counts-result-n-a-and-the-agent-version-before-and-after-in-a-claude-code-run-record`)
 — §2.2, §2.3, §2.6, §2.7, §2.8, §4.2 and §4.5.** (1) `dl-180` version (b), `bug-366`: `version_args` runs before the
