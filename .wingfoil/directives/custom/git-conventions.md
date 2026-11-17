@@ -6,16 +6,16 @@ kind: custom
 title: "Git conventions: branches, sync, tags, subjects, identity, id allocation, attribution"
 tags: [custom, git, process, security]
 scope: global
-version: "2.6"   # 2.6 §9: two checks on pushed commits, an `Approver:` line on a `workflow:` record and a `WingFoil-*` trailer outside the final paragraph (task-328, bug-444, bug-391; release-planning v0.3.2 R8) (prev 2.5 §1 rule 6: the merge forward is `release-publishing`'s `merge-forward` phase, its sequence in a detached worktree at origin/main, the push, the fast-forward of the shared working tree, and a minor recording the phase with `workflow finalize` (task-306, bug-428; release-planning v0.3.2 R8) (prev 2.4 §1: a triage's line is keyed on the release it gives, the eligibility test `git log --no-merges release/X.Y..main`, the re-capture on the line of an element that exists only on main; rule 5: the dl-095 pin keeps main's value in a merge forward with no conflict too (task-305, dl-206 Q1 (i), Q2 (i); release-planning v0.3.2 R8) (prev 2.3 §4, §8: the `workflow: rekey <instance-id> <from> <to>` record subject and its `WingFoil-Rekey-From:` / `WingFoil-Rekey-To:` trailers (task-295, dl-187 C5) (prev 2.2 §4, §8: the non-Memory record subjects `workflow: finalize`, `workflow: adopt`, `agent: record`, and the `WingFoil-Adopted:` trailer of an adoption (task-294, dl-187) (prev 2.1 §9: the pre-push hook takes a new remote ref's base from the line the branch was cut from, the nearest merge-base among `origin/main` and each `origin/release/X.Y`, and CI stays the enforcing check (task-291, dl-185 C3 (i)) (prev 2.0 §1: the merge forward of a release line — rule 5's two kinds of colliding file and the bump in the merge commit, who runs it, when and where, the release/X.Y counterpart of the direct-commit list (task-290, dl-185 C1 (a)–(d); approver design-gate rulings 2026-10-22) (prev 1.9 §8: the trailer paragraph also carries the workflow `WingFoil-*` trailers (`-Instance`, `-Step`, `-Phase`, `-Element`, `-Item`), which a separate paragraph would unlink from their step (task-252, bug-236 amendment of 2026-10-11) (prev 1.8 §1: the quotation of `dev-loop.yaml`'s `done` merges into the task's integration branch, `git.merge(to: integration_branch, ff: false)`, which carries the on-branch commits into it (task-288, dl-159 A1.8, approver ruling D6) (prev 1.7 §1–§3, §6, §9: the release/X.Y maintenance line, the integration branch, the merge forward, a tag per line, push the add on both lines, the release worktree (task-286, dl-159 A1.6, dl-092 Action 3) (prev 1.6 §1: `dev-loop.yaml`'s `done` declares the on-branch order, approve, finalize and the bugs' sync before the merge (task-281, bug-313, approver ruling 2026-10-12 D6) (prev 1.5 §1: one worktree per task, no task commit in the shared working tree, a dev-loop task's approve/reject/finalize on its branch, `ingest/` for a `vision-change` run; §4: code-commit subjects (task-276, approver rulings 2026-10-10) (prev 1.4 §9: the governance check in CI, the opt-in pre-push hook, and which §§ the check enforces (task-208, dl-103 §1); 1.3 §2: who runs each main-sync in dev-loop and who resolves its conflicts (task-205 review F3, approver ruling 2026-10-09, option 2); 1.2 §7, task-260))))))))))))
+version: "2.9"   # 2.9 §7: `dna.yaml` also refuses an agent email on `example.com`, `example.net`, `example.org` or a subdomain of one (RFC 2606 §3); §9: the rule `co-author-identity`, a non-approval commit's `Co-Authored-By:` names a `team.agents` or `team.members` entry of the `dna.yaml` committed before it, merges included, and its final paragraph carries the attribution pair once (task-352, bug-475, bug-193, bug-535) (prev 2.8 §7, §8: the mutating verbs write the agent's `Co-Authored-By:` and `AI-Model:` themselves in an agent's session, after `WingFoil-Version:`, the signing entry by `spec-018` §2.3's precedence and the model from `--ai-model` or `WINGFOIL_AGENT_MODEL`, else `not-reported`; an agent never adds them again to such a commit (task-334, spec-018 §2) (prev 2.7 §9: the agent-trailer rule `approval-agent-trailer` replaces `approval-ai-trailer`, on every commit with an `Approver:` line, not only `approve` and `reject`; §7, §8 and the preamble: agents never run an approval, the verbs refuse an agent's session (task-333, spec-018 §3, §4) (prev 2.6 §9: two checks on pushed commits, an `Approver:` line on a `workflow:` record and a `WingFoil-*` trailer outside the final paragraph (task-328, bug-444, bug-391; release-planning v0.3.2 R8) (prev 2.5 §1 rule 6: the merge forward is `release-publishing`'s `merge-forward` phase, its sequence in a detached worktree at origin/main, the push, the fast-forward of the shared working tree, and a minor recording the phase with `workflow finalize` (task-306, bug-428; release-planning v0.3.2 R8) (prev 2.4 §1: a triage's line is keyed on the release it gives, the eligibility test `git log --no-merges release/X.Y..main`, the re-capture on the line of an element that exists only on main; rule 5: the dl-095 pin keeps main's value in a merge forward with no conflict too (task-305, dl-206 Q1 (i), Q2 (i); release-planning v0.3.2 R8) (prev 2.3 §4, §8: the `workflow: rekey <instance-id> <from> <to>` record subject and its `WingFoil-Rekey-From:` / `WingFoil-Rekey-To:` trailers (task-295, dl-187 C5) (prev 2.2 §4, §8: the non-Memory record subjects `workflow: finalize`, `workflow: adopt`, `agent: record`, and the `WingFoil-Adopted:` trailer of an adoption (task-294, dl-187) (prev 2.1 §9: the pre-push hook takes a new remote ref's base from the line the branch was cut from, the nearest merge-base among `origin/main` and each `origin/release/X.Y`, and CI stays the enforcing check (task-291, dl-185 C3 (i)) (prev 2.0 §1: the merge forward of a release line — rule 5's two kinds of colliding file and the bump in the merge commit, who runs it, when and where, the release/X.Y counterpart of the direct-commit list (task-290, dl-185 C1 (a)–(d); approver design-gate rulings 2026-10-22) (prev 1.9 §8: the trailer paragraph also carries the workflow `WingFoil-*` trailers (`-Instance`, `-Step`, `-Phase`, `-Element`, `-Item`), which a separate paragraph would unlink from their step (task-252, bug-236 amendment of 2026-10-11) (prev 1.8 §1: the quotation of `dev-loop.yaml`'s `done` merges into the task's integration branch, `git.merge(to: integration_branch, ff: false)`, which carries the on-branch commits into it (task-288, dl-159 A1.8, approver ruling D6) (prev 1.7 §1–§3, §6, §9: the release/X.Y maintenance line, the integration branch, the merge forward, a tag per line, push the add on both lines, the release worktree (task-286, dl-159 A1.6, dl-092 Action 3) (prev 1.6 §1: `dev-loop.yaml`'s `done` declares the on-branch order, approve, finalize and the bugs' sync before the merge (task-281, bug-313, approver ruling 2026-10-12 D6) (prev 1.5 §1: one worktree per task, no task commit in the shared working tree, a dev-loop task's approve/reject/finalize on its branch, `ingest/` for a `vision-change` run; §4: code-commit subjects (task-276, approver rulings 2026-10-10) (prev 1.4 §9: the governance check in CI, the opt-in pre-push hook, and which §§ the check enforces (task-208, dl-103 §1); 1.3 §2: who runs each main-sync in dev-loop and who resolves its conflicts (task-205 review F3, approver ruling 2026-10-09, option 2); 1.2 §7, task-260)))))))))))))))
 ref: [P3.5, P3.7, REQ-SEC-01, REQ-SYS-08]
 ---
 
 # Directive — Git conventions
 
-**Date:** 2026-10-31
+**Date:** 2026-11-12
 
 Custom WingFoil rule. Applies to **every role**: whoever writes a commit or names a branch in this
-repository — a `developer` on a task branch, the `approver` whose `approve` commit an agent types, a
+repository — a `developer` on a task branch, the `approver` running an `approve` from their own terminal, a
 `facilitator` capturing a retrospective, a `product-owner` filing a decision-log. Bound in
 `roles.yaml` `global:` (`dl-119-a-git-conventions-directive` Q2 (b)).
 
@@ -250,14 +250,18 @@ rule; this clause only keeps a test identity from leaking into it.
 
 ## 7. AI attribution (`dl-117` Q1 (B), Q2 (c); `dl-158` Rule 1 (a), Rule 2 (ii))
 
-- **Which commits.** Every commit whose content an agent produced, in whole or in part — Memory
-  operations performed on the approver's instruction included — carries AI co-authorship, **except
-  `approve` and `reject` commits**: those record the approver's decision and carry no AI co-author even
-  when an agent typed them (`dna.yaml` declares every agent `approval_authority: false`).
+- **Which commits.** Every commit whose content an agent produced, in whole or in part, carries AI
+  co-authorship, **except approval commits** — `approve`, `reject`, `amend` and every `workflow:` record with an
+  `Approver:` line: those record the approver's decision and carry no AI co-author, because agents never run them;
+  the approver runs them from their own terminal, and the verbs refuse an agent's session with `E_AGENT_CONTEXT`
+  (`dl-212` D1, `spec-018` §3; `dna.yaml` declares every agent `approval_authority: false`). Every commit an
+  agent caused carries the two trailers, whoever writes it: `wingfoil` on the commits it writes in an agent's
+  session (`spec-018` §2.1), the agent on a commit it makes with `git commit`.
 - **Which name.** The `Co-Authored-By:` identity is the agent entry declared in `dna.yaml`
   `team.agents`, written as its `name` and `email`: `Co-Authored-By: <name> <<email>>` (`bug-240`).
   A separate `AI-Model:` trailer, in the same trailer paragraph, carries the model identifier the
-  running agent reports. A commit an agent co-authors ends with this trailer paragraph, the values read from
+  running agent reports — the `--ai-model` value or `WINGFOIL_AGENT_MODEL` on a commit `wingfoil` writes, and
+  `not-reported` when the agent reports none (`spec-018` §2.4). A commit an agent co-authors ends with this trailer paragraph, the values read from
   `dna.yaml` (`wingfoil dna show team`), never typed from memory:
 
   ```
@@ -265,7 +269,12 @@ rule; this clause only keeps a test identity from leaking into it.
   AI-Model: <the model identifier the running agent reports>
   ```
 
-- **Which entry signs** (`dl-158` Rule 1 (a)). The entry `agent execute` launches signs that agent's
+- **Which entry signs** (`dl-158` Rule 1 (a)). On a commit `wingfoil` writes, the first rule that applies
+  decides (`spec-018` §2.3): `--co-author <name>`; else a non-blank `WINGFOIL_AGENT`; else the entry whose
+  `adapter` is the built-in adapter of the vendor marker (`CLAUDE_CODE_CHILD_SESSION` → `claude-code`,
+  `CODEX_SANDBOX` → `codex-cli`); else the first entry, with the body line `Attributed to the first team.agents
+  entry, <name>: no entry is named for this agent.` and the warning `W_AGENT_ENTRY_GUESSED`.
+  The entry `agent execute` launches signs that agent's
   commits: its `adapter` resolves it (`spec-016`). A hand session signs with the entry whose `name` is
   the agent's own; when no entry has that name, it signs with the first entry and says so in the commit
   body, naming the entry it used.
@@ -281,12 +290,16 @@ rule; this clause only keeps a test identity from leaking into it.
   refuses a bare `<login>@users.noreply.github.com`: an unregistered login can be claimed by anyone, who
   would then be credited with every commit naming it. It also refuses, through the same rule, every
   identity the attribution audit rejects (`bug-261`): an empty or blank `name`, and an `email`
-  on an RFC 2606 reserved top-level domain (`.test`, `.example`, `.invalid`, `.localhost`) or carrying
-  git's guessed `.(none)` domain.
-- **Who applies it.** Hand sessions — an agent writing commits with `git commit` — apply this section
+  on an RFC 2606 reserved top-level domain (`.test`, `.example`, `.invalid`, `.localhost`), on one of its
+  reserved second-level domains (`example.com`, `example.net`, `example.org`) or a subdomain of one (`bug-193`),
+  or carrying git's guessed `.(none)` domain.
+- **Who applies it.** `wingfoil` writes the two lines itself on every commit it writes in an agent's session,
+  after `WingFoil-Version:`, and an agent never adds them again to such a commit. Hand sessions — an agent
+  writing commits with `git commit` — apply this section
   from `task-256-give-team.agents-an-email-and-state-the-intake-prefix-and-on-main-operations-in-git-conventions`'s
   merge on, in place of the model-named trailer they wrote before. A commit written by `wingfoil`
-  keeps its `WingFoil-Version:` trailer and takes these two in the same paragraph (§8).
+  keeps its `WingFoil-Version:` trailer and takes these two in the same paragraph (§8). An amend the approver
+  writes carries no co-author; an agent's credit, if any, goes in its `Reason:` prose (`spec-018` Process Notes).
 - **Past commits are not rewritten.** The policy applies from `dl-117`'s ratification. `agent execute`
   carries this rule to the agents it launches (approver ruling R20, `release-planning-rel-v0.3-plan`).
 
@@ -298,8 +311,8 @@ the commit — the other `WingFoil-*` trailers: `WingFoil-Instance:` and `WingFo
 --workflow … --step …`; `WingFoil-Phase:`, `WingFoil-Instance:` and `WingFoil-Element:` or `WingFoil-Item:` on a
 `workflow finalize` record; `WingFoil-Instance:`, `WingFoil-Step:` and `WingFoil-Adopted:` on a `workflow adopt`
 record; `WingFoil-Instance:`, `WingFoil-Rekey-From:` and `WingFoil-Rekey-To:` on a `workflow rekey` record. To add a trailer to such a
-commit (e.g. `Co-Authored-By:`), amend with `git commit --amend --no-edit --trailer "Co-Authored-By: …"`,
-which joins the existing trailer paragraph. Never add a new paragraph after it: the trailer paragraph
+commit by hand — one it lacks: an agent's `Co-Authored-By:` and `AI-Model:` are already there when an agent ran
+the command (§7) —, amend with `git commit --amend --no-edit --trailer "<Key>: …"`, which joins the existing trailer paragraph. Never add a new paragraph after it: the trailer paragraph
 would no longer be the last one, so a reader of the `Reason:` block (`dl-067-reason-trailer-contract`)
 would take the `WingFoil-Version:` line into the reason, and the workflow deduction, which reads only the
 final paragraph (`%(trailers:only)`), would lose the element's link to its step or the phase record. Two
@@ -307,8 +320,8 @@ limits:
 
 - **Only a commit not yet pushed.** Amending a pushed `wf()` commit rewrites an audit record, which §2
   forbids.
-- **Never an `approve` or `reject` commit.** §7 excludes them from AI co-authorship, so there is no
-  trailer to add.
+- **Never an approval commit** (`approve`, `reject`, `amend`, a `workflow:` record with an `Approver:` line). §7
+  excludes them from AI co-authorship, so there is no trailer to add.
 
 ## 9. Checks on pushed commits (`dl-103` §1)
 
@@ -318,13 +331,20 @@ limits:
   checks §4's `wf()` subjects and brackets (not its code-commit subjects), the `Reason:`/`Approver:`
   shape (`dl-067`), approval authority (§5, `dl-094`), state legality and the verb each transition
   uses, status changes outside a `wf()` operation (`dl-139`), an approve whose `supersedes:` target is
-  not `superseded` at `HEAD` (`bug-218`), and §7's exclusion of `approve` and `reject` (`bug-307`),
-  enforced as: those commits carry no `Co-Authored-By:` and no `AI-Model:` line at all, anywhere in the body,
-  whoever it names; an `Approver:` line on a `workflow: finalize`, `workflow: adopt` or `workflow: rekey`
+  not `superseded` at `HEAD` (`bug-218`), and §7's exclusion of approvals from AI co-authorship (`bug-307`,
+  widened by `spec-018` §4 to the rule `approval-agent-trailer`), enforced as: a commit with an `Approver:` line —
+  `approve`, `reject`, `amend` and every `workflow:` record that has one — carries no `Co-Authored-By:` and no
+  `AI-Model:` line at all, anywhere in the message, whoever it names; an `Approver:` line on a `workflow: finalize`, `workflow: adopt` or `workflow: rekey`
   record, when it has one (`bug-444`), held to the same `Approver:` grammar and the same authority as an
   approval (the record needs none: whether a record of an `approval:` phase must carry one is not judged);
   and a `WingFoil-*` trailer outside the commit's final paragraph (§8, `bug-391`), on every non-merge commit,
-  any key in any letter case, because the workflow deduction reads only that paragraph. With `--base` only (CI passes it), it also checks the version bump of the four versioned
+  any key in any letter case, because the workflow deduction reads only that paragraph; and, on every commit, merges
+  included, except a non-merge commit with an `Approver:` line (the agent-trailer rule's), the rule `co-author-identity` (`bug-475`, `bug-535`): each `Co-Authored-By:`
+  line of the final paragraph is `Name <email>` and names a `team.agents` or `team.members` entry of the
+  `.wingfoil/dna.yaml` committed before the commit (its first parent), the name exactly and the email in any letter
+  case — so a runtime-injected name such as `Claude Opus …` fails, and a `dna.yaml` change cannot legitimise its own
+  commit — and the paragraph carries no two `Co-Authored-By:` lines naming the same co-author (the name exactly, the email
+  in any letter case) and at most one `AI-Model:` line (§7, §8). With `--base` only (CI passes it), it also checks the version bump of the four versioned
   config files over the range (`bug-249`); a whole-history run has no range and does not judge it. Each rule
   fails only commits after the one that introduced it; older history is reported, never rewritten (§2, §8).
   Beside it, a warn-only lint (`scripts/lint-claims.cjs`, `dl-097` §2 (b)) annotates claims with no command in

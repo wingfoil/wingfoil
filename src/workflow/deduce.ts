@@ -14,8 +14,11 @@
  *
  * What is deduced here:
  * - **Instances** (§3.1–§3.3): an open main is a `plan` element (`draft`/`active`, no `parent`) whose
- *   `workflow` is startable; most recently started first, the first one active. A plan naming a
- *   workflow the registry does not load is listed with an empty frontier (`W_INSTANCE_WORKFLOW_UNKNOWN`).
+ *   `workflow` is loaded and startable and that `workflow start` opened — its start commit carries the
+ *   start marker ({@link START_TRAILER}), or carries none and follows no marked start (the transitory
+ *   pre-marker rule, {@link StartCommit.marker}); most recently started first, the first one active. An
+ *   open plan naming a workflow the registry does not load is no instance and is reported
+ *   `W_INSTANCE_WORKFLOW_UNKNOWN` (task-345, `dl-217` (a)).
  * - **The bound element** (§3.4; §3.5 the context). A self-creating workflow's element is the element
  *   of its creating phase's type that its creating step created (step linkage, §4.8) with the oldest add
  *   commit; until then it is `null` and its `{id}` tokens are pending, never unresolved. Further linked
@@ -88,8 +91,16 @@ export function uncommittedInputDiagnostic(path: string): Diagnostic {
 export const W_MEMORY_INVALID_STATE = 'W_MEMORY_INVALID_STATE';
 /** `W_UNRESOLVED_TOKEN` (`spec-017` §4.1): a token with no value on the element it resolves against. */
 export const W_UNRESOLVED_TOKEN = 'W_UNRESOLVED_TOKEN';
-/** `W_INSTANCE_WORKFLOW_UNKNOWN` (`spec-017` §2): an open plan names a workflow the registry does not load. */
+/** `W_INSTANCE_WORKFLOW_UNKNOWN` (`spec-017` §2): an open plan names a workflow the registry does not load; it is no instance. */
 export const W_INSTANCE_WORKFLOW_UNKNOWN = 'W_INSTANCE_WORKFLOW_UNKNOWN';
+
+/**
+ * The start marker's trailer key (`spec-017` §3.1, `dl-217` (a), task-345): `workflow start` writes
+ * `WingFoil-Start: <workflow>` in the final trailer paragraph of its `wf(plan): add <id>` commit, before
+ * `WingFoil-Version:`; `memory add` never writes it. A plan's start commit carrying it with a non-blank value
+ * is a **marked start**.
+ */
+export const START_TRAILER = 'WingFoil-Start';
 
 /** The note of an `iterate_over` phase no candidate was counted for (`spec-017` §4.6, P4.16 sc. 3). */
 export const NO_ITERATION_NOTE = 'no elements matched the iterate_over filter';
@@ -100,11 +111,21 @@ export const OPEN_PLAN_STATUSES: readonly string[] = ['draft', 'active'];
 /** The Memory type that records a workflow instance (`spec-017` §3.1, `dl-019`). */
 export const PLAN_TYPE = 'plan';
 
+/**
+ * How a plan's start commit stands against the start marker (`spec-017` §3.2, task-345): `marked` — it carries
+ * {@link START_TRAILER}; `pre-marker` — it carries none and no marked start is among its ancestors (kept by the
+ * transitory pre-marker rule); `after-marker` — it carries none and a marked start is among its ancestors, so the
+ * plan is no instance.
+ */
+export type StartMarker = 'marked' | 'pre-marker' | 'after-marker';
+
 /** Where an instance started: the commit that added its plan file, and its index in `git rev-list --topo-order HEAD`. */
 export interface StartCommit {
   readonly commit: string;
   /** `0` is `HEAD`; a larger number is an older start. */
   readonly position: number;
+  /** The start's standing against the start marker (§3.2); absent reads as `pre-marker`. */
+  readonly marker?: StartMarker;
 }
 
 /**
@@ -205,7 +226,7 @@ export interface DeductionSnapshot {
   readonly scanDiagnostics: readonly Diagnostic[];
   /** Every file path `HEAD` holds, sorted (`produces` evidence). */
   readonly tree: readonly string[];
-  /** The start commit of each candidate plan, by its path. */
+  /** The start commit of each candidate plan (an open plan with `parent` empty), by its path, with its standing against the start marker. */
   readonly starts: ReadonlyMap<string, StartCommit>;
   /** What each instance's walk holds (§4.8) — records, linkages, re-entries, adoptions, rekeys — by the instance's start commit. */
   readonly history: ReadonlyMap<string, InstanceHistory>;
@@ -439,6 +460,12 @@ export interface Deduction {
    * acts on it), ascending `(type, id)` (§5.1, ungated elements).
    */
   readonly gated: readonly ElementRef[];
+  /**
+   * The open instances kept only by the transitory pre-marker rule (`spec-017` §3.2, task-345): their start commit
+   * carries no start marker. In instance order, each with its plan's repository-relative path; `workflow status`
+   * reports them as `W_INSTANCE_PRE_MARKER`. Absent: none.
+   */
+  readonly preMarker?: readonly { readonly instance: string; readonly file: string }[];
 }
 
 // --- Elements --------------------------------------------------------------------------------------
@@ -1662,25 +1689,38 @@ function progress(phase: string, state: PhaseProgress['state'], vacuous: boolean
 /**
  * Deduce every open workflow instance at the snapshot's commit (`spec-017` §3–§4): its bound element,
  * its top-level phase progress and its frontier, plus the ordered diagnostics of §1.3 — the registry's,
- * then `W_UNCOMMITTED_INPUTS`, then `W_MEMORY_*` by path, then `W_INSTANCE_WORKFLOW_UNKNOWN` in
- * instance order, then the step-attached `W_UNRESOLVED_TOKEN` in frontier order. Never throws on a
- * Memory document it cannot use: it leaves the document out and reports it (§1.4).
+ * then `W_UNCOMMITTED_INPUTS`, then `W_MEMORY_*` by path, then `W_INSTANCE_WORKFLOW_UNKNOWN` in the
+ * start order of the open plans it names (ties by id), then the step-attached `W_UNRESOLVED_TOKEN` in
+ * frontier order. An instance is an open plan (`parent` empty) whose workflow is loaded and startable and
+ * whose start is not `after-marker` (§3.2, task-345). Never throws on a Memory document it cannot use: it
+ * leaves the document out and reports it (§1.4).
  */
 export function deduceWorkflowState(snapshot: DeductionSnapshot): Deduction {
   const { elements, diagnostics: memoryDiagnostics } = readElements(snapshot);
   const plans = elements.filter((element) => element.type === PLAN_TYPE);
 
-  const open = plans
+  const openPlans = plans
     .filter((plan) => OPEN_PLAN_STATUSES.includes(plan.status) && scalarText(plan.frontmatter['parent']) === null)
     .map((plan) => {
       const start = snapshot.starts.get(plan.path);
-      return { plan, workflowName: scalarText(plan.frontmatter['workflow']) ?? '', start, position: start?.position ?? Number.MAX_SAFE_INTEGER };
-    })
-    .filter(({ workflowName }) => {
+      const workflowName = scalarText(plan.frontmatter['workflow']) ?? '';
       const workflow = snapshot.workflows.find((candidate) => candidate.name === workflowName);
-      return workflow === undefined || workflowFacts(workflow).startable;
+      return { plan, workflowName, workflow, start, position: start?.position ?? Number.MAX_SAFE_INTEGER };
     })
     .sort((a, b) => a.position - b.position || compareText(a.plan.id, b.plan.id));
+  // §2, D3 (a): every open plan naming a workflow the registry does not load, marked or not, is reported; none is an instance.
+  const unknownDiagnostics: Diagnostic[] = openPlans
+    .filter(({ workflow }) => workflow === undefined)
+    .map(({ plan, workflowName }) => ({
+      code: W_INSTANCE_WORKFLOW_UNKNOWN,
+      severity: 'warning',
+      file: plan.path,
+      path: 'workflow',
+      message: `open plan ${plan.id} names workflow '${workflowName}', which the registry does not load`,
+    }));
+  const open = openPlans.flatMap(({ plan, workflowName, workflow, start }) =>
+    workflow !== undefined && workflowFacts(workflow).startable && start?.marker !== 'after-marker' ? [{ plan, workflowName, workflow, start }] : [],
+  );
 
   // Provenance (§4.8, P4.21): rekeys, orphans and one owner per element, over every walk at once.
   const provenance = resolveProvenance(
@@ -1689,12 +1729,10 @@ export function deduceWorkflowState(snapshot: DeductionSnapshot): Deduction {
   );
   const owned = new Set([...provenance.owners.keys(), ...provenance.conflicts.map((conflict) => keyOf(conflict.element))]);
   const deducer = new Deducer(snapshot, elements, provenance.history, owned);
-  const provenanceDiagnostics = provenanceDiagnosticsOf(provenance, open, (name) => deducer.workflow(name) !== undefined, plans);
+  const provenanceDiagnostics = provenanceDiagnosticsOf(provenance, open, plans);
 
-  const unknownDiagnostics: Diagnostic[] = [];
   const stepDiagnostics: Diagnostic[] = [];
-  const instances = open.map(({ plan, workflowName, start }, index): InstanceDeduction => {
-    const workflow = deducer.workflow(workflowName);
+  const instances = open.map(({ plan, workflowName, workflow, start }, index): InstanceDeduction => {
     const startCommit = start?.commit ?? '';
     const base = {
       id: plan.id,
@@ -1705,16 +1743,6 @@ export function deduceWorkflowState(snapshot: DeductionSnapshot): Deduction {
       active: index === 0,
       abandoned: false,
     };
-    if (workflow === undefined) {
-      unknownDiagnostics.push({
-        code: W_INSTANCE_WORKFLOW_UNKNOWN,
-        severity: 'warning',
-        file: plan.path,
-        path: 'workflow',
-        message: `open plan ${plan.id} names workflow '${workflowName}', which the registry does not load`,
-      });
-      return { instance: { ...base, element: null, context: null }, complete: false, phases: [], frontier: [], late: [] };
-    }
     const bound = deducer.bind(workflow, plan, startCommit);
     const element = bound.element === null ? null : refOf(bound.element);
     // An archived bound element abandons the instance: nothing is deduced for it (§4.11).
@@ -1734,6 +1762,8 @@ export function deduceWorkflowState(snapshot: DeductionSnapshot): Deduction {
   });
 
   const uncommitted: Diagnostic[] = snapshot.dirty.map(uncommittedInputDiagnostic);
+  // The transitory pre-marker rule made visible (§3.2, bug-515): the instances whose start carries no marker.
+  const preMarker = open.filter(({ start }) => start?.marker !== 'marked').map(({ plan }) => ({ instance: plan.id, file: plan.path }));
 
   // The elements waiting at a gate (§5.1): `status` lists those no pending approval carries. Every element's type is
   // declared in `memory.yaml` (`readElements` leaves the others out), so the machine resolves. A gate that is also a
@@ -1753,24 +1783,20 @@ export function deduceWorkflowState(snapshot: DeductionSnapshot): Deduction {
     instances,
     diagnostics: [...snapshot.registryDiagnostics, ...uncommitted, ...memoryDiagnostics, ...unknownDiagnostics, ...provenanceDiagnostics, ...stepDiagnostics],
     gated,
+    ...(preMarker.length === 0 ? {} : { preMarker }),
   };
 }
 
 /**
  * The provenance diagnostics (`spec-017` §2, §4.8; design D3 (a), D4): one `W_PROVENANCE_ORPHAN` per orphan of an
- * open instance whose workflow the registry loads — an instance of an unknown workflow is already reported by
- * `W_INSTANCE_WORKFLOW_UNKNOWN` — then one `W_PROVENANCE_CONFLICT` per conflict, in the orders
+ * open instance — every instance's workflow is loaded; a plan naming an unknown one is no instance and is reported
+ * by `W_INSTANCE_WORKFLOW_UNKNOWN` (task-345) — then one `W_PROVENANCE_CONFLICT` per conflict, in the orders
  * {@link resolveProvenance} gives. `file` is the instance's plan (for a conflict, the first claim's instance; empty
  * when no plan of that id is at `HEAD`).
  */
-function provenanceDiagnosticsOf(
-  provenance: ReturnType<typeof resolveProvenance>,
-  open: readonly { readonly plan: Element; readonly workflowName: string }[],
-  loaded: (workflow: string) => boolean,
-  plans: readonly Element[],
-): Diagnostic[] {
+function provenanceDiagnosticsOf(provenance: ReturnType<typeof resolveProvenance>, open: readonly { readonly plan: Element }[], plans: readonly Element[]): Diagnostic[] {
   const planPath = (id: string): string => (open.find(({ plan }) => plan.id === id)?.plan ?? plans.find((plan) => plan.id === id))?.path ?? '';
-  const reported = new Set(open.filter(({ workflowName }) => loaded(workflowName)).map(({ plan }) => plan.id));
+  const reported = new Set(open.map(({ plan }) => plan.id));
   const orphans = provenance.orphans
     .filter((orphan) => reported.has(orphan.instance))
     .map(

@@ -136,7 +136,7 @@ Each **`Phase`** object:
 |-----------------|-------------------------------|----------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `name`          | string, `[a-z][a-z0-9-]*`     | yes      | Phase identifier, unique within the workflow; also the target token for `fallback.step` and for `distinct_from`. The character class is `spec-009`'s ID characters `[a-z0-9-.]` without the `.` and starting with a letter, so a phase name is a legal segment of a run id (`spec-016`) and `<workflow>.<phase>` splits at its first `.` — `E_PHASE_NAME_INVALID`. The name `adhoc` is reserved for a run without a step (`spec-016`: no `--next`, `--workflow` or `--step`) — `E_PHASE_NAME_RESERVED`. |
 | `description`   | string                        | no       | What the phase does and why.                                                                                                                                            |
-| `role`          | string (a `dna.yaml` role)    | no       | The role executing the phase; its directives auto-load (P3.6). **This is the only path by which a directive reaches a phase**: the directives in force for a phase are exactly those `roles.yaml` binds to its `role`, plus `global` (`dl-066` option 1). A phase carries no directive reference of its own, so the referrer source for P3.3 / REQ-SEC-07 clause (b) is `roles.yaml` alone, workflow phases included by transitivity. Omitted when the phase only `include:`s another workflow (the included phases carry their own roles). |
+| `role`          | string (a `dna.yaml` role)    | no       | The role executing the phase; its directives auto-load (P3.6). **This is the only path by which a directive reaches a phase**: the directives in force for a phase are exactly those `roles.yaml` binds to its `role`, plus `global` (`dl-066` option 1). A phase carries no directive reference of its own, so the referrer source for P3.3 / REQ-SEC-07 clause (b) is `roles.yaml` alone, workflow phases included by transitivity. Omitted when the phase only `include:`s another workflow (the included phases carry their own roles). A phase whose `actions` hold an `agent.<x>` token under a `role` that no `team.agents` entry with an `adapter` executes is reported (`W_WORKFLOW_AGENT_ROLE_UNEXECUTED`, `dl-202` item 2) — a human-only role (`spec-002` § "Role binding") always. |
 | `optional`      | boolean (default `false`)     | no       | If true the phase may be skipped without failing the workflow: in v0.3 when a later phase of the same workflow is complete (`spec-017` §4.10); from v1.0 also when its `checks.pre` are unmet (P4.12). |
 | `actions`       | string[]                      | no       | Ordered **atomic** actions (P4.10 / REQ-INT-06), each an action expression (see below). Executed in order.                                                             |
 | `include`       | string (a workflow `name`)    | no       | Compose another workflow here (P4.16). Mutually the composition counterpart of `actions`: an `include:` phase delegates its body to the named workflow. The value is a workflow **name**, never a file path (`bug-144`); it must resolve to a loaded workflow (`bug-145`) that is includable (`dl-109` K3) — see § "Diagnostics". |
@@ -149,6 +149,7 @@ Each **`Phase`** object:
 | `fallback`      | `{ step: string, set_state?: string }` | no | On rejection/failure, route back to the named phase (`step`) and optionally reset the active element's state to `set_state` before retrying.                             |
 | `mode`          | `fresh` \| `resume` \| `reference` (default `fresh`) | no | Which non-fresh execution mode the phase **allows** for the agent run that executes it (`dl-135` point 3 and 4; `dl-134` §4 (a)). See § "Execution independence". |
 | `distinct_from` | string[] (phase names)        | no       | Phases of the **same workflow** whose runs this phase's run must never share an agent session with, whatever `mode` is set (`dl-134` §4 (b)). See § "Execution independence". |
+| `launch`        | `interactive` \| `headless` \| `any` (default `interactive`) | no | The launch kind an agent run of the phase takes by default (`dl-183` Q1 (a), from v0.4): `interactive`, the agent owns a terminal and the user works in its session; `headless`, a work run with no terminal that the agent finishes alone (`spec-016` §3.5); `any`, the phase does not care, so the caller's option or the adapter decides, `interactive` first. `agent execute --headless` / `--interactive` overrides it, with a warning when it contradicts a declared `interactive` or `headless` (`spec-016` §3.2 step 7). An absent `launch` reads as `interactive` but stays absent in the parsed phase, so `workflow show` and `workflow next` report it as declared (`spec-017` §6.3). Separate from `mode` (`adr-012` point 4); an executor attribute like `mode` and `distinct_from` (§ "Diagnostics", `E_PHASE_EXECUTOR_WITHOUT_ROLE`). No value relaxes the two fixed cases: a verification run is always headless (v1.0, P4.12), and a phase whose `role` is human-only (`spec-002` § "Role binding": `approver` always) is never launched. |
 | `cadence`       | `once` \| `{ recurring: { cron: string } \| { on: string } }` (default `once`) | no | Whether the phase runs once per pass of its workflow or recurs, and on what trigger (`dl-105`). See § "Recurring phases". |
 
 There is **no `entry:` field** (`dl-104` D5 (b)): the generic workflow commands (`workflow start`,
@@ -193,6 +194,8 @@ const Phase = z.object({
   mode: z.enum(["fresh", "resume", "reference"]).optional(),   // absent reads as `fresh`; the
                                                                // checks below run on the raw value
   distinct_from: z.array(z.string()).optional(),
+  launch: z.enum(["interactive", "headless", "any"]).optional(),   // absent reads as `interactive`;
+                                                                   // reported as declared (spec-017 §6.3)
   cadence: Cadence.default("once"),
 });
 export const Workflow = z.object({
@@ -637,7 +640,10 @@ The commands above are illustrative. This repository's file (`task-199`, `dl-090
 bound only in a YAML comment on that key (`npm run docs:api`, `npm run lint`) — and every
 other token a command or a manual step can carry; the prose checks no command asserts stay unbound
 (`W_WORKFLOW_UNBOUND_TOKEN`) until, from `patch-v0.3.1`, those a human confirms on purpose are bound
-`manual: true` (`dl-172` (a), `dl-186` Q6).
+`manual: true` (`dl-172` (a), `dl-186` Q6). From v0.4 (`task-358`, `bug-469`) it leaves none unbound: a check a
+command decides is bound `run` (`dev-loop`'s `retrospective.present` to `scripts/check-retrospective.cjs` with
+`{element.path}`), and a check a command could decide but none does yet is bound `manual: true` in a group of its
+own, "manual until a command", each entry naming the command owed, until a `run` binding replaces it.
 
 | Field                  | Type                     | Required | Description |
 |------------------------|--------------------------|----------|-------------|
@@ -654,8 +660,11 @@ other token a command or a manual step can carry; the prose checks no command as
 | `*.args`               | map<placeholder, pattern>| no       | A declared pattern per interpolated argument, where `spec-009`'s ID class is too narrow. |
 
 A placeholder — `{<key>}` for a token's `key: value` argument, `{element.field}` or `{<type>.field}`
-for the scope — may stand only as a **whole** element of `run` (`E_BINDING_PARTIAL_INTERPOLATION`
-otherwise). A project binding may not rebind a built-in token
+for the scope, and `{element.path}` or `{<type>.path}` for the repository-relative path of that scope
+element's file (from v0.4, `bug-320`) — may stand only as a **whole** element of `run` (`E_BINDING_PARTIAL_INTERPOLATION`
+otherwise). The path is the file the deduction read the element from, under its type's `memory.yaml` `path`;
+`path` is no frontmatter field, and in a placeholder it always names the file. It belongs to a binding's `run`
+only: in a `where` value, a `produces` pattern or an action argument the type's pattern is the path itself. A project binding may not rebind a built-in token
 (`E_BINDING_BUILTIN_TOKEN`), and a check binding whose program is `wingfoil agent execute` is refused
 (`E_BINDING_AGENT_CHECK`).
 
@@ -733,7 +742,9 @@ when the loader reported no error. A core check is not decided when its input is
 token, exit state or fallback, and without a type's template no token field. The first two skips are reported:
 each missing file adds one `W_WORKFLOW_CHECKS_NOT_RUN` warning, ahead of the core rows, so an empty
 `diagnostics` means the checks ran and found nothing (`bug-281`). Structural (Zod)
-failures keep `spec-009`'s structural codes, except the named `kind` refusal.
+failures keep `spec-009`'s structural codes, except the named `kind` refusal: a phase `launch` outside
+`interactive`, `headless` and `any`, like a `mode` outside its three values, is one structural `E_VALIDATION`
+error at `phases[<i>].launch` (`dl-183` Q1 (a)).
 
 | Code | Severity | Runs in | Rule | Source |
 |---|---|---|---|---|
@@ -756,7 +767,7 @@ failures keep `spec-009`'s structural codes, except the named `kind` refusal.
 | `E_PHASE_DISTINCT_FROM_UNKNOWN` | error | loader | a `distinct_from` entry names no phase of the same workflow; path `phases[<i>].distinct_from[<k>]`, message `distinct_from phase '<entry>' not found in workflow` | `dl-134` §4 |
 | `E_PHASE_DISTINCT_FROM_SELF` | error | loader | a phase names itself in `distinct_from`; path `phases[<i>].distinct_from[<k>]`, message `phase '<name>' names itself in distinct_from` | `dl-134` §4 |
 | `E_PHASE_MODE_NOT_INDEPENDENT` | error | loader | a phase whose `role` is `reviewer` or `qa` declares `mode` other than `fresh`; path `phases[<i>].mode`, message `phase '<name>' has role '<role>' and must run fresh (mode '<mode>' is not allowed)` | `dl-135` point 3 |
-| `E_PHASE_EXECUTOR_WITHOUT_ROLE` | error | loader | a phase without `role` declares `mode` or `distinct_from`, on the raw declaration (an absent `mode` is not declared); one per field, path `phases[<i>].mode` / `phases[<i>].distinct_from`, message `phase '<name>' declares <field> but has no role (it has no executor)` | open question 4, settled |
+| `E_PHASE_EXECUTOR_WITHOUT_ROLE` | error | loader | a phase without `role` declares `mode`, `distinct_from` or `launch`, on the raw declaration (an absent `mode` or `launch` is not declared); one per field, in that order, path `phases[<i>].mode` / `phases[<i>].distinct_from` / `phases[<i>].launch`, message `phase '<name>' declares <field> but has no role (it has no executor)` | open question 4, settled; `launch` from v0.4 (`dl-183`) |
 | `E_PHASE_PRODUCES_NOT_A_PATH` | error | loader | a `produces` path is not a path pattern | `dl-104` D3 |
 | `E_PHASE_PRODUCES_OWNER_NOT_CREATED` | error | loader | a `{ type: T, path }` entry in a phase that does not `memory.add(type: T)` | `dl-104` D3 |
 | `E_PHASE_SELECTION_UNTYPED` | error | loader | `where` without `iterate_over` and without a `type` key | § "Selections"; `dl-016` |
@@ -776,6 +787,7 @@ failures keep `spec-009`'s structural codes, except the named `kind` refusal.
 | `W_PHASE_EXIT_STATE_UNDETERMINED` | warning | core | the phase's state-changing actions cannot be applied along the element's machine from the state the previous phase leaves (`spec-017` §4.4) | `spec-001` |
 | `W_PHASE_FALLBACK_STATE_MISMATCH` | warning | core | `fallback.set_state` differs from `memory.yaml`'s reject target for the gate state the phase holds its element in | P4.15; `spec-001` |
 | `W_PHASE_FALLBACK_NOT_REENTRANT` | warning | core | `fallback.step` names an earlier phase, but the reject target of the phase's gate lies forward in the `sequence`, so a reject completes the phase instead of re-entering it (`spec-017` §4.8) | P4.15 |
+| `W_WORKFLOW_AGENT_ROLE_UNEXECUTED` | warning | core | a phase whose `role` is a `team.roles` name and whose `actions` hold a token the built-in binding runs as `wingfoil agent execute` (an `agent.<x>` token, § "Action expressions"), when no `team.agents` entry that declares an `adapter` lists that role in `executes_as` — so always for a human-only role (`spec-002` § "Role binding"), and for every role when `team.agents` is absent; one per phase, at its first such action, path `phases[<i>].actions[<a>]`, message `phase '<name>' declares <token> under role '<role>', but no team.agents entry with an adapter executes as '<role>'`. A phase without `role`, or whose `role` is unknown (`E_PHASE_ROLE_UNKNOWN`), is not checked; without `dna.yaml` it is one of the role checks `W_WORKFLOW_CHECKS_NOT_RUN` names | `dl-202` item 2 |
 | `W_WORKFLOW_CHECKS_NOT_RUN` | warning | core | `dna.yaml` or `memory.yaml` is absent at the baseline, so the core checks that read it did not run; one per missing file, `dna.yaml` first, before every other core row; `file` the missing file (`dna.yaml` / `memory.yaml`), path empty, message `<file> is absent: the <checks> checks were not run` (`dna.yaml`: role, approver and dna: collection; `memory.yaml`: type, cadence event, token, exit state and fallback). None for a registry with no workflow | `bug-281` |
 
 **Unbound tokens in v0.3 are warnings** (open question 1, settled at this revision). `dl-090` Q2 (c)
@@ -783,7 +795,9 @@ makes an unbound check fail closed and requires every action to be bound or `man
 engine runs a binding, `workflow list` reports each unbound token as `W_WORKFLOW_UNBOUND_TOKEN` in
 `diagnostics` and exits `0`. It becomes an error when P4.10/P4.12 ship in v1.0 and the engine would
 otherwise fail closed at run time. A check that is manual on purpose is declared `manual: true` (`dl-172` (a)), so
-the warning keeps naming only the checks not bound yet.
+the warning keeps naming only the checks not bound yet. A project may also declare `manual: true` for a check a
+command could decide but none does yet, while a person applies it by hand: the loader does not tell the two apart,
+so the project's file keeps them in separate groups, and from v1.0 both wait for a confirmation.
 
 **Measured on this repository** at `997e8998` (branch `design/release_planning_v0.3`), applying the
 table to the committed files (`git show 997e8998:.wingfoil/<path>`; `npm run -s wingfoil -- workflow
@@ -1153,3 +1167,36 @@ the message of `E_WORKFLOW_INCLUDE_UNRESOLVED`.** § "Diagnostics" records the s
 unresolved phase `include`: the name to write when a declared workflow is near (the shared closest-name matcher, distance
 2 as in `spec-008` §1) and, for a value written as a file path, the user guide's upgrade section. The rule is unchanged.
 Edited in place without a supersede or a state change (`dl-047`), pending the approver's `memory amend`.
+
+**Revision (2026-11-07, `task-335-add-the-headless-work-run-the-launch-phase-key-headless-interactive-timeout-next-on-a-waiting-step`)
+— Layer 2's `Phase` table and Zod shape, and § "Diagnostics": the `launch` field.** A phase declares the launch kind
+of its agent run, `launch: interactive | headless | any`, default `interactive` (`dl-183` Q1 (a)); the option of
+`agent execute` overrides it (`spec-016` §3.2 step 7). An unknown value is a structural `E_VALIDATION` at
+`phases[<i>].launch`, as an unknown `mode` is, and `launch` on a phase without a `role` is `E_PHASE_EXECUTOR_WITHOUT_ROLE`,
+as `mode` and `distinct_from` are. The field is new to the format but needs no `format` bump: every released build
+loads a phase that declares it, reporting the key as an unknown field it ignores (the pinned build 0.3.2, checked at
+`task-335`'s design, `dl-205` Q1 (a)). Edited in place without a supersede or a state change (`dl-047`), pending the
+approver's `memory amend`.
+
+**Revision (2026-11-11, `task-358-bind-this-repository-s-workflow-tokens-give-dl-115-s-plan-half-a-check-and-end-the-stale-ingest-plans`,
+`bug-320`, `bug-469`) — Layer 3's placeholders, and `manual: true` for a check no command decides yet.** A binding's
+`run` may carry `{element.path}` / `{<type>.path}`, the repository-relative path of the scope element's file, so a
+check that reads the element's document can be bound (`retrospective.present`, `dl-115` Q2 (a)). Nothing in v0.4 fills
+it: the loader accepts it as a whole `run` element (`isWholeInterpolation`) and `workflow next` / `workflow show` print
+it as written (the pinned build 0.3.2 too, checked at `task-358`'s design, `dl-205` Q1 (a)); the v1.0 engine fills it.
+And a check a deterministic command could decide, while none exists, may be bound `manual: true` in a group of its own
+(approver ruling at the same design gate), so this repository's configuration carries no `W_WORKFLOW_UNBOUND_TOKEN`.
+No `format` bump: no released build refuses either form. Edited in place without a supersede or a state change
+(`dl-047`), pending the approver's `memory amend`.
+
+**Revision (2026-11-13, `task-340`)
+— Layer 2 Phase table and § "Diagnostics": the agent-role check, per `dl-202` item 2.** The core row
+`W_WORKFLOW_AGENT_ROLE_UNEXECUTED` reports a phase that declares an agent action under a role no `team.agents` entry with
+an `adapter` executes, naming the phase and the role; the `role` row says so, and the `launch` row's fixed case reads
+"human-only" for "`approver`" (`spec-002` § "Role binding", the same revision). It is a warning, like
+`W_WORKFLOW_UNBOUND_TOKEN`: `workflow list` exits `0`. Measured at `task-340`'s design on this repository with a prototype
+of the row and `approver`, `product-owner`, `tech-lead` marked human-only: two warnings,
+`release-publishing.publish` (`phases[3].actions[0]`) and `release-publishing.merge-forward` (`phases[5].actions[1]`),
+both `agent.execute` under `tech-lead`, ruled at that design gate. No `format` bump: the row reads no new field.
+Edited in place without a supersede or a state change (`dl-047`), pending the approver's `memory amend` at `task-340`'s
+design gate.

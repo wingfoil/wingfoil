@@ -50,6 +50,8 @@ import { type Diagnostic, formatDiagnostic, isNewerFormatError, ValidationError 
 
 import { requireConfinedWriteTarget } from './confinement';
 import { requireGitIdentity, type GitIdentity } from './git-identity';
+import { resolveGatedAgentContext, resolveOperationAgentContext, type AgentContext } from './agent-context';
+import { requireTeamMembership } from './team-membership';
 import { loadMemoryYamlAtRev, MEMORY_YAML_PATH } from './loaders';
 import { atHeadOr, resolveRevision } from './revision';
 import { coreErr, coreOk, type CoreResult } from './types';
@@ -200,7 +202,7 @@ function uncommittedDocumentPath(root: string, memoryYaml: MemoryYaml, id: strin
 function recordedIdAt(root: string, sha: string, path: string): string | undefined {
   let id: unknown;
   try {
-    id = loadMemoryDocumentSummaryAtRev(root, sha, path)?.frontmatter.id;
+    id = loadMemoryDocumentSummaryAtRev(root, sha, path, 'HEAD')?.frontmatter.id; // `sha` is HEAD's (task-354)
   } catch {
     // Explain-only: a document HEAD holds but cannot be read records no id to name.
     return undefined;
@@ -307,7 +309,7 @@ export function prepareMemoryTransition(
   const sha = atHeadOr(root, () => resolveRevision(root, 'HEAD'), null);
   let memoryYaml: MemoryYaml | null;
   try {
-    memoryYaml = sha === null ? null : loadMemoryYamlAtRev(root, sha);
+    memoryYaml = sha === null ? null : loadMemoryYamlAtRev(root, sha, 'HEAD');
   } catch (error) {
     if (!(error instanceof ValidationError)) throw error;
     return coreErr({
@@ -552,7 +554,9 @@ export const WIP_REFS_SENTENCE =
  *   `sha` counts every copy it holds). The refs are those {@link refBaselineCommits} lists for
  *   `memory add`'s id counter (`dl-101` §2 (a)); a ref that is an ancestor of `sha` changed nothing.
  *   When several refs changed it, the most advanced of their copies wins
- *   ({@link isMoreAdvancedState}), the decided commit's copy not competing;
+ *   ({@link isMoreAdvancedState}), the decided commit's copy not competing; between copies in the same
+ *   state, the one whose `path` sorts first (UTF-16 code units, as the holders are sorted), so the copy
+ *   chosen is a total order of (rank, state, path) and never the read order (task-357, `bug-361`);
  * - otherwise the state commit `sha` records.
  *
  * So a stale branch does not keep a parked holder counted, and an older copy elsewhere does not hide an
@@ -564,7 +568,8 @@ export const WIP_REFS_SENTENCE =
  * Only the type's directory is read, every commit's listing and every distinct blob in one batch each,
  * each blob parsed once (`loadTypeDocumentCopiesAtRevs`; task-274 review F2, the `bug-178` class);
  * one `git merge-base` per ref. A document none of those reads can parse is not counted (task-171's
- * tolerant scan) and is returned as a `W_MEMORY_UNREADABLE` diagnostic, once per file, which the
+ * tolerant scan) and is returned as a `W_MEMORY_UNREADABLE` diagnostic, once per file (of two unreadable
+ * copies of one file, the diagnostic whose message sorts first; the files in path order, task-357), which the
  * caller's success carries as a warning and a refusal carries in `details.issues`, so a limit that may
  * be undercounted says so. Without a declared limit nothing is read and nothing is returned.
  */
@@ -586,9 +591,12 @@ export function requireWipSlot(
   const moved = refs.map((ref, index) => ({ ref, base: bases[index] as string | null })).filter(({ ref, base }) => base !== ref);
   const revs = [...new Set([decided, ...moved.map(({ ref }) => ref), ...moved.flatMap(({ base }) => (base === null ? [] : [base]))])];
 
-  const unreadable: Diagnostic[] = [];
+  // One diagnostic per file: of a file's diagnostics, the one whose message sorts first; the files in path
+  // order. Both by UTF-16 code units, so neither depends on the order the commits were read in (REQ-SYS-07).
+  const byFile = new Map<string, Diagnostic>();
   const onDiagnostic = (diagnostic: Diagnostic): void => {
-    if (!unreadable.some((known) => known.file === diagnostic.file)) unreadable.push(diagnostic);
+    const known = byFile.get(diagnostic.file);
+    if (known === undefined || diagnostic.message < known.message) byFile.set(diagnostic.file, diagnostic);
   };
   const copiesAt = new Map<string, Map<string, WipCopy>>();
   loadTypeDocumentCopiesAtRevs(root, revs, memoryYaml, type, { onDiagnostic }).forEach((copies, index) => {
@@ -601,6 +609,7 @@ export function requireWipSlot(
     }
     copiesAt.set(revs[index] as string, byKey);
   });
+  const unreadable = [...byFile.keys()].sort().map((file) => byFile.get(file) as Diagnostic);
 
   // The decided commit's copy, unless a ref changed the element since the fork.
   const elements = new Map<string, WipCopy>(copiesAt.get(decided));
@@ -611,6 +620,9 @@ export function requireWipSlot(
       if (atBase.get(key)?.state === copy.state) continue;
       const known = changed.get(key);
       if (known === undefined || isMoreAdvancedState(machine, copy.state, known.state)) changed.set(key, copy);
+      // Two copies in the same state tie: the one whose path sorts first wins, so the copy kept — and
+      // where the refusal names it — never depends on the order the refs were read in (REQ-SYS-07).
+      else if (copy.state === known.state && copy.path < known.path) changed.set(key, copy);
     }
   }
   for (const [key, copy] of changed) elements.set(key, copy);
@@ -671,7 +683,18 @@ export interface BegunMemoryTransition extends PreparedMemoryTransition {
    * `bug-149`).
    */
   readonly identity: GitIdentity;
+  /**
+   * The agent context of the invocation, resolved once right after membership (`spec-006` §7 step 2, `spec-018` §2.6,
+   * `bug-531`): the gated form for `approve`, `reject` and `amend`, handed to their authority check; the ungated form
+   * otherwise, whose attribution {@link commitMemoryTransition} hands to the commit primitive. Always set by
+   * {@link beginMemoryTransition}; absent on the superseded element's transition the `supersedes:` trigger prepares
+   * (`./memory-supersede.ts`), the second commit of an approve, which carries no agent trailer (`spec-018` §3.3).
+   */
+  readonly agent?: AgentContext;
 }
+
+/** The transition verbs that are approver-gated (`spec-018` §0): their agent context is the gated form (§2.6). */
+const GATED_TRANSITIONS: ReadonlySet<string> = new Set(['approve', 'reject', 'amend']);
 
 /**
  * The shared preamble of every state-moving `memory` verb — `submit`, `approve`, `reject`,
@@ -691,12 +714,16 @@ export function beginMemoryTransition(
   id: string,
   op: TransitionOp | 'amend' | 'finalize',
   options: ReferenceLookupOptions = {},
-): CoreResult<BegunMemoryTransition> {
+): CoreResult<BegunMemoryTransition & { readonly agent: AgentContext }> {
   const identity = requireGitIdentity(root);
   if (!identity.ok) return identity;
+  const member = requireTeamMembership(root, identity.value);
+  if (!member.ok) return member;
+  const agent = GATED_TRANSITIONS.has(op) ? coreOk<AgentContext>(resolveGatedAgentContext()) : resolveOperationAgentContext(root);
+  if (!agent.ok) return agent;
   const prepared = prepareMemoryTransition(root, id, op, options);
   if (!prepared.ok) return prepared;
-  return coreOk({ ...prepared.value, identity: identity.value });
+  return coreOk({ ...prepared.value, identity: identity.value, agent: agent.value });
 }
 
 /**
@@ -865,7 +892,11 @@ export function commitMemoryTransition(
   const checked = checkMemoryTransition(root, prepared, content, expected, scope);
   if (!checked.ok) return checked;
   const owned = { status: prepared.to, ...expected };
-  const sha = writeAndCommit(root, [{ path: prepared.path, content }], message, { author: prepared.identity, warnings });
+  const sha = writeAndCommit(root, [{ path: prepared.path, content }], message, {
+    author: prepared.identity,
+    warnings,
+    attribution: prepared.agent?.attribution ?? undefined,
+  });
 
   const leaked = verifyCommittedScope(root, sha, prepared.path, owned, scope);
   if (leaked.length > 0) {

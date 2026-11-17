@@ -4,7 +4,9 @@
  * schema §2.2, the placeholder rules §2.3, discovery and loading at a revision §2.1, §3.2 step 5, and
  * the report of what under `.wingfoil/agents/` is not an adapter, `bug-290`), the run log (task-206),
  * `agent execute`'s pipeline up to the spawn (task-218, `./execute.ts`) and the launch (task-228,
- * `./launch.ts`). Its operations are registered under the `agent` `CoreModule` (`src/core/index.ts`).
+ * `./launch.ts`), interactive or headless with an optional time bound (task-335, `./duration.ts`), a headless run's
+ * forwarded output and its `--log` copy (task-336, `./output.ts`), the active registry of running launches (task-336,
+ * `./active-runs.ts`), and the per-clone session salt of an assigned session id (task-338, `./session-salt.ts`). Its operations are registered under the `agent` `CoreModule` (`src/core/index.ts`).
  */
 export const MODULE_NAME = 'agent' as const;
 
@@ -39,6 +41,7 @@ export {
   runLogDirPrefix,
   runLogPreflight,
   serializeRunRecord,
+  START_UP_HINT_NOTES,
   W_RUN_LOG_SYMLINK,
 } from './run-log';
 export type {
@@ -51,24 +54,50 @@ export type {
   RunTokens,
 } from './run-log';
 export {
+  agentEnvironment,
   assignedSessionId,
+  CLI_VARIABLE,
   launchAgent,
   launchBanner,
+  launchPermissions,
+  launchTrust,
   LOOKUP_TIMEOUT_MS,
   readJsonPath,
   renderLaunchArgv,
   runSummaryLine,
   SESSION_ID_NAMESPACE,
+  TIMEOUT_GRACE_MS,
   uuidV5,
 } from './launch';
-export type { LaunchHost, LaunchInput, LaunchValues, RecordedLaunch, SpawnAgent } from './launch';
+export type { LaunchHost, LaunchInput, LaunchKindRun, LaunchValues, RecordedLaunch, SpawnAgent } from './launch';
+export { SESSION_SALT_FILE, sessionSalt } from './session-salt';
+export {
+  ACTIVE_RUNS_DIR,
+  activeRunPath,
+  couldNotRemoveWarning,
+  notAnEntryUnremovedWarning,
+  notAnEntryWarning,
+  processAlive,
+  readActiveRuns,
+  registerRun,
+  REGISTRY_NOT_IGNORED_WARNING,
+  removeRun,
+  rewriteRunPid,
+} from './active-runs';
+export type { ActiveRunEntry } from './active-runs';
+export { LOG_INTERACTIVE, lineSplitter, logNotIgnoredWarning, notIgnoredInRepository, openLog, OUTPUT_LINE_CAP } from './output';
+export type { LineSplitter, OpenLog } from './output';
+export { MAX_TIMEOUT_MS, parseDuration } from './duration';
+export type { TimeBound } from './duration';
 export {
   agentCommandFound,
   attributionLine,
   ATTRIBUTION_LINE_PREFIX,
   agentExecutePipeline,
+  cliShim,
   DEFAULT_ROLE,
   DEFAULT_ROLE_WARNING,
+  DRY_RUN_TERMINAL_WARNING,
   FRESH_MODE,
   handoffLine,
   launchPlan,
@@ -77,6 +106,8 @@ export {
   mcpPreflight,
   renderBootstrap,
   renderMcpTemplate,
+  resolveLaunchKind,
+  runningBuildCli,
   runningBuildMcpServer,
   selectAgent,
   withRunFiles,
@@ -86,6 +117,7 @@ export type {
   AgentExecuteRequest,
   AgentLaunchPlan,
   BootstrapInput,
+  CliShim,
   McpPreflightInput,
   McpServerCommand,
   PreparedLaunch,

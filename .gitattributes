@@ -1,0 +1,2 @@
+# Run records (spec-016 §4.1): one JSON object per LF-terminated line, whatever the checkout platform.
+*.jsonl text eol=lf

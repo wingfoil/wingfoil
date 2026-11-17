@@ -116,9 +116,11 @@ describe('resolveRoleHolders (AC-2 — Fit Criterion: DNA is the sole source of 
 
 describe('module surface (AC-3, dl-033-canonical-role-resolver option b)', () => {
   it('exports only the P5.4.2 directive-binding primitives — no approval-routing symbol', () => {
+    // task-340 (dl-202 item 1): + isHumanOnlyRole, the one human-only predicate (a DNA read, not approval routing).
     expect(Object.keys(rolesModule).sort()).toEqual([
       'UnknownRoleError',
       'assertRoleDefined',
+      'isHumanOnlyRole',
       'isRoleDefined',
       'resolveRoleHolders',
     ]);

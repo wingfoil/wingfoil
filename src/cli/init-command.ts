@@ -20,7 +20,7 @@ import {
   DEFAULT_TEMPLATE,
   TEMPLATE_NAMES,
   resolveTemplate,
-} from '../storage';
+} from '../core/surface-reads';
 
 import { emitError } from './error';
 import { exitWith } from './exit';

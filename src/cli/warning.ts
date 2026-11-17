@@ -48,6 +48,16 @@ export function emitNotice(text: string, opts: { format: OutputFormat }): void {
 }
 
 /**
+ * Write one line of a headless agent's forwarded output (task-336, `reportOutput`: `spec-016` §3.5, `dl-182` Q1 (a))
+ * to stderr in the active `--format`'s shape: the line as is for `console`, `{"output": "<line>", "stream": "stdout" |
+ * "stderr"}` for `json`, one self-delimiting YAML document for `yaml`, so a structured stderr stays one document per
+ * message (`spec-005` §3.2).
+ */
+export function emitOutput(line: string, stream: 'stdout' | 'stderr', opts: { format: OutputFormat }): void {
+  emitStderrDocument({ output: line, stream }, line, opts);
+}
+
+/**
  * Write one stderr message: `document` as one JSON line (`json`) or one `---`/`...` YAML document
  * (`yaml`), `consoleLine` as is (`console`). The success report of a command that writes nothing on
  * stdout (`CoreOperation.renderToStderr`, `spec-016` §3.4) goes through here too.

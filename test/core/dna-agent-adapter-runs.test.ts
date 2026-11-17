@@ -32,6 +32,7 @@ stacks:
 team:
   members:
     - name: roberto
+      email: wf-test@example.invalid
       roles: [ approver ]
   agents:
     - name: claude

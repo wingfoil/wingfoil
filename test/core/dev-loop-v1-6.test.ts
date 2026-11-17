@@ -18,9 +18,10 @@
  * sources and `package.json` are read from the working tree, as the other live-configuration suites do.
  *
  * What is NOT asserted here: that any of these checks is evaluated — no check runs before P4.12 (v1.0,
- * `dl-090` Q2 (c)); the unbound ones are `W_WORKFLOW_UNBOUND_TOKEN` warnings until then. The readings a human
- * confirms on purpose — `acceptance-criteria.consistent`, `claims.rerun`, `rereview.previous-reject` — are bound
- * `manual: true` (task-303, `dl-186` Q6, `dl-172` (a)) and raise no warning.
+ * `dl-090` Q2 (c)). The readings a human confirms on purpose — `acceptance-criteria.consistent`, `claims.rerun`,
+ * `rereview.previous-reject` — are bound `manual: true` (task-303, `dl-186` Q6, `dl-172` (a)) and raise no warning.
+ * task-358 (`bug-469`, `bug-320`, approver ruling D1 (B)) bound the rest: `stop-the-line.clear` `manual: true` until a
+ * command decides it, `retrospective.present` `run` (`scripts/check-retrospective.cjs` on `{element.path}`).
  */
 import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
@@ -101,9 +102,9 @@ describe('AC 1 — dev-loop.yaml v1.6 declares the seven v0.3 gates (red-first)'
   });
 
   describe('design — each criterion read against the directives and the ratified specs (dl-102 §4)', () => {
-    it('`design.checks.post` keeps its three checks and adds `acceptance-criteria.consistent`', () => {
+    it('`design.checks.post` keeps its three checks and adds `acceptance-criteria.consistent`, then task-348\'s `pinned-build.reads` (dl-205 Q1 (a))', () => {
       const names = (phase('design').checks?.post ?? []).map(tokenName);
-      expect(names).toEqual(['frontmatter.required', 'tech-spec.approved', 'depends_on.acknowledged', 'acceptance-criteria.consistent']);
+      expect(names).toEqual(['frontmatter.required', 'tech-spec.approved', 'depends_on.acknowledged', 'acceptance-criteria.consistent', 'pinned-build.reads']);
       expect(declaringLine('design', 'acceptance-criteria.consistent')).toMatch(/dl-102/);
     });
   });
@@ -129,9 +130,9 @@ describe('AC 1 — dev-loop.yaml v1.6 declares the seven v0.3 gates (red-first)'
   });
 
   describe('review — claim re-run (dl-097 (a)), re-review (dl-098), parity suites (dl-116)', () => {
-    it('`review.checks.pre` keeps `tests.bdd.passing` first and adds the three checks', () => {
+    it('`review.checks.pre` keeps `tests.bdd.passing` first and adds the three checks (task-349 appends `gate.slot-free` last)', () => {
       const names = (phase('review').checks?.pre ?? []).map(tokenName);
-      expect(names).toEqual(['tests.bdd.passing', 'claims.rerun', 'rereview.previous-reject', 'docs.parity']);
+      expect(names).toEqual(['tests.bdd.passing', 'claims.rerun', 'rereview.previous-reject', 'docs.parity', 'gate.slot-free']);
       expect(declaringLine('review', 'claims.rerun')).toMatch(/dl-097/);
       expect(declaringLine('review', 'rereview.previous-reject')).toMatch(/dl-098/);
       expect(declaringLine('review', '"docs.parity"')).toMatch(/dl-116/);
@@ -207,13 +208,13 @@ describe('AC 2 — workflow show dev-loop lists each new check with its binding,
   });
 
   it.each([
-    ['start:stop-the-line.clear', 'unbound'],
+    ['start:stop-the-line.clear', 'manual'],   // task-358 (bug-469, D1 (B)): manual until a command
     ['design:acceptance-criteria.consistent', 'manual'],
     ['refactor:typecheck.clean', 'run'],
     ['review:claims.rerun', 'manual'],
     ['review:rereview.previous-reject', 'manual'],
     ['review:docs.parity', 'run'],
-    ['done:retrospective.present', 'unbound'],
+    ['done:retrospective.present', 'run'],     // task-358 (bug-320): scripts/check-retrospective.cjs on {element.path}
   ])('%s is shown with binding kind %s, never evaluated', (key, kind) => {
     const entry = checks.get(key);
     expect(entry).toBeDefined();

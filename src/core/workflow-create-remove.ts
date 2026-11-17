@@ -20,7 +20,7 @@
  */
 import { join } from 'path';
 
-import { documentExists, readDocument, writeAndCommit } from '../storage';
+import { documentExists, readDocument, writeAndCommit, type CommitAttribution } from '../storage';
 import { DiagnosticsError, raiseConfigVersion } from '../validation';
 import { withWarningSink } from '../validation/warning';
 import { renderCustomWorkflow, type NewWorkflow } from '../workflow/create';
@@ -28,9 +28,11 @@ import { deduceWorkflowState, type Baseline } from '../workflow/deduce';
 import { withIncludeAdded, withIncludeRemoved, type ManifestEdit } from '../workflow/manifest-edit';
 import { invalidKindMessage, WORKFLOW_NAME_RE, type Workflow } from '../workflow/schema';
 
+import { resolveOperationAgentContext } from './agent-context';
 import { requireCustomAsset } from './builtin-asset';
 import { requireConfinedTarget, requireConfinedWriteTarget } from './confinement';
 import { requireGitIdentity } from './git-identity';
+import { requireTeamMembership } from './team-membership';
 import { requireInitializedProject } from './init';
 import { missingOperandReason } from './registry';
 import { atHeadOr, resolveRevision } from './revision';
@@ -134,7 +136,7 @@ function prospectiveLoad(root: string, sha: string, overlay: ReadonlyMap<string,
   try {
     withWarningSink(
       () => {},
-      () => loadWorkflowRegistryAtRev(root, sha, overlay),
+      () => loadWorkflowRegistryAtRev(root, sha, overlay, 'HEAD'),
     );
     return coreOk(undefined);
   } catch (error) {
@@ -143,9 +145,17 @@ function prospectiveLoad(root: string, sha: string, overlay: ReadonlyMap<string,
   }
 }
 
-/** Commit `changes` as `message` and verify the commit carries exactly them (the post-commit alarm). */
-function commitBoth(root: string, changes: readonly { path: string; content: string | null }[], message: string): CoreResult<string> {
-  const sha = writeAndCommit(root, changes, message);
+/**
+ * Commit `changes` as `message`, naming `attribution` as co-author in an agent's session (`spec-018` §2.2), and verify
+ * the commit carries exactly them (the post-commit alarm).
+ */
+function commitBoth(
+  root: string,
+  changes: readonly { path: string; content: string | null }[],
+  message: string,
+  attribution: CommitAttribution | undefined,
+): CoreResult<string> {
+  const sha = writeAndCommit(root, changes, message, { attribution });
   const problems = verifyCommittedPaths(root, sha, new Map(changes.map((change) => [change.path, change.content])));
   if (problems.length > 0) return coreErr({ code: 'VALIDATION', message: `commit ${sha} carries more than the change it declares: ${problems.join('; ')}` });
   return coreOk(sha);
@@ -164,12 +174,16 @@ export async function workflowCreate(params: WorkflowCreateParams): Promise<Core
   const workflow = createUsage(params);
   const identity = requireGitIdentity(root);
   if (!identity.ok) return identity;
+  const member = requireTeamMembership(root, identity.value);
+  if (!member.ok) return member;
+  const agent = resolveOperationAgentContext(root);
+  if (!agent.ok) return agent;
   const initialized = requireInitializedProject(root);
   if (!initialized.ok) return initialized;
 
   const sha = atHeadOr(root, () => resolveRevision(root, 'HEAD'), null);
   if (sha === null) return coreErr({ code: 'VALIDATION', message: 'workflow create needs a commit at HEAD: commit the project configuration first' });
-  const registry = loadWorkflowRegistryAtRev(root, sha);
+  const registry = loadWorkflowRegistryAtRev(root, sha, undefined, 'HEAD');
   const { name } = workflow;
   if (registry.workflows.some((loaded) => loaded.name === name)) return coreErr({ code: 'CONFLICT', message: workflowExistsMessage(name), details: { name } });
 
@@ -202,7 +216,7 @@ export async function workflowCreate(params: WorkflowCreateParams): Promise<Core
   if (!loads.ok) return loads;
 
   const message = `wf(workflow): create ${name}`;
-  const committed = commitBoth(root, [{ path: file, content }, { path: WORKFLOWS_MANIFEST_PATH, content: edit.text }], message);
+  const committed = commitBoth(root, [{ path: file, content }, { path: WORKFLOWS_MANIFEST_PATH, content: edit.text }], message, agent.value.attribution ?? undefined);
   if (!committed.ok) return committed;
   return coreOk(
     { baseline: { rev: 'HEAD', commit: sha }, name, file, startable: workflow.startable, includable: workflow.includable, commit: committed.value },
@@ -234,6 +248,10 @@ export async function workflowRemove(params: WorkflowRemoveParams): Promise<Core
   if (ref === undefined || ref.trim() === '') throw new UsageError(missingOperandReason('ref'));
   const identity = requireGitIdentity(root);
   if (!identity.ok) return identity;
+  const member = requireTeamMembership(root, identity.value);
+  if (!member.ok) return member;
+  const agent = resolveOperationAgentContext(root);
+  if (!agent.ok) return agent;
   const initialized = requireInitializedProject(root);
   if (!initialized.ok) return initialized;
 
@@ -285,7 +303,7 @@ export async function workflowRemove(params: WorkflowRemoveParams): Promise<Core
   if (!loads.ok) return loads;
 
   const message = `wf(workflow): remove ${name}`;
-  const committed = commitBoth(root, [{ path: file, content: null }, { path: WORKFLOWS_MANIFEST_PATH, content: edit.text }], message);
+  const committed = commitBoth(root, [{ path: file, content: null }, { path: WORKFLOWS_MANIFEST_PATH, content: edit.text }], message, agent.value.attribution ?? undefined);
   if (!committed.ok) return committed;
   return coreOk({ baseline: deduction.baseline, name, file, commit: committed.value }, { sha: committed.value, message });
 }

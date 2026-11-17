@@ -25,6 +25,8 @@ import { join } from 'node:path';
 
 import { CORE_MODULES } from '../../src/core';
 import { exitCodeForResult } from '../../src/core/exit-code';
+import { requireApprovalAuthority } from '../../src/core/approval-authority';
+import { readGitIdentity } from '../../src/core/git-identity';
 import type { CoreFn } from '../../src/core/registry';
 import { commitAll, git, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
 import { assertPersistenceUnchanged, snapshotPersistence } from '../storage/helpers/persistence-snapshot';
@@ -214,7 +216,12 @@ describe('approval authority is resolved from the committed dna.yaml (bug-079, R
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(exitCodeForResult(result)).toBe(1);
-    expect(result.error.message).toContain('cannot resolve approval authority');
+    // task-333 (design D2, `spec-006` §7 "Membership"): the membership step reads the same committed file first and
+    // refuses it fail-closed with its own message; the authority check, called directly, still refuses it with its own.
+    expect(result.error.message).toContain('cannot resolve team membership');
+    const direct = requireApprovalAuthority(repo, 'adr', readGitIdentity(repo), { markers: [], attribution: null }, 'memory approve');
+    expect(direct.ok).toBe(false);
+    if (!direct.ok) expect(direct.error.message).toContain('cannot resolve approval authority');
     expect(head(repo)).toBe(before);
     assertPersistenceUnchanged(repo, unchanged);
   });

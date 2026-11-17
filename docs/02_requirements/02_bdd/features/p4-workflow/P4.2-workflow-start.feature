@@ -24,3 +24,9 @@ Feature: P4.2 (US-0A-16) - wingfoil workflow start
     When I run "wingfoil workflow start dev-loop"
     Then no workflow is started
     And the command exits with code 1 and message "cannot start a sub workflow directly: dev-loop"
+
+  Scenario: The plan of a started workflow is left to be written
+    When I run "wingfoil workflow start report-bug"
+    Then its plan is in draft
+    And the output names "wingfoil memory submit report-bug-1-plan"
+    And "wingfoil workflow end" is refused until the plan is submitted

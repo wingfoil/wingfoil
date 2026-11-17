@@ -80,6 +80,18 @@ const { delimiter, dirname, isAbsolute, join, resolve } = require('node:path');
 const { PACK_INPUTS, inputStatus } = require('./write-build-info.cjs');
 
 /**
+ * The `spec-018` §1 environment markers (task-333 design D14), spelled here because the smoke runs from a copy of
+ * `scripts/` where neither `test/` nor `dist/` exists; `test/cli/e2e-smoke-agent-markers.test.ts` holds the list
+ * equal to `test/agent-markers.cjs`'s, and that one to `AGENT_MARKERS` (`src/core/agent-context.ts`).
+ */
+const AGENT_ENV_MARKERS = Object.freeze(['WINGFOIL_AGENT', 'CLAUDE_CODE_CHILD_SESSION', 'CODEX_SANDBOX']);
+
+/** `env` without the {@link AGENT_ENV_MARKERS}, every other variable kept. */
+function withoutAgentMarkers(env) {
+  return Object.fromEntries(Object.entries(env).filter(([key]) => !AGENT_ENV_MARKERS.includes(key)));
+}
+
+/**
  * A commit an expected stamp may name: a full hex object name, SHA-1 (40) or SHA-256 (64) — the shape
  * `scripts/write-build-info.cjs` records for a clean build (`git rev-parse HEAD`). An abbreviated sha
  * could never equal a real stamp, so it is refused as an argument rather than failing every run; and
@@ -273,8 +285,8 @@ function agentRunSteps(template) {
       commit: 'smoke: the fake adapter custom/fake (spec-016 §2.7)',
     },
     {
-      // `.invalid` is refused for an agent's email (bug-261), so the agent is not the smoke's own identity.
-      args: ['dna', 'add', 'team.agents', '--value', 'Fake Agent', '--entry-email', 'fake-agent@example.com', '--entry-executes_as', 'developer', '--entry-adapter', 'fake'],
+      // RFC 2606 domains are refused for an agent's email (bug-261, bug-193), so the agent is not the smoke's own identity.
+      args: ['dna', 'add', 'team.agents', '--value', 'Fake Agent', '--entry-email', '0+fake-agent@users.noreply.github.com', '--entry-executes_as', 'developer', '--entry-adapter', 'fake'],
       exit: 0,
     },
     { args: ['agent', 'execute', '--element', 'task:{agent.id}', '--role', 'developer'], exit: 0, fakeAgent: true },
@@ -928,7 +940,10 @@ function runSmoke(options) {
     if (options.expectedVersion === undefined) throw new Error('expectedCommit requires expectedVersion');
     assertCommitName(options.expectedCommit);
   }
-  const env = options.env ?? process.env;
+  // The smoke's throwaway repository plays the approver on purpose, so its base environment carries no `spec-018`
+  // §1 agent marker: run by an agent (`wave-checks`, the `e2e-smoke` phase), its approvals would be refused for the
+  // runner's reason (task-333 design D14).
+  const env = withoutAgentMarkers(options.env ?? process.env);
   const prefix = options.commandArgs ?? [];
   const log = options.log ?? (() => undefined);
   // A step may carry its own environment (the agent run's fake switches, task-243); every other step gets `env`.
@@ -1300,6 +1315,7 @@ if (require.main === module) {
 }
 
 module.exports = {
+  AGENT_ENV_MARKERS,
   AGENT_FIXTURES,
   JOURNEY_COMMANDS,
   JOURNEY_SCRIPT,

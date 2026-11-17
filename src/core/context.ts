@@ -217,6 +217,10 @@ export interface ContextRequest {
   /** The revision every read is pinned to — a sha, or any name of one commit (`HEAD`, a branch). It is
    * resolved once; the payload records the full sha. */
   readonly stateRef: string;
+  /** How warnings and errors the reads raise name the revision (`<label>:<path>`); `stateRef` as given when
+   * omitted. A caller that resolved `HEAD` to the sha it passes as `stateRef` passes `'HEAD'` (task-354,
+   * `bug-317`). It never reaches the payload. */
+  readonly label?: string;
   /** Memory caps (§6); {@link DEFAULT_CONTEXT_LIMITS} when omitted. */
   readonly limits?: ContextLimits;
 }
@@ -805,12 +809,14 @@ export function assembleExecutionContext(root: string, request: ContextRequest):
   }
   const { role, element: wanted } = request;
   const label = `${wanted.type}:${wanted.id}`;
+  // How the reads below name the revision in a warning or an error; never part of the payload (task-354).
+  const revLabel = request.label ?? request.stateRef;
 
   // The scan is tolerant (task-171, `bug-031`): a document it cannot read is left out and reported as
   // `W_MEMORY_UNREADABLE`, so one malformed sibling no longer fails every context. It reads archived
   // documents too — the archived subject is refused below, and §6 drops archived candidates itself.
   const diagnostics: Diagnostic[] = [];
-  const memoryYaml = loadMemoryYamlAtRev(root, sha);
+  const memoryYaml = loadMemoryYamlAtRev(root, sha, revLabel);
   const documents =
     memoryYaml === null
       ? null
@@ -848,11 +854,11 @@ export function assembleExecutionContext(root: string, request: ContextRequest):
   const dnaSelected =
     dnaRaw === null
       ? undefined
-      : selectDnaSections(loadDnaYamlAtRev(root, sha)!, declaredKeyOrder(dnaRaw, `${sha}:${DNA_YAML_PATH}`), frontmatter);
+      : selectDnaSections(loadDnaYamlAtRev(root, sha, revLabel)!, declaredKeyOrder(dnaRaw, `${revLabel}:${DNA_YAML_PATH}`), frontmatter);
   const dna = dnaSelected?.selection;
 
-  const rolesYaml = loadRolesYamlAtRev(root, sha);
-  const resolution = rolesYaml === null ? undefined : resolveRoleDirectives(loadDirectivesAtRev(root, sha), rolesYaml, role);
+  const rolesYaml = loadRolesYamlAtRev(root, sha, revLabel);
+  const resolution = rolesYaml === null ? undefined : resolveRoleDirectives(loadDirectivesAtRev(root, sha, revLabel), rolesYaml, role);
   const directives = resolution === undefined ? undefined : withBodies(root, sha, resolution.directives);
 
   const candidates =

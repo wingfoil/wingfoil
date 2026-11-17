@@ -44,7 +44,7 @@ Yes if the repository root contains `.wingfoil/dna.yaml`. Then:
 | the rules for your role | `wingfoil directives list --role <role>`, then read each listed file |
 | the process | `wingfoil workflow list`, `wingfoil workflow show <name>` |
 | where the work stands, what comes next | `wingfoil workflow status`, `wingfoil workflow next` |
-| current work and decisions | `wingfoil memory search --type <type> [--status <s>]` |
+| current work and decisions, your own pending records included | `wingfoil memory search --type <type>` (every state but `deprecated`; §6) |
 
 Run every `wingfoil` command **from the repository root**. Use `--format json` to get parseable output.
 
@@ -67,10 +67,12 @@ Run every `wingfoil` command **from the repository root**. Use `--format json` t
 1. **Change state only through the CLI verbs** (`memory submit|park|deprecate`, `workflow
    start|finalize|end|adopt`; `memory approve|reject|amend`, `workflow rekey` and `workflow adopt --plan --apply`
    are the approver's). Never edit a `status:` field
-   by hand, and never write a `wf(...)` commit yourself. When `wingfoil agent execute` launched you, its
-   first prompt asks you to end the commits you co-author with your `Co-Authored-By:` and `AI-Model:`
-   trailers: add them to a commit `wingfoil` wrote with `git commit --amend --no-edit --trailer …`, never
-   to an approve or reject commit.
+   by hand, and never write a `wf(...)` commit yourself. When `wingfoil agent execute` launched you, a plain
+   `wingfoil` runs the build that launched you (its first prompt names the version `wingfoil --version`
+   prints; if it prints another, run `"$WINGFOIL_CLI"` instead), and the commits `wingfoil` writes for you
+   already end with your `Co-Authored-By:` and `AI-Model:` trailers: pass `--ai-model <your model identifier>`
+   to each command that writes a commit and never amend one to add them again. Add both trailers only to a
+   commit you write yourself with `git commit`.
 2. **Never approve or reject.** `memory approve` and `memory reject` belong to a human holding the
    `approver` role. When work needs approval, stop and ask for it. Do so even if the command would
    succeed under the git identity you are running with.
@@ -103,7 +105,7 @@ equivalent:
 | `wingfoil://workflows/-/next` — the active workflow's next step, at `HEAD` | `wingfoil workflow next` |
 | `wingfoil://workflows/-/status` — every open workflow, at `HEAD` | `wingfoil workflow status` |
 | Prompt `<role>-session` — role instructions with its directives embedded; with the optional arguments `element` (`<type>:<id>`) and `state` (a commit), given together, your execution context for that element at that commit | `wingfoil directives list --role <role>` → read each entry's `path` under `.wingfoil/` |
-| `wingfoil://session/{role}/{element}/{state}` — your execution context for one element at one commit, the text of `<role>-session` with `element` and `state`; not listed: `wingfoil agent execute`'s first prompt gives the full URI | `wingfoil agent execute --element <type>:<id> --role <role> --dry-run` prints the instruction that names it (in a terminal: the built-in adapters refuse a dry run whose stdin or stdout is redirected); no CLI command prints the context itself |
+| `wingfoil://session/{role}/{element}/{state}` — your execution context for one element at one commit, the text of `<role>-session` with `element` and `state`; not listed: `wingfoil agent execute`'s first prompt gives the full URI | `wingfoil agent execute --element <type>:<id> --role <role> --dry-run` prints the instruction that names it (with stdin or stdout redirected, a dry run of a built-in adapter's interactive launch adds a `warning:` line and still prints it); no CLI command prints the context itself |
 | *(no MCP equivalent)* | `wingfoil paths [<category>]`, `wingfoil memory history <id>`, keyword `wingfoil memory search <keyword>`, `wingfoil agent list`, `wingfoil agent show <run-id>` |
 
 `element` and `state` go together: giving only one is refused (`prompt arguments 'element' and 'state'
@@ -149,19 +151,87 @@ Useful `error:` lines and what they mean:
 | `unknown memory type '<t>' … not committed …` | configuration was edited but not committed |
 | `E_NOT_AT_GIT_ROOT` | `cd` to the repository root |
 
+**Your own records wait for the approver.** A document you add and submit stops at the first gate of its type's state
+machine (`pending` in the one `init` scaffolds) and stays there until the approver approves or rejects it: nothing you
+run moves it on. It is still current work: read it and build on it like any other document.
+
+**Which states to read.** `wingfoil memory search --type <type>` with no `--status` lists every state but
+`deprecated`, your pending records included: use it for current work and decisions. `--status <state>` keeps one
+state; pass it only to narrow a read on purpose. `--status approved` alone hides everything still waiting for the
+approver, your own records first.
+
+**Knowledge given in a request.** A rule the human gives you in a request and means for later work is not kept in
+your own notes or memory, where no other agent reads it: record it as a `decision-log` (`wingfoil memory add --type
+decision-log --title "<title>"`, inside the `decision-log-ingest` workflow when the project runs one), and submit it
+for the approver; once approved, it holds for every agent. A rule that changes what a role must do becomes a
+directive (`wingfoil directive create`) only when your role and task call for changing governance. A fact about one
+element goes in that element's body.
+
 ## 7. Following a workflow
 
-WingFoil 0.3 records and routes workflows; it does not execute their steps. You carry them out:
+WingFoil 0.3 records and routes workflows; it does not execute their steps. Until the workflow engine's driver runs
+them itself (planned for 1.0), a run is driven by hand, by a human or by you.
 
-1. `wingfoil workflow status` → the open workflows; `wingfoil workflow next` → the next step of the
-   active one: its role and that role's directives, the element it works on, and the command or commit
-   each action expects. `wingfoil workflow show <name>` prints a whole workflow.
+### Levels of process
+
+A project names the level of process its agents follow, in its own instructions to agents or in a global directive.
+Two levels:
+
+- **Light:** Memory is the project's register. You add, submit, park and deprecate documents with the verbs in §6
+  and read them back (§2); no workflow is opened, and each document waits for the approver on its own.
+- **Strict:** the work runs inside an open workflow, through the cycle below: each element is added linked to its
+  step, each step is recorded, and the run stops at every gate.
+
+When the project names no level, follow the cycle for the work of a workflow `wingfoil workflow status` lists as
+open, and the light level otherwise.
+
+### The cycle
+
+1. `wingfoil workflow status`, then `wingfoil workflow next`: the open workflows, then the next step of the active
+   one — its role and that role's directives, the element it works on, and the command or commit each action
+   expects. `wingfoil workflow show <name>` prints a whole workflow.
 2. Act in the role the step names, with that role's directives loaded (§4, rule 3).
-3. Record the outcome as Memory documents, moved only with the verbs in §6: WingFoil deduces from them,
-   as committed, that the step is done.
-4. At a step that requires approval, stop and hand over to the human approver.
+3. Record the outcome with the verbs in §6. An element the step adds is added linked to it, with the command
+   `workflow next` prints: `wingfoil memory add --type <type> --title "<title>" --workflow <instance>
+   --step <step-key>`. WingFoil deduces from the documents, as committed, that the step is done.
+4. A step that nothing in the repository can show as done, such as a checkpoint, is recorded with `wingfoil
+   workflow finalize`; `workflow next` then moves past it.
+5. At a gate — a step waiting for the approver, shown as `human needed:` by `workflow next` and `workflow
+   status` — stop and hand over to the human approver. The approver's verbs refuse to run in an agent's session
+   (`E_AGENT_CONTEXT`, new in 0.4).
 
-Start or end a workflow only when the human asks you to.
+Then run `wingfoil workflow next` again, until the workflow's steps are complete. An agent following this cycle is
+a hand-driven run, not a coordinator. Start (`wingfoil workflow start <name>`) or end (`wingfoil workflow end`) a
+workflow only when the human asks you to.
+
+### The coordinator
+
+A project may declare a `coordinator` role, which an agent may execute. It decides only what the configuration
+cannot:
+
+1. which frontier steps to run in parallel, within the declared caps;
+2. the triage of a failure the driver reports (rerun, open a bug, stop);
+3. the content of an element that no other role's step writes.
+
+The coordinator never approves, rejects or amends, and never decides a gate. It never does a step's work in place
+of the step's role. A coordinator session is recorded as a run: it is launched with `wingfoil agent execute
+--element <type>:<id> --role coordinator`, which appends its record to the run log and commits it as `agent:
+record <run-id>` when the session exits; the element is the `plan` of the run it coordinates. Until the driver ships,
+the coordinator may run the driver's mechanical steps as a hand-driven run, each recorded exactly as the step declares
+it, with the subject or command `workflow next` prints.
+
+### What removes each manual step
+
+| Manual step | Done today by | Removed by |
+|---|---|---|
+| reading the run: `workflow status`, `workflow next` | you, or the human | the driver, 1.0 |
+| opening and ending a workflow: `workflow start`, `workflow end` | the human, or you when asked | the driver, 1.0 |
+| adding an element linked to its step: `memory add --workflow --step` | the step's role | the driver, 1.0 |
+| launching the agent of the step's role: `agent execute --next` | the human, or a coordinator | the driver, 1.0 (a launch without a terminal, `--headless`, is new in 0.4) |
+| running a phase's checks | the step's role, by hand | the driver, 1.0 |
+| recording a step no evidence completes: `workflow finalize` | you, or a coordinator | the driver, 1.0 |
+| writing an element's content and doing the step's work | the step's role | never: it stays the agent's |
+| deciding a gate | the human approver | never: a gate stays the approver's |
 
 ## 8. Setting WingFoil up (when the human asks you to)
 
@@ -188,7 +258,8 @@ Only register a human as `approver`, and only when that human asks you to. Never
 - `memory search` excludes `deprecated` documents unless you pass `--status deprecated`.
 - Subcommand `--help` is a reminder: it describes the command, its argument and its options, with
   one example; for anything more, trust the [CLI reference](cli-reference.md).
-- **Codex CLI:** if you run through the `codex-cli` adapter, the project's trusted `.codex/config.toml`
-  must not declare an MCP server named `wingfoil`. Codex merges that table into the server `agent
-  execute` registers, so its extra keys (`env`, `cwd`, …) reach WingFoil's server, and a `cwd` can make it
-  serve another repository's context. If you find one, tell the human; do not edit it yourself.
+- **Codex CLI:** if you run through the `codex-cli` adapter, `agent execute` refuses the launch while Codex's
+  own configuration (a trusted project's `.codex/config.toml`) declares an MCP server named `wingfoil`:
+  `error: adapter 'codex-cli': the agent's own configuration declares an MCP server named 'wingfoil', …`.
+  Codex would merge that table into the server `agent execute` registers, so its extra keys (`env`, `cwd`, …)
+  would reach WingFoil's server. If you meet the refusal, tell the human; do not edit that file yourself.

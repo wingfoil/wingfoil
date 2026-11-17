@@ -63,10 +63,12 @@
  *   numerically greater (`isVersionIncrease`, `src/validation`, shared with the pending-change gate of
  *   `test/lint/helpers/version-bump.ts`). The finding sits on the range's last commit touching the file.
  *   Without `--base` nothing is judged: a whole-history run has no range to bump over.
- * - `approval-ai-trailer` (`bug-307`; rule `body`): an `approve` or `reject` commit records the
- *   approver's decision and carries no `Co-Authored-By:` and no `AI-Model:` line (`git-conventions` §7);
- *   every other verb may. The approve/reject commits written before this check are history: they cannot
- *   be rewritten (`git-conventions` §2, §8).
+ * - `approval-agent-trailer` (`spec-018` §4, task-333; widening `bug-307`'s `approval-ai-trailer`; rule `body`): on
+ *   every non-merge commit whose message has a line starting `Approver:` (any letter case) — an approval commit:
+ *   `wf(…): approve|reject|amend` and every `workflow:` record with an `Approver:` line, keyed on the line, not on
+ *   a verb list — each line matching `^(co-authored-by|ai-model):` (any case) is one finding, naming the key
+ *   (`git-conventions` §7); a commit with no `Approver:` line may carry them. The approval commits written before
+ *   this check are history: they cannot be rewritten (`git-conventions` §2, §8).
  * - `workflow-record-authority` (`bug-444`; rules `body`, `authority`): a `workflow: finalize`, `workflow: adopt`
  *   or `workflow: rekey` record that has an `Approver:` line holds it to the grammar above and to the
  *   `authority` rule (its author holds `approver` at the first parent, the line names the author). Whether a
@@ -74,6 +76,18 @@
  * - `trailer-paragraph` (`bug-391`; rule `body`): on every non-merge commit, a `WingFoil-*` line (any key, any
  *   letter case) sits in the body's final paragraph, the one the workflow deduction reads
  *   (`git-conventions` §8).
+ * - `plan-retrospective` (`bug-320`, `dl-115` Q2 (a), task-358 approver ruling D2 (a) (i); rule `state`): a
+ *   `wf(plan): finalize` into the last state of the plan's `sequence` (`[active → done]`) leaves, at that commit, a
+ *   plan whose `### Retrospective` subsection holds an entry — a line outside HTML comments, `None` included (D2 (b)) —
+ *   as `scripts/check-retrospective.cjs` (`hasRetrospectiveEntry`, shared) tests a task's at `dev-loop.done`.
+ * - `co-author-identity` (`bug-475`, `bug-535`, task-352; rule `body`): on every commit of the range, merges
+ *   included, except a non-merge commit with a line starting `Approver:` (`approval-agent-trailer`'s), each
+ *   `Co-Authored-By:` line (any case) of the body's final paragraph is `Name <email>` and names a `team.agents` or
+ *   `team.members` entry of the `.wingfoil/dna.yaml` committed at the commit's first parent — the name compared
+ *   exactly, the email ignoring case, an entry without an email matching nothing; no `dna.yaml` there, or one that
+ *   does not validate, is a finding (`git-conventions` §7). The same final paragraph carries no two
+ *   `Co-Authored-By:` lines naming the same co-author (name exact, email any case) and at most one `AI-Model:` line
+ *   (`bug-535`).
 
  * **Starting mode** (`dl-103` §1). A finding on a commit that is not the introduction commit nor one
  * of its ancestors is gated, and fails the check (exit 1). A finding on history — the introduction
@@ -107,6 +121,8 @@ const { execFileSync } = require('node:child_process');
 const { existsSync } = require('node:fs');
 const { basename, join } = require('node:path');
 
+const { hasRetrospectiveEntry } = require('./check-retrospective.cjs');
+
 /** This file's path inside the repository it governs: its introduction is the first-parent commit adding it. */
 const SCRIPT_PATH = 'scripts/check-governance.cjs';
 const MEMORY_YAML = '.wingfoil/memory.yaml';
@@ -126,15 +142,24 @@ const CHECKS = Object.freeze({
   'status-outside-wf': 'governance-check:status-outside-wf',
   'supersedes-pair': 'governance-check:supersedes-pair',
   'config-version': 'governance-check:config-version',
-  'approval-ai-trailer': 'governance-check:approval-ai-trailer',
+  'approval-agent-trailer': 'governance-check:approval-agent-trailer',
   'workflow-record-authority': 'governance-check:workflow-record-authority',
   'trailer-paragraph': 'governance-check:trailer-paragraph',
+  'plan-retrospective': 'governance-check:plan-retrospective',
+  'co-author-identity': 'governance-check:co-author-identity',
 });
 
-/** The verbs that record the approver's decision and carry no AI co-author (`git-conventions` §7). */
-const DECISION_VERBS = new Set(['approve', 'reject']);
-/** A co-author or model trailer line (`git-conventions` §7, `bug-307`). */
-const AI_TRAILER_RE = /^(co-authored-by|ai-model):/i;
+/** A line that makes a commit an approval commit (`spec-018` §0): `Approver:`, any letter case. */
+const APPROVAL_LINE_RE = /^approver:/i;
+/** An agent trailer line (`spec-018` §0, `git-conventions` §7, `bug-307`): `Co-Authored-By:` or `AI-Model:`, any case. */
+const AGENT_TRAILER_RE = /^(co-authored-by|ai-model):/i;
+
+/** A `Co-Authored-By:` line, any case: its value is what follows the key. */
+const CO_AUTHOR_KEY_RE = /^co-authored-by:/i;
+/** A `Co-Authored-By:` line's value as `Name <email>` (`git-conventions` §7). */
+const CO_AUTHOR_VALUE_RE = /^co-authored-by:[ \t]*(.*?)[ \t]*<([^<>\s]+)>[ \t]*$/i;
+/** An `AI-Model:` line, any case. */
+const AI_MODEL_KEY_RE = /^ai-model:/i;
 
 /** The subject of a record written outside the `wf()` grammar by `workflow finalize|adopt|rekey` (`spec-017` §7.9, §7.11, §7.12). */
 const WORKFLOW_RECORD_RE = /^workflow: (?:finalize|adopt|rekey)(?: |$)/;
@@ -562,22 +587,95 @@ function authorityFindings(commit, approval, dna, dist) {
   return findings;
 }
 
+/** The index of the first line of the final paragraph of `lines`: the line after the last blank one. */
+function finalParagraphStart(lines) {
+  let lastBlank = -1;
+  lines.forEach((line, index) => {
+    if (line.trim() === '') lastBlank = index;
+  });
+  return lastBlank + 1;
+}
+
 /**
  * The `WingFoil-*` keys a commit's body writes outside its final paragraph, each once, as first written
  * (`git-conventions` §8, `bug-391`): the final paragraph is the last blank-line-separated one.
  */
 function trailerKeysOutsideFinalParagraph(body) {
   const lines = body.split('\n');
-  let lastBlank = -1;
-  lines.forEach((line, index) => {
-    if (line.trim() === '') lastBlank = index;
-  });
   const keys = new Map();
-  for (const line of lines.slice(0, lastBlank + 1)) {
+  for (const line of lines.slice(0, finalParagraphStart(lines))) {
     const key = WINGFOIL_TRAILER_RE.exec(line)?.[1];
     if (key !== undefined && !keys.has(key.toLowerCase())) keys.set(key.toLowerCase(), key);
   }
   return [...keys.values()];
+}
+
+/** The lines of a commit body's final paragraph: those after its last blank line (`git-conventions` §8). */
+function finalParagraphLines(body) {
+  const lines = body.split('\n');
+  return lines.slice(finalParagraphStart(lines));
+}
+
+/**
+ * Whether `name` <`email`> is a `team.agents` or `team.members` entry of `dna`: the name equal, the email equal
+ * ignoring case; an entry without an email matches nothing (task-352 D5).
+ */
+function isTeamIdentity(dna, name, email) {
+  const team = dna.team ?? {};
+  return [...(team.agents ?? []), ...(team.members ?? [])].some(
+    (entry) => entry.name === name && typeof entry.email === 'string' && entry.email.toLowerCase() === email.toLowerCase(),
+  );
+}
+
+/**
+ * The `co-author-identity` findings of one non-approval commit (`bug-475`, `bug-535`, task-352): `lines` are its
+ * final paragraph's, `dna` the `.wingfoil/dna.yaml` of its first parent as `configReader` reads it.
+ */
+function coAuthorFindings(lines, dna) {
+  const messages = [];
+  const coAuthors = lines.filter((line) => CO_AUTHOR_KEY_RE.test(line));
+  for (const line of coAuthors) {
+    const parsed = CO_AUTHOR_VALUE_RE.exec(line);
+    if (parsed === null) {
+      messages.push(`a Co-Authored-By: line of the final paragraph is not \`Name <email>\` (git-conventions §7): ${line.slice(line.indexOf(':') + 1).trim()}`);
+      continue;
+    }
+    const [, name, email] = parsed;
+    const who = `${name} <${email}>`;
+    if (dna === null) {
+      messages.push(`no ${DNA_YAML} is committed before this commit, so the co-author ${who} cannot be matched against team.agents or team.members`);
+    } else if (!dna.ok) {
+      messages.push(`the ${DNA_YAML} committed before this commit does not validate (${dna.error}), so the co-author ${who} cannot be matched`);
+    } else if (!isTeamIdentity(dna.value, name, email)) {
+      messages.push(
+        `the co-author ${who} is neither a team.agents nor a team.members entry of the ${DNA_YAML} committed before this commit ` +
+          '(name and email both; git-conventions §7, bug-475)',
+      );
+    }
+  }
+  // bug-535: the attribution pair written twice — one finding per commit, naming each repeated key. Two lines name
+  // the same co-author under D5's equivalence (the name exact, the email in any case); a line that does not parse is
+  // compared as written.
+  const repeated = [];
+  const values = new Map();
+  for (const line of coAuthors) {
+    const value = line.slice(line.indexOf(':') + 1).trim();
+    const parsed = CO_AUTHOR_VALUE_RE.exec(line);
+    const key = parsed === null ? `\0${value}` : `${parsed[1]}\0${parsed[2].toLowerCase()}`;
+    const entry = values.get(key) ?? { value, count: 0 };
+    entry.count += 1;
+    values.set(key, entry);
+  }
+  for (const { value, count } of values.values()) if (count > 1) repeated.push(`${count} Co-Authored-By: ${value} lines`);
+  const models = lines.filter((line) => AI_MODEL_KEY_RE.test(line)).length;
+  if (models > 1) repeated.push(`${models} AI-Model: lines`);
+  if (repeated.length > 0) {
+    messages.push(
+      `the final paragraph repeats the agent attribution: ${repeated.join(', ')} ` +
+        '(one Co-Authored-By: line per co-author and at most one AI-Model: line; git-conventions §7, bug-535)',
+    );
+  }
+  return messages;
 }
 
 /** A `TransitionFinding` of `verifyTransitionConsistency`, as one line. */
@@ -664,6 +762,8 @@ function checkGovernance(root, options = {}) {
   const rejectCrossings = [];
   /** Named, bracketed touches of a document gone at `HEAD`: { sha, parent, path, hops, type }. */
   const goneAtHead = [];
+  /** The plan documents a `wf(plan): finalize` into the machine's last state names, for `plan-retrospective`: { sha, path }. */
+  const planFinalizes = [];
 
   memoryCommits.forEach((commit, index) => {
     const memoryOid = blobs[index * 2];
@@ -675,16 +775,6 @@ function checkGovernance(root, options = {}) {
     const { findings: subjectFindings, op, ids } = checkSubjectAndBracket(commit, memoryYaml, dist);
     subjectFindings.forEach(push);
     if (op !== null) checkBodyAndAuthority(commit, op, dna, dist).forEach(push);
-    if (DECISION_VERBS.has(op)) {
-      for (const line of commit.body.split('\n').filter((candidate) => AI_TRAILER_RE.test(candidate))) {
-        const key = line.slice(0, line.indexOf(':'));
-        push({
-          rule: 'body',
-          message: `'${op}' records the approver's decision and carries no AI co-author trailer (git-conventions §7), yet it has a ${key}: line`,
-          check: 'approval-ai-trailer',
-        });
-      }
-    }
 
     if (!WF_HEAD_RE.test(commit.subject)) return;
     const gated = !history.has(commit.sha);
@@ -753,6 +843,9 @@ function checkGovernance(root, options = {}) {
     if (![...documents.values()].some(Boolean)) unchecked('no document it touches is named by its subject');
     for (const [path, isNamedDocument] of documents) {
       if (isNamedDocument && op === 'approve' && machine) approvals.push({ sha: commit.sha, path: writtenAt.get(path) ?? path, machine, type });
+      if (isNamedDocument && op === 'finalize' && type === 'plan' && machine && hops && hops.length > 0 && hops[hops.length - 1].to === machine.sequence[machine.sequence.length - 1]) {
+        planFinalizes.push({ sha: commit.sha, path: writtenAt.get(path) ?? path });
+      }
       if (!atHead.has(path)) {
         if (!isNamedDocument) continue;
         if (machine && hops && !EDGE_EXEMPT_VERBS.has(op)) {
@@ -912,6 +1005,20 @@ function checkGovernance(root, options = {}) {
     });
   }
 
+  // plan-retrospective: a plan finalized into its last state holds a ### Retrospective entry (bug-320, dl-115 Q2 (a)).
+  if (planFinalizes.length > 0) {
+    const texts = readBlobTexts(root, planFinalizes.map((entry) => `${entry.sha}:${entry.path}`));
+    planFinalizes.forEach((entry, index) => {
+      const text = texts[index];
+      if (text === null || hasRetrospectiveEntry(text)) return;
+      stateFinding(
+        entry.sha,
+        `${entry.path}: plan ${basename(entry.path, '.md')} is finalized with no ### Retrospective entry, a line outside HTML comments ("None" counts; dl-115 Q2 (a), bug-320)`,
+        'plan-retrospective',
+      );
+    });
+  }
+
   // workflow-record-authority: an `Approver:` line on a `workflow:` record is held to the grammar and the
   // authority of an approval, when the record has one (bug-444).
   const records = allCommits.filter((commit) => !commit.merge && WORKFLOW_RECORD_RE.test(commit.subject));
@@ -925,6 +1032,46 @@ function checkGovernance(root, options = {}) {
     [...approverGrammarFindings(approverLines, approval, dist), ...authorityFindings(commit, approval, dna, dist)].forEach(({ rule, message }) =>
       findings.push({ sha: commit.sha, subject: commit.subject, rule, message, gated: isGated(commit.sha, check), check }),
     );
+  });
+
+  // approval-agent-trailer: an approval commit carries no agent trailer (spec-018 §4, bug-307, task-333). Every
+  // non-merge commit of the range is judged, keyed on its `Approver:` line, so a record of any kind is covered.
+  for (const commit of allCommits.filter((candidate) => !candidate.merge)) {
+    const lines = [commit.subject, ...commit.body.split('\n')];
+    if (!lines.some((line) => APPROVAL_LINE_RE.test(line))) continue;
+    // One finding per line: a repeated key is numbered, so the de-duplication by message keeps every line.
+    const seen = new Map();
+    for (const line of lines.filter((candidate) => AGENT_TRAILER_RE.test(candidate))) {
+      const key = line.slice(0, line.indexOf(':'));
+      const count = (seen.get(key.toLowerCase()) ?? 0) + 1;
+      seen.set(key.toLowerCase(), count);
+      findings.push({
+        sha: commit.sha,
+        subject: commit.subject,
+        rule: 'body',
+        message:
+          `an approval commit (it has an Approver: line) carries no agent trailer (spec-018 §4, git-conventions §7), ` +
+          `yet it has ${/^[aeiou]/i.test(key) ? 'an' : 'a'} ${key}: line${count > 1 ? ` (occurrence ${count})` : ''}`,
+        gated: isGated(commit.sha, 'approval-agent-trailer'),
+        check: 'approval-agent-trailer',
+      });
+    }
+  }
+
+  // co-author-identity: a non-approval commit's co-authors are team entries of the dna.yaml before it, and its final
+  // paragraph carries the attribution pair once (bug-475, bug-535, task-352). Merges are judged: they carry the pair too.
+  // Only a non-merge approval is left out, the one approval-agent-trailer judges: a merge with an Approver: line is
+  // judged here, or it would escape both checks.
+  const attributed = allCommits
+    .filter((commit) => commit.merge || ![commit.subject, ...commit.body.split('\n')].some((line) => APPROVAL_LINE_RE.test(line)))
+    .map((commit) => ({ commit, lines: finalParagraphLines(commit.body) }))
+    .filter(({ lines }) => lines.some((line) => CO_AUTHOR_KEY_RE.test(line) || AI_MODEL_KEY_RE.test(line)));
+  const attributedDnaBlobs = readBlobIds(root, attributed.map(({ commit }) => `${commit.parent ?? commit.sha + '^'}:${DNA_YAML}`));
+  attributed.forEach(({ commit, lines }, index) => {
+    const dna = commit.parent === null ? null : readDnaYaml(attributedDnaBlobs[index]);
+    for (const message of coAuthorFindings(lines, dna)) {
+      findings.push({ sha: commit.sha, subject: commit.subject, rule: 'body', message, gated: isGated(commit.sha, 'co-author-identity'), check: 'co-author-identity' });
+    }
   });
 
   // trailer-paragraph: a `WingFoil-*` trailer outside the final paragraph is lost to the deduction (bug-391).
@@ -1106,7 +1253,7 @@ function main(argv) {
   }
 }
 
-module.exports = { CHECKS, checkGovernance, exitCodeFor, formatReport };
+module.exports = { CHECKS, checkGovernance, exitCodeFor, formatReport, trailerKeysOutsideFinalParagraph };
 
 if (require.main === module) {
   process.exitCode = main(process.argv.slice(2));

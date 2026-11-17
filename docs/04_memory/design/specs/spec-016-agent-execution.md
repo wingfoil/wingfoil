@@ -26,7 +26,8 @@ needs are still unwritten:
   a name, `executes_as` and `approval_authority`. `AgentEntry` is `.passthrough()`
   (`src/dna/schema.ts:122-128`), so an extra field would be tolerated and not validated.
 - **The `agent` command surface.** The vision plans one command:
-  `wingfoil agent execute [--next] [--role ROLE] [--element TYPE:ID]` (`docs/01_vision/X_cli-cmds.md:216`).
+  `wingfoil agent execute [--next] [--role ROLE] [--element TYPE:ID]` (`docs/01_vision/X_cli-cmds.md`, § "Agent
+  Execution Commands", the `wingfoil agent execute` row, at this spec's writing).
   `dl-135` adds `agent list` and `agent show` and splits them across v0.3 and v0.4 (plan R5).
   `spec-006-core-domain-api` §3 has one planned row, `agentExecute` (`spec-006:196`).
 - **The run record.** `dl-114-recording-agent-token-consumption` (`ready`, Q1 (A), Q2 (b), Q3 (i),
@@ -101,7 +102,9 @@ that changes from task to task.
   `adapter` must also declare `email` (`dl-158` Rule 2 (ii), `task-260`): the entry is the identity
   that signs the launched agent's commits (§3.2 step 4). An agent without
   `adapter` can still be named in DNA, but it cannot be launched (§3.7, `NO_ADAPTER`). The DNA stays
-  the only place where *who* executes *which roles* is declared. The manifest never lists roles.
+  the only place where *who* executes *which roles* is declared. The manifest never says which agent executes a
+  role: the one place it names roles is a `launch.*.permissions` map's keys (§2.2, `dl-223` (b)), which pick the
+  argv fragment of a run whose role is already resolved and grant no role to anyone.
 - Manifests are read at `HEAD`, because they gate what `agent execute` launches
   (`dl-080` (B), `command-baseline` directive, `spec-006` §6).
 - **What is not an adapter is reported** (`bug-290`). An adapter is a `.yaml` file directly inside
@@ -130,11 +133,15 @@ without its MCP registration.
 | `version_args` | string[] | no | Argv that prints the agent CLI's version on stdout, recorded as `agent_version`. Absent → `not-reported`. |
 | `launch.interactive.args` | string[] | yes | Argv template for the interactive launch (§2.3). |
 | `launch.interactive.terminal` | `required` \| `optional` | no (default `required`) | Whether the interactive launch needs a terminal on stdin and stdout (§3.3 step 12, `NO_TERMINAL`). `required` for every agent CLI that owns a terminal session, and for every built-in. `optional` declares an executable that runs to completion on inherited, non-terminal stdio; the fake adapter declares it, which is how the interactive success path runs under Jest and CI with no pseudo-terminal (§2.7). |
-| `launch.headless.args` | string[] | no | Argv template for the headless launch. Read from v1.0 (§3.5). |
-| `launch.headless.output` | `json` \| `none` | with `headless` | How stdout is read after a headless run. |
+| `launch.headless.args` | string[] | no | Argv template for the headless launch (§2.3). Read from v0.4 by the work run (§3.5, `dl-181`); an adapter without it cannot launch headless (§3.7 `NO_LAUNCH_KIND`, `dl-183` Q3 (a)). |
+| `launch.headless.output` | `json` \| `jsonl` \| `none` | with `headless` | How stdout is read after a headless run: `json`, one JSON document; `jsonl`, one JSON value per line; `none`, not read. The v0.4 work run reads from it only the session id under `session.id: output` (§2.6, §3.5). |
+| `launch.interactive.permissions` | string[] \| map | no | The permission posture of the interactive launch (`dl-223` (b)): either one argv fragment, for every role, or a map from a role name to an argv fragment, which declares a `default` entry, the fragment of every role the map does not name. Any other shape is a manifest validation error: a scalar, a map without `default`, a value that is not a list of strings. It holds no placeholder (§2.3). §3.3 step 14 appends the run's fragment to `launch.interactive.args`. Absent, nothing is appended and the agent CLI keeps its own posture. A map's keys name roles only to pick a fragment for a run whose role is already resolved (§3.2); they are not checked against `team.roles`, since a built-in ships to projects with any role set. |
+| `launch.headless.permissions` | string[] \| map | no | The same, for the headless launch: what a headless agent may do without asking (`dl-181` Q2 (a), refined per role by `dl-223` (b)), never wider than the step's role needs (`dl-181`'s ratification). Appended to `launch.headless.args` (§3.3 step 14). |
+| `launch.interactive.trust`, `launch.headless.trust` | `implied` \| `prompt` \| string[] | no | How the agent CLI treats a launch directory it has not been told to trust (`bug-500`, `task-353`): `implied`, that launch never stops to ask (the CLI trusts the directory for that kind of launch, or does not check it); `prompt`, the CLI may stop at its start-up to ask whether to trust the directory; an argv fragment, the CLI's own option that tells it to trust the launch directory, appended after the permission fragment (§3.3 step 14), holding no placeholder (§2.3). Read from the agent CLI's help at the version `verified_with` names. Absent: nothing is declared, nothing is appended, and no start-up hint is given (§3.3 step 16). |
 | `prompt.via` | `arg` \| `stdin` \| `file` | yes | How the bootstrap (§2.4) reaches the agent: as the `{bootstrap}` argument, on stdin, or as a file whose path is `{bootstrap_file}`. `stdin` is legal only for `headless`, because an interactive agent owns stdin. Every format-1 manifest declares `launch.interactive`, so a format-1 manifest declaring `stdin` is refused; the value is kept so that v1.0 can make `launch.interactive` optional for a headless-only adapter (§3.5) without changing this enum. |
 | `mcp.via` | `config-file` \| `config-arg` \| `args` | yes | How the `wingfoil` MCP server is registered for the launched process (§2.5): a file, one argument holding the rendered `mcp.template`, or the server's command and argv as arguments. There is no `none`: an adapter that cannot register the server is refused (`adr-012` Consequences). |
 | `mcp.template` | string | `config-file`, `config-arg`: yes | The registration, with placeholders (§2.3). Under `config-file` it is rendered to a file outside the repository and its path passed as `{mcp_config_file}`; under `config-arg` the rendered text itself is passed as the one argument `{mcp_config}` (for an agent CLI that has no option taking a configuration file's path, task-237). |
+| `mcp.conflict_args` | string[] | no | Argv that exits `0` when the agent's own configuration already declares an MCP server named `wingfoil`, which the agent would merge into the server WingFoil registers (§2.5). Run before the launch as a post-run lookup runs (§2.6), no placeholder; exit `0` refuses the launch (§3.3 step 4, `MCP_SERVER_DECLARED`). Absent: no check. |
 | `session.id` | `assign` \| `output` \| `lookup` \| `none` | yes | How the session id is obtained (§2.6). |
 | `session.assign_args` | string[] | `assign`: yes | Argv fragment carrying `{session_id}`, appended to the launch argv. |
 | `session.lookup_args` | string[] | `lookup`: yes | Argv run after the agent exits. Its stdout is one JSON value. |
@@ -166,6 +173,13 @@ error (`dl-090` Q3 (a): "argv, no shell. … Interpolation fills whole arguments
 | `{mcp_args}` | the MCP server's argv; expands to **several** elements in `args`, to a JSON array in `mcp.template` | same as `{mcp_command}` |
 | `{session_id}` | the assigned or recorded session id | `session.assign_args`, `session.resume.args`; `session.lookup_args` and `usage.lookup_args` only when `session.id: assign` (under `lookup` or `output` the id is not known before the lookup, and using it there is a manifest validation error) |
 
+In `mcp.template`, `{mcp_command}` renders as JSON string content (the template quotes it) and `{mcp_args}` as a
+JSON array of strings, with every U+007F written as the escape `\u007f`: the rendered text is valid JSON (for
+`config-file`) and valid TOML (for `config-arg`, which a TOML-reading agent CLI such as Codex parses), whatever the
+command and arguments hold. A command or argument holding an unpaired surrogate (a code unit U+D800–U+DFFF that is
+not half of a pair, which a Windows path can hold) has no representation in either, so it is refused at §3.3
+step 10, before anything is spawned (§3.7; `task-355`, `bug-371`).
+
 Some placeholders are also **required**, so that a manifest that validates can launch. A missing one
 is a manifest validation error naming the field:
 
@@ -184,31 +198,56 @@ temporary directory, never inside the repository, and are removed when `agent ex
 #### 2.4 Bootstrap prompt
 
 The bootstrap is the only text WingFoil puts into the agent's initial prompt. Its bytes are a pure
-function of `(role, element, run id, state_ref, agent)`, `agent` being the `team.agents` entry §3.2 step 4
-selects, read at `HEAD`. It has no clock and no host data, and it is LF-terminated
-(`REQ-SYS-07`, `REQ-STATE-09`). It is a fixed template owned by this spec:
+function of `(role, element, run id, state_ref, agent, build)`, `agent` being the `team.agents` entry §3.2 step 4
+selects, read at `HEAD`, and `build` the launching build's signature `"<semver> (<sha>)"`, the value of `dl-111`'s
+`WingFoil-Version:` trailer and of the run record's `wingfoil` field (§4.2). It has no clock and no host data, and it
+is LF-terminated (`REQ-SYS-07`, `REQ-STATE-09`). It is a fixed template owned by this spec:
 
 ```
 WingFoil run {run_id}: act as role "{role}" on element {type}:{id}.
 Your context is assembled at commit {state_ref} and served by the "wingfoil" MCP server
 registered for this session. Load it before any other action: {context_instruction}
+{cli_line}
 {handoff_line}
 {attribution_line}
 ```
 
-`{attribution_line}` carries the AI-attribution rule of the `git-conventions` directive §7 to the agent
-(`dl-117` Action 4; approver ruling R20 Q8, `release-planning-rel-v0.3-plan`), with the entry that signs
-(`dl-158` Rule 1 (a)) — its `name` and `email`, which an entry declaring `adapter` always has (§2.1):
+**The CLI the agent runs** (`dl-180` invocation (c), `bug-369`). The agent's CLI work runs the build that launched
+it, the one that serves its context (§2.5). Before the spawn, `agent execute` writes a `wingfoil` shim into a
+directory of its own inside the run's temporary directory (§2.3: outside the repository, removed when `agent execute`
+exits): on POSIX an owner-only executable `sh` script that runs that build's Node executable and `dist/cli.js` with
+the arguments it is given; on Windows a `wingfoil.cmd` that does the same (written, not exercised by CI, which runs on
+Linux). The agent is spawned (§3.3 step 14) with WingFoil's environment and three changes: the shim's directory first
+on `PATH`, `WINGFOIL_CLI` set to the shim's absolute path, and `WINGFOIL_AGENT` set to the selected entry's `name`
+(`spec-018` §1.1), whatever either variable held. `agent execute`'s own environment is not changed, and its own
+child processes — the MCP pre-flight (step 11), the conflict probe (step 4) and the post-run lookups (§2.6) — get it
+unchanged. `{cli_line}` names the invocation; the shim's path is in the environment only, never in the bootstrap:
 
 ```
-End every commit you write, except an approve or reject commit, with the trailer paragraph "Co-Authored-By: {agent_name} <{agent_email}>" and "AI-Model: <the model identifier you run as>"; to a commit wingfoil writes, add them with git commit --amend --no-edit --trailer, never as a paragraph of their own (git-conventions §7, §8).
+Run WingFoil commands as "wingfoil <command>": the build that launched you is first on your PATH, and "wingfoil --version" prints "{build}"; if it prints anything else, run "$WINGFOIL_CLI" in place of "wingfoil".
 ```
 
-The agent applies it to every commit it writes. A commit `wingfoil` writes for it (a Memory verb) already
-ends with the `WingFoil-Version:` trailer paragraph, so the line tells the agent to add the two trailers to
-it with `git commit --amend --no-edit --trailer`, never as a paragraph of their own, which would push
-`WingFoil-Version:` into a `Reason:` block (`git-conventions` §8, `bug-236`). The `agent: record
-<run-id>` commit is WingFoil's, not the agent's, and keeps §4.4's form.
+A shell profile that puts another directory before the shim's (a Node version manager's, say) makes a plain
+`wingfoil` reach another build; the version check tells the agent, and `$WINGFOIL_CLI` reaches the launching build
+whatever `PATH` holds.
+
+`{attribution_line}` carries the AI-attribution rule of the `git-conventions` directive §7 as `spec-018` §2 has the
+verbs apply it (`spec-018` Consequences; `dl-117` Action 4; approver ruling R20 Q8, `release-planning-rel-v0.3-plan`),
+with the entry that signs (`dl-158` Rule 1 (a)) — its `name` and `email`, which an entry declaring `adapter` always
+has (§2.1):
+
+```
+Commits wingfoil writes for you already end with "Co-Authored-By: {agent_name} <{agent_email}>" and an "AI-Model:" trailer: pass --ai-model <your model identifier> to each wingfoil command that writes a commit, or that trailer records "AI-Model: not-reported"; end a commit you write yourself with git commit with the trailer paragraph "Co-Authored-By: {agent_name} <{agent_email}>" and "AI-Model: <your model identifier>"; never run memory approve, memory reject or memory amend, which refuse in your session (git-conventions §7).
+```
+
+A `wingfoil` command the agent runs writes the two trailers itself (`spec-018` §2): `WINGFOIL_AGENT` names the
+signing entry (`spec-018` §2.3) and `--ai-model`, else `WINGFOIL_AGENT_MODEL`, the model (`spec-018` §2.4). So the
+line no longer tells the agent to amend a commit `wingfoil` wrote, which would leave two pairs (`bug-535`); the
+amend recipe stays for a commit the agent writes with plain `git commit` (`git-conventions` §8). WingFoil learns the
+model only after the run, if at all (§2.6), so it never fills `<your model identifier>`: an `AI-Model:` value on a
+commit the agent wrote is the agent's own claim (`bug-370`). The approver-gated verbs refuse an agent's session
+(`spec-018` §3). The `agent: record <run-id>` commit is WingFoil's, not the agent's: it keeps §4.4's form and carries
+no agent trailer (`spec-018` §1.1).
 
 `{handoff_line}` is one of two fixed literals, chosen by the element type's template (read at `HEAD`):
 `Record your handoff in the element's "## Execution Notes" section.` when the type's
@@ -245,9 +284,13 @@ component (`dl-131`).
 #### 2.5 MCP registration
 
 - The server that WingFoil registers is **the build that is running `agent execute`**:
-  `{mcp_command}` is the Node executable, and `{mcp_args}` is `[<that build's dist/cli.js>, "mcp"]`
-  (`spec-014-mcp-server-entry-point`). The context served then comes from the same code that
-  validated it before launch, and the run record's `wingfoil` field names it (§4.2).
+  `{mcp_command}` is the Node executable, and `{mcp_args}` is
+  `[<that build's dist/cli.js>, "--project", <the project root>, "mcp"]` (`spec-014-mcp-server-entry-point`;
+  from `minor-v0.4`, `spec-008` §2 `--project`, `dl-198`), the root being the one `agent execute` resolved. The
+  context served then comes from the same code that validated it before launch, and the run record's `wingfoil`
+  field names it (§4.2). The server serves that root whatever working directory the agent CLI starts it in, and
+  the step 11 pre-flight starts it with the same arguments. The root is in the registration only, never in the
+  bootstrap (§2.4: no host data), nor in the run record.
 - A project's own registration (`.mcp.json`, `dl-026-repo-versioned-mcp-server-config`) is not read
   and not modified. An agent that also reads it may see two `wingfoil` servers. The adapter template
   names its server `wingfoil`, and whether the agent's own precedence rules pick the adapter's is
@@ -257,19 +300,53 @@ component (`dl-131`).
   0.145.0` the pass found that, with a same-named server in the project's `.codex/config.toml` loaded (the scratch
   directory was trusted before the checked run), the server Codex started has the command and args of the adapter's
   `-c mcp_servers.wingfoil=…` override: the session Resource, which only the build under test serves, was read
-  (`task-237`, 2026-10-14). Whether the override replaces the project's table or merges into it (a merge would keep
-  keys such as `cwd` or `env` the project sets) was not observed.
+  (`task-237`, 2026-10-14). **The override merges** (`codex-cli 0.145.0`, observed by hand on 2026-10-15, `bug-372`):
+  the keys of a same-named table in a trusted project's `.codex/config.toml` that the override does not set (`env`,
+  `cwd`, …) are kept, the keys it sets win, and a nested table it sets merges as well: `env = {}` in the override
+  leaves the project's `env` entries in place (observed by hand on 2026-11-09 with `codex -c
+  'mcp_servers.wingfoil={command="codex",args=["mcp-server"],env={}}' mcp get wingfoil`); the project's layer loads
+  only once the directory is trusted. So a
+  project's `wingfoil` table can reach the server WingFoil registers, and a `cwd` can make it serve another
+  repository's context. An adapter whose agent merges declares `mcp.conflict_args` (§2.2), and `agent execute`
+  refuses to launch while the agent's configuration declares a server named `wingfoil` (§3.3 step 4,
+  `MCP_SERVER_DECLARED`); `codex-cli` declares `[mcp, get, wingfoil]` (§2.8), whose exit status the agent CLI's own
+  layering decides, trust included: `0` with a trusted project's `wingfoil` table, `1` (`No MCP server named
+  'wingfoil' found.`) for an untrusted one or none (2026-11-09). Whether a user-level `wingfoil` table merges the
+  same way was not observed.
 
 #### 2.6 Session id, usage, model
 
 - **`assign`**: WingFoil chooses the id before launch and passes it through `session.assign_args`.
   The value is a UUID version 5 (RFC 4122 §4.3) over a fixed namespace and the string
-  `<absolute repository root>\n<run id>`. The namespace is itself the version 5 UUID of the name
+  `<session salt>\n<run id>`. The namespace is itself the version 5 UUID of the name
   `wingfoil:spec-016:session` in RFC 4122's URL namespace: `a432dcd6-576d-5991-9503-2b23aa4139db`. The
-  id is unique per clone and run and derived, not random. The run id stays the identifier WingFoil
-  relies on (`dl-135` Q3 (a)).
-- **`output`**: read from the headless JSON output (v1.0 only; for an interactive launch it
-  degrades to `not-reported`, because stdout belongs to the agent).
+  id is unique per clone and run and derived, and it discloses nothing about the host: the committed record no
+  longer lets a guessed repository path be tested against it (`dl-168` Q1 (b)). The run id stays the identifier
+  WingFoil relies on (`dl-135` Q3 (a)).
+  - **The session salt** is 32 random bytes, written once per clone as 64 lowercase hexadecimal digits and a line
+    feed to the file `wingfoil/session-salt` of the repository's common git directory (`git rev-parse
+    --git-common-dir`), so the linked worktrees of a clone share it and never mint a second one. It is outside the
+    working tree, so it is never committed and needs no `.gitignore` entry (`spec-011` § `.gitignore` policy). The
+    first launch under `assign` that finds no salt creates it, owner-only (file `0600`, directory `0700` on POSIX),
+    atomically: the bytes go to a temporary file in the same directory, which is then hard-linked to the salt's name,
+    and when that name already exists — a concurrent launch won — the existing salt is read and used, so two
+    launches of one clone never use two salts. A salt that exists but is not exactly that text is refused before the
+    banner, `VALIDATION`, `the session salt in the git directory (wingfoil/session-salt) is not 64 lowercase
+    hexadecimal digits: remove it, and a new one is created at the next launch`; a salt that cannot be created or read
+    is refused there too, `IO`, `cannot create or read the session salt in the git directory (wingfoil/session-salt):
+    <cause>`, the cause naming no absolute path. Nothing is launched and nothing is recorded on either refusal. A
+    dry run computes no session id and creates no salt.
+  - The salt is the one random value of a launch. It enters the session id only — never the bootstrap, the
+    context, the run id or any other record field (`determinism`, "context assembly").
+  - Records committed before the salt keep the session ids they hold, which hashed the repository root: they are
+    history, read as any other record and never rewritten (`dl-168` ratification).
+- **`output`**: read from the stdout of a headless run (the v0.4 work run, §3.5), after the agent exits: under
+  `launch.headless.output: json` the whole stdout is one JSON document and the id is at `session.field`; under
+  `jsonl` each line is one JSON value, and the id is the first non-empty string found at `session.field`, lines
+  in order (a line that is not JSON, or has no such value, is passed over). At most 1 MiB of stdout is kept for
+  `json`, and a line over 1 MiB is passed over for `jsonl`. No id found, invalid JSON under `json`, or more than
+  1 MiB yield `not-reported` and one `warning:` line naming the adapter and the cause; the run never fails for
+  it. For an interactive launch it degrades to `not-reported` silently, because stdout belongs to the agent.
 - **`lookup`**: run `session.lookup_args` after the agent exits, with a 10 s time limit; any
   failure yields `not-reported` and a `warning:` line on stderr (§3.4). The lookup never fails the
   run.
@@ -284,7 +361,12 @@ component (`dl-131`).
   value yields `not-reported` silently. `agent_version` is the first non-blank line `version_args`
   prints.
 - **`none`**: `not-reported`.
-- Usage and model follow the same rules through `usage.from`.
+- Usage and model follow the same rules through `usage.from`. The record's `model` is a value WingFoil read
+  from the adapter's declared lookup; `not-reported` says it read none. WingFoil never knows the model before the
+  launch (`spec-018` §2.4), so the `AI-Model:` trailers on the commits the agent wrote during the run carry what the
+  agent passed (`--ai-model`, `WINGFOIL_AGENT_MODEL`) or `not-reported`: the agent's own claim, never a value
+  WingFoil read. A record whose `model` is `not-reported` therefore says that any model those trailers name is
+  unverified (`bug-370`).
 - **`not-reported` is the literal string**, never `0`, `null` or an absent key (`dl-114` Decision: "a
   run whose agent reports no usage records that explicitly, never a zero").
 
@@ -302,7 +384,10 @@ that the path tests exercise is the one every project adapter takes:
     fetch with `element` and `state`);
   - optionally calls the headless result Tool (v1.0);
   - prints a declared JSON document (session id, model, usage) for `output`/`lookup`;
-  - exits with a declared code, or waits to be killed by a signal.
+  - exits with a declared code, or waits to be killed by a signal;
+  - optionally records each signal it receives, so a test can count the deliveries of one signal
+    (§3.3 step 15, `task-355`), and starts a long-running process of its own, whose pid it records, so a
+    test can see whether a child of the agent outlives the run.
 - `test/fixtures/agents/custom/fake.yaml`, declaring that script with every manifest field
   exercised and `launch.interactive.terminal: optional`. Jest and CI give the child no terminal on
   stdin and stdout, so this is what lets the interactive success path (spawn, wait, lookups, record,
@@ -330,8 +415,8 @@ needs:
 
 | `name` (file basename) | Agent CLI | `command`, `launch.interactive.args`, `prompt.via`, `mcp.*`, `session.*`, `usage.*` | `verified_with` |
 |---|---|---|---|
-| `claude-code` | Claude Code | `command: claude`; `launch.interactive.args: ["{bootstrap}", --mcp-config, "{mcp_config_file}"]`; `prompt.via: arg`; `mcp.via: config-file`; `session.id: assign` with `[--session-id, "{session_id}"]`, resume `[--resume, "{session_id}"]`; `usage.from: none` (`task-236`; launch, MCP and session id checked by hand on 2026-10-14 with 2.1.296, resume from `--help` only) | `2.1.296 (Claude Code)` |
-| `codex-cli` | Codex CLI | `command: codex`; `launch.interactive.args: [-c, "{mcp_config}", "{bootstrap}"]`; `prompt.via: arg`; `mcp.via: config-arg` with the template `mcp_servers.wingfoil={command = "{mcp_command}", args = {mcp_args}, enabled = true, required = true}`; `session.id: none`, resume not supported; `usage.from: none` (`task-237`; from `codex --help` of `codex-cli 0.145.0`; checked by hand on 2026-10-14 with codex-cli 0.145.0 (ChatGPT sign-in)) | `codex-cli 0.145.0` |
+| `claude-code` | Claude Code | `command: claude`; `launch.interactive.args: ["{bootstrap}", --mcp-config, "{mcp_config_file}"]`; `prompt.via: arg`; `mcp.via: config-file`; `session.id: assign` with `[--session-id, "{session_id}"]`, resume `[--resume, "{session_id}"]`; `usage.from: none` (`task-236`; launch, MCP and session id checked by hand on 2026-10-14 with 2.1.296, resume from `--help` only) | the pass ran on `2.1.296 (Claude Code)` (`task-236`); the manifest has one `verified_with`, the headless table's |
+| `codex-cli` | Codex CLI | `command: codex`; `launch.interactive.args: [-c, "{mcp_config}", "{bootstrap}"]`; `prompt.via: arg`; `mcp.via: config-arg` with the template `mcp_servers.wingfoil={command = "{mcp_command}", args = {mcp_args}, enabled = true, required = true}` and `mcp.conflict_args: [mcp, get, wingfoil]` (`task-356`, §2.5); `session.id: output` with `session.field: thread_id`, read from the headless launch's `--json` events (the first event, `thread.started`, carries it; `codex exec resume <id>` accepts it) (§2.6; an interactive run records `not-reported`), resume not supported until §7's resume ships; `usage.from: none` (`task-237`; from `codex --help` of `codex-cli 0.145.0`; checked by hand on 2026-10-14 with codex-cli 0.145.0 (ChatGPT sign-in); the conflict check and the session field by hand with `codex-cli 0.145.0`, `task-356`) | `codex-cli 0.145.0` |
 
 Each built-in declares `launch.interactive.terminal: required` (§2.2) and carries `verified_with`,
 the agent CLI version whose own help output and documentation its declarations were checked against by
@@ -346,35 +431,109 @@ the approver (ruling R18). Nothing in this repository establishes this capabilit
 If the verification finds either agent CLI unable to meet §2.2 (MCP registration) or the check above,
 the implementing task stops and returns the choice to the approver; R17 is not silently narrowed.
 
+**The headless launch of the built-ins (v0.4, `task-335`; `dl-181` Q3 (c), Action 3).** Each built-in gains a
+`launch.headless` block for the work run (§3.5), read from its agent CLI's own help output at the version
+`verified_with` names, keeping `prompt.via: arg` (the bootstrap is the CLI's positional prompt in both launches) and
+the MCP registration of its interactive launch, and declaring `output: none`, since the work run reads nothing
+from stdout (§2.2), except `codex-cli`, which declares `output: jsonl`: its work run's stdout is read for the session
+id only (§2.6, `task-356`):
+
+| `name` | `launch.headless` | Read from | `verified_with` |
+|---|---|---|---|
+| `claude-code` | `args: [-p, "{bootstrap}", --mcp-config, "{mcp_config_file}"]`, `output: none` (`-p`/`--print`, "print response and exit"; the prompt before `--mcp-config` for the reason of the interactive launch; `session.assign_args` still closes the list) | `claude --help` of `2.1.310 (Claude Code)`, which still lists every flag of the interactive launch, `--session-id` and `--resume` | `2.1.322 (Claude Code)`, the version the by-hand pass of the headless role map ran (`task-339`) |
+| `codex-cli` | `args: [exec, --json, -c, "{mcp_config}", "{bootstrap}"]`, `output: jsonl` (`codex exec`, "run Codex non-interactively", which takes `-c` and the prompt as its positional; `--json` prints its events to stdout as JSONL, the source of the session id, `task-356`) | `codex exec --help` of `codex-cli 0.145.0` | `codex-cli 0.145.0` |
+
+The by-hand pass of a headless launch, as `task-236` and `task-237` made for the interactive one (the agent starts
+with no terminal, registers the `wingfoil` server, reads the session Resource and exits), is recorded in
+`task-335`'s Execution Notes with the version it ran, before any project relies on the block.
+
+**The posture of the built-ins' headless launch (v0.4, `task-339`; `dl-223` (b), Action 3).** Each built-in
+declares `launch.headless.permissions` as a role map, read from its agent CLI's own help output at the version
+`verified_with` names. `default`, the entry of every role the map does not name, grants reading only. `developer`,
+`qa` and `architect`, whose work edits files, runs the tests and the `wingfoil` verbs and commits, are granted that and
+no publishing step — the verbs run through the project's own copy of wingfoil, in any of the forms a project uses:
+bare (`node_modules/.bin` on `PATH`, or an alias), `npx wingfoil …` or `npm run wingfoil -- …`; `reviewer`, whose work reads history and diffs and runs the tests (`dl-223` Context), is granted
+reading and running them:
+
+| `name` | `default` | `developer`, `qa`, `architect` | `reviewer` | Read from |
+|---|---|---|---|---|
+| `claude-code` | `[--permission-mode, dontAsk, --allowedTools, Read, Glob, Grep]` (`dontAsk` is chosen to deny every tool no rule allows, so that a headless agent never waits on a prompt nobody can answer; the help lists the mode without describing it, so the by-hand pass below settles it) | `default`'s, with `Edit`, `Write`, `"Bash(git *)"`, `"Bash(npm *)"`, `"Bash(npx *)"`, `"Bash(node *)"` and `"Bash(wingfoil *)"` allowed (with `"Bash(npx *)"` and `"Bash(npm *)"`, the three forms the project's own wingfoil runs in), then `--disallowedTools` with `"Bash(git push *)"` and `"Bash(npm publish *)"` | `default`'s, with `"Bash(git log *)"`, `"Bash(git show *)"`, `"Bash(git diff *)"`, `"Bash(git status *)"`, `"Bash(npm test *)"`, `"Bash(npm run *)"` and `"Bash(npx jest *)"` allowed | `claude --help` of `2.1.310 (Claude Code)`: `--permission-mode` and its choices, `--allowedTools` and `--disallowedTools` ("Comma or space-separated list of tool names", the example `"Bash(git *) Edit"`) |
+| `codex-cli` | `[--sandbox, read-only]` | `[--sandbox, workspace-write]` | `[--sandbox, workspace-write]`: the narrowest sandbox the tests can run in, since they write the build | `codex exec --help` of `codex-cli 0.145.0`: `-s, --sandbox <SANDBOX_MODE>`, with `read-only`, `workspace-write` and `danger-full-access` |
+
+Neither built-in declares `launch.interactive.permissions`: at a terminal a person answers the agent CLI's own
+prompts. The by-hand pass of each entry (the agent starts with the fragment, reads the session Resource, can do what
+its role's work needs and is refused the rest) is recorded in `task-339`'s Execution Notes with the CLI version it
+ran, before any project relies on the maps; `verified_with` names that version.
+
+**The folder trust of the built-ins (v0.4, `task-353`; `bug-500`).** Each built-in declares `trust` on both its
+launches (§2.2), read from its agent CLI's own help output at the version `verified_with` names and checked by hand in
+a directory the CLI has never opened, the pass recorded in `task-353`'s Execution Notes with the CLI version it ran
+(the approver's pass of 2026-11-14 in a fresh `git init` directory, on `2.1.322 (Claude Code)` and `codex-cli 0.167.2`):
+
+| `name` | `launch.interactive.trust` | `launch.headless.trust` | Read from |
+|---|---|---|---|
+| `claude-code` | `prompt`: the interactive launch shows a workspace trust dialog in a directory it has not seen, whose default answer exits, and a person at the terminal answers it | `implied`: the help says the workspace trust dialog is skipped under `-p`, and `claude -p` answered and exited `0` with no dialog | `claude --help` of `2.1.310` and `2.1.322 (Claude Code)`, and the by-hand pass |
+| `codex-cli` | `prompt`: the interactive launch asks whether to trust the current folder (§2.5: a project's layer loads only once the directory is trusted) | `implied`: `codex exec` answered and exited `0` in a fresh git repository with no trust step (a directory outside any git repository needs its `--skip-git-repo-check`, which no launch meets: every launch directory is a git root, §3.1) | `codex --help` and `codex exec --help` of `codex-cli 0.167.2`, whose only trust option is `--dangerously-bypass-hook-trust`, for hooks, and the by-hand pass |
+
+No built-in declares a fragment: neither CLI's help at those versions shows an option that tells it to trust the launch
+directory. A built-in whose by-hand pass finds one declares it, and the row says so.
+
 ### 3. `wingfoil agent execute`
 
 #### 3.1 Grammar
 
 ```
 wingfoil agent execute [--next] [--workflow <ref>] [--step <key>] [--element <type>:<id>]
-                       [--role <role>] [--agent <name>] [--format console|json|yaml]
+                       [--role <role>] [--agent <name>] [--headless | --interactive]
+                       [--timeout <duration>] [--log <path>] [--format console|json|yaml]
 ```
 
 | Flag / option | Source | Meaning |
 |---|---|---|
 | `--next` | P5.3.1, BDD sc. 1 | Resolve workflow, phase, element and role from the next step of the active instance (`spec-017` §3.3, §7.3; `REQ-STATE-03`). |
 | `--workflow <ref>` | `spec-017` §3.3 (the shared selector), `REQ-STATE-03` | Selects the instance whose next step is taken: `<ref>` is a workflow name (its most recently started open instance) or an open instance id, exactly as `spec-017` §3.3 resolves the positional `<ref>` of `workflow next`. It implies `--next`, so the `agent` binding's argv `wingfoil agent execute --workflow <instance-id> --step <key>` (`spec-017` §6.1) is complete as written; giving `--next` as well changes nothing. `agent execute` has no positional to spare, so the selector is an option here; there is no `--name` spelling (`spec-017` OQ-2). |
-| `--step <key>` | approver ruling R16, 2026-09-30, `release-planning-rel-v0.3-plan`; `spec-017` §4.9, §6.1 | Selects the step: a `spec-017` §4.9 step key, which must be on the frontier of the instance `--workflow` selects, else of the active instance. It implies `--next`. Without it the step is `NextResult.next`. It is what lets each frontier step's `agent` binding launch on its own step when the frontier holds several (parallel `dev-loop`s, `dl-014`), mirroring `memory add --workflow <ref> --step <key>` (`spec-017` §7.10) and `workflow finalize --step <key>` (`spec-017` §7.9). |
+| `--step <key>` | approver ruling R16, 2026-09-30, `release-planning-rel-v0.3-plan`; `spec-017` §4.9, §6.1 | Selects the step: a `spec-017` §4.9 step key, which must be on the frontier of the instance `--workflow` selects, else of the active instance; a key without its scope names the one frontier step of that workflow and phase (`spec-017` §4.9, `bug-468`). It implies `--next`. Without it the step is `NextResult.next`. It is what lets each frontier step's `agent` binding launch on its own step when the frontier holds several (parallel `dev-loop`s, `dl-014`), mirroring `memory add --workflow <ref> --step <key>` (`spec-017` §7.10) and `workflow finalize --step <key>` (`spec-017` §7.9). |
 | `--element <type>:<id>` | P5.3.1, BDD sc. 2; element-ref per `spec-008` §7 | The target element. With `--next`, it overrides the step's element and keeps its phase and role. |
-| `--role <role>` | `X_cli-cmds.md:216,223` | Overrides the role. It must be a `dna.yaml` `team.roles` name (P5.4.1). |
+| `--role <role>` | `X_cli-cmds.md` § "Agent Execution Commands" (the `wingfoil agent execute` row) and § "Parameters for Agent Execution" (the `--role` row) | Overrides the role. It must be a `dna.yaml` `team.roles` name (P5.4.1), and not a human-only one (§3.2 step 4). |
 | `--agent <name>` | **new**; not in the BDD or in `X_cli-cmds` | Picks a `team.agents` entry. Default: the first entry, in declared order, whose `executes_as` contains the role and that declares an `adapter`. |
+| `--headless` | `dl-183` Q2 (a), `dl-181` (v0.4) | Launch the work run without a terminal (§3.5), whatever the phase's `launch` says (§3.2 step 7). |
+| `--interactive` | `dl-183` Q2 (a) (v0.4) | Launch interactively (§3.3, §3.4), whatever the phase's `launch` says. It is this command's launch kind, not the prompting behaviour of `spec-008` §2's negatable `--no-interactive`, which keeps its meaning here. |
+| `--timeout <duration>` | `dl-181` Q4 (a) (v0.4) | Bound the agent's run: `<n>s`, `<n>m` or `<n>h`, `<n>` a positive integer without a leading zero, at most `24h`. At expiry the agent receives `SIGTERM`, and `SIGKILL` 10 s later if it has not exited (§3.3 step 15). Absent: unbounded. Either launch kind takes it. |
+| `--log <path>` | `dl-182` Q2 (a), Q4 (a) (v0.4) | Append a copy of a headless run's output (§3.5) to the file `<path>`, a path resolved against the current directory, created owner-only (mode `0600` on POSIX) when absent; the output still reaches stderr. When `<path>` is inside the project root and `git check-ignore` does not report it ignored (a file git tracks, or one no ignore rule covers), one `warning:` line says so (§3.3 step 13); a path outside the root is not checked. Only a headless launch takes it (§3.2 step 7). The output may hold secrets: WingFoil never commits it, and the caller chooses where the copy goes. |
 | `--format` | `REQ-INT-05`, `spec-005` §2 | See §3.4. |
 
 At least one of `--next`, `--workflow`, `--step` and `--element` is required. None → exit `2`, `error: missing
-required argument: --next or --element`.
+required argument: --next or --element`. `--headless` with `--interactive` → exit `2`, `error: invalid flag
+combination: --headless cannot be combined with --interactive`. A `--timeout` that is not a duration of that form →
+exit `2`, `error: invalid flag value: --timeout expects <n>s, <n>m or <n>h, got "<raw>"`; one over `24h` → exit `2`,
+`error: invalid flag value: --timeout must be at most 24h, got "<raw>"` (`spec-008` §12). A blank `--log` → exit `2`,
+`error: invalid flag value: --log must not be blank`; `--log` with `--interactive` → exit `2`, `error: invalid flag
+combination: --log needs a headless launch, and this run launches interactive` (`dl-182` Q4 (a)); a `--log` whose
+path, resolved against the current directory, is `.wingfoil/run/` under the project root or lies beneath it → exit
+`2`, `error: invalid flag value: --log must not name a file under .wingfoil/run/, the active registry` (the path is
+compared as resolved, without following a symbolic link, with the registry directory both under the project root as
+given and under the root's real path, its symbolic links resolved, so a `--project` given through a link still meets
+the check: a file there would be git-ignored, so no warning would name it, and the next reader would prune it as no
+entry, §7). All six are decided before the project is read. A `--log` on a run whose kind §3.2 step 7 resolves to `interactive` is refused
+there, with the same message and exit `2`.
+
+**The launch directory** (`bug-499`, `task-353`). The agent runs in the project root (§3.3 step 14): the directory
+the global `--project <dir>` names (`spec-008` §2, `dl-198` (a)), else the current directory. A linked worktree of
+the repository (`git worktree add`) is a root of its own — its `.git` is a file — so `wingfoil agent execute`
+given `--project <worktree>` reads every gating input at the worktree's `HEAD`, registers the MCP
+server for the worktree (§2.5), launches the agent there, and commits the record on the branch the worktree has
+checked out (§4.4), where the element's Memory commits are (`git-conventions` §1). `agent execute` has no option that
+sets the agent's working directory apart from the root: an agent launched in one checkout while the server serves,
+and the record lands on, another would split the run across two branches. A `<dir>` that is not a git root is
+refused before anything is read (`E_NOT_AT_GIT_ROOT`, exit `1`, `spec-008` §2).
 
 `--resume <run-id>` and `--ref <run-id>` (`dl-135` point 4) are **v0.4** (§7). In v0.3 they are not
 registered, so they are rejected as unknown options, exit `2`, per `spec-005` §1.
 
 **Where this grammar departs from the BDD** (`P5.3.1-agent-execute.feature`,
 `P5.3.2-agent-role-selection.feature`):
-- `--role` is in `X_cli-cmds.md:216` but in no scenario. `--agent`, `--workflow` and `--step` are in
-  neither.
+- `--role` is in `X_cli-cmds.md`'s `wingfoil agent execute` row (§ "Agent Execution Commands") but in no
+  scenario. `--agent`, `--workflow` and `--step` are in neither.
   The BDD gains scenarios for them, and for the run record, under `dl-114` Action 2 and `dl-135`
   Action 3. The BDD's `--name <workflow>` spelling on the workflow commands (P4.2/P4.3/P4.7/P4.8) is
   amended to `spec-017`'s positional `<ref>` in its own task (`spec-017` Consequences); nothing in the
@@ -405,26 +564,43 @@ In this order, each a gating read at `HEAD` (`spec-006` §6):
 1. **Step** (only with `--next`, `--workflow` or `--step`): `spec-017`'s `workflow next` deduction
    for the instance `--workflow <ref>` selects, else the active instance (`spec-017` §3.3). The step
    is the frontier step `--step <key>` names, which must be on that instance's frontier, else
-   `spec-017` §10's `step '<key>' is not on the frontier of <instance>` (`CONFLICT`); without
+   `spec-017` §10's `step '<key>' is not on the frontier of <instance>` (`CONFLICT`); a key without its scope
+   names the one frontier step of its workflow and phase, and several are `spec-017` §10's ambiguity refusal
+   (`spec-017` §4.9); without
    `--step`, it is `NextResult.next`, the first frontier step in `spec-017` §1.3's order (§7.3); it gives
-   `workflow`, `phase`, `scope`, `role`, `allowedModes` and `distinctFrom` (`spec-017` §6.3, §8).
+   `workflow`, `phase`, `scope`, `role`, `allowedModes`, `distinctFrom` and `launch` (`spec-017` §6.3, §8).
    A `<ref>` that resolves to no open instance is `spec-017` §10's refusal (`unknown workflow:
    <name>` or `workflow is not open: <ref>`). No open instance, or `next: null` without `--step` →
    `NO_NEXT_STEP`; with `--step`, an open instance whose frontier is empty is the `CONFLICT` above, since
    the key names no step of it. The deduction's commit is the `HEAD` every other read of the run takes
    (§3.3 step 2), so the step, the element and the context come from one commit.
+   **A step that only waits is refused** (`dl-171` (c), v0.4): without `--element`, a selected step whose
+   `awaiting` is not `null` (`spec-017` §5.1, §8: an approval, an approval record, or another party) →
+   `STEP_AWAITING`, whose message is the line `workflow next` prints for that step (`spec-017` §5.3: `human
+   needed: approve or reject <ids> — routed to <members>`, `human needed: finalize <key> — routed to <members>`,
+   or `waiting for <party>: <token> (a phase record completes it: wingfoil workflow finalize <instance> --step
+   <key>)`). The step is not skipped for a later one (`dl-171` rejected (a)). With `--element` the step is an
+   explicit target and keeps its phase and role (`dl-171` (c)); `--step` alone is not one.
 2. **Element**: `--element` if given, else the step's scope element, else the instance's bound
-   element (`spec-017` §3.4). A step with none of the three (a collection-entry scope on an unbound
-   instance) → `NO_STEP_ELEMENT`. The element must exist at `HEAD` → else `NOT_FOUND`; a short reference (`spec-008` §7) is resolved here, among the documents of the type at `HEAD`, and everything after names the full id; several matches → `CONFLICT`.
+   element (`spec-017` §3.4), else the instance's own `plan` element, `plan:<instance-id>` (`bug-418`,
+   `task-353`): an open instance is a `plan` element whose id is the instance id (`spec-017` §3.1), so a
+   step with no scope element on an unbound instance — a checkpoint of the `init` scaffold, a
+   collection-entry scope — runs on that plan, and its record goes to the plan's run log (§4.1). The
+   context element (`spec-017` §3.5) is not taken: it never enters deduction. A step with none of these
+   (no instance, a defence: every step form selects an instance, step 1) → `NO_STEP_ELEMENT`. The element must exist at `HEAD` → else `NOT_FOUND`; a short reference (`spec-008` §7) is resolved here, among the documents of the type at `HEAD`, and everything after names the full id; several matches → `CONFLICT`.
 3. **Role**: `--role` if given, else the step's `role` (P5.3.2); a step with `role: null` and no
    `--role` → `NO_STEP_ROLE`. Without `--next`, `--workflow` or `--step`, and without `--role`, the
-   role is the `developer` default of `X_cli-cmds.md:223`, and a `warning:` line says so
+   role is the `developer` default of `X_cli-cmds.md` (§ "Parameters for Agent Execution", the `--role`
+   row), and a `warning:` line says so
    (approver ruling R18, 2026-09-30, `release-planning-rel-v0.3-plan`; it keeps P5.3.1 scenario 2 passing as written):
    `warning: no --role given and no workflow step to take one from: running as the default role 'developer'`.
    The role must be in `team.roles`.
-4. **Agent**: per §3.1 `--agent`. The role `approver` is never executed by an agent, even when an
-   agent lists it in `executes_as`: it is the role that holds approval authority (`REQ-SEC-03`;
-   `team.agents[].approval_authority: false`, `.wingfoil/dna.yaml:123-128`) → `APPROVER_ROLE`. With
+4. **Agent**: per §3.1 `--agent`. A human-only role (`spec-002` § "Role binding", `dl-202` item 1: `approver`
+   always, the role that holds approval authority, `REQ-SEC-03`; and every role whose `team.roles` entry declares
+   `human_only: true`) is never executed by an agent → `HUMAN_ONLY_ROLE`, of which the `approver` case is the
+   former `APPROVER_ROLE`. It is decided before the agent is selected, so it holds whatever `--role`, `--agent` or
+   launch kind is given; and since `dna.yaml` refuses a `team.agents[].executes_as` that names a human-only role
+   (a load error, `spec-002`), no agent entry can claim one. With
    `--agent`, that agent's `executes_as` must contain the role; without it, the first agent with an
    `adapter` whose `executes_as` contains the role is taken, and if there is none → `NO_AGENT`.
    **The entry selected here is the identity that signs** (`dl-158` Rule 1 (a)): the launched agent
@@ -441,12 +617,26 @@ In this order, each a gating read at `HEAD` (`spec-006` §6):
    enforcement is a workflow check that lands with P4.12 in v1.0 (`spec-003` § "Execution
    independence", release boundaries) and reads the records' `session` field. The record carries the
    mode that ran.
+7. **Launch kind** (`dl-183`, v0.4): `interactive` or `headless`. The two cases no option relaxes are checked
+   before it: a step whose role is human-only is never launched (step 4, `HUMAN_ONLY_ROLE`, whatever option is given), and a
+   verification run is always headless and fresh, chosen by the engine (v1.0, P4.12, §3.5). Then, in this order of
+   precedence (`dl-183` Q2 (a)): `--headless` or `--interactive`; else the step's phase `launch` (`spec-003`
+   Layer 2) when it is `interactive` or `headless`; else `interactive` — for a stepless run, for a phase that
+   declares no `launch`, and for `launch: any`, under which the adapter's declared kinds are tried with
+   `interactive` first (`dl-183` Q3 (a); every format-1 manifest declares `launch.interactive`, §2.2). When the
+   option names the other kind than the one the phase declares, one `warning:` line says so: `phase
+   '<workflow>.<phase>' declares launch: <declared>; launching <kind> (--<kind>)`. A phase that declares no
+   `launch`, or `any`, contradicts no option, and no warning is printed. The adapter must declare
+   `launch.<kind>` (§3.3 step 4). A run that resolves to `interactive` and was given `--log` is refused here, a
+   usage error (exit `2`), with §3.1's `invalid flag combination: --log needs a headless launch, and this run launches
+   interactive` (`dl-182` Q4 (a)): its output belongs to the terminal, and nothing copies it.
 
 #### 3.3 Pipeline
 
-A fixed sequence. The first failure stops it. Before step 14, `agent execute` has written only its
-temporary files outside the repository (step 10); before step 17, it has written nothing to the
-repository.
+A fixed sequence. The first failure stops it. Before step 13, `agent execute` has written only its
+temporary files outside the repository (step 10); step 13 adds the run's entry in the git-ignored active registry
+(§7) and opens the file `--log` names; before step 17, it has written nothing git tracks, and nothing of the agent's
+output anywhere but stderr and that file (§3.5).
 
 1. Parse arguments → exit `2` on usage errors.
 2. Load `dna.yaml` and `memory.yaml` and, when a step is resolved (`--next`, `--workflow`, `--step`),
@@ -458,8 +648,14 @@ repository.
    before any resolution refusal. The stepless form resolves no step, reads no workflow file and prints none. `roles.yaml` and the
    directives are read by the context builder at step 7, so a missing `roles.yaml` is step 7's
    `INVALID_CONTEXT`.
-3. Resolve (§3.2).
-4. `command` of the adapter found on `PATH` (or at its repository path) → else `AGENT_NOT_FOUND`.
+3. Resolve (§3.2). A human-only role is refused here (§3.2 step 4), before the adapter is probed and before any
+   file is written.
+4. The adapter declares the launch kind §3.2 step 7 resolved (`launch.headless` for `headless`) → else
+   `NO_LAUNCH_KIND` (`dl-183` Q3 (a): refused, never a fallback to the other kind); then the `command` of the
+   adapter found on `PATH` (or at its repository path) → else `AGENT_NOT_FOUND`; then, when the adapter declares
+   `mcp.conflict_args`, that argv run as a post-run lookup runs (§2.6: the `command`, no shell, the project root,
+   WingFoil's environment, 10 s) → exit `0` is `MCP_SERVER_DECLARED`; a non-zero exit passes; a probe that
+   times out or cannot be started passes with one `warning:` line naming the adapter and the cause.
 5. Git identity present (`REQ-SEC-01`), since step 17 commits → else the shared pre-flight error
    (`requireGitIdentity`, `task-014`).
 6. Run log declared (§4.1) → else `NO_RUN_LOG`; the element's run-log file unmodified against
@@ -469,67 +665,136 @@ repository.
 8. Print `ExecutionContext.warnings` on stderr, in `spec-012` §5.1 order (`dl-050` option 4), then the
    documents the builder could not read (`W_MEMORY_UNREADABLE`, `spec-012` §3). The builder's notes
    (the DNA note, P5.3.3 sc. 3's `no relevant Memory found for task`) are not warnings: they reach the
-   agent inside the `{role}-session` Prompt's `warnings` (`spec-004` §3.2), not stderr.
+   agent inside the session context's `warnings` (`spec-004` §3.2: the session Resource the bootstrap
+   names, and the `{role}-session` Prompt, serve the same text), not stderr.
    The deduction's diagnostics of step 2 are printed before these, and before any refusal.
 9. Compute the run id (§4.3).
-10. Render `{bootstrap}` / `{bootstrap_file}` and `{mcp_config_file}`.
-11. **MCP pre-flight**: spawn `{mcp_command} {mcp_args}`, complete MCP `initialize`, get the
-    `{role}-session` Prompt with `element` and `state` = `state_ref`, then read the session Resource the
-    bootstrap names (§2.4, `task-236`), close. Any failure → `MCP_UNREACHABLE` (P5.4.3 sc. 3).
+10. Render `{bootstrap}` / `{bootstrap_file}`, and `{mcp_config_file}` or `{mcp_config}` from `mcp.template`
+    (§2.3): an MCP server command or argument holding an unpaired surrogate is refused here (§3.7).
+11. **MCP pre-flight**: spawn `{mcp_command} {mcp_args}`, complete MCP `initialize`, read the session
+    Resource the bootstrap names (§2.4, `task-236`), the one carrier the agent reads, close. The
+    `{role}-session` Prompt, which serves the same text from the same builder, is not fetched: one
+    assembly of the context per pre-flight (`task-355`, `bug-376`). Any failure → `MCP_UNREACHABLE` (P5.4.3 sc. 3).
     One deadline covers the whole exchange, start-up included (30 s, REQ-PERF-01's budget), not one per
     request.
     **Declared exception to the `HEAD` baseline:** the server is `wingfoil mcp`, whose own start-up
     check reads the working tree's `dna.yaml` role set (`spec-014` §1). An uncommitted change there —
     a deleted or invalid `dna.yaml` — refuses the pre-flight even though every gating read of steps 2–7
-    passed at `HEAD`. The Prompt it serves still resolves at `state` (§2.4).
-12. **Terminal check**, the last check before the spawn: when the adapter's
-    `launch.interactive.terminal` is `required` (the default), stdin and stdout must both be
+    passed at `HEAD`. The Resource it serves still resolves at `state` (§2.4).
+12. **Terminal check**, the last check before the spawn, for an interactive launch only: when the
+    adapter's `launch.interactive.terminal` is `required` (the default), stdin and stdout must both be
     terminals → else `NO_TERMINAL`. With `optional`, the check is skipped (§2.2, §2.7). Placing it
-    last keeps every earlier refusal reachable, and testable, without a terminal.
-13. Print `run <run-id>: launching <agent> (<adapter>) as <role> on <type>:<id>` on stderr, `<adapter>`
-    in the record's `<built-in|custom>/<name>` form. It is a **notice** (§3.4).
+    last keeps every earlier refusal reachable, and testable, without a terminal. A headless launch needs
+    no terminal and has no step 12.
+13. **Register the run** (§7, `dl-181`): create its entry `.wingfoil/run/<element-id>/<phase>/<n>.json`
+    exclusively (it must not exist), its `pid` `agent execute`'s own until step 14. An entry already there whose
+    process is alive → `RUN_ACTIVE`; one whose process is gone is pruned and the entry created. When
+    `git check-ignore` does not report the entry ignored, one `warning:` line says so (a project initialized
+    before v0.4 has no `.wingfoil/.gitignore`, `spec-011` § `.gitignore` policy): `.wingfoil/run/ is not
+    git-ignored: add "/run/" to .wingfoil/.gitignore, or a running launch can be committed`. Then, for a headless
+    run with `--log` (§3.5): open the file for appending, creating it owner-only when absent → else
+    `LOG_UNWRITABLE`, the entry removed; when it is inside the project root and `git check-ignore` does not report
+    it ignored, one `warning:` line: `--log <path> is inside the repository and not git-ignored: the agent's output
+    may hold secrets`, `<path>` as given. Then print `run <run-id>: launching <agent> (<adapter>) as <role> on
+    <type>:<id>` on stderr, `<adapter>` in the record's `<built-in|custom>/<name>` form. It is a **notice** (§3.4).
+    From here to step 18, every exit path removes the entry and closes the log.
 14. **Spawn** the agent's `command` (a name is looked up on `PATH`, a path resolved against the project
-    root) with `launch.interactive.args` (+ `session.assign_args` when `assign`), no shell, the project
-    root as its working directory, stdio inherited, WingFoil's environment passed through. This is
+    root) with `launch.<kind>.args`, then the permission fragment of the run's role (`launch.<kind>.permissions`:
+    the fragment itself, or the map's entry for the role, else its `default`; nothing when the field is absent;
+    §2.2, `dl-223` (b)), then the trust fragment when `launch.<kind>.trust` is one (§2.2, `bug-500`), then
+    `session.assign_args` when `assign`, no shell, the project root as its working directory (the directory
+    `--project` names, a linked worktree included, §3.1), WingFoil's environment passed through with §2.4's three
+    changes (the `wingfoil` shim first on `PATH`, `WINGFOIL_CLI`, `WINGFOIL_AGENT`). Interactive: stdio inherited.
+    Headless (§3.5): stdin is not connected (the null device), stdout and stderr are both captured and forwarded
+    to `agent execute`'s stderr line by line (§3.5), and the agent runs in a session and process group of its own
+    (POSIX), so it has no controlling terminal to open and receives no keyboard signal but the ones step 15
+    forwards. Once the agent is spawned, its registry entry (step 13) is rewritten in place (a new file renamed
+    over it) with the agent's `pid`; a spawn that fails removes it. When the agent exits (step 15), the entry is
+    rewritten again, the same way, with `agent execute`'s own `pid`, so it stays live through steps 16–17 — the
+    post-exit read of the output, the lookups and the record commit — and no reader prunes it, and no second launch
+    takes its run id, while the run is still being recorded (§7). This is
     the **"agent ready"** instant of `REQ-PERF-01`. Steps 1–14 must complete in < 30,000 ms p95
     (`02_performance-nfr.md:16-22`). The agent's own start-up is outside WingFoil's control and
     outside the budget (`adr-012` Consequences).
 15. Wait for the agent to exit. **Signals.** Interactive launch: the agent runs in `agent execute`'s
     foreground process group, so the terminal delivers keyboard signals to both processes directly.
-    While the agent runs, `agent execute` therefore **ignores** `SIGINT` and `SIGQUIT` (it neither
+    While the agent runs, `agent execute` therefore **ignores** `SIGINT`, `SIGQUIT` and `SIGHUP` (it neither
     dies nor forwards them, as a shell does for a foreground job; a forwarded copy would reach the
-    agent twice, and how an agent CLI treats a repeated `SIGINT` is its own behaviour, which WingFoil
+    agent twice, and how an agent CLI treats a repeated signal is its own behaviour, which WingFoil
     does not control) and
-    **forwards** only `SIGTERM` and `SIGHUP`, which do not come from the keyboard. Headless launch
-    (v1.0, §3.5): the agent has no terminal, and `SIGINT`, `SIGTERM` and `SIGHUP` are all forwarded.
-    In both cases `agent execute` then continues at step 16, so a run ended by a signal is still
+    **forwards** only `SIGTERM`, which does not come from the terminal. `SIGHUP` is the terminal's hang-up,
+    which the kernel delivers to the whole foreground process group, the agent included (and a shell
+    that is hung up sends it to each of its jobs' process groups); `agent execute` cannot tell it from a
+    `SIGHUP` sent to it alone, so it does not forward it (`task-355`, `bug-318`): a `SIGHUP` sent to
+    `agent execute` alone does not reach the agent, and `SIGTERM` is the signal that stops an interactive
+    run from outside. Headless launch
+    (v0.4, §3.5): the agent has no terminal and its own process group, so no signal reaches it twice:
+    `SIGINT`, `SIGTERM` and `SIGHUP` are all forwarded, and `SIGQUIT` is ignored. On POSIX a headless
+    run's forwarded signal, and both signals of the time bound, are sent to the agent's whole process
+    group, so the processes the agent started (the `wingfoil` MCP server it registered, its tools'
+    subprocesses) receive them too; once an agent that such a signal reached has exited, whatever is left
+    of its process group is sent `SIGKILL` before `agent execute` returns, so no process of a signalled
+    or timed-out headless run outlives it (`task-355`, `bug-516`). An interactive agent shares
+    `agent execute`'s process group, so its signal goes to the agent alone; on Windows, to the agent alone
+    in both kinds.
+    **The time bound** (`--timeout <duration>`, `dl-181` Q4 (a)): it runs from the spawn. At expiry,
+    while the agent runs, `agent execute` sends it `SIGTERM` through the same forwarding as a received
+    signal; if the agent has not exited 10 s later, `SIGKILL`. Both timers stop when the agent exits.
+    The record keeps what happened — `exit_status: "signal:SIGTERM"`, `"signal:SIGKILL"`, or the code of
+    an agent that handled `SIGTERM` and exited — and step 18 reports the expiry.
+    In every case `agent execute` then continues at step 16, so a run ended by a signal is still
     recorded (`exit_status: "signal:<NAME>"`). The handling holds until the record is committed: once
-    the agent has exited, a `SIGTERM` or `SIGHUP` has no agent to reach and is ignored like `SIGINT`,
+    the agent has exited, a signal of the forwarded set has no agent to reach and is ignored like `SIGQUIT`,
     so steps 16–17 (bounded by the lookups' limits) cannot be cut short and lose the run. The handling is
-    installed **before** the spawn, and before the pre-launch handling below is removed: a `SIGTERM` or
-    `SIGHUP` that arrives while the agent is being spawned is remembered and forwarded as soon as the
+    installed **before** the spawn, and before the pre-launch handling below is removed: a signal of the
+    forwarded set that arrives while the agent is being spawned is remembered and forwarded as soon as the
     agent exists, so no signal can end `agent execute` without a record or leave the agent orphaned. If
     the spawn then fails, there is no agent to forward it to: `agent execute` exits `1` with §3.7's
     `could not be started` refusal and writes nothing, the signal having ended nothing.
     **Before the spawn**, from step 10 on — its listeners installed before the temporary directory is
     created — a `SIGINT`, `SIGTERM` or `SIGHUP` removes the temporary files and then ends `agent execute`
     by that same signal, so an interrupted pre-flight leaves nothing behind (§2.3).
-16. Post-run lookups (§2.6), `agent_version` (§2.2), `notes` (§4.2).
-17. Append the record and commit it (§4.4).
-18. Exit: `0` if the agent exited `0` and step 17 succeeded; otherwise `1` (§3.7).
+16. The end of a headless run's output (§3.5): after the agent exits, its two streams are forwarded until each
+    ends, for at most 10 s (§2.6's lookup limit; a process the agent left behind may hold a pipe open), then
+    closed, and a last line without a newline is forwarded with one. Post-run lookups (§2.6), the session id of a
+    headless run's stdout under `session.id: output` (§2.6), `agent_version` (§2.2), `notes` (§4.2).
+    **The start-up hint** (`bug-500`, `task-353`): when the run did not succeed (the agent exited non-zero or
+    by a signal, or the time bound expired), `HEAD` is still `state_ref` (the agent committed nothing), `notes`
+    would be `none`, and the adapter declares `launch.<kind>.trust: prompt` for the kind that ran, the agent may
+    never have got past its CLI's folder-trust step: the record's `notes` is the fixed text `none (no commit since
+    state_ref: the agent CLI may have stopped at its folder-trust step)` (§4.2), and after step 17 one `warning:`
+    line says so, before step 18's error: `run <run-id>: the agent exited <exit_status> with no commit since
+    state_ref: its CLI may have stopped at its folder-trust step (adapter '<name>' declares launch.<kind>.trust:
+    prompt)`. Under `implied`, a fragment, or no `trust`, neither is given. The run's outcome and exit code are
+    unchanged.
+17. Append the record and commit it (§4.4). Then, whatever the commit's outcome, remove the run's registry entry
+    (§7) — only while the file still holds this launch's entry — and close the log.
+18. Exit: `0` if the agent exited `0`, the time bound did not expire, and step 17 succeeded; otherwise `1`
+    (§3.7). An expired bound is reported as `agent timed out after <duration>; run <run-id> recorded`,
+    `<duration>` as given, whatever the exit status.
 
-**`--dry-run`** (`spec-008` §2) runs steps 1–12 — every refusal included — and, instead of step 13,
-prints the launch plan on stdout and exits `0`: `{dryRun: true, subject, paths, run, bootstrap}`, the
+**`--dry-run`** (`spec-008` §2) runs steps 1–12 — every refusal included but step 12's — and, instead
+of step 13, prints the launch plan on stdout and exits `0`. Step 12 does not refuse a dry run, which
+spawns no agent and needs no terminal (`bug-392`): when a real run would be refused there, the dry run
+prints the one line `warning: interactive launch needs a terminal on stdin and stdout: a run without
+--dry-run is refused here` and its plan. The plan is `{dryRun: true, subject, paths, run, launch, bootstrap}`, the
 record commit's subject and run-log path, the record's fields known before the spawn (`id`, `element`,
-`workflow`, `phase`, `role`, `mode`, `agent`, `adapter`, `state_ref`, §4.2 order) and §2.4's bootstrap.
+`workflow`, `phase`, `role`, `mode`, `agent`, `adapter`, `state_ref`, §4.2 order), the launch
+`{kind, permissions}` — the kind §3.2 step 7 resolved and the fragment step 14 would append for the run's role,
+`[]` when the adapter declares none (`dl-223` Action 3) — and §2.4's bootstrap. The fragment is not part of the
+record (§4.2): it is the manifest's at `state_ref`, for the record's `role`.
 It has no `message` or `diff`: the record holds the run's exit, which no plan can know. Nothing is
-spawned but the pre-flight's server, and nothing is written to the repository.
+spawned but the pre-flight's server, and nothing is written to the repository. `--log` is checked as a real run
+checks it — its spelling at step 1, its refusal on an interactive run at §3.2 step 7 — and its not-ignored `warning:`
+line is printed, but the file is neither created nor opened, and no registry entry is written or checked.
 
 #### 3.4 Interactive launch: stdio
 
 - The agent inherits stdin, stdout and stderr. **WingFoil writes nothing to stdout**, before, during
   or after the run. Its own lines (warnings, the step-13 banner, the post-run summary, errors) go to
   stderr, before step 14 and after step 15.
+- The agent's output is the terminal's, and WingFoil neither reads nor copies it: `--log` is refused for an
+  interactive launch (§3.2 step 7, `dl-182` Q4 (a)), since a copy would mean interposing on the agent's terminal.
 - `warning: <text>` is the warning prefix, beside `spec-005` §3.1's `error: `. The post-run summary
   is one line: `run <run-id>: agent exited <exit_status> after <duration> (recorded in <sha7>)`.
 - The step-13 banner is a **notice**: neither a warning nor an error, an informational line printed
@@ -544,29 +809,55 @@ spawned but the pre-flight's server, and nothing is written to the repository.
   ("stdout carries only the structured payload"). An interactive launch has no stdout of its own to
   put a payload on. `spec-005` §2 is amended accordingly in a v0.3 task (Consequences; Q8, settled).
 
-#### 3.5 Headless launch (v1.0, shape only)
+#### 3.5 Headless launch: the work run (v0.4) and the verification run (v1.0)
 
-Specified now so that the adapter shape does not change in v1.0 (`adr-012` point 4). It ships with
-P4.12:
+A headless launch uses `launch.headless.args`, has no terminal, and `prompt.via` may be `stdin` (§2.2; a
+format-1 manifest still refuses `stdin`, because it declares `launch.interactive`). Two runs share it and differ
+in what ends them (`dl-181`):
 
-- It is selected by the workflow engine for a check that binds an agent, or by `--headless` (an
-  option registered in v1.0). It uses `launch.headless.args`, has no terminal, and `prompt.via` may be
-  `stdin`.
-- **The verdict is reported through an MCP Tool** on the registered server. Its name is provisional,
-  `gate.report`: `{ run_id, verdict: "PASS" | "FAIL" | "ERROR", summary: string }`. It is accepted
-  once per run, and a second call is refused.
-- `result` in the record (§4.2): the Tool's verdict. If the Tool is never called, the result is
-  **`ERROR`, never `FAIL`**. A non-zero agent exit is `ERROR`, whatever was reported. A verdict
-  WingFoil did not receive through the Tool is never inferred from the agent's text.
-- stdout carries `{ "run": <record> }` as the `spec-005` §2 payload. The agent's own stdout is
-  captured for `output` parsing and not echoed.
+- **The work run** (v0.4, `dl-181`, `dl-183`): an agent does work alone — implements a task, writes a
+  document, fixes a bug. It is selected by `--headless`, or by the step's phase `launch: headless` (§3.2 step 7).
+  A human-only role is refused for it as for an interactive launch (§3.2 step 4, `HUMAN_ONLY_ROLE`).
+  It has no verdict: its outcome is the commits the agent made and the record's `exit_status`, and the
+  record's `result` is `n/a`, as for an interactive launch (`dl-181` Q1 (a)). Its stdio is §3.3 step 14's
+  and its signals step 15's; `--timeout` bounds it. On success stdout carries `{ "run": <record> }` as the
+  `spec-005` §2 payload, and the §3.4 summary line is printed on stderr as a notice, so the record commit's
+  sha is still shown; a failure is §3.4's `error` with the summary as its `details` line.
+  **Its output** (`dl-182` Q1–Q5 (a)): the agent's stdout and stderr are both forwarded to `agent execute`'s
+  stderr, line by line as they arrive (a line ends at a newline; one still pending at 64 KiB is forwarded as it
+  stands). Each stream keeps its own order; how lines of the two streams interleave is the order they reach
+  `agent execute`. A line is its bytes up to the newline, decoded as UTF-8 with U+FFFD for an invalid sequence
+  (a carriage return before the newline stays in the line). Under `--format console` it is written followed by a
+  newline; under `json` / `yaml` it is one document among §3.4's, `{ "output": <the line>, "stream": "stdout" |
+  "stderr" }`, so stderr stays one document per message (`spec-005` §3.2). With `--log <path>`, every forwarded line is also appended to that file, in the
+  console form whatever `--format` says, after the step-13 banner and before the summary; WingFoil's own lines are
+  not copied there. WingFoil keeps no log of its own, and nothing of the output enters the run record, the
+  run log, the registry entry or any file but the one `--log` names: the output may hold secrets (a token a tool
+  printed, a credential in an error message), and it is stated, not filtered — nothing is redacted (Q5 (a)).
+  Under `session.id: output` the session id is read from its stdout, the same bytes that are forwarded (§2.6);
+  nothing else is parsed from them yet.
+  A headless agent CLI that would stop to ask whether to trust the launch directory has nobody to answer it
+  (`bug-500`): its adapter declares `launch.headless.trust` (§2.2), and a run that ends there is recorded with
+  §3.3 step 16's start-up hint.
+- **The verification run** (v1.0, P4.12, unchanged; specified now so that the adapter shape does not change,
+  `adr-012` point 4): selected only by the workflow engine, for a check that binds an agent, always headless
+  and `fresh` (§3.2 step 7).
+  - **The verdict is reported through an MCP Tool** on the registered server. Its name is provisional,
+    `gate.report`: `{ run_id, verdict: "PASS" | "FAIL" | "ERROR", summary: string }`. It is accepted
+    once per run, and a second call is refused.
+  - `result` in the record (§4.2): the Tool's verdict. If the Tool is never called, the result is
+    **`ERROR`, never `FAIL`**. A non-zero agent exit is `ERROR`, whatever was reported. A verdict
+    WingFoil did not receive through the Tool is never inferred from the agent's text.
+  - stdout carries `{ "run": <record> }` as for the work run.
 
 #### 3.6 What `agent execute` writes
 
 - **v0.3**: one run-record line in the element's run-log file, and one commit containing only that
   file (§4.4). Nothing else: no Memory transition, no workflow state (step execution is P4.10,
   v1.0). Temporary files are outside the repository and removed at exit.
-- **v0.4**: also the git-ignored `.wingfoil/run/` entry for the run's lifetime (§7).
+- **v0.4**: also, once per clone, the session salt in the git directory, outside the working tree (§2.6).
+- **v0.4**: also the git-ignored `.wingfoil/run/` entry for the run's lifetime (§7), and, with `--log`, the
+  lines appended to the file the caller names (§3.5); that file is the caller's, never committed by WingFoil.
 - The Memory transitions a run causes are made **by the agent**, through the Memory verbs or MCP
   Tools, under its own commits. They are not part of `agent execute`'s write set.
 
@@ -574,33 +865,43 @@ P4.12:
 
 | Case | `CoreError.code` | Exit | Message (`error: …`) |
 |---|---|---|---|
-| None of `--next`, `--workflow`, `--step`, `--element`; bad element-ref; unknown option (incl. v0.4 flags) | — (parse) | `2` | `missing required argument: --next or --element` / `spec-008` §7 message / Commander's |
+| None of `--next`, `--workflow`, `--step`, `--element`; bad element-ref; `--headless` with `--interactive`; a malformed or too long `--timeout`; a blank `--log`; `--log` with `--interactive`; a `--log` under `.wingfoil/run/`; unknown option (incl. `--resume` and `--ref`) | — (parse) | `2` | `missing required argument: --next or --element` / `spec-008` §7 message / `invalid flag combination: --headless cannot be combined with --interactive` / §3.1's two `--timeout` messages / `invalid flag value: --log must not be blank` / `invalid flag combination: --log needs a headless launch, and this run launches interactive` / `invalid flag value: --log must not name a file under .wingfoil/run/, the active registry` / Commander's |
 | any `spec-003` load error in the workflow registry (step 2) | `VALIDATION` | `1` | as `spec-017` §10's first row: the first error in `spec-003`'s order, every diagnostic in `details` |
 | `--workflow` names no workflow | `NOT_FOUND` | `1` | `unknown workflow: <name>` (`spec-017` §10) |
 | `--workflow` names no open instance | `NOT_FOUND` | `1` | `workflow is not open: <ref>` (`spec-017` §10) |
 | `--step` names no step on the instance's frontier | `CONFLICT` | `1` | `step '<key>' is not on the frontier of <instance>` (`spec-017` §10); `details` holds `step`, `instance` and `frontier`, the frontier's keys in frontier order (`task-330`, `bug-340`) |
+| `--step` without its scope names several frontier steps (`spec-017` §4.9, `bug-468`) | `CONFLICT` | `1` | `step '<key>' names <N> steps of <instance>: give --step, one of: <key>, <key>` (`spec-017` §10); `details` holds `step`, `instance` and `steps`, their keys in frontier order |
 | `NO_NEXT_STEP` | `NOT_FOUND` | `1` | `no next step to execute` (P5.3.1 sc. 3, verbatim) |
-| `NO_STEP_ELEMENT` | `VALIDATION` | `1` | `step '<key>' has no element: give --element <type>:<id>` |
+| `STEP_AWAITING` (a step form without `--element`, on a step whose `awaiting` is not `null`; `dl-171` (c)) | `CONFLICT` | `1` | the step's line of `spec-017` §5.3, as `workflow next` prints it (§3.2 step 1); `details` holds `step`, `instance` and `awaiting` (`approval` or `party`) |
+| `NO_STEP_ELEMENT` (a defence: no instance to take the `plan` element of, §3.2 step 2) | `VALIDATION` | `1` | `step '<key>' has no element: give --element <type>:<id>` |
 | element absent at `HEAD` | `NOT_FOUND` | `1` | `element not found: <type>:<id>` |
 | `--element` short reference matching several elements | `CONFLICT` | `1` | `ambiguous reference: <id> matches <N> elements` (`spec-008` §6), `hint:` `give the full id, or a longer prefix of it`, `details.candidates` and one `details` line per full id, in id order |
 | `NO_STEP_ROLE` | `VALIDATION` | `1` | `step '<key>' declares no role: give --role <role>` |
 | step role not in DNA | `VALIDATION` | `1` | `step role '<r>' not defined in dna.yaml` — a defence, reached only by a step deduced without `spec-003`'s role check: against the same committed `dna.yaml` the registry already refuses such a phase at step 2 (`E_PHASE_ROLE_UNKNOWN`, `unknown role '<r>' (not defined in dna.yaml)`, the row above), which is what a repository shows and what P5.3.2 sc. 3 expects (approver ruling 2026-10-11) |
 | `--role` not in DNA | `VALIDATION` | `1` | `unknown role '<r>' (not defined in dna.yaml)` (P5.4.2 sc. 3 text) |
-| `APPROVER_ROLE` | `VALIDATION` | `1` | `role 'approver' is never executed by an agent` (`REQ-SEC-03`) |
+| `HUMAN_ONLY_ROLE` (the role is human-only, `spec-002` § "Role binding"; its `approver` case was `APPROVER_ROLE`) | `VALIDATION` | `1` | `role '<r>' is never executed by an agent` (`dl-202` item 1) — for `approver`, `role 'approver' is never executed by an agent` (`REQ-SEC-03`), unchanged |
 | `NO_AGENT` (no `--agent`, and no agent with an adapter executes the role) | `VALIDATION` | `1` | `no agent in dna.yaml with an adapter executes as role '<r>'` |
 | `--agent` names no agent, or one whose `executes_as` lacks the role | `VALIDATION` | `1` | `unknown agent '<name>'` / `agent '<name>' does not execute as role '<r>'` |
 | `NO_ADAPTER` (`--agent` names an agent without `adapter`) | `VALIDATION` | `1` | `agent '<name>' declares no adapter` |
 | the agent's `adapter` is in neither directory at `HEAD` | `NOT_FOUND` | `1` | `adapter '<name>': no .wingfoil/agents/built-in/<name>.yaml or .wingfoil/agents/custom/<name>.yaml at HEAD` |
 | manifest invalid | `VALIDATION` | `1` | `adapter '<name>': <zod issue>` (`dl-055` detail lines) |
+| `LOG_INTERACTIVE` (§3.2 step 7: `--log` given and the kind resolved `interactive` from the phase's `launch` or the default; `dl-182` Q4 (a)) | — (usage) | `2` | `invalid flag combination: --log needs a headless launch, and this run launches interactive` |
+| `NO_LAUNCH_KIND` (step 4: the adapter declares no `launch.headless` for a headless launch; `dl-183` Q3 (a)) | `VALIDATION` | `1` | `adapter '<name>' declares no headless launch` — and its interactive counterpart, `adapter '<name>' declares no interactive launch`, once a format makes `launch.interactive` optional |
 | `AGENT_NOT_FOUND` | `IO` | `1` | `agent command '<command>' not found (adapter '<name>')` |
+| `MCP_SERVER_DECLARED` (step 4: `mcp.conflict_args` exited `0`; §2.5, `bug-372`) | `CONFLICT` | `1` | `adapter '<name>': the agent's own configuration declares an MCP server named 'wingfoil', which it would merge into the server agent execute registers: remove or rename it`; `details` holds `adapter` and `argv` |
 | git identity missing | as `requireGitIdentity` | `1` | as `requireGitIdentity` |
 | `NO_RUN_LOG` | `VALIDATION` | `1` | `dna.yaml declares no run log (paths.runs)` |
 | run-log file modified | `CONFLICT` | `1` | `run log <path> has uncommitted changes` |
 | `INVALID_CONTEXT` | `VALIDATION` | `1` | `invalid execution context: missing '<section>' section` (P5.4.4 sc. 3) |
+| the MCP server's command or an argument holds an unpaired surrogate (step 10, §2.3) | `VALIDATION` | `1` | `mcp.template cannot carry the MCP server's command: it holds an unpaired surrogate (U+<XXXX>)` / `… the MCP server's argument <n>: …`, `<n>` counted from 1, `<XXXX>` the first unpaired code unit in upper-case hex (`task-355`, `bug-371`) |
 | `MCP_UNREACHABLE` | `IO` | `1` | `context pre-load failed: MCP server unreachable` (P5.4.3 sc. 3, verbatim) |
-| `NO_TERMINAL` (step 12) | `VALIDATION` | `1` | `interactive launch needs a terminal on stdin and stdout` |
+| `NO_TERMINAL` (step 12, an interactive launch that is not a dry run; a dry run prints it as a warning, §3.3) | `VALIDATION` | `1` | `interactive launch needs a terminal on stdin and stdout` |
+| `RUN_ACTIVE` (step 13: the run id has a registry entry whose process is alive, §7; `dl-181`) | `CONFLICT` | `1` | `run <run-id> is already running (pid <pid>)`; `details` holds `run_id` and `pid` — nothing spawned, nothing recorded |
+| `LOG_UNWRITABLE` (step 13: the file `--log` names cannot be opened for appending) | `IO` | `1` | `cannot write the log <path>: <cause>`, `<path>` as given — the registry entry removed, nothing spawned, nothing recorded |
 | the agent's command cannot be started at step 14 (it vanished from `PATH` after step 4, the OS refuses it) | `IO` | `1` | `agent command '<command>' could not be started (adapter '<name>'): <cause>` — no run, no record (§0) |
+| `TIMED_OUT` (`--timeout` expired, step 15; whatever the exit status) | `IO` | `1` | `agent timed out after <duration>; run <run-id> recorded` (`dl-181` Q4 (a)), `<duration>` as given; `details` as the row below, plus `timeout` |
 | agent exited non-zero or by signal | `IO` | `1` | `agent exited <exit_status>; run <run-id> recorded` |
+| `START_UP_HINT` (step 16: the run did not succeed, with no commit since `state_ref`, and the kind's `trust` is `prompt`; `bug-500`) | `IO` | `1` | the row above's message (or `TIMED_OUT`'s), after the `warning:` line of §3.3 step 16; the record's `notes` is the start-up hint text (§4.2) |
 | record commit failed | `IO` | `1` | `run <run-id> not recorded: <cause>`, with the record as a `details` line |
 | duplicate run id at record time (§4.3) | `CONFLICT` | `1` | `run id <run-id> already recorded at HEAD` |
 
@@ -659,8 +960,8 @@ record with its keys in that order (`bug-288`). JSON Lines is chosen because:
 | 14 | `state_ref` | string | Full commit sha the context was assembled at (§3.3 step 7). |
 | 15 | `duration_ms` | integer | Wall-clock, spawn to exit. It is a record of what happened and never enters a context (`dl-114` Q2 rationale). |
 | 16 | `exit_status` | integer \| string | The agent's exit code, an integer from `0` to `255`, or `signal:<NAME>` (`bug-288`). |
-| 17 | `result` | string | `n/a` for an interactive launch; `PASS`/`FAIL`/`ERROR` for a headless one (§3.5). |
-| 18 | `notes` | string | `<element-id>#execution-notes` if the element's `## Execution Notes` section at `HEAD` after the run differs from its text at `state_ref`, else `none` (`dl-135` Q2 (c)). Notes the agent wrote but did not commit are not seen, and yield `none`; for a type whose template has no such section (§2.4) the value is always `none`. |
+| 17 | `result` | string | `n/a` for an interactive launch and for a headless work run (`dl-181` Q1 (a)); `PASS`/`FAIL`/`ERROR` for a verification run (§3.5, v1.0). |
+| 18 | `notes` | string | `<element-id>#execution-notes` if the element's `## Execution Notes` section at `HEAD` after the run differs from its text at `state_ref`, else `none` (`dl-135` Q2 (c)). Notes the agent wrote but did not commit are not seen, and yield `none`; for a type whose template has no such section (§2.4) the value is always `none`. A run that §3.3 step 16 finds stopped before any commit, under `launch.<kind>.trust: prompt`, records instead the fixed text `none (no commit since state_ref: the agent CLI may have stopped at its folder-trust step)` (`bug-500`, `task-353`). |
 
 A field is never omitted and never `null`. Adding a field is a revision of this spec. Readers
 refuse a line with an unknown key, so a record from a newer build is reported, not silently
@@ -749,7 +1050,7 @@ read, ids must be unique. A violation is
 ### 5. `wingfoil agent list`
 
 ```
-wingfoil agent list [--past] [--waiting] [--element <type>:<id>] [--phase <name>] [--format console|json|yaml]
+wingfoil agent list [--past] [--waiting] [--active] [--element <type>:<id>] [--phase <name>] [--format console|json|yaml]
 ```
 
 - **Sources** (`dl-135` point 1):
@@ -758,24 +1059,28 @@ wingfoil agent list [--past] [--waiting] [--element <type>:<id>] [--phase <name>
     `StatusResult.open[].frontier` whose `agentRole` is true (`spec-017` §6.3, §8, and its
     Consequences, "`dl-135`'s `agent list --waiting`"), i.e. every frontier step (`spec-017` §4.9) of
     every open instance (§3.2), not only each instance's first. `agentRole` is `spec-017`'s
-    predicate: the step's role is listed in some `team.agents[].executes_as`. **v0.3 limit, stated:**
-    with no active registry, a step that has an agent running on it right now is still listed as
-    waiting (`dl-135` point 1's "with no active run on it" is v0.4, §7).
-- **Flags.** `--past` selects the past section and `--waiting` the waiting section. Without either,
-  both sections are shown; both flags together are the same as neither. `--active` is v0.4, and in
-  v0.3 it is rejected as an unknown option, exit `2`.
-- `--element` and `--phase` filter both sources: a past record by its `element` and `phase` fields,
-  a waiting step by its element (its scope element, else its instance's bound element, as §3.2
-  step 2 resolves it) and its `phase`.
+    predicate: the step's role is listed in some `team.agents[].executes_as`. From v0.4 a step with an
+    agent running on it is not waiting (`dl-135` point 1's "with no active run on it"): a step is left out
+    when the active registry (§7) holds a live entry whose `workflow`, `phase` and `element` are the step's.
+  - **active** (v0.4, `dl-181`) = the live entries of the active registry (§7), read from the working tree's
+    `.wingfoil/run/` (§5.1), stale entries pruned as they are read.
+- **Flags.** `--past` selects the past section, `--waiting` the waiting section and `--active` the active
+  section. Without any of them, all three are shown; all three together are the same as none.
+- `--element` and `--phase` filter every source: an active entry, like a past record, by its `element` and
+  `phase` fields,
+  a waiting step by its element (its scope element, else its instance's bound element, else
+  `plan:<instance-id>`, as §3.2 step 2 resolves it, `bug-418`) and its `phase`.
 - **Order.** past: element id ascending (byte order), then line order within the file, which is
   append order. waiting: `spec-017` §1.3's frontier order (instance order, then depth-first phase
-  order, then iteration order), unchanged by filtering.
+  order, then iteration order), unchanged by filtering. active: element id ascending (byte order), then
+  phase (byte order), then `n` as a number — never directory order (`determinism`).
 - **JSON / YAML** (`REQ-INT-05`): a single object with `baseline` and `diagnostics` always, and only
   the selected source keys: `{ "baseline": { "rev": "HEAD", "commit": <sha> }, "past": [<record>…],
   "waiting": [{ "instance", "key", "workflow", "phase", "element", "role", "allowedModes", "agents"
-  }…], "diagnostics": [<Diagnostic>…] }`. `baseline` and `Diagnostic` are `spec-017` §8's shapes
+  }…], "active": [<entry>…], "diagnostics": [<Diagnostic>…] }`, an `<entry>` being §7's object, keys in
+  §7's order. `baseline` and `Diagnostic` are `spec-017` §8's shapes
   (`dl-084` (A): every payload carries the baseline it answered from). `key` is the step key
-  (`spec-017` §4.9); `element` is `<type>:<id>` or `null`; `agents` lists, in DNA order, the agents
+  (`spec-017` §4.9); `element` is `<type>:<id>`, the element §3.2 step 2 resolves, so a step `agent list --waiting` lists is one `agent execute --next` can run (`bug-418`); `agents` lists, in DNA order, the agents
   that execute the role and declare an adapter. `diagnostics` carries `spec-017`'s deduction
   diagnostics unchanged; its `W_UNCOMMITTED_INPUTS` already names run-log paths (`spec-017` §1.2).
   When `--past` alone is selected and no deduction runs, `agent list` emits that code itself under
@@ -784,10 +1089,13 @@ wingfoil agent list [--past] [--waiting] [--element <type>:<id>] [--phase <name>
   - past: `<id>  <role>  <agent>  <exit_status>  <duration>  <tokens>`, where `<duration>` is
     `duration_ms` in seconds with one decimal and an `s` (`61.0s`, as `agent execute`'s run summary
     rounds it) and `<tokens>` is `in/out`, or `not-reported` when both are;
-  - waiting: `<key>  <role>  <agents>`, the agents joined by `, `, or `none`.
+  - waiting: `<key>  <role>  <agents>`, the agents joined by `, `, or `none`;
+  - active: `<id>  <role>  <agent>  <pid>  <started>`, where `<started>` is `started_ms` as an ISO 8601
+    UTC instant with milliseconds (`2026-11-16T08:30:00.000Z`).
 
-  A non-empty section opens with the heading `past runs: <n>` or `waiting steps: <n>`; an empty one
-  prints `no past runs` or `no waiting steps` instead. Diagnostics print on stderr as `warning:` lines,
+  A non-empty section opens with the heading `past runs: <n>`, `waiting steps: <n>` or `active runs: <n>`; an
+  empty one prints `no past runs`, `no waiting steps` or `no active runs` instead. Sections print in the order
+  past, waiting, active. Diagnostics print on stderr as `warning:` lines,
   `<code> (<file>): <message>` (`spec-008` §6's form), carried as success warnings, so `json`/`yaml`
   print them on stderr too, beside the payload's `diagnostics`.
 - **Exit codes.** `0` on a result, including an empty one. `1` on a §4.5 violation, or when the
@@ -798,7 +1106,10 @@ wingfoil agent list [--past] [--waiting] [--element <type>:<id>] [--phase <name>
   `--phase` select: the filters choose what is listed, not what is checked, so a §4.5 violation in another
   element's log still exits `1`. `2` on a usage error only. A missing `paths.runs`
   is not an error for `list`: `past` is empty, with `warning: dna.yaml declares no run log
-  (paths.runs)`.
+  (paths.runs)`. A missing `.wingfoil/run/` is an empty `active`; one that cannot be read is `IO`, exit `1`,
+  `cannot read the active registry .wingfoil/run/: <cause>`. An entry pruned as unreadable or malformed (§7)
+  prints its `warning:` line and changes no exit code; so does a file `agent list` reads but cannot remove (§7's
+  `could not remove` line): the listing is still answered, without that file.
 
 #### 5.1 Baseline of `agent list` and `agent show` — a declared exception
 
@@ -826,6 +1137,13 @@ commands, at the cost of `agent list --waiting` (at `HEAD`) and `--past` (at the
 answering from two baselines in one payload. `spec-006` §6 gains the sentence declaring the
 exception in the implementing task (Consequences).
 
+**The active section is not in that exception** (v0.4). The active registry (§7) is a process cache that git never
+holds: it has no `HEAD` to read, and what it answers — which launches are running now — is a fact about this
+checkout's processes, so it is read from the working tree's `.wingfoil/run/`, as the `command-baseline` directive's
+rule that a read predicting a filesystem effect resolves on the filesystem has it. The payload's `baseline` still
+names the `HEAD` the other two sections answered from. Pruning a stale entry is the only write `agent list` makes, to
+that git-ignored cache; it changes nothing git tracks, so `agentList` stays `mutates: false` (§8).
+
 ### 6. `wingfoil agent show <run-id>`
 
 - Positional `<run-id>`, required. A malformed id (§4.3) → exit `2`,
@@ -838,18 +1156,47 @@ exception in the implementing task (Consequences).
   **Console**: `key: value` lines in §4.2 order, `tokens` flattened to `tokens.input` and so on, then
   `commit: <sha>`.
 
-### 7. v0.4, shape only
+### 7. v0.4: the active registry, and the shape of the rest
 
-Fixed here so that v0.3 does not foreclose it (`dl-135` release split, plan R5):
+The active registry ships with the headless work run (`dl-181`: a run with no terminal has nothing else to show it is
+alive); the rest of this section is fixed here so that v0.3 does not foreclose it (`dl-135` release split, plan R5):
 
-- **Active registry** (`dl-135` Q1 (a)): `.wingfoil/run/<element-id>/<phase>/<n>.json`, written at
-  step 14 and deleted at exit. The fields are `{ id, pid, workflow, phase, element, role, agent,
-  session, started_ms }`. It is git-ignored through a line that `wingfoil init` adds. Entries whose
-  `pid` is gone are pruned on every read. `agent execute` refuses a launch whose run id already has a
-  live entry. The task that ships it amends `spec-011`'s `.gitignore` policy, which today states "No
-  subpath within `.wingfoil/` is excluded" (`spec-011-storage-layout.md:199-203`); nothing in v0.3
-  writes `.wingfoil/run/`.
-- `agent list --active`, and `waiting` minus the steps with a live entry.
+- **Active registry** (`dl-135` Q1 (a), `dl-181`): one file per running launch,
+  `.wingfoil/run/<element-id>/<phase>/<n>.json` under the project root — the working tree's, so each linked worktree
+  has its own — its path the run id's three segments (§4.3). Its content is one JSON object and a newline, the keys
+  in this order: `id` (the run id: three non-empty segments `<element-id>/<phase>/<n>`, `<n>` a positive decimal
+  integer without a leading zero, naming the file's own path), `pid` (a positive integer: `agent execute`'s own from
+  §3.3 step 13 until the agent is spawned, then the agent's from the spawn until the agent exits, step 14, then
+  `agent execute`'s own again until the entry is removed, step 15), `workflow`, `phase`, `element`, `role` and
+  `agent` (the record's values, §4.2, each a non-empty string), `session` (the assigned session id under
+  `session.id: assign`, else `not-reported`: the other forms are known only after the run) and `started_ms` (the
+  wall-clock instant of step 13, milliseconds since the epoch, an integer from `0` to `8640000000000000`, the
+  range of an ECMAScript date: a record of what happened, never part of a context). Nothing of the agent's output, no environment value,
+  argv or path outside the root is written in it (`REQ-SEC-08`). It is created exclusively at step 13 and removed
+  after step 17, on every exit path once created; an `agent execute` killed by `SIGKILL` leaves it behind, and it
+  stays live while the agent it names runs.
+  **This launch's entry.** A launch removes the file, and rewrites its `pid` at the agent's exit, only while the file
+  still holds its own entry: the same `id` and `started_ms`, and a `pid` that is `agent execute`'s own or the agent it
+  spawned. A file that holds another launch's entry — one created after this launch's was pruned — is left as it is.
+  The check and the removal are two steps, not one atomic operation: a reader that prunes, and a launch that creates,
+  between them is a known limit.
+  **Liveness and pruning.** An entry is live while a process with its `pid` exists (`kill(pid, 0)` succeeds or
+  fails with `EPERM`); a pid the system has reused for another process keeps an entry live — a known limit. Every
+  reader — `agent list` and step 13 — prunes what it reads: an entry whose process is gone is removed, and so is a
+  file that is not one JSON object of exactly these keys with these types and ranges (JSON `null`, a missing or an
+  extra key, an empty string, a `pid` that is not a positive integer, a `started_ms` out of its range, an `id` that is
+  not three segments or does not name the file's path), with one `warning:` line, `.wingfoil/run/<path>: not an
+  active run entry: removed`; a directory left empty by a removal is removed too, up to `.wingfoil/run/` exclusive.
+  A removal that fails for another cause than the file being gone already leaves the file, and the reader goes on
+  with one `warning:` line, listing nothing of that file and never failing the read (§5): for a file that is no
+  entry, `.wingfoil/run/<path>: not an active run entry: could not remove: <cause>`, in place of the line above; for
+  an entry whose process is gone, `.wingfoil/run/<path>: could not remove: <cause>`. A file is reported by one line,
+  never two.
+  Readers list entries in §5's active order, never directory order.
+  **Git.** `.wingfoil/run/` is the one git-ignored subpath of `.wingfoil/`: `wingfoil init` writes
+  `.wingfoil/.gitignore` with the line `/run/` (`spec-011` § `.gitignore` policy). `agent execute` warns when the
+  entry it creates is not ignored (§3.3 step 13); it never refuses for it.
+- `agent list --active`, and `waiting` minus the steps with a live entry (§5).
 - `agent execute --resume <run-id>` and `--ref <run-id>`, each refused unless the step's
   `allowedModes` contains the mode (`dl-135` point 4; `spec-003` § "Execution independence").
   `--resume` also needs `session.resume.supported` and the same element and role, and passes
@@ -882,6 +1229,10 @@ reaches MCP in v0.3 and `spec-006` §4's parity rule needs no exception for them
 the mutation. `spec-006` §Consequences' possible split into `agentResolveNext` / `agentAdvanceStep`
 (`spec-006:285-289`) is not needed while nothing advances a step, and the `spec-006` revision deletes
 that bullet.
+
+The active registry (§7, v0.4) changes neither row's `mutates`: `agentExecute` also creates and removes its run's
+entry, and `agentList` prunes stale entries as it reads them (§5.1), both in a git-ignored process cache that no
+commit holds; the record commit stays `agentExecute`'s one mutation of the repository.
 
 ### Open questions
 
@@ -951,7 +1302,8 @@ that bullet.
     (`dl-135` Action 3), whose ids then replace the `dl-135` citation in `spec-006` §3's `feature`
     column and enter `minor-v0.3` `features:` through the plan; the dependency cells of P5.3.1 and
     P5.4.4 per `adr-012`;
-  - `docs/01_vision/X_cli-cmds.md`: the Agent Execution section (`:212-224`) gains `--workflow <ref>`,
+  - `docs/01_vision/X_cli-cmds.md`: the Agent Execution section (§ "Agent Execution Commands" and
+    § "Parameters for Agent Execution") gains `--workflow <ref>`,
     `--step <key>`, `--agent <name>`, `agent list` and `agent show` (`spec-006` §5 makes this file the
     source §3 follows), and P2.5's `paths` category list gains `runs` (§4.1, ruling R18);
   - `spec-002` (`team.agents[].adapter`, `paths.runs`);
@@ -973,15 +1325,16 @@ that bullet.
     the baseline it reads (`dl-084` (A)).
 - **Determinism.**
   - The bootstrap, the MCP payload and the run id are pure functions of committed state and the run's
-    inputs `(role, element, run id, state_ref)`. The argv is too, except for the temporary-file paths
-    (`{bootstrap_file}`, `{mcp_config_file}`, in the OS temporary directory) and the Node executable
-    path (`{mcp_command}`), which are host values that never reach the context. The `assign` session
-    id hashes the absolute repository root (§2.6), so it is per clone by design and is never used as
-    an identifier across clones; the run id is.
+    inputs `(role, element, run id, state_ref)`, the bootstrap also of the launching build's signature (§2.4). The
+    argv is too, except for the temporary-file paths (`{bootstrap_file}`, `{mcp_config_file}`, in the OS temporary
+    directory) and the Node executable path (`{mcp_command}`), which are host values that never reach the context;
+    so is the spawned environment's shim path (§2.4). The `assign` session id hashes the clone's random session
+    salt (§2.6), so it is per clone by design, discloses no host path, and is never used as an identifier across
+    clones; the run id is.
   - The wall-clock values (`duration_ms`, and `started_ms` in v0.4) sit only in records of what
     happened, never in a context.
-  - Two clones that launch the same step from the same `HEAD` produce the same bootstrap bytes and the
-    same run id, which is **I** (`dl-131`).
+  - Two clones that launch the same step from the same `HEAD` with the same build produce the same bootstrap
+    bytes and the same run id, which is **I** (`dl-131`).
   - The record's `mode`, `session` and `state_ref` are what the v1.0 **P** checks read (`dl-134`
     `distinct_from`).
 - **Revision triggers.**
@@ -990,7 +1343,9 @@ that bullet.
   - A new manifest field bumps `format`.
 - **Known limits, stated rather than hidden.**
   - An interactive launch often yields `not-reported` for model, tokens and session.
-  - v0.3's `waiting` includes steps already being worked on.
+  - v0.3's `waiting` includes steps already being worked on; from v0.4 it leaves out the steps with a live
+    registry entry in this checkout (§5, §7), never one a colleague, or another worktree, is running.
+  - A registry entry stays live while its `pid` names any process, a reused pid included (§7).
   - A colleague's runs appear only after they push (`dl-135` Decision 1).
   - No automated test exercises a real agent's terminal handling; the built-ins' `verified_with` pass
     is by hand (§2.7, `adr-012` Consequences).
@@ -1192,3 +1547,157 @@ for session, model and tokens. Edited in place without a supersede or a state ch
 reference (`spec-008` §7): the Process note's "Element ids are full ids … resolves only if such an id exists" no longer
 holds, an ambiguous reference is a `CONFLICT` row, and the run records the full id (approver design gate 2026-11-01,
 D1 (b)). Edited in place without a supersede or a state change (`dl-047`), pending the approver's `memory amend`.
+
+**Revision (2026-11-07, `task-335-add-the-headless-work-run-the-launch-phase-key-headless-interactive-timeout-next-on-a-waiting-step`)
+— §2.2, §2.8, §3.1, §3.2, §3.3, §3.5, §3.7, §4.2 and the `X_cli-cmds.md` citations.** The headless launch is split into
+the v0.4 work run and the v1.0 verification run (`dl-181` Q1 (a), Q3 (c), Q4 (a)): §3.5 is rewritten around the two
+runs, `launch.headless` is read from v0.4 (§2.2), each built-in gains a `launch.headless` block read from its CLI's
+help at `verified_with` (§2.8), the work run's stdio, process group, signals and `--timeout` are §3.3 steps 14–15 and
+18, and §4.2's `result` is `n/a` for a work run. Who chooses the kind is `dl-183` Q1–Q4 (a): `--headless` /
+`--interactive` (§3.1) over the phase's `launch` (`spec-003` Layer 2) over `interactive`, with a warning on a
+contradiction, as §3.2's new step 7; an adapter without the kind is §3.3 step 4's `NO_LAUNCH_KIND`. A step form
+refuses a step that only waits (`dl-171` (c), §3.2 step 1, `STEP_AWAITING`). A dry run no longer refuses at step 12
+(`bug-392`): it warns and prints its plan. The bare line citations of `docs/01_vision/X_cli-cmds.md` (Context, §3.1,
+§3.2 step 3, Consequences), which its version 1.7 had moved, cite its section headings and rows instead (`bug-380`,
+`dl-075`). Edited in place without a supersede or a state change (`dl-047`), pending the approver's `memory amend`.
+
+**Revision (2026-11-08, `task-355-fix-agent-execute-s-sighup-forwarding-run-log-line-endings-template-escaping-and-double-context-assembly`)
+— §2.3, §2.7, §3.3 steps 8, 10, 11 and 15, and §3.7.** An interactive launch no longer forwards `SIGHUP`: the
+terminal's hang-up reaches the agent in the foreground process group already, and a forwarded copy delivered it
+twice (`bug-318`, observed again on `main` at `b20ddf0a5` before this change); `SIGTERM` stays forwarded. A headless
+run's forwarded signals and its time bound reach the agent's whole process group on POSIX, and what is left of a
+signalled agent's group is sent `SIGKILL` once the agent has exited, so no child of the agent outlives the run
+(`bug-516`, absorbed by approver ruling of 2026-11-08). `mcp.template`'s rendering escapes U+007F and refuses an
+unpaired surrogate at step 10, a new §3.7 row, so a rendered value is valid TOML and valid JSON (`bug-371`). The MCP
+pre-flight reads only the session Resource, no longer the Prompt first, and
+step 8 names the session context rather than the Prompt alone (`bug-376`). §2.7's fake records the signals it receives and can start a child of its own. No manifest field, placeholder, record key or exit code changes.
+Edited in place without a supersede or a state change (`dl-047`), pending the approver's `memory amend`.
+
+**Revision (2026-11-08, `task-356-pin-codex-s-c-override-behaviour-record-codex-cli-session-ids-and-resolve-an-unscoped-step-key`)
+— §2.2, §2.5, §2.6, §2.8, §3.1, §3.2, §3.3, §3.5 and §3.7.** (1) `bug-372`: §2.5 records that Codex's `-c`
+override merges with a same-named table, a nested `env = {}` included (`codex-cli 0.145.0`, the approver's by-hand
+observations of 2026-10-15 and 2026-11-09),
+which the approver's headless run of 2026-11-08 (`task-335`, the override honoured, the session Resource read)
+does not contradict; §2.2 gains the optional `mcp.conflict_args`, and §3.3 step 4 refuses a launch while the
+agent's own configuration declares a server named `wingfoil` (§3.7 `MCP_SERVER_DECLARED`); the manifest `format`
+stays 1, an additive optional field (`dl-149`). (2) `bug-375`: `session.id: output` is read from a work run's stdout
+from v0.4 (§2.6, §3.5), `launch.headless.output` gains `jsonl`, and `codex-cli` records the session id of a headless
+run from `codex exec --json`, the `thread_id` of its first event (§2.8, observed by hand on 2026-11-09); an interactive `codex-cli` run still records `not-reported`, and resume stays
+unsupported until §7's resume ships. (3) `bug-468`: `--step` without its scope resolves per `spec-017` §4.9 (§3.1,
+§3.2 step 1, §3.7). Edited in place without a supersede or a state change (`dl-047`), pending the approver's
+`memory amend`.
+
+**Revision (2026-11-09, `task-356-pin-codex-s-c-override-behaviour-record-codex-cli-session-ids-and-resolve-an-unscoped-step-key`,
+review) — §2.8.** The paragraph that introduces the built-ins' headless launches said every built-in declares
+`output: none`; it now says that `codex-cli`'s declares `output: jsonl`, read for its session id (as its row already
+says), while `claude-code`'s stays `none`. Edited in place without a supersede or a state change (`dl-047`), pending
+the approver's `memory amend`.
+
+**Revision (2026-11-11, `task-339-declare-an-adapter-s-launch-permissions-per-role-and-print-the-selected-fragment-in-dry-run`)
+— §2.1, §2.2, §2.8 and §3.3.** `dl-223` (b) (`ready`) refines `dl-181` Q2 (a) from per adapter to per role: §2.2
+gains `launch.interactive.permissions` and `launch.headless.permissions`, an argv fragment or a map from a role name to
+a fragment with a `default` entry, holding no placeholder; §2.1 says what a map's role keys are; §3.3 step 14 appends
+the fragment of the run's role between `launch.<kind>.args` and `session.assign_args`, and the dry-run plan gains
+`launch: {kind, permissions}`; §2.8 gives each built-in's headless launch a role map, read from its CLI's help, and
+replaces the sentence that left the posture to `dl-223`. The manifest `format` stays 1, an additive optional field
+(`dl-149`); a 0.3.x build refuses a manifest that declares it (an unknown key). No placeholder, record key or exit code
+changes. Edited in place without a supersede or a state change (`dl-047`), pending the approver's `memory amend`.
+
+**Revision (2026-11-12, `task-339-declare-an-adapter-s-launch-permissions-per-role-and-print-the-selected-fragment-in-dry-run`)
+— §2.8.** The `claude-code` row of the headless table names `verified_with` `2.1.322 (Claude Code)`: the CLI updated
+itself from `2.1.310` between the help read and the by-hand pass of the role map, which ran on `2.1.322` and passed
+(`task-339`'s Execution Notes, "by-hand pass H2"; approver ruling 2026-11-12). The flags stay those read from the help
+of `2.1.310`. The `claude-code` map's `developer`, `qa` and `architect` entries gain `"Bash(wingfoil *)"`, and the
+posture paragraph says the `wingfoil` verbs run through the project's own copy of wingfoil, bare, through `npx` or
+through an npm script, the copy the project itself installs (the task's review, approver ruling 2026-11-12). The interactive table's
+`claude-code` `verified_with` cell reads as the history of `task-236`'s pass on `2.1.296`: the manifest has one
+`verified_with`, the headless table's. Edited in place without a supersede or a state change (`dl-047`), pending the
+approver's `memory amend`.
+
+**Revision (2026-11-12, `task-350-add-the-global-project-dir-option-naming-the-project-root-documenting-why-it-is-not-inferred`)
+— §2.5: the registered server names its root.** `{mcp_args}` gains `--project <the project root>` before `mcp`
+(`spec-008` §2, `dl-198` (a)), so the server the agent CLI starts serves the root `agent execute` resolved, whatever
+its working directory; the step 11 pre-flight uses the same arguments. The bootstrap (§2.4) and the run record (§4.2)
+are unchanged. Edited in place without a supersede or a state change (`dl-047`), pending the approver's
+`memory amend` at `task-350`'s design gate.
+
+**Revision (2026-11-13, `task-338-name-the-launching-build-in-the-bootstrap-set-wingfoil-agent-at-spawn-and-salt-the-session-id-per-clone`)
+— § 2.4 bootstrap, § 2.6 session id.** §2.4: the bootstrap gains `{cli_line}`, which names `wingfoil` as the agent's
+CLI and the launching build's signature `wingfoil --version` prints, with `"$WINGFOIL_CLI"` as the invocation that
+does not depend on `PATH`; the bootstrap becomes a function of that signature too (`dl-180` invocation (c),
+`bug-369`). The agent is spawned with a `wingfoil` shim of the launching build first on `PATH`, written in the run's
+temporary directory, `WINGFOIL_CLI` naming it, and `WINGFOIL_AGENT` naming the selected entry (`spec-018` §1.1); the
+post-run lookups, the pre-flight and the conflict probe keep WingFoil's environment. `{attribution_line}` takes
+`spec-018` Consequences' text: the verbs write the trailers, the agent passes `--ai-model`, writes the trailers itself
+only on a plain `git commit`, and never runs an approve, reject or amend (`bug-370`). §2.6: the `assign` session id
+hashes a per-clone random salt kept in the common git directory with the run id, never the repository root, the salt
+created once, atomically and owner-only, and refused when malformed (`dl-168` Q1 (b)); records committed before keep
+their ids as history; the record's `model` says whether WingFoil read a model, so `not-reported` marks the agent's
+`AI-Model:` trailers as its own claim (`bug-370`). The cross-references this needs: §3.3 step 14's environment
+sentence names §2.4's changes, §3.6 lists the salt, and the Consequences' determinism bullets follow. Edited in place
+without a supersede or a state change (`dl-047`), pending the approver's `memory amend` at `task-338`'s design gate.
+
+**Revision (2026-11-13, `task-340`)
+— §3.1, §3.2 steps 4 and 7, §3.3 step 3, §3.5, §3.7: the human-only refusal, per `dl-202` item 1.** The `approver` rule
+becomes a case of a rule on every human-only role (`spec-002` § "Role binding", the same revision): §3.7's
+`APPROVER_ROLE` row is `HUMAN_ONLY_ROLE`, message `role '<r>' is never executed by an agent`, which for `approver` is
+the message it had; it stays at §3.2 step 4, before the agent selection, so before any probe or file. §3.1's `--role`
+row, §3.3 step 3 and §3.5's work run name it. No other row, no exit code and no step order changes. Edited in place
+without a supersede or a state change (`dl-047`), pending the approver's `memory amend` at `task-340`'s design gate.
+
+**Revision (2026-11-13, `task-353-let-agent-execute-launch-in-a-task-worktree-and-report-an-agent-stopped-at-its-cli-s-folder-trust-prompt`)
+— §2.2, §2.8, §3.1, §3.2, §3.3, §3.5, §3.7, §4.2 and §5.** (1) `bug-499`: §3.1 says where the agent runs — the
+project root, which the global `--project` names, a linked worktree included — and §3.3 step 14 says it; no option
+sets the working directory apart from the root (the design's decision D1). (2) `bug-500`: §2.2 gains the optional
+`launch.interactive.trust` and `launch.headless.trust` (`implied`, `prompt` or an argv fragment appended after the
+permission fragment), §2.8 gives each built-in's values, and §3.3 step 16 records a start-up hint — the record's
+`notes` (§4.2) and one `warning:` line — when a run under `trust: prompt` ends unsuccessfully with no commit since
+`state_ref`; §3.5 and §3.7 say so. The manifest `format` stays 1, an additive optional field (`dl-149`); a build that
+does not know the key refuses a manifest that declares it. (3) `bug-418`: §3.2 step 2 falls back to the instance's
+own `plan` element, so `NO_STEP_ELEMENT` is a defence only (§3.7), and §5's waiting `element` follows step 2. No
+placeholder, record key or exit code changes. Edited in place without a supersede or a state change (`dl-047`),
+pending the approver's `memory amend` at `task-353`'s design gate.
+
+**Revision (2026-11-16, `task-336-forward-a-launched-agent-s-output-to-the-caller-with-an-optional-log-copy-and-keep-the-active-run-registry`)
+— § 3.1 grammar, § 3.2 resolution, § 3.3 pipeline, § 3.4, § 3.5 headless, § 3.6, § 3.7 refusals, § 5, § 5.1, § 7, § 8
+and the Consequences' known limits.** (1) `dl-182` Q1–Q5 (a): a headless run's stdout and stderr are both forwarded
+to `agent execute`'s stderr line by line, as written under `--format console` and one `{ "output", "stream" }`
+document per line under `json` / `yaml`, stdout staying the `{ "run": <record> }` payload (§3.3 steps 14 and 16,
+§3.5); `--log <path>` appends a copy in the console form, the file created owner-only, with a `warning:` line when
+it is inside the root and not git-ignored (§3.1, §3.3 step 13, §3.6); WingFoil keeps no log of its own and nothing of
+the output reaches the record or the repository, which §3.5 states together with the secrets the output may hold;
+an interactive launch keeps its terminal and refuses `--log` with exit `2`, at parse time with `--interactive` and at
+§3.2 step 7 otherwise (`LOG_INTERACTIVE`, §3.4, §3.7). (2) `dl-181` with `dl-135` Q1 (a): the active registry of
+§7 ships — its entry's content, its exclusive creation at the new start of §3.3 step 13 with `agent execute`'s pid
+rewritten to the agent's at step 14, its removal after step 17, liveness, pruning (malformed files included) and its
+order; a live entry for the run id refuses the launch (`RUN_ACTIVE`), an unwritable log too (`LOG_UNWRITABLE`);
+`agent list --active` lists the entries, from the working tree's `.wingfoil/run/` and outside §5.1's `HEAD`
+exception, and `waiting` leaves out a step with a live entry (§5, §5.1); §8 says why neither row's `mutates`
+changes. §3.3's opening sentence and §3.6 name the two new writes. §7's MCP bullet, the `agent.execute` Tool sentence
+included, and §8's MCP cells are unchanged: they are the MCP surface's (P5.2.3), not this task's. No placeholder,
+no key of §4.2 and no rule of §4.3 changes. Edited in place without a supersede or a state change (`dl-047`), pending
+the approver's `memory amend` at `task-336`'s design gate.
+
+**Revision (2026-11-16, `task-336-forward-a-launched-agent-s-output-to-the-caller-with-an-optional-log-copy-and-keep-the-active-run-registry`,
+review) — § 3.1 grammar, § 3.3 steps 14 and 17, § 3.7, § 5's exit codes and § 7's registry entry.** The independent
+review found four gaps in the registry rules as amended at the design gate. (1) After the agent exited, its entry still
+named the agent's dead pid while `agent execute` read the output, ran the lookups and committed the record, so a reader
+pruned it, a second launch could take the same run id, and the first launch's removal then deleted the second's
+entry: the `pid` now returns to `agent execute`'s own at the agent's exit (§3.3 step 14, §7), and a launch rewrites or
+removes the file only while it holds its own entry, by `id`, `started_ms` and `pid` (§3.3 step 17, §7, with the
+residual check-then-remove window stated as a known limit). (2) An entry's `id` must be three segments naming the
+file's path, and `started_ms` stays within an ECMAScript date's range; the malformed cases are listed (§7). (3) A
+`--log` path under `.wingfoil/run/` is refused at parse time, exit `2` (§3.1, §3.7's parse row): such a file would be
+git-ignored and then pruned as no entry. (4) A removal that fails while reading is one `warning:` line, never a failed
+read (§5, §7). No key of §4.2, no rule of §4.3 and no other exit code changes. Edited in place without a supersede or a
+state change (`dl-047`), pending the approver's `memory amend` at `task-336`'s review fix round.
+
+**Revision (2026-11-17, `task-336-forward-a-launched-agent-s-output-to-the-caller-with-an-optional-log-copy-and-keep-the-active-run-registry`,
+second review fix round) — § 3.1 grammar and § 7's pruning lines.** The re-review found two gaps. (1) A file that is
+no entry and cannot be removed printed the not-an-entry line, which says `removed`, and then the could-not-remove
+line: §7 now gives such a file one line, `.wingfoil/run/<path>: not an active run entry: could not remove: <cause>`,
+and keeps `.wingfoil/run/<path>: could not remove: <cause>` for a dead entry. (2) §3.1's refusal of a `--log` under
+`.wingfoil/run/` compared it with the registry under the root as given only, so a `--project` given through a symbolic
+link let a log under the real registry through: the registry directory is now also taken under the root's real path.
+No exit code, key or other message changes. Edited in place without a supersede or a state change (`dl-047`), pending
+the approver's `memory amend` at `task-336`'s second review fix round.

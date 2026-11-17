@@ -152,7 +152,7 @@ export const agentShowFn: CoreFn<unknown, AgentShowResult> = async (params) => {
 
   let runs: readonly string[] | undefined;
   try {
-    const dna = loadDnaYamlAtRev(root, commit);
+    const dna = loadDnaYamlAtRev(root, commit, 'HEAD');
     if (dna === null) {
       return coreErr({ code: 'NOT_FOUND', message: `${DNA_YAML_PATH} is not committed at HEAD, which agent show reads: commit it first` });
     }

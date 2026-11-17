@@ -58,7 +58,7 @@ types:
       file: memory/templates/plan.md
       frontmatter:
         required: [id, type, title, status, workflow, phase]
-    # A started workflow: `wingfoil workflow start` adds and submits it, `wingfoil workflow end` closes it.
+    # A started workflow: `wingfoil workflow start` adds it as draft, its author submits it, `wingfoil workflow end` closes it.
     states:
       sequence: [ draft, active, done ]
       waiting: [ active ]

@@ -212,7 +212,7 @@ describe('launchAgent — signals around the spawn (review fix 1, spec-016 §3.3
     expect(outcome.ok ? 'ok' : outcome.error.message).toBe(`agent exited signal:SIGTERM; run ${input.runId} recorded`);
   }, 60000);
 
-  it('SIGINT and SIGQUIT are ignored, SIGHUP forwarded, while the agent runs', async () => {
+  it('task-355 AC 1 — SIGINT, SIGQUIT and SIGHUP are ignored, SIGTERM forwarded, while an interactive agent runs (bug-318)', async () => {
     const { root, input } = launchFixture((manifest: AdapterManifest) => manifest);
     repos.push(root);
     const child = new FakeChild();
@@ -223,11 +223,13 @@ describe('launchAgent — signals around the spawn (review fix 1, spec-016 §3.3
     await new Promise((resolve) => setImmediate(resolve));
     process.emit('SIGINT', 'SIGINT');
     process.emit('SIGQUIT', 'SIGQUIT');
-    expect(child.killed).toEqual([]);
     process.emit('SIGHUP', 'SIGHUP');
+    const afterIgnored = [...child.killed];
+    process.emit('SIGTERM', 'SIGTERM');
     const outcome = await run;
-    expect(child.killed).toEqual(['SIGHUP']);
-    expect(outcome.ok ? 'ok' : outcome.error.message).toBe(`agent exited signal:SIGHUP; run ${input.runId} recorded`);
+    expect(afterIgnored).toEqual([]);
+    expect(child.killed).toEqual(['SIGTERM']);
+    expect(outcome.ok ? 'ok' : outcome.error.message).toBe(`agent exited signal:SIGTERM; run ${input.runId} recorded`);
   }, 60000);
 });
 

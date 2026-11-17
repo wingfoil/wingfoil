@@ -24,6 +24,7 @@ import { delimiter, dirname, join } from 'node:path';
 
 import Ajv2020 from 'ajv/dist/2020';
 
+import { checkGovernance } from '../../scripts/check-governance.cjs';
 import { formatReportJson, httpDay, main, measureRelease, measureToolchain, parseHttp, processConformance, resolveMeasurementPoint } from '../../scripts/release-health/measure.cjs';
 import type { ExternalReader, MetricEntry, Report, ToolCall, ToolResult, ToolRunner } from '../../scripts/release-health/measure.cjs';
 import { git, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
@@ -197,8 +198,10 @@ function taskDoc(id: string, status: string, extra = '', body = 'Revision.'): st
   return `---\nid: "${id}"\ntype: task\ntitle: "Task ${id}"\nstatus: ${status}\nref: "dl-117"\n${extra}---\n\n${body}\n`;
 }
 
+// task-358 (bug-320, approver ruling D2 (a) (i), (b)): a plan carries a ### Retrospective entry, so the fixture's
+// wf(plan): finalize stays clean under the governance check plan-retrospective.
 function planDoc(status: string): string {
-  return `---\nid: "demo-plan"\ntype: plan\ntitle: "Demo"\nstatus: ${status}\nworkflow: "demo"\nphase: "build"\nelement: "minor-v0.2"\nrelease: "v0.2"\n---\n\nSteps.\n`;
+  return `---\nid: "demo-plan"\ntype: plan\ntitle: "Demo"\nstatus: ${status}\nworkflow: "demo"\nphase: "build"\nelement: "minor-v0.2"\nrelease: "v0.2"\n---\n\nSteps.\n\n## Execution Notes\n\n### Retrospective\n\n- None.\n`;
 }
 
 function runRecord(phase: string, role: string, session: string): string {
@@ -1207,5 +1210,53 @@ describe('bug-329 — a signal removes the throw-away worktree and its directory
     expect(tree).toMatch(/wf-release-health-/);
     expect(existsSync(dirname(tree))).toBe(false);
     expect(git(r.root, ['worktree', 'list', '--porcelain'])).toBe(worktreesBefore);
+  });
+});
+
+/**
+ * task-352 design D4 (a) (`bug-466`'s class): P01 ("well-formed `wf()` commits") does not count the later check
+ * `co-author-identity`, which reports under rule `body` on every commit and whose subject G08 already measures; the
+ * governance check still reports it. Fixture: this repository's committed `.wingfoil/memory.yaml` and
+ * `.wingfoil/dna.yaml` (read at `HEAD`), then a `docs:` commit co-authored by the runtime-injected name of the v0.3.2
+ * breach (`bug-475`). Red until the check exists (the positive case); the P01 case guards the exclusion.
+ */
+describe('task-352 D4 — P01 leaves co-author-identity findings out (P01_EXCLUDED_CHECKS)', () => {
+  function coAuthorFixture(): { root: string; base: string; point: string } {
+    const root = makeTempGitRepo();
+    const atHead = (path: string): string => execFileSync('git', ['show', `HEAD:${path}`], { cwd: REPO_ROOT, encoding: 'utf-8' });
+    const commit = (message: string, files: Readonly<Record<string, string>>): string => {
+      for (const [path, content] of Object.entries(files)) writeFixtureFile(root, path, content);
+      git(root, ['add', '-A']);
+      execFileSync('git', ['commit', '--quiet', '--allow-empty', '--cleanup=whitespace', '-m', message], {
+        cwd: root,
+        encoding: 'utf-8',
+        env: { ...process.env, GIT_AUTHOR_DATE: DAY1, GIT_COMMITTER_DATE: DAY1 },
+      });
+      return git(root, ['rev-parse', 'HEAD']).trim();
+    };
+    const base = commit('chore: configure wingfoil', { '.wingfoil/memory.yaml': atHead('.wingfoil/memory.yaml'), '.wingfoil/dna.yaml': atHead('.wingfoil/dna.yaml') });
+    const point = commit('docs: a note\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nAI-Model: claude-opus-5-5', { 'docs/note.md': 'Note.\n' });
+    return { root, base, point };
+  }
+
+  it('the governance check reports the commit under co-author-identity, rule body (the positive case)', () => {
+    const { root, base, point } = coAuthorFixture();
+    try {
+      const findings = checkGovernance(root, { base }).findings.filter((finding) => (finding.check as string | undefined) === 'co-author-identity');
+      expect(findings.map(({ sha, rule }) => ({ sha, rule }))).toEqual([{ sha: point, rule: 'body' }]);
+    } finally {
+      removeTempDir(root);
+    }
+  });
+
+  it('P01 over the same window has no failing item', () => {
+    const { root, base, point } = coAuthorFixture();
+    try {
+      const p01 = processConformance(root, point, base).find((metric) => metric.id === 'P01');
+      expect(p01).toBeDefined();
+      expect(p01!.failing ?? []).toEqual([]);
+    } finally {
+      removeTempDir(root);
+    }
   });
 });

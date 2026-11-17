@@ -30,7 +30,7 @@ stacks:
 team:
   members:
     - name: WingFoil Test
-      email: wf-test@example.com
+      email: wf-test@example.invalid
       roles: [ approver ]
   roles:
     - name: developer
@@ -39,12 +39,12 @@ team:
     - name: approver
   agents:
     - name: Fake Agent
-      email: fake-agent@example.com
-      executes_as: [ developer, reviewer, approver ]
+      email: 0+fake-agent@users.noreply.github.com
+      executes_as: [ developer, reviewer ]
       approval_authority: false
       adapter: fake
     - name: Plain Agent
-      email: plain-agent@example.com
+      email: 0+plain-agent@users.noreply.github.com
       executes_as: [ developer ]
 paths:
   sources: [ src/ ]
@@ -98,12 +98,21 @@ export function manifest(name: string, edit: (text: string) => string = (text) =
   return edit(fake.replace(/^name: fake$/m, `name: ${name}`));
 }
 
+/**
+ * `.wingfoil/.gitignore` as `wingfoil init` writes it from v0.4 (task-336, `spec-011` § `.gitignore` policy): the active
+ * run registry `.wingfoil/run/` git-ignored. {@link seed} commits it, so a launch in the fixture prints no
+ * `.wingfoil/run/ is not git-ignored` warning (`spec-016` §3.3 step 13, approver ruling D8 (a)); a test of that warning
+ * removes it in its `tweak`.
+ */
+export const WINGFOIL_GITIGNORE = "# wingfoil agent execute's registry of running agents: local to this checkout, never committed.\n/run/\n";
+
 /** A project the fake adapter can be selected in; `tweak` edits the tree before the one commit. */
 export function seed(tweak: (repo: string) => void = () => undefined): string {
   const repo = makeTempGitRepo();
   writeFixtureFile(repo, '.wingfoil/dna.yaml', DNA_YAML);
   writeFixtureFile(repo, '.wingfoil/memory.yaml', MEMORY_YAML);
   writeFixtureFile(repo, '.wingfoil/roles.yaml', ROLES_YAML);
+  writeFixtureFile(repo, '.wingfoil/.gitignore', WINGFOIL_GITIGNORE);
   writeFixtureFile(repo, '.wingfoil/memory/templates/task.md', TASK_TEMPLATE);
   writeFixtureFile(repo, '.wingfoil/memory/templates/bug.md', BUG_TEMPLATE);
   for (const id of ['testing', 'code-review', 'doc-versioning']) {

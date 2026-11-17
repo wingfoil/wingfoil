@@ -237,7 +237,7 @@ function executorDiagnostics(
     );
   }
   if (phase.role === undefined) {
-    for (const field of ['mode', 'distinct_from'] as const) {
+    for (const field of ['mode', 'distinct_from', 'launch'] as const) {
       if (phase[field] === undefined) continue;
       out.push(
         error(file, at(field), 'E_PHASE_EXECUTOR_WITHOUT_ROLE', `phase '${phase.name}' declares ${field} but has no role (it has no executor)`),

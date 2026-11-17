@@ -3,7 +3,7 @@
  * `docs/02_requirements/02_bdd/features/p5-interaction/P5.2.1-mcp-resources.feature`. Exercised
  * end-to-end over the MCP SDK's own in-memory transport + a real `Client` (mirroring
  * `test/mcp/registrar.test.ts` / `test/mcp/resource-latency.test.ts`), against
- * `registerReadOnlyResources` (`src/mcp/index.ts`) — the full Memory + DNA + Workflow Resources
+ * `registerReadOnlyResources` (`src/mcp/read-only-resources.ts`) — the full Memory + DNA + Workflow Resources
  * channel plus the structural `resources/write` refusal.
  */
 import { existsSync } from 'fs';

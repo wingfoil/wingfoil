@@ -2,18 +2,25 @@
  * task-218 — the pure and near-pure parts of `agent execute`'s pre-launch half (`spec-016` §2.4, §2.5,
  * §2.3's temporary files, §3.2 step 4, §3.3 steps 4, 11 and 12), unit by unit. The pipeline as a user
  * meets it is `test/cli/agent-execute.integration.test.ts`.
+ *
+ * task-338 AC 1 and AC 3 (`spec-016` §2.4 as amended, `dl-180` (c), `bug-369`, `bug-370`): the bootstrap is a
+ * function of the launching build's signature too, and carries `{cli_line}` and `spec-018` Consequences'
+ * `{attribution_line}`; `cliShim` writes the POSIX `wingfoil` script and the win32 `wingfoil.cmd` (its text only,
+ * design D5); `runningBuildCli` names the build that runs `agent execute`.
  */
 import { execFileSync } from 'node:child_process';
-import { existsSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, relative, sep } from 'node:path';
 
 import {
   agentCommandFound,
+  cliShim,
   handoffLine,
   mcpPreflight,
   renderBootstrap,
   renderMcpTemplate,
+  runningBuildCli,
   runningBuildMcpServer,
   selectAgent,
   withRunFiles,
@@ -25,31 +32,116 @@ import { commitAll, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../
 const SHA = '0123456789abcdef0123456789abcdef01234567';
 const REPO_ROOT = join(__dirname, '..', '..');
 
-describe('renderBootstrap (§2.4) — a pure function of (role, element, run id, state_ref, signing entry)', () => {
-  it('is the fixed template, LF-terminated, with the context instruction and the handoff line', () => {
+describe('renderBootstrap (§2.4) — a pure function of (role, element, run id, state_ref, signing entry, build)', () => {
+  const BUILD = '9.9.9 (0123abc)';
+
+  it('task-338 AC 1, AC 3 — the fixed six-line template, LF-terminated: context instruction, CLI line, handoff line, attribution line', () => {
     const text = renderBootstrap({
       role: 'developer',
       element: 'task:task-001-a',
       runId: 'task-001-a/adhoc/1',
       stateRef: SHA,
       handoff: handoffLine(true),
-      agent: { name: 'Fake Agent', email: 'fake-agent@example.com' },
+      agent: { name: 'Fake Agent', email: '0+fake-agent@users.noreply.github.com' },
+      build: BUILD,
     });
     expect(text).toBe(
       [
         'WingFoil run task-001-a/adhoc/1: act as role "developer" on element task:task-001-a.',
         `Your context is assembled at commit ${SHA} and served by the "wingfoil" MCP server`,
         `registered for this session. Load it before any other action: Read the MCP resource "wingfoil://session/developer/task:task-001-a/${SHA}".`,
+        'Run WingFoil commands as "wingfoil <command>": the build that launched you is first on your PATH, and "wingfoil --version" prints "9.9.9 (0123abc)"; if it prints anything else, run "$WINGFOIL_CLI" in place of "wingfoil".',
         'Record your handoff in the element\'s "## Execution Notes" section.',
-        'End every commit you write, except an approve or reject commit, with the trailer paragraph "Co-Authored-By: Fake Agent <fake-agent@example.com>" and "AI-Model: <the model identifier you run as>"; to a commit wingfoil writes, add them with git commit --amend --no-edit --trailer, never as a paragraph of their own (git-conventions §7, §8).',
+        'Commits wingfoil writes for you already end with "Co-Authored-By: Fake Agent <0+fake-agent@users.noreply.github.com>" and an "AI-Model:" trailer: pass --ai-model <your model identifier> to each wingfoil command that writes a commit, or that trailer records "AI-Model: not-reported"; end a commit you write yourself with git commit with the trailer paragraph "Co-Authored-By: Fake Agent <0+fake-agent@users.noreply.github.com>" and "AI-Model: <your model identifier>"; never run memory approve, memory reject or memory amend, which refuse in your session (git-conventions §7).',
         '',
       ].join('\n'),
     );
   });
 
+  it('task-338 AC 3 — no longer asks the agent to type its model into an amend (bug-370)', () => {
+    const text = renderBootstrap({
+      role: 'developer',
+      element: 'task:task-001-a',
+      runId: 'task-001-a/adhoc/1',
+      stateRef: SHA,
+      handoff: handoffLine(true),
+      agent: { name: 'Fake Agent', email: '0+fake-agent@users.noreply.github.com' },
+      build: BUILD,
+    });
+    expect(text).not.toContain('<the model identifier you run as>');
+    expect(text).not.toContain('--amend');
+  });
+
+  it('task-338 AC 1 — another build is named in its own CLI line; no host path enters the bootstrap', () => {
+    const input = { role: 'qa', element: 'bug:bug-1', runId: 'bug-1/adhoc/2', stateRef: SHA, handoff: handoffLine(false), agent: { name: 'A', email: 'a@users.noreply.github.com' } };
+    const text = renderBootstrap({ ...input, build: '1.2.3 (fedcba9)' });
+    expect(text.split('\n')[3]).toBe(
+      'Run WingFoil commands as "wingfoil <command>": the build that launched you is first on your PATH, and "wingfoil --version" prints "1.2.3 (fedcba9)"; if it prints anything else, run "$WINGFOIL_CLI" in place of "wingfoil".',
+    );
+    expect(text).not.toContain(process.execPath);
+    expect(text).not.toContain(REPO_ROOT);
+  });
+
   it('the same inputs render the same bytes', () => {
-    const input = { role: 'qa', element: 'bug:bug-1', runId: 'bug-1/adhoc/2', stateRef: SHA, handoff: handoffLine(false), agent: { name: 'A', email: 'a@example.com' } };
+    const input = { role: 'qa', element: 'bug:bug-1', runId: 'bug-1/adhoc/2', stateRef: SHA, handoff: handoffLine(false), agent: { name: 'A', email: '0+a@users.noreply.github.com' }, build: BUILD };
     expect(renderBootstrap(input)).toBe(renderBootstrap({ ...input }));
+  });
+});
+
+describe('task-338 AC 1 — cliShim: the wingfoil shim of the launching build (spec-016 §2.4, design D1, D5)', () => {
+  const cli = { command: '/opt/node/bin/node', args: ['/opt/wf/dist/cli.js'] };
+
+  it('POSIX: named wingfoil, a /bin/sh script that execs the Node executable and cli.js with its arguments, single-quoted', () => {
+    const shim = cliShim(cli, 'linux');
+    expect(shim.name).toBe('wingfoil');
+    const lines = shim.text.split('\n');
+    expect(lines[0]).toBe('#!/bin/sh');
+    expect(lines).toContain(`exec '/opt/node/bin/node' '/opt/wf/dist/cli.js' "$@"`);
+    expect(shim.text.endsWith('\n')).toBe(true);
+    expect(shim.text).not.toContain('\r');
+  });
+
+  it("POSIX: a quote in a path is written '\\''", () => {
+    const shim = cliShim({ command: "/opt/it's/node", args: ["/a b/o'k/cli.js"] }, 'darwin');
+    expect(shim.text.split('\n')).toContain(`exec '/opt/it'\\''s/node' '/a b/o'\\''k/cli.js' "$@"`);
+  });
+
+  it('POSIX: the script runs that build with every argument intact, through sh, no other shell expansion', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'wf-cli-shim-'));
+    try {
+      // A stand-in "cli.js" in a path with a quote and a space, which prints the arguments it receives.
+      const fakeCli = join(dir, "o'k dir", 'cli.js');
+      mkdirSync(dirname(fakeCli));
+      writeFileSync(fakeCli, 'process.stdout.write(JSON.stringify(process.argv.slice(2)));\n');
+      const shim = cliShim({ command: process.execPath, args: [fakeCli] }, 'linux');
+      const file = join(dir, shim.name);
+      writeFileSync(file, shim.text, { mode: 0o700 });
+      const out = execFileSync('sh', [file, '--version', 'a b', '$HOME', "q'uote"], { encoding: 'utf-8' });
+      expect(JSON.parse(out)).toEqual(['--version', 'a b', '$HOME', "q'uote"]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('win32: named wingfoil.cmd, one CRLF line running the Node executable and cli.js with %*', () => {
+    const shim = cliShim({ command: 'C:\\Program Files\\nodejs\\node.exe', args: ['C:\\wf\\dist\\cli.js'] }, 'win32');
+    expect(shim.name).toBe('wingfoil.cmd');
+    expect(shim.text).toBe('@"C:\\Program Files\\nodejs\\node.exe" "C:\\wf\\dist\\cli.js" %*\r\n');
+  });
+});
+
+describe('task-338 AC 1 — runningBuildCli: the build that runs agent execute (spec-016 §2.4)', () => {
+  it('from the compiled build: the Node executable and [<dist>/cli.js]', () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const dist = require(join(DIST_DIR, 'agent')) as { runningBuildCli: typeof runningBuildCli };
+    expect(dist.runningBuildCli()).toEqual({ command: process.execPath, args: [CLI_ENTRY] });
+  });
+
+  it('from the sources: the Node executable and this tree\'s cli entry beside the module', () => {
+    const cli = runningBuildCli();
+    expect(cli.command).toBe(process.execPath);
+    expect(cli.args).toHaveLength(1);
+    expect(cli.args[0]!.endsWith(`${sep}cli.js`)).toBe(true);
   });
 });
 
@@ -63,12 +155,55 @@ describe('handoffLine (§2.4) — chosen by the type template’s `## Execution 
 describe('renderMcpTemplate (§2.3) — {mcp_command} and {mcp_args} in mcp.template', () => {
   it('fills the command as JSON string content and the args as a JSON array', () => {
     const template = '{"mcpServers": {"wingfoil": {"command": "{mcp_command}", "args": {mcp_args}}}}\n';
-    const text = renderMcpTemplate(template, { command: '/opt/node "v22"/bin/node', args: ['/a\\b/cli.js', 'mcp'] });
-    expect(JSON.parse(text)).toEqual({ mcpServers: { wingfoil: { command: '/opt/node "v22"/bin/node', args: ['/a\\b/cli.js', 'mcp'] } } });
+    const rendered = renderMcpTemplate(template, { command: '/opt/node "v22"/bin/node', args: ['/a\\b/cli.js', 'mcp'] });
+    expect(rendered.ok).toBe(true);
+    if (!rendered.ok) return;
+    expect(JSON.parse(rendered.value)).toEqual({ mcpServers: { wingfoil: { command: '/opt/node "v22"/bin/node', args: ['/a\\b/cli.js', 'mcp'] } } });
   });
 
   it('leaves braces that are not a placeholder alone', () => {
-    expect(renderMcpTemplate('{"a": {}} {mcp_command}', { command: 'node', args: [] })).toBe('{"a": {}} node');
+    expect(renderMcpTemplate('{"a": {}} {mcp_command}', { command: 'node', args: [] })).toEqual({ ok: true, value: '{"a": {}} node' });
+  });
+});
+
+describe('task-355 AC 3 — renderMcpTemplate escapes U+007F and refuses an unpaired surrogate (bug-371, spec-016 §2.3, §3.7)', () => {
+  const DEL = String.fromCharCode(0x7f);
+
+  it('U+007F in the command is written as the escape \\u007f, never raw', () => {
+    const rendered = renderMcpTemplate('x="{mcp_command}"', { command: '/a\u007fb/node', args: [] });
+    expect(rendered).toEqual({ ok: true, value: 'x="/a\\u007fb/node"' });
+    expect(JSON.stringify(rendered).includes(DEL)).toBe(false);
+  });
+
+  it('U+007F in an argument is written as the escape \\u007f, never raw', () => {
+    const rendered = renderMcpTemplate('{mcp_args}', { command: 'node', args: ['/a\u007fb', 'mcp'] });
+    expect(rendered).toEqual({ ok: true, value: '["/a\\u007fb","mcp"]' });
+    expect(JSON.stringify(rendered).includes(DEL)).toBe(false);
+  });
+
+  it("an unpaired high surrogate in the command: VALIDATION naming the command and the code point", () => {
+    expect(renderMcpTemplate('x="{mcp_command}"', { command: '/a\ud800b', args: [] })).toEqual({
+      ok: false,
+      error: { code: 'VALIDATION', message: "mcp.template cannot carry the MCP server's command: it holds an unpaired surrogate (U+D800)" },
+    });
+  });
+
+  it('an unpaired low surrogate in an argument: VALIDATION naming the argument, from 1', () => {
+    expect(renderMcpTemplate('{mcp_args}', { command: 'node', args: ['/x\udc00', 'mcp'] })).toEqual({
+      ok: false,
+      error: { code: 'VALIDATION', message: "mcp.template cannot carry the MCP server's argument 1: it holds an unpaired surrogate (U+DC00)" },
+    });
+  });
+
+  it('a low surrogate before a high one pairs with nothing: the first is named', () => {
+    expect(renderMcpTemplate('x="{mcp_command}"', { command: '\udc00\ud800', args: [] })).toEqual({
+      ok: false,
+      error: { code: 'VALIDATION', message: "mcp.template cannot carry the MCP server's command: it holds an unpaired surrogate (U+DC00)" },
+    });
+  });
+
+  it('a paired surrogate (U+1F600) is accepted and written raw', () => {
+    expect(renderMcpTemplate('x="{mcp_command}"', { command: '/a\u{1F600}b', args: [] })).toEqual({ ok: true, value: 'x="/a\u{1F600}b"' });
   });
 });
 
@@ -113,17 +248,21 @@ describe('withRunFiles (§2.3) — the temporary files live in the OS temporary 
   });
 });
 
-describe('runningBuildMcpServer (§2.5) — the build that runs agent execute', () => {
-  it('from the compiled build: the Node executable and [<dist>/cli.js, "mcp"]', () => {
+// task-350 AC 5 (design D2 (a), `spec-016` §2.5 amended): the registered server names the root `agent execute`
+// resolved, so it serves that root whatever working directory the agent CLI starts it in.
+describe('runningBuildMcpServer (§2.5) — the build that runs agent execute, serving the root it resolved', () => {
+  const ROOT = '/fixture/project-root';
+
+  it('from the compiled build: the Node executable and [<dist>/cli.js, "--project", <root>, "mcp"]', () => {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const dist = require(join(DIST_DIR, 'agent')) as { runningBuildMcpServer: typeof runningBuildMcpServer };
-    expect(dist.runningBuildMcpServer()).toEqual({ command: process.execPath, args: [CLI_ENTRY, 'mcp'] });
+    expect(dist.runningBuildMcpServer(ROOT)).toEqual({ command: process.execPath, args: [CLI_ENTRY, '--project', ROOT, 'mcp'] });
   });
 
-  it('from the sources it names this tree’s cli entry beside the module (no build: the pre-flight then fails as unreachable)', () => {
-    const server = runningBuildMcpServer();
+  it('from the sources it names this tree’s cli entry beside the module, then --project <root> mcp (no build: the pre-flight then fails as unreachable)', () => {
+    const server = runningBuildMcpServer(ROOT);
     expect(server.command).toBe(process.execPath);
-    expect(server.args[1]).toBe('mcp');
+    expect(server.args.slice(1)).toEqual(['--project', ROOT, 'mcp']);
   });
 });
 
@@ -157,9 +296,9 @@ const team = (agents: unknown[]): DnaYaml =>
   ({ team: { roles: [{ name: 'developer' }, { name: 'qa' }], agents } }) as unknown as DnaYaml;
 
 describe('selectAgent (§3.2 step 4)', () => {
-  const fake = { name: 'Fake', email: 'fake@example.com', executes_as: ['developer'], adapter: 'fake' };
-  const plain = { name: 'Plain', email: 'plain@example.com', executes_as: ['developer', 'qa'] };
-  const second = { name: 'Second', email: 'second@example.com', executes_as: ['developer', 'qa'], adapter: 'other' };
+  const fake = { name: 'Fake', email: '0+fake@users.noreply.github.com', executes_as: ['developer'], adapter: 'fake' };
+  const plain = { name: 'Plain', email: '0+plain@users.noreply.github.com', executes_as: ['developer', 'qa'] };
+  const second = { name: 'Second', email: '0+second@users.noreply.github.com', executes_as: ['developer', 'qa'], adapter: 'other' };
 
   it('without --agent: the first agent, in declared order, with an adapter that executes the role', () => {
     const picked = selectAgent(team([plain, fake, second]), 'developer', undefined);
@@ -238,11 +377,11 @@ function runningBuildFromDist(): { command: string; args: string[] } {
   return { command: process.execPath, args: [CLI_ENTRY, 'mcp'] };
 }
 
-describe('mcpPreflight — a server that answers the Prompt with no text is unreachable (§3.3 step 11)', () => {
-  it('an empty messages list: MCP_UNREACHABLE naming the empty prompt', async () => {
+describe('mcpPreflight — a server that answers the session Resource with no text is unreachable (§3.3 step 11)', () => {
+  it('task-355 AC 4 — an empty contents list: MCP_UNREACHABLE naming the empty session resource', async () => {
     const root = makeTempGitRepo();
     try {
-      // A minimal stdio MCP server: initialize, then an empty prompt for any prompts/get.
+      // A minimal stdio MCP server: initialize, then an empty contents list for any resources/read.
       writeFixtureFile(
         root,
         'stub-server.cjs',
@@ -251,8 +390,8 @@ describe('mcpPreflight — a server that answers the Prompt with no text is unre
           "const send = (m) => process.stdout.write(JSON.stringify({ jsonrpc: '2.0', ...m }) + '\\n');",
           "rl.on('line', (line) => {",
           '  const m = JSON.parse(line);',
-          "  if (m.method === 'initialize') send({ id: m.id, result: { protocolVersion: m.params.protocolVersion, capabilities: { prompts: {} }, serverInfo: { name: 'stub', version: '1' } } });",
-          "  else if (m.method === 'prompts/get') send({ id: m.id, result: { messages: [] } });",
+          "  if (m.method === 'initialize') send({ id: m.id, result: { protocolVersion: m.params.protocolVersion, capabilities: { resources: {} }, serverInfo: { name: 'stub', version: '1' } } });",
+          "  else if (m.method === 'resources/read') send({ id: m.id, result: { contents: [] } });",
           '});',
           '',
         ].join('\n'),
@@ -268,7 +407,49 @@ describe('mcpPreflight — a server that answers the Prompt with no text is unre
       expect(result.ok).toBe(false);
       if (result.ok) return;
       expect(result.error.message).toBe('context pre-load failed: MCP server unreachable');
-      expect(result.error.details?.['cause']).toBe('the developer-session prompt returned no context text');
+      expect(result.error.details?.['cause']).toBe(`the session resource wingfoil://session/developer/task:task-001-a/${SHA} returned no context text`);
+    } finally {
+      removeTempDir(root);
+    }
+  }, 30000);
+});
+
+describe('task-355 AC 4 — the pre-flight reads only the session Resource the bootstrap names (bug-376, spec-016 §3.3 step 11)', () => {
+  it('a server that serves the Resource and refuses prompts/get: ok, and prompts/get is never asked', async () => {
+    const root = makeTempGitRepo();
+    try {
+      // A stdio MCP server that answers initialize and resources/read, refuses prompts/get with -32601, and
+      // appends the method of every message it receives to methods.log.
+      writeFixtureFile(
+        root,
+        'resource-server.cjs',
+        [
+          "const { appendFileSync } = require('fs');",
+          "const log = require('path').join(__dirname, 'methods.log');",
+          "const rl = require('readline').createInterface({ input: process.stdin });",
+          "const send = (m) => process.stdout.write(JSON.stringify({ jsonrpc: '2.0', ...m }) + '\\n');",
+          "rl.on('line', (line) => {",
+          '  const m = JSON.parse(line);',
+          "  appendFileSync(log, m.method + '\\n');",
+          "  if (m.method === 'initialize') send({ id: m.id, result: { protocolVersion: m.params.protocolVersion, capabilities: { resources: {} }, serverInfo: { name: 'resource-only', version: '1' } } });",
+          "  else if (m.method === 'resources/read') send({ id: m.id, result: { contents: [{ uri: m.params.uri, mimeType: 'text/markdown', text: 'context' }] } });",
+          "  else if (m.method === 'prompts/get') send({ id: m.id, error: { code: -32601, message: 'Method not found' } });",
+          '});',
+          '',
+        ].join('\n'),
+      );
+      const result = await mcpPreflight({
+        root,
+        server: { command: process.execPath, args: [join(root, 'resource-server.cjs')] },
+        role: 'developer',
+        element: 'task:task-001-a',
+        stateRef: SHA,
+        timeoutMs: 20000,
+      });
+      expect(result).toEqual({ ok: true, value: undefined });
+      const methods = readFileSync(join(root, 'methods.log'), 'utf-8').split('\n').filter((line) => line !== '');
+      expect(methods).not.toContain('prompts/get');
+      expect(methods).toContain('resources/read');
     } finally {
       removeTempDir(root);
     }
@@ -276,10 +457,10 @@ describe('mcpPreflight — a server that answers the Prompt with no text is unre
 });
 
 describe('task-228 — the B3 handovers on the pre-launch half', () => {
-  it('the MCP pre-flight has one deadline: initialize and the Prompt fetch share it (REQ-PERF-01)', async () => {
+  it('the MCP pre-flight has one deadline: initialize and the session Resource read share it (REQ-PERF-01; task-355 AC 4)', async () => {
     const root = makeTempGitRepo();
     try {
-      // A stub that takes 1.5 s to answer initialize and 1.5 s to answer the Prompt: each answer is
+      // A stub that takes 1.5 s to answer initialize and 1.5 s to answer the Resource read: each answer is
       // within a 2.5 s limit, both together are not.
       writeFixtureFile(
         root,
@@ -290,8 +471,8 @@ describe('task-228 — the B3 handovers on the pre-launch half', () => {
           "const later = (f) => setTimeout(f, 1500);",
           "rl.on('line', (line) => {",
           '  const m = JSON.parse(line);',
-          "  if (m.method === 'initialize') later(() => send({ id: m.id, result: { protocolVersion: m.params.protocolVersion, capabilities: { prompts: {} }, serverInfo: { name: 'slow', version: '1' } } }));",
-          "  else if (m.method === 'prompts/get') later(() => send({ id: m.id, result: { messages: [{ role: 'user', content: { type: 'text', text: 'context' } }] } }));",
+          "  if (m.method === 'initialize') later(() => send({ id: m.id, result: { protocolVersion: m.params.protocolVersion, capabilities: { resources: {} }, serverInfo: { name: 'slow', version: '1' } } }));",
+          "  else if (m.method === 'resources/read') later(() => send({ id: m.id, result: { contents: [{ uri: m.params.uri, mimeType: 'text/markdown', text: 'context' }] } }));",
           '});',
           '',
         ].join('\n'),

@@ -22,6 +22,7 @@ import { join } from 'node:path';
 
 import { loadWorkflowRegistry, loadWorkflowRegistryAtHead } from '../../src/core';
 import { workflowShowAtHead } from '../../src/core/workflow-list-show';
+import { resolveToken, tokenName } from '../../src/workflow/bindings';
 import type { Phase } from '../../src/workflow/schema';
 
 const ROOT = join(__dirname, '..', '..');
@@ -52,7 +53,7 @@ describe('task-277 AC 1 — vision-change `schedule` stamps the element and the 
   it('keeps its actions and checks', () => {
     expect(schedule().actions).toEqual(['element.set_release("{change-proposal.target_release}")', 'element.set_state(scheduled)']);
     expect(schedule().checks?.pre).toEqual(['change-proposal.target_release is not empty']);
-    expect(schedule().checks?.post).toEqual(['vision-index.current']);
+    expect(schedule().checks?.post).toEqual(['vision-index.current', 'change-proposal.assigned']); // task-359 (dl-166 Q2 (ii)): the release-exit post-check
   });
 
   it('vision-change.yaml is at least 1.1, with a task-277 history entry', () => {
@@ -95,16 +96,19 @@ describe('task-277 AC 2 — define-scope sweeps the scheduled change-proposals (
   });
 });
 
-describe('task-277 AC 3 — at HEAD: zero errors, the state evidence kept, the new check unbound', () => {
-  it('loads with zero errors and reports change-proposals.swept as define-scope checks.post[1]', () => {
+describe('task-277 AC 3 — at HEAD: zero errors, the state evidence kept, the new check bound manual (task-358)', () => {
+  it('loads with zero errors; define-scope checks.post[1] is change-proposals.swept, bound manual like post[0] (task-358)', () => {
     const loaded = loadWorkflowRegistryAtHead(ROOT);
     expect(loaded.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
     const own = loaded.diagnostics
-      .filter((d) => d.file === 'workflows/custom/release-planning.yaml' && d.path.startsWith('phases[1].'))
+      .filter((d) => d.file === 'workflows/custom/release-planning.yaml' && d.path.startsWith('phases[2].'))
       .map((d) => [d.code, d.path, /token '([a-z.-]+)/.exec(d.message)?.[1]]);
-    expect(own).toEqual([
-      ['W_WORKFLOW_UNBOUND_TOKEN', 'phases[1].checks.post[0]', 'frontmatter.required'],
-      ['W_WORKFLOW_UNBOUND_TOKEN', 'phases[1].checks.post[1]', 'change-proposals.swept'],
+    // task-358 (bug-469, approver ruling D1 (B)): both checks are bound manual: true until a command decides them.
+    expect(own).toEqual([]);
+    const scope = loaded.workflows.find((w) => w.name === 'release-planning')!.phases[2]!;
+    expect((scope.checks?.post ?? []).map((token) => [tokenName(token), resolveToken(token, 'check', loaded.bindings).kind])).toEqual([
+      ['frontmatter.required', 'manual'],
+      ['change-proposals.swept', 'manual'],
     ]);
   });
 

@@ -3,16 +3,18 @@
 name: release-planning
 kind: sub
 description: >-
-  Plan a release: confirm the pillar focus and scope, triage bugs and reconcile accumulated
-  governance into their gated states, identify and spec shared artefacts up front, pull backlog
-  tasks for the release, and stamp each included element with its `release`. Set the release
-  element to `planning` then `in-development`.
-version: 2.4                     # dl-016: added triage-bugs + reconcile-governance, record-adrs approve, build-backlog release-stamping; 1.2 dl-092: define-scope check gains `kind`; 1.3 dl-095 Q3 (B): + advance-pinned-build (task-112); 1.4 dl-133 Q1 (b): build-backlog check gains the task `kind` (task-150); 1.5 bug-175: define-scope check exempts the pre-dl-092 minors from `kind` (task-148); 1.6 bug-163: define-scope produces under rl-{release-line}/, as memory.yaml 2.3 files a release (task-164); 1.7 spec-003 alignment (task-199): record-adrs/identify-specs/build-backlog name their produces owner as { type, path } (dl-104 D3), build-backlog derives its DL and fix tasks from a selection, npm.pin_advance takes a key: value argument and the lockfile/MCP post-checks are two bound tokens (dl-090), agent.survey_specs becomes agent.execute; 1.8 dl-163 S3e (task-270): advance-pinned-build re-checks the wingfoil-cli directive against the new pin; 1.9 dl-100 §1–§4 (b), dl-102 §2 (task-230): reconcile-governance selects ready decision-logs for a coverage check only (approver ruling 2026-10-12 D2), define-scope states the 20 % reservation, build-backlog checks every criterion and stamps `wave:`, commit-backlog fixes `backlog_committed` and `waves:`; advance-pinned-build's mcp.registered names the KNOWN_READ_FAILURES cleanup (task-239 handover, bug-292); 2.0 (numerically, after 1.9) dl-132 element 4 (task-277, approver rulings 2026-10-10 item 5, 2026-10-12 D1 (c), D2): define-scope sweeps the scheduled change-proposals of the release into its features: (prose + the unbound change-proposals.swept post-check, no selection); 2.1 bug-342 (task-279, approver ruling 2026-10-12 D1 (a)): define-scope drops the hand-amend clause — `memory amend` accepts a release predating dl-092, its `kind` exemption read from memory.yaml `release` template.frontmatter.exempt, which the check restates; 2.2 dl-050 option 1 (task-215, batch ruling D1): reconcile-governance declares the pre-check role-directives.clean, `directives list --role` over every dna.yaml team.roles name, failing on any warning; 2.3 task-291 (dl-185 C4 (i)): advance-pinned-build's after-a-patch case is the merge forward of the patch's line `release/X.Y` into the in-flight release's integration branch, never `main` into the line; 2.4 task-305 (dl-206 Q1 (i), Q2 (i), dl-159 A2 item 5, bug-429, release-planning v0.3.2 R8, design gate D3–D6): triage-bugs and define-scope name a patch's eligibility test `git log --no-merges release/X.Y..main`, advance-pinned-build states the pin per line, that the merge forward keeps main's pin, the AGENTS.md §1 status sentence and the line's own node_modules
+  Plan a release: read the consumer projects' feedback inboxes, confirm the pillar focus and scope,
+  triage bugs, give every triaged bug with no release a release, reconcile accumulated governance
+  into its gated states, identify and spec shared artefacts up front, pull backlog tasks for the
+  release, and stamp each included element with its `release`. Set the release element to
+  `planning` then `in-development`.
+version: 2.6                     # dl-016: added triage-bugs + reconcile-governance, record-adrs approve, build-backlog release-stamping; 1.2 dl-092: define-scope check gains `kind`; 1.3 dl-095 Q3 (B): + advance-pinned-build (task-112); 1.4 dl-133 Q1 (b): build-backlog check gains the task `kind` (task-150); 1.5 bug-175: define-scope check exempts the pre-dl-092 minors from `kind` (task-148); 1.6 bug-163: define-scope produces under rl-{release-line}/, as memory.yaml 2.3 files a release (task-164); 1.7 spec-003 alignment (task-199): record-adrs/identify-specs/build-backlog name their produces owner as { type, path } (dl-104 D3), build-backlog derives its DL and fix tasks from a selection, npm.pin_advance takes a key: value argument and the lockfile/MCP post-checks are two bound tokens (dl-090), agent.survey_specs becomes agent.execute; 1.8 dl-163 S3e (task-270): advance-pinned-build re-checks the wingfoil-cli directive against the new pin; 1.9 dl-100 §1–§4 (b), dl-102 §2 (task-230): reconcile-governance selects ready decision-logs for a coverage check only (approver ruling 2026-10-12 D2), define-scope states the 20 % reservation, build-backlog checks every criterion and stamps `wave:`, commit-backlog fixes `backlog_committed` and `waves:`; advance-pinned-build's mcp.registered names the KNOWN_READ_FAILURES cleanup (task-239 handover, bug-292); 2.0 (numerically, after 1.9) dl-132 element 4 (task-277, approver rulings 2026-10-10 item 5, 2026-10-12 D1 (c), D2): define-scope sweeps the scheduled change-proposals of the release into its features: (prose + the unbound change-proposals.swept post-check, no selection); 2.1 bug-342 (task-279, approver ruling 2026-10-12 D1 (a)): define-scope drops the hand-amend clause — `memory amend` accepts a release predating dl-092, its `kind` exemption read from memory.yaml `release` template.frontmatter.exempt, which the check restates; 2.2 dl-050 option 1 (task-215, batch ruling D1): reconcile-governance declares the pre-check role-directives.clean, `directives list --role` over every dna.yaml team.roles name, failing on any warning; 2.3 task-291 (dl-185 C4 (i)): advance-pinned-build's after-a-patch case is the merge forward of the patch's line `release/X.Y` into the in-flight release's integration branch, never `main` into the line; 2.4 task-305 (dl-206 Q1 (i), Q2 (i), dl-159 A2 item 5, bug-429, release-planning v0.3.2 R8, design gate D3–D6): triage-bugs and define-scope name a patch's eligibility test `git log --no-merges release/X.Y..main`, advance-pinned-build states the pin per line, that the merge forward keeps main's pin, the AGENTS.md §1 status sentence and the line's own node_modules; 2.5 task-347 (dl-191 (a), dl-163 S3d, release-planning-rel-v0.4-plan R11, approver ruling 2026-11-05, design gate D1–D5): a collect-feedback phase after advance-pinned-build reads the consumer inboxes as retrospective's does, its read record rel-{release.version}-planning-feedback-triage.md; triage-bugs is followed by assign-bugs, which gives every triaged bug with no release a release or closes it; define-scope reserves at least 10 % of the task budget for low-severity bugs, oldest first, inside the 20 %; 2.6 task-358 (bug-435 item 4, W0-R10): collect-feedback's check takes retrospective's split, feedback-notes.recorded (manual until a command) and feedback-notes.restated (manual on purpose), character for character; no phase, step or action changes
 element: release
 
 # Selection filter (dl-016 §1) — every phase that considers accumulated elements picks those whose
 # `release` is EMPTY or == the release in planning. This re-offers approved-but-unassigned elements and
-# never re-pulls ones already assigned elsewhere. Assignment (`release=`) happens only in build-backlog.
+# never re-pulls ones already assigned elsewhere. Assignment (`release=`) happens only in build-backlog,
+# and for a triaged bug with no release in assign-bugs (dl-191 (a): no bug stays unassigned past a planning).
 
 phases:
   - name: advance-pinned-build                 # dl-095 Q3 (B) — precondition step (task-112)
@@ -55,12 +57,55 @@ phases:
         - "mcp.registered"            # `npm run check:mcp` exit 0 (bound in workflows/bindings.yaml)
         # task-239 handover (bug-292, task-230): a KNOWN_READ_FAILURES entry for the old pin fails check:mcp: delete it when the new pin reads the Resource (scripts/check-mcp*).
 
+  - name: collect-feedback                     # dl-163 S3d, release-planning-rel-v0.4-plan R11 (task-347, design gate D2)
+    description: >-
+      Read-only (dl-163 S3d), the read retrospective's collect-feedback makes, run at every planning
+      because a patch has no retrospective (dl-092 Q2 (ii)) and no consumer inbox would otherwise be read
+      between two minors' retrospectives (release-planning-rel-v0.4-plan R11). Reads the feedback inbox of
+      every `active` service of kind `repository` that declares a `feedback_inbox`, at the consumer's
+      `main` — through the remote the service's `verify` reads, with the approver's read access (no
+      credential is recorded, dl-088), or a local checkout recorded per machine outside this repository —
+      and records the commit read for each. Lists the notes in status `open`, the `needs-info` notes the
+      consumer has since answered, and the `captured` notes since the previous read record (a
+      retrospective's or a planning's). The read record has one row per note: its cite
+      `<service id>/F-<nnn>@<sha>`, with the full service id and the full 40-hex sha, so a cite pastes
+      unchanged into `reported_by:`; the commit read, the note's content restated in WingFoil's words (a
+      defect is reproduced in this repository before it becomes an element, R2), and a proposed outcome
+      among six — dl-115's four (covered | element | restated | superseded) or declined | needs-info. The
+      record lists every service read with the commit read, and never holds a consumer's configuration,
+      paths or prose. The phase adds or changes no Memory element and never commits into a consumer
+      repository (R3); no hold-out repository is a source (R7). The approver rules on every row before
+      define-scope; an `element` outcome is filed through bug-ingest or decision-log-ingest with
+      `reported_by:`, so triage-bugs, assign-bugs and reconcile-governance sweep it into this planning.
+    role: facilitator
+    actions:
+      - agent.execute                  # dl-090 Q6: the read above, run under the facilitator's session prompt
+    produces:
+      # The read record, beside the retrospective's and outside every Memory path; the name the v0.4
+      # planning wrote by hand, so minor-v0.4's completed iteration stays complete (task-347 design).
+      - "docs/09_retrospectives/rl-{release.release-line}/rel-{release.version}-planning-feedback-triage.md"
+    checks:
+      # The tokens of retrospective.collect-feedback, character for character (bound manual: true, task-303, task-358).
+      # Split by task-358 (bug-435 item 4) as retrospective's is: feedback-notes.recorded, the half a command could
+      # decide, bound manual: true until a command; feedback-notes.restated, a reading, manual on purpose.
+      post:
+        - >-
+          feedback-notes.recorded(every service read is listed with the commit read; one row per note,
+          with its cite <service id>/F-<nnn>@<sha>, the commit read and one proposed outcome among
+          covered | element | restated | superseded | declined | needs-info)
+        - >-
+          feedback-notes.restated(each note's content restated in WingFoil's words; no row holds a
+          consumer's configuration, paths or prose)
+
   - name: define-scope
     description: >-
       Confirm pillar focus + feature scope for the release (from the release Memory doc). The scope
       reserves 20 % of the release's task budget for bug fixes and governance debt (dl-100 §4 (b), the
       planning rule; §4 (a), net bug flow, is release-health's measure): the reservation is stated in the
       release's `## Scope`, and build-backlog plans the feature tasks within the other 80 %.
+      Inside that 20 %, at least 10 % of the task budget, rounded up, goes to fix tasks of `low`-severity
+      bugs, the oldest first by bug number (dl-191 (a)): the scope states the count, and build-backlog
+      derives those fix tasks from the selected `triaged` bugs.
       The scope also sweeps the vision changes scheduled into this release (dl-132 element 4, as dl-016
       sweeps decision-logs and bugs): read the `scheduled` change-proposals whose `release` is
       {release.version} and write their `feature` ids into the release's `features:` before its submit.
@@ -85,7 +130,8 @@ phases:
       # (test/workflow/release-kind-rule.test.ts holds them together).
       # task-277 (approver ruling 2026-10-12 D1 (c)): the sweep is declared as this check, not as a `where`
       # selection — a selection would be the target of memory.submit (spec-017 §4.2) and the release's state
-      # would stop being evidence. Unbound until dl-166 Q2 (ii) binds it.
+      # would stop being evidence. Bound manual: true "until a command" in workflows/bindings.yaml (task-358),
+      # owing a Memory query command with an exit status, until dl-166 Q2 (ii) binds it.
       post:
         - "frontmatter.required: [title, kind, version, pillar, features, requirements, release-line] except kind for [minor-v0.1, minor-v0.2, minor-v0.3, minor-v0.4, minor-v1.0]"
         - "change-proposals.swept(every feature id of a change-proposal with status scheduled and release {release.version} is in the release's features:)"
@@ -97,13 +143,28 @@ phases:
       For a `kind: patch` release a bug is eligible only if its file has not changed on `main` since its
       line was cut, `git log --no-merges release/X.Y..main -- <file>` empty (dl-206 Q2 (i),
       release-planning-rel-v0.3.2-plan R8); any other is captured again on the line first (dl-206 Q1 (i),
-      git-conventions §1).
+      git-conventions §1). Every `open` bug of the selection is decided here, and assign-bugs then gives a
+      release to every `triaged` bug that has none, so no bug stays unassigned past a planning (dl-191 (a)).
     role: tech-lead
     where: { type: bug, status: [open], release: ["", "{release.version}"] }
     actions:
       - memory.approve                         # selected bugs: open -> triaged
     approval: { by_role: approver }
     fallback: { step: triage-bugs, set_state: closed }   # reject (incomplete/wontfix/dup): open -> closed
+
+  - name: assign-bugs                          # dl-191 (a) (task-347, design gate D1 (b))
+    description: >-
+      Give every `triaged` bug whose `release` is empty a release, so no bug stays unassigned past a
+      planning (dl-191 (a)). Each selected bug is assigned this release, or a later one the approver
+      names, by a `wf(bug): assign` commit, or closed by the approver with `memory reject`
+      (triaged -> closed). The phase is complete when no `triaged` bug has an empty `release`. A bug
+      assigned this release that build-backlog gives no fix task stays `triaged` in it. For a `kind: patch`
+      release, only a bug whose file `git log --no-merges release/X.Y..main -- <file>` leaves empty takes this
+      release (dl-206 Q2 (i), release-planning-rel-v0.3.2-plan R8); any other takes a later release.
+    role: tech-lead
+    where: { type: bug, status: [triaged], release: [""] }
+    actions:
+      - 'element.set_release("{release.version}")'   # or a later release the approver names, per bug; manual: wf(bug): assign
 
   - name: reconcile-governance                 # dl-016 §2 phase 3 (new)
     description: >-
@@ -124,7 +185,8 @@ phases:
     fallback: { step: reconcile-governance, set_state: draft }   # reject (element incomplete): -> draft
     checks:
       pre: ["role-directives.clean"]   # dl-050 option 1 (task-215): `npm run check:role-directives` exit 0 (bound in workflows/bindings.yaml)
-      # task-230 (D2): unbound — no command asserts it yet (W_WORKFLOW_UNBOUND_TOKEN until P4.12, v1.0).
+      # task-230 (D2): no command asserts it yet — bound manual: true "until a command" in workflows/bindings.yaml (task-358),
+      # owing a Memory query command with an exit status.
       post: ["ready-decision-logs.covered(each ready decision-log with release {release.version} is named by the ref: of a task of the release; an uncovered one is flagged, never moved or assigned here)"]
 
   - name: record-adrs

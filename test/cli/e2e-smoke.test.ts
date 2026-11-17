@@ -445,7 +445,7 @@ describe('dl-023 smoke (task-060) — scripts/e2e-smoke.cjs', () => {
         });
         expect(steps).toContainEqual(
           expect.objectContaining({
-            args: ['dna', 'add', 'team.agents', '--value', 'Fake Agent', '--entry-email', 'fake-agent@example.com', '--entry-executes_as', 'developer', '--entry-adapter', 'fake'],
+            args: ['dna', 'add', 'team.agents', '--value', 'Fake Agent', '--entry-email', '0+fake-agent@users.noreply.github.com', '--entry-executes_as', 'developer', '--entry-adapter', 'fake'],
             exit: 0,
           }),
         );
@@ -602,7 +602,8 @@ describe('dl-023 smoke (task-060) — scripts/e2e-smoke.cjs', () => {
         );
         expect(driveCli?.description).toContain('agent execute');
         expect(driveCli?.description).toContain('custom/fake');
-        expect(driveCli?.checks?.post).toHaveLength(3);
+        // task-358 (bug-435, approver ruling D3 (a)): the three prose checks are the one token e2e-smoke.scenario.
+        expect(driveCli?.checks?.post).toEqual(['e2e-smoke.scenario']);
       });
 
       it('the report names the agent run', () => {
@@ -933,7 +934,8 @@ describe('dl-023 smoke (task-060) — scripts/e2e-smoke.cjs', () => {
         for (const token of ['workflow create', 'workflow start <name>', 'workflow next', 'workflow status', 'workflow finalize', 'workflow end', 'memory add ... --workflow <ref>']) {
           expect(actions.some((a) => a.startsWith(`cli.run(command: "${token}`))).toBe(true);
         }
-        expect(driveCli?.checks?.post).toHaveLength(3);
+        // task-358 (bug-435, approver ruling D3 (a)): the three prose checks are the one token e2e-smoke.scenario.
+        expect(driveCli?.checks?.post).toEqual(['e2e-smoke.scenario']);
       });
 
       it('WORKFLOW.md\'s E2E Smoke section names `workflow finalize` and the example', () => {

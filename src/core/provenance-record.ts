@@ -13,7 +13,9 @@
  * WingFoil-Instance: <instance>                      ← the record's trailers, in the final paragraph
  * WingFoil-Step: <key>
  * WingFoil-Adopted: <type>:<id>
- * WingFoil-Version: <semver> (<sha>)                 ← last, written by `commitEmpty`
+ * WingFoil-Version: <semver> (<sha>)                 ← written by `commitEmpty`
+ * Co-Authored-By: <name> <<email>>                   ← a single adoption in an agent's session only (`spec-018` §2)
+ * AI-Model: <model>
  * ```
  *
  * The trailers share the final paragraph with `WingFoil-Version:` because git, and the workflow deduction
@@ -22,7 +24,7 @@
  * writer and reader share one spelling. A dry run (`spec-008` §2) is `commitEmpty`'s: `{dryRun: true, subject,
  * message, paths: [], diff: ''}`.
  */
-import { commitEmpty } from '../storage';
+import { commitEmpty, type CommitAttribution } from '../storage';
 import { ADOPT_SUBJECT_PREFIX, ADOPTED_TRAILER, INSTANCE_TRAILER, REKEY_FROM_TRAILER, REKEY_SUBJECT_PREFIX, REKEY_TO_TRAILER, STEP_TRAILER } from '../workflow/provenance';
 
 import { APPROVER_ROLE } from './approval-authority';
@@ -40,6 +42,12 @@ export interface ProvenanceRecord {
   readonly approver: GitIdentity | null;
   /** The record's `Key: value` trailer lines, written in the final paragraph before `WingFoil-Version:`. */
   readonly trailers: readonly string[];
+  /**
+   * The agent the record names as its co-author, after `WingFoil-Version:` (`spec-018` §2.1–§2.2): a single adoption
+   * in an agent's session only; `null` or absent for a bulk adoption and a rekey, approval records that never carry
+   * one (§3.3).
+   */
+  readonly attribution?: CommitAttribution | null;
 }
 
 /** The record's message before its trailer paragraph: the subject, then one body paragraph. Pure. */
@@ -57,7 +65,7 @@ export function provenanceMessage(record: Pick<ProvenanceRecord, 'subject' | 're
 export function writeProvenanceRecord(root: string, author: GitIdentity, record: ProvenanceRecord): CoreResult<string> {
   const clean = requireCleanIndex(root, record.subject);
   if (!clean.ok) return clean;
-  return coreOk(commitEmpty(root, provenanceMessage(record), { author, trailers: record.trailers }));
+  return coreOk(commitEmpty(root, provenanceMessage(record), { author, trailers: record.trailers, attribution: record.attribution ?? undefined }));
 }
 
 /** An adoption's subject: `workflow: adopt <instance> <key> <type>:<id>` (`spec-017` §4.8). */

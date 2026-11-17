@@ -4,9 +4,16 @@
  * end — refused or started — never loop. Driven through the compiled CLI with a time limit, because a loop
  * in the operation is synchronous and no in-process timeout could stop it. Also the `{slug}` nit: the
  * collision check predicts the id from the title `memory add` will slug (`<workflow> — <phase>`).
+ *
+ * task-346 AC 2 item 7 (`bug-491`'s Steps, `spec-017` §7.1 as amended): on an `init --template Kanban` project whose
+ * plan type is edited to `plan-{n}-{slug}` / `docs/memory/plan/{id}.md`, `start` writes `workflow` and `phase` as
+ * fields, accepts `--set phase=`, and the plan it adds can be submitted.
  */
+import { appendFileSync, readFileSync, writeFileSync } from 'fs';
+import { join } from 'path';
+
 import { commitAll, git, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
-import { CLI_ENTRY, spawnCapture } from './helpers/spawn-cli';
+import { CLI_ENTRY, runCliEntry, spawnCapture } from './helpers/spawn-cli';
 
 const DNA_YAML = `version: 1.0
 modules:
@@ -20,6 +27,9 @@ team:
   members:
     - name: Alex
       email: alex@example.invalid
+      roles: [ developer ]
+    - name: WingFoil Test
+      email: wf-test@example.invalid
       roles: [ developer ]
   roles:
     - name: developer
@@ -82,5 +92,56 @@ describe('workflow start ends on every plan pattern (task-217 review F1)', () =>
     const second = start(repo);
     expect(second).toMatchObject({ timedOut: false, status: 0 });
     expect((JSON.parse(second.stdout) as { instance: { id: string } }).instance.id).toBe('1-2-checklist-1-2');
+  });
+});
+
+describe('task-346 AC 2 item 7 — bug-491\'s Steps on the compiled CLI: a numbered plan type gets workflow and phase', () => {
+  let repo: string;
+  afterEach(() => removeTempDir(repo));
+
+  /** `init --template Kanban`, the plan type edited as bug-491's Steps edit it, committed. */
+  function numberedKanban(): string {
+    const root = makeTempGitRepo();
+    const init = runCliEntry(root, ['init', '--template', 'Kanban', '--no-interactive']);
+    if (init.status !== 0) throw new Error(`init exited ${init.status}: ${init.stderr}`);
+    const path = join(root, '.wingfoil/memory.yaml');
+    const scaffold = readFileSync(path, 'utf-8');
+    const from = '    path: docs/memory/plan/{scope}/{id}.md\n    id_pattern: "{workflow}-{phase}-plan"\n';
+    if (!scaffold.includes(from)) throw new Error('fixture bug: the scaffolded plan type moved');
+    writeFileSync(path, scaffold.replace(from, '    path: docs/memory/plan/{id}.md\n    id_pattern: "plan-{n}-{slug}"\n'));
+    commitAll(root, 'plan type: numbered');
+    return root;
+  }
+
+  it('workflow start decision-log-ingest: exit 0, the plan draft with workflow and phase "1"; --set phase= accepted; memory submit succeeds', () => {
+    repo = numberedKanban();
+
+    const first = runCliEntry(repo, ['workflow', 'start', 'decision-log-ingest', '--format', 'json']);
+    expect([first.status, first.stderr]).toEqual([0, '']);
+    const id = (JSON.parse(first.stdout) as { instance: { id: string } }).instance.id;
+    expect(id).toBe('plan-001-decision-log-ingest-1');
+    const plan = join(repo, 'docs/memory/plan', `${id}.md`);
+    const document = readFileSync(plan, 'utf-8');
+    expect(document).toMatch(/^status: draft$/m);
+    expect(document).toMatch(/^workflow: "decision-log-ingest"$/m);
+    expect(document).toMatch(/^phase: "1"$/m);
+
+    const second = runCliEntry(repo, ['workflow', 'start', 'adr-ingest', '--set', 'phase=capture', '--format', 'json']);
+    expect([second.status, second.stderr]).toEqual([0, '']);
+    const secondId = (JSON.parse(second.stdout) as { instance: { id: string } }).instance.id;
+    expect(readFileSync(join(repo, 'docs/memory/plan', `${secondId}.md`), 'utf-8')).toMatch(/^phase: "capture"$/m);
+
+    appendFileSync(plan, '\nCapture the decision, then close the run.\n');
+    const submitted = runCliEntry(repo, ['memory', 'submit', id]);
+    expect([submitted.status, submitted.stderr]).toEqual([0, '']);
+    expect(readFileSync(plan, 'utf-8')).toMatch(/^status: active$/m);
+  });
+
+  it('(unchanged) --set scope=x on the same type: exit 1, `--set scope: … has no token {scope} …`, nothing written', () => {
+    repo = numberedKanban();
+    const head = git(repo, ['rev-parse', 'HEAD']).trim();
+    const run = runCliEntry(repo, ['workflow', 'start', 'adr-ingest', '--set', 'scope=x']);
+    expect([run.status, run.stdout, run.stderr]).toEqual([1, '', "error: --set scope: memory type 'plan' has no token {scope} in its id_pattern or path\n"]);
+    expect(git(repo, ['rev-parse', 'HEAD']).trim()).toBe(head);
   });
 });

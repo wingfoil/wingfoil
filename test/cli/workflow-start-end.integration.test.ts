@@ -7,9 +7,15 @@
  * - BDD P4.2 sc. 3 / P4.3 sc. 3: exit 1 with the message, nothing written.
  * - `spec-017` §10's usage row: a missing `<name>`, a malformed `--element`, a `--set` name other than
  *   `phase` / `scope` and a second positional exit 2 before anything is read.
+ * - task-345 AC 4: `--element none` on an element-less main exits 0 (`bug-413` option (c)); a malformed
+ *   `--element` other than `none` still exits 2.
  * - AC 5: a freshly `init`-ed project can `workflow start` with no edit (its `memory.yaml` declares `plan`).
+ * - task-346 AC 1 item 6 (`bug-390`, `spec-017` §7.1 as amended): `start` writes one commit and leaves the plan
+ *   `draft`; `--format json` carries `submit: "wingfoil memory submit <id>"`, the console prints the draft-plan line
+ *   after the `started` line, and the dry run (json and console) still stops at the add. An `end` after a `start`
+ *   writes a body line and runs `memory submit` first.
  */
-import { readFileSync } from 'fs';
+import { appendFileSync, readFileSync } from 'fs';
 import { join } from 'path';
 
 import { commitAll, git, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
@@ -47,6 +53,9 @@ team:
   members:
     - name: Alex
       email: alex@example.invalid
+      roles: [ developer ]
+    - name: WingFoil Test
+      email: wf-test@example.invalid
       roles: [ developer ]
   roles:
     - name: developer
@@ -99,6 +108,13 @@ function writeProject(root: string): void {
 
 const head = (root: string): string => git(root, ['rev-parse', 'HEAD']).trim();
 
+/** task-346: the author writes a body line into the plan `start` left `draft`, then `wingfoil memory submit <id>`. */
+function writeAndSubmit(root: string, id: string, scope: string): void {
+  appendFileSync(join(root, 'docs/plans', scope, `${id}.md`), '\nThe plan of this run.\n');
+  const run = runCliEntry(root, ['memory', 'submit', id]);
+  if (run.status !== 0) throw new Error(`memory submit ${id} exited ${run.status}: ${run.stderr}`);
+}
+
 describe('task-217 — wingfoil workflow start / end on the compiled CLI', () => {
   let repo: string;
   beforeEach(() => {
@@ -117,10 +133,11 @@ describe('task-217 — wingfoil workflow start / end on the compiled CLI', () =>
   it('--format json parses as StartResult', () => {
     const run = runCliEntry(repo, ['workflow', 'start', 'report', '--format', 'json']);
     expect(run.status).toBe(0);
-    const value = JSON.parse(run.stdout) as { baseline: { rev: string }; instance: { id: string }; commits: string[] };
+    const value = JSON.parse(run.stdout) as { baseline: { rev: string }; instance: { id: string }; commits: string[]; submit?: string };
     expect(value.baseline.rev).toBe('HEAD');
     expect(value.instance.id).toBe('report-1-plan');
-    expect(value.commits).toHaveLength(2);
+    expect(value.commits).toHaveLength(1);
+    expect(value.submit).toBe('wingfoil memory submit report-1-plan');
   });
 
   it('BDD P4.2 sc. 3 — a sub workflow: exit 1, the message, nothing written', () => {
@@ -132,6 +149,7 @@ describe('task-217 — wingfoil workflow start / end on the compiled CLI', () =>
 
   it('BDD P4.3 sc. 1 — `workflow end` closes the complete active instance: exit 0', () => {
     expect(runCliEntry(repo, ['workflow', 'start', 'report']).status).toBe(0);
+    writeAndSubmit(repo, 'report-1-plan', 'report');
     const run = runCliEntry(repo, ['workflow', 'end']);
     expect([run.status, run.stderr]).toEqual([0, '']);
     expect(run.stdout).toContain('ended report (report-1-plan)');
@@ -146,12 +164,21 @@ describe('task-217 — wingfoil workflow start / end on the compiled CLI', () =>
 
   it('an incomplete instance: exit 1, the current step, and the `memory deprecate` hint', () => {
     expect(runCliEntry(repo, ['workflow', 'start', 'release-cycle', '--element', 'release:minor-1']).status).toBe(0);
+    writeAndSubmit(repo, 'release-cycle-minor-1-plan', 'release-cycle');
     const run = runCliEntry(repo, ['workflow', 'end']);
     expect([run.status, run.stdout]).toEqual([1, '']);
     expect(run.stderr).toBe(
       "error: workflow 'release-cycle' is not complete: current step release-cycle.ship@release:minor-1\n" +
         'hint: wingfoil memory deprecate release-cycle-minor-1-plan abandons it\n',
     );
+  });
+
+  it('task-345 AC 4 (bug-413 (c)): `--element none` on an element-less main is accepted: exit 0, no context', () => {
+    expect(runCliEntry(repo, ['workflow', 'start', 'release-cycle', '--element', 'release:minor-1']).status).toBe(0);
+    const run = runCliEntry(repo, ['workflow', 'start', 'report', '--element', 'none', '--format', 'json']);
+    expect([run.status, run.stderr]).toEqual([0, '']);
+    const value = JSON.parse(run.stdout) as { instance: { id: string; context: unknown } };
+    expect(value.instance).toMatchObject({ id: 'report-1-plan', context: null });
   });
 
   it.each([
@@ -170,6 +197,46 @@ describe('task-217 — wingfoil workflow start / end on the compiled CLI', () =>
   });
 });
 
+describe('task-346 AC 1 item 6 — the CLI start leaves its plan draft and names memory submit (bug-390)', () => {
+  let repo: string;
+  beforeEach(() => {
+    repo = makeTempGitRepo();
+    writeProject(repo);
+  });
+  afterEach(() => removeTempDir(repo));
+
+  it('--format json: exit 0, one commit, `submit` names memory submit, the plan file `status: draft`', () => {
+    const before = head(repo);
+    const run = runCliEntry(repo, ['workflow', 'start', 'report', '--format', 'json']);
+    expect([run.status, run.stderr]).toEqual([0, '']);
+    const value = JSON.parse(run.stdout) as { commits: string[]; submit?: string; instance: { planStatus: string } };
+    expect(git(repo, ['rev-list', '--count', `${before}..HEAD`]).trim()).toBe('1');
+    expect(value.commits).toEqual([head(repo)]);
+    expect(value.submit).toBe('wingfoil memory submit report-1-plan');
+    expect(value.instance.planStatus).toBe('draft');
+    expect(readFileSync(join(repo, 'docs/plans/report/report-1-plan.md'), 'utf-8')).toMatch(/^status: draft$/m);
+  });
+
+  it('console: the draft-plan line follows the started line', () => {
+    const run = runCliEntry(repo, ['workflow', 'start', 'report']);
+    expect([run.status, run.stderr]).toEqual([0, '']);
+    const lines = run.stdout.split('\n');
+    expect(lines.slice(0, 2)).toEqual([
+      'started report as report-1-plan (active)',
+      'plan report-1-plan is draft: write its body, then run wingfoil memory submit report-1-plan',
+    ]);
+  });
+
+  it.each([['json'], ['console']])('--dry-run --format %s: exit 0, the plan of `wf(plan): add <id>`, nothing written', (format) => {
+    const before = head(repo);
+    const run = runCliEntry(repo, ['workflow', 'start', 'report', '--dry-run', '--format', format]);
+    expect([run.status, run.stderr]).toEqual([0, '']);
+    expect(JSON.parse(run.stdout)).toMatchObject({ dryRun: true, subject: 'wf(plan): add report-1-plan', paths: ['docs/plans/report/report-1-plan.md'] });
+    expect(head(repo)).toBe(before);
+    expect(git(repo, ['status', '--porcelain']).trim()).toBe('');
+  });
+});
+
 describe('task-217 AC 5 — a freshly init-ed project can workflow start without edits', () => {
   it('init --template Kanban, then workflow start sw-life-cycle: exit 0, a plan the scaffold declares', () => {
     const repo = makeTempGitRepo();
@@ -182,7 +249,7 @@ describe('task-217 AC 5 — a freshly init-ed project can workflow start without
       const run = runCliEntry(repo, ['workflow', 'start', 'sw-life-cycle', '--format', 'json']);
       expect([run.status, run.stderr]).toEqual([0, '']);
       const value = JSON.parse(run.stdout) as { instance: { id: string; planStatus: string; active: boolean } };
-      expect(value.instance).toMatchObject({ id: 'sw-life-cycle-1-plan', planStatus: 'active', active: true });
+      expect(value.instance).toMatchObject({ id: 'sw-life-cycle-1-plan', planStatus: 'draft', active: true });
       expect(git(repo, ['status', '--porcelain']).trim()).toBe('');
     } finally {
       removeTempDir(repo);

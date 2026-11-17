@@ -138,6 +138,7 @@ describe('task-332 AC 5 — workflow start --element resolves a short reference 
     '%s: the instance is bound to release-003 — its id, its plan file and its commits name the full id only',
     async (reference) => {
       const root = project('release-003', 'release-010');
+      const before = head(root);
 
       const result = await workflowStart(root, reference);
 
@@ -146,7 +147,10 @@ describe('task-332 AC 5 — workflow start --element resolves a short reference 
       expect(value.instance.id).toBe('release-cycle-release-003-plan');
       const shortId = reference.slice('release:'.length);
       expect(readFileSync(join(root, 'docs/plans/release-cycle/release-cycle-release-003-plan.md'), 'utf-8')).not.toContain(shortId);
-      for (const sha of git(root, ['rev-list', 'HEAD~2..HEAD']).trim().split('\n')) expect(messageOf(root, sha)).not.toContain(shortId);
+      // task-346 (`spec-017` §7.1 as amended): start writes one commit, the plan's add.
+      const commits = git(root, ['rev-list', `${before}..HEAD`]).trim().split('\n');
+      expect(commits).toHaveLength(1);
+      for (const sha of commits) expect(messageOf(root, sha)).not.toContain(shortId);
     },
   );
 

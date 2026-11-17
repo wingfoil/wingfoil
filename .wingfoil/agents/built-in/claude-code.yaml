@@ -1,15 +1,37 @@
 # Claude Code, a built-in adapter (spec-016 section 2.8). Every flag below is read from the
-# --help output of the version in verified_with, checked by hand (task-236).
+# --help output of the version in verified_with, checked by hand (task-236; headless, task-335;
+# the headless permissions, task-339).
 name: claude-code
 format: 1
 command: claude
-verified_with: "2.1.296 (Claude Code)"
+verified_with: "2.1.322 (Claude Code)"
 version_args: [ --version ]
 launch:
   interactive:
     # The prompt first: --mcp-config takes several values and would read a following prompt as one.
     args: [ "{bootstrap}", --mcp-config, "{mcp_config_file}" ]
     terminal: required
+    # Folder trust (task-353): in a directory it has not seen, a trust dialog comes before any
+    # prompt, and the person at the terminal answers it; no option of the help skips it here.
+    trust: prompt
+  headless:
+    # -p (--print) prints the response and exits; the prompt first, for the reason above.
+    args: [ -p, "{bootstrap}", --mcp-config, "{mcp_config_file}" ]
+    output: none
+    # The help says the workspace trust dialog is skipped under -p (task-353).
+    trust: implied
+    # The posture of each role (dl-223 (b), task-339), appended after args: --permission-mode
+    # dontAsk denies every tool no rule allows, so a headless agent never waits on a prompt;
+    # --allowedTools and --disallowedTools take a list, closed by the next option. default, the
+    # posture of every role not named here, reads only; no entry publishes. The write roles run
+    # the project's own copy of wingfoil: bare (node_modules/.bin on PATH, or an alias), through
+    # npx, or through an npm script.
+    permissions:
+      default: [ --permission-mode, dontAsk, --allowedTools, Read, Glob, Grep ]
+      developer: [ --permission-mode, dontAsk, --allowedTools, Read, Glob, Grep, Edit, Write, "Bash(git *)", "Bash(npm *)", "Bash(npx *)", "Bash(node *)", "Bash(wingfoil *)", --disallowedTools, "Bash(git push *)", "Bash(npm publish *)" ]
+      qa: [ --permission-mode, dontAsk, --allowedTools, Read, Glob, Grep, Edit, Write, "Bash(git *)", "Bash(npm *)", "Bash(npx *)", "Bash(node *)", "Bash(wingfoil *)", --disallowedTools, "Bash(git push *)", "Bash(npm publish *)" ]
+      architect: [ --permission-mode, dontAsk, --allowedTools, Read, Glob, Grep, Edit, Write, "Bash(git *)", "Bash(npm *)", "Bash(npx *)", "Bash(node *)", "Bash(wingfoil *)", --disallowedTools, "Bash(git push *)", "Bash(npm publish *)" ]
+      reviewer: [ --permission-mode, dontAsk, --allowedTools, Read, Glob, Grep, "Bash(git log *)", "Bash(git show *)", "Bash(git diff *)", "Bash(git status *)", "Bash(npm test *)", "Bash(npm run *)", "Bash(npx jest *)" ]
 prompt:
   via: arg
 mcp:

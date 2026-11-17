@@ -97,7 +97,8 @@ describe('AC 1 — collect-feedback: a read-only phase between explore and addit
     for (const outcome of SIX) expect(description).toContain(outcome);
     expect(description).toMatch(/never holds a consumer's configuration, paths or prose/);
     const post = phase('collect-feedback').checks?.post ?? [];
-    expect(post).toEqual([expect.stringMatching(/^feedback-notes\.recorded\(/)]);
+    // task-358 (bug-435 item 4): the restating reading is split into its own token.
+    expect(post).toEqual([expect.stringMatching(/^feedback-notes\.recorded\(/), expect.stringMatching(/^feedback-notes\.restated\(/)]);
     for (const outcome of SIX) expect(post[0]).toContain(outcome);
   });
 });

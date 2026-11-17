@@ -172,6 +172,16 @@ describe('the drive: every declared entry-field option lands, through the real c
       expect: (document) => (document.team as unknown as { agents: unknown[] }).agents[0],
       value: { name: 'agent', executes_as: ['developer', 'qa'], approval_authority: false, adapter: 'claude-code', email: 'noreply@anthropic.com' },
     },
+    {
+      // task-340 (dl-202 item 1, spec-002 RoleEntry.human_only): the boolean entry form coerces `true`.
+      fields: ['human_only'],
+      args: ['dna', 'add', 'team.roles', '--value', 'r', '--entry-human_only', 'true'],
+      expect: (document) => {
+        const list = (document.team as unknown as { roles: Array<{ name: string }> }).roles;
+        return list[list.length - 1];
+      },
+      value: { name: 'r', human_only: true },
+    },
   ];
 
   it('the table drives EVERY entry-field option the registry declares — no field slips in undriven', () => {

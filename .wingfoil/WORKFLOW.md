@@ -63,7 +63,7 @@ flowchart TD
     VP["Vision Package\n`docs/01_vision/`"]
 
     M1["**Module 1** *(product-owner)*\n`user-story-mapping`\nbackbone → vertical-explosion → mvp-cut"]
-    SC1{{"Stop-Check\n100% MVP Canvas features covered\nedge-case stories present"}}
+    SC1{{"Stop-Check\n100% MVP Canvas features covered (manual until a command)\nedge-case stories present (manual on purpose)"}}
 
     M2["**Module 2** *(qa)*\n`specification-by-examples`\nisolate-mvp → write-scenarios (Gherkin)"]
     SC2{{"Stop-Check\nscenarios atomic + testable\nzero ambiguous adjectives/adverbs"}}
@@ -190,7 +190,7 @@ and its proposals are disposed of by the next minor's retrospective (dl-167).
 
 ```mermaid
 flowchart TD
-    RP["**planning** → `release-planning`\nadvance-pinned-build → define-scope → triage-bugs → reconcile-governance\n→ record-adrs (opt.) → identify-specs → build-backlog → commit-backlog\n✔ P4.12 per step (see sub-diagram below)\n🔑 Approval gates — *approver*\nrelease: draft → planning → in-development"]
+    RP["**planning** → `release-planning`\nadvance-pinned-build → collect-feedback → define-scope → triage-bugs → assign-bugs\n→ reconcile-governance → record-adrs (opt.) → identify-specs → build-backlog → commit-backlog\n✔ P4.12 per step (see sub-diagram below)\n🔑 Approval gates — *approver*\nrelease: draft → planning → in-development"]
 
     DL["**implementation** → `wave` *(iterate_over: element:waves)*\none wave per entry of the release's waves: (all listed waves open at once)\ntasks → wave-checks → re-sweep → re-plan\n(see sub-diagram below)"]
 
@@ -284,8 +284,9 @@ criterion against the bound directives and the ratified specs (`dl-102` §4); `r
 reject's items first on a re-review (`dl-098`) and runs the document-parity suites (`docs.parity`,
 `dl-116`); since v1.9 (`task-230`) `start` also waits while the release's tasks exceed `backlog_committed`
 by more than `memory.yaml` `release.growth_threshold` allows, until a wave's `re-plan` (`dl-100` §3, from
-v0.4); `done` checks that the task's `### Retrospective` subsection exists, and that of each bug
-it closes (`dl-115`). No check is evaluated before v1.0 (P4.12); until then the phase's role applies it.
+v0.4); `done` checks that the task's `### Retrospective` subsection holds an entry, and that of each bug
+it closes (`dl-115`; `scripts/check-retrospective.cjs`, since v2.5, `task-358`); since v2.5 `design` also reads the
+decision-logs the task's `ref:` names, as it reads the `depends_on` tasks (`bug-320`). No check is evaluated before v1.0 (P4.12); until then the phase's role applies it.
 
 ```mermaid
 flowchart TD
@@ -308,22 +309,30 @@ implementing the task (detail not predictable at planning time).
 
 ### Release Planning — `release-planning`
 
-Eight steps in sequence; `record-adrs` is optional. `advance-pinned-build` moves the pinned
+Ten steps in sequence; `record-adrs` is optional. `advance-pinned-build` moves the pinned
 published build forward first (dl-095) and re-checks the `wingfoil-cli` directive against the new
 pin (dl-163 S3e). The pin is per line: a patch's switch is committed on `release/X.Y` and pins only a
 published `X.Y.z`, a minor's on `main`; run `npm ci` in the release worktree before the pre-check (`bug-429`).
-After the switch the phase updates `AGENTS.md` §1's status sentence, and only it, in its own commit. For a
+After the switch the phase updates `AGENTS.md` §1's status sentence, and only it, in its own commit.
+`collect-feedback` then makes the read `retrospective`'s `collect-feedback` makes (`dl-163` S3d), at every planning
+because a patch has no retrospective (`release-planning-rel-v0.4-plan` R11, `task-347`): every `active` service of
+kind `repository` with a `feedback_inbox`, read at the consumer's `main`, the commit read recorded for each, one row
+per note in `rel-<version>-planning-feedback-triage.md`, every row ruled by the approver before `define-scope`. For a
 `kind: patch`, `define-scope` and `triage-bugs` admit an element only if
 `git log --no-merges release/X.Y..main -- <file>` prints nothing; any other is captured again on the line first
-(`dl-206`, `git-conventions` §1). `triage-bugs` and `reconcile-governance` sweep in-scope
+(`dl-206`, `git-conventions` §1). By the same test `assign-bugs` gives a bug the patch release, and any other bug a
+later release. `triage-bugs` and `reconcile-governance` sweep in-scope
 `open` bugs and not-ready decision-logs/ADRs into their gated states (dl-016), selecting only
-elements whose `release` is empty or this release; `reconcile-governance` also selects `ready`
+elements whose `release` is empty or this release; `assign-bugs`, right after `triage-bugs`, gives every `triaged`
+bug with no release this release or a later one (a `wf(bug): assign` commit), or the approver closes it with
+`memory reject`, so no bug stays unassigned past a planning (`dl-191` (a)); `reconcile-governance` also selects `ready`
 decision-logs, for a coverage check only: each one of this release must be named by a task's `ref:`
 (approver ruling 2026-10-12). Before it approves anything, `reconcile-governance`'s pre-check
 `role-directives.clean` (`npm run check:role-directives`, `dl-050` option 1, `task-215`) runs `directives list
 --role` for every `dna.yaml` role and fails on any warning: a role with no directives, a dangling binding, a
 shadowed id. `define-scope` states the 20 % reserved for fixes and governance debt
-(`dl-100` §4 (b)) and sweeps the `scheduled` change-proposals whose `release` is this release into the
+(`dl-100` §4 (b)), inside it at least 10 % of the task budget, rounded up, for `low`-severity bugs, the oldest first
+by bug number (`dl-191` (a)), and sweeps the `scheduled` change-proposals whose `release` is this release into the
 release's `features:` (`dl-132` element 4, `task-277`): a `memory amend` by the approver of a release already past `draft`,
 one predating dl-092 with no `kind:` included (bug-342, `task-279`); `build-backlog` checks every criterion against the bound directives and ratified
 specs (`dl-102` §2) and gives each task its `wave:`; `commit-backlog` fixes `backlog_committed` and
@@ -336,15 +345,17 @@ which `memory submit` and `memory amend` read and the check restates (bug-342).
 ```mermaid
 flowchart TD
     AB["**advance-pinned-build** *(tech-lead)*\nnpm.pin_advance(package: wingfoil-released)\nforward only, published builds only, per line\n✔ check:lockfile · check:mcp · wingfoil-cli re-check\n→ AGENTS.md §1 status"]
-    DS["**define-scope** *(product-owner)*\nmemory.submit\nrelease: draft → planning\n✔ P4.12: [title, kind, version, pillar, features, requirements, release-line]\n(kind exempt for minor-v0.1 … minor-v1.0)\n20 % reserved for fixes and debt (dl-100 §4 (b))\nsweeps the scheduled change-proposals of the release\ninto its features: (dl-132 element 4; ✔ change-proposals.swept)\npast draft: memory amend by the approver\n(no kind: too, bug-342)"]
+    CF["**collect-feedback** *(facilitator)*\nagent.execute: read every active repository service's feedback_inbox\nat the consumer's main, the commit read recorded (dl-163 S3d)\n✔ feedback-notes.recorded (manual until a command)\nrows ruled by the approver before define-scope\n`docs/09_retrospectives/rl-{release-line}/rel-{version}-planning-feedback-triage.md`"]
+    DS["**define-scope** *(product-owner)*\nmemory.submit\nrelease: draft → planning\n✔ P4.12: [title, kind, version, pillar, features, requirements, release-line]\n(kind exempt for minor-v0.1 … minor-v1.0)\n20 % reserved for fixes and debt (dl-100 §4 (b))\n≥ 10 % of the task budget for low-severity bugs, oldest first (dl-191 (a))\nsweeps the scheduled change-proposals of the release\ninto its features: (dl-132 element 4; ✔ change-proposals.swept)\npast draft: memory amend by the approver\n(no kind: too, bug-342)"]
     TB["**triage-bugs** *(tech-lead)*\nmemory.approve: bug open → triaged\n🔑 Approval gate — *approver*\n↩ REJECT → closed"]
+    AS["**assign-bugs** *(tech-lead)*\nselection: triaged bugs with an empty release\nelement.set_release: this release or a later one (wf(bug): assign)\nor memory reject by the approver: triaged → closed\n(dl-191 (a))"]
     RG["**reconcile-governance** *(product-owner)*\nmemory.approve: decision-log in-discussion → ready\nadr pending → accepted\nready decision-logs: coverage check only (a task ref: names each)\n✔ pre: role-directives.clean (check:role-directives)\n🔑 Approval gate — *approver*\n↩ REJECT → draft"]
     RA["**record-adrs** *(architect)* · **OPTIONAL**\nmemory.add(type: adr) → memory.submit → memory.approve\n✔ spec-review.passed · P4.12: [title, sard_ref]\n🔑 Approval gate — *approver*\n`{ type: adr, path: docs/04_memory/design/adrs/{adr.id}.md }`"]
     IS["**identify-specs** *(architect)*\nagent.execute: survey → memory.add(type: tech-spec) → memory.submit\n✔ P4.12: [title, scope]\n🔑 Approval gate — *approver*\n`{ type: tech-spec, path: docs/04_memory/design/specs/{tech-spec.id}.md }`"]
     BB["**build-backlog** *(product-owner)*\nselection: in-scope ready decision-logs + triaged bugs\nmemory.add(type: task) → memory.submit\nper selected DL / bug: memory.add(type: task, dl: {decision-log.id} / bug: {bug.id}) → memory.submit\n→ bug.set_state(planned) · element.set_release · wave:\n✔ P4.12: [title, release, kind] · acceptance-criteria.consistent (dl-102)\n✔ each task's wave is one of the release's waves\n`{ type: task, path: docs/04_memory/{task.release}/{task.id}.md }`"]
     CB["**commit-backlog** *(tech-lead)*\n✔ pre: backlog_committed fixed · waves: a non-empty list\ntask.set_state(backlog) · release.set_state(in-development)\n🔑 Approval gate — *approver*"]
 
-    AB --> DS --> TB --> RG --> RA --> IS --> BB --> CB
+    AB --> CF --> DS --> TB --> AS --> RG --> RA --> IS --> BB --> CB
     RG --> IS
 
     style RA fill:#f9f9f9,stroke:#bbb,stroke-dasharray:5 5
@@ -380,7 +391,7 @@ land at release-line boundaries). It declares no `element`, so either caller may
 ```mermaid
 flowchart TD
     subgraph AD["agent-docs"]
-        AGD["**align-agent-docs** *(architect)*\nAGENTS.md (CLAUDE.md: its @AGENTS.md pointer) · .wingfoil/README.md · .wingfoil/WORKFLOW.md\n✔ AGENTS.md status, element/state tables, workflow list and role bindings\nmatch CORE_MODULES, memory.yaml, workflows.yaml, roles.yaml\n✔ workflow-md.complete: WORKFLOW.md names every workflow and phase\n✔ CLAUDE.md is a pointer that imports AGENTS.md (dl-137)\n🔑 Approval gate — *approver*"]
+        AGD["**align-agent-docs** *(architect)*\nAGENTS.md (CLAUDE.md: its @AGENTS.md pointer) · .wingfoil/README.md · .wingfoil/WORKFLOW.md\n✔ agents-md.current: AGENTS.md status, element/state tables, workflow list and role bindings\nmatch CORE_MODULES, memory.yaml, workflows.yaml, roles.yaml; CLAUDE.md imports AGENTS.md (dl-137)\n(test/docs/agents-md.test.ts)\n✔ workflow-md.complete: WORKFLOW.md names every workflow and phase\n🔑 Approval gate — *approver*"]
     end
 ```
 
@@ -402,9 +413,9 @@ on every push in `ci.yml`'s `e2e-smoke` job, against the packed tarball.
 
 ```mermaid
 flowchart TD
-    FI["**fresh-init** *(qa)*\nwingfoil init on a scratch project\n✔ exit 0 · scaffold round-trips its own loaders"]
-    DC["**drive-cli** *(qa)*\none task each: add → submit → approve · reject · deprecate · history\nrefusals at exit 1 and 2 · dna set/add · paths · directives/workflow list\nagent run: agent execute through the fake adapter custom/fake → agent show · agent list --past\nJourney 4: docs/examples/06-workflow-approval/run.sh — workflow start → next → memory add --workflow → submit → status → approve → finalize → end\n✔ each step's declared exit (spec-005) · every write re-loaded after the last writer\n✔ tree clean after every step"]
-    MR["**mcp-registration** *(qa)*\nnpm run check:mcp\n✔ exit 0 · registered server version == package.json pin\n✔ advertised channels == EXPECTED_CHANNELS\n✔ every Resource reads, every Prompt gets (pin + dev build; KNOWN_READ_FAILURES)"]
+    FI["**fresh-init** *(qa)*\nwingfoil init on a scratch project\n✔ e2e-smoke.scenario: exit 0 · scaffold round-trips its own loaders"]
+    DC["**drive-cli** *(qa)*\none task each: add → submit → approve · reject · deprecate · history\nrefusals at exit 1 and 2 · dna set/add · paths · directives/workflow list\nagent run: agent execute through the fake adapter custom/fake → agent show · agent list --past\nJourney 4: docs/examples/06-workflow-approval/run.sh — workflow start → next → memory add --workflow → submit → status → approve → finalize → end\n✔ e2e-smoke.scenario: each step's declared exit (spec-005) · every write re-loaded after the last writer\n· tree clean after every step (scripts/e2e-smoke.cjs --candidate)"]
+    MR["**mcp-registration** *(qa)*\nnpm run check:mcp\n✔ mcp.registered: registered server version == package.json pin\n✔ advertised channels == EXPECTED_CHANNELS\n✔ every Resource reads, every Prompt gets (pin + dev build; KNOWN_READ_FAILURES)"]
     GA["**gate** *(qa)*\n✔ e2e-smoke-passed — hard-reject (dl-023)\n`docs/07_gates/rl-{release-line}/rel-{version}-e2e-smoke.md`\n🔑 Approval gate — *approver*"]
 
     FI --> DC --> MR --> GA
@@ -488,11 +499,13 @@ content, REQ-STATE-06).
 
 ```mermaid
 flowchart TD
-    AN["**announce** *(product-owner)*\nmemory.add(type: decision-log) 'End-of-life plan'\n✔ P4.12: [title]\n🔑 Approval gate — *approver*"]
+    AN["**announce** *(product-owner)*\nmemory.add(type: decision-log, tags: [end-of-life]) 'End-of-life plan'\nmemory.submit\n✔ P4.12: [title]\ndraft → in-discussion"]
+    AP["**approve** *(approver)*\nselection: the in-discussion decision-log tagged end-of-life\nmemory.approve\n🔑 Approval gate — reject → announce\nin-discussion → ready"]
     DE["**deprecate** *(tech-lead)*\nselection: the closing release-line's releases not yet released\nmemory.deprecate on each selected release\n✔ deprecated content excluded from agent context"]
     AR["**archive** *(tech-lead)*\ngit.commit(message: 'end-of-life: archive')\nfreeze the repository line"]
 
-    AN --> DE --> AR
+    AN --> AP --> DE --> AR
+    AP -. reject .-> AN
 ```
 
 ---
@@ -557,10 +570,10 @@ flowchart TD
         V1["**capture** *(product-owner)*\nmemory.add(type: change-proposal)\nmemory.submit\n✔ P4.12: [title, kind]\ndraft → in-analysis"]
         V2["**impact-analysis** *(architect)*\nagent.execute (reverse walk of the traceability chain)\nmemory.approve\n🔑 *approver*\nin-analysis → accepted (reject → draft, back to capture)"]
         V3["**update-vision** *(product-owner)*\nvision documents + doc-versioning bumps\n00_index.md in the same commit\n✔ vision-index.current"]
-        V4["**downcast-stories** *(optional)*\n`user-story-mapping`"]
-        V5["**downcast-scenarios** *(optional)*\n`specification-by-examples`"]
-        V6["**downcast-requirements** *(optional)*\n`volere-requirements`"]
-        V7["**schedule** *(product-owner)*\nfills target_release (✔ pre: not empty)\nsequencer entry (the release features: are define-scope's sweep)\nelement.set_release · element.set_state(scheduled)\n✔ vision-index.current\naccepted → scheduled"]
+        V4["**downcast-stories** *(optional)*\n`user-story-mapping`\n✔ downcast.in-scope(layer: stories) (manual until a command)"]
+        V5["**downcast-scenarios** *(optional)*\n`specification-by-examples`\n✔ downcast.in-scope(layer: scenarios) (manual until a command)"]
+        V6["**downcast-requirements** *(optional)*\n`volere-requirements`\n✔ downcast.in-scope(layer: requirements) (manual until a command)"]
+        V7["**schedule** *(product-owner)*\nfills target_release (✔ pre: not empty)\nsequencer entry (the release features: are define-scope's sweep)\nelement.set_release · element.set_state(scheduled)\n✔ vision-index.current · change-proposal.assigned\naccepted → scheduled"]
         V1 --> V2 --> V3 --> V4 --> V5 --> V6 --> V7
         V2 -. reject .-> V1
     end
@@ -572,7 +585,11 @@ flowchart TD
 
 `schedule` stamps the element's `release` and writes the sequencer entry; the release's `features:` gain the
 change's feature ids at that release's `release-planning` `define-scope`, which sweeps its `scheduled`
-change-proposals (`task-277`).
+change-proposals (`task-277`). Its post-check `change-proposal.assigned` (`scripts/check-release-exit.cjs`,
+`dl-166` Q2 (ii)) refuses the exit until the stamp, the sequencer row and, on a release past `draft`, the release's
+`features:` (written then by the approver's `memory amend` of the release) agree; each downcast phase's
+`downcast.in-scope` (`dl-166` Q1 (b)) holds its delta to the analysis's subsection for its layer, applied by hand
+until a command decides it.
 
 A downcast phase whose layer the analysis marks "no impact" is skipped once `schedule` completes
 (`spec-017` §4.10). The included subs are the same ones `specification-downcast` runs at inception,
@@ -589,7 +606,7 @@ above use these keys (`spec-003` § Phase; `workflow next` and `workflow show` s
 | Key | Meaning | Used here |
 |-----|---------|-----------|
 | `iterate_over` / `where` | Run the included workflow once per matching element of a type, or once per entry of a collection in versioned configuration (`element:waves`, `dl-104` D2 (b)); `where` filters the candidates | `release-line-cycle`, `release-cycle`, `wave` |
-| `produces` | The artifacts that deduce the phase's completion. A string is owned by the workflow's `element`; an object `{ type, path }` is owned by the elements of type `type` the phase creates (`dl-104` D3) | the object form in `initial-design` (`seed-releases`, `seed-adrs`, `seed-dls`, `seed-specs`), `release-line-cycle` (`plan-next-release-line`), `release-planning` (`record-adrs`, `identify-specs`, `build-backlog`) and `dev-loop` (`design`) |
+| `produces` | The artifacts that deduce the phase's completion. A string is owned by the workflow's `element`; an object `{ type, path }` is owned by the elements of type `type` the phase creates (`dl-104` D3) | the object form in `initial-design` (`seed-releases`, `seed-adrs`, `seed-dls`, `seed-specs`), `release-line-cycle` (`plan-next-release-line`), `release-planning` (`record-adrs`, `identify-specs`, `build-backlog`), `dev-loop` (`design`), the `capture` of `bug-ingest`, `decision-log-ingest` and `adr-ingest`, and `end-of-life` (`announce`) |
 | `awaits` | `{ party, evidence }`: the phase waits on an actor outside the project (the npm registry, a GitHub environment reviewer), `evidence` a check token that observes the outcome (`dl-104` D4); distinct from `approval:`, which names a project role. In v0.3 such a phase completes by a `workflow finalize` record | declared by no phase today |
 | `mode` | Which non-fresh execution mode the phase's agent run may use: `fresh` (default), `resume`, `reference` (`dl-134` §4 (a), `dl-135`); every v0.3 run is `fresh` | `dev-loop`'s `refactor` (`resume`) |
 | `distinct_from` | Phases of the same workflow whose runs this phase's run never shares an agent session with, whatever `mode` says (`dl-134` §4 (b)) | `dev-loop`'s `green` (`[red]`) and `review` (`[red, green, refactor]`) |
@@ -611,10 +628,14 @@ an action to a command (`release-health.measure` / `.compare`, `node scripts/rel
 dl-172 (a)). Token arguments are `key: value` pairs, substituted as whole argv elements, never
 through a shell. The prose checks a person confirms on purpose — a reading or a judgement no program can
 decide (`spec-review.passed`, the specification-phase quality criteria, the reviewer's re-checks, the
-retrospective's dispositions, …) — are bound `manual: true` by their prose (dl-186 Q6). The prose checks a
-command could decide but none does yet (`frontmatter.required: […]`, the Memory state queries, …) stay
-unbound: `workflow list` reports each as a `W_WORKFLOW_UNBOUND_TOKEN` warning, which fails closed once the
-engine runs checks (v1.0).
+retrospective's dispositions, …) — are bound `manual: true` by their prose (dl-186 Q6), in the file's
+"manual on purpose" group. The checks a command could decide but none does yet (`frontmatter.required: […]`,
+the Memory state queries, the `tests.*` checks of `dev-loop`, …) are bound `manual: true` too, in a group of
+their own, "manual until a command", each entry naming the command it owes, until a `run` binding replaces it
+(`task-358`, `bug-469`). `dev-loop`'s `retrospective.present` runs `scripts/check-retrospective.cjs` on
+`{element.path}`, the element's file (spec-003 Layer 3). No token of this repository is unbound, so
+`workflow list` reports no `W_WORKFLOW_UNBOUND_TOKEN` (`test/core/workflow-bindings-complete.test.ts`); in another
+project such a warning fails closed once the engine runs checks (v1.0).
 
 ---
 
@@ -801,3 +822,4 @@ stateDiagram-v2
 | `qa` | BDD specification, the dev-loop `red` phase (black-box tests, `dl-134`), end-to-end smoke (`e2e-smoke`, and per wave in `wave-checks`), pre-release checks, release-health measurement (`measure`) |
 | `facilitator` | Lean inception sessions, release-health comparison and proposals (`compare`, `propose`), retrospective exploration, consumer feedback collection and capture |
 | `approver` | All approval gates (bug triage, vision-change acceptance, governance reconcile, wave re-sweep and re-plan, backlog commit, task review, documentation, e2e smoke, release, retrospective, end-of-life, service verification) |
+| `coordinator` | No phase: the judgement points between steps (`dl-203` D2); never a gate |

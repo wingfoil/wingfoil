@@ -10,8 +10,9 @@ module.exports = {
   // `test/lint/coverage-parity.test.ts` fails if the report and `src/` ever disagree.
   roots: ['<rootDir>/test', '<rootDir>/src'],
   testMatch: ['**/*.test.ts'],
-  // The suites that time spawned processes are left out of this run: their budgets presuppose an
-  // otherwise idle machine, and here jest's own workers compete with what they measure. They run
+  // The latency suites — those that time spawned processes and those that time an operation in-process
+  // (task-357, `bug-221`) — are left out of this run: their budgets presuppose an otherwise idle machine,
+  // and here jest's own workers compete with what they measure, so no budget runs here. They run
   // alone, through `jest.latency.config.js`, only when asked for (`npm run test:latency`, or
   // `WINGFOIL_LATENCY=1 npm test` — `scripts/run-tests.cjs`; task-154, `bug-013`). The list is
   // `test/latency-suites.cjs`.
@@ -65,9 +66,11 @@ module.exports = {
   // `collectCoverageFrom` excludes only true re-export barrels, each by its literal path
   // (task-122-coverage-measures-every-index-file-with-logic, bug-021). A CommonJS re-export compiles to
   // one getter thunk per name, which the report counts as an uncalled function, so a barrel only drags
-  // the `functions` total down. The earlier `!src/**/index.ts` glob also hid `src/core/index.ts` and
-  // `src/mcp/index.ts`, which hold logic. An `index.ts` not listed here is measured, so forgetting to
-  // list a new barrel costs a few function points rather than hiding code.
+  // the `functions` total down. The earlier `!src/**/index.ts` glob also hid `src/core/index.ts`, which
+  // holds logic, and `src/mcp/index.ts`, which did until task-354 moved `registerReadOnlyResources` to
+  // `src/mcp/read-only-resources.ts`; a re-export barrel since, it is listed below (task-354 review, finding 4).
+  // An `index.ts` not listed here is measured, so forgetting to list a new barrel costs a few function points
+  // rather than hiding code.
   // `test/lint/coverage-scope.test.ts` fails if an entry is a glob, names a missing file, or names a
   // file that is not a barrel (anything beyond re-exports, type-only statements and literal constants).
   collectCoverageFrom: [
@@ -76,6 +79,7 @@ module.exports = {
     '!src/cli/index.ts',
     '!src/directives/index.ts',
     '!src/dna/index.ts',
+    '!src/mcp/index.ts',
     '!src/memory/index.ts',
     '!src/storage/index.ts',
     '!src/validation/index.ts',

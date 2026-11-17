@@ -115,6 +115,8 @@ import { selectDirectivesById } from './context';
 import { checkAssignable, checkUnreferenced, updateRoleAssignments } from './directive-assign';
 import type { MemoryYaml } from '../memory/schema';
 import { requireGitIdentity } from './git-identity';
+import { requireTeamMembership } from './team-membership';
+import { resolveOperationAgentContext } from './agent-context';
 import { requireRequiredFields } from './required-fields';
 import { requireInitializedProject } from './init';
 import { requireCustomAsset } from './builtin-asset';
@@ -127,7 +129,7 @@ import { amendReservedFields, requireAmendableEdit, requireAmendableType, requir
 import { resolveAddType } from './memory-add-type';
 import { addLinkTrailers, resolveAddLink, type AddLink } from './memory-add-link';
 import { committedScopeError, requireAbsentTarget, requireUnmodifiedTarget } from './write-guard';
-import { agentExecuteFn, renderAgentExecuteStderr } from './agent-execute';
+import { AGENT_EXECUTE_LOG_OPTION, agentExecuteFn, renderAgentExecuteStderr } from './agent-execute';
 import { agentListFn, renderAgentListConsole } from './agent-list';
 import { agentShowFn, renderAgentShowConsole } from './agent-show';
 import { UsageError } from './usage-error';
@@ -291,6 +293,8 @@ export * from './registry';
 export * from './exit-code';
 export * from './git-identity';
 export * from './approval-authority';
+export * from './agent-context';
+export * from './team-membership';
 export * from './require-reason';
 export * from './builtin-asset';
 export * from './confinement';
@@ -618,6 +622,10 @@ async function runDnaMutation(
 ): Promise<CoreResult<{ key: string; value?: string }>> {
   const identity = requireGitIdentity(root);
   if (!identity.ok) return identity;
+  const member = requireTeamMembership(root, identity.value);
+  if (!member.ok) return member;
+  const agent = resolveOperationAgentContext(root);
+  if (!agent.ok) return agent;
 
   // REQ-SEC-06 / bug-121 (task-172): `writeDocument` follows a symlinked `dna.yaml`, so a file that
   // leads outside the project, or is itself a link, is refused before any read or write. First, so a
@@ -673,6 +681,7 @@ async function runDnaMutation(
   const sha = writeAndCommit(root, [{ path: DNA_YAML_PATH, content: serialized }], subject, {
     warnings,
     plannedWarnings,
+    attribution: agent.value.attribution ?? undefined,
   });
   const leaked = committedScopeError(root, sha, DNA_YAML_PATH, serialized);
   if (leaked) return leaked;
@@ -888,9 +897,16 @@ export interface MemoryAddParams {
   /**
    * Frontmatter fields written as given, after the `--set` ones and sorted by name — for a core caller only:
    * `workflow start` records the plan's `element` through it (task-217, `spec-017` §7.1), a field that is no
-   * token. The CLI and MCP never populate it, so no command line can.
+   * token, and its `workflow` and `phase` when the plan type's patterns hold no token for them (task-345,
+   * task-346). The CLI and MCP never populate it, so no command line can.
    */
   readonly fields?: Readonly<Record<string, string>>;
+  /**
+   * Trailer lines added to the add commit's trailer paragraph, after the step linkage's and before
+   * `WingFoil-Version:` — for a core caller only: `workflow start` writes the start marker `WingFoil-Start: <name>`
+   * through it (task-345, `spec-017` §3.1). The CLI and MCP never populate it, so `memory add` never writes the marker.
+   */
+  readonly trailers?: readonly string[];
 }
 
 /** A single-valued option of {@link MemoryAddParams.options}: a repeated occurrence keeps the last. */
@@ -948,7 +964,7 @@ function singleOption(options: MemoryAddParams['options'], name: string): string
  * only exit-2 path and are thrown before this try.
  */
 const memoryAddFn: CoreFn<unknown, { id: string; path: string }> = async (params) => {
-  const { root, options, fields: extraFields } = params as MemoryAddParams;
+  const { root, options, fields: extraFields, trailers: extraTrailers } = params as MemoryAddParams;
 
   const type = singleOption(options, 'type');
   if (type === undefined) throw new UsageError('missing required argument: --type');
@@ -964,6 +980,10 @@ const memoryAddFn: CoreFn<unknown, { id: string; path: string }> = async (params
 
   const identity = requireGitIdentity(root);
   if (!identity.ok) return identity;
+  const member = requireTeamMembership(root, identity.value);
+  if (!member.ok) return member;
+  const agent = resolveOperationAgentContext(root);
+  if (!agent.ok) return agent;
 
   // task-095 / `bug-085`: the registry, the `path` and the scaffold all resolve at HEAD, inside a
   // function that accepts no parsed `MemoryYaml` — so this verb cannot decide any of the three from
@@ -993,7 +1013,7 @@ const memoryAddFn: CoreFn<unknown, { id: string; path: string }> = async (params
       if (!linked.ok) return linked;
       link = linked.value;
     }
-    const trailers = link === undefined ? [] : addLinkTrailers(link);
+    const trailers = [...(link === undefined ? [] : addLinkTrailers(link)), ...(extraTrailers ?? [])];
 
     // spec-001's order: {date} → {author} → field/context tokens → {slug} → {n}, so the counter sees
     // the materialized prefix. {date} is read ONCE, from the author date git records for this add's
@@ -1036,6 +1056,7 @@ const memoryAddFn: CoreFn<unknown, { id: string; path: string }> = async (params
       author: identity.value,
       warnings,
       trailers,
+      attribution: agent.value.attribution ?? undefined,
       // `@`: git reads a bare `<seconds> <offset>` as a timestamp only from 9 digits of seconds up
       // (`0 +0000` is "invalid date format"); `@<seconds> <offset>` is a timestamp at any width.
       ...(date === undefined ? {} : { env: { GIT_AUTHOR_DATE: `@${date}` } }),
@@ -1547,14 +1568,15 @@ const memoryApproveFn: CoreFn<unknown, MemoryApproveResult> = async (params) => 
   if (reference === undefined || reference.trim().length === 0) {
     throw new UsageError(missingOperandReason('id'));
   }
-  const reason = requireReason(options);
+  const reason = requireReason(options, { approval: true });
 
   const prepared = beginMemoryTransition(root, reference, 'approve', { resolveReference: true });
   if (!prepared.ok) return prepared;
   const { id } = prepared.value; // the element's full id, whatever reference the verb was given (task-332)
   const { type, path, content, from, to } = prepared.value;
 
-  const authorized = requireApprovalAuthority(root, type, prepared.value.identity);
+  const agent = prepared.value.agent;
+  const authorized = requireApprovalAuthority(root, type, prepared.value.identity, agent, 'memory approve');
   if (!authorized.ok) return authorized;
 
   const supersede = prepareSupersede(root, prepared.value);
@@ -1708,14 +1730,15 @@ const memoryRejectFn: CoreFn<unknown, MemoryRejectResult> = async (params) => {
   if (reference === undefined || reference.trim().length === 0) {
     throw new UsageError(missingOperandReason('id'));
   }
-  const reason = requireReason(options);
+  const reason = requireReason(options, { approval: true });
 
   const prepared = beginMemoryTransition(root, reference, 'reject', { resolveReference: true });
   if (!prepared.ok) return prepared;
   const { id } = prepared.value; // the element's full id, whatever reference the verb was given (task-332)
   const { type, path, from, to, content } = prepared.value;
 
-  const authorized = requireApprovalAuthority(root, type, prepared.value.identity);
+  const agent = prepared.value.agent;
+  const authorized = requireApprovalAuthority(root, type, prepared.value.identity, agent, 'memory reject');
   if (!authorized.ok) return authorized;
 
   const { name, email } = prepared.value.identity;
@@ -1963,7 +1986,7 @@ const memoryAmendFn: CoreFn<unknown, MemoryAmendResult> = async (params) => {
   if (reference === undefined || reference.trim().length === 0) {
     throw new UsageError(missingOperandReason('id'));
   }
-  const reason = requireReason(options);
+  const reason = requireReason(options, { approval: true });
 
   const prepared = beginMemoryTransition(root, reference, 'amend', { resolveReference: true });
   if (!prepared.ok) return prepared;
@@ -1976,7 +1999,8 @@ const memoryAmendFn: CoreFn<unknown, MemoryAmendResult> = async (params) => {
   // would otherwise be refused for a field change it never made.
   const confined = requireConfinedWriteTarget(root, path, 'write');
   if (!confined.ok) return confined;
-  const authorized = requireApprovalAuthority(root, type, prepared.value.identity);
+  const agent = prepared.value.agent;
+  const authorized = requireApprovalAuthority(root, type, prepared.value.identity, agent, 'memory amend');
   if (!authorized.ok) return authorized;
 
   const amendable = requireAmendableType(memoryYaml, type);
@@ -2064,6 +2088,10 @@ const directiveCreateFn: CoreFn<unknown, { name: string; path: string }> = async
 
   const identity = requireGitIdentity(root);
   if (!identity.ok) return identity;
+  const member = requireTeamMembership(root, identity.value);
+  if (!member.ok) return member;
+  const agent = resolveOperationAgentContext(root);
+  if (!agent.ok) return agent;
 
   // One spelling of the location, reused for the existence check, the write and the commit scope, so
   // the three can never drift apart. `join` normalizes the separators, so the POSIX form is also the
@@ -2086,7 +2114,7 @@ const directiveCreateFn: CoreFn<unknown, { name: string; path: string }> = async
 
   const content = renderCustomDirective(name);
   const message = `wf(directive): create ${name}`;
-  const sha = writeAndCommit(root, [{ path: relativePath, content }], message);
+  const sha = writeAndCommit(root, [{ path: relativePath, content }], message, { attribution: agent.value.attribution ?? undefined });
   const leaked = committedScopeError(root, sha, relativePath, content);
   if (leaked) return leaked;
   return coreOk({ name, path: relativePath }, { sha, message });
@@ -2164,6 +2192,10 @@ const directiveAssignFn: CoreFn<unknown, DirectiveAssignResult> = async (params)
 
   const identity = requireGitIdentity(root);
   if (!identity.ok) return identity;
+  const member = requireTeamMembership(root, identity.value);
+  if (!member.ok) return member;
+  const agent = resolveOperationAgentContext(root);
+  if (!agent.ok) return agent;
 
   const invalid = checkAssignable(root, role, directives);
   if (invalid) return coreErr(invalid);
@@ -2171,6 +2203,7 @@ const directiveAssignFn: CoreFn<unknown, DirectiveAssignResult> = async (params)
   const message = `wf(directive): assign ${directives.join(', ')} to ${role}`;
   const updated = updateRoleAssignments(root, role, (current) => withAssignedDirectives(current, directives), message, {
     force: force === true,
+    attribution: agent.value.attribution ?? undefined,
   });
   if (!updated.ok) return updated;
   return coreOk({ directives, role, assignments: updated.value.assignments }, updated.commit, updated.warnings);
@@ -2361,6 +2394,10 @@ const directiveRemoveFn: CoreFn<unknown, DirectiveRemoveResult> = async (params)
 
   const identity = requireGitIdentity(root);
   if (!identity.ok) return identity;
+  const member = requireTeamMembership(root, identity.value);
+  if (!member.ok) return member;
+  const agent = resolveOperationAgentContext(root);
+  if (!agent.ok) return agent;
 
   let atHead: HeadDirectiveInventory;
   try {
@@ -2418,7 +2455,7 @@ const directiveRemoveFn: CoreFn<unknown, DirectiveRemoveResult> = async (params)
   if (!unmodified.ok) return unmodified;
 
   const message = `wf(directive): remove ${name}`;
-  const sha = writeAndCommit(root, [{ path: relativePath, content: null }], message);
+  const sha = writeAndCommit(root, [{ path: relativePath, content: null }], message, { attribution: agent.value.attribution ?? undefined });
   const leaked = committedScopeError(root, sha, relativePath, null);
   if (leaked) return leaked;
   return coreOk({ name, path: relativePath }, { sha, message });
@@ -2578,8 +2615,8 @@ const workflowRekeyFn: CoreFn<unknown, RekeyResult> = async (params) => {
 
 /**
  * `workflowStart` / `workflowEnd` `CoreOperation.fn`s (P4.2, P4.3; `spec-017` §7.1–§7.2; task-217): the two
- * operations of `./workflow-start-end`, with `start` writing through this registry's own `memoryAdd` and
- * `memorySubmit`. A `spec-003` error at `HEAD` (or a token value outside the id class) is `VALIDATION`,
+ * operations of `./workflow-start-end`, with `start` writing through this registry's own `memoryAdd` (its plan is
+ * left `draft`, for its author's `memory submit`, task-346). A `spec-003` error at `HEAD` (or a token value outside the id class) is `VALIDATION`,
  * exit 1, as every workflow operation maps it ({@link coreErrorOf}).
  */
 async function refusalOf<T>(run: () => Promise<CoreResult<T>>): Promise<CoreResult<T>> {
@@ -2593,7 +2630,7 @@ async function refusalOf<T>(run: () => Promise<CoreResult<T>>): Promise<CoreResu
 }
 
 const workflowStartFn: CoreFn<unknown, StartResult> = (params) =>
-  refusalOf(() => workflowStart(params as WorkflowStartParams, { add: memoryAddFn, submit: memorySubmitFn }));
+  refusalOf(() => workflowStart(params as WorkflowStartParams, { add: memoryAddFn }));
 
 const workflowEndFn: CoreFn<unknown, EndResult> = (params) => refusalOf(() => workflowEnd(params as WorkflowEndParams));
 
@@ -2664,16 +2701,34 @@ export const CORE_MODULES: readonly CoreModule[] = [
       // (spec-016 §7, §8). Reads `HEAD` (spec-008 §11).
       agentExecute: {
         name: 'agentExecute',
+        // `spec-018` §1.1: its record commit names the launched agent in its `run`, so it takes no `--co-author`.
+        agentAttribution: false,
         mutates: true,
         description: 'launch an agent CLI through its adapter on one Memory element, with its context assembled and checked first',
         // task-235 (spec-016 §3.1, ruling R16): the step forms. `--workflow` and `--step` imply `--next`.
-        flags: [{ name: 'next', description: "take the workflow, phase, element and role from the active workflow's next step" }],
+        flags: [
+          { name: 'next', description: "take the workflow, phase, element and role from the active workflow's next step" },
+          // task-335 (spec-016 §3.1, dl-183 Q2 (a)): the launch kind, over the phase's `launch`; both together are exit 2.
+          { name: 'headless', description: "launch the agent without a terminal, as a work run; overrides the phase's launch" },
+          { name: 'interactive', description: "launch the agent in this terminal; overrides the phase's launch" },
+        ],
         options: [
           { name: 'workflow', valueName: 'ref', description: 'take the step from this workflow (its most recent open instance) or open instance id; implies --next' },
           { name: 'step', valueName: 'key', description: 'take this step of the frontier, e.g. dev-loop.red@task:task-042-login-form; implies --next' },
           { name: 'element', valueName: 'type:id', description: "the element the agent works on, e.g. task:task-042-login-form, or a short reference (e.g. task:task-42); with a step, it overrides the step's element" },
           { name: 'role', valueName: 'role', description: "the role the agent runs as, a dna.yaml team.roles name (default: the step's role; with no step, developer, with a warning)" },
           { name: 'agent', valueName: 'name', description: 'the team.agents entry to launch (default: the first with an adapter that executes the role)' },
+          {
+            name: 'timeout',
+            valueName: 'duration',
+            description: 'stop the agent after this long: <n>s, <n>m or <n>h, at most 24h (SIGTERM, then SIGKILL 10 s later)',
+          },
+          // task-336 (spec-016 §3.1, dl-182 Q2 (a), Q4 (a)): a copy of a headless run's output; refused on an interactive one.
+          {
+            name: AGENT_EXECUTE_LOG_OPTION,
+            valueName: 'path',
+            description: "append a copy of a headless run's output to this file (created mode 0600); the output may hold secrets and is never committed",
+          },
         ],
         example: 'wingfoil agent execute --next',
         fn: agentExecuteFn,
@@ -2683,15 +2738,17 @@ export const CORE_MODULES: readonly CoreModule[] = [
       // task-240 (`spec-016` §5): read-only, and a declared `HEAD` read (§5.1, `spec-006` §6 item 6): the
       // run log and the workflow deduction at one commit. Its console rendering is §5's sections
       // (`renderConsole`); each diagnostic is also a success warning, the console's `warning:` line.
-      // `--active` is v0.4 and not declared, so it is refused as an unknown option (exit 2). CLI only
-      // in v0.3 (spec-016 §7, §8).
+      // task-336 (`spec-016` §5, §5.1, §7): `--active` lists the running launches of the active registry, read from the
+      // working tree's git-ignored `.wingfoil/run/` outside that `HEAD` exception; pruning a stale entry writes nothing
+      // git tracks, so it stays `mutates: false` (§8). CLI only (spec-016 §7, §8).
       agentList: {
         name: 'agentList',
         mutates: false,
-        description: 'list the recorded agent runs and the workflow steps waiting for an agent, as committed at HEAD',
+        description: 'list the recorded agent runs, the workflow steps waiting for an agent (both as committed at HEAD) and the agents running now',
         flags: [
-          { name: 'past', description: 'list the recorded runs (the run log at HEAD); without --past or --waiting, both sections' },
-          { name: 'waiting', description: "list the open workflows' ready steps whose role an agent executes; without --past or --waiting, both sections" },
+          { name: 'past', description: 'list the recorded runs (the run log at HEAD); without --past, --waiting or --active, every section' },
+          { name: 'waiting', description: "list the open workflows' ready steps whose role an agent executes and that no agent is running; without --past, --waiting or --active, every section" },
+          { name: 'active', description: 'list the agents running now in this checkout (the registry .wingfoil/run/); without --past, --waiting or --active, every section' },
         ],
         options: [
           { name: 'element', valueName: 'type:id', description: 'keep the runs and steps of this element, e.g. task:task-042-login-form' },
@@ -3007,16 +3064,22 @@ export const CORE_MODULES: readonly CoreModule[] = [
         renderConsole: renderNextConsole as (value: unknown) => string,
       },
       // task-217 (`spec-017` §7.1–§7.2): both decide at `HEAD` (§1.1 item 1, gating). `start` records the
-      // instance as a `plan` element in two commits (`wf(plan): add`, `wf(plan): submit`); `end` closes it
+      // instance as a `plan` element in one commit (`wf(plan): add`), the plan left `draft` for its author's
+      // `memory submit` (task-346); `end` closes it
       // with `wf(plan): finalize <id> [active → done]`. The MCP Tools `workflow.start` / `workflow.end` are
       // v0.4 (P5.2.3); the production server serves no Tool.
       workflowStart: {
         name: 'workflowStart',
         mutates: true,
-        description: 'start a workflow: record it as an active plan element and print its first step',
+        description: 'start a workflow: record it as a draft plan element and print its first step',
         positional: { name: 'name', required: true, description: 'the startable workflow to start' },
         options: [
-          { name: 'element', valueName: 'type:id', description: 'the element the workflow runs on, when it declares one, the id may be a short reference (default: the active workflow\'s element of that type)' },
+          {
+            name: 'element',
+            valueName: 'type:id',
+            description:
+              "the element the workflow runs on, when it declares one, or its context element, when it declares none; the id may be a short reference; none records no context (default: the active workflow's element, of that type or, for a workflow that declares none, when the active workflow declares one)",
+          },
           { name: 'title', valueName: 'title', description: "the plan's title (default: '<workflow> — <phase>')" },
           {
             name: 'set',

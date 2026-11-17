@@ -5,7 +5,8 @@
  * {@link readDeductionSnapshotAtHead} is the one impure step: it resolves `HEAD` once and reads every
  * input at that sha — the workflow registry with its core checks (`loadWorkflowRegistryAtCommit`),
  * `memory.yaml`, `dna.yaml`, every Memory document in sorted path order (tolerant, task-171), the file
- * list, each open plan's start commit and what each instance's walk holds (phase records, step linkages,
+ * list, each open plan's start commit and its standing against the start marker (task-345, §3.2: the marked starts
+ * are read for every instance plan, in the same `git log`, and the ancestry from the walk) and what each instance's walk holds (phase records, step linkages,
  * re-entries, and the provenance records `workflow: adopt` / `workflow: rekey`, read from the same subjects and
  * trailers by `src/workflow/provenance.ts`, task-293) — plus, to **explain** and never to decide, the working-tree paths among the inputs that
  * differ from `HEAD` (`W_UNCOMMITTED_INPUTS`, §1.2; the `command-baseline` directive). The deduction
@@ -39,12 +40,14 @@ import {
   deduceWorkflowState,
   OPEN_PLAN_STATUSES,
   PLAN_TYPE,
+  START_TRAILER,
   type Deduction,
   type DeductionSnapshot,
   type InstanceHistory,
   type PhaseRecord,
   type Reentry,
   type StartCommit,
+  type StartMarker,
   type StepLink,
   type TransitionCommit,
   type WalkPosition,
@@ -68,29 +71,61 @@ function text(value: unknown): string | null {
 
 /** The marker that opens one commit of {@link readStarts}'s `git log` (a byte no path or sha holds). */
 const COMMIT_MARK = String.fromCharCode(1);
+/** What separates a commit's name from its start-marker values on that line, and the values from each other. */
+const FIELD_MARK = String.fromCharCode(2);
+const VALUE_MARK = String.fromCharCode(3);
+
+/** A plan's start commit as {@link readStarts} reads it, with whether it carries the start marker (§3.1). */
+interface ReadStart extends StartCommit {
+  readonly marked: boolean;
+}
 
 /**
  * The start commit of each plan at `paths` (§3.3): the latest commit reachable from `sha` that **added**
- * the file at its current path (`--no-renames`, so a moved plan starts where it arrived). One
- * `git log --topo-order` over all of them: the commits come out in `git rev-list --topo-order` order,
+ * the file at its current path (`--no-renames`, so a moved plan starts where it arrived), and whether it
+ * carries the start marker — a non-blank {@link START_TRAILER} in its final trailer paragraph (§3.1, task-345).
+ * One `git log --topo-order` over all of them: the commits come out in `git rev-list --topo-order` order,
  * so a start's position is the index of its commit among them (`0` the most recent).
  */
-function readStarts(root: string, sha: string, paths: readonly string[]): Map<string, StartCommit> {
-  const starts = new Map<string, StartCommit>();
+function readStarts(root: string, sha: string, paths: readonly string[]): Map<string, ReadStart> {
+  const starts = new Map<string, ReadStart>();
   if (paths.length === 0) return starts;
-  const args = ['-c', 'core.quotePath=false', 'log', '--no-show-signature', '--topo-order', '--no-renames', '--diff-filter=A', '--name-only', '--format=%x01%H', sha, '--'];
+  const format = `--format=%x01%H%x02%(trailers:key=${START_TRAILER},valueonly,unfold,separator=%x03)`;
+  const args = ['-c', 'core.quotePath=false', 'log', '--no-show-signature', '--topo-order', '--no-renames', '--diff-filter=A', '--name-only', format, sha, '--'];
   const wanted = new Set(paths);
   let commit = '';
+  let marked = false;
   let position = -1;
   for (const line of runGitRead(root, [...args, ...paths.map((path) => `:(literal)${path}`)]).stdout.split('\n')) {
     if (line.startsWith(COMMIT_MARK)) {
-      commit = requireCommitName(line.slice(1), 'git log --diff-filter=A');
+      const [name, values = ''] = line.slice(1).split(FIELD_MARK);
+      commit = requireCommitName(name!, 'git log --diff-filter=A');
+      marked = values.split(VALUE_MARK).some((value) => value.trim() !== '');
       position += 1;
     } else if (wanted.has(line) && !starts.has(line)) {
-      starts.set(line, { commit, position });
+      starts.set(line, { commit, position, marked });
     }
   }
   return starts;
+}
+
+/**
+ * The standing of an open plan's start against the start marker (`spec-017` §3.2, task-345): `marked` when it
+ * carries the marker; otherwise `after-marker` when a marked start is among its ancestors (the plan is no
+ * instance), else `pre-marker`.
+ *
+ * **The pre-marker rule is transitory** (`spec-017` §3.2; the approver's ruling at task-345's design gate). It keeps
+ * the instances opened before the start marker existed: an unmarked start no marked start precedes stays an
+ * instance, and `workflow status` reports each such instance with `W_INSTANCE_PRE_MARKER`. Its removal condition is
+ * that no WingFoil repository holds an open unmarked instance, checked by zero `W_INSTANCE_PRE_MARKER` in
+ * `workflow status --format json` of each; its removal — this classification (an unmarked start is then never an
+ * instance), the warning, and the `spec-017` §1.3/§2/§3.2/§7.4 text — is tracked by `bug-515`.
+ *
+ * `follows` answers whether one of the marked starts is an ancestor of a commit, from the history walk already read.
+ */
+function startMarker(start: ReadStart, markedStarts: readonly string[], follows: (commit: string, ancestors: readonly string[]) => boolean): StartMarker {
+  if (start.marked) return 'marked';
+  return markedStarts.length > 0 && follows(start.commit, markedStarts) ? 'after-marker' : 'pre-marker';
 }
 
 /** The value of each `key: value` line of a trailer block, by key (the last one wins), or `null`. */
@@ -151,18 +186,24 @@ function readWalk(root: string, sha: string, bound: readonly string[]): WalkComm
  * it is needed.
  */
 function instanceWalk(walk: readonly WalkCommit[], byCommit: ReadonlyMap<string, WalkCommit>, start: string): Set<string> {
-  const excluded = new Set<string>();
+  const excluded = ancestorsInWalk(byCommit, start);
+  return new Set(walk.filter((entry) => !excluded.has(entry.commit)).map((entry) => entry.commit));
+}
+
+/** The commits of the union walk reachable from `start`'s parents — its ancestors inside the walk — through the walk's parent links. */
+function ancestorsInWalk(byCommit: ReadonlyMap<string, WalkCommit>, start: string): Set<string> {
+  const ancestors = new Set<string>();
   // Every start lies in the union walk: it descends from (or is) the merge base, so it is not reachable
   // from the base's parents.
   const pending = [...byCommit.get(start)!.parents];
   while (pending.length > 0) {
     const commit = pending.pop()!;
     const entry = byCommit.get(commit);
-    if (entry === undefined || excluded.has(commit)) continue;
-    excluded.add(commit);
+    if (entry === undefined || ancestors.has(commit)) continue;
+    ancestors.add(commit);
     pending.push(...entry.parents);
   }
-  return new Set(walk.filter((entry) => !excluded.has(entry.commit)).map((entry) => entry.commit));
+  return ancestors;
 }
 
 /** The ids a `wf(<type>): <verb> <ids> [<bracket>]` subject names, in order. */
@@ -277,6 +318,12 @@ interface HistoryRead {
   readonly transitions: TransitionCommit[];
   readonly lastChanges: Map<string, WalkPosition>;
   readonly parents: Map<string, readonly string[]>;
+  /**
+   * Whether one of `ancestors` is an ancestor of the start `commit` (task-345, §3.2), from the walk alone: a commit
+   * reachable from `sha` that the walk does not hold is reachable from the bound's parents, so it is an ancestor
+   * of every start; one the walk holds is an ancestor of `commit` when the walk's parent links reach it from there.
+   */
+  readonly follows: (commit: string, ancestors: readonly string[]) => boolean;
 }
 
 /**
@@ -293,11 +340,16 @@ function readHistory(
   memoryYaml: MemoryYaml | null,
   documents: readonly MemoryDocumentSummary[],
 ): HistoryRead {
-  const read: HistoryRead = { history: new Map(), transitions: [], lastChanges: new Map(), parents: new Map() };
-  if (starts.length === 0) return read;
+  if (starts.length === 0) return { history: new Map(), transitions: [], lastChanges: new Map(), parents: new Map(), follows: () => false };
   const bound = readWalkBound(root, starts);
   const walk = readWalk(root, sha, bound);
   const byCommit = new Map(walk.map((entry) => [entry.commit, entry]));
+  const follows = (commit: string, ancestors: readonly string[]): boolean => {
+    if (ancestors.some((ancestor) => !byCommit.has(ancestor))) return true;
+    const reached = ancestorsInWalk(byCommit, commit);
+    return ancestors.some((ancestor) => reached.has(ancestor));
+  };
+  const read: HistoryRead = { history: new Map(), transitions: [], lastChanges: new Map(), parents: new Map(), follows };
   for (const entry of walk) read.parents.set(entry.commit, entry.parents);
   const facts = walk.map((entry) => readFacts(entry, memoryYaml));
 
@@ -527,9 +579,10 @@ export function readDeductionSnapshotAtHead(root: string): DeductionSnapshot {
   // `HEAD` is resolved once, above, and every pillar is read at that sha (task-283, `bug-309`): no loader
   // resolves it again, and `memory.yaml` / `dna.yaml` are read and parsed once, for the registry's core
   // checks and for the snapshot alike, in the order the registry reads them.
-  const memoryYamlOnce = once(() => loadMemoryYamlAtCommit(root, sha));
-  const dnaYamlOnce = once(() => loadDnaYamlAtCommit(root, sha));
-  const registry = loadWorkflowRegistryAtCommit(root, sha, undefined, { memoryYaml: memoryYamlOnce, dnaYaml: dnaYamlOnce });
+  // The sha is `HEAD`'s, so every read names its files `HEAD:<path>` (task-354, `bug-317`).
+  const memoryYamlOnce = once(() => loadMemoryYamlAtCommit(root, sha, 'HEAD'));
+  const dnaYamlOnce = once(() => loadDnaYamlAtCommit(root, sha, 'HEAD'));
+  const registry = loadWorkflowRegistryAtCommit(root, sha, undefined, { memoryYaml: memoryYamlOnce, dnaYaml: dnaYamlOnce }, 'HEAD');
   const memoryYaml = memoryYamlOnce();
   const dnaYaml = dnaYamlOnce();
   const scanDiagnostics: Diagnostic[] = [];
@@ -538,11 +591,19 @@ export function readDeductionSnapshotAtHead(root: string): DeductionSnapshot {
   const documents = memoryYaml === null ? [] : loadMemoryDocumentsAtCommit(root, sha, memoryYaml, { onDiagnostic: (diagnostic) => scanDiagnostics.push(diagnostic) });
 
   // The plans that may be open instances (§3.2's status and `parent` rules; the workflow rule is the deduction's).
-  const candidates = documents
-    .filter(({ frontmatter }) => isInstancePlan(frontmatter) && OPEN_PLAN_STATUSES.includes(text(frontmatter['status']) ?? ''))
-    .map((document) => document.path);
-  const starts = readStarts(root, sha, candidates);
-  const { history, transitions, lastChanges, parents } = readHistory(root, sha, [...starts.values()], memoryYaml, documents);
+  // The start lookup reads every instance plan, any status: a marked start counts whatever its plan's status now is.
+  const instancePlans = documents.filter(({ frontmatter }) => isInstancePlan(frontmatter));
+  const candidates = instancePlans.filter(({ frontmatter }) => OPEN_PLAN_STATUSES.includes(text(frontmatter['status']) ?? '')).map((document) => document.path);
+  const read = readStarts(root, sha, instancePlans.map((document) => document.path));
+  const candidateStarts = candidates.flatMap((path) => {
+    const start = read.get(path);
+    return start === undefined ? [] : [[path, start] as const];
+  });
+  const markedStarts = [...new Set([...read.values()].filter((start) => start.marked).map((start) => start.commit))].sort();
+  const { history, transitions, lastChanges, parents, follows } = readHistory(root, sha, candidateStarts.map(([, start]) => start), memoryYaml, documents);
+  const starts = new Map<string, StartCommit>(
+    candidateStarts.map(([path, start]) => [path, { commit: start.commit, position: start.position, marker: startMarker(start, markedStarts, follows) }]),
+  );
 
   return {
     commit: sha,

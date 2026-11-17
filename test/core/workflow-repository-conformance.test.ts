@@ -18,6 +18,8 @@
  * - AC 6 (red-first): `release-line-cycle` runs the same `align-agent-docs` phase as `user-docs` (`dl-025`).
  * - task-303 (`dl-186` Q6): the prose checks a human confirms on purpose are bound `manual: true`, so the warning set
  *   keeps only the checks a command could decide (86 → 65).
+ * - task-358 (`bug-469`, approver ruling D1 (B)): the checks a command could decide are bound `run`, or `manual: true`
+ *   until that command exists, so the warning set is empty (68 → 0).
  * - task-301 AC 2 / AC 3 (red-first, `bug-389`): the eleven phases of the four specification sub-workflows declare
  *   their module's output directory as `produces`, so they leave the checkpoint list (28 → 17).
  * - `dl-153` (A): the first `workflows/bindings.yaml` carries `format: 1`; `tests.coverage(min: N)` restates
@@ -60,98 +62,16 @@ function rows(diagnostics: readonly Diag[]): Row[] {
 }
 
 describe('AC 1 / AC 2 — every workflow loads at HEAD with zero errors and only the deliberate warnings', () => {
-  it('zero errors; the only warnings left are unbound checks (each with a reason in the notes), in spec-003 order', () => {
+  it('zero errors and zero warnings: no token is left unbound (task-358, bug-469), so no row remains', () => {
     const { diagnostics } = registry();
     expect(diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
     expect(diagnostics.every((d) => d.severity === 'warning')).toBe(true);
-    // task-303 (dl-186 Q6, dl-172 (a)): the 17 prose checks a human confirms on purpose (21 occurrences) are bound
-    // `manual: true` in bindings.yaml 2.6; the 65 left are the checks a command could decide (spec-017 §12).
-    expect(rows(diagnostics)).toEqual([
-      ["sw-life-cycle", "phases[3].checks.post[0]", "frontmatter.required"],
-      ["bug-ingest", "phases[0].checks.post[0]", "frontmatter.required"],
-      ["decision-log-ingest", "phases[0].checks.post[0]", "frontmatter.required"],
-      ["adr-ingest", "phases[0].checks.post[0]", "frontmatter.required"],
-      ["service-ingest", "phases[0].checks.post[0]", "frontmatter.required"],
-      ["service-ingest", "phases[0].checks.post[1]", "secret-scan.clean"],
-      // task-212 (dl-132): vision-change's capture mirrors the change-proposal template; its vision-index.current checks are bound.
-      ["vision-change", "phases[0].checks.post[0]", "frontmatter.required"],
-      ["vision-change", "phases[6].checks.pre[0]", "change-proposal.target_release is not empty"],
-      ["specification-downcast", "phases[3].checks.post[0]", "valid JSON; no duplicate IDs; no circular dependencies"],
-      ["backlog-export", "phases[2].checks.post[0]", "valid JSON parse"],
-      ["backlog-export", "phases[2].checks.post[1]", "no duplicate IDs"],
-      ["backlog-export", "phases[2].checks.post[2]", "no circular dependencies"],
-      ["initial-design", "phases[0].checks.post[0]", "frontmatter.required"],
-      ["initial-design", "phases[1].checks.post[0]", "frontmatter.required"],
-      ["initial-design", "phases[2].checks.post[0]", "frontmatter.required"],
-      ["initial-design", "phases[3].checks.post[0]", "frontmatter.required"],
-      ["release-line-cycle", "phases[4].checks.pre[0]", "all releases where release-line={release-line.version} are status"],
-      ["release-line-cycle", "phases[4].checks.post[0]", "frontmatter.required"],
-      ["release-planning", "phases[0].checks.pre[0]", "`npm run -s wingfoil -- --version` == the version package.json pins"],
-      ["release-planning", "phases[0].checks.post[0]", "new pin >= old pin, and `npm view wingfoil versions` lists it"],
-      ["release-planning", "phases[0].checks.post[1]", "the switch commit changes only package.json and package-lock.json"],
-      ["release-planning", "phases[1].checks.post[0]", "frontmatter.required"],
-      // task-277 (approver ruling 2026-10-12 D1 (c)): define-scope's sweep of the scheduled change-proposals, bound later under dl-166 Q2 (ii).
-      ["release-planning", "phases[1].checks.post[1]", "change-proposals.swept"],
-      // task-230 (dl-100 §1, approver ruling 2026-10-12 D2): the coverage of the ready decision-logs, read by the product-owner.
-      ["release-planning", "phases[3].checks.post[0]", "ready-decision-logs.covered"],
-      ["release-planning", "phases[4].checks.post[0]", "frontmatter.required"],
-      ["release-planning", "phases[5].checks.post[0]", "frontmatter.required"],
-      ["release-planning", "phases[6].checks.post[0]", "frontmatter.required"],
-      // task-230 (dl-102 §2): build-backlog's criteria check is bound manual (task-303); (dl-100 §2) commit-backlog's backlog_committed.
-      // task-230 review F1: each task's wave is listed; commit-backlog's waves is a non-empty list.
-      ["release-planning", "phases[6].checks.post[2]", "task.wave.declared"],
-      ["release-planning", "phases[7].checks.pre[0]", "frontmatter.required"],
-      ["release-planning", "phases[7].checks.pre[1]", "waves.declared"],
-      // task-230 (dl-133 §2): no single command runs the docs/examples scripts (docs/examples/README.md).
-      ["wave", "phases[1].checks.post[1]", "docs.examples.passing"],
-      // task-221 (dl-133 Q4 (i)): the stop-the-line check reads memory.yaml's rule; no command asserts it yet.
-      ["dev-loop", "phases[0].checks.pre[0]", "stop-the-line.clear"],
-      // task-230 (dl-100 §3 (a)): the growth check reads memory.yaml's release.growth_threshold; no command asserts it yet.
-      ["dev-loop", "phases[0].checks.pre[1]", "growth.clear"],
-      ["dev-loop", "phases[1].checks.post[0]", "frontmatter.required"],
-      ["dev-loop", "phases[1].checks.post[1]", "tech-spec.approved"],
-      ["dev-loop", "phases[1].checks.post[2]", "depends_on.acknowledged"],
-      ["dev-loop", "phases[2].checks.post[0]", "tests.exist"],
-      ["dev-loop", "phases[2].checks.post[1]", "tests.failing"],
-      // task-205 (dl-134 §2): declared on green and refactor, evaluated from v1.0 (P4.12); no command asserts it yet.
-      ["dev-loop", "phases[3].checks.post[1]", "tests.unchanged"],
-      ["dev-loop", "phases[4].checks.post[5]", "tests.unchanged"],
-      // task-221 (dl-115 Q2 (a)): the file is the task's path, which no binding placeholder carries. `typecheck.clean`
-      // and `docs.parity` are bound; claims.rerun and rereview.previous-reject are bound manual (task-303).
-      ["dev-loop", "phases[6].checks.post[0]", "retrospective.present"],
-      ["user-docs", "phases[0].checks.pre[0]", "all tasks where tags=[{release.version}] are status"],
-      // task-298 (dl-172 (a)): demo.rendered (task-224's manual re-render, approver ruling 2026-10-10) is bound
-      // `manual: true` in bindings.yaml 2.5, so it is no longer unbound (86 warnings at task-298, spec-017 §12).
-      // task-252 (dl-137 Q1 (b)): the agent file is AGENTS.md; the fifth check reads CLAUDE.md, its pointer.
-      ["agent-docs", "phases[0].checks.post[0]", "AGENTS.md project status matches the shipped command surface"],
-      ["agent-docs", "phases[0].checks.post[1]", "AGENTS.md element/state tables match memory.yaml"],
-      ["agent-docs", "phases[0].checks.post[2]", "AGENTS.md workflow list matches workflows.yaml"],
-      ["agent-docs", "phases[0].checks.post[3]", "AGENTS.md role-directive bindings match roles.yaml"],
-      ["agent-docs", "phases[0].checks.post[5]", "CLAUDE.md is a pointer that imports AGENTS.md"],
-      ["e2e-smoke", "phases[0].checks.post[0]", "exit-code-zero"],
-      ["e2e-smoke", "phases[0].checks.post[1]", "scaffolded dna.yaml/memory.yaml/directives round-trip their own loaders"],
-      ["e2e-smoke", "phases[1].checks.post[0]", "every step exits with the code it declares, per spec-005-cli-command-contract"],
-      ["e2e-smoke", "phases[1].checks.post[1]", "every artifact a command wrote re-loads through its own reader after the last writer, with its content asserted"],
-      ["e2e-smoke", "phases[1].checks.post[2]", "the working tree is clean after every step"],
-      ["e2e-smoke", "phases[2].checks.post[0]", "exit-code-zero"],
-      ["e2e-smoke", "phases[2].checks.post[1]", "registered server version == package.json pin"],
-      ["e2e-smoke", "phases[2].checks.post[2]", "advertised channel set == EXPECTED_CHANNELS, every advertised list answers, every listed Resource reads and Prompt gets except a declared KNOWN_READ_FAILURES entry, on the pinned build and the build under development"],
-      ["release-submit", "phases[0].checks.pre[0]", "all tasks where tags=[{release.version}] are status"],
-      ["release-submit", "phases[0].checks.pre[1]", "all bugs where tags=[{release.version}] are status"],
-      // task-219: release-commit and staging-rehearsal precede tag; the rehearsal's check is bound.
-      // task-288 (dl-159 A1.8, approver ruling D3): on-integration-branch is bound (scripts/integration-branch.cjs);
-      // which phase branch has merged into the integration branch is a reading no command asserts.
-      ["release-publishing", "phases[2].checks.pre[1]", "phase-branch-merged-to-integration-branch"],
-      // task-229 (dl-130 Action 2): the prose post check also names the GitHub Release; task-238 (dl-130 step 2) the MCP Registry listing; task-244 (dl-136) the test reports attached to the Release; task-306 (bug-433): installable once its tarball answers HTTP 200.
-      ["release-publishing", "phases[3].checks.post[0]", "staged version approved on npm, installable from the npm registry once its tarball answers HTTP 200, its GitHub Release created with the test reports attached and its MCP Registry listing published"],
-      // task-222 (dl-089 §1): the report checks, unbound until scripts/release-health/ ships them (task-231, task-241).
-      ["release-health", "phases[0].checks.post[0]", "every catalogue metric has a value or an explicit not-measurable reason"],
-      ["release-health", "phases[1].checks.post[0]", "every regressed metric and every breached floor has a finding"],
-      ["release-health", "phases[2].checks.post[0]", "every finding is tracked by an element or carries an RH proposal in the report's Proposals section"],
-      ["retrospective", "phases[3].checks.post[0]", "frontmatter.required"],
-      ["end-of-life", "phases[0].checks.post[0]", "frontmatter.required"],
-      ["end-of-life", "phases[1].checks.post[0]", "deprecated content excluded from agent context and default search"],
-    ]);
+    // task-303 (dl-186 Q6, dl-172 (a)): the 17 prose checks a human confirms on purpose (21 occurrences) were bound
+    // `manual: true` in bindings.yaml 2.6, leaving 65 checks a command could decide; task-349 (dl-170 Q2 (C)) made
+    // them 68 with dev-loop 2.3's three gate.slot-free. task-358 (bug-469, approver ruling D1 (B)): each is bound
+    // `run` where a command decides it, or `manual: true` under "manual until a command" (the command it owes named
+    // in bindings.yaml); the lists are pinned in workflow-bindings-complete.test.ts. 68 → 0.
+    expect(rows(diagnostics)).toEqual([]);
   });
 
   it('the alignment codes are gone (9 + 2 + 1, and bug-ingest\'s W_PHASE_FALLBACK_NOT_REENTRANT, at 4fd77678), and no action token is unbound', () => {
@@ -161,7 +81,8 @@ describe('AC 1 / AC 2 — every workflow loads at HEAD with zero errors and only
     expect(codes).not.toContain('W_PHASE_TOKEN_OUT_OF_SCOPE');
     expect(codes).not.toContain('W_PHASE_ACTION_UNTARGETED');
     expect(codes).not.toContain('W_PHASE_FALLBACK_NOT_REENTRANT');
-    expect(new Set(codes)).toEqual(new Set(['W_WORKFLOW_UNBOUND_TOKEN']));
+    // task-358 (bug-469): not even W_WORKFLOW_UNBOUND_TOKEN is left.
+    expect(new Set(codes)).toEqual(new Set());
     const unboundActions = diagnostics.filter((d) => d.code === 'W_WORKFLOW_UNBOUND_TOKEN' && /\.actions\[/.test(d.path));
     expect(unboundActions).toEqual([]);
   });
@@ -331,7 +252,7 @@ describe('AC 4 — spec-017 §12\'s deduction consequences, re-measured', () => 
     ]);
   });
 
-  it('the nine implicit-owner produces name the element type the phase creates (dl-104 D3)', () => {
+  it('the thirteen typed produces name the element type the phase creates (dl-104 D3; nine until task-351 adopted the packs\' typed capture of bug-ingest, decision-log-ingest, adr-ingest and end-of-life.announce, dl-186 Q3)', () => {
     const owners: string[] = [];
     for (const workflow of registry().workflows) {
       for (const phase of workflow.phases) {
@@ -341,6 +262,9 @@ describe('AC 4 — spec-017 §12\'s deduction consequences, re-measured', () => 
       }
     }
     expect(owners).toEqual([
+      'bug-ingest.capture bug docs/04_memory/bugs/{id}.md',
+      'decision-log-ingest.capture decision-log docs/04_memory/design/dls/{id}.md',
+      'adr-ingest.capture adr docs/04_memory/design/adrs/{id}.md',
       'initial-design.seed-releases release docs/04_memory/planning/rl-{release-line.version}/{release.id}.md',
       'initial-design.seed-adrs adr docs/04_memory/design/adrs/{adr.id}.md',
       'initial-design.seed-dls decision-log docs/04_memory/design/dls/{decision-log.id}.md',
@@ -350,6 +274,7 @@ describe('AC 4 — spec-017 §12\'s deduction consequences, re-measured', () => 
       'release-planning.identify-specs tech-spec docs/04_memory/design/specs/{tech-spec.id}.md',
       'release-planning.build-backlog task docs/04_memory/{task.release}/{task.id}.md',
       'dev-loop.design tech-spec docs/04_memory/design/specs/{tech-spec.id}.md',
+      'end-of-life.announce decision-log docs/04_memory/design/dls/{id}.md',
     ]);
   });
 

@@ -56,11 +56,23 @@
  * The fixture is `test/core/helpers/reference-repo.ts` and the timing is `test/core/helpers/latency.ts`
  * (`sampleLatency` + `p95`, `RUNS = 25`): both moved out of this file by task-154 so that every latency
  * budget in the suite is measured in one shape.
+ *
+ * **Placement** (task-357, `bug-221`). The budgets presuppose an otherwise idle machine (the SARD's measurement
+ * condition of every REQ-PERF target), so this suite runs only in the opt-in latency pass
+ * (`test/latency-suites.cjs` `IN_PROCESS_LATENCY_SUITES`; `npm run test:latency`), never inside the parallel
+ * `npm test`, where jest's own workers compete with what it times. It reads the load average before and after
+ * its sampling and refuses a loaded run through `inProcessIdleVerdict` rather than counting it, as
+ * `test/core/workflow-next-latency.test.ts` does. What it asserts besides the time — the P1.5 singleton match,
+ * the P1.10 trail and its reasons, a non-empty keyword search — also runs in the parallel pass, one call each and
+ * no clock, in `test/core/query-reference-repo.test.ts`, so `npm run test:coverage` keeps counting the code paths
+ * this file reaches; the sanity assertions stay here too, on the timed runs' last results.
  */
+import { cpus } from 'os';
+
 import { loadDnaYaml, CORE_MODULES } from '../../src/core';
 import type { CoreFn } from '../../src/core/registry';
 import { removeTempDir } from '../storage/helpers/git-fixture';
-import { P95_BUDGET_MS, p95, RUNS, sampleLatency } from './helpers/latency';
+import { describeLoad, describeSamples, inProcessIdleVerdict, P95_BUDGET_MS, p95, readLoadAverage, RUNS, sampleLatency, type LoadWindow } from './helpers/latency';
 import {
   HISTORY_APPROVE_REASON,
   KEYWORD,
@@ -102,7 +114,11 @@ function memoryHistoryFn(): CoreFn<unknown, BenchmarkHistory> {
   return operation.fn as CoreFn<unknown, BenchmarkHistory>;
 }
 
-jest.setTimeout(60_000);
+/** The four timed operations, in the order they are sampled and judged. */
+const OPERATIONS = ['dna show', 'memory search', 'P1.5 memory search api', 'P1.10 memory history'] as const;
+type Operation = (typeof OPERATIONS)[number];
+
+jest.setTimeout(120_000);
 
 describe('REQ-PERF-02 — DNA/Memory query latency on a 1,000-Memory-document reference repository', () => {
   let root: string;
@@ -115,81 +131,96 @@ describe('REQ-PERF-02 — DNA/Memory query latency on a 1,000-Memory-document re
 
   afterAll(() => removeTempDir(root));
 
-  it('`dna show`\'s bounded dna.yaml read stays under 1000ms at p95 over >= 20 runs', async () => {
-    const samples = await sampleLatency(RUNS, () => loadDnaYaml(root));
-    expect(samples).toHaveLength(RUNS);
-    expect(p95(samples)).toBeLessThan(P95_BUDGET_MS);
+  const samples = new Map<Operation, number[]>();
+  let load: LoadWindow;
+
+  /** The budget judgement of one operation, refused (not counted) on a loaded machine. */
+  function judge(operation: Operation): void {
+    if (inProcessIdleVerdict(load, cpus().length) !== 'otherwise idle') return; // refused below, not counted
+    const measured = samples.get(operation) ?? [];
+    const report = `${operation}: ${describeSamples(measured)}; ${describeLoad(load)}`;
+    expect({ report, under: p95(measured) < P95_BUDGET_MS }).toEqual({ report, under: true });
+  }
+
+  // Every timed run redoes the full pillar-config load + scan; the last run's result is what the sanity
+  // assertions read, so they hold on a loaded machine too.
+  it('samples >= 20 runs of each operation, reading the load before and after, and each run answers what the reference repository holds', async () => {
+    const search = memorySearchFn();
+    const history = memoryHistoryFn();
+    let keywordMatches: readonly unknown[] = [];
+    let apiMatches: readonly BenchmarkMatch[] = [];
+    let trail: BenchmarkHistory | undefined;
+    const before = readLoadAverage();
+    samples.set('dna show', await sampleLatency(RUNS, () => loadDnaYaml(root)));
+    samples.set(
+      'memory search',
+      await sampleLatency(RUNS, async () => {
+        const outcome = await search({ root, positional: KEYWORD });
+        if (outcome.ok) keywordMatches = outcome.value.matches;
+      }),
+    );
+    samples.set(
+      'P1.5 memory search api',
+      await sampleLatency(RUNS, async () => {
+        const outcome = await search({ root, positional: P1_5_QUERY });
+        if (outcome.ok) apiMatches = outcome.value.matches;
+      }),
+    );
+    samples.set(
+      'P1.10 memory history',
+      await sampleLatency(RUNS, async () => {
+        const outcome = await history({ root, positional: historyTargetId });
+        if (outcome.ok) trail = outcome.value;
+      }),
+    );
+    load = { before, after: readLoadAverage() };
+    for (const operation of OPERATIONS) {
+      process.stdout.write(`${operation}: ${describeSamples(samples.get(operation) ?? [])}; ${describeLoad(load)}\n`);
+      expect({ operation, runs: samples.get(operation)?.length }).toEqual({ operation, runs: RUNS });
+    }
+
+    // The fixture exercises a real, non-trivial match set (both metadata- and body-only hits per
+    // `seedReferenceRepo`'s `index % 13`/`index % 7` construction) through the full registered op.
+    expect(keywordMatches.length).toBeGreaterThan(0);
+    // P1.5 "Then the results include the document titled 'API design'", as an exact singleton.
+    expect(apiMatches.map((match) => match.id)).toEqual([P1_5_DOC_ID]);
+    expect(apiMatches[0]?.title).toBe(P1_5_TITLE);
+    expect(apiMatches[0]?.tags).toContain(P1_5_TAG);
+    // P1.10: the op resolved THIS document (task ids repeat across releases) and walked its whole trail.
+    expect(trail?.path).toBe(historyTarget);
+    expect(trail?.entries.map((entry) => entry.to)).toEqual(['draft', 'pending', 'backlog', 'in-progress']);
+    expect(trail?.entries.map((entry) => entry.reason)).toEqual([null, null, HISTORY_APPROVE_REASON, null]);
   });
 
-  it("`memory search`'s keyword/frontmatter scan over 1,000 documents stays under 1000ms at p95 over >= 20 runs (measured through the REGISTERED memory.memorySearch op, task-021)", async () => {
-    const fn = memorySearchFn();
-    let lastMatches: readonly unknown[] = [];
-    const samples = await sampleLatency(RUNS, async () => {
-      const outcome = await fn({ root, positional: KEYWORD });
-      if (outcome.ok) lastMatches = outcome.value.matches;
-    });
-    expect(samples).toHaveLength(RUNS);
-    expect(p95(samples)).toBeLessThan(P95_BUDGET_MS);
-    // Sanity: the fixture exercises a real, non-trivial match set (both metadata- and body-only hits
-    // per `seedReferenceRepo`'s `index % 13`/`index % 7` construction) through the full registered op
-    // — id/frontmatter-projection included, not just the raw scan primitive.
-    expect(lastMatches.length).toBeGreaterThan(0);
+  it('the run was taken on an otherwise idle machine (a loaded run is refused, not counted)', () => {
+    expect(inProcessIdleVerdict(load, cpus().length)).toBe('otherwise idle');
   });
 
-  // BDD P1.5 "Find a decision by keyword", both clauses, measured where the budget means something
-  // (task-067 / bug-011). The Given ("Memory contains a document titled 'API design' tagged
-  // 'architecture'") is document 750 of the reference repository; the When ("I run `wingfoil memory
-  // search api`") is the registered `memory.memorySearch` op — the very call the CLI command
-  // dispatches to; the Thens are the two assertions below. Stronger than the spawn-wrapped assertion
-  // it replaces on three axes — it measures the query rather than process startup, over 1,000
-  // documents rather than 2, at p95 over 25 runs rather than a single sample — but not on the fourth:
-  // it no longer runs the command; `test/cli/command-latency.test.ts` times that, opt-in (bug-013). The threshold is
-  // untouched: 1,000 ms, exactly as the feature file and REQ-PERF-02 both state it.
-  it('P1.5 "Find a decision by keyword": `memory search api` returns the "API design" document, in under 1000ms at p95 over >= 20 runs (task-067)', async () => {
-    const fn = memorySearchFn();
-    let lastMatches: readonly BenchmarkMatch[] = [];
-    const samples = await sampleLatency(RUNS, async () => {
-      const outcome = await fn({ root, positional: P1_5_QUERY });
-      if (outcome.ok) lastMatches = outcome.value.matches;
-    });
-    expect(samples).toHaveLength(RUNS);
-    // "And the query returns in under 1 second" — P1.5-memory-search.feature line 12 / REQ-PERF-02.
-    expect(p95(samples)).toBeLessThan(P95_BUDGET_MS);
-    // "Then the results include the document titled 'API design'" — asserted as an exact singleton:
-    // no other fixture document's id, title, tags or filler body contains the substring "api", so a
-    // second match would mean the keyword scan had started over-matching.
-    expect(lastMatches.map((match) => match.id)).toEqual([P1_5_DOC_ID]);
-    expect(lastMatches[0]?.title).toBe(P1_5_TITLE);
-    expect(lastMatches[0]?.tags).toContain(P1_5_TAG);
+  it("`dna show`'s bounded dna.yaml read stays under 1000ms at p95 over >= 20 runs, on an otherwise idle machine", () => {
+    judge('dna show');
   });
 
-  // BDD P1.10 "View the full audit trail of a document" — its "And the query returns in under 1
-  // second" clause, measured where the budget means something (task-049; same placement rule
-  // task-067/bug-011 established for P1.5). REQ-PERF-02 names `wingfoil memory history` explicitly,
-  // and this measures the registered `memory.memoryHistory` op — the very call that command
-  // dispatches to — end to end: `memory.yaml` load, the bare-`<id>` scan over all 1,000 reference
-  // documents, the `git log --follow` walk, and one `git show` per commit to derive each state.
-  //
-  // The scenario's Background gives its document "3 recorded state transitions"; this fixture's
-  // target has FOUR entries (creation + the three `HISTORY_TARGET_COMMITS`), so the measurement
-  // upper-bounds the scenario's own case rather than approximating it — one extra `git show` on top
-  // of an id scan two orders of magnitude larger than the scenario's Memory.
-  it('P1.10 "View the full audit trail of a document": `memory history <id>` returns the full chronological trail, in under 1000ms at p95 over >= 20 runs (task-049)', async () => {
-    const fn = memoryHistoryFn();
-    let last: BenchmarkHistory | undefined;
-    const samples = await sampleLatency(RUNS, async () => {
-      const outcome = await fn({ root, positional: historyTargetId });
-      if (outcome.ok) last = outcome.value;
-    });
-    expect(samples).toHaveLength(RUNS);
-    // "And the query returns in under 1 second" — P1.10-memory-history.feature line 13 / REQ-PERF-02.
-    expect(p95(samples)).toBeLessThan(P95_BUDGET_MS);
+  it("`memory search`'s keyword/frontmatter scan over 1,000 documents stays under 1000ms at p95 over >= 20 runs (measured through the REGISTERED memory.memorySearch op, task-021), on an otherwise idle machine", () => {
+    judge('memory search');
+  });
 
-    // Sanity: the op really resolved THIS document (the `task-*` ids repeat across the seven release
-    // directories, so pin the path) and really walked its whole trail — "the output lists N entries
-    // in chronological order", with the `approve` commit's `Reason:` read back off the commit body.
-    expect(last?.path).toBe(historyTarget);
-    expect(last?.entries.map((entry) => entry.to)).toEqual(['draft', 'pending', 'backlog', 'in-progress']);
-    expect(last?.entries.map((entry) => entry.reason)).toEqual([null, null, HISTORY_APPROVE_REASON, null]);
+  // BDD P1.5 "Find a decision by keyword", its "And the query returns in under 1 second" clause
+  // (P1.5-memory-search.feature line 12 / REQ-PERF-02), measured where the budget means something
+  // (task-067 / bug-011): the registered `memory.memorySearch` op, the very call `wingfoil memory search api`
+  // dispatches to, over 1,000 documents at p95 over 25 runs. `test/cli/command-latency.test.ts` times the
+  // command itself, opt-in (bug-013). The threshold is untouched: 1,000 ms, as the feature file and REQ-PERF-02
+  // both state it. The scenario's other clause runs in the parallel pass (`test/core/query-reference-repo.test.ts`).
+  it('P1.5 "Find a decision by keyword": `memory search api` answers in under 1000ms at p95 over >= 20 runs, on an otherwise idle machine (task-067)', () => {
+    judge('P1.5 memory search api');
+  });
+
+  // BDD P1.10 "View the full audit trail of a document", its "And the query returns in under 1 second" clause
+  // (P1.10-memory-history.feature line 13 / REQ-PERF-02; task-049): the registered `memory.memoryHistory` op end
+  // to end — `memory.yaml` load, the bare-`<id>` scan over all 1,000 reference documents, the `git log --follow`
+  // walk, and one `git show` per commit to derive each state. The fixture's target has FOUR entries (creation +
+  // the three `HISTORY_TARGET_COMMITS`), one more than the scenario's Background, so the measurement upper-bounds
+  // the scenario's own case.
+  it('P1.10 "View the full audit trail of a document": `memory history <id>` answers in under 1000ms at p95 over >= 20 runs, on an otherwise idle machine (task-049)', () => {
+    judge('P1.10 memory history');
   });
 });

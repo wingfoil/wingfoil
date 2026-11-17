@@ -15,7 +15,9 @@
  *   before anything starts with the registry's `E_PHASE_ROLE_UNKNOWN` message (sc. 3 as amended by the
  *   approver's ruling of 2026-10-11 on decision 1);
  * - AC 4: `--step` off the frontier (`CONFLICT`), `--workflow` naming no workflow or no open instance,
- *   `NO_STEP_ELEMENT`, `NO_STEP_ROLE`;
+ *   `NO_STEP_ROLE`; an unscoped step of an unbound instance (`chores`) runs on the instance's own plan element
+ *   (task-353, `bug-418`: `NO_STEP_ELEMENT` is now a defence only, pinned in process by
+ *   `test/core/agent-execute-step.test.ts`);
  * - AC 5: with two parallel frontier steps, the `agent` binding argv `workflow next` prints for the second
  *   step (`spec-017` §6.1), run as written, launches on that step;
  * - AC 6: a phase declaring `mode: resume` still runs `fresh`, with no warning; `--resume` exits 2.
@@ -216,7 +218,6 @@ describe('task-235 AC 4 — the step refusals of spec-016 §3.7', () => {
     [['--workflow', 'delivery-1', '--step', `loop.review@task:${TASK_ID}`], `step 'loop.review@task:${TASK_ID}' is not on the frontier of delivery-1`],
     [['--workflow', 'nope'], 'unknown workflow: nope'],
     [['--workflow', 'review-only'], 'workflow is not open: review-only'],
-    [['--workflow', 'chores'], "step 'chores.tidy' has no element: give --element <type>:<id>"],
     [['--next'], `step 'roleless.wander@release:${RELEASE_ID}' declares no role: give --role <role>`],
   ])('%j → %s', (args, message) => {
     const before = headOf(repo);
@@ -230,6 +231,22 @@ describe('task-235 AC 4 — the step refusals of spec-016 §3.7', () => {
     const run = execute(repo, ['--step', `roleless.wander@release:${RELEASE_ID}`, '--role', 'developer', '--dry-run', '--format', 'json']);
     expect(run.status).toBe(0);
     expect(JSON.parse(run.stdout)).toMatchObject({ run: { id: `${RELEASE_ID}/wander/1`, workflow: 'roleless', phase: 'wander', role: 'developer', element: `release:${RELEASE_ID}` } });
+  });
+
+  // task-353 AC 3 (red-first; `spec-016` §3.2 step 2 as amended at `c0ac033df`; `bug-418`, ruling D6 (a)): an unscoped
+  // step of an unbound instance runs on the instance's own plan, `plan:chores-1`, its run log `docs/runs/chores-1.jsonl`.
+  it.each(['json', 'console'])('--workflow chores, no --element, --dry-run --format %s: the step runs on plan:chores-1 (task-353, bug-418)', (format) => {
+    const before = headOf(repo);
+    const run = execute(repo, ['--workflow', 'chores', '--dry-run', '--format', format]);
+    expect([run.status, run.stderr]).toEqual([0, '']);
+    expect(JSON.parse(run.stdout)).toMatchObject({
+      dryRun: true,
+      subject: 'agent: record chores-1/tidy/1',
+      paths: ['docs/runs/chores-1.jsonl'],
+      run: { id: 'chores-1/tidy/1', element: 'plan:chores-1', workflow: 'chores', phase: 'tidy', role: 'developer' },
+    });
+    expect(run.fake).toEqual([]);
+    expect(headOf(repo)).toBe(before);
   });
 
   it('--workflow chores with --element: the element the step lacks is given', () => {

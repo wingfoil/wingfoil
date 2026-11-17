@@ -96,7 +96,8 @@ describe('AC 2 — retrospective.yaml: explore lists its secondary sources; addi
 
   it('additional-points gains one checks.pre: every proposal has one outcome — the four of dl-115, six for a consumer note', () => {
     const points = retrospective().phases.find((p) => p.name === 'additional-points')!;
-    expect(points.checks?.pre).toHaveLength(1);
+    // task-358 (bug-435 item 4): the check is split; its second half, proposals.outcome-chosen, is the approver's reading.
+    expect(points.checks?.pre).toHaveLength(2);
     const check = points.checks!.pre![0]!;
     expect(check).toMatch(/^proposals\.disposed\(/);
     // dl-115's four outcomes, in its order …

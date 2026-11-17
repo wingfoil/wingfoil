@@ -35,7 +35,7 @@ type ManifestInput = z.input<typeof AdapterManifest>;
  * `mcp.via: config-file` or `config-arg`; `session.assign_args` with `session.id: assign`; `session.lookup_args` with
  * `lookup` and `session.field` with `output` or `lookup`; the same pair under `usage.from`
  * (`usage.lookup_args`, `usage.fields`); `verified_with` on a built-in. Then §2.2's one exclusion,
- * `prompt.via: stdin` beside an interactive launch.
+ * `prompt.via: stdin` beside an interactive launch. Then `launch.<kind>.permissions`: a role map declares `default`.
  */
 function crossFieldIssues(manifest: ManifestInput, source: AdapterSource): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
@@ -69,6 +69,15 @@ function crossFieldIssues(manifest: ManifestInput, source: AdapterSource): Valid
   }
   // Resume is read from v0.4 (§7), but a manifest that declares it supported must say how (bug-234).
   if (session.resume.supported) required(session.resume.args !== undefined, 'session.resume.args', 'session.resume.supported: true');
+
+  // A role map picks the fragment of a run's role, else its `default` (§2.2, `dl-223` (b)): without one, a role the
+  // map does not name would launch with no posture at all.
+  for (const [kind, launch] of [['interactive', manifest.launch.interactive], ['headless', manifest.launch.headless]] as const) {
+    const permissions = launch?.permissions;
+    if (permissions !== undefined && !Array.isArray(permissions) && !Object.hasOwn(permissions, 'default')) {
+      issue(`launch.${kind}.permissions`, 'a role map must declare a default entry, the fragment of every role it does not name (spec-016 §2.2)');
+    }
+  }
 
   const usage = manifest.usage;
   if (usage.from === 'lookup') required(usage.lookup_args !== undefined, 'usage.lookup_args', 'usage.from: lookup');

@@ -13,11 +13,13 @@
  * instances and the deduction. `start`'s id collision check reads the wider baseline `dl-101` names — every
  * local branch, remote-tracking ref, `HEAD` and the working tree — which can only refuse more.
  *
- * **`start`** writes two commits through the Memory verbs, each scoped to the plan file: `wf(plan): add <id>`
- * (`memory add`, with the derived tokens and the `element` field) then `wf(plan): submit <id>` (`memory
- * submit`, `draft → active`). A refused second commit leaves the plan `draft`, the instance open, and the
- * error names `wingfoil memory submit <id>`. Under `--dry-run` the plan of the first commit is printed (the
- * dry run stops at a command's first commit, `spec-008` §2).
+ * **`start`** writes one commit through the `memory add` verb, scoped to the plan file: `wf(plan): add <id>`, with
+ * the derived tokens, the `workflow`, `phase` and `element` fields the patterns hold no token for, and the start
+ * marker `WingFoil-Start: <name>` in its trailer paragraph (`dl-217` (a), task-345 — only a marked start, or one
+ * no marked start precedes, opens an instance, §3.2). The plan is left `draft` for its author to write: the output
+ * names `wingfoil memory submit <id>`, which moves it `draft → active` (task-346, `bug-390`); the instance is open
+ * from the add, and `end` refuses it until then. Under `--dry-run` the plan of that commit is printed
+ * (`spec-008` §2).
  *
  * **`end`** refuses a plan still in `draft` and an instance whose deduction is not complete, then moves the
  * plan `active → done` along the `waiting` edge `memory.yaml` declares, writing `wf(plan): finalize <id>
@@ -34,13 +36,14 @@ import {
 } from '../memory';
 import { ambiguousReferenceError, resolveElementReference } from '../memory';
 import type { ElementReferenceResolution } from '../memory';
-import { commitFailureSummary, StorageError } from '../storage';
 import { generateId, patternTokens } from '../validation';
-import { deduceWorkflowState, PLAN_TYPE, resolveInstanceRef, type Baseline, type Deduction, type ElementRef, type Instance, type InstanceDeduction } from '../workflow/deduce';
-import { workflowFacts } from '../workflow/schema';
+import { deduceWorkflowState, PLAN_TYPE, resolveInstanceRef, START_TRAILER, type Baseline, type Deduction, type ElementRef, type Instance, type InstanceDeduction } from '../workflow/deduce';
+import { workflowFacts, type Workflow } from '../workflow/schema';
 
+import { resolveOperationAgentContext } from './agent-context';
 import { parseElementRef } from './element-ref';
 import { requireGitIdentity } from './git-identity';
+import { requireTeamMembership } from './team-membership';
 import { requireInitializedProject } from './init';
 import { beginMemoryTransition, commitMemoryTransition } from './memory-transition';
 import { missingOperandReason, type CoreFn } from './registry';
@@ -58,6 +61,9 @@ const MAX_PHASE_SUFFIX = 1000;
 
 /** `phase` with no bound and no context element (approver ruling R18). */
 const DEFAULT_PHASE = '1';
+
+/** The `--element` value that clears the context of an element-less main (`spec-017` §3.5, `bug-413` option (c)). */
+const NO_ELEMENT = 'none';
 
 /** `spec-017` §10's refusal of a project whose `memory.yaml` declares no `plan` type. */
 export const NO_PLAN_TYPE_MESSAGE = "memory type 'plan' is not declared in memory.yaml; workflow start records an instance as a plan element";
@@ -79,13 +85,18 @@ export interface WorkflowEndParams {
   readonly positional?: string;
 }
 
-/** `workflow start`'s value (`spec-017` §8): the new instance, its first frontier step, and the two commits. */
+/**
+ * `workflow start`'s value (`spec-017` §8): the new instance, its first frontier step, its one commit, and the
+ * command that submits its `draft` plan.
+ */
 export interface StartResult {
   readonly baseline: Baseline;
   readonly instance: Instance;
   readonly next: Step | null;
-  /** The add and submit commits, in that order. */
+  /** The add commit, the one commit `start` writes (task-346). */
   readonly commits: readonly string[];
+  /** `wingfoil memory submit <id>`: the command that submits the plan once its author has written it (§7.1, `bug-390`). */
+  readonly submit: string;
 }
 
 /** `workflow end`'s value (`spec-017` §8): the ended instance, the instance now active (or `null`), the commit. */
@@ -97,14 +108,17 @@ export interface EndResult {
 }
 
 /**
- * The two Memory verbs `start` writes through, handed in by `CORE_MODULES` (`memoryAdd`, `memorySubmit`), so
- * the plan is added and submitted by the very operations `wingfoil memory add` / `submit` run — their
- * checks, their commit subjects and their commit-scope post-conditions — and by no copy of them.
+ * The Memory verb `start` writes through, handed in by `CORE_MODULES` (`memoryAdd`), so the plan is added by the
+ * very operation `wingfoil memory add` runs — its checks, its commit subject and its commit-scope post-condition —
+ * and by no copy of it. Its submit is the author's `wingfoil memory submit` (task-346, `bug-390`).
  */
 export interface StartVerbs {
-  /** `memoryAdd`: `options` as the CLI passes them, `fields` the frontmatter written as given (`element`). */
+  /**
+   * `memoryAdd`: `options` as the CLI passes them, `fields` the frontmatter written as given (`workflow`, `phase`
+   * where the patterns hold no token for them, `element`), `trailers` the lines added to the add commit's trailer
+   * paragraph (the start marker).
+   */
   readonly add: CoreFn<unknown, { id: string; path: string }>;
-  readonly submit: CoreFn<unknown, unknown>;
 }
 
 /** A single-valued option: a repeated occurrence keeps the last. */
@@ -112,13 +126,18 @@ function single(value: string | readonly string[] | undefined): string | undefin
   return typeof value === 'string' || value === undefined ? value : value[value.length - 1];
 }
 
+/** `--element` as `start` reads it: `<type>:<id>`, `none` (§3.5), or absent (`null`). */
+type GivenElement = { type: string; id: string } | typeof NO_ELEMENT | null;
+
 /** The usage half of `start` (`spec-008` §1, §5, §7, §10): every spelling fault, exit 2, before any read. */
-function startUsage(params: WorkflowStartParams): { name: string; element: { type: string; id: string } | null; title?: string; set: Readonly<Record<string, string>> } {
+function startUsage(params: WorkflowStartParams): { name: string; element: GivenElement; title?: string; set: Readonly<Record<string, string>> } {
   const { positional: name, options } = params;
   if (name === undefined || name.trim() === '') throw new UsageError(missingOperandReason('name'));
   const elementOption = single(options?.['element']);
-  let element: { type: string; id: string } | null = null;
-  if (elementOption !== undefined) {
+  let element: GivenElement = null;
+  if (elementOption === NO_ELEMENT) {
+    element = NO_ELEMENT;
+  } else if (elementOption !== undefined) {
     const parsed = parseElementRef(elementOption);
     if (!parsed.ok) throw new UsageError(parsed.error.message);
     element = parsed.value;
@@ -132,50 +151,69 @@ function startUsage(params: WorkflowStartParams): { name: string; element: { typ
   return { name, element, ...(title === undefined ? {} : { title }), set: set.values };
 }
 
-/** What `start` decides before it writes: the plan's id, its title and the tokens handed to `memory add`. */
+/**
+ * What `start` decides before it writes: the plan's id, its title, the tokens handed to `memory add`, and the
+ * `phase` the plan records (a token, or a field when the patterns hold no `{phase}`).
+ */
 interface StartPlan {
   readonly id: string;
   readonly title: string;
   readonly tokens: Readonly<Record<string, string>>;
+  readonly phase: string;
 }
 
 /**
  * The bound element (§3.4) and the context element (§3.5) of a new instance of `workflow`, or the refusal.
  * A declared element comes from `--element` or, absent it, from the active instance when its bound element
- * is of the declared type; it must exist at `HEAD`. A workflow that declares none takes no `--element`, and
- * records the active instance's bound element, if any, as its context.
+ * is of the declared type; it must exist at `HEAD`; `--element none` is refused as an absent element is. A
+ * workflow that declares none (`bug-413` option (c), task-345) takes its context from `--element <type>:<id>`
+ * (it must exist at `HEAD`), records none for `--element none`, and otherwise takes the active instance's bound
+ * element only when the active instance's workflow declares `element:` — an element-less active instance, or
+ * none open, gives no context.
  */
 function resolveStartElement(
   name: string,
   declared: string | undefined,
-  given: { type: string; id: string } | null,
+  given: GivenElement,
   deduction: Deduction,
+  workflows: readonly Workflow[],
   resolve: (type: string, reference: string) => ElementReferenceResolution,
-): CoreResult<{ bound: ElementRef | { type: string; id: string } | null; context: ElementRef | null }> {
+): CoreResult<{ bound: ElementRef | { type: string; id: string } | null; context: ElementRef | { type: string; id: string } | null }> {
   const active = deduction.instances[0]?.instance ?? null;
+  // `--element <type>:<ref>` takes a short reference (task-332, `spec-008` §7): the plan records the element's full id.
+  const lookup = (element: { type: string; id: string }): CoreResult<{ type: string; id: string }> => {
+    const resolution = resolve(element.type, element.id);
+    if (resolution.kind === 'ambiguous') return coreErr(ambiguousReferenceError(element.id, resolution.candidates));
+    if (resolution.kind === 'missing') return coreErr({ code: 'NOT_FOUND', message: `element not found: ${element.type}:${element.id}`, details: { element: `${element.type}:${element.id}` } });
+    return coreOk({ type: element.type, id: String(resolution.document.frontmatter['id']) });
+  };
   if (declared === undefined) {
-    if (given !== null) return coreErr({ code: 'VALIDATION', message: `workflow '${name}' declares no element: --element is not accepted` });
-    return coreOk({ bound: null, context: active?.element ?? null });
+    if (given === NO_ELEMENT) return coreOk({ bound: null, context: null });
+    if (given !== null) {
+      const found = lookup(given);
+      return found.ok ? coreOk({ bound: null, context: found.value }) : found;
+    }
+    const activeDeclares = active !== null && workflows.find((workflow) => workflow.name === active.workflow)?.element !== undefined;
+    return coreOk({ bound: null, context: activeDeclares ? active.element : null });
   }
   const needs = coreErr({ code: 'VALIDATION', message: `workflow '${name}' needs a ${declared} element: give --element ${declared}:<id>` });
   if (given === null) {
     const inherited = active?.element ?? null;
     return inherited !== null && inherited.type === declared ? coreOk({ bound: inherited, context: null }) : needs;
   }
-  if (given.type !== declared) return needs;
-  // `--element <type>:<ref>` takes a short reference (task-332, `spec-008` §7): the plan binds the element's full id.
-  const resolution = resolve(given.type, given.id);
-  if (resolution.kind === 'ambiguous') return coreErr(ambiguousReferenceError(given.id, resolution.candidates));
-  if (resolution.kind === 'missing') return coreErr({ code: 'NOT_FOUND', message: `element not found: ${given.type}:${given.id}`, details: { element: `${given.type}:${given.id}` } });
-  return coreOk({ bound: { type: given.type, id: String(resolution.document.frontmatter['id']) }, context: null });
+  if (given === NO_ELEMENT || given.type !== declared) return needs;
+  const found = lookup(given);
+  return found.ok ? coreOk({ bound: found.value, context: null }) : found;
 }
 
 /**
  * The plan's tokens and id (§7.1, ruling R18): `workflow` = the name; `phase` = the bound element's id, else
  * the context element's, else `1`, with the lowest free `-<n>` (`n ≥ 2`) appended when the id is occupied on
  * any baseline `dl-101` names; `scope` = the name. `--set phase=` / `--set scope=` override them, and a
- * colliding `--set phase=` is `CONFLICT`. Only tokens the committed `id_pattern` or `path` holds are passed
- * on; a `--set` naming none is `memory add`'s refusal. An `id_pattern` with a `{n}` counter is unique by
+ * colliding `--set phase=` is `CONFLICT`. Only derived values the committed `id_pattern` or `path` holds are
+ * passed on as tokens; `phase` is recorded whatever they hold (task-346, `bug-491`: the caller writes it as a
+ * field when it is no token), and the default title is `<workflow> — <phase>` with that phase. A `--set scope=`
+ * naming no token is still passed on, so it stays `memory add`'s refusal. An `id_pattern` with a `{n}` counter is unique by
  * construction and is not checked, nor is a `path` with no `{id}` (one file per other tokens: `memory add`
  * refuses an occupied one). The suffix is tried only when `{phase}` is a token of the `id_pattern` itself —
  * in the `path` alone it cannot change the id — and at most {@link MAX_PHASE_SUFFIX} times.
@@ -193,12 +231,21 @@ function planTokens(
   const derived: Record<string, string> = { workflow: name, phase: base, scope: name };
   const tokens: Record<string, string> = {};
   for (const key of Object.keys(derived).sort()) if (declared.has(key)) tokens[key] = derived[key]!;
-  Object.assign(tokens, set);
-  const titleOf = (phase: string | undefined): string => title ?? (phase === undefined ? name : `${name} — ${phase}`);
+  // A `--set phase=` the patterns hold no token for is recorded as a field (task-346, `bug-491`); any other
+  // `--set` is a token, so one naming no token stays `memory add`'s refusal.
+  for (const key of Object.keys(set).sort()) if (key !== 'phase' || declared.has(key)) tokens[key] = set[key]!;
+  const recordedPhase = set['phase'] ?? base;
+  const phaseOf = (values: Readonly<Record<string, string>>): string => values['phase'] ?? recordedPhase;
+  const titleOf = (phase: string): string => title ?? `${name} — ${phase}`;
   // The id `memory add` will generate: its `{slug}` comes from the title it is given (review F1 nit).
   const idOf = (values: Readonly<Record<string, string>>): string =>
-    generateId(expandFieldTokens(idPattern, values), { slug: slugifyTitle(titleOf(values['phase'])), n: 0 });
-  const planned = (values: Readonly<Record<string, string>>): StartPlan => ({ id: idOf(values), title: titleOf(values['phase']), tokens: values });
+    generateId(expandFieldTokens(idPattern, values), { slug: slugifyTitle(titleOf(phaseOf(values))), n: 0 });
+  const planned = (values: Readonly<Record<string, string>>): StartPlan => ({
+    id: idOf(values),
+    title: titleOf(phaseOf(values)),
+    tokens: values,
+    phase: phaseOf(values),
+  });
 
   // A `{n}` id is unique by construction; a `path` with no `{id}` names one file per other tokens, which
   // `memory add`'s absent-target check decides (`idOccupancy` would read every plan as that one).
@@ -233,6 +280,12 @@ export async function workflowStart(params: WorkflowStartParams, verbs: StartVer
 
   const identity = requireGitIdentity(root);
   if (!identity.ok) return identity;
+  const member = requireTeamMembership(root, identity.value);
+  if (!member.ok) return member;
+  // The agent context, once per operation, right after membership (`spec-006` §7 step 2, `spec-018` §2.6): the nested
+  // `memory add` (start) and transition preamble (end) get this same resolution back, so a warning prints once (D3).
+  const agent = resolveOperationAgentContext(root);
+  if (!agent.ok) return agent;
   const initialized = requireInitializedProject(root);
   if (!initialized.ok) return initialized;
 
@@ -247,57 +300,60 @@ export async function workflowStart(params: WorkflowStartParams, verbs: StartVer
   const deduction = deduceWorkflowState(snapshot);
   const resolve = (type: string, reference: string): ElementReferenceResolution =>
     resolveElementReference(snapshot.documents, planMemoryYaml, reference, { type });
-  const resolved = resolveStartElement(usage.name, workflow.element, usage.element, deduction, resolve);
+  const resolved = resolveStartElement(usage.name, workflow.element, usage.element, deduction, snapshot.workflows, resolve);
   if (!resolved.ok) return resolved;
   const recorded = resolved.value.bound ?? resolved.value.context;
   const base = recorded?.id ?? DEFAULT_PHASE;
 
   const plan = planTokens(root, usage.name, planType.id_pattern ?? '{workflow}-{phase}-plan', planType.path, usage.set, base, usage.title);
   if (!plan.ok) return plan;
-  const { title, tokens } = plan.value;
+  const { title, tokens, phase } = plan.value;
 
+  // The plan names its workflow and phase (§3.1, §7.1) even when the `id_pattern` and `path` hold no token for
+  // them (task-346, `bug-491`): a plan naming no loaded workflow is no instance (§3.2, task-345), and a required
+  // `phase` left blank would refuse the author's submit.
+  const fields = {
+    ...(tokens['workflow'] === undefined ? { workflow: usage.name } : {}),
+    ...(tokens['phase'] === undefined ? { phase } : {}),
+    ...(recorded === null ? {} : { element: recorded.id }),
+  };
   const added = await verbs.add({
     root,
     options: { type: PLAN_TYPE, title, set: Object.keys(tokens).sort().map((key) => `${key}=${tokens[key]}`) },
-    ...(recorded === null ? {} : { fields: { element: recorded.id } }),
+    ...(Object.keys(fields).length === 0 ? {} : { fields }),
+    // The start marker (§3.1, `dl-217` (a)): only this commit carries it, so only `start` opens an instance.
+    trailers: [`${START_TRAILER}: ${usage.name}`],
   });
   if (!added.ok) return added;
-  // A successful `memoryAdd` / `memorySubmit` always carries its commit (`coreOk(…, { sha, message })`).
-  const addCommit = added.commit!.sha;
+  // A successful `memoryAdd` always carries its commit (`coreOk(…, { sha, message })`). The plan stays `draft`:
+  // its author writes the body and submits it (task-346, `bug-390`).
+  const { id } = added.value;
 
-  let submitted: CoreResult<unknown>;
-  try {
-    submitted = await verbs.submit({ root, positional: added.value.id });
-  } catch (error) {
-    if (!(error instanceof StorageError)) throw error;
-    return coreErr(submitFailure(added.value.id, 'IO', commitFailureSummary(error)));
-  }
-  if (!submitted.ok) return coreErr(submitFailure(added.value.id, submitted.error.code, submitted.error.message));
-
-  const next = workflowNextAtHead(root, added.value.id);
+  const next = workflowNextAtHead(root, id);
   if (!next.ok) return next;
   return coreOk(
-    { baseline: next.value.baseline, instance: next.value.instance!, next: next.value.next, commits: [addCommit, submitted.commit!.sha] },
-    submitted.commit,
-    [...(added.warnings ?? []), ...(submitted.warnings ?? [])],
+    {
+      baseline: next.value.baseline,
+      instance: next.value.instance!,
+      next: next.value.next,
+      commits: [added.commit!.sha],
+      submit: `wingfoil memory submit ${id}`,
+    },
+    added.commit,
+    added.warnings ?? [],
   );
 }
 
-/** `spec-017` §10's refusal when the plan was added and its submit commit was not made. */
-function submitFailure(id: string, code: Parameters<typeof coreErr>[0]['code'], cause: string): Parameters<typeof coreErr>[0] {
-  return {
-    code,
-    message: `plan ${id} was added but not submitted: run wingfoil memory submit ${id}`,
-    details: { id, issues: [{ detail: cause }] },
-  };
-}
-
-/** Why an open instance whose deduction is not complete cannot end (§7.2): its current step, or why it has none. */
+/**
+ * Why an open instance whose deduction is not complete cannot end (§7.2): its current step, or — an empty
+ * frontier — its abandonment (§4.11). Every instance's workflow is loaded (§3.2, task-345), so an incomplete
+ * instance with no step is an abandoned one, whose bound element is set.
+ */
 function incompleteReason(selected: InstanceDeduction): string {
   const { instance, frontier } = selected;
   if (frontier.length > 0) return `current step ${frontier[0]!.key}`;
-  if (instance.abandoned && instance.element !== null) return `it is abandoned: its element ${instance.element.type}:${instance.element.id} is ${instance.element.status}`;
-  return `workflow '${instance.workflow}' is not loaded`;
+  const element = instance.element!;
+  return `it is abandoned: its element ${element.type}:${element.id} is ${element.status}`;
 }
 
 /**
@@ -312,6 +368,12 @@ export async function workflowEnd(params: WorkflowEndParams): Promise<CoreResult
   const { root, positional: ref } = params;
   const identity = requireGitIdentity(root);
   if (!identity.ok) return identity;
+  const member = requireTeamMembership(root, identity.value);
+  if (!member.ok) return member;
+  // The agent context, once per operation, right after membership (`spec-006` §7 step 2, `spec-018` §2.6): the nested
+  // `memory add` (start) and transition preamble (end) get this same resolution back, so a warning prints once (D3).
+  const agent = resolveOperationAgentContext(root);
+  if (!agent.ok) return agent;
   const initialized = requireInitializedProject(root);
   if (!initialized.ok) return initialized;
 
@@ -355,11 +417,14 @@ function isDryRunPlan(value: unknown): boolean {
   return typeof value === 'object' && value !== null && (value as { dryRun?: unknown }).dryRun === true;
 }
 
-/** `workflow start`'s `--format console` rendering (`spec-017` §8): the instance, then its first step as `next` prints it. Pure. */
+/**
+ * `workflow start`'s `--format console` rendering (`spec-017` §7.1, §8): the instance, the line naming the submit
+ * its `draft` plan owes (task-346), then its first step as `next` prints it. Pure.
+ */
 export function renderStartConsole(value: StartResult): string {
   if (isDryRunPlan(value)) return `${JSON.stringify(value, null, 2)}\n`;
   const { instance, next } = value;
-  const head = `started ${instance.workflow} as ${instance.id} (active)\n`;
+  const head = `started ${instance.workflow} as ${instance.id} (active)\nplan ${instance.id} is draft: write its body, then run ${value.submit}\n`;
   const message = next === null ? `no next step: workflow '${instance.workflow}' is complete` : undefined;
   return head + renderNextConsole({ baseline: value.baseline, instance: null, complete: next === null, next, more: [], ...(message === undefined ? {} : { message }), diagnostics: [] });
 }

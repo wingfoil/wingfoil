@@ -218,11 +218,13 @@ describe('buildProgram — the program itself (bug-007: this module is now loada
     expect(typeof program.opts).toBe('function');
   });
 
-  it('registers the four global flags from spec-008 §2 plus `-V, --version` (bug-001)', async () => {
+  // task-350 AC 1 (`dl-198` (a), `spec-008` §2): `--project <dir>` joins the root program's flags.
+  it('registers the global flags from spec-008 §2 (`--project <dir>` included, task-350) plus `-V, --version` (bug-001)', async () => {
     const program = await buildFixtureProgram();
     expect(program.options.map((option) => option.flags)).toEqual([
       '-V, --version',
       '--format <format>',
+      '--project <dir>',
       '--verbose',
       '--no-color',
       '--no-interactive',
@@ -237,6 +239,13 @@ describe('buildProgram — the program itself (bug-007: this module is now loada
       program.options.find((option) => option.flags === flags)?.description;
     expect(descriptionOf('--format <format>')).toBe('output format (console|json|yaml); console prints indented JSON for now, unless the command defines its own');
     expect(descriptionOf('--no-color')).toBe('disable ANSI colors (accepted; no output is colored yet)');
+  });
+
+  it('task-350 AC 1 — `--help` describes `--project <dir>` as naming the project root, which must be a git root', async () => {
+    const program = await buildFixtureProgram();
+    expect(program.options.find((option) => option.flags === '--project <dir>')?.description).toBe(
+      'run on the project rooted at <dir> instead of the current directory (it must be a git root)',
+    );
   });
 
   it('`--format` defaults to `console`; the negatable flags resolve to enabled once an invocation is parsed', async () => {
@@ -309,7 +318,9 @@ describe('buildProgram — command tree derivation (spec-006 §4, spec-008 §1)'
     const memoryAdd = program.commands.find((c) => c.name() === 'memory')?.commands.find((c) => c.name() === 'add');
     // `--dry-run` is not declared by the operation: the registrar adds it to every mutating command
     // (task-210), as a flag, so Commander registers it before the value options.
-    expect(memoryAdd?.options.map((option) => option.flags)).toEqual(['--dry-run', '--type <value>', '--title <value>', '--set <name=value>']);
+    // `--co-author <name>` likewise (task-333, `spec-018` §1, design D4): derived for every mutating command but
+    // `agent execute`, after the operation's own value options; `--ai-model <id>` right after it (task-334, `spec-018` §2.4).
+    expect(memoryAdd?.options.map((option) => option.flags)).toEqual(['--dry-run', '--type <value>', '--title <value>', '--set <name=value>', '--co-author <name>', '--ai-model <id>']);
   });
 
   it("an unknown noun terminates through commander's own `unknownCommand`, whose SUGGESTED exit code is 1", async () => {

@@ -18,6 +18,7 @@
  * no network.
  */
 import { spawnSync } from 'node:child_process';
+import { rmSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { directiveMd } from '../agent/helpers/agent-execute-fixture';
@@ -154,13 +155,69 @@ describe('task-215 AC 1 — check-role-directives sweeps every dna.yaml role (dl
   });
 });
 
+/**
+ * task-340 AC 4 (red-first; `bug-459`) — the sweep also visits every role `roles.yaml` binds under `assignments`, the
+ * ascending union with the `dna.yaml` `team.roles` names (`global` is not a role; an absent `roles.yaml` adds none).
+ * A role `dna.yaml` does not declare gets, before its listing's warnings, the warning `bound in roles.yaml but not
+ * declared in dna.yaml team.roles`. Output format unchanged. The expected lines are the design's prototype run (task-340
+ * `### design`); the dangling-binding line is the pinned build's own warning, as `directives list --role intern`
+ * prints it.
+ */
+describe('task-340 AC 4 — a roles.yaml binding under a role dna.yaml does not declare fails the sweep (bug-459)', () => {
+  let repo: string;
+
+  beforeEach(() => {
+    repo = makeTempGitRepo();
+  });
+
+  afterEach(() => {
+    removeTempDir(repo);
+  });
+
+  it('(a) intern (a dangling binding) and ghost (an existing directive) are swept and fail, each named; the summary counts the union', () => {
+    writeFixture(repo);
+    writeFixtureFile(
+      repo,
+      '.wingfoil/roles.yaml',
+      ['version: 1', 'global: [doc-versioning]', 'assignments:', '  developer: [testing]', '  reviewer: [testing]', '  intern: [ghost-intern]', '  ghost: [testing]', ''].join('\n'),
+    );
+
+    const run = runCheck(['--root', repo]);
+
+    expect(run.status).toBe(1);
+    expect(run.stdout).toBe(
+      'developer: ok\nghost: 1 warning(s)\nintern: 2 warning(s)\nreviewer: ok\nrole-directives: 4 roles checked, 2 with warnings\n',
+    );
+    expect(run.stderr).toBe(
+      [
+        "error: role 'ghost': bound in roles.yaml but not declared in dna.yaml team.roles",
+        "error: role 'intern': bound in roles.yaml but not declared in dna.yaml team.roles",
+        "error: role 'intern': directive 'ghost-intern' bound to role 'intern' has no directive file",
+        '',
+      ].join('\n'),
+    );
+  });
+
+  it('(c) no roles.yaml: only the team.roles roles are swept (characterization)', () => {
+    writeFixture(repo);
+    rmSync(join(repo, '.wingfoil', 'roles.yaml'));
+
+    const run = runCheck(['--root', repo]);
+
+    expect(run.status).toBe(0);
+    expect(run.stdout).toBe('developer: ok\nreviewer: ok\nrole-directives: 2 roles checked, 0 with warnings\n');
+    expect(run.stderr).toBe('');
+  });
+});
+
 describe('task-215 AC 1 — this repository passes the sweep (D-A (a): approver and facilitator bound)', () => {
-  it('AC 1 (exit 0 on this repository): all eight dna.yaml roles checked, none with warnings', () => {
+  // task-341 (dl-203 Q3 (a)) adds the ninth role, `coordinator`, bound to its directive: the pin changes in task-341's red.
+  it('AC 1 (exit 0 on this repository): all nine dna.yaml roles checked, none with warnings', () => {
     const run = runCheck(['--root', REPO_ROOT]);
 
     expect(run.status).toBe(0);
     expect(run.stderr).toBe('');
     const lines = run.stdout.trimEnd().split('\n');
-    expect(lines[lines.length - 1]).toBe('role-directives: 8 roles checked, 0 with warnings');
+    expect(lines[lines.length - 1]).toBe('role-directives: 9 roles checked, 0 with warnings');
   });
 });

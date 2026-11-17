@@ -31,7 +31,11 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
-import { registerReadOnlyResources, registerRolePrompts, registerSessionContextResource } from './index';
+// Leaf modules, not the `./index` barrel: the barrel re-exports this file, so importing it here closed an import
+// cycle (task-354, bug-345).
+import { registerRolePrompts } from './prompt';
+import { registerReadOnlyResources } from './read-only-resources';
+import { registerSessionContextResource } from './session-resource';
 
 /** Construction/connection options for the production MCP server. */
 export interface McpServerOptions {

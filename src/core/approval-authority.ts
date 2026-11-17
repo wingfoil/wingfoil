@@ -14,13 +14,13 @@
  * returned, handed in by the caller rather than read again here (`dl-064` B.1, task-132) — git
  * identity is WingFoil's sole attribution mechanism (adr-001/adr-006), and the transition verbs pin
  * that same value as the commit's author, so authority is checked against the exact "who" the
- * resulting approval commit records (`bug-149`). This
- * is why `team.agents` is deliberately NOT consulted here: an AI agent has no git identity of its own
- * distinct from whichever human account runs the command, so there is no code-level signal this
- * git-identity-keyed check could use to single an agent out. Structurally preventing agents from
- * holding approval authority is instead a `dna.yaml` fact (`team.agents[].approval_authority: false`)
- * enforced by process/governance (AGENTS.md §4/§8: "AI agents ... never hold approval authority"), not
- * by this predicate.
+ * resulting approval commit records (`bug-149`). An AI agent has no git identity of its own
+ * distinct from whichever human account runs the command, so the identity cannot single an agent out;
+ * the session's **agent markers** are that signal (`spec-018` §1, `dl-212` D1): the check's first step,
+ * before `dna.yaml` is read, is `refuseAgentContext` (`./agent-context.ts`, `spec-018` §3.1), which
+ * refuses an agent's session with `E_AGENT_CONTEXT` before its identity is judged. Both functions take
+ * the agent context and the command's name as required parameters, so no caller compiles without them.
+ * `team.agents` is still not consulted here: the gated agent context reads no entry (`spec-018` §2.6).
  *
  * **"Who is authorized" is read from the COMMITTED `dna.yaml`, never from the working tree**
  * (task-090, `bug-079-uncommitted-dna-yaml-grants-approval-authority`). The two halves of the check
@@ -33,15 +33,20 @@
  *   grant used to be enough to put `Approver: … (approver)` into a permanent commit that the
  *   repository's own record, at that very commit, contradicted.
  */
-import type { DnaYaml } from '../dna/schema';
+import { APPROVER_ROLE, type DnaYaml } from '../dna/schema';
 import { ValidationError } from '../validation';
 
+import { refuseAgentContext, type AgentContext } from './agent-context';
 import type { GitIdentity } from './git-identity';
 import { DNA_YAML_PATH, loadDnaYaml, loadDnaYamlAtHead } from './loaders';
 import { coreErr, coreOk, type CoreResult } from './types';
 
-/** The one role that carries approval authority, uniformly across every Memory type (adr-006). */
-export const APPROVER_ROLE = 'approver' as const;
+/**
+ * The one role that carries approval authority, uniformly across every Memory type (adr-006). Its value is
+ * declared by `src/dna/schema.ts`, which owns the role catalogue and makes the role human-only (`dl-202` item 1);
+ * this module re-exports it, so the literal is spelled once.
+ */
+export { APPROVER_ROLE };
 
 /**
  * The roles held by the `dna.yaml` `team.members[]` entry whose `email` matches `email`
@@ -110,9 +115,19 @@ function workingTreeWouldGrant(root: string, email: string): boolean {
  * guarantee that is to leave this function nothing to read (`dl-064` B.1, task-132). Callers obtain it
  * from `beginMemoryTransition` (`./memory-transition.ts`), which runs the identity check first — an
  * unconfigured identity surfaces as REQ-SEC-01's own message, not this one.
+ *
+ * `agent` is the gated agent context of the invocation (`resolveAgentContext`, `spec-018` §2.6) and `command` the
+ * command as the grammar names it (`memory approve`, `memory reject`, `memory amend`, `workflow finalize`): with any
+ * agent marker present the check refuses with `E_AGENT_CONTEXT` naming `command` (`spec-018` §3.1–§3.2), first.
  */
-export function requireApprovalAuthority(root: string, typeName: string, identity: GitIdentity): CoreResult<void> {
-  return requireApproverAuthority(root, identity, `user not authorized to approve type '${typeName}'`);
+export function requireApprovalAuthority(
+  root: string,
+  typeName: string,
+  identity: GitIdentity,
+  agent: AgentContext,
+  command: string,
+): CoreResult<void> {
+  return requireApproverAuthority(root, identity, `user not authorized to approve type '${typeName}'`, agent, command);
 }
 
 /**
@@ -121,9 +136,22 @@ export function requireApprovalAuthority(root: string, typeName: string, identit
  * (plus the uncommitted-grant sentence when only the working tree would grant it) instead of the approve message.
  * For the operations that need the approver without approving a Memory type (task-294, plan ruling W1-3; REQ-SEC-03,
  * `dl-187` rule 7): `workflow adopt --plan --apply` (`user not authorized to apply adoptions in bulk`) and `workflow
- * rekey` (`user not authorized to rekey`).
+ * rekey` (`user not authorized to rekey`). Its first step is the agent-context refusal of `spec-018` §3.1, on
+ * `agent` and `command` (`workflow adopt --plan --apply`, `workflow rekey`).
  */
-export function requireApproverAuthority(root: string, identity: GitIdentity, refusal: string): CoreResult<void> {
+export function requireApproverAuthority(
+  root: string,
+  identity: GitIdentity,
+  refusal: string,
+  agent: AgentContext,
+  command: string,
+): CoreResult<void> {
+  // `spec-018` §3.1: an agent's session is refused first, before the committed `dna.yaml` is read, so an agent
+  // learns nothing about whose identity it holds. `refusal` stays verb-free (`dl-063` clause B); `command` feeds
+  // only the `E_AGENT_CONTEXT` message.
+  const session = refuseAgentContext(agent, command);
+  if (!session.ok) return session;
+
   const { email } = identity;
 
   let committed: DnaYaml | null;

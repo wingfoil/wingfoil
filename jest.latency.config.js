@@ -8,7 +8,8 @@
  *
  * Run it on its own with `npm run test:latency`.
  * `test/core/latency-budget-placement.test.ts` checks that every suite exempted from its no-timed-spawn
- * rule is selected here and ignored there.
+ * rule is selected here and ignored there, and that no suite outside the list times (its rule 6; task-357,
+ * `bug-221`): the in-process REQ-PERF suites run here too, each refusing a loaded run.
  *
  * @type {import('jest').Config}
  */

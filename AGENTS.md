@@ -125,10 +125,10 @@ the move. Start from `.wingfoil/README.md`.
 | `.wingfoil/memory/templates/`                              | Memory (P1.13)         | One Markdown scaffold per element type (`frontmatter.required` enforced on submit)                                                                                                                   |
 | `docs/04_memory/planning/{id}.md`                          | Memory (P1.11)         | The **release-line** roadmap (one file per major version, e.g. `rl-v1.md`)                                                                                                                           |
 | `docs/04_memory/planning/rl-{release-line}/{id}.md`        | Memory (P1.11)         | That release-line's releases: the minors (v0.1→v1.0 for `rl-v1`) and the patches (`patch-v0.2.2`, `dl-092`)                                                                                          |
-| `.wingfoil/directives/custom/`                             | Directives (P3.5/P3.8) | Rules: P3.8 template **stand-ins** (`code-quality, testing, code-review, architecture, security, documentation`) + WingFoil-specific (`determinism, doc-versioning, security-secrets, traceability, command-baseline, claim-evidence, git-conventions, wingfoil-cli`) |
+| `.wingfoil/directives/custom/`                             | Directives (P3.5/P3.8) | Rules: P3.8 template **stand-ins** (`code-quality, testing, code-review, architecture, security, documentation`) + WingFoil-specific (`determinism, doc-versioning, security-secrets, traceability, command-baseline, claim-evidence, git-conventions, wingfoil-cli, standing-approvals, coordinator`) |
 | `.wingfoil/roles.yaml`                                     | Directives (P3.2/P3.7) | Role → directive bindings                                                                                                                                                                            |
 | `.wingfoil/workflows.yaml` + `workflows/custom/`           | Workflow (P4.1)        | `sw-life-cycle` (main) + its sub-workflows + five more startable mains: four ingest mains and `vision-change`                                                                                        |
-| `.wingfoil/workflows/bindings.yaml`                        | Workflow (P4.10/P4.12) | The command each project-bound `actions:` / `checks:` token runs — binding kind `run` (an argument vector), or `manual: true` (`spec-003` Layer 3, `dl-090`); unbound prose checks stay `W_WORKFLOW_UNBOUND_TOKEN` warnings |
+| `.wingfoil/workflows/bindings.yaml`                        | Workflow (P4.10/P4.12) | The command each project-bound `actions:` / `checks:` token runs — binding kind `run` (an argument vector), or `manual: true` (`spec-003` Layer 3, `dl-090`), "on purpose" or "until a command" decides the check (`task-358`); no token here is unbound, so no `W_WORKFLOW_UNBOUND_TOKEN` |
 | `.wingfoil/agents/`                                        | Interaction (P5.3)     | Agent adapters for `wingfoil agent execute` (`spec-016`): `built-in/claude-code.yaml`, and `custom/` (empty)                                                                                           |
 
 > The tool ships the official P3.8 **built-in** directive templates (`task-057`: `wingfoil init`
@@ -153,8 +153,8 @@ the move. Start from `.wingfoil/README.md`.
   `chalk`, and `test/cli/runtime-dependencies.test.ts` keeps it that way.
   **Methodologies** (`stacks.methodologies`): Lean Inception · User Story Mapping · Specification by
   Example (BDD) · SARD · TDD.
-- **Roles:** `developer, reviewer, qa, architect, product-owner, tech-lead, facilitator, approver`.
-  AI agents execute as `developer/reviewer/qa/architect/facilitator` and **never hold approval authority** — all
+- **Roles:** `developer, reviewer, qa, architect, product-owner, tech-lead, facilitator, approver, coordinator`.
+  AI agents execute as `developer/reviewer/qa/architect/facilitator/coordinator` and **never hold approval authority** — all
   approvals route to the `approver` role (the human, Roberto).
 - **Paths:** query categories `sources, tests, docs, config, governance, runs, health` (`dna.yaml`
   `paths:`; `wingfoil paths <category>`).
@@ -250,28 +250,33 @@ the same kind (`workflow: adopt <instance-id> <step-key> <type>:<id>`, `workflow
 on a `memory add --workflow … --step …`, and `WingFoil-Phase:`, `WingFoil-Instance:` and `WingFoil-Element:` or
 `WingFoil-Item:` on a `workflow finalize` record, `WingFoil-Instance:`, `WingFoil-Step:` and `WingFoil-Adopted:` on a
 `workflow adopt` record, and `WingFoil-Instance:`, `WingFoil-Rekey-From:` and `WingFoil-Rekey-To:` on a
-`workflow rekey` record. To add a trailer to such a commit,
-amend with `git commit --amend --no-edit --trailer "…"`, which joins that paragraph; never add a new paragraph
+`workflow rekey` record. To add a trailer to such a commit — one it lacks: the agent's two are already there when an
+agent ran the command —, amend with `git commit --amend --no-edit --trailer "…"`, which joins that paragraph; never add a new paragraph
 after it, or a reader takes `WingFoil-Version:` into the `Reason:` block and the workflow deduction, which reads
 only the final paragraph, loses the step link or the phase record (`git-conventions` §8, `bug-236`). Only a commit
 not yet pushed may be amended. On push, the governance check flags a `WingFoil-*` trailer outside the final
 paragraph (`bug-391`) and holds an `Approver:` line on a `workflow:` record to an approval's grammar and authority
 (`bug-444`, `git-conventions` §9).
 
-**AI attribution** (`git-conventions` §7, `dl-117`). Every commit an agent writes, **except an `approve` or
-`reject` commit**, ends with the trailer paragraph
-`Co-Authored-By: <team.agents name> <<team.agents email>>` and `AI-Model: <the model identifier you run as>`,
-the values read from `dna.yaml` `team.agents`. On a commit `wingfoil` wrote, add the two with
-`git commit --amend --no-edit --trailer …`, in the paragraph of `WingFoil-Version:`. `wingfoil agent execute`
-hands this rule to the agents it launches; an agent started from its own CLI has only this file.
+**AI attribution** (`git-conventions` §7, `dl-117`, `spec-018` §2). Every commit an agent causes, **except an
+approval commit** (`approve`, `reject`, `amend` and a `workflow:` record with an `Approver:` line, which the verbs
+refuse in an agent's session), ends with the trailer paragraph
+`Co-Authored-By: <team.agents name> <<team.agents email>>` and `AI-Model: <the model identifier you run as>`, the
+values read from `dna.yaml` `team.agents`. A `wingfoil` command that writes a commit in an agent's session writes
+the two lines itself, after `WingFoil-Version:`: pass `--ai-model <the model identifier you run as>` (or set
+`WINGFOIL_AGENT_MODEL`), or it writes `AI-Model: not-reported`; never add them again to such a commit, which would
+leave two pairs. The hand recipe `git commit --amend --no-edit --trailer …` stays only for a commit an agent writes
+with plain `git commit`. `wingfoil agent execute` hands this rule to the agents it launches; an agent started from
+its own CLI has only this file.
 
 > **All Memory verbs ship and run on this repository** through the code build (§3): `memory add`, `submit`,
 > `approve`, `reject`, `deprecate`, `amend`, `park` (P1.6–P1.9, `dl-108`, `dl-110`), with the read-only
 > `memory search` and `memory history` (P1.10). `finalize` is written by `workflow end` (`wf(plan): finalize`,
 > `active → done`) and by the supersede trigger; `workflow start` writes a plan's `add` and `submit`; no command
 > writes `start` or commits `sync` (`workflow next` prints the `sync` subjects a step owes), so those two are
-> written by hand, in the same format. Approvals, rejections and amendments run only on the approver's instruction,
-> whether by verb or by hand (§8). Run `node dist/cli.js memory --help` rather than trusting this paragraph.
+> written by hand, in the same format. Approvals, rejections and amendments are the approver's own, run from the
+> approver's terminal: the verbs refuse an agent's session, and an agent never writes one by hand (§8, `spec-018`
+> §3). Run `node dist/cli.js memory --help` rather than trusting this paragraph.
 >
 > The commit *format* is the contract either way — it is what the verbs emit and what
 > `wingfoil memory history` reads back — so follow it exactly, and keep each operation to its own commit.
@@ -293,6 +298,9 @@ and the rule is the same whether the commit is written by `wingfoil memory <verb
   `Approver:` line of its own and performs no authority check — one would make `memory history` report an
   approval that never happened. Ordinary `Key: value` prose (`Action: amend spec-015 §3`) is fine; only
   those keys are reserved.
+- **On an approval — an operation that writes an `Approver:` line — no line may begin with `Co-Authored-By:` or
+  `AI-Model:` either**, in any letter case: an approval never carries an agent trailer (`spec-018` §3.3), so the CLI
+  refuses such a reason at exit `2`.
 - **A reason may not END with a paragraph made entirely of `Key: value` lines**, because a reader
   cannot tell it from the commit's own trailer block. Add a closing sentence, or fold the lines into
   prose.
@@ -367,8 +375,9 @@ two must appear explicitly in the commit message.
    under `docs/03_backlog/04_backlog/by-release/` when it reaches `backlog` — that JSON is an output of
    the `backlog-export` sub-workflow from the *specification* phase (`docs/design.md` phase 4), read as
    a source and cited by each release's `requirements:` frontmatter field.
-5. Agents may execute `memory.approve` **only when explicitly instructed** by the `approver` role (Roberto);
-   agents never approve autonomously (§4, §8).
+5. Agents never run `memory approve`, `memory reject` or `memory amend`: the approver runs them from their own
+   terminal, and the verbs refuse an agent's session with `E_AGENT_CONTEXT`, whatever its git identity (`dl-212` D1,
+   `spec-018` §3; §4, §8).
 
 ### `memory.reject` — send back for revision
 
@@ -389,8 +398,9 @@ the commit message (the timestamp comes from the git commit itself).
    Approver: {full name} <{email}> ({role})
    Reason: <what needs to change before resubmitting>
    ```
-3. Agents may execute `memory.reject` **only when explicitly instructed** by the `approver` role — same
-   restriction as `memory.approve` (§4, §8). A task with linked bugs: see the two-commit exception above.
+3. Agents never run `memory reject`, nor `approve` or `amend`: the approver runs them from their own terminal, and
+   the verbs refuse an agent's session (`E_AGENT_CONTEXT`, `spec-018` §3). A task with linked bugs: see the
+   two-commit exception above.
 
 ### `memory.amend` — record a correction without a state change
 
@@ -444,9 +454,9 @@ non-blank (`--reason` itself stays optional, `dl-027`).
       `plan-next-release-line` (closes this release-line to `done`, self-seeds the next one once
       every one of its releases is `released`).
         - `delivery` → `release-cycle` *(iterate_over: release, scoped to this release-line)*:
-            - `planning` → `release-planning` *(`advance-pinned-build` → `define-scope` → `triage-bugs` →
-              `reconcile-governance` → `record-adrs` (optional) → `identify-specs` → `build-backlog` →
-              `commit-backlog`)*;
+            - `planning` → `release-planning` *(`advance-pinned-build` → `collect-feedback` → `define-scope` →
+              `triage-bugs` → `assign-bugs` → `reconcile-governance` → `record-adrs` (optional) → `identify-specs` →
+              `build-backlog` → `commit-backlog`)*;
             - `implementation` → `wave` *(iterate_over: `element:waves`, the release's `waves:`)*: per wave,
               `tasks` → `dev-loop` *(iterate_over: task, where `release` and `wave` match)* → `wave-checks`
               (e2e smoke, examples, `docs.parity`; a failure opens a bug) → `re-sweep` → `re-plan`
@@ -511,7 +521,8 @@ Bindings are by **role**, never by person (REQ-SYS-08).
 | product-owner          | traceability                                                                                     |
 | tech-lead              | architecture, code-review, traceability                                                          |
 | facilitator            | traceability                                                                                     |
-| approver               | code-review                                                                                      |
+| approver               | code-review, standing-approvals                                                                  |
+| coordinator            | coordinator                                                                                      |
 | **global (all roles)** | doc-versioning, documentation, security, security-secrets, claim-evidence, git-conventions, wingfoil-cli |
 
 `command-baseline` states which state a command may read and write (`dl-080`); `claim-evidence` states that
@@ -519,7 +530,10 @@ a sentence asserting a fact about the code names the command that establishes it
 (`dl-119`) covers branch prefixes, staying current with the integration branch, tags, `wf()` subjects,
 identity, id allocation, AI attribution, amending a tool commit, the two release lines and their merge forward (§1)
 and the governance check on pushed commits (§9); `wingfoil-cli` (`task-270`) says which
-build runs which command (§3). `roles.yaml` declares its own `version:`; read it there.
+build runs which command (§3); `standing-approvals` (`task-343`, R1 L7) holds the rules under which a gate's
+command-checked evidence suffices and the exact command the approver runs — no rule lets an agent run an approver
+verb (`dl-212` D1); `coordinator` (`task-341`, `dl-203` D2) states the judgement points the coordinator role decides,
+that it never approves, rejects, amends or decides a gate, and how its session is recorded as a run. `roles.yaml` declares its own `version:`; read it there.
 
 When executing under a role, **auto-load and obey that role's directives** (P3.6/P5.4.2).
 

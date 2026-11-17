@@ -49,10 +49,11 @@ describe('task-242 Q4 — the feature files carry the finalize scenarios (bug-32
     ]);
   });
 
-  it('P4.14 keeps the uncarried-approval case as sc. 4 (ruling D2 (a))', () => {
+  it('P4.14 keeps the uncarried-approval case as sc. 4 (ruling D2 (a)); task-333 adds the agent-session refusal as sc. 5', () => {
     const titles = P4_14.split('\n').filter((line) => line.startsWith('  Scenario: ')).map((line) => line.slice('  Scenario: '.length));
     expect(titles[3]).toBe('An approval no element carries is routed, then recorded by workflow finalize');
-    expect(titles).toHaveLength(4);
+    expect(titles[4]).toBe("Error - an approval phase is not recorded from an agent's session");
+    expect(titles).toHaveLength(5);
   });
 });
 

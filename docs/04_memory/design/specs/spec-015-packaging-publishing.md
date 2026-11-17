@@ -121,13 +121,20 @@ scheme (§4), not hand-edited at publish time.
   publish (staging or prod). Must exit non-zero on any failure.
 - `publish:staging`: the **local-first** entry point (`scripts/publish-staging.*`) that runs the full
   staging→smoke flow (§3) against a Verdaccio instance, usable identically on a dev machine and in CI.
-- Existing `build`/`prepack`/`lint` unchanged; `prepack → build` still produces `dist/`. `test` is
-  `node scripts/run-tests.cjs`: the parallel jest run, which leaves out the suites that time spawned
-  processes (`test/latency-suites.cjs`). Those run alone (`jest.latency.config.js`) only when asked
+- Existing `prepack`/`lint` unchanged; `prepack → build` still produces `dist/`. `build` runs its
+  `tsc -p tsconfig.build.json` under the machine-wide heavy-gate lock of `scripts/heavy-gate.cjs` (a gate
+  waits while another holds it and, outside CI (`CI=true` skips the load wait, never the lock), while the
+  1-minute load average is above the number of cores), and so do `test` with no suite filter, `test:coverage` and `test:report`: see the *Revision (2026-11-06) — §2
+  heavy gates* note below. `test` is
+  `node scripts/run-tests.cjs`: the parallel jest run, which leaves out the latency suites
+  (`test/latency-suites.cjs`): the suites that time spawned processes, and the suites that time an
+  operation in-process against a REQ-PERF budget, all of whose budgets presuppose an otherwise idle
+  machine. Those run alone (`jest.latency.config.js`) only when asked
   for — `npm run test:latency`, or `WINGFOIL_LATENCY=1 npm test` — and never from `prepublishOnly`,
-  so no publish waits on a wall-clock measurement. See the *Revision (2026-10-03) — §2 `test`* note
-  below.
-- `test:report`: `jest --coverage --json --outputFile=coverage/jest-results.json` — the same suite as
+  so no publish waits on a wall-clock measurement and no budget in the parallel run depends on an idle
+  machine. See the *Revision (2026-10-03) — §2 `test`* and *Revision (2026-11-07) — §2 in-process latency
+  suites* notes below.
+- `test:report`: `node scripts/run-tests.cjs --coverage --json --outputFile=coverage/jest-results.json` — the same suite as
   `test`, once, with coverage (`coverage/coverage-summary.json`, `coverage/lcov.info`: `jest.config.js`
   `coverageReporters`) and Jest's own JSON results, the inputs of `scripts/test-report.cjs` (§3 stage 1,
   `dl-136`).
@@ -872,3 +879,28 @@ still pass, and `--check-evidence-only` inherits the refusal. A passing run writ
 committed rehearsal transcripts hold none. The pins are `test/cli/staging-rehearsal.test.ts` and
 `test/cli/evidence-only-tag.test.ts`. Edited in place: no supersede, no state change, no `version:` bump
 (`dl-047`), as in the revisions above.
+
+**Revision (2026-11-06, `task-349`) — §2 heavy gates: the full suite, the coverage runs and the production build run
+under one machine-wide lock (`dl-170`, `ready`; Decisions 1–4, Q1 (a), Q2 (C)).** §2 said `build` was unchanged and
+quoted `test:report` as a bare `jest --coverage …`. Each of them is a heavy gate in `dl-170`'s sense, and nothing bounded
+how many worktrees of one machine ran them at the same time. `scripts/heavy-gate.cjs` now holds one lock per machine,
+outside every worktree: a heavy gate waits while another holds it or, outside CI (`CI=true` skips the load wait, never the
+lock), while the 1-minute load average is above the number of cores, says so once on stderr naming the holder's worktree and pid, and takes over a lock whose holder is no longer
+running. `test` takes it when no argument names a suite (a targeted run does not), `test:coverage` and `test:report` run
+through `scripts/run-tests.cjs` with `--coverage` and take it the same way, and `build` runs its `tsc` step under it; a
+gate started inside a gate that holds the lock (the jest global setup, a nested build) runs without waiting on it. What
+is built, tested and measured is unchanged, and so are `prepublishOnly`, `prepack` and the stage-1 steps of §3: only when
+they start changes. The pins are `test/cli/run-tests.test.ts`, `test/cli/test-report.test.ts`,
+`test/cli/build-info.test.ts` and `test/lint/dist-lock.test.ts`. Edited in place: no supersede, no state change, no
+`version:` bump (`dl-047`), as in the revisions above.
+
+**Revision (2026-11-07, `task-357`) — §2 in-process latency suites: no REQ-PERF budget runs in the parallel pass
+(`bug-221`).** §2 said the parallel run leaves out the suites that time spawned processes. Since `task-216` the list
+in `test/latency-suites.cjs` also holds an in-process suite, and the in-process REQ-PERF-02 and REQ-PERF-04 budgets
+still ran in the parallel pass, where the SARD's measurement condition, an otherwise idle machine, does not hold and
+one of them was seen to fail with nothing changed. Every suite that times an operation against a REQ-PERF budget is
+now a latency suite: it reads the load average around its measurement and refuses a loaded run, and it runs only in
+the latency pass. What those suites assert besides the time runs in the parallel pass, so `test:coverage` and
+`test:report` measure the same code as before; their scripts, `prepublishOnly` and the stage-1 steps of §3 are
+unchanged. The pins are `test/core/latency-budget-placement.test.ts` and `test/cli/run-tests.test.ts`. Edited in
+place: no supersede, no state change, no `version:` bump (`dl-047`), as in the revisions above.

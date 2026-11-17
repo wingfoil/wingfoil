@@ -57,7 +57,7 @@ import { isRoleDefined, UnknownRoleError } from '../dna/roles';
 import type { DnaYaml } from '../dna/schema';
 import { setRoleAssignmentsInText } from '../directives/roles-edit';
 import { RolesYaml } from '../directives/schema';
-import { documentExists, readDocument, writeAndCommit } from '../storage';
+import { documentExists, readDocument, writeAndCommit, type CommitAttribution } from '../storage';
 import { INITIAL_CONFIG_VERSION, parseYaml, raiseConfigVersion, toValidationError, ValidationError } from '../validation';
 import { newerFormatIssue, ROLES_YAML_FORMAT } from '../validation/format';
 
@@ -353,7 +353,8 @@ function parseRoles(text: string, filePath: string): CoreResult<{ raw: Record<st
  * @param role - The role whose list is updated (already validated by the caller).
  * @param update - Pure function from the current list to the desired list.
  * @param message - The commit subject.
- * @param options - `force`: authorize the whole-file rewrite when the in-place edit cannot apply.
+ * @param options - `force`: authorize the whole-file rewrite when the in-place edit cannot apply; `attribution`: the
+ *   agent the commit names as its co-author (`spec-018` §2.2), absent outside an agent's session.
  * @returns The role's resulting list, with the commit when one was made and the rewrite warning when
  *   `force` was used.
  * @throws whatever `git` raises inside `commitPaths`.
@@ -363,7 +364,7 @@ export function updateRoleAssignments(
   role: string,
   update: (current: readonly string[]) => readonly string[],
   message: string,
-  options: { readonly force: boolean },
+  options: { readonly force: boolean; readonly attribution?: CommitAttribution },
 ): CoreResult<RoleAssignmentUpdate> {
   // dl-080 (B) / bug-078: refuse while `roles.yaml` carries modifications this operation does not
   // own — otherwise an unrelated uncommitted edit rides into `wf(directive): assign <id> to <role>`,
@@ -414,6 +415,7 @@ export function updateRoleAssignments(
   const sha = writeAndCommit(root, [{ path: ROLES_YAML_PATH, content: serialized }], message, {
     warnings,
     plannedWarnings,
+    attribution: options.attribution,
   });
   const leaked = committedScopeError(root, sha, ROLES_YAML_PATH, serialized);
   if (leaked) return leaked;

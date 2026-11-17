@@ -6,7 +6,7 @@ kind: custom
 title: "Testing"
 tags: [custom, testing, tdd, jest]
 ref: [P3.8]
-version: "1.3"   # 1.3: coverage non-regression against the integration branch's figures, release/X.Y or main (task-286, dl-159 A1.6) (prev 1.2)
+version: "1.4"   # 1.4: T5, heavy gates attached and under the machine-wide lock (task-349, dl-170 Decision 4) (prev 1.3: coverage non-regression against the integration branch's figures, release/X.Y or main (task-286, dl-159 A1.6) (prev 1.2))
 ---
 
 # Directive — Testing
@@ -40,12 +40,13 @@ Custom stand-in directive. Applies to developers, QA and reviewers (`roles.yaml`
   on a type error in either tree. `ci.yml` runs `npm run typecheck` on every push; `dev-loop`'s
   `refactor` and `release-submit`'s `pre-release-checks` declare `typecheck.clean`.
 
-## WingFoil-specific clauses (`dl-121`, `dl-134`)
+## WingFoil-specific clauses (`dl-121`, `dl-134`, `dl-170`)
 
 The rules in this section are WingFoil's own. They are not part of the generic P3.8 template that
 this stand-in mirrors. T1 and T2 were ratified in `dl-121-testing-directive-extensions` (`ready`,
 Q1 (a), Q2 following `dl-120` Q1 (a)); T3 and T4 in `dl-134-dev-loop-separation-of-duties`
-(`ready`, Q1 (a), Q2 (a)), placed here under `dl-121` Q2. When this stand-in is reconciled with the
+(`ready`, Q1 (a), Q2 (a)), placed here under `dl-121` Q2; T5 in `dl-170-cap-the-number-of-worktrees-whose-test-and-coverage-gates-run-at-the-same-time` (`ready`,
+Decision 4, Q2 (C)). When this stand-in is reconciled with the
 shipped built-in template, this section is kept as a `custom` rule and is not dropped with the
 generic rules above.
 
@@ -81,6 +82,19 @@ generic rules above.
   commit (`main`, or `release/X.Y` on the maintenance line, `git-conventions` §1) is excluded
   (`--first-parent` never visits the integration branch's side of that merge). From v1.0 the `dev-loop` post-check `tests.unchanged(since: red)` on `green` and `refactor`
   evaluates it (P4.12); until then this rule and the reviewer do.
+- **T5 — Heavy gates run attached and under the lock (`dl-170` Decision 4).** A heavy gate — the full
+  suite (`npm test` with no suite filter), the coverage run (`npm run test:coverage`, `npm run test:report`), the
+  production type-check or build (`npm run typecheck`, `npm run build`) — is run in the foreground, or as a
+  background command its session tracks and reads to the end; it is never detached (`nohup`, `setsid`, `&` with
+  `disown`, a terminal multiplexer), because a detached gate outlives the session that should read it and holds the
+  machine while nobody waits for it. It is run through the npm scripts, which take the machine-wide lock of
+  `scripts/heavy-gate.cjs`: one heavy gate at a time on the machine, waiting while another holds the lock and,
+  outside CI, while the 1-minute load average is above the cores; the wait is reported once on stderr, naming the
+  holder's pid and worktree. A gate is never started around the lock (a bare `jest`, `tsc -p tsconfig.build.json`)
+  to skip the wait. An agent is resumed only after checking that its worktree has no live gate process
+  (`ps -eo pid,etime,args` filtered on the worktree path, the output quoted in the notes); a live one is waited
+  for, or ended, first. `dev-loop` names the lock on `green`, `refactor` and `review` (`checks.pre`
+  `gate.slot-free`, evaluated from v1.0, P4.12).
 - **Secret-shaped fixtures** follow `security-secrets` S1: a fixture that must match a secret pattern
   is assembled at runtime, never committed as one literal (`dl-073` Action 3, `dl-122`).
 

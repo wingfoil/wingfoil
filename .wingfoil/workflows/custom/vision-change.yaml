@@ -9,7 +9,7 @@
 name: vision-change
 kind: main
 description: Change the vision (a new feature or any other vision edit) through a change-proposal, its impact analysis, a scoped downcast and a release assignment.
-version: 1.1                     # 1.0 dl-132 (task-212): the first version; schedule's target_release pre-check added at task-212's review, before the file reached main; 1.1 task-277 (approver ruling 2026-10-10 item 5 on task-212 decision 4): schedule writes the sequencer entry and the release stamp only, and release-planning's define-scope writes the release's features:
+version: 1.3                     # 1.0 dl-132 (task-212): the first version; schedule's target_release pre-check added at task-212's review, before the file reached main; 1.1 task-277 (approver ruling 2026-10-10 item 5 on task-212 decision 4): schedule writes the sequencer entry and the release stamp only, and release-planning's define-scope writes the release's features:; 1.2 task-358 (bug-469, W0-R10), comment only: schedule's change-proposal.target_release check is bound manual: true "until a command", no longer unbound; no phase, step or action changes; 1.3 task-359 (dl-166 Q1 (b), Q2 (ii), approver rulings D1–D4): the three downcast phases carry the post-check downcast.in-scope(layer: …), bound manual: true until a command, and schedule's post-checks gain change-proposal.assigned, bound to scripts/check-release-exit.cjs on {element.path}, both declared before cp-001 runs its downcast
 # No fixed `element:` — self-creating (spec-003 Layer 2 `element`): the change-proposal its capture phase
 # adds becomes the instance's element.
 phases:
@@ -50,19 +50,25 @@ phases:
       post: ["vision-index.current"]          # the bug-270 test: the index matches every vision file (bound in workflows/bindings.yaml)
 
   - name: downcast-stories
-    description: "User stories for the delta only — run when the analysis names a user-story impact (dl-132 Q2 (ii))."
+    description: "User stories for the delta only — run when the analysis names a user-story impact (dl-132 Q2 (ii)); its post-check holds the stories it adds or edits to the analysis's user-story subsection (dl-166 Q1 (b))."
     optional: true
     include: user-story-mapping
+    checks:
+      post: ["downcast.in-scope(layer: stories)"]          # bound manual: true until a command in workflows/bindings.yaml (task-359, D2 (A))
 
   - name: downcast-scenarios
-    description: "BDD scenarios for the delta only — run when the analysis names a BDD impact (dl-132 Q2 (ii))."
+    description: "BDD scenarios for the delta only — run when the analysis names a BDD impact (dl-132 Q2 (ii)); its post-check holds the scenarios it adds or edits to the analysis's BDD subsection (dl-166 Q1 (b))."
     optional: true
     include: specification-by-examples
+    checks:
+      post: ["downcast.in-scope(layer: scenarios)"]        # bound manual: true until a command in workflows/bindings.yaml (task-359, D2 (A))
 
   - name: downcast-requirements
-    description: "SARD requirements for the delta only — run when the analysis names a requirement impact (dl-132 Q2 (ii))."
+    description: "SARD requirements for the delta only — run when the analysis names a requirement impact (dl-132 Q2 (ii)); its post-check holds the requirements it adds or edits to the analysis's SARD subsection (dl-166 Q1 (b))."
     optional: true
     include: volere-requirements
+    checks:
+      post: ["downcast.in-scope(layer: requirements)"]     # bound manual: true until a command in workflows/bindings.yaml (task-359, D2 (A))
 
   - name: schedule
     description: >-
@@ -71,12 +77,17 @@ phases:
       writes its entry in docs/01_vision/07_sequencer.md (with the budget it moves, dl-096); stamp the
       element's `release` from `target_release` and move it to `scheduled` (dl-132 element 4). The release
       element is not edited here: release-planning's define-scope sweeps the `scheduled` change-proposals
-      of its release into the release's `features:` (task-277). An empty `target_release` stamps nothing,
-      so the check below refuses it.
+      of its release into the release's `features:` (task-277); on a release past `draft` they reach
+      `features:` by the approver's `memory amend` of the release (dl-132 note of 2026-10-12). An empty
+      `target_release` stamps nothing, so the pre-check below refuses it, and the post-check
+      `change-proposal.assigned` refuses the exit until the stamp, the sequencer row and, past `draft`, the
+      release's `features:` agree (dl-166 Q2 (ii)).
     role: product-owner
     actions:
       - element.set_release("{change-proposal.target_release}")   # stamp `release` on the change-proposal (traceability directive)
       - element.set_state(scheduled)                               # change-proposal: accepted -> scheduled
     checks:
-      pre: ["change-proposal.target_release is not empty"]   # set_release("") would stamp nothing (task-212 review); prose, unbound until P4.12
-      post: ["vision-index.current"]          # the sequencer edit updates its index row in the same commit (dl-132 element 5)
+      pre: ["change-proposal.target_release is not empty"]   # set_release("") would stamp nothing (task-212 review); bound manual: true "until a command" in workflows/bindings.yaml (task-358), owing a Memory query command with an exit status
+      post:
+        - "vision-index.current"              # the sequencer edit updates its index row in the same commit (dl-132 element 5)
+        - "change-proposal.assigned"          # the mandatory release exit (dl-166 Q2 (ii), task-359): scripts/check-release-exit.cjs on {element.path}, bound in workflows/bindings.yaml

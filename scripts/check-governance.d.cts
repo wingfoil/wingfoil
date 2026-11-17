@@ -6,7 +6,7 @@
 export type GovernanceRule = 'subject' | 'bracket' | 'body' | 'authority' | 'state' | 'config';
 
 /** A check added after the script itself (task-208): each gates only the commits after its own introduction. */
-export type GovernanceCheck = 'verb-edge' | 'status-outside-wf' | 'supersedes-pair' | 'config-version' | 'approval-ai-trailer' | 'workflow-record-authority' | 'trailer-paragraph';
+export type GovernanceCheck = 'verb-edge' | 'status-outside-wf' | 'supersedes-pair' | 'config-version' | 'approval-agent-trailer' | 'workflow-record-authority' | 'trailer-paragraph' | 'plan-retrospective' | 'co-author-identity';
 
 /**
  * Each later check's marker: the string whose first appearance in `scripts/check-governance.cjs`, on
@@ -86,3 +86,9 @@ export function exitCodeFor(report: GovernanceReport): 0 | 1;
 
 /** The report as the lines the command prints. */
 export function formatReport(report: GovernanceReport): string;
+
+/**
+ * The `WingFoil-*` keys a commit body writes outside its final (last blank-line-separated) paragraph, each once, as
+ * first written (`git-conventions` §8, `bug-391`); exported for `scripts/check-phase-report.cjs` (task-344 D4).
+ */
+export function trailerKeysOutsideFinalParagraph(body: string): string[];

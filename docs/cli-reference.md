@@ -19,6 +19,18 @@ Run `wingfoil` from the **root of a git repository** that has been initialized w
 Outside a git repository a command fails with `error: E_NO_GIT_ROOT: not inside a git repository`; in a
 subdirectory it fails with `error: E_NOT_AT_GIT_ROOT: run wingfoil from the project root` (both exit `1`).
 
+New in 0.4: to run a command on a project from another directory, name its root with the global
+`--project <dir>` — `wingfoil --project ../my-project workflow status`, or after the verb,
+`wingfoil workflow status --project ../my-project`. `<dir>` is resolved against the current directory and must
+itself be the git root, holding its own `.git` (a worktree's root counts); every read and write then lands in that
+repository, at its own `HEAD`, the git identity and the `team.members` check of a command that writes included.
+Anything else — a subdirectory, a directory outside every repository, a file or a missing path — exits `1` with
+`error: E_NOT_AT_GIT_ROOT: --project is not a git root: <absolute dir>`; a blank value exits `2` with
+`error: invalid flag value: --project must not be blank`. WingFoil never infers the project root: without
+`--project` the current directory must be the root, even for a command that only reads, so the same command line
+always acts on the repository it names or the one it is run in, never on one found by searching upwards. A tool
+that drives WingFoil from elsewhere — an MCP client, an agent launch — names the root it means.
+
 New in 0.3: a command that reads the configuration, run where there is no `.wingfoil/`, exits `1`
 with `error: WingFoil not initialized (no .wingfoil/ directory at the project root): run 'wingfoil init'
 first`. When `.wingfoil/` exists but lacks the file the command needs, the error names that file from
@@ -60,12 +72,15 @@ not a file` (exit `1`).
 
 ### Global options
 
-Accepted by every command, except `--dry-run`, which only the commands that change the project take:
+Accepted by every command, except `--dry-run`, which only the commands that change the project take, and `--co-author` and `--ai-model`, which those commands but `agent execute` take:
 
 | Option | Effect |
 |---|---|
 | `--format <console\|json\|yaml>` | Output format. On success, `console` (default) prints the result `json` prints, indented by two spaces — it has no human rendering yet (New in 0.3: except the commands whose entry shows their own console text — `agent list`, `agent show`, `workflow next`, `workflow status`, `workflow start`, `workflow end`, `workflow finalize`, `workflow adopt`, `workflow rekey`); errors and warnings keep their `error:`/`warning:` lines on stderr. A human rendering is planned with the CLI UX work (P5.1.4, `dl-043`), and will change what the default prints. `json` prints compact single-line JSON; `yaml` prints YAML. `json`/`yaml` write only the result — nothing else — so scripts can parse stdout directly: a script should pass `--format json` rather than parse the default. |
 | `--dry-run` | New in 0.3. Show the commit the command would make, and make nothing. Taken by every command that changes the project — `memory add`, `submit`, `approve`, `reject`, `deprecate`, `park`, `amend`, `dna set`, `add`, `update`, `remove`, `directive create`, `assign`, `remove`, `workflow start`, `end`, `finalize`, `create`, `remove`, `adopt`, `rekey`, `agent execute` — after the verb (`wingfoil memory submit task-001-my-first-task --dry-run`); any other command refuses it as an unknown option (exit `2`). The command runs all its checks, then prints `{"dryRun": true, "subject", "message", "paths", "diff"}`: the commit subject, its full message, the files it would contain, and the unified diff from the last commit — and exits `0`, leaving the working tree, the index and the branch untouched. If the real run would be refused, the dry run is refused the same way, with the same exit code; the warnings the real run would print are printed too, a rewrite warning worded as a plan (`dna.yaml would be rewritten as a whole file (--force): …`). The diff is of what the commit would store — after your `core.autocrlf` or `.gitattributes` line-ending conversion — and is laid out with git's default diff settings, whatever your own git configuration says, so `git show` with a customized `diff.*` configuration can group the same changes into different hunks. It does not run git hooks, for a `memory approve` that also moves a superseded document it shows only the approve commit, and for `workflow start` only the plan's `add` commit. `workflow finalize`'s, `workflow adopt`'s and `workflow rekey`'s commits change no file, so their `paths` is `[]` and their `diff` is empty. `agent execute` prints the launch it would make instead, with no `message` or `diff`: its commit records how the agent's run ended, which cannot be known beforehand (see [`agent execute`](#wingfoil-agent-execute)). |
+| `--co-author <name>` | New in 0.4. Says the command runs in an agent's session, as the `team.agents` entry `<name>`. Taken by every command that takes `--dry-run` except `agent execute`, after the verb; any other command refuses it as an unknown option (exit `2`), and a blank `<name>` is refused at exit `2` (`error: invalid flag value: --co-author must not be blank`). It is one of the agent markers (`spec-018` §1), beside the `WINGFOIL_AGENT`, `CLAUDE_CODE_CHILD_SESSION` and `CODEX_SANDBOX` environment variables, defined with any value, the empty one included (`CLAUDECODE` is not one): with any of them present, the commands that need the approver — `memory approve`, `reject`, `amend`, `workflow finalize` on an approval phase, `workflow adopt --plan --apply`, `workflow rekey` — are refused (exit `1`, `error: E_AGENT_CONTEXT: '<command>' needs the approver and does not run in an agent's session (<markers>): …`, with a `hint:` line), before anything is written. Run them yourself, from a terminal no agent started. On the other commands their commit names the agent: `Co-Authored-By: <name> <<email>>` and `AI-Model:` (see `--ai-model`) after `WingFoil-Version:`, in the same final paragraph, from the `team.agents` entry `<name>` — without `--co-author`, the entry a non-blank `WINGFOIL_AGENT` names, else the one whose `adapter` matches the session (`CLAUDE_CODE_CHILD_SESSION` → `claude-code`, `CODEX_SANDBOX` → `codex-cli`), else the first entry, said in the commit body's first line and by `warning: W_AGENT_ENTRY_GUESSED: …`. A `<name>` naming no `team.agents` entry exits `1` (`error: unknown team.agents entry …`), and so does an entry with no `email`, with nothing written; with no `team.agents` entry at all the commit names no co-author and `warning: W_NO_AGENT_ENTRY: …` is printed. Without any marker every commit is what it was before 0.4. |
+| `--ai-model <id>` | New in 0.4. The model identifier the agent's `AI-Model:` trailer records. Taken by the commands that take `--co-author`, after the verb; without it the `WINGFOIL_AGENT_MODEL` environment variable's value, and without either `not-reported`. It is not an agent marker. Refused at exit `2` before anything is read: a blank value (`error: invalid flag value: --ai-model must not be blank`), a value holding a line break or another control character, tab included (`error: invalid flag value: --ai-model must be one line`), and the option given in a session no agent marker marks (`error: invalid flag combination: --ai-model needs an agent context (--co-author, or a session an agent started)`). `WINGFOIL_AGENT_MODEL` follows the same one-line rule (`error: invalid environment value: WINGFOIL_AGENT_MODEL must be one line`), and a blank one counts as unset. The value is written trimmed. |
+| `--project <dir>` | New in 0.4. Run on the project rooted at `<dir>` instead of the current directory, before or after the verb; `<dir>` must itself be a git root (see [Where to run it](#where-to-run-it)). `--help` and `--version` keep their precedence: with either, the value is not checked. |
 | `--verbose` | Emit diagnostic logs to stderr. |
 | `--no-color` | Disable ANSI colors. Accepted, but no output is colored yet, so it changes nothing; neither does the `NO_COLOR` environment variable. Both will apply once `console` has a colored rendering (P5.1.4, `dl-043`). |
 | `--no-interactive` | Fail on a missing argument instead of prompting for it. |
@@ -109,7 +124,7 @@ document). Stdout is the same with or without warnings, so a script parsing it i
 ### Git side effects
 
 Every command that changes the project writes **exactly one git commit**, authored by your git identity
-(`workflow start` writes two, an `add` and a `submit` of its plan).
+(new in 0.4: `workflow start` too, the `add` of its plan, which it leaves `draft` for you to submit).
 Read-only commands never commit. New in 0.3: if git refuses that commit — a `pre-commit` hook
 that fails, a full disk, another git command holding the index lock — the command puts back every file
 it wrote (removing the files and folders it created), and the index, as they were, and
@@ -201,6 +216,12 @@ config line 9 in file .git/config`) rather than reporting a missing identity; `a
 such as `workflow list` report it as `E_GIT_READ_FAILED: git rev-parse HEAD failed in <root>: fatal: bad
 config line …`. In every case nothing is written.
 
+New in 0.4: every command that commits, except `init`, also requires the author's email to belong to a
+`team.members` entry of the `dna.yaml` committed at `HEAD`, matched in any letter case; otherwise it exits `1`
+with `error: E_NOT_A_MEMBER: the git identity <name> <email> is not a team member: …` and a `hint:` line, and
+writes nothing. A `dna.yaml` that is not committed, or a committed one whose `team.members` is empty (as `init`
+writes it), refuses nobody; a member added in the working tree and not committed is not a member yet.
+
 `memory approve`, `memory reject` and `memory amend` additionally require the author's email to
 belong to a `team.members` entry holding the `approver` role in the committed `dna.yaml` (see
 [`memory approve`](#wingfoil-memory-approve)). The `memory` commands that move or amend a document
@@ -246,6 +267,9 @@ by an MCP client, not typed by hand.
 ```
 wingfoil mcp
 ```
+
+New in 0.4: `wingfoil --project <dir> mcp` serves the project rooted at `<dir>` for the server's whole life, whatever
+directory the client starts it in (see [Where to run it](#where-to-run-it)).
 
 Exposes the project **read-only**: Resources for DNA, Memory and workflows, and one Prompt per role
 (`<role>-session`) embedding that role's directives. It exposes no Tools — every write goes through the
@@ -360,8 +384,8 @@ wingfoil dna add <path> --value <name-or-values> [--entry-<field> <value> ...] [
 | `stacks.technologies` | `category` (required), `version`, `notes` |
 | `stacks.methodologies` | `phase`, `notes` |
 | `team.members` | `email`, `roles` (comma-separated) |
-| `team.roles` | `description` |
-| `team.agents` | `email` (one address, `local@domain.tld`: the agent's `Co-Authored-By:` identity, by default the vendor's published address; a GitHub noreply address must be id-qualified, `<id>+<login>@users.noreply.github.com`; not on a reserved top-level domain, `.test`/`.example`/`.invalid`/`.localhost`, nor on git's guessed `.(none)` domain; required when the entry has an `adapter`), `executes_as` (comma-separated), `approval_authority` (`true`/`false`), `adapter` (the agent's adapter name: lowercase letters, digits, `-` and `.`) |
+| `team.roles` | `description`, `human_only` (`true`/`false`: no agent executes the role; `approver` always is human-only and may not declare `false`) |
+| `team.agents` | `email` (one address, `local@domain.tld`: the agent's `Co-Authored-By:` identity, by default the vendor's published address; a GitHub noreply address must be id-qualified, `<id>+<login>@users.noreply.github.com`; not on a reserved top-level domain, `.test`/`.example`/`.invalid`/`.localhost`, nor on `example.com`/`example.net`/`example.org` or a subdomain of one, nor on git's guessed `.(none)` domain; required when the entry has an `adapter`), `executes_as` (comma-separated), `approval_authority` (`true`/`false`), `adapter` (the agent's adapter name: lowercase letters, digits, `-` and `.`) |
 
 ```console
 $ wingfoil dna add team.members --value "Ada Lovelace" --entry-email ada@example.com --entry-roles approver,developer
@@ -515,7 +539,7 @@ $ wingfoil memory add --type task --title "My first task" --tags demo,quickstart
 | `--tags <t1,t2>` | Comma-separated tags, written as the `tags` list. |
 | `--set <name>=<value>` | New in 0.2.2. Repeatable. Gives the `id_pattern` or `path` token `{name}` its value and writes the frontmatter field `name`, so the id and the field agree. |
 | `--workflow <ref>` | New in 0.3. Links the document to a step of an open workflow instance: `<ref>` is the instance id, or a workflow name (its most recently started open instance). |
-| `--step <key>` | New in 0.3. The step to link to, by its key, when several ready steps of the instance add this type. Needs `--workflow`. |
+| `--step <key>` | New in 0.3. The step to link to, by its key, when several ready steps of the instance add this type. Needs `--workflow`. A key without its scope (`bug-ingest.capture` for `bug-ingest.capture@bug:<id>`) names the one ready step of that workflow and phase (new in 0.4). |
 
 The id comes from the type's `id_pattern`. For `task-{n}-{slug}` that is a per-type counter plus a
 slug of the title. The slug keeps a `.` between two letters or digits (`v0.2` stays `v0.2`); every
@@ -582,7 +606,9 @@ Without `--workflow`, `memory add` links nothing and its commit is unchanged.
     refuses it with the same `E_VALIDATION` issue.
   - Exit `1`, with `--workflow`: a `<ref>` that names no open instance (`workflow is not open: <ref>`, or
     `unknown workflow: <ref>`, as `workflow next` answers it); a `--step` that is not a ready step of the instance
-    (`step '<key>' is not on the frontier of <instance>`); no ready step that adds this type
+    (`step '<key>' is not on the frontier of <instance>`); a `--step` given without its scope (`<workflow>.<phase>`)
+    that names several ready steps (`step '<key>' names <N> steps of <instance>: give --step, one of: <key>, <key>`,
+    new in 0.4); no ready step that adds this type
     (`no step of <instance> adds a <type>`); several, and no `--step`
     (`no step of <instance> adds a <type> alone: give --step, one of: <key>, <key>`). Nothing is written.
 
@@ -694,7 +720,9 @@ commit or stash them first.
 
 - **Errors:** missing `--reason` → exit `2`; blank `--reason` → exit `2`
   (`error: invalid flag value: --reason must not be blank`); not an approver → exit `1`
-  (`error: user not authorized to approve type 'task'`); the state is not a gate → exit `1`
+  (`error: user not authorized to approve type 'task'`); new in 0.4, run in an agent's session → exit `1`
+  (`error: E_AGENT_CONTEXT: 'memory approve' needs the approver and does not run in an agent's session …`, see
+  [Global options](#global-options)); the state is not a gate → exit `1`
   (`error: illegal transition draft -> (none) for type 'task'`; 0.2.x prints `draft -> backlog`, see
   [Exit codes](#exit-codes)).
 
@@ -897,7 +925,9 @@ Other modified or staged files are left as they are and are not committed.
   (`error: missing required field on amend: <fields>`), or (new in 0.3) sets a not-applicable
   value the type does not allow on that field → exit `1` (`error: not-applicable value on amend: <field> …`);
   the type is not amendable → exit `1` (`error: type 'release-line' is not amendable: …`); not an approver →
-  exit `1` (`error: user not authorized to approve type 'tech-spec'`).
+  exit `1` (`error: user not authorized to approve type 'tech-spec'`): the message names `approve` because
+  `approve`, `reject` and `amend` share one authority check and one message (REQ-SEC-03, `dl-063` clause B); run in
+  an agent's session → exit `1` (`error: E_AGENT_CONTEXT: 'memory amend' needs the approver …`).
 
 #### Rules for `--reason` (approve, reject, deprecate, park, amend)
 
@@ -905,6 +935,11 @@ Other modified or staged files are left as they are and are not committed.
 - No line of it may begin with `Approver:` or `Reason:` — those keys are reserved for the commit trailer.
   New in 0.3: `WingFoil-Version:` is reserved too, and all three keys are matched in any letter
   case.
+- New in 0.4: on `approve`, `reject` and `amend` — and on `workflow finalize` of an approval phase, `workflow adopt
+  --plan --apply` and `workflow rekey`, the commands that write an `Approver:` line — no line of it may begin with
+  `Co-Authored-By:` or `AI-Model:` either, in any letter case: an approval never carries an agent trailer
+  (`error: invalid flag value: --reason must not contain a line starting with "Co-Authored-By:" or "AI-Model:" on
+  an approval`, exit `2`). `deprecate` and `park` accept such a line.
 - It may not end with a paragraph made only of `Key: value` lines; end with a sentence instead.
   New in 0.3: the refusal says so (`… add a closing sentence after it, or fold those lines into
   prose`).
@@ -1171,8 +1206,8 @@ wingfoil workflow end [<ref>]
 open instance; without it, the active instance. It decides at `HEAD`, as `workflow next` does: the plan,
 the workflow files and the deduction of the instance's steps.
 
-It refuses an instance that is not finished: one whose plan is still `draft` (a `workflow start` whose
-second commit failed), and one whose steps are not all complete — the error names the current step, and a
+It refuses an instance that is not finished: one whose plan is still `draft` (run
+`wingfoil memory submit <id>` once its body is written), and one whose steps are not all complete — the error names the current step, and a
 `hint:` line says that `wingfoil memory deprecate <id>` abandons the instance instead. Otherwise it moves
 the plan `active → done` and prints the ended instance and the one now active (`active: none` when none is
 left open); `--format json|yaml` prints `{"baseline": {…}, "ended": {…}, "active": {…} | null, "commit": "<sha>"}`.
@@ -1234,7 +1269,11 @@ The workflows are also checked against the rest of the configuration: a phase `r
 register (in `element`, `iterate_over`, `memory.add(type: …)` or a `produces` owner), an `iterate_over`
 collection that resolves to no list, and a `cadence` event that can never fire are errors (exit `1`).
 A `{<type>.<field>}` token outside its scope, a phase whose actions its element's state machine cannot
-apply, and a `fallback` that does not match the reject it answers are warnings. Without `dna.yaml` or
+apply, a `fallback` that does not match the reject it answers, and (new in 0.4) a phase whose actions
+hold an `agent.<x>` action, such as `agent.execute`, under a role no `team.agents` entry with an `adapter`
+executes — always so for a human-only role — (`W_WORKFLOW_AGENT_ROLE_UNEXECUTED`, `phase '<name>' declares
+agent.execute under role '<role>', but no team.agents entry with an adapter executes as '<role>'`) are
+warnings. Without `dna.yaml` or
 `memory.yaml` the checks that need it cannot run: each missing file is reported as a
 `W_WORKFLOW_CHECKS_NOT_RUN` warning naming the checks that were skipped. The command fails (exit `1`)
 when `dna.yaml` or `memory.yaml` is present but invalid.
@@ -1326,7 +1365,7 @@ wingfoil workflow finalize [<ref>] [--step <key>] [--reason <text>]
 
 | Option | Description |
 |---|---|
-| `--step <key>` | The frontier step to record, by the key `workflow next` prints (e.g. `dev-loop.red@task:task-130`). Default: the instance's next step. |
+| `--step <key>` | The frontier step to record, by the key `workflow next` prints (e.g. `dev-loop.red@task:task-130`); without its scope (`dev-loop.red`), the one frontier step of that workflow and phase (new in 0.4). Default: the instance's next step. |
 | `--reason <text>` | Why. Required on a phase that declares `approval:`, where it is recorded with an `Approver:` line as `memory approve` records it; optional elsewhere. Same shape rules as every `--reason`. |
 
 Some phases have nothing in the repository to show they are done: a checkpoint (a
@@ -1366,6 +1405,8 @@ next step: dev-loop.green@task:task-130
 `finalized` and `next` as `workflow next` reports a step.
 
 - **Errors, exit `1`:** a step not on the frontier → `step '<key>' is not on the frontier of <instance>`;
+  a key without its scope naming several frontier steps → `step '<key>' names <N> steps of <instance>: give
+  --step, one of: <key>, <key>` (new in 0.4);
   a step whose phase completes from evidence the repository can show → `phase '<workflow>.<phase>' completes from its evidence: <kinds>`;
   an instance with no next step → `workflow next`'s message (`no next step: workflow '<name>' is complete`);
   no open instance and no `<ref>` → `no active workflow to finalize`; a `<ref>` that selects no open
@@ -1404,6 +1445,11 @@ reports who is asked: a routed member without the `approver` role is flagged
 
 Last, the **ungated elements**: elements sitting in a gate state of their type that no pending approval of an open
 workflow carries, routed to the holders of the `approver` role.
+
+An instance opened before `workflow start` wrote its `WingFoil-Start:` trailer (see `workflow start`) stays open
+for now, and status warns about it (new in 0.4): the line `    warning: kept by the pre-marker rule: restart it
+with workflow start` under that instance, and a `W_INSTANCE_PRE_MARKER` entry in `diagnostics`, the last ones. End
+it and start it again with `workflow start` to clear the warning.
 
 Each pending approval and ungated element prints a **"human needed"** line naming the action
 (`approve or reject`, or `finalize` for a phase record), the element ids or the step key, and the members it is
@@ -1459,13 +1505,12 @@ alone), `mode`, `allowedModes` and `distinctFrom`, `cadence`, the kinds of evide
 another workflow, that workflow resolved the same way under `sub`. The payload is
 `{"baseline": {…}, "workflow": {…}, "diagnostics": […]}`, the diagnostics as `workflow list` reports them.
 
-- **Errors:** a name no workflow at `HEAD` has and no open instance holds → `unknown workflow: <name>` —
-  `<ref>` itself, or, for an open instance whose workflow is not loaded, that workflow's name — exit `1`; an error in the workflow files → exit `1`, as `workflow list`; no `<ref>`, or more than one → exit `2`.
+- **Errors:** a name no workflow at `HEAD` has and no open instance holds → `unknown workflow: <ref>`, exit `1`; an error in the workflow files → exit `1`, as `workflow list`; no `<ref>`, or more than one → exit `2`.
 - **Commit:** none.
 
 ### `wingfoil workflow start`
 
-Start a workflow: record it as an active plan element and print its first step.
+Start a workflow: record it as a draft plan element and print its first step.
 
 ```
 wingfoil workflow start <name> [--element <type>:<id>] [--title <title>] [--set phase=<v>] [--set scope=<v>]
@@ -1473,9 +1518,9 @@ wingfoil workflow start <name> [--element <type>:<id>] [--title <title>] [--set 
 
 | Option | Description |
 |---|---|
-| `--element <type>:<id>` | The element the workflow runs on, when the workflow declares one (`element:`); `<id>` may be a short reference (new in 0.3.2, see [Short element references](#short-element-references)) and the plan binds the full id. Without it, the active workflow's element is used if it has that type. |
+| `--element <type>:<id>` | The element the workflow runs on, when the workflow declares one (`element:`), or — for a workflow that declares none — the element recorded as its context (new in 0.4); `<id>` may be a short reference (new in 0.3.2, see [Short element references](#short-element-references)) and the plan records the full id. `--element none` records no context (new in 0.4). Without it, the active workflow's element is used: if it has that type, or, for a workflow that declares none, if the active workflow declares an element. |
 | `--title <title>` | The plan's title. Default: `<workflow> — <phase>`. |
-| `--set phase=<v>` | The plan's `phase` token. Default: the element's id, else `1`. |
+| `--set phase=<v>` | The plan's `phase`. Default: the element's id, else `1`. New in 0.4: accepted, and the plan's `workflow` and `phase` written, whether or not the `plan` type's `id_pattern` or `path` holds a `{phase}` token. |
 | `--set scope=<v>` | The plan's `scope` token, the folder its file goes in. Default: the workflow name. |
 
 It decides at `HEAD`: the workflow files, `memory.yaml`, the element and the open
@@ -1483,24 +1528,35 @@ workflows. A started workflow is an **instance**, recorded as a Memory document 
 `workflow` names the workflow and whose `element` holds the element it runs on. The new instance becomes
 the active one; the others stay open (`wingfoil workflow end` closes one).
 
+Only `workflow start` opens an instance (new in 0.4): its `wf(plan): add <id>` commit carries the trailer
+`WingFoil-Start: <name>`, which `wingfoil memory add` never writes. A plan added without it — by
+`memory add --type plan` or by hand — after a started one is in its history is no instance, whatever it names;
+a plan naming a workflow that is not loaded is no instance either, and `workflow list`, `status` and `next`
+report it as a warning. Plans opened before any start wrote the trailer stay open, and `workflow status` warns
+about each of them (`kept by the pre-marker rule: restart it with workflow start`).
+
 - A workflow that declares `element: <type>` needs one: `--element`, or the active workflow's element of
-  that type. It must be committed at `HEAD`.
-- A workflow that declares no element takes no `--element`. Started while the active workflow has an
-  element, it records that element in its plan as the context (a bug reported during a release names the
-  release).
+  that type. It must be committed at `HEAD`; `--element none` is refused as a missing element.
+- A workflow that declares no element records a context in its plan (new in 0.4): the element that
+  `--element <type>:<id>` names (committed at `HEAD`), none with `--element none`, and otherwise the active workflow's
+  element when the active workflow declares one (a bug reported during a release names the release). Started
+  while the active workflow declares no element — another ingest, or the lifecycle — it records none.
 - The plan's id comes from the `plan` type's `id_pattern` (`{workflow}-{phase}-plan` here). When the
   derived id is already taken on any branch, `-2`, `-3`, … is added to the phase; an id taken by a
   `--set phase=` is refused instead.
 
-It writes **two commits**, each touching only the plan file: `wf(plan): add <id>` then
-`wf(plan): submit <id>` (`draft → active`). If the second one fails, the plan stays `draft` and the error
-says to run `wingfoil memory submit <id>`. With `--dry-run` it prints the first commit's plan only. The
-output names the instance and its first step, as `workflow next` prints it; `--format json|yaml` prints
-`{"baseline": {…}, "instance": {…}, "next": {…} | null, "commits": ["<add sha>", "<submit sha>"]}`.
+New in 0.4: it writes **one commit**, touching only the plan file: `wf(plan): add <id>`. The plan is
+left `draft`, for you to write: fill its body, then run `wingfoil memory submit <id>` (`draft → active`),
+which checks the `plan` type's required fields; no approver is needed. The instance is open from the start,
+and `wingfoil workflow end` refuses it until the plan is submitted. With `--dry-run` it prints that commit's
+plan. The output names the instance, the submit its plan owes and its first step, as `workflow next` prints
+it; `--format json|yaml` prints `{"baseline": {…}, "instance": {…}, "next": {…} | null, "commits": ["<add sha>"],
+"submit": "wingfoil memory submit <id>"}`.
 
 ```console
 $ wingfoil workflow start release-cycle --element release:minor-v1
 started release-cycle as release-cycle-minor-v1-plan (active)
+plan release-cycle-minor-v1-plan is draft: write its body, then run wingfoil memory submit release-cycle-minor-v1-plan
 next step: release-cycle.ship@release:minor-v1
   …
 ```
@@ -1509,13 +1565,13 @@ A project's `memory.yaml` must declare a `plan` type; `wingfoil init` declares o
 
 - **Errors (exit `1`):** `unknown workflow: <name>`; `cannot start a sub workflow directly: <name>`;
   `memory type 'plan' is not declared in memory.yaml; workflow start records an instance as a plan element`;
-  `workflow '<name>' needs a <type> element: give --element <type>:<id>`; `workflow '<name>' declares no
-  element: --element is not accepted`; `element not found: <type>:<id>`; `plan id already exists: <id>`.
-- **Errors (exit `2`):** no `<name>`, more than one positional, a malformed `--element`
+  `workflow '<name>' needs a <type> element: give --element <type>:<id>` (also for `--element none`);
+  `element not found: <type>:<id>`; `plan id already exists: <id>`.
+- **Errors (exit `2`):** no `<name>`, more than one positional, a malformed `--element` other than `none`
   (`malformed element-ref "<ref>": expected <type>:<id>`), a `--set` other than `phase=` / `scope=`, or a
   `--set` value refused as `memory add` refuses it (`--set scope holds a '.' or '..' path segment:
   "../../etc"`); nothing is written.
-- **Commit:** `wf(plan): add <id>`, then `wf(plan): submit <id>`.
+- **Commit:** `wf(plan): add <id>` (new in 0.4: one commit; the plan's `wf(plan): submit <id>` is yours).
 
 ### `wingfoil workflow create`
 
@@ -1601,7 +1657,7 @@ instance, as for `workflow next`.
 
 | Option | Description |
 |---|---|
-| `--step <key>` | The frontier step the element counts as created by, by the key `workflow next` prints. Default: the one frontier step that adds the element's type. |
+| `--step <key>` | The frontier step the element counts as created by, by the key `workflow next` prints; without its scope, the one frontier step of that workflow and phase (new in 0.4). Default: the one frontier step that adds the element's type. |
 | `--element <type:id>` | The existing element to adopt, e.g. `release-line:rl-v1`; `<id>` may be a short reference (new in 0.3.2, see [Short element references](#short-element-references)), the record names the full id. Default: the step's one candidate. |
 | `--plan` | Propose the adoptions and write nothing. Takes no `--step` or `--element`. |
 | `--apply` | With `--plan`: write the proposed adoptions, one commit per step. Needs the `approver` role. |
@@ -1663,7 +1719,9 @@ for the single form, and `{"baseline", "instance", "steps": [{"step", "type", "c
 [{"commit", "key", "element"}], "applied": [{"step", "element", "commit"}]}` for `--plan` (`applied` is empty
 without `--apply`).
 
-- **Errors, exit `1`:** a step not on the frontier → `step '<key>' is not on the frontier of <instance>`; no
+- **Errors, exit `1`:** a step not on the frontier → `step '<key>' is not on the frontier of <instance>`; a key
+  without its scope naming several frontier steps → `step '<key>' names <N> steps of <instance>: give --step, one
+  of: <key>, <key>` (new in 0.4); no
   `--step` and no frontier step adding the type → `no step of <instance> adds a <type>` (several →
   `… adds a <type> alone: give --step, one of: <key>, …`); a step that adds nothing → `<key> adds no element to adopt`;
   an element of another type → `<key> adds a <T>, not a <type>`; a step that already created one →
@@ -1761,7 +1819,8 @@ Launch an agent CLI through its adapter on one Memory element, with its context 
 
 ```
 wingfoil agent execute [--next] [--workflow <ref>] [--step <key>] [--element <type:id>]
-                       [--role <role>] [--agent <name>]
+                       [--role <role>] [--agent <name>] [--headless | --interactive]
+                       [--timeout <duration>] [--log <path>]
 ```
 
 At least one of `--next`, `--workflow`, `--step` and `--element` is required.
@@ -1770,20 +1829,35 @@ At least one of `--next`, `--workflow`, `--step` and `--element` is required.
 |---|---|
 | `--next` | Take the workflow, phase, element and role from the next step of the active workflow (the open workflow started most recently): the step [`wingfoil workflow next`](#wingfoil-workflow-next) prints first. |
 | `--workflow <ref>` | Take the step from this workflow instead: a workflow name (its most recently started open instance) or an open instance id. Implies `--next`. |
-| `--step <key>` | Take this step, which must be on the frontier of the selected workflow (`--workflow`, else the active one), e.g. `dev-loop.red@task:task-042-login-form`: when several steps are ready at once, it is how each one's agent launches on its own step. Implies `--next`. `wingfoil workflow next` prints each `agent` step as `wingfoil agent execute --workflow <instance> --step <key>`, which runs as written. |
+| `--step <key>` | Take this step, which must be on the frontier of the selected workflow (`--workflow`, else the active one), e.g. `dev-loop.red@task:task-042-login-form`; without its scope (`dev-loop.red`), the one frontier step of that workflow and phase (new in 0.4): when several steps are ready at once, it is how each one's agent launches on its own step. Implies `--next`. `wingfoil workflow next` prints each `agent` step as `wingfoil agent execute --workflow <instance> --step <key>`, which runs as written. |
 | `--element <type:id>` | The element the agent works on, as `<type>:<id>`, e.g. `task:task-042-login-form`; `<id>` may be a short reference (new in 0.3.2, see [Short element references](#short-element-references)) and the run records the full id. With a step, it replaces the step's element and keeps its phase and role. |
-| `--role <role>` | The role the agent runs as: a `team.roles` name in `dna.yaml`. Without it the role is the step's; with no step, it is `developer`, and a `warning:` line says so. `approver` is refused: an agent never runs as the role that approves. |
+| `--role <role>` | The role the agent runs as: a `team.roles` name in `dna.yaml`. Without it the role is the step's; with no step, it is `developer`, and a `warning:` line says so. A human-only role is refused: `approver` (an agent never runs as the role that approves) and every role `dna.yaml` marks `human_only: true`. |
 | `--agent <name>` | The `team.agents` entry to launch. Without it, the first entry, in `dna.yaml` order, that declares an `adapter` and lists the role in `executes_as`. |
+| `--headless` | Launch the agent without a terminal, as a work run (new in 0.4, see below), whatever the step's phase declares in `launch:`. |
+| `--interactive` | Launch the agent in this terminal, whatever the step's phase declares in `launch:`. It is this command's own flag, distinct from the global `--no-interactive`, which keeps its meaning. `--headless` with `--interactive` exits `2` with `error: invalid flag combination: --headless cannot be combined with --interactive`. |
+| `--timeout <duration>` | Stop the agent after this long: `<n>s`, `<n>m` or `<n>h`, `<n>` a positive integer without a leading zero, at most `24h` (new in 0.4). At expiry the agent receives `SIGTERM`, and `SIGKILL` 10 seconds later if it has not exited. A value of another form exits `2` with `error: invalid flag value: --timeout expects <n>s, <n>m or <n>h, got "<value>"`, one over `24h` with `error: invalid flag value: --timeout must be at most 24h, got "<value>"`. |
+| `--log <path>` | Append a copy of a headless run's output to the file `<path>` (new in 0.4, see the headless work run below), a path relative to the current directory, created readable and writable by you only (mode `0600`) when absent; the output still reaches stderr. The copy holds the agent's lines only, as `--format console` shows them. When the file is inside the repository and git does not ignore it, `warning: --log <path> is inside the repository and not git-ignored: the agent's output may hold secrets`. A blank value exits `2` with `error: invalid flag value: --log must not be blank`, and a path in the active registry (`.wingfoil/run/` of the project, or a path beneath it) with `error: invalid flag value: --log must not name a file under .wingfoil/run/, the active registry`, both before the project is read; with `--interactive`, or on a run that launches interactive (no `--headless` and no phase declaring `launch: headless`), it exits `2` with `error: invalid flag combination: --log needs a headless launch, and this run launches interactive`. A file that cannot be opened exits `1` with `error: cannot write the log <path>: <cause>`, before the agent is started. |
 
 With a step (`--next`, `--workflow` or `--step`), the run's workflow and phase are the step's, so its run
 id is `<element-id>/<phase>/<n>`, `n` counting the runs of that element in that phase; the element is the
-step's (or, for a step with none of its own, the workflow's element), and the role the phase's. Every run
+step's (or, for a step with none of its own, the workflow's element, else — new in 0.4 — the workflow's own plan,
+`plan:<instance-id>`, whose run log is `<paths.runs>/<instance-id>.jsonl`: a step `wingfoil agent list --waiting`
+lists is one `--next` can run), and the role the phase's. Every run
 in this release starts a fresh agent session, whatever the phase allows (`--resume` and `--ref` are
 planned, and refused as unknown options); a phase's `distinct_from` is not checked. The step's refusals
 come first, each exit `1`: `error: no next step to execute` (no open workflow, or none of its steps is
 ready), `error: unknown workflow: <name>`, `error: workflow is not open: <ref>`,
-`error: step '<key>' is not on the frontier of <instance>`, `error: step '<key>' has no element: give
---element <type>:<id>`, `error: step '<key>' declares no role: give --role <role>`. A workflow file with an
+`error: step '<key>' is not on the frontier of <instance>`, `error: step '<key>' names <N> steps
+of <instance>: give --step, one of: <key>, <key>` (a key without its scope, new in 0.4),
+`error: step '<key>' declares no role: give --role <role>`. A step with no element of its own on a workflow
+with none no longer exits `1` with `error: step '<key>' has no element: give --element <type>:<id>` (changed in
+0.4): it runs on the workflow's plan. A step that only waits
+(new in 0.4) is refused too, exit `1`, with the line `wingfoil workflow next` prints for it —
+`error: human needed: approve or reject <id> — routed to <members>`,
+`error: human needed: finalize <key> — routed to <members>`, or
+`error: waiting for <party>: <evidence> (a phase record completes it: wingfoil workflow finalize <instance> --step <key>)`
+— and no later step is taken instead; with `--element`, the step is an explicit target and is launched
+(`--step` alone is not one). A workflow file with an
 error (for example a phase whose role `dna.yaml` does not define) refuses every step form, as it refuses
 `wingfoil workflow next`.
 
@@ -1792,12 +1866,26 @@ It reads **as committed at `HEAD`** (see [Git side effects](#git-side-effects)):
 `.wingfoil/agents/custom/`, the run log, and, with a step, the workflows and the Memory they deduce from. That commit is the run's `state_ref`. The one read outside
 it: the WingFoil MCP server it starts for the pre-flight reads your working tree's `dna.yaml` when it
 starts, so an uncommitted change there can refuse the pre-flight. In order, it checks:
-the element exists; the role is defined and is not `approver`; an agent with an adapter runs the role;
-the adapter is valid; its `command` is on `PATH` (or at its path in the project); your git identity is
+the element exists; the role is defined and is not human-only — `approver`, or a role `dna.yaml` marks
+`human_only: true` — (`error: role '<role>' is never executed by an agent`, whichever of `--headless` and
+`--interactive` is given; new in 0.4 for a role other than `approver`); an agent with an adapter runs the role; the adapter is valid; it declares the
+launch kind (see below; for a headless launch without `launch.headless`, `error: adapter '<name>' declares no
+headless launch`); its `command` is on `PATH` (or at its path in the project); when the adapter declares
+`mcp.conflict_args` (`codex-cli`: `codex mcp get wingfoil`), the agent's own configuration declares no MCP server
+named `wingfoil` that it would merge into the one WingFoil registers (exit `0` of that command gives `error:
+adapter '<name>': the agent's own configuration declares an MCP server named 'wingfoil', which it would merge into
+the server agent execute registers: remove or rename it`; a check that times out or cannot start prints a
+`warning:` line and passes; new in 0.4); your git identity is
 set; `dna.yaml` declares `paths.runs` and the element's run log has no uncommitted changes; the
-execution context (DNA, the role's directives, the relevant Memory) assembles and validates; the
+execution context (DNA, the role's directives, the relevant Memory) assembles and validates; the adapter's
+`mcp.template` can carry the MCP server's command and arguments (one holding an unpaired surrogate, which
+neither JSON nor TOML can write, gives `error: mcp.template cannot carry the MCP server's argument <n>: it holds
+an unpaired surrogate (U+<XXXX>)`, or `… command: …`; new in 0.4); the
 WingFoil MCP server of this same build starts and serves that context (your project's `.mcp.json` is
-neither read nor changed); and, for an adapter whose launch needs one, stdin and stdout are a terminal.
+neither read nor changed; new in 0.4, the server is registered and started as `<this build's cli.js> --project <the
+project root> mcp`, so it serves the root `agent execute` resolved whatever working directory the agent CLI starts
+it in); and, for an interactive launch of an adapter that needs one, stdin and stdout are a
+terminal.
 The first check that fails ends the command with exit `1` and its message, for example
 `error: context pre-load failed: MCP server unreachable` or
 `error: invalid execution context: missing 'directives' section`. The context's warnings (a directive
@@ -1815,11 +1903,20 @@ Then it launches the agent: it prints
 `run <run-id>: launching <agent> (<adapter>) as <role> on <type>:<id>`, starts the adapter's command with the arguments its manifest declares (no shell), and
 hands it the terminal. The agent's first prompt names the run, the role, the element and the commit,
 tells it where to load its context (the Resource `wingfoil://session/<role>/<type>:<id>/<commit>` of the
-`wingfoil` MCP server registered for it), and tells it to end every commit it writes, except an approve or reject commit, with
-`Co-Authored-By: <agent name> <<agent email>>` and `AI-Model: <its model>` — added to a commit `wingfoil`
-writes with `git commit --amend --no-edit --trailer`, never as a paragraph of their own. While the agent runs,
-Ctrl-C and Ctrl-\ reach the agent and do not stop `agent execute`; `SIGTERM` and `SIGHUP` sent to
-`agent execute` are passed on to the agent. When the agent exits, it asks the adapter's declared
+`wingfoil` MCP server registered for it), tells it to run WingFoil commands as `wingfoil <command>` and which
+version `wingfoil --version` then prints, and tells it that the commits `wingfoil` writes for it already end with
+`Co-Authored-By: <agent name> <<agent email>>` and an `AI-Model:` trailer (it passes `--ai-model <its model>`, or the
+trailer records `not-reported`), that a commit it writes itself with plain `git commit` ends with both trailers, and
+that it never runs `memory approve`, `memory reject` or `memory amend`. The agent is started with a `wingfoil` shim
+of the build running `agent execute` first on its `PATH`, the shim's path in `WINGFOIL_CLI` (for a shell profile that
+puts another `wingfoil` first), and `WINGFOIL_AGENT` set to the agent's name; the shim lives in the run's temporary
+directory, and `agent execute`'s own environment and its other child processes are left as they were. Under an
+adapter that assigns the session id, the id hashes a random salt created once per clone in the file
+`wingfoil/session-salt` of the common git directory (outside the working tree, shared by linked worktrees) and the
+run id; a salt file that is not 64 lowercase hexadecimal digits and a line feed is refused before the launch, exit
+`1`, nothing recorded. While the agent runs,
+Ctrl-C, Ctrl-\ and a hang-up of the terminal reach the agent and do not stop `agent execute`; `SIGTERM` sent to
+`agent execute` is passed on to the agent, and a `SIGHUP` sent to `agent execute` alone is not. When the agent exits, it asks the adapter's declared
 commands for the agent's version, session, model and token counts (each within 10 seconds; one that
 fails is recorded as `not-reported`, with a `warning:` line), appends one record to the element's run
 log (`<paths.runs>/<element-id>.jsonl`) and commits it alone, then prints
@@ -1831,17 +1928,90 @@ another code, or was ended by a signal, gives exit `1` and
 record that could not be committed gives exit `1` and `error: run <run-id> not recorded: <cause>` (or the
 run-log refusal), with the record itself as a detail line so the run is not lost.
 
-**Nothing is written on stdout**, which belongs to the agent: every line `agent execute` prints goes to
-stderr, and `--format json` / `yaml` only reshape those lines, one document each — `{"warning": …}`,
-`{"notice": "run …: launching …"}`, `{"error": …, "hint"?, "details"?}`, and `{"run": <record>}` for the
-summary.
+**The start-up hint** (new in 0.4). An agent CLI may stop at its start-up to ask whether to trust the
+directory it was launched in, and an agent that never got past that question exits without doing anything. An
+adapter declares it with `launch.interactive.trust` and `launch.headless.trust`: `prompt` (the CLI may stop to
+ask), `implied` (that launch never asks), or a list of arguments, the CLI's own option that trusts the directory,
+appended after the permission arguments. When a run under `prompt` did not succeed (an exit other than `0`, a
+signal, or an expired `--timeout`) and the agent committed nothing, the record's `notes` is `none (no commit since
+state_ref: the agent CLI may have stopped at its folder-trust step)` and, after the record is committed and before
+the `error:` line, one line says so:
+`warning: run <run-id>: the agent exited <status> with no commit since state_ref: its CLI may have stopped at its
+folder-trust step (adapter '<name>' declares launch.<kind>.trust: prompt)`. The exit code and the error are
+unchanged. Both built-in adapters declare `prompt` on their interactive launch (at a terminal you answer the
+question) and `implied` on their headless one (`claude -p` skips the trust dialog; `codex exec` does not ask in a
+git repository). A build before 0.4 refuses a manifest that declares the field.
+
+**In a worktree** (new in 0.4, with the global `--project`). The agent's working directory is the
+project root. To launch it in a linked worktree of the repository (`git worktree add`), name the worktree with
+the global `--project`: `wingfoil --project ../wt-task-42 agent execute --element task:task-042-login-form`. Every
+read is then made at the worktree's `HEAD` (its `state_ref`), the MCP server is registered for the worktree, the
+agent starts there, and the record is committed on the branch the worktree has checked out. There is no option
+that sets the agent's directory apart from the root. A `<dir>` that is not a git root exits `1` with
+`error: E_NOT_AT_GIT_ROOT: --project is not a git root: <absolute dir>` before anything is read or written.
+
+**The active registry** (new in 0.4). While the agent runs, `agent execute` keeps one file for the run,
+`.wingfoil/run/<element-id>/<phase>/<n>.json`, holding its run id, the agent's process id, its workflow, phase,
+element, role, agent, session id (or `not-reported`) and the instant it started, and removes it when the run ends,
+recorded or not; [`wingfoil agent list --active`](#wingfoil-agent-list) lists these files. A launch whose run id
+already has a file whose process is still alive exits `1` with
+`error: run <run-id> is already running (pid <pid>)`, nothing started and nothing recorded; a file whose process is gone is removed and the launch goes on.
+`.wingfoil/run/` is local to the checkout and never committed: `wingfoil init` writes `.wingfoil/.gitignore` with
+the line `/run/`. When git does not ignore the file (a project initialized before 0.4), every launch prints
+`warning: .wingfoil/run/ is not git-ignored: add "/run/" to .wingfoil/.gitignore, or a running launch can be
+committed`. A `--dry-run` writes no such file, and creates no `--log` file, though it prints the `--log` warning.
+
+**Nothing is written on stdout** by an interactive launch, whose stdout belongs to the agent: every line
+`agent execute` prints goes to stderr, and `--format json` / `yaml` only reshape those lines, one document each
+— `{"warning": …}`, `{"notice": "run …: launching …"}`, `{"error": …, "hint"?, "details"?}`, and
+`{"run": <record>}` for the summary.
+
+**The launch kind** (new in 0.4). `--headless` or `--interactive` if given; else the step's phase `launch:`
+(`interactive`, `headless` or `any`) when it is `interactive` or `headless`; else interactive — with no step,
+with a phase that declares no `launch:`, and with `launch: any`. A flag that contradicts the phase's declared
+kind prints `warning: phase '<workflow>.<phase>' declares launch: <declared>; launching <kind> (--<kind>)`.
+
+**The headless work run** (new in 0.4). The agent starts with no terminal: its stdin is not connected, its
+stdout and stderr are both passed on to `agent execute`'s stderr line by line as they arrive, and on Linux and
+macOS it runs in a process group of its own. Under `--format console` each line is written as the agent wrote it;
+under `json` and `yaml` it is one `{"output": "<line>", "stream": "stdout" | "stderr"}` document, so stderr stays
+one document per message. Each stream keeps its own order; how the lines of the two interleave is the order they
+arrive. A line still unfinished at 64 KiB is passed on as it stands, and after the agent exits its streams are read
+for at most 10 seconds (a process it left behind may hold them open), a last line without a newline passed on with
+one. With `--log <path>` every such line is also appended to that file. **The output may hold secrets** (a token a
+tool printed, a credential in an error message), and nothing redacts it: WingFoil keeps no log of its own, and the
+output is never committed — not to the run record, not to the run log, not to any file but the one `--log` names. Ctrl-C, `SIGTERM` and `SIGHUP` sent to `agent execute` are passed on to it; Ctrl-\ is
+ignored. On Linux and macOS a passed-on signal and the `--timeout` signals reach the processes the agent
+started too, and once an agent a signal reached has exited, what is left of them is killed: nothing of a
+signalled or timed-out headless run outlives `agent execute`. Both built-in adapters declare a headless launch (`claude -p …`, `codex exec --json …`). An
+adapter whose `session.id` is `output` has its session id read from the run's stdout (`launch.headless.output`:
+`json`, one document; `jsonl`, the first line carrying it): `codex-cli` records the `thread_id` of the first
+`codex exec --json` event; a stdout that carries none records `not-reported`, with a `warning:` line. The record's
+`result` is `n/a`, as for an interactive run. On success stdout carries `{"run": <record>}` (indented under
+`--format console`), and the summary line is a notice on stderr. A timed-out run, interactive or headless, is
+still recorded and exits `1` with `error: agent timed out after <duration>; run <run-id> recorded`, whatever
+the agent's exit status.
+
+**The launch's permissions** (new in 0.4). An adapter may declare `launch.headless.permissions` (and
+`launch.interactive.permissions`): one list of arguments for every role, or a map from a role name to a list, with
+a `default` entry for every role the map does not name. The launch appends the list of the run's role after the
+launch's own arguments; without the field nothing is appended. Both built-in adapters declare a headless map:
+`default` lets the agent read only; `developer`, `qa` and `architect` may edit, run the tests and commit, never
+push or publish; `reviewer` may read, read the history and run the tests (`claude-code`: `--permission-mode
+dontAsk` with `--allowedTools` and `--disallowedTools`; `codex-cli`: `--sandbox read-only` or
+`--sandbox workspace-write`). Neither declares an interactive one: at a terminal you answer the agent's own prompts.
+A build before 0.4 refuses a manifest that declares the field.
 
 With `--dry-run` it runs every check above, launches nothing, and prints on stdout the launch it would
 make: `{"dryRun": true, "subject": "agent: record <run-id>", "paths": [<run log>], "run": {id, element,
-workflow, phase, role, mode, agent, adapter, state_ref}, "bootstrap": "<the prompt the agent would
-receive>"}`. The terminal check is one of them: for an adapter whose launch needs a terminal (both
-built-in adapters), a dry run with stdin or stdout redirected exits `1` with
-`error: interactive launch needs a terminal on stdin and stdout`, although it would launch nothing. With
+workflow, phase, role, mode, agent, adapter, state_ref}, "launch": {"kind": "interactive" | "headless",
+"permissions": [<the arguments appended for the run's role>]}, "bootstrap": "<the prompt the agent would
+receive>"}` — `permissions` is `[]` when the adapter declares none (changed in 0.4: `launch`). The terminal check does not refuse a dry run, which launches nothing: for an interactive launch of
+an adapter that needs a terminal (both built-in adapters), a dry run with stdin or stdout redirected prints
+`warning: interactive launch needs a terminal on stdin and stdout: a run without --dry-run is refused here`
+and its plan, and exits `0` (changed in 0.4; the run without `--dry-run` is still refused with
+`error: interactive launch needs a terminal on stdin and stdout`). A valid `--timeout` is checked and launches
+nothing. With
 none of `--next`, `--workflow`, `--step` and `--element` it exits `2` with
 `error: missing required argument: --next or --element`.
 
@@ -1851,13 +2021,13 @@ none of `--next`, `--workflow`, `--step` and `--element` it exits `2` with
 
 ### `wingfoil agent list`
 
-List the recorded agent runs and the workflow steps waiting for an agent, as committed at HEAD.
+List the recorded agent runs, the workflow steps waiting for an agent (both as committed at HEAD) and the agents running now.
 
 ```
-wingfoil agent list [--past] [--waiting] [--element <type>:<id>] [--phase <name>]
+wingfoil agent list [--past] [--waiting] [--active] [--element <type>:<id>] [--phase <name>]
 ```
 
-Read-only. It has two sections:
+Read-only. It has three sections:
 
 - **past** (`--past`) — the runs the run log holds: every `<element-id>.jsonl` file directly in the
   directory `dna.yaml` declares in `paths.runs`, ordered by element id and then in the order the runs
@@ -1865,13 +2035,17 @@ Read-only. It has two sections:
 - **waiting** (`--waiting`) — the ready steps of every open workflow (the frontier `workflow status`
   shows, in the same order) whose role an agent executes, that is, a role some `team.agents` entry lists
   in `executes_as`. Each step names the agents, in `dna.yaml` order, that execute its role and declare an
-  `adapter`, so `agent execute` can launch them.
+  `adapter`, so `agent execute` can launch them. A step an agent is running on right now in this checkout (an entry
+  of the active section with the step's workflow, phase and element) is not waiting, and is left out (new in 0.4);
+- **active** (`--active`, new in 0.4) — the agents `agent execute` is running now in this checkout: the files of
+  its active registry, `.wingfoil/run/` (see [`wingfoil agent execute`](#wingfoil-agent-execute)), ordered by
+  element id, then phase, then run number.
 
-Without `--past` or `--waiting`, or with both, it prints both sections, past first.
-`--element <type>:<id>` keeps the runs and steps of one element (a step's element is the element it works on, else
-its workflow's), and `--phase <name>` those of one phase. Nothing tracks running agents yet: a step an
-agent is working on right now is still listed as waiting, and `--active` comes later (v0.4); today it is an
-unknown option, exit `2`.
+Without any of `--past`, `--waiting` and `--active`, or with all three, it prints every section, in the order
+past, waiting, active (changed in 0.4: the active section is new).
+`--element <type>:<id>` keeps the runs, steps and running agents of one element (a step's element is the element it
+works on, else its workflow's, else the workflow's own plan, `plan:<instance-id>`, new in 0.4), and `--phase <name>`
+those of one phase. A step a colleague, or another worktree, is running is still listed as waiting.
 
 It reads the run log, `dna.yaml` and the workflow state **as committed at `HEAD`**, not the working tree
 (see [Git side effects](#git-side-effects)), so it agrees with `agent show` and with the run ids `agent
@@ -1880,6 +2054,13 @@ execute` counts. A run log you changed and did not commit is not read: a `warnin
 directory is neither read nor reported. A run log committed as a symbolic link is not read either: a
 `warning:` line names it (`W_RUN_LOG_SYMLINK`), and `diagnostics` carries it.
 
+The active section is the one read outside `HEAD`: `.wingfoil/run/` is a git-ignored cache that no commit holds,
+so it is read from the working tree. A file whose process is gone is removed as it is read; a file that is not a
+registry entry is removed too, with `warning: .wingfoil/run/<path>: not an active run entry: removed`. A file that
+cannot be removed stays, and is not listed: `warning: .wingfoil/run/<path>: could not remove: <cause>`, or, for a file
+that is not a registry entry, `warning: .wingfoil/run/<path>: not an active run entry: could not remove: <cause>`.
+None of these changes the exit code, and nothing git tracks is written.
+
 ```console
 $ wingfoil agent list
 past runs: 2
@@ -1887,17 +2068,23 @@ task-042-login-form/red/1  developer  claude  0  61.0s  1200/340
 task-042-login-form/green/1  developer  claude  130  245.3s  not-reported
 waiting steps: 1
 dev-loop.green@task:task-043-logout  developer  claude
+active runs: 1
+task-044-session-timeout/red/1  developer  claude  48211  2026-11-16T08:30:00.000Z
 ```
 
 A past run prints `<run-id>  <role>  <agent>  <exit status>  <duration>  <tokens>`: the duration in
 seconds, the tokens as `input/output`, or `not-reported` when the agent reported neither. A waiting step
-prints `<step key>  <role>  <agents>` (`none` when no agent of the role declares an adapter). An empty
-section prints `no past runs` or `no waiting steps`.
+prints `<step key>  <role>  <agents>` (`none` when no agent of the role declares an adapter). A running agent
+prints `<run-id>  <role>  <agent>  <pid>  <started>`, the instant it started in UTC with milliseconds. An empty
+section prints `no past runs`, `no waiting steps` or `no active runs`.
 
 `--format json` and `--format yaml` print `{"baseline": {"rev": "HEAD", "commit": "<sha>"}, "past":
 […records…], "waiting": [{"instance", "key", "workflow", "phase", "element", "role", "allowedModes",
-"agents"}…], "diagnostics": […]}`, with only the sections selected: each record is the run log's line, as
-[`agent show`](#wingfoil-agent-show) prints it; `element` is `<type>:<id>` or `null`.
+"agents"}…], "active": [{"id", "pid", "workflow", "phase", "element", "role", "agent", "session",
+"started_ms"}…], "diagnostics": […]}`, with only the sections selected: each record is the run log's line, as
+[`agent show`](#wingfoil-agent-show) prints it; `element` is `<type>:<id>`, the element `agent execute --next`
+runs the step on (changed in 0.4: a step with no element of its own on a workflow with none names the workflow's
+plan, `plan:<instance-id>`, where it was `null`).
 
 - **Exit `0`** on every result, an empty one included. A `dna.yaml` with no `paths.runs` lists no past
   runs and prints `warning: dna.yaml declares no run log (paths.runs)`.
@@ -1905,8 +2092,9 @@ section prints `no past runs` or `no waiting steps`.
   the file and the line — every run log is checked, whatever `--element` and `--phase` keep; with the past
   section, a `dna.yaml` not committed at `HEAD` → exit `1`, `error: .wingfoil/dna.yaml is not committed at
   HEAD, which agent list reads: commit it first`, and a `paths.runs` outside the project → exit `1`; an
-  error in the workflow files → exit `1`, as `workflow status`; a malformed `--element`, or `--active` →
-  exit `2`.
+  error in the workflow files → exit `1`, as `workflow status`; a `.wingfoil/run/` that cannot be read → exit
+  `1`, `error: cannot read the active registry .wingfoil/run/: <cause>`; a malformed `--element` → exit `2`
+  (changed in 0.4: `--active` is no longer an unknown option).
 - **Commit:** none.
 
 ### `wingfoil agent show`

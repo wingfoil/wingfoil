@@ -1,7 +1,7 @@
 # CLI Commands Reference — WingFoil
 
-**Version:** 1.9
-**Date:** 2026-10-25  
+**Version:** 2.5
+**Date:** 2026-11-16  
 **Status:** Approved
 
 ---
@@ -94,7 +94,7 @@ decomposition, and `dl-082` fixed the spelling.
 |-----------|------|-------------|-------------|-------------|-------------|
 | `<path>` | path | **Positional**, and the only positional a write verb reads. The full dotted path to the target — `project.license`, `stacks.technologies`, `modules.core.path`. Never a bare field name: `team.roles` and `team.members.<name>.roles` are different fields | User specifies in the command | Resolved against the `dna.yaml` schema; an undeclared path is refused (exit `1`) | `.wingfoil/dna.yaml` nested keys |
 | `--value` | string/array | The new entry's **identity** when `<path>` ends at a collection; the new **value** when it ends at a leaf. Comma-separated where the field is a list of values | User input (flag) | Validated against DNA schema | `.wingfoil/dna.yaml` |
-| `--entry-<field>` | string/array | One option per field the entry schema declares — `--entry-description`, `--entry-path`, `--entry-category`, `--entry-version`, `--entry-notes`, `--entry-phase`, `--entry-email`, `--entry-roles`, `--entry-executes_as`, `--entry-approval_authority`, `--entry-adapter`. Accepted by `add` and `update` | User input (flag) | The `entry-` prefix is required; it keeps this derived namespace disjoint from the global flags (`spec-008` §9). `--entry-adapter` names a `team.agents` entry's adapter (`task-138`) | `.wingfoil/dna.yaml` entry fields |
+| `--entry-<field>` | string/array | One option per field the entry schema declares — `--entry-description`, `--entry-path`, `--entry-category`, `--entry-version`, `--entry-notes`, `--entry-phase`, `--entry-email`, `--entry-roles`, `--entry-executes_as`, `--entry-approval_authority`, `--entry-adapter`, `--entry-human_only`. Accepted by `add` and `update` | User input (flag) | The `entry-` prefix is required; it keeps this derived namespace disjoint from the global flags (`spec-008` §9). `--entry-adapter` names a `team.agents` entry's adapter (`task-138`) | `.wingfoil/dna.yaml` entry fields |
 | `--force` | flag | On `set`, `add`, `update`, `remove`: authorizes rewriting the whole `dna.yaml` when the in-place edit cannot express the change | User specifies via flag | Without it that case is refused; with it the success carries a warning (`spec-008` §12) | `.wingfoil/dna.yaml` |
 | `[<section>]` | enum | **Positional** on `dna show`: one top-level DNA key — `project`, `modules`, `stacks`, `team`, `paths` | User specifies, or omits to show all | Matches top-level keys in YAML; a dotted path is refused | `.wingfoil/dna.yaml` |
 | `category` | enum | Positional `[<category>]`: resource path category on `paths`: sources, tests, docs, config, governance, runs, health | User specifies, or omits for the whole map | Defined in DNA `paths:` section; `runs` holds exactly one directory | `.wingfoil/dna.yaml` under `paths:` |
@@ -228,8 +228,8 @@ needs; `--template` names the methodology without a prompt; the mode inferred fr
 
 | Command | Description | Actors | Journeys | Notes |
 |---------|-------------|--------|----------|-------|
-| `wingfoil agent execute [--next] [--workflow <ref>] [--step <key>] [--element <type>:<id>] [--role <role>] [--agent <name>]` | Launch agent with auto-loaded context (directives, Memory, target element) | All | 0a, 1, 2, 4, 6 | With `--next` (normal path): **workflow, phase, element and role are resolved from the active instance's next step**; `--workflow <ref>` and `--step <key>` select another instance or step and imply `--next`. Override with `--element type:id` (and optionally `--role`); `--agent` picks a `team.agents` entry. At least one of `--next`, `--workflow`, `--step`, `--element` is required. Records the run in the run log (`spec-016` §4). Pre-loads Memory context in <30 sec. `--resume` / `--ref` are v0.4 |
-| `wingfoil agent list [--past] [--waiting] [--element <type>:<id>] [--phase <name>]` | List the recorded agent runs and the workflow steps waiting for an agent | All | 1, 2, 4 | `--past` the run log at `HEAD`, `--waiting` the open instances' ready steps whose role an agent executes; neither (or both) shows both. `--element` and `--phase` filter both (`spec-016` §5) |
+| `wingfoil agent execute [--next] [--workflow <ref>] [--step <key>] [--element <type>:<id>] [--role <role>] [--agent <name>] [--headless \| --interactive] [--timeout <duration>] [--log <path>]` | Launch agent with auto-loaded context (directives, Memory, target element) | All | 0a, 1, 2, 4, 6 | With `--next` (normal path): **workflow, phase, element and role are resolved from the active instance's next step**; `--workflow <ref>` and `--step <key>` select another instance or step and imply `--next`. Override with `--element type:id` (and optionally `--role`); `--agent` picks a `team.agents` entry. At least one of `--next`, `--workflow`, `--step`, `--element` is required. A step that only waits (an approval, an approval record, another party) is refused unless `--element` names the target. `--headless` launches the work run without a terminal, `--interactive` in this terminal, either one over the phase's `launch`; `--timeout` bounds the run. A headless run's stdout and stderr are forwarded to stderr line by line; `--log <path>` appends a copy to a file (a headless launch only); the output may hold secrets and is never committed (`dl-182`). While the agent runs, its entry under the git-ignored `.wingfoil/run/` refuses a second launch of the run id (`spec-016` §7). Records the run in the run log (`spec-016` §4). Pre-loads Memory context in <30 sec. `--resume` / `--ref` are v0.4 |
+| `wingfoil agent list [--past] [--waiting] [--active] [--element <type>:<id>] [--phase <name>]` | List the recorded agent runs, the workflow steps waiting for an agent and the agents running now | All | 1, 2, 4 | `--past` the run log at `HEAD`, `--waiting` the open instances' ready steps whose role an agent executes and no agent is running, `--active` the running launches of the working tree's `.wingfoil/run/`; none of them (or all three) shows all three. `--element` and `--phase` filter every section (`spec-016` §5) |
 | `wingfoil agent show <run-id>` | Print one recorded agent run and the commit that added it | All | 1, 2, 4 | `<run-id>` is `<element-id>/<phase>/<n>` (`spec-016` §6) |
 
 ### Parameters for Agent Execution
@@ -240,6 +240,8 @@ needs; `--template` names the methodology without a prompt; the mode inferred fr
 | `--workflow`, `--step` | string | The instance (a workflow name or an instance id) and the frontier step to take; each implies `--next` | `workflow next` / `agent list --waiting` output | `spec-016` §3.1 | N/A (selector) |
 | `--role` | string | Agent role (developer, reviewer, qa, architect, etc.) | Step definition, or DNA, or flag | Normally taken from the step; flag overrides. If neither, defaults to `developer` with a warning | N/A (used for context filtering) |
 | `--agent` | string | The `team.agents` entry to launch | `dna show team` | Default: the first entry with an adapter that executes the role | The run record |
+| `--headless`, `--interactive` | flag | The launch kind: `--headless` the work run, with no terminal; `--interactive` the agent in this terminal. Either one overrides the step's phase `launch`, with a warning when it contradicts it; both together are a usage error (exit `2`) | User specifies via flag | Default: the phase's `launch`, else interactive (`spec-016` §3.2 step 7) | N/A (affects behavior, not stored) |
+| `--timeout` | duration | Bound the agent's run: `<n>s`, `<n>m` or `<n>h`, at most `24h`; `SIGTERM` at expiry, `SIGKILL` 10 s later; the run is still recorded and the command exits `1` | User specifies via flag | `spec-016` §3.1, §3.3 step 15 | The run record's `exit_status` |
 | `--element` | string | Target element as `type:id` (e.g. `task:task-101`, `release:rel-...`) | `workflow next` output, or user flag | Resolved from the step with `--next`; override for ad-hoc runs. Must exist in Memory. A filter on `agent list` | N/A (query parameter) |
 | `--past`, `--waiting`, `--phase` | flag / string | On `agent list`: the sections shown and the phase filter | User specifies via flag | `spec-016` §5 | N/A (query parameter only) |
 | `<run-id>` | string | On `agent show`: `<element-id>/<phase>/<n>` | `agent list --past` output | A malformed id is refused (exit `2`) | The run log under DNA `paths.runs` |
@@ -248,13 +250,17 @@ needs; `--template` names the methodology without a prompt; the mode inferred fr
 
 ## Global Options
 
-Every command accepts these, except `--dry-run`, which only the commands that change the project take:
+Every command accepts these, except `--dry-run`, which only the commands that change the project take, and
+`--co-author` and `--ai-model`, which those commands but `agent execute` take:
 
 | Option | Format | Description |
 |--------|--------|-------------|
 | `--format` | `json`, `yaml`, `console` (default) | Output format, stated once here for every command. JSON/YAML for scripting/CI. Console prints the JSON payload indented for now, unless the command defines its own text (`spec-008` §2) |
+| `--project <dir>` | path | Run on the project rooted at `<dir>`, resolved against the current directory, instead of on the current directory. `<dir>` must itself be a git root, holding its own `.git` (a worktree included); anything else exits `1` with `E_NOT_AT_GIT_ROOT: --project is not a git root: <absolute dir>`, and a blank value exits `2`. Without it, the current directory must be the git root: WingFoil never infers the project root (`spec-008` §2, `spec-011`, `dl-198` (a)) |
 | `-h`, `--help` | flag | Show command-specific help and examples |
 | `-V`, `--version` | flag | Print the build stamp `<semver> (<sha>)` (top level only) |
+| `--co-author <name>` | `team.agents` entry name | An agent marker (`spec-018` §1): the command runs in an agent's session, as the entry `<name>`. Taken by every command that takes `--dry-run` but `agent execute`, after the verb; a blank `<name>` exits `2`. With it, or with `WINGFOIL_AGENT`, `CLAUDE_CODE_CHILD_SESSION` or `CODEX_SANDBOX` defined, the approver-gated commands (`memory approve`, `reject`, `amend`, `workflow finalize` on an approval phase, `workflow adopt --plan --apply`, `workflow rekey`) refuse with `E_AGENT_CONTEXT`, exit `1` (`dl-212` D1); on the other commands the commit ends with the entry's `Co-Authored-By:` and an `AI-Model:` trailer, after `WingFoil-Version:` (`spec-018` §2) |
+| `--ai-model <id>` | model identifier | The model the agent's `AI-Model:` trailer records (`spec-018` §2.4); without it `WINGFOIL_AGENT_MODEL`, else `not-reported`. Taken by the commands that take `--co-author`, after the verb; not a marker. A blank value, one that is not one line, or the option in a session no agent marker marks exits `2` |
 | `--verbose` | flag | Show detailed execution logs on stderr (useful for debugging) |
 | `--no-color` | flag | Disable ANSI colours (accepted; no output is coloured yet) |
 | `--no-interactive` | flag | Fail on a missing argument instead of prompting for it (only init prompts) |
@@ -391,6 +397,33 @@ Every command accepts these, except `--dry-run`, which only the commands that ch
 ---
 
 ## Revision history
+
+**Version 2.5 (2026-11-16) — `agent execute --log` and `agent list --active`, per `task-336` (`dl-182`, `dl-181`; `spec-016` §3.1, §5, §7).**
+The `agent execute` row gains `[--log <path>]` and says that a headless run's output is forwarded to stderr, may hold
+secrets and is never committed; the `agent list` row gains `[--active]`, the running launches of `.wingfoil/run/`.
+
+**Version 2.4 (2026-11-14) — `--entry-human_only` on `team.roles`, per `task-340` (`dl-202` item 1).**
+The `--entry-<field>` row lists `--entry-human_only`, the option derived from `team.roles` entries' new `human_only`
+boolean (`spec-002` § "Role binding"): a role no agent executes; `approver` is human-only without it.
+
+**Version 2.3 (2026-11-13) — the `--project <dir>` global option, per `task-350` (`spec-008` §2, `spec-011`, `dl-198` (a)).**
+Global Options gets a `--project <dir>` row: every command, `init` and `mcp` included, runs on the repository the option
+names, which must itself be a git root. Without it the current directory must be the root, as before; the root is
+never inferred.
+
+**Version 2.2 (2026-11-12) — the `--ai-model` global option and the agent trailers, per `task-334` (`spec-018` §2,
+`dl-212` D1).** Global Options gets an `--ai-model <id>` row, registered beside `--co-author`, and the `--co-author`
+row states that on the commands that are not approver-gated the commit names the agent in its `Co-Authored-By:` and
+`AI-Model:` trailers. Like `--dry-run`, both are stated once here, not in each command row.
+
+**Version 2.1 (2026-11-11) — the `--co-author` global option, per `task-333` (`spec-018` §1, `dl-212` D1).** Global
+Options gets a `--co-author <name>` row: an agent marker, registered on every command that takes `--dry-run` but
+`agent execute`, and the refusal of the approver-gated commands in an agent's session. Like `--dry-run`, it is stated
+once here, not in each command row.
+
+**Version 2.0 (2026-11-08) — `agent execute` gets `--headless`, `--interactive` and `--timeout`, per `task-335` (`dl-181`, `dl-183`, `dl-171`).** The row is
+written from `node dist/cli.js agent execute --help` on the task's build; it states the waiting-step refusal, and
+§ "Parameters for Agent Execution" gets a `--headless`, `--interactive` row and a `--timeout` row.
 
 **Version 1.9 (2026-10-25) — `workflow rekey` gets its row, per `task-295` (P4.21, `cp-002`, `dl-187` C5).** The row is
 written from `node dist/cli.js workflow rekey --help` on the task's build; `--from` / `--to` get a parameter row and

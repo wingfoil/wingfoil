@@ -2,45 +2,87 @@
  * `wingfoil agent execute`, the launch half (`spec-016-agent-execution` §3.3 steps 13–18, task-228):
  * what follows the pre-launch pipeline (`./execute.ts`) once every check has passed.
  *
- * 13. The banner, `run <run-id>: launching <agent> (<adapter>) as <role> on <type>:<id>`, as a notice
- *     on stderr (`reportNotice`): the CLI renders it in the active `--format`.
- * 14. The spawn: the adapter's `command` with `launch.interactive.args` (+ `session.assign_args` under
- *     `session.id: assign`), every placeholder filling whole argv elements ({@link renderLaunchArgv}),
- *     no shell, the agent inheriting stdin, stdout and stderr, its working directory the project root,
- *     the environment passed through unchanged (`adr-012` point 1). This is REQ-PERF-01's "agent ready".
- * 15. The wait. From the spawn until the record is committed `SIGINT` and `SIGQUIT` are ignored (the
- *     terminal delivers them to the agent itself, in the same foreground process group) and `SIGTERM`
- *     and `SIGHUP` are forwarded to the agent while it runs, so a run ended by a signal is still recorded
- *     as `signal:<NAME>`.
- * 16. The post-run lookups (§2.6): `version_args`, `session.lookup_args`, `usage.lookup_args`, each run as
+ * 13. The run's entry in the active registry (`./active-runs.ts`, §7, task-336): created exclusively, a live entry
+ *     for the run id refusing the launch (`RUN_ACTIVE`), with a `warning:` line when git does not ignore it; then,
+ *     for a headless run with `--log`, the file opened for appending (`./output.ts`; `LOG_UNWRITABLE`), with a
+ *     `warning:` line when it is inside the repository and not ignored. Then the banner,
+ *     `run <run-id>: launching <agent> (<adapter>) as <role> on <type>:<id>`, as a notice on stderr
+ *     (`reportNotice`): the CLI renders it in the active `--format`. From here every exit path removes the entry
+ *     and closes the log.
+ * 14. The spawn: the adapter's `command` with `launch.<kind>.args`, then the permission fragment of the run's role
+ *     ({@link launchPermissions}, task-339), then the trust fragment ({@link launchTrust}, task-353), then
+ *     `session.assign_args` under `session.id: assign`, every placeholder filling whole argv elements
+ *     ({@link renderLaunchArgv}), no shell, its working directory the project root (the directory the global
+ *     `--project` names, a linked worktree of the repository included, `bug-499`), the environment passed
+ *     through with three changes ({@link agentEnvironment}, task-338): the launching build's `wingfoil` shim
+ *     first on `PATH`, `WINGFOIL_CLI` naming it, and `spec-018` §1.1's launcher marker set to the agent's name. An interactive agent inherits stdin, stdout and stderr; a headless one (the
+ *     work run, §3.5, task-335) reads the null device, its stdout and stderr are both piped and forwarded line by
+ *     line to the caller's stderr (`reportOutput`, `dl-182` Q1 (a), task-336) and, with `--log`, appended to that
+ *     file — stdout also read for the session id under `session.id: output`, step 16 — and on POSIX it runs in a
+ *     session and process group of its own (approver ruling D6 (a)). Once spawned, the registry entry is rewritten
+ *     with the agent's pid, and at the agent's exit with `agent execute`'s own again, each time only while the file
+ *     still holds this launch's entry (§7). This is REQ-PERF-01's "agent ready".
+ * 15. The wait. From the spawn until the record is committed, for an interactive launch `SIGINT`,
+ *     `SIGQUIT` and `SIGHUP` are ignored (the terminal delivers them to the agent itself, in the same
+ *     foreground process group: a forwarded `SIGHUP` reached it twice, task-355, `bug-318`) and only
+ *     `SIGTERM` is forwarded to the agent while it runs; a headless agent has no terminal, so `SIGINT`,
+ *     `SIGTERM` and `SIGHUP` are forwarded and only `SIGQUIT` is ignored. On POSIX a headless delivery goes
+ *     to the agent's whole process group, and once an agent a signal reached has exited, what is left of
+ *     the group is sent `SIGKILL` before the launch returns (task-355, `bug-516`). A run ended by a
+ *     signal is still recorded as `signal:<NAME>`. With `--timeout` the bound runs from the spawn: at
+ *     expiry `SIGTERM` through the same forwarding, then `SIGKILL` {@link TIMEOUT_GRACE_MS} later if the
+ *     agent still runs; both timers stop when it exits.
+ * 16. The end of a headless run's output: after the exit both streams are forwarded until each ends, at most
+ *     {@link LOOKUP_TIMEOUT_MS}, then closed, a last line without a newline forwarded with one (approver ruling
+ *     D11). The session id a headless run's stdout carried, under `session.id: output` (§2.6, task-356: one JSON
+ *     document under `launch.headless.output: json`, the first line carrying it under `jsonl`; none found is
+ *     `not-reported` and a `warning:` line). The post-run lookups (§2.6): `version_args`, `session.lookup_args`,
+ *     `usage.lookup_args`, each run as
  *     `command` + argv with a time limit ({@link LOOKUP_TIMEOUT_MS}); one argv declared twice runs once.
  *     A lookup that fails, times out or prints no JSON, and a value of the wrong type, yield
- *     `not-reported` and a `warning:` line; the lookup never fails the run.
- * 17. The record (§4.2), appended and committed by `recordRun` (task-206): `agent: record <run-id>`.
- * 18. The outcome: success only when the agent exited `0` and the record was committed.
+ *     `not-reported` and a `warning:` line; the lookup never fails the run. The start-up hint (task-353,
+ *     `bug-500`): a run that did not succeed, with `HEAD` still at `state_ref` and `notes` `none`, under
+ *     `launch.<kind>.trust: prompt`, records {@link START_UP_HINT_NOTES} as its `notes` and, once committed, prints
+ *     one `warning:` line naming the agent CLI's folder-trust step.
+ * 17. The record (§4.2), appended and committed by `recordRun` (task-206): `agent: record <run-id>`; then, whatever
+ *     its outcome, the registry entry removed (only while it is still this launch's) and the log closed.
+ * 18. The outcome: success only when the agent exited `0`, the bound did not expire and the record was
+ *     committed. An expired bound is `agent timed out after <duration>; run <run-id> recorded`, whatever
+ *     the exit status. A headless success also prints the summary line as a notice (§3.5).
  *
  * **Determinism.** The argv, the session id and every record field but `duration_ms` are pure functions
- * of committed state and the run's inputs; the temporary-file paths and the Node executable are host
+ * of committed state, the run's inputs and, for an assigned session id, the clone's session salt (§2.6,
+ * `./session-salt.ts`), the one random value of a launch; the temporary-file paths and the Node executable are host
  * values that never reach the context (`spec-016` Consequences). `duration_ms` is wall-clock by design:
- * a record of what happened, never part of a context (`dl-114` Q2).
+ * a record of what happened, never part of a context (`dl-114` Q2); so is the registry entry's `started_ms` (§7,
+ * {@link LaunchHost.now}), which never reaches the record.
  */
+import { AsyncLocalStorage, AsyncResource } from 'node:async_hooks';
 import { execFile, spawn, type ChildProcess, type SpawnOptions } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { isAbsolute, resolve } from 'node:path';
+import { isAbsolute, posix, resolve, win32 } from 'node:path';
 import { performance } from 'node:perf_hooks';
 
-import { readBuildStamp } from '../storage';
-import { reportNotice, reportWarning } from '../validation/warning';
+import { readBuildStamp, resolveCommitAtRev } from '../storage';
+import { reportNotice, reportOutput, reportWarning, type OutputStream } from '../validation/warning';
+import { AGENT_MARKERS } from '../core/agent-context';
 import { coreErr, coreOk, type CoreResult } from '../core/types';
 
+import type { TimeBound } from './duration';
 import type { AdapterManifest } from './schema';
-import { deriveNotesField, NOT_REPORTED, recordRun, type ReportedCount, type RunRecord, type RunTokens } from './run-log';
+import { deriveNotesField, NOT_REPORTED, recordRun, START_UP_HINT_NOTES, type ReportedCount, type RunRecord, type RunTokens } from './run-log';
+import { sessionSalt } from './session-salt';
+import { activeRunPath, registerRun, REGISTRY_NOT_IGNORED_WARNING, removeRun, rewriteRunPid, type ActiveRunEntry } from './active-runs';
+import { lineSplitter, logNotIgnoredWarning, notIgnoredInRepository, openLog, type OpenLog } from './output';
 
 /**
  * How much one post-run lookup may print before it is stopped (§2.6): `execFile`'s `maxBuffer`, which
  * bounds stdout and stderr each, so a lookup with valid stdout and over 1 MiB on stderr loses its values.
  */
 const LOOKUP_MAX_BYTES = 1024 * 1024;
+
+/** How long `--timeout`'s `SIGTERM` waits before `SIGKILL` (§3.3 step 15; approver ruling D5 (a): fixed, 10 s). */
+export const TIMEOUT_GRACE_MS = 10000;
 
 /** How long one post-run lookup may run (§2.6, §3.3 step 16). */
 export const LOOKUP_TIMEOUT_MS = 10000;
@@ -65,12 +107,45 @@ export function uuidV5(namespace: string, name: string): string {
 }
 
 /**
- * The session id WingFoil assigns (§2.6 `assign`): the v5 UUID of `<absolute repository root>\n<run id>`
- * in {@link SESSION_ID_NAMESPACE}. Unique per clone and run, derived, never random. Per clone by design
- * (it hashes the root): the run id is the identifier across clones (`dl-135` Q3 (a)).
+ * The session id WingFoil assigns (§2.6 `assign`): the v5 UUID of `<session salt>\n<run id>` in
+ * {@link SESSION_ID_NAMESPACE}, `salt` the clone's ({@link sessionSalt}, task-338, `dl-168` Q1 (b)). Unique per
+ * clone and run, derived, and it discloses nothing about the host; the run id is the identifier across clones
+ * (`dl-135` Q3 (a)). Records committed before the salt hashed the repository root instead and keep those ids.
  */
-export function assignedSessionId(root: string, runId: string): string {
-  return uuidV5(SESSION_ID_NAMESPACE, `${root}\n${runId}`);
+export function assignedSessionId(salt: string, runId: string): string {
+  return uuidV5(SESSION_ID_NAMESPACE, `${salt}\n${runId}`);
+}
+
+/** The variable that names the launching build's `wingfoil` shim in the agent's environment (§2.4). */
+export const CLI_VARIABLE = 'WINGFOIL_CLI';
+
+/**
+ * The environment the agent is spawned with (§2.4, §3.3 step 14, task-338): a copy of `env` with, when `cliShim` (the
+ * shim's absolute path) is given, the shim's directory first on `PATH` (the key found case-insensitively on win32;
+ * `PATH` is the directory alone when absent) and {@link CLI_VARIABLE} set to the shim's path; and always `spec-018`
+ * §1.1's launcher marker — the first of `AGENT_MARKERS`, read from there so no marker name is spelled here — set to
+ * `agentName`, whatever it held. `env` is not changed; an unset variable is left out. `platform` (the process's by
+ * default) picks the path rules: win32's `;` separator and backslashes, and its case-insensitive `Path` key.
+ */
+export function agentEnvironment(
+  env: Readonly<Record<string, string | undefined>>,
+  cliShim: string | undefined,
+  agentName: string,
+  platform: NodeJS.Platform = process.platform,
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [name, value] of Object.entries(env)) if (value !== undefined) out[name] = value;
+  if (cliShim !== undefined) {
+    const rules = platform === 'win32' ? win32 : posix;
+    const pathKey = (platform === 'win32' ? Object.keys(out).find((name) => name.toUpperCase() === 'PATH') : undefined) ?? 'PATH';
+    const current = out[pathKey];
+    const dir = rules.dirname(cliShim);
+    out[pathKey] = current === undefined || current === '' ? dir : `${dir}${rules.delimiter}${current}`;
+    out[CLI_VARIABLE] = cliShim;
+  }
+  // Read at call time: `src/core` and `src/agent` import each other, so the table may still be loading at module time.
+  out[AGENT_MARKERS[0]!.id] = agentName;
+  return out;
 }
 
 /** The values the launch placeholders take (§2.3). */
@@ -103,13 +178,49 @@ function renderArgv(template: readonly string[], values: LaunchValues): string[]
   });
 }
 
+/** The kind a launch runs as (`spec-016` §3.2 step 7, task-335). */
+export type LaunchKindRun = 'interactive' | 'headless';
+
 /**
- * The launch argv (§3.3 step 14): `launch.interactive.args` rendered, then `session.assign_args`
- * rendered when the session id is assigned. The `command` is not part of it.
+ * The permission fragment of a run (§3.3 step 14, §2.2 `launch.<kind>.permissions`, `dl-223` (b), task-339): the
+ * declared fragment itself, for every role; or the role map's entry for `role`, else its `default` (Pass 2 makes a
+ * map declare one); `[]` when the launch kind declares none. It holds no placeholder (§2.3), so it is not rendered.
+ *
+ * @param manifest - A validated manifest.
+ * @param kind - The launch kind of the run; `interactive` never reads the headless field.
+ * @param role - The run's resolved role (§3.2).
  */
-export function renderLaunchArgv(manifest: AdapterManifest, values: LaunchValues): string[] {
+export function launchPermissions(manifest: AdapterManifest, kind: LaunchKindRun, role: string): readonly string[] {
+  const permissions = kind === 'headless' ? manifest.launch.headless?.permissions : manifest.launch.interactive.permissions;
+  if (permissions === undefined) return [];
+  if (Array.isArray(permissions)) return permissions;
+  // An own key only: a role named like an `Object.prototype` member picks `default`, never an inherited value.
+  return (Object.hasOwn(permissions, role) ? permissions[role] : permissions['default']) ?? [];
+}
+
+/**
+ * The trust fragment of a launch kind (§2.2 `launch.<kind>.trust`, §3.3 step 14, `bug-500`, task-353): the declared
+ * fragment; `[]` under `implied`, `prompt` or no `trust`. It holds no placeholder (§2.3), so it is not rendered.
+ *
+ * @param manifest - A validated manifest.
+ * @param kind - The launch kind of the run; each kind reads its own field.
+ */
+export function launchTrust(manifest: AdapterManifest, kind: LaunchKindRun): readonly string[] {
+  const trust = kind === 'headless' ? manifest.launch.headless?.trust : manifest.launch.interactive.trust;
+  return Array.isArray(trust) ? trust : [];
+}
+
+/**
+ * The launch argv (§3.3 step 14): `launch.<kind>.args` rendered, then the permission fragment of `role`
+ * ({@link launchPermissions}; the `default` entry when no role is given), then the trust fragment
+ * ({@link launchTrust}), then `session.assign_args` rendered when the session id is assigned. The `command` is not
+ * part of it. A headless launch of an adapter without `launch.headless` is refused before (§3.3 step 4,
+ * `NO_LAUNCH_KIND`), so its argv is never rendered here.
+ */
+export function renderLaunchArgv(manifest: AdapterManifest, values: LaunchValues, kind: LaunchKindRun = 'interactive', role = 'default'): string[] {
   const assign = manifest.session.id === 'assign' ? (manifest.session.assign_args ?? []) : [];
-  return [...renderArgv(manifest.launch.interactive.args, values), ...renderArgv(assign, values)];
+  const args = kind === 'headless' ? (manifest.launch.headless?.args ?? []) : manifest.launch.interactive.args;
+  return [...renderArgv(args, values), ...launchPermissions(manifest, kind, role), ...launchTrust(manifest, kind), ...renderArgv(assign, values)];
 }
 
 /**
@@ -137,14 +248,36 @@ function commandToSpawn(root: string, command: string): string {
 /** How the agent process ended: its exit code, or `signal:<NAME>` (§4.2 key 16). */
 type ExitStatus = number | string;
 
-/** The signals `agent execute` takes over while the agent runs (§3.3 step 15). */
-const IGNORED_SIGNALS: readonly NodeJS.Signals[] = process.platform === 'win32' ? ['SIGINT'] : ['SIGINT', 'SIGQUIT'];
-const FORWARDED_SIGNALS: readonly NodeJS.Signals[] = process.platform === 'win32' ? ['SIGTERM'] : ['SIGTERM', 'SIGHUP'];
+const WINDOWS = process.platform === 'win32';
+
+/**
+ * The signals `agent execute` takes over while the agent runs (§3.3 step 15), per launch kind: an interactive
+ * agent shares the terminal's foreground process group, so the keyboard's signals and the terminal's hang-up
+ * reach it directly and are ignored here — `SIGHUP` included, which `agent execute` cannot tell from one sent
+ * to it alone (task-355, `bug-318`, approver ruling D1 (a)); a headless agent has no terminal, so `SIGINT` and
+ * `SIGHUP` are forwarded to it as well (task-335, D6 (a)). Windows has only the subsets that exist there.
+ */
+const TAKEN_OVER: Readonly<Record<LaunchKindRun, { readonly ignored: readonly NodeJS.Signals[]; readonly forwarded: readonly NodeJS.Signals[] }>> = {
+  interactive: { ignored: WINDOWS ? ['SIGINT'] : ['SIGINT', 'SIGQUIT', 'SIGHUP'], forwarded: ['SIGTERM'] },
+  headless: { ignored: WINDOWS ? [] : ['SIGQUIT'], forwarded: WINDOWS ? ['SIGINT', 'SIGTERM'] : ['SIGINT', 'SIGTERM', 'SIGHUP'] },
+};
 
 /** §3.3 step 15's signal handling, installed before the spawn and attached to the agent once it exists. */
 interface SignalTakeover {
   /** Hand the agent over: a forwarded signal that arrived before it existed is sent to it now. */
   attach(child: ChildProcess): void;
+  /**
+   * The one forwarding path, which a received signal and the time bound both take: `signal` is sent to the
+   * agent while it runs — on POSIX, for a headless agent with a pid, to its whole process group — remembered
+   * until it is attached, and dropped once it has exited.
+   */
+  send(signal: NodeJS.Signals): void;
+  /**
+   * After the agent has exited: when a signal was delivered to its process group, send what is left of the
+   * group one `SIGKILL` (task-355, `bug-516`, approver ruling D2 (a)); otherwise nothing. A delivery that
+   * fails is a `warning:` line, never an error: the run's outcome is already decided.
+   */
+  sweep(): void;
   /** Remove every listener installed. */
   restore(): void;
 }
@@ -152,26 +285,59 @@ interface SignalTakeover {
 /**
  * Install §3.3 step 15's signal handling **before the spawn** (review fix 1: a signal between the
  * pre-launch cleanup's release and the spawn must neither kill `agent execute` nor orphan the agent):
- * `SIGINT`/`SIGQUIT` ignored, `SIGTERM`/`SIGHUP` forwarded to the agent while it runs. One that arrives
- * before the agent exists is remembered and sent as soon as it is attached; once the agent has exited
- * they are ignored, until the record is committed.
+ * the `kind`'s ignored signals ignored, its forwarded ones forwarded to the agent while it runs. One that
+ * arrives before the agent exists is remembered and sent as soon as it is attached; once the agent has
+ * exited they are ignored, until the record is committed. A headless agent on POSIX runs in a process group
+ * of its own (its pid is the group id), so each delivery goes to the group through `signalGroup`, and the
+ * processes the agent started receive it too; the interactive kind, Windows and a child with no pid keep
+ * `child.kill` (task-355, `bug-516`).
  */
-function takeOverSignals(): SignalTakeover {
+function takeOverSignals(kind: LaunchKindRun, signalGroup: (pgid: number, signal: NodeJS.Signals) => void): SignalTakeover {
   let child: ChildProcess | undefined;
   let pending: NodeJS.Signals | undefined;
-  const forward = (signal: NodeJS.Signals): void => {
-    if (child === undefined) pending = signal;
-    else if (child.exitCode === null && child.signalCode === null) child.kill(signal);
+  let signalled = false;
+  // A group delivery that fails (`EPERM`, say) neither throws out of a signal listener or a timer nor replaces
+  // the run's outcome: §3.3 step 18 decides that from the agent's exit, the bound and the record alone.
+  // The launch's context, so the warning reaches the operation's sink from a signal listener too.
+  const inLaunch = AsyncLocalStorage.snapshot();
+  const deliver = (pgid: number, signal: NodeJS.Signals): void => {
+    try {
+      signalGroup(pgid, signal);
+    } catch (error) {
+      inLaunch(reportWarning, `could not send ${signal} to the agent's process group ${pgid}: ${error instanceof Error ? error.message : String(error)}`);
+    }
   };
+  const groupOf = (agent: ChildProcess): number | undefined => (kind === 'headless' && !WINDOWS && typeof agent.pid === 'number' ? agent.pid : undefined);
+  const send = (signal: NodeJS.Signals): void => {
+    if (child === undefined) {
+      pending = signal;
+      return;
+    }
+    if (child.exitCode !== null || child.signalCode !== null) return;
+    const pgid = groupOf(child);
+    if (pgid === undefined) {
+      child.kill(signal);
+      return;
+    }
+    signalled = true;
+    deliver(pgid, signal);
+  };
+  const { ignored, forwarded } = TAKEN_OVER[kind];
   const installed: [NodeJS.Signals, () => void][] = [
-    ...IGNORED_SIGNALS.map((signal): [NodeJS.Signals, () => void] => [signal, () => undefined]),
-    ...FORWARDED_SIGNALS.map((signal): [NodeJS.Signals, () => void] => [signal, () => forward(signal)]),
+    ...ignored.map((signal): [NodeJS.Signals, () => void] => [signal, () => undefined]),
+    ...forwarded.map((signal): [NodeJS.Signals, () => void] => [signal, () => send(signal)]),
   ];
   for (const [signal, listener] of installed) process.on(signal, listener);
   return {
     attach(spawned) {
       child = spawned;
-      if (pending !== undefined) forward(pending);
+      if (pending !== undefined) send(pending);
+    },
+    send,
+    sweep() {
+      if (!signalled || child === undefined || (child.exitCode === null && child.signalCode === null)) return;
+      const pgid = groupOf(child);
+      if (pgid !== undefined) deliver(pgid, 'SIGKILL');
     },
     restore() {
       for (const [signal, listener] of installed) process.removeListener(signal, listener);
@@ -179,22 +345,107 @@ function takeOverSignals(): SignalTakeover {
   };
 }
 
-/** Spawn the agent and wait for it: its exit status and the wall-clock duration, or why it could not start. */
+/**
+ * The spawn options of each launch kind (§3.3 step 14). Headless: stdin the null device, stdout and stderr both piped
+ * (forwarded line by line by {@link runAgent}, `dl-182` Q1 (a), task-336; stdout also handed to the session-id reader
+ * under `session.id: output`), and on POSIX a session and process group of its own, so the agent has no controlling
+ * terminal to open and gets each signal once (approver ruling D6 (a)).
+ */
+function spawnOptions(kind: LaunchKindRun, root: string, env: NodeJS.ProcessEnv): SpawnOptions {
+  if (kind === 'interactive') return { cwd: root, stdio: 'inherit', env };
+  return { cwd: root, stdio: ['ignore', 'pipe', 'pipe'], env, detached: !WINDOWS };
+}
+
+/**
+ * What a headless run's output feeds (§3.5, task-336): every line of either stream (the forwarding to the caller's
+ * stderr and the `--log` copy), every raw chunk of stdout to each of `stdout`'s consumers in order (the session-id
+ * reader of `session.id: output`, task-356 — another reader of the whole stdout, such as a usage read of a headless
+ * `output: json` run, is one more entry here), and how long to wait after the agent exits for both streams to end.
+ */
+interface HeadlessOutput {
+  readonly line: (line: string, stream: OutputStream) => void;
+  readonly stdout: readonly ((chunk: Buffer) => void)[];
+  readonly drainMs: number;
+}
+
+/**
+ * Feed one piped stream to `output` (§3.5): each chunk to its line splitter (and, for stdout, to every consumer). The
+ * promise settles when the stream ends, closes or fails; {@link close} stops it early, flushing the pending line. The
+ * listeners are bound to the launch's async context, so a line reaches the sinks the surface installed around the
+ * launch (`withOutputSink`) whoever emits the stream's events.
+ */
+function feedStream(stream: NodeJS.ReadableStream & { destroy?: () => void }, name: OutputStream, output: HeadlessOutput): { ended: Promise<void>; close: () => void } {
+  const splitter = lineSplitter((line) => output.line(line, name));
+  const consumers = name === 'stdout' ? output.stdout : [];
+  let open = true;
+  const close = (): void => {
+    if (!open) return;
+    open = false;
+    splitter.end();
+  };
+  const ended = new Promise<void>((resolve) => {
+    for (const event of ['end', 'close', 'error'] as const) {
+      stream.once(
+        event,
+        AsyncResource.bind(() => {
+          close();
+          resolve();
+        }),
+      );
+    }
+  });
+  stream.on(
+    'data',
+    AsyncResource.bind((chunk: Buffer | string) => {
+      if (!open) return;
+      const bytes = typeof chunk === 'string' ? Buffer.from(chunk) : chunk;
+      for (const consume of consumers) consume(bytes);
+      splitter.write(bytes);
+    }),
+  );
+  return {
+    ended,
+    close: () => {
+      close();
+      stream.destroy?.();
+    },
+  };
+}
+
+/**
+ * Spawn the agent and wait for it: its exit status and the wall-clock duration, or why it could not start. With
+ * `output` (a headless launch, §3.5), both piped streams are fed to it ({@link feedStream}); after the exit the wait goes
+ * on until both streams end or `output.drainMs` passes (a process the agent left behind may hold a pipe open, §3.3 step
+ * 16), then the streams are closed, a pending last line forwarded, so nothing is forwarded after this settles; the
+ * duration is still measured to the exit. A pipe the child does not have (a test's stand-in) is passed over.
+ */
 function runAgent(
   spawnAgent: SpawnAgent,
   command: string,
   args: readonly string[],
-  root: string,
+  options: SpawnOptions,
   onSpawn: (child: ChildProcess) => void,
+  onExit: () => void,
+  output?: HeadlessOutput,
 ): Promise<{ ok: true; exitStatus: ExitStatus; durationMs: number } | { ok: false; reason: string }> {
   return new Promise((settle) => {
     let child: ChildProcess;
     const start = performance.now();
     try {
-      child = spawnAgent(command, args, { cwd: root, stdio: 'inherit', env: process.env });
+      child = spawnAgent(command, args, options);
     } catch (error) {
       settle({ ok: false, reason: error instanceof Error ? error.message : String(error) });
       return;
+    }
+    const piped = [
+      ['stdout', child.stdout ?? null],
+      ['stderr', child.stderr ?? null],
+    ] as const;
+    const fed: { ended: Promise<void>; close: () => void }[] = [];
+    for (const [name, stream] of piped) {
+      if (stream === null) continue;
+      if (output !== undefined) fed.push(feedStream(stream, name, output));
+      else stream.resume();
     }
     onSpawn(child);
     let spawned = false;
@@ -202,17 +453,31 @@ function runAgent(
       spawned = true;
     });
     child.once('error', (error) => {
-      if (!spawned) settle({ ok: false, reason: error.message });
+      if (!spawned) {
+        for (const stream of fed) stream.close();
+        settle({ ok: false, reason: error.message });
+      }
     });
     child.once('exit', (code, signal) => {
+      onExit();
       const durationMs = Math.max(0, Math.round(performance.now() - start));
-      settle({ ok: true, exitStatus: signal !== null ? `signal:${signal}` : (code ?? 0), durationMs });
+      const result = { ok: true as const, exitStatus: signal !== null ? `signal:${signal}` : (code ?? 0), durationMs };
+      if (output === undefined || fed.length === 0) return settle(result);
+      let handle: NodeJS.Timeout | undefined;
+      const bound = new Promise<void>((resolve) => {
+        handle = setTimeout(resolve, output.drainMs);
+      });
+      void Promise.race([Promise.all(fed.map((stream) => stream.ended)), bound]).then(() => {
+        clearTimeout(handle);
+        for (const stream of fed) stream.close();
+        settle(result);
+      });
     });
   });
 }
 
 /** One lookup's outcome: its stdout, or why it failed (one line, for a warning). */
-type LookupOutcome = { ok: true; stdout: string } | { ok: false; reason: string };
+type LookupOutcome = { ok: true; stdout: string } | { ok: false; reason: string; exitCode?: number };
 
 /** Run `command` + `args` with the time limit, no shell, in the root; stdout captured. */
 function runLookup(command: string, args: readonly string[], root: string, timeoutMs: number): Promise<LookupOutcome> {
@@ -222,11 +487,27 @@ function runLookup(command: string, args: readonly string[], root: string, timeo
       const failed = error as NodeJS.ErrnoException & { killed?: boolean; code?: number | string; signal?: string | null };
       if (failed.killed === true) return settle({ ok: false, reason: `timed out after ${timeoutMs} ms` });
       if (failed.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER') return settle({ ok: false, reason: `printed more than ${LOOKUP_MAX_BYTES / 1024 / 1024} MiB on stdout or stderr` });
-      if (typeof failed.code === 'number') return settle({ ok: false, reason: `exited ${failed.code}` });
+      if (typeof failed.code === 'number') return settle({ ok: false, reason: `exited ${failed.code}`, exitCode: failed.code });
       if (failed.signal) return settle({ ok: false, reason: `ended by ${failed.signal}` });
       return settle({ ok: false, reason: failed.code !== undefined ? `could not start: ${failed.code}` : failed.message });
     });
   });
+}
+
+/** What the conflict probe answered (§3.3 step 4): a server named `wingfoil` declared, none, or no answer. */
+export type ConflictProbe = { readonly kind: 'declared' } | { readonly kind: 'none' } | { readonly kind: 'failed'; readonly reason: string };
+
+/**
+ * §3.3 step 4's conflict probe (task-356, `bug-372`; §2.5): the adapter's `mcp.conflict_args` run as a post-run
+ * lookup runs (§2.6: the `command`, no shell, the project root, WingFoil's environment, `timeoutMs`). Only the exit
+ * status is read, never the output: `0` is `declared`, another exit `none`, and a probe that timed out, was ended by
+ * a signal or could not be started is `failed`, with the reason.
+ */
+export async function runConflictProbe(root: string, command: string, args: readonly string[], timeoutMs: number): Promise<ConflictProbe> {
+  const outcome = await runLookup(commandToSpawn(root, command), args, root, timeoutMs);
+  if (outcome.ok) return { kind: 'declared' };
+  if (outcome.exitCode !== undefined) return { kind: 'none' };
+  return { kind: 'failed', reason: outcome.reason };
 }
 
 /** The first JSON value a lookup printed, or why there is none. */
@@ -237,6 +518,106 @@ function parseLookup(outcome: LookupOutcome): { ok: true; document: unknown } | 
   } catch {
     return { ok: false, reason: 'printed no JSON' };
   }
+}
+
+/**
+ * How much of a headless run's stdout the session id is read from (§2.6 `session.id: output`): the whole document
+ * under `launch.headless.output: json`, one line under `jsonl`; past it, `json` yields `not-reported` and a `jsonl`
+ * line is passed over.
+ */
+const OUTPUT_MAX_BYTES = 1024 * 1024;
+
+/** The session id a headless run's stdout carried, or why there is none (one phrase, for a warning). */
+type OutputSession = { ok: true; id: string } | { ok: false; reason: string };
+
+/** A reader of a headless run's stdout for the session id: fed chunk by chunk, asked once the stream is over. */
+interface SessionOutputReader {
+  readonly write: (chunk: Buffer) => void;
+  readonly end: () => OutputSession;
+}
+
+/** The non-empty string at `field` of the JSON `text`, else `undefined` (not JSON, no such value, another type). */
+function sessionIdIn(text: string, field: string): string | undefined {
+  let document: unknown;
+  try {
+    document = JSON.parse(text) as unknown;
+  } catch {
+    return undefined;
+  }
+  const value = readJsonPath(document, field);
+  return typeof value === 'string' && value !== '' ? value : undefined;
+}
+
+const NO_SESSION_ID = 'the headless output carries no session id';
+
+/**
+ * §2.6 `session.id: output` (task-356, `bug-375`): under `jsonl` each line is one JSON value, read in order, and the
+ * first non-empty string at `field` is the id (a line that is not JSON, has no such value or is over
+ * {@link OUTPUT_MAX_BYTES} is passed over); under `json` the whole stdout, at most {@link OUTPUT_MAX_BYTES}, is one
+ * document and the id is at `field`. A pure function of the bytes written, in their order.
+ */
+function sessionOutputReader(output: 'json' | 'jsonl', field: string): SessionOutputReader {
+  if (output === 'json') {
+    const chunks: Buffer[] = [];
+    let size = 0;
+    return {
+      write: (chunk) => {
+        size += chunk.length;
+        if (size <= OUTPUT_MAX_BYTES) chunks.push(chunk);
+        else chunks.length = 0;
+      },
+      end: () => {
+        if (size > OUTPUT_MAX_BYTES) return { ok: false, reason: `the headless output is over ${OUTPUT_MAX_BYTES / 1024 / 1024} MiB` };
+        const text = Buffer.concat(chunks).toString('utf-8');
+        try {
+          JSON.parse(text);
+        } catch {
+          return { ok: false, reason: 'the headless output is not one JSON document' };
+        }
+        const id = sessionIdIn(text, field);
+        return id === undefined ? { ok: false, reason: NO_SESSION_ID } : { ok: true, id };
+      },
+    };
+  }
+  let id: string | undefined;
+  let line: Buffer[] = [];
+  let lineSize = 0;
+  let skipping = false;
+  const append = (piece: Buffer): void => {
+    if (skipping || piece.length === 0) return;
+    lineSize += piece.length;
+    if (lineSize > OUTPUT_MAX_BYTES) {
+      skipping = true;
+      line = [];
+    } else {
+      line.push(piece);
+    }
+  };
+  const close = (): void => {
+    if (!skipping && lineSize > 0) id = sessionIdIn(Buffer.concat(line).toString('utf-8'), field);
+    line = [];
+    lineSize = 0;
+    skipping = false;
+  };
+  return {
+    write: (chunk) => {
+      let from = 0;
+      while (id === undefined) {
+        const newline = chunk.indexOf(0x0a, from);
+        if (newline === -1) {
+          append(chunk.subarray(from));
+          return;
+        }
+        append(chunk.subarray(from, newline));
+        close();
+        from = newline + 1;
+      }
+    },
+    end: () => {
+      if (id === undefined) close();
+      return id === undefined ? { ok: false, reason: NO_SESSION_ID } : { ok: true, id };
+    },
+  };
 }
 
 /** The facts §3.3 step 16 reads after the agent exited. */
@@ -262,6 +643,8 @@ interface PostRunInput {
   readonly assigned: string | undefined;
   readonly values: LaunchValues;
   readonly timeoutMs: number;
+  /** What the headless run's stdout carried under `session.id: output` (§2.6); `undefined` when it was not read. */
+  readonly output: OutputSession | undefined;
 }
 
 /**
@@ -290,6 +673,10 @@ async function postRunFacts(input: PostRunInput): Promise<PostRunFacts> {
   }
 
   let session: string = input.assigned ?? NOT_REPORTED;
+  if (input.output !== undefined) {
+    if (input.output.ok) session = input.output.id;
+    else warn(`${input.output.reason}: session recorded as not-reported`);
+  }
   if (manifest.session.id === 'lookup' && manifest.session.lookup_args !== undefined && manifest.session.field !== undefined) {
     const parsed = parseLookup(await lookup(manifest.session.lookup_args));
     if (!parsed.ok) warn(`the session lookup failed (${parsed.reason}): session recorded as not-reported`);
@@ -332,6 +719,39 @@ export interface LaunchHost {
   readonly spawn?: SpawnAgent;
   /** {@link LOOKUP_TIMEOUT_MS} by default. */
   readonly lookupTimeoutMs?: number;
+  /**
+   * Arms a timer that calls `fire` after `delayMs` and returns the function that cancels it (`--timeout`,
+   * §3.3 step 15); `setTimeout` / `clearTimeout` by default. A test injects a recorder, so no wall clock runs.
+   */
+  readonly timer?: (delayMs: number, fire: () => void) => () => void;
+  /**
+   * Sends `signal` to the process group `pgid` (§3.3 step 15, task-355, `bug-516`): how a headless agent on
+   * POSIX, which leads a process group of its own, and the processes it started receive a forwarded signal,
+   * the time bound's signals and the sweep's `SIGKILL`. `process.kill(-pgid, signal)` by default, an empty
+   * group (`ESRCH`) ignored; any other error it throws is reported as a `warning:` line and changes nothing of
+   * the run. A test injects a recorder, so no real process group is signalled.
+   */
+  readonly signalGroup?: (pgid: number, signal: NodeJS.Signals) => void;
+  /**
+   * The wall-clock instant of §3.3 step 13, in milliseconds since the epoch: the registry entry's `started_ms` (§7,
+   * task-336), a record of what happened, never part of a context. `Date.now` by default; a test injects a fixed one.
+   */
+  readonly now?: () => number;
+}
+
+/** {@link LaunchHost.signalGroup}'s default: the signal to every process of the group, none left being no error. */
+function killGroup(pgid: number, signal: NodeJS.Signals): void {
+  try {
+    process.kill(-pgid, signal);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
+  }
+}
+
+/** {@link LaunchHost.timer}'s default: a real timer. */
+function realTimer(delayMs: number, fire: () => void): () => void {
+  const handle = setTimeout(fire, delayMs);
+  return () => clearTimeout(handle);
 }
 
 /** What the launch needs from the pre-launch pipeline (`PreparedLaunch`, `./execute.ts`). */
@@ -356,6 +776,18 @@ export interface LaunchInput {
   readonly files: Partial<Record<'bootstrap_file' | 'mcp_config_file', string>>;
   /** The rendered `mcp.template` under `mcp.via: config-arg` (§2.3 `{mcp_config}`); `undefined` otherwise. */
   readonly mcpConfig?: string | undefined;
+  /** The launch kind §3.2 step 7 resolved (task-335). */
+  readonly kind: LaunchKindRun;
+  /** `--timeout`'s bound: its length and the value as given (§3.1); absent, the run is unbounded. */
+  readonly timeout?: TimeBound | undefined;
+  /** Absolute path of the launching build's `wingfoil` shim in the run's temporary directory (§2.4), when written. */
+  readonly cliShim?: string | undefined;
+  /**
+   * `--log <path>` as given (§3.1, task-336): a headless run's forwarded lines are appended to it, the path resolved
+   * against the current directory when the file is opened (§3.3 step 13). An interactive launch never has one (§3.2
+   * step 7 refuses it).
+   */
+  readonly log?: string | undefined;
 }
 
 /** A launched run, recorded: what `agent execute` reports (§3.4's `{ "run": <record> }`). */
@@ -376,18 +808,75 @@ export function launchBanner(input: LaunchInput): string {
 }
 
 /**
+ * Whether §3.3 step 16's start-up hint applies (`bug-500`, task-353): all four of — the run did not succeed (a
+ * non-zero exit, a signal, or the expired bound), `HEAD` is still `state_ref` (the agent committed nothing), `notes`
+ * would be `none`, and the adapter declares `launch.<kind>.trust: prompt` for the kind that ran. A function of the
+ * exit status, two committed shas and the manifest: no wall clock. A `HEAD` git cannot read gives no hint, so the
+ * record is never lost to it.
+ */
+function startUpHint(root: string, input: LaunchInput, run: { readonly expired: boolean; readonly exitStatus: ExitStatus; readonly notes: string }): boolean {
+  const { launch } = input.adapter.manifest;
+  const trust = input.kind === 'headless' ? launch.headless?.trust : launch.interactive.trust;
+  if (trust !== 'prompt' || run.notes !== 'none' || (run.exitStatus === 0 && !run.expired)) return false;
+  try {
+    return resolveCommitAtRev(root, 'HEAD') === input.stateRef;
+  } catch {
+    return false;
+  }
+}
+
+/** §3.3 step 16's start-up hint warning, without the `warning: ` prefix. */
+function startUpHintWarning(record: RunRecord, input: LaunchInput): string {
+  return (
+    `run ${record.id}: the agent exited ${String(record.exit_status)} with no commit since state_ref: its CLI may have stopped at its ` +
+    `folder-trust step (adapter '${input.adapter.name}' declares launch.${input.kind}.trust: prompt)`
+  );
+}
+
+/**
+ * A headless run's output wiring (§3.5, task-336): each line forwarded to the caller (`reportOutput`) and, with
+ * `--log`, appended to the file in the console form; `stdout` the raw-chunk consumers (the session-id reader). A log
+ * that fails mid-run is reported once, as a `warning:` line, and no longer written: the run goes on.
+ */
+function forwardOutput(log: { readonly file: OpenLog; readonly given: string } | undefined, stdout: readonly ((chunk: Buffer) => void)[], drainMs: number): HeadlessOutput {
+  let copying = log !== undefined;
+  return {
+    line(line, stream) {
+      reportOutput(line, stream);
+      if (!copying) return;
+      try {
+        log!.file.append(line);
+      } catch (error) {
+        copying = false;
+        reportWarning(`cannot write the log ${log!.given}: ${error instanceof Error ? error.message : String(error)}; the rest of the output is not copied`);
+      }
+    },
+    stdout,
+    drainMs,
+  };
+}
+
+/**
  * §3.3 steps 13–18 for a launch every pre-launch check has passed. `releaseSignals` is called right
  * before the spawn, after the launch has installed its own listeners: it hands the process's signals
  * over from the pre-launch cleanup (`withRunFiles`) to the launch (§3.3 step 15) with no gap between.
  *
- * @returns The recorded run (the agent exited `0` and the record was committed); otherwise `IO`
- *   `agent command '<command>' could not be started …` (no run, no record), `IO` `agent exited
- *   <exit_status>; run <run-id> recorded` with `details: {run_id, exit_status}` and the summary as a
- *   detail line, or `recordRun`'s refusal, the record in its `details` (the run is never lost).
+ * @returns The recorded run (the agent exited `0`, the bound did not expire, and the record was
+ *   committed); otherwise `IO` `agent command '<command>' could not be started …` (no run, no record), `IO`
+ *   `agent timed out after <duration>; run <run-id> recorded` with `details: {run_id, exit_status, timeout}`,
+ *   `IO` `agent exited <exit_status>; run <run-id> recorded` with `details: {run_id, exit_status}` — each
+ *   with the summary as a detail line — or `recordRun`'s refusal, the record in its `details` (the run is
+ *   never lost).
  */
 export async function launchAgent(root: string, input: LaunchInput, host: LaunchHost, releaseSignals: () => void): Promise<CoreResult<RecordedLaunch>> {
   const { manifest } = input.adapter;
-  const assigned = manifest.session.id === 'assign' ? assignedSessionId(root, input.runId) : undefined;
+  // §2.6: the clone's salt, before the banner, so a salt refused launches and records nothing (task-338).
+  let assigned: string | undefined;
+  if (manifest.session.id === 'assign') {
+    const salt = sessionSalt(root);
+    if (!salt.ok) return coreErr(salt.error);
+    assigned = assignedSessionId(salt.value, input.runId);
+  }
   const values: LaunchValues = {
     bootstrap: input.bootstrap,
     files: input.files,
@@ -395,15 +884,118 @@ export async function launchAgent(root: string, input: LaunchInput, host: Launch
     mcpConfig: input.mcpConfig,
     sessionId: assigned ?? '',
   };
-  const argv = renderLaunchArgv(manifest, values);
+  const argv = renderLaunchArgv(manifest, values, input.kind, input.role);
 
+  // Step 13 — the run's registry entry (§7, task-336, approver ruling D3 (a)): created exclusively, `agent execute`'s pid
+  // until the spawn; a live entry for the run id refuses the launch (RUN_ACTIVE), before anything is printed.
+  const entry: ActiveRunEntry = {
+    id: input.runId,
+    pid: process.pid,
+    workflow: input.workflow,
+    phase: input.phase,
+    element: input.element,
+    role: input.role,
+    agent: input.agent.name,
+    session: assigned ?? NOT_REPORTED,
+    started_ms: (host.now ?? Date.now)(),
+  };
+  const registered = registerRun(root, entry);
+  if (!registered.ok) return registered;
+  // From here every exit path removes the entry and closes the log (§3.3 step 13). `spawned.pid` is the agent's, once
+  // spawned: the second pid an entry of this launch may hold (§7 "This launch's entry").
+  const spawned: { pid: number | undefined } = { pid: undefined };
+  let log: OpenLog | undefined;
+  try {
+    // D8 (a): a project initialized before v0.4 has no `.wingfoil/.gitignore`; warned of, never refused.
+    if (notIgnoredInRepository(root, activeRunPath(root, input.runId))) reportWarning(REGISTRY_NOT_IGNORED_WARNING);
+    // Step 13 — the `--log` file (§3.5): a headless run's only, §3.2 step 7 having refused it on an interactive one.
+    if (input.log !== undefined && input.kind === 'headless') {
+      const opened = openLog(input.log);
+      if (!opened.ok) return coreErr({ code: 'IO', message: `cannot write the log ${input.log}: ${opened.cause}` });
+      log = opened.log;
+      if (notIgnoredInRepository(root, input.log)) reportWarning(logNotIgnoredWarning(input.log));
+    }
+    return await launchRun(root, input, host, releaseSignals, { assigned, values, argv, log, entry, spawned });
+  } finally {
+    // The entry first, only while it is still this launch's (§7), then the log: a close that throws can neither
+    // leave the entry behind nor replace the run's result (review F2, F3).
+    removeRun(root, entry, spawned.pid);
+    try {
+      log?.close();
+    } catch (error) {
+      reportWarning(`cannot close the log ${input.log ?? ''}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+}
+
+/**
+ * {@link launchAgent} once the run is registered and its log open (§3.3 steps 13–18): the banner, the spawn, the wait,
+ * the post-run lookups, the record and the outcome. A headless run's output is forwarded line by line to the caller
+ * (`reportOutput`) and, with `--log`, appended to `log` (§3.5).
+ */
+async function launchRun(
+  root: string,
+  input: LaunchInput,
+  host: LaunchHost,
+  releaseSignals: () => void,
+  launch: { readonly assigned: string | undefined; readonly values: LaunchValues; readonly argv: string[]; readonly log: OpenLog | undefined; readonly entry: ActiveRunEntry; readonly spawned: { pid: number | undefined } },
+): Promise<CoreResult<RecordedLaunch>> {
+  const { manifest } = input.adapter;
+  const { assigned, values, argv, log, entry, spawned } = launch;
   // Step 13 — the banner; step 14 — the spawn; step 15 — the wait, with the signals taken over.
   reportNotice(launchBanner(input));
   // The launch's listeners go in before the pre-launch cleanup's come out: no signal finds neither.
-  const signals = takeOverSignals();
+  const signals = takeOverSignals(input.kind, host.signalGroup ?? killGroup);
   releaseSignals();
+  // The time bound (step 15): from the spawn, SIGTERM at expiry, SIGKILL after the grace; both stop at the exit.
+  const timer = host.timer ?? realTimer;
+  const { timeout } = input;
+  let expired = false;
+  const cancels: (() => void)[] = [];
+  const armBound = (): void => {
+    if (timeout === undefined) return;
+    cancels.push(
+      timer(timeout.ms, () => {
+        expired = true;
+        signals.send('SIGTERM');
+        cancels.push(timer(TIMEOUT_GRACE_MS, () => signals.send('SIGKILL')));
+      }),
+    );
+  };
+  const stopBound = (): void => {
+    for (const cancel of cancels.splice(0)) cancel();
+  };
+  // §2.6 `session.id: output`: a headless run's stdout carries the session id (task-356); an interactive one's
+  // belongs to the agent, and its session is `not-reported` silently.
+  const headlessOutput = input.kind === 'headless' ? manifest.launch.headless?.output : undefined;
+  const reader =
+    manifest.session.id === 'output' && manifest.session.field !== undefined && (headlessOutput === 'json' || headlessOutput === 'jsonl')
+      ? sessionOutputReader(headlessOutput, manifest.session.field)
+      : undefined;
+  const lookupTimeoutMs = host.lookupTimeoutMs ?? LOOKUP_TIMEOUT_MS;
   try {
-    const ran = await runAgent(host.spawn ?? spawn, commandToSpawn(root, manifest.command), argv, root, (child) => signals.attach(child));
+    const ran = await runAgent(
+      host.spawn ?? spawn,
+      commandToSpawn(root, manifest.command),
+      argv,
+      // The agent only: the lookups, the pre-flight and the probe keep `agent execute`'s own environment (§2.4).
+      spawnOptions(input.kind, root, agentEnvironment(process.env, input.cliShim, input.agent.name)),
+      (child) => {
+        // Step 14 — the registry entry names the agent from now on (§7); a child with no pid keeps `agent execute`'s.
+        if (typeof child.pid === 'number') {
+          spawned.pid = child.pid;
+          rewriteRunPid(root, { ...entry, pid: child.pid }, child.pid);
+        }
+        signals.attach(child);
+        armBound();
+      },
+      () => {
+        stopBound();
+        // Step 14 — at the agent's exit the entry names `agent execute` again, live through steps 16–17 (§7, review F2).
+        if (spawned.pid !== undefined) rewriteRunPid(root, entry, spawned.pid);
+      },
+      input.kind === 'headless' ? forwardOutput(log === undefined ? undefined : { file: log, given: input.log ?? '' }, reader === undefined ? [] : [reader.write], lookupTimeoutMs) : undefined,
+    );
     if (!ran.ok) {
       return coreErr({ code: 'IO', message: `agent command '${manifest.command}' could not be started (adapter '${input.adapter.name}'): ${ran.reason}` });
     }
@@ -415,9 +1007,16 @@ export async function launchAgent(root: string, input: LaunchInput, host: Launch
       manifest,
       assigned,
       values,
-      timeoutMs: host.lookupTimeoutMs ?? LOOKUP_TIMEOUT_MS,
+      timeoutMs: lookupTimeoutMs,
+      output: reader?.end(),
     });
     const elementId = input.element.slice(input.element.indexOf(':') + 1);
+    const notes =
+      input.templatePath === undefined
+        ? 'none'
+        : deriveNotesField(root, { elementId, elementPath: input.elementPath, templatePath: input.templatePath, stateRef: input.stateRef });
+    // Step 16 — the start-up hint (bug-500): a failed run that committed nothing, under `trust: prompt`.
+    const hint = startUpHint(root, input, { expired, exitStatus: ran.exitStatus, notes });
     const record: RunRecord = {
       id: input.runId,
       element: input.element,
@@ -436,17 +1035,22 @@ export async function launchAgent(root: string, input: LaunchInput, host: Launch
       duration_ms: ran.durationMs,
       exit_status: ran.exitStatus,
       result: 'n/a',
-      notes:
-        input.templatePath === undefined
-          ? 'none'
-          : deriveNotesField(root, { elementId, elementPath: input.elementPath, templatePath: input.templatePath, stateRef: input.stateRef }),
+      notes: hint ? START_UP_HINT_NOTES : notes,
     };
 
     // Step 17 — append and commit.
     const recorded = recordRun(root, input.logPath, record);
     if (!recorded.ok) return recorded;
+    if (hint) reportWarning(startUpHintWarning(record, input));
 
-    // Step 18 — the outcome.
+    // Step 18 — the outcome: an expired bound first, whatever the exit status (§3.7 `TIMED_OUT`).
+    if (expired && timeout !== undefined) {
+      return coreErr({
+        code: 'IO',
+        message: `agent timed out after ${timeout.label}; run ${record.id} recorded`,
+        details: { run_id: record.id, exit_status: record.exit_status, timeout: timeout.label, issues: [{ detail: runSummaryLine(record, recorded.value.sha) }] },
+      });
+    }
     if (record.exit_status !== 0) {
       return coreErr({
         code: 'IO',
@@ -454,8 +1058,13 @@ export async function launchAgent(root: string, input: LaunchInput, host: Launch
         details: { run_id: record.id, exit_status: record.exit_status, issues: [{ detail: runSummaryLine(record, recorded.value.sha) }] },
       });
     }
+    // A work run's stdout carries the record (§3.5), so its summary line is a notice on stderr.
+    if (input.kind === 'headless') reportNotice(runSummaryLine(record, recorded.value.sha));
     return coreOk({ run: record, sha: recorded.value.sha });
   } finally {
+    stopBound();
+    // What is left of a signalled headless agent's process group does not outlive the run (bug-516).
+    signals.sweep();
     signals.restore();
   }
 }

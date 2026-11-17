@@ -8,7 +8,9 @@
  *   instance (`spec-017` §3.3), at `HEAD`; a `spec-003` error in the registry is `VALIDATION` with every
  *   diagnostic in `details`, as `workflow next` refuses it (§3.7's second row).
  * - {@link selectFrontierStep}: `--step <key>` on that instance's frontier, else `NextResult.next`.
- * - {@link stepTargetElement}: `--element`, else the step's scope element, else the instance's bound element.
+ * - {@link refuseWaitingStep}: without `--element`, a step that only waits is refused (task-335, `dl-171` (c)).
+ * - {@link stepTargetElement}: `--element`, else the step's scope element, else the instance's bound element, else
+ *   the instance's own `plan` element (task-353, `bug-418`).
  * - {@link resolveStepRole}: `--role`, else the step's role, which `dna.yaml` must define.
  *
  * All four are pure but the first, which reads `HEAD` only (`dl-080` (B)): the step a run takes is a
@@ -20,7 +22,8 @@ import { isRoleDefined } from '../dna/roles';
 import type { DnaYaml } from '../dna/schema';
 import type { ExecutionContextElement } from '../core/context';
 import { coreErr, coreOk, type CoreResult } from '../core/types';
-import { workflowNextAtHead, type NextResult, type Step } from '../core/workflow-next';
+import { ambiguousStepKey, resolveFrontierKey } from '../core/workflow-step-key';
+import { humanNeededLine, workflowNextAtHead, type NextResult, type Step } from '../core/workflow-next';
 import { DiagnosticsError, ValidationError } from '../validation';
 import type { Instance } from '../workflow/deduce';
 
@@ -54,17 +57,20 @@ export function readNextAtHead(root: string, ref: string | undefined): CoreResul
 /**
  * §3.2 step 1: the frontier step `key` names — `NextResult.next` or one of the further ready steps — else,
  * without `key`, `NextResult.next`. No open instance, or an empty frontier without `key`, is `NO_NEXT_STEP`;
- * a `key` that is not on the selected instance's frontier is `spec-017` §10's `CONFLICT`, its `details.frontier`
- * the frontier's keys in frontier order (task-330, `bug-340`).
+ * `key` resolves by `spec-017` §4.9 ({@link resolveFrontierKey}: an unscoped key names the one frontier step of
+ * its workflow and phase, several are {@link ambiguousStepKey}'s `CONFLICT`, task-356, `bug-468`); a `key` that is
+ * not on the selected instance's frontier is `spec-017` §10's `CONFLICT`, its `details.frontier` the frontier's
+ * keys in frontier order (task-330, `bug-340`).
  */
 export function selectFrontierStep(next: NextResult, key: string | undefined): CoreResult<Step> {
   const noNextStep = coreErr({ code: 'NOT_FOUND', message: NO_NEXT_STEP_MESSAGE });
   if (next.instance === null) return noNextStep;
   if (key === undefined) return next.next === null ? noNextStep : coreOk(next.next);
   const frontier = [...(next.next === null ? [] : [next.next]), ...next.more];
-  const found = frontier.find((step) => step.key === key);
-  if (found !== undefined) return coreOk(found);
   const instance = next.instance.id;
+  const resolved = resolveFrontierKey(frontier, key);
+  if (resolved.kind === 'one') return coreOk(resolved.step);
+  if (resolved.kind === 'many') return ambiguousStepKey(key, instance, resolved.steps);
   return coreErr({
     code: 'CONFLICT',
     message: `step '${key}' is not on the frontier of ${instance}`,
@@ -73,14 +79,30 @@ export function selectFrontierStep(next: NextResult, key: string | undefined): C
 }
 
 /**
+ * §3.2 step 1's waiting-step rule (task-335, `dl-171` (c), §3.7 `STEP_AWAITING`; approver ruling D8 (a)): a step
+ * whose `awaiting` is not `null` — an approval, an approval record, another party (`spec-017` §5.1, §5.4) — is
+ * `CONFLICT`, its message the line `workflow next` prints for it ({@link humanNeededLine}, `spec-017` §5.3), its
+ * `details` the step key, the instance and the kind awaited. A step that does not wait is returned unchanged. The
+ * pipeline asks it only of a step form without `--element`: with `--element` the step is an explicit target.
+ */
+export function refuseWaitingStep(step: Step): CoreResult<Step> {
+  const line = humanNeededLine(step);
+  if (step.awaiting === null || line === null) return coreOk(step);
+  return coreErr({ code: 'CONFLICT', message: line, details: { step: step.key, instance: step.instance, awaiting: step.awaiting.kind } });
+}
+
+/**
  * §3.2 step 2: `--element` if given, else the step's scope element, else the instance's bound element
- * (`spec-017` §3.4). A step with none of the three — a collection-entry or empty scope on an instance with no
- * bound element — is `NO_STEP_ELEMENT`. Whether the element exists at `HEAD` is the pipeline's check.
+ * (`spec-017` §3.4), else the instance's own `plan` element, `plan:<instance-id>` (`bug-418`, task-353): an open
+ * instance is a `plan` element whose id is the instance id (`spec-017` §3.1), so a collection-entry or empty scope
+ * on an unbound instance runs on that plan. With no instance at all — a defence: every step form selects one —
+ * the step is `NO_STEP_ELEMENT`. Whether the element exists at `HEAD` is the pipeline's check.
  */
 export function stepTargetElement(step: Step, instance: Instance | null, override: ExecutionContextElement | undefined): CoreResult<ExecutionContextElement> {
   if (override !== undefined) return coreOk(override);
   const scope = step.scope !== null && 'element' in step.scope ? step.scope.element : (instance?.element ?? null);
   if (scope !== null) return coreOk({ type: scope.type, id: scope.id });
+  if (instance !== null) return coreOk({ type: 'plan', id: instance.id });
   return coreErr({ code: 'VALIDATION', message: `step '${step.key}' has no element: give --element <type>:<id>` });
 }
 

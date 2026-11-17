@@ -57,7 +57,8 @@ A few ideas run through everything:
 ## 1. Prerequisites
 
 - **Node.js 22.12 or later** — `node --version`.
-- **git**, and a **git repository** to work in. WingFoil must be run from the repository root.
+- **git**, and a **git repository** to work in. WingFoil must be run from the repository root, or be given it
+  with `--project <dir>` (§10).
 - **A git identity** — WingFoil refuses to commit without one:
 
   ```bash
@@ -170,6 +171,20 @@ above it to uncomment in its place, or run:
 wingfoil dna add team.agents --value claude --entry-executes_as developer,reviewer --entry-approval_authority false
 ```
 
+**Human-only roles** (new in 0.4). Some roles only a person executes. `approver` always is one; mark any
+other with `human_only: true`, and `dna.yaml` refuses to load if an agent's `executes_as` names it
+(`team.agents[<i>] '<name>' executes_as names the human-only role "<role>" …`). `wingfoil agent execute`
+refuses to launch an agent as such a role (`error: role '<role>' is never executed by an agent`), and
+`wingfoil workflow list` warns about a phase that gives an `agent.execute` action to a role no agent with an
+`adapter` executes (`W_WORKFLOW_AGENT_ROLE_UNEXECUTED`):
+
+```bash
+wingfoil dna update team.roles.tech-lead --entry-human_only true
+```
+
+`human_only` says who may *execute* a role, nothing about who may approve: approval stays with the
+`approver` role.
+
 **Agent commit identity.** An agent entry may also carry an `email`; with its
 `name`, it is the identity written in the `Co-Authored-By: <name> <<email>>` trailer of the commits the
 agent co-authors (WingFoil's own `git-conventions` directive adds an `AI-Model:` trailer with the model
@@ -190,7 +205,8 @@ ways to fill it:
 
 An agent's `name` may not be empty or blank, nor contain `<`, `>` or a line break, since it is written
 into the trailer. An `email` on a top-level domain RFC 2606 reserves (`.test`, `.example`, `.invalid`,
-`.localhost`), or carrying git's guessed `.(none)` domain, is refused: no mailbox exists there, and
+`.localhost`), on `example.com`, `example.net`, `example.org` or a subdomain of one, or carrying git's guessed
+`.(none)` domain, is refused: no mailbox exists there, and
 WingFoil's attribution audit treats such an identity as unattributed. The `email` is required on an entry that declares an `adapter`: that
 agent can be launched, and every commit it co-authors names it.
 
@@ -395,26 +411,54 @@ wingfoil workflow list                 # the workflows you can run now (--all: e
 wingfoil workflow show sw-life-cycle   # one workflow: its phases, roles, directives, actions, checks
 ```
 
-Both read the workflow files as committed at `HEAD`. A workflow is run in four steps:
+Both read the workflow files as committed at `HEAD`. Until the workflow engine's driver runs a workflow itself
+(planned for 1.0), you drive it by hand: you start it, go round a cycle until its steps are complete, and end it.
 
-1. **Start it.** `wingfoil workflow start <name>` opens a workflow: it records it as a `plan` document
-   (an `add` and a `submit` commit) and makes it the active workflow. `--element <type>:<id>` names the
-   element it runs on.
-2. **Ask what comes next.** `wingfoil workflow next` names the next step of the active workflow: its role
+**Start it.** `wingfoil workflow start <name>` opens a workflow: it records it as a `plan` document (an `add` and a
+`submit` commit) and makes it the active workflow. `--element <type>:<id>` names the element it runs on.
+
+Then, until its steps are complete:
+
+1. **Ask where the run stands.** `wingfoil workflow next` names the next step of the active workflow: its role
    and that role's directives, the element it works on, and for each action the command to run or the
    commit subject it expects (`--assigned-to me` keeps the steps your role holds). `wingfoil workflow
    status` lists every open workflow with its phases and ready steps, the approvals waiting for a
    decision and who they are routed to, and the documents sitting at a gate that no open workflow carries,
    each as a "human needed" line.
-3. **Do the step.** Do that phase's work in the role it names, with that role's directives loaded, and
-   record the outcome as Memory documents moved through their states with the verbs in §8. WingFoil
-   deduces from those documents, as committed, that the step is done. A step that nothing in the
-   repository can show as done — a checkpoint, a wait for a third party, an approval no element carries —
-   is recorded with `wingfoil workflow finalize`, an empty commit that `workflow next` then moves past (on
-   a phase with `approval:`, only an approver can, with `--reason`). An agent can be launched on a step
-   with `wingfoil agent execute --next` (§9.4).
-4. **End it.** `wingfoil workflow end` closes the active workflow once its steps are complete, and makes
-   the previous one active again.
+2. **Do the step, or have it done.** Do the phase's work in the role it names, with that role's directives loaded,
+   or launch the agent of that role on it with `wingfoil agent execute --next` (§9.4).
+3. **Record it with the verbs.** Move the outcome's Memory documents through their states with the verbs in §8. An
+   element the step adds is added linked to it: `workflow next` prints the `wingfoil memory add` command with
+   `--workflow <instance> --step <step-key>`. WingFoil deduces from those documents, as committed, that the step is
+   done.
+4. **Record what nothing else shows.** A step that nothing in the repository can show as done — a checkpoint, a wait
+   for a third party, an approval no element carries — is recorded with `wingfoil workflow finalize`, an empty commit
+   that `workflow next` then moves past (on a phase with `approval:`, only an approver can, with `--reason`).
+5. **Decide the gates.** At a step waiting for the approver (`human needed:` in `workflow next` and `workflow
+   status`), the approver approves or rejects from a terminal of their own (§8.3); an agent stops there and hands
+   over.
+
+**End it.** `wingfoil workflow end` closes the active workflow once its steps are complete, and makes the previous
+one active again; before that it refuses and names the current step.
+
+A run driven this way, by you or by an agent following [`agents.md` §7](agents.md#7-following-a-workflow), is a
+hand-driven run. A project may also declare a `coordinator` role, executed by an agent, that decides only what the
+configuration cannot — which ready steps to run in parallel, the triage of a failure, the content of an element no
+other role's step writes — and never approves, rejects, amends or decides a gate; its session is recorded as a run
+with `wingfoil agent execute --element plan:<instance-id> --role coordinator`.
+
+**What removes each manual step.**
+
+| Manual step | Done today by | Removed by |
+|---|---|---|
+| reading the run: `workflow status`, `workflow next` | you, or the human | the driver, 1.0 |
+| opening and ending a workflow: `workflow start`, `workflow end` | the human, or you when asked | the driver, 1.0 |
+| adding an element linked to its step: `memory add --workflow --step` | the step's role | the driver, 1.0 |
+| launching the agent of the step's role: `agent execute --next` | the human, or a coordinator | the driver, 1.0 (a launch without a terminal, `--headless`, is new in 0.4) |
+| running a phase's checks | the step's role, by hand | the driver, 1.0 |
+| recording a step no evidence completes: `workflow finalize` | you, or a coordinator | the driver, 1.0 |
+| writing an element's content and doing the step's work | the step's role | never: it stays the agent's |
+| deciding a gate | the human approver | never: a gate stays the approver's |
 
 **WingFoil records and routes; it does not execute.** Nothing runs a step or its checks for you: the
 workflow files describe your process so that people and agents read the same one, and the commands above
@@ -531,6 +575,14 @@ wingfoil memory reject  task-001-my-first-task --reason "Add acceptance criteria
 - These verbs commit the state change **and nothing else**. If the document has uncommitted edits they
   refuse — commit or stash them first.
 - Without the approver role you get `error: user not authorized to approve type 'task'` (exit `1`).
+- Only the approver approves, from a
+  terminal of their own. In a session an AI agent started — `WINGFOIL_AGENT`, `CLAUDE_CODE_CHILD_SESSION` or
+  `CODEX_SANDBOX` defined, or `--co-author` given — `approve`, `reject` and `amend` refuse with `error: E_AGENT_CONTEXT:
+  …` (exit `1`) and write nothing: run them yourself, from a terminal no agent started. So approvals carry a name and a
+  reason, and agent commits are marked by their `Co-Authored-By:` and `AI-Model:` trailers, which an approval never
+  carries. This stops an agent that cooperates or makes a mistake, not one working against you: an agent that removes
+  its markers, or runs the command through a process that drops its environment, is not stopped, and its commit looks
+  like yours (Codex marks only the commands it runs sandboxed).
 
 ### 8.4 Retire
 
@@ -591,6 +643,12 @@ the `Approver:` and `Reason:` lines: like `approve`, it needs the `approver` rol
 ## 9. Connect an AI agent
 
 Agents read the project through WingFoil in two ways, which complement each other.
+
+Commits an agent causes carry its trailers: in an agent's
+session every `wingfoil` command that writes ends its commit with `Co-Authored-By: <name> <<email>>` — the
+`team.agents` entry `--co-author <name>` names, else the one the session selects — and `AI-Model: <model>`, from
+`--ai-model <id>` or `WINGFOIL_AGENT_MODEL`, else `not-reported`. An agent never approves: the approval commands
+refuse its session (§8.3).
 
 ### 9.1 The MCP server
 
@@ -669,21 +727,69 @@ Before anything is spawned it checks the element, the role (never `approver`), t
 identity, `paths.runs` and the context, and refuses with exit `1` on the first failure. The agent is
 handed the terminal; its first prompt tells it to read its context from the MCP Resource
 `wingfoil://session/<role>/<type>:<id>/<commit>`, served by a WingFoil MCP server of the same build that
-`agent execute` registers for it. When the agent exits, the run is recorded as one line of
+`agent execute` registers for it. Its plain `wingfoil` is that build too: a shim of it is first on the agent's `PATH`,
+also named by `WINGFOIL_CLI`, and the first prompt says which version `wingfoil --version` prints. When the agent exits, the run is recorded as one line of
 `<paths.runs>/<element-id>.jsonl`, committed as `agent: record <run-id>`. `--dry-run` runs every check and
-prints the launch it would make; both built-in adapters need a terminal, so a dry run with stdin or
-stdout redirected fails with `error: interactive launch needs a terminal on stdin and stdout`.
+prints the launch it would make; both built-in adapters need a terminal for an interactive launch, so a dry
+run with stdin or stdout redirected still plans it, with a `warning:` line saying the real run is refused
+there.
+
+With `--headless` (or a phase declaring `launch: headless`), the agent runs as a work run, with no terminal:
+it does its work alone, and `agent execute` prints `{"run": <record>}` on stdout when it ends. What the agent
+writes on its stdout and stderr is passed on to `agent execute`'s stderr line by line as it runs (new in 0.4), as
+it is under `--format console` and as one `{"output": <line>, "stream": "stdout" | "stderr"}` document per line
+under `json` and `yaml`. `--log <path>` also appends those lines to a file you name (created readable by you only,
+mode `0600`), with a `warning:` line when the file is inside the repository and not git-ignored; an interactive
+launch refuses it (exit `2`): its output is the terminal's. **The output may hold secrets** — a token a tool printed,
+a credential in an error message — and nothing filters it: WingFoil keeps no log of its own, and the output is
+never committed, neither to the run record nor anywhere else; where a copy goes is your choice. `--timeout 30m`
+(`<n>s`, `<n>m` or `<n>h`, at most `24h`) stops the agent if it runs longer; the run is still recorded. A step that only waits for an approval or another party is refused with the line
+`wingfoil workflow next` prints for it, unless `--element` names the target.
+
+A headless agent cannot be asked for permission, so the adapter says what each role may do without asking
+(`launch.headless.permissions`, new in 0.4): a map from a role name to the arguments appended to the launch, with
+a `default` entry for every other role. The built-in adapters let `developer`, `qa` and `architect` edit, run the
+tests and commit but never push or publish, let `reviewer` read and run the tests, and let any other role only
+read. `--dry-run` prints the arguments the run's role would get, under `launch.permissions`.
+
+An agent CLI launched in a directory it has never opened may stop at its start-up to ask whether to trust it.
+The built-in adapters declare it (`launch.<kind>.trust`, new in 0.4): their interactive launch asks, and you answer
+at the terminal; their headless launch does not ask. When a run of a launch that may ask ends without success and
+without a commit, `agent execute` records a hint in the run's `notes` and prints a `warning:` line naming the
+folder-trust step as the likely cause: open the directory once with the agent CLI and answer it.
+
+**In a worktree.** To run an agent on a task checked out in a linked worktree (`git worktree add ../wt-task-1
+task/task-1`), name the worktree with the global `--project` (new in 0.4):
+`wingfoil --project ../wt-task-1 agent execute --element task:task-001-my-first-task`. The run reads the
+worktree's `HEAD`, the agent starts in the worktree, the MCP server serves it, and the record is committed on the
+worktree's branch, beside the task's own commits. A step with no element of its own, on a workflow with none (the
+checkpoints `init` scaffolds), runs on the workflow's plan, `plan:<instance-id>` (new in 0.4), as
+`wingfoil agent list --waiting` shows it.
+
+While an agent runs, `agent execute` keeps an entry for the run under `.wingfoil/run/` (its run id, the agent's
+process id, when it started), removed when the run ends: `wingfoil agent list --active` lists them, and a second
+launch of the same run id is refused while the first one runs (new in 0.4). `.wingfoil/run/` is local to the
+checkout and never committed: `wingfoil init` writes `.wingfoil/.gitignore` with the line `/run/`. A project
+initialized before 0.4 has no such file, and every launch prints a `warning:` line until you add it.
 
 ```bash
-wingfoil agent list            # the recorded runs, and the workflow steps waiting for an agent
+wingfoil agent list            # the recorded runs, the workflow steps waiting for an agent, and the agents running now
 wingfoil agent show task-001-my-first-task/adhoc/1
 ```
 
-**Codex CLI: do not declare a server named `wingfoil` in a trusted project's `.codex/config.toml`.** The
-`codex-cli` adapter registers WingFoil's MCP server with Codex's `-c mcp_servers.wingfoil=…` override, and
-Codex merges that override with a same-named table of a trusted project's `.codex/config.toml`: the
-keys the project sets and the override does not (`env`, `cwd`, …) reach WingFoil's server, and a `cwd`
-can make it serve another repository's context.
+**Codex CLI: a server named `wingfoil` in Codex's own configuration stops the run.** The `codex-cli` adapter
+registers WingFoil's MCP server with Codex's `-c mcp_servers.wingfoil=…` override, and Codex merges that override
+with a same-named table of a trusted project's `.codex/config.toml`, a nested `env` table included: the keys the
+project sets and the override does not (`env`, `cwd`, …) would reach WingFoil's server, and a `cwd` could make it
+serve another repository's context. So, before the launch (and in a dry run), `agent execute` asks Codex with
+`codex mcp get wingfoil`; when Codex would load such a table it refuses with exit `1`, `error: adapter 'codex-cli':
+the agent's own configuration declares an MCP server named 'wingfoil', which it would merge into the server agent
+execute registers: remove or rename it`. Rename or remove that table. A check that times out or cannot start
+prints a `warning:` line and the run goes on (new in 0.4).
+
+A headless `codex-cli` run (`--headless`) records its session id: `codex exec --json` prints its events on stdout,
+and the first one carries the id, which `codex exec resume <id>` accepts. An interactive run records
+`not-reported` (new in 0.4).
 
 ## 10. CI and scripting
 
@@ -703,12 +809,21 @@ PENDING=$(wingfoil memory search --type task --status pending --format json \
 
 Full script: [`examples/05-ci-json-exit-codes`](examples/05-ci-json-exit-codes/run.sh).
 
+A script, a CI job or an agent launch that runs somewhere else names the project instead of changing directory:
+`wingfoil --project <dir> <command>` (new in 0.4) runs the command on the repository rooted at `<dir>`, which must
+itself be the git root, and `wingfoil --project <dir> mcp` serves that project to an MCP client started in any
+directory. WingFoil never infers the project root: it does not search upwards from a subdirectory the way git does,
+even for a command that only reads, so a command line acts on the repository it names, or on the one it is run in,
+and never on one it found. A directory that is not a git root exits `1` with
+`E_NOT_AT_GIT_ROOT: --project is not a git root: <absolute dir>` ([CLI reference](cli-reference.md#where-to-run-it)).
+
 ## 11. Known limitations in 0.3
 
 - **No step execution** — WingFoil tracks workflows and routes their approvals, but people and agents
   carry out the steps and run their checks (§7).
 - **No unassign command for directives** — edit `roles.yaml` and commit (§6.2).
-- **Run from the repository root** — a subdirectory fails with `E_NOT_AT_GIT_ROOT`.
+- **Run from the repository root** — or name it with `--project <dir>` (new in 0.4, §10); a subdirectory fails with
+  `E_NOT_AT_GIT_ROOT`.
 - **`dna show` takes only a top-level section** (`team`, not `team.members`).
 
 ## 12. Upgrading from 0.2.x

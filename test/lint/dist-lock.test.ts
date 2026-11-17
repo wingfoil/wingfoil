@@ -517,9 +517,15 @@ describe('dist/ lock wiring (task-146, bug-095)', () => {
 
   it('the build the setup composes still mirrors package.json\'s build script (task-308, characterization)', () => {
     // test/global-setup.cjs runs tsc and the build record into the staging directory itself; this pin
-    // makes a change to the `build` script fail here rather than drift silently from the setup.
+    // makes a change to the `build` script fail here rather than drift silently from the setup. Since
+    // task-349 (dl-170 Decision 1) the script's tsc step runs under the heavy-gate lock, which the setup
+    // does not take (it is nested in run-tests' hold, or a targeted run): the mirror is the script minus
+    // that prefix.
     const pkg = JSON.parse(readFileSync(join(REPO_ROOT, 'package.json'), 'utf-8')) as { scripts: Record<string, string> };
-    expect(pkg.scripts.build).toBe('tsc -p tsconfig.build.json && node scripts/write-build-info.cjs');
+    const HEAVY_GATE_PREFIX = 'node scripts/heavy-gate.cjs build -- ';
+    const SETUP_BUILD = 'tsc -p tsconfig.build.json && node scripts/write-build-info.cjs';
+    expect(pkg.scripts.build).toBe(`${HEAVY_GATE_PREFIX}${SETUP_BUILD}`);
+    expect((pkg.scripts.build ?? '').slice(HEAVY_GATE_PREFIX.length)).toBe(SETUP_BUILD);
   });
 
   it('this run\'s setup left a complete dist/ and no staging or previous directory (task-308, characterization)', () => {

@@ -18,9 +18,12 @@ import { dirname, join } from 'node:path';
  */
 export const TYPECHECK_PROJECTS: readonly string[] = ['tsconfig.json', 'tsconfig.build.json'];
 
-/** The exact `typecheck` npm script {@link TYPECHECK_PROJECTS} implies. */
+/**
+ * The exact `typecheck` npm script {@link TYPECHECK_PROJECTS} implies: each project's `tsc --noEmit` run
+ * under the machine-wide heavy-gate lock of `scripts/heavy-gate.cjs` (task-349, `dl-170` Decision 1).
+ */
 export function typecheckScript(): string {
-  return TYPECHECK_PROJECTS.map((project) => `tsc --noEmit -p ${project}`).join(' && ');
+  return TYPECHECK_PROJECTS.map((project) => `node scripts/heavy-gate.cjs typecheck -- tsc --noEmit -p ${project}`).join(' && ');
 }
 
 /** The installed TypeScript compiler's CLI, resolved through its package root. */

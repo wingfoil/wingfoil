@@ -10,7 +10,9 @@
  * `E_WORKFLOW_ELEMENT_TYPE_UNKNOWN`, `E_WORKFLOW_COLLECTION_UNRESOLVED`, `E_PHASE_CADENCE_EVENT_UNKNOWN`
  * (spec-003 open question 3: an event that can never fire), then the warnings
  * `W_PHASE_TOKEN_OUT_OF_SCOPE`, `W_PHASE_EXIT_STATE_UNDETERMINED`, `W_PHASE_FALLBACK_STATE_MISMATCH`,
- * `W_PHASE_FALLBACK_NOT_REENTRANT`.
+ * `W_PHASE_FALLBACK_NOT_REENTRANT`, `W_WORKFLOW_AGENT_ROLE_UNEXECUTED` (task-340, `dl-202` item 2: an `agent.<x>`
+ * action under a role no `team.agents` entry with an `adapter` executes — a human-only role always, `spec-002`
+ * § "Role binding").
  *
  * Order (REQ-SYS-07): files in manifest `include` order; within a file the workflow-level row before
  * the phases, phases in declared order, and per phase the rows in table order; within one row, the
@@ -67,6 +69,7 @@ const ROWS = [
   'W_PHASE_EXIT_STATE_UNDETERMINED',
   'W_PHASE_FALLBACK_STATE_MISMATCH',
   'W_PHASE_FALLBACK_NOT_REENTRANT',
+  'W_WORKFLOW_AGENT_ROLE_UNEXECUTED',
 ] as const;
 type Row = (typeof ROWS)[number];
 
@@ -149,6 +152,18 @@ function notRunDiagnostics(registry: CheckedRegistry, inputs: WorkflowCoreInputs
 
 // ---- the rows that read one workflow and the other pillars, with no include context ---------------
 
+/** The prefix of the action tokens the built-in binding runs as `wingfoil agent execute` (spec-003 § "Action expressions"). */
+const AGENT_TOKEN_PREFIX = 'agent.';
+
+/**
+ * Whether a `team.agents` entry that declares an `adapter` lists `role` in `executes_as` (`W_WORKFLOW_AGENT_ROLE_UNEXECUTED`,
+ * `dl-202` item 2): only such an entry can be launched by `agent execute`. A human-only role is never listed — the
+ * `dna.yaml` load refuses it (`spec-002` § "Role binding") — so it is never executed.
+ */
+function agentExecutes(dnaYaml: DnaYaml, role: string): boolean {
+  return (dnaYaml.team.agents ?? []).some((agent) => agent.adapter !== undefined && agent.executes_as.includes(role));
+}
+
 function staticChecks(out: Collector, i: number, workflow: Workflow, bindings: BindingsYaml | null, inputs: WorkflowCoreInputs): void {
   const { memoryYaml, dnaYaml } = inputs;
   const knownType = (type: string): boolean => memoryYaml !== null && Object.prototype.hasOwnProperty.call(memoryYaml.types, type);
@@ -172,6 +187,20 @@ function staticChecks(out: Collector, i: number, workflow: Workflow, bindings: B
       const person = approval?.by_person;
       if (person !== undefined && !dnaYaml.team.members.some((member) => member.name === person || member.email === person)) {
         out.add(i, p, 'E_PHASE_APPROVER_UNKNOWN', at('approval.by_person'), `unknown approver '${person}' (no team.members[] name or email in dna.yaml)`);
+      }
+      const role = phase.role;
+      if (role !== undefined && roles.has(role) && !agentExecutes(dnaYaml, role)) {
+        const a = (phase.actions ?? []).findIndex((action) => tokenName(action).startsWith(AGENT_TOKEN_PREFIX));
+        if (a !== -1) {
+          const token = tokenName(phase.actions![a]!);
+          out.add(
+            i,
+            p,
+            'W_WORKFLOW_AGENT_ROLE_UNEXECUTED',
+            at(`actions[${a}]`),
+            `phase '${phase.name}' declares ${token} under role '${role}', but no team.agents entry with an adapter executes as '${role}'`,
+          );
+        }
       }
     }
 

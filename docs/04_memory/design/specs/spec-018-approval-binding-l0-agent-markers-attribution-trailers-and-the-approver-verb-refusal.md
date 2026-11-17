@@ -47,7 +47,7 @@ What the code does today, read on the v0.4 planning branch:
   (`src/core/approval-authority.ts:160`), exit `1` (`src/core/exit-code.ts:38-44`).
 - **`agent execute` sets nothing in the agent's environment.** The agent is spawned with `env: process.env`
   (`src/agent/launch.ts:194`), and the post-run lookups likewise (`src/agent/launch.ts:220`). It refuses to run the
-  `approver` role at all (`src/agent/execute.ts:591`), but an agent it launched as `developer` can still run
+  `approver` role at all (`src/agent/execute.ts:585`), but an agent it launched as `developer` can still run
   `memory approve` from its shell.
 - **No verb writes attribution trailers.** The commit primitives append only the caller's `trailers` and the
   `WingFoil-Version:` line (`src/storage/commit.ts:52-59`, `stampedMessage` at `:109-111`, used by `commitPaths` at
@@ -62,7 +62,7 @@ What the code does today, read on the v0.4 planning branch:
   not ship to projects; `dl-222` (a) moves its generic rules into a shipped, read-only verb, built by its own v0.4
   task.
 - **The shipped MCP server registers no Tools.** `wingfoil mcp` answers `tools/list` with an empty list
-  (`src/mcp/server.ts:57-72`), until P5.2.3 (v0.4) registers real ones (`spec-004` §4.3 item 5). The registrar that
+  (`src/mcp/server.ts:61-76`), until P5.2.3 (v0.4) registers real ones (`spec-004` §4.3 item 5). The registrar that
   maps each mutating operation to a Tool (`src/mcp/registrar.ts:107-111`, `:118-140`) serves the parity tests only:
   "The production server does not use this registrar" (`src/mcp/registrar.ts:96-97`).
 
@@ -124,7 +124,7 @@ it records names the launched agent in its `agent` field (`spec-016` §4.2), and
 session would credit the wrong agent, or the right one twice. So `agent execute` is excluded from §2.1 by name: its record commit carries no
 agent trailer whatever its environment — a launch from a Claude Code shell (`CLAUDE_CODE_CHILD_SESSION` set) included
 — and it takes neither `--co-author` nor `--ai-model` (§2.4). It is not approver-gated, so §3 does not refuse it
-either; it already refuses the `approver` role for the agent it launches (`src/agent/execute.ts:591`).
+either; it already refuses the `approver` role for the agent it launches (`src/agent/execute.ts:585`).
 
 #### 1.2 The MCP surface is not a marker
 
@@ -488,3 +488,10 @@ choice by name alone. "Who applies it": `wingfoil` writes them on its own commit
   does not refuse** (former OQ-3, §2.3). Refusing would enforce `dl-158` Rule 2 (ii)'s "every commit an agent
   co-authors" strictly, at the cost of every project that has not declared its agents; the warning puts the gap on
   screen.
+
+**Revision (2026-11-07, `task-354-remove-the-import-cycles-between-src-core-and-src-agent-and-the-surface-imports-bypassing-src-core`)
+— the line citations of the Context and §1.** `task-354` removed `agent execute`'s warning rewrite and changed `src/mcp/server.ts`'s
+imports, which moved two cited ranges: the approver-role refusal is at `src/agent/execute.ts:585` (was 591; `grep -n
+"role === APPROVER_ROLE" src/agent/execute.ts` → 585) and the empty Tools channel at `src/mcp/server.ts:61-76` (was
+57-72, the same text four lines lower). No rule changes. Edited in place without a supersede or a state change (`dl-047`),
+pending the approver's `memory amend`.

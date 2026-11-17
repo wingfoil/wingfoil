@@ -8,16 +8,22 @@
  * - AC 2: BDD P4.3 sc. 1 (`end` closes a complete instance, no active one is left), sc. 2 (ending the active
  *   instance restores the previous one), sc. 3 (`no active workflow to end`), and the new scenario: an
  *   incomplete instance is refused with its current step and the `memory deprecate` hint.
- * - AC 3: each `start` commit touches only the plan file; a refused second commit leaves the plan `draft` and
- *   names `wingfoil memory submit <id>`; a project with no `plan` type is refused with §10's message.
+ * - AC 3: the `start` commit touches only the plan file; a project with no `plan` type is refused with §10's
+ *   message.
  * - AC 4: the element errors of §10 and the `CONFLICT` of a colliding `--set phase=`.
+ * - task-345 AC 4 (`bug-413` option (c), `spec-017` §3.5): `--element <type>:<id>` on an element-less main sets
+ *   its context, `--element none` clears it, and with neither the context comes only from an active instance
+ *   whose workflow declares `element:`.
+ * - task-346 AC 1 (`bug-390`, `spec-017` §7.1 as amended): `start` writes only the plan's add commit and leaves the
+ *   plan `draft`, naming `wingfoil memory submit <id>` in its `submit` field; the instance is open from the add;
+ *   `end` refuses it until the plan is submitted, so every `end` after a `start` below submits the plan first.
  *
  * The CLI's exit codes and usage errors are `test/cli/workflow-start-end.integration.test.ts`.
  */
-import { chmodSync, existsSync, readFileSync } from 'fs';
+import { appendFileSync, existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 
-import { CORE_MODULES, enumerateOperations } from '../../src/core';
+import { CORE_MODULES, deduceWorkflowStateAtHead, enumerateOperations } from '../../src/core';
 import type { CoreFn } from '../../src/core/registry';
 import type { CoreResult } from '../../src/core/types';
 import { commitAll, git, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
@@ -165,6 +171,25 @@ async function end(root: string, ref?: string): Promise<CoreResult<unknown>> {
   return operation('workflowEnd')({ root, ...(ref === undefined ? {} : { positional: ref }) });
 }
 
+/** The registered `memorySubmit` (`wingfoil memory submit <id>`), the positional the plan id. */
+async function memorySubmit(root: string, id: string): Promise<CoreResult<unknown>> {
+  const found = enumerateOperations(CORE_MODULES).find((entry) => entry.module.name === 'memory' && entry.operation.name === 'memorySubmit');
+  if (found === undefined) throw new Error('memorySubmit is not registered');
+  return found.operation.fn({ root, positional: id }) as Promise<CoreResult<unknown>>;
+}
+
+/**
+ * What the author of a started plan does before `end` (task-346, `spec-017` §7.1): write a body line into the plan
+ * `start` left `draft`, then `memory submit` it (`draft → active`).
+ */
+async function writeAndSubmit(root: string, id: string): Promise<void> {
+  const path = out(root, ['ls-files', `docs/plans/*/${id}.md`]);
+  if (path === '') throw new Error(`no plan file for ${id}`);
+  appendFileSync(join(root, path), '\nThe plan of this run.\n');
+  const submitted = await memorySubmit(root, id);
+  if (!submitted.ok) throw new Error(`expected a submit of ${id}, got ${submitted.error.code}: ${submitted.error.message}`);
+}
+
 const out = (root: string, args: string[]): string => git(root, args).trim();
 const head = (root: string): string => out(root, ['rev-parse', 'HEAD']);
 const subjects = (root: string, range: string): string[] => out(root, ['log', '--format=%s', range]).split('\n').filter((line) => line !== '');
@@ -185,6 +210,8 @@ interface StartValue {
   readonly instance: InstanceView;
   readonly next: { readonly key: string } | null;
   readonly commits: readonly string[];
+  /** `wingfoil memory submit <id>` (task-346, `spec-017` §8 `StartResult.submit`). */
+  readonly submit?: string;
 }
 
 interface EndValue {
@@ -214,7 +241,7 @@ describe('workflow start and workflow end (task-217, spec-017 §7.1–§7.2)', (
   afterEach(() => removeTempDir(repo));
 
   describe('BDD P4.2 — workflow start (AC 1)', () => {
-    it('sc. 1: the instance is recorded as an active plan, becomes the active instance, and its first step is reported', async () => {
+    it('sc. 1: the instance is recorded as a draft plan, becomes the active instance, and its first step is reported', async () => {
       const before = head(repo);
       const value = startValue(await start(repo, { name: 'release-cycle', element: 'release:minor-v1' }));
 
@@ -222,7 +249,7 @@ describe('workflow start and workflow end (task-217, spec-017 §7.1–§7.2)', (
         id: 'release-cycle-minor-v1-plan',
         workflow: 'release-cycle',
         element: { type: 'release', id: 'minor-v1' },
-        planStatus: 'active',
+        planStatus: 'draft',
         active: true,
       });
       expect(value.next?.key).toBe('release-cycle.ship@release:minor-v1');
@@ -230,9 +257,9 @@ describe('workflow start and workflow end (task-217, spec-017 §7.1–§7.2)', (
       expect(value.commits).toEqual(out(repo, ['rev-list', '--reverse', `${before}..HEAD`]).split('\n'));
 
       const path = 'docs/plans/release-cycle/release-cycle-minor-v1-plan.md';
-      expect(subjects(repo, `${before}..HEAD`)).toEqual(['wf(plan): submit release-cycle-minor-v1-plan', 'wf(plan): add release-cycle-minor-v1-plan']);
+      expect(subjects(repo, `${before}..HEAD`)).toEqual(['wf(plan): add release-cycle-minor-v1-plan']);
       const document = readFileSync(join(repo, path), 'utf-8');
-      expect(document).toMatch(/^status: active$/m);
+      expect(document).toMatch(/^status: draft$/m);
       expect(document).toMatch(/^workflow: "release-cycle"$/m);
       expect(document).toMatch(/^phase: "minor-v1"$/m);
       expect(document).toMatch(/^element: "minor-v1"$/m);
@@ -245,8 +272,9 @@ describe('workflow start and workflow end (task-217, spec-017 §7.1–§7.2)', (
       startValue(await start(repo, { name: 'release-cycle', element: 'release:minor-v1' }));
       const second = startValue(await start(repo, { name: 'report-bug' }));
 
-      expect(second.instance).toMatchObject({ workflow: 'report-bug', active: true, planStatus: 'active' });
+      expect(second.instance).toMatchObject({ workflow: 'report-bug', active: true, planStatus: 'draft' });
       // Both instances are open, the second one active (spec-017 §3.3).
+      await writeAndSubmit(repo, second.instance.id);
       const ended = endValue(await end(repo));
       expect(ended.ended.workflow).toBe('report-bug');
       expect(ended.active).toMatchObject({ id: 'release-cycle-minor-v1-plan', workflow: 'release-cycle', active: true });
@@ -343,9 +371,62 @@ describe('workflow start and workflow end (task-217, spec-017 §7.1–§7.2)', (
       });
     });
 
-    it('`--element` on a workflow that declares no element', async () => {
-      const result = await start(repo, { name: 'checklist', element: 'release:minor-v1' });
-      expect(result.ok ? null : result.error).toMatchObject({ code: 'VALIDATION', message: "workflow 'checklist' declares no element: --element is not accepted" });
+    it('task-345 AC 4 (bug-413 (c)): `--element <type>:<id>` on a workflow that declares no element sets the context', async () => {
+      const value = startValue(await start(repo, { name: 'checklist', element: 'release:minor-v1' }));
+      expect(value.instance).toMatchObject({ id: 'checklist-minor-v1-plan', element: null, context: { type: 'release', id: 'minor-v1' } });
+      expect(readFileSync(join(repo, 'docs/plans/checklist/checklist-minor-v1-plan.md'), 'utf-8')).toMatch(/^element: "minor-v1"$/m);
+    });
+
+    it('task-345 AC 4: the context `--element` takes a short reference; the plan records the full id', async () => {
+      const value = startValue(await start(repo, { name: 'checklist', element: 'release:minor-v' }));
+      expect(value.instance).toMatchObject({ element: null, context: { type: 'release', id: 'minor-v1' } });
+      expect(readFileSync(join(repo, `docs/plans/checklist/${value.instance.id}.md`), 'utf-8')).toMatch(/^element: "minor-v1"$/m);
+    });
+
+    it('task-345 AC 4: a context `--element` that does not exist at HEAD is NOT_FOUND, nothing written', async () => {
+      const before = head(repo);
+      const result = await start(repo, { name: 'checklist', element: 'release:nope' });
+      expect(result.ok ? null : result.error).toMatchObject({ code: 'NOT_FOUND', message: 'element not found: release:nope' });
+      expect(head(repo)).toBe(before);
+    });
+
+    it('task-345 AC 4: `--element none` clears the context an active release-cycle would give', async () => {
+      startValue(await start(repo, { name: 'release-cycle', element: 'release:minor-v1' }));
+      const value = startValue(await start(repo, { name: 'checklist', element: 'none' }));
+      expect(value.instance).toMatchObject({ id: 'checklist-1-plan', element: null, context: null });
+      expect(readFileSync(join(repo, 'docs/plans/checklist/checklist-1-plan.md'), 'utf-8')).toMatch(/^element: ""$/m);
+    });
+
+    it('task-345 AC 4: no `--element` while an element-less main is active records no context', async () => {
+      startValue(await start(repo, { name: 'checklist' }));
+      const value = startValue(await start(repo, { name: 'report-bug' }));
+      expect(value.instance).toMatchObject({ id: 'report-bug-1-plan', element: null, context: null });
+    });
+
+    it('task-345 AC 4 (bug-413 step 1): no `--element` while a self-bound element-less main is active records no context', async () => {
+      // A self-creating main (spec-017 §3.4), bound to the release its creating step added.
+      writeFixtureFile(repo, '.wingfoil/workflows/custom/intake.yaml', "name: intake\nstartable: true\nphases:\n  - name: capture\n    role: developer\n    actions:\n      - 'memory.add(type: release)'\n");
+      writeFixtureFile(repo, '.wingfoil/workflows.yaml', `version: 1.0\ninclude:\n${[...WORKFLOWS, 'intake'].map((name) => `  - workflows/custom/${name}.yaml\n`).join('')}`);
+      commitAll(repo, 'a self-creating main');
+      startValue(await start(repo, { name: 'intake' }));
+      writeFixtureFile(repo, 'docs/releases/minor-v2.md', element('release', 'minor-v2', 'draft'));
+      git(repo, ['add', '-A']);
+      git(repo, ['commit', '--quiet', '-m', 'wf(release): add minor-v2', '-m', 'WingFoil-Instance: intake-1-plan\nWingFoil-Step: intake.capture']);
+      expect(deduceWorkflowStateAtHead(repo).instances[0]?.instance).toMatchObject({ id: 'intake-1-plan', element: { type: 'release', id: 'minor-v2' } });
+
+      const value = startValue(await start(repo, { name: 'report-bug' }));
+      expect(value.instance).toMatchObject({ id: 'report-bug-1-plan', element: null, context: null });
+      expect(readFileSync(join(repo, 'docs/plans/report-bug/report-bug-1-plan.md'), 'utf-8')).toMatch(/^element: ""$/m);
+    });
+
+    it('task-345 AC 4 (spec-017 §10, D6 (a)): `--element none` on a workflow that declares an element is refused as an absent element', async () => {
+      const before = head(repo);
+      const result = await start(repo, { name: 'release-cycle', element: 'none' });
+      expect(result.ok ? null : result.error).toMatchObject({
+        code: 'VALIDATION',
+        message: "workflow 'release-cycle' needs a release element: give --element release:<id>",
+      });
+      expect(head(repo)).toBe(before);
     });
 
     it('a colliding `--set phase=` is CONFLICT `plan id already exists: <id>`, nothing written', async () => {
@@ -357,34 +438,13 @@ describe('workflow start and workflow end (task-217, spec-017 §7.1–§7.2)', (
     });
   });
 
-  describe('commit scope, a refused second commit, no plan type (AC 3)', () => {
-    it('each of the two commits touches only the plan file', async () => {
+  describe('commit scope, no plan type (AC 3)', () => {
+    it('the one commit touches only the plan file (task-346: no submit commit)', async () => {
       const before = head(repo);
       const value = startValue(await start(repo, { name: 'checklist' }));
-      expect(value.commits).toHaveLength(2);
+      expect(out(repo, ['rev-list', '--count', `${before}..HEAD`])).toBe('1');
+      expect(value.commits).toHaveLength(1);
       for (const commit of value.commits) expect(changedPaths(repo, commit)).toEqual(['docs/plans/checklist/checklist-1-plan.md']);
-      expect(out(repo, ['rev-list', '--count', `${before}..HEAD`])).toBe('2');
-    });
-
-    it('a refused second commit leaves the plan draft and names `wingfoil memory submit <id>`', async () => {
-      // A hook that refuses the submit commit only.
-      writeFixtureFile(repo, '.git/hooks/commit-msg', '#!/bin/sh\nif grep -q "^wf(plan): submit" "$1"; then echo "no submit here" >&2; exit 1; fi\nexit 0\n');
-      chmodSync(join(repo, '.git/hooks/commit-msg'), 0o755);
-      const before = head(repo);
-
-      const result = await start(repo, { name: 'checklist' });
-      expect(result.ok).toBe(false);
-      if (result.ok) return;
-      expect(result.error.code).toBe('IO');
-      expect(result.error.message).toMatch(/^plan checklist-1-plan was added but not submitted: run wingfoil memory submit checklist-1-plan/);
-      expect(subjects(repo, `${before}..HEAD`)).toEqual(['wf(plan): add checklist-1-plan']);
-      expect(statusOf(repo, 'docs/plans/checklist/checklist-1-plan.md')).toBe('draft');
-      // The instance is open (draft), so `end` refuses it as not submitted.
-      const ended = await end(repo);
-      expect(ended.ok ? null : ended.error).toMatchObject({
-        code: 'INVALID_TRANSITION',
-        message: "workflow 'checklist' was not submitted: run wingfoil memory submit checklist-1-plan",
-      });
     });
 
     it('a project whose memory.yaml declares no plan type is refused with §10\'s message', async () => {
@@ -407,6 +467,7 @@ describe('workflow start and workflow end (task-217, spec-017 §7.1–§7.2)', (
   describe('BDD P4.3 — workflow end (AC 2)', () => {
     it('sc. 1: ends the active complete instance with `wf(plan): finalize <id> [active → done]`; no instance stays active', async () => {
       startValue(await start(repo, { name: 'report-bug' }));
+      await writeAndSubmit(repo, 'report-bug-1-plan');
       const before = head(repo);
       const value = endValue(await end(repo));
 
@@ -421,7 +482,8 @@ describe('workflow start and workflow end (task-217, spec-017 §7.1–§7.2)', (
 
     it('sc. 2: ending the named active instance restores the previous one', async () => {
       startValue(await start(repo, { name: 'release-cycle', element: 'release:minor-v1' }));
-      startValue(await start(repo, { name: 'report-bug' }));
+      const second = startValue(await start(repo, { name: 'report-bug' }));
+      await writeAndSubmit(repo, second.instance.id);
       const value = endValue(await end(repo, 'report-bug'));
       expect(value.ended.workflow).toBe('report-bug');
       expect(value.active).toMatchObject({ workflow: 'release-cycle', active: true });
@@ -429,6 +491,7 @@ describe('workflow start and workflow end (task-217, spec-017 §7.1–§7.2)', (
 
     it('an instance id selects it too', async () => {
       startValue(await start(repo, { name: 'report-bug' }));
+      await writeAndSubmit(repo, 'report-bug-1-plan');
       const value = endValue(await end(repo, 'report-bug-1-plan'));
       expect(value.ended.id).toBe('report-bug-1-plan');
     });
@@ -448,6 +511,7 @@ describe('workflow start and workflow end (task-217, spec-017 §7.1–§7.2)', (
 
     it('new scenario: an incomplete instance is refused with its current step and the `memory deprecate` hint', async () => {
       startValue(await start(repo, { name: 'release-cycle', element: 'release:minor-v1' }));
+      await writeAndSubmit(repo, 'release-cycle-minor-v1-plan');
       const before = head(repo);
       const result = await end(repo);
       expect(result.ok).toBe(false);
@@ -463,6 +527,57 @@ describe('workflow start and workflow end (task-217, spec-017 §7.1–§7.2)', (
       writeFixtureFile(repo, 'docs/releases/minor-v1.md', element('release', 'minor-v1', 'released'));
       commitAll(repo, 'wf(release): finalize minor-v1 [in-development → released]');
       expect(endValue(await end(repo)).ended.id).toBe('release-cycle-minor-v1-plan');
+    });
+  });
+
+  describe('task-346 AC 1 — the plan start writes is left to be written (bug-390, spec-017 §7.1 as amended)', () => {
+    const PLAN = 'docs/plans/report-bug/report-bug-1-plan.md';
+
+    it('1: one commit, `wf(plan): add <id>`, only the plan file, the start marker; the plan `draft`; `submit` names memory submit', async () => {
+      const before = head(repo);
+      const value = startValue(await start(repo, { name: 'report-bug' }));
+
+      expect(out(repo, ['rev-list', '--count', `${before}..HEAD`])).toBe('1');
+      expect(subjects(repo, `${before}..HEAD`)).toEqual(['wf(plan): add report-bug-1-plan']);
+      expect(changedPaths(repo, 'HEAD')).toEqual([PLAN]);
+      expect(out(repo, ['log', '-1', '--format=%B', 'HEAD']).split('\n')).toContain('WingFoil-Start: report-bug');
+      expect(statusOf(repo, PLAN)).toBe('draft');
+      expect(value.commits).toEqual([head(repo)]);
+      expect(value.instance).toMatchObject({ id: 'report-bug-1-plan', planStatus: 'draft', active: true });
+      expect(value.submit).toBe('wingfoil memory submit report-bug-1-plan');
+    });
+
+    it('2: the instance is open from the add — the deduction at HEAD reads it, `planStatus: draft` (dl-217)', async () => {
+      startValue(await start(repo, { name: 'report-bug' }));
+      expect(deduceWorkflowStateAtHead(repo).instances[0]?.instance).toMatchObject({ id: 'report-bug-1-plan', workflow: 'report-bug', planStatus: 'draft' });
+    });
+
+    it('3: `end` before the submit is INVALID_TRANSITION `workflow <name> was not submitted: run wingfoil memory submit <id>`, HEAD unchanged', async () => {
+      startValue(await start(repo, { name: 'report-bug' }));
+      const before = head(repo);
+      const ended = await end(repo);
+      expect(ended.ok ? null : ended.error).toMatchObject({
+        code: 'INVALID_TRANSITION',
+        message: "workflow 'report-bug' was not submitted: run wingfoil memory submit report-bug-1-plan",
+      });
+      expect(head(repo)).toBe(before);
+    });
+
+    it('4: a body line, then memory submit: one `wf(plan): submit <id>` commit carrying the body, the plan `active`; then end finalizes it', async () => {
+      startValue(await start(repo, { name: 'report-bug' }));
+      appendFileSync(join(repo, PLAN), '\nTriage the report, then close it.\n');
+      const before = head(repo);
+
+      const submitted = await memorySubmit(repo, 'report-bug-1-plan');
+      expect(submitted.ok ? null : submitted.error).toBeNull();
+      expect(subjects(repo, `${before}..HEAD`)).toEqual(['wf(plan): submit report-bug-1-plan']);
+      expect(out(repo, ['log', '-1', '--format=%B', 'HEAD']).split('\n')).toContain('Carries content: the body');
+      expect(changedPaths(repo, 'HEAD')).toEqual([PLAN]);
+      expect(statusOf(repo, PLAN)).toBe('active');
+
+      const afterSubmit = head(repo);
+      expect(endValue(await end(repo)).ended.id).toBe('report-bug-1-plan');
+      expect(subjects(repo, `${afterSubmit}..HEAD`)).toEqual(['wf(plan): finalize report-bug-1-plan [active → done]']);
     });
   });
 });

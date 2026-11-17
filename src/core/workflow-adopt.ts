@@ -16,7 +16,8 @@
  * **Refusal order** (design "The command"): the usage refusals (exit 2, before any read: `--apply` without
  * `--plan`, `--plan` with `--step`/`--element`, none of the three, a malformed `--element`, a missing or
  * unrecordable `--reason` — validated, unused, with `--plan` alone, D6) → the git identity (REQ-SEC-01; not on
- * `--plan` alone) → approver authority (`--plan --apply`) → the instance → the step (on the frontier; else the one
+ * `--plan` alone) → approver authority (`--plan --apply`) → the instance → the step (on the frontier, an unscoped
+ * key naming the one frontier step of its workflow and phase, `spec-017` §4.9, task-356; else the one
  * frontier step adding `--element`'s type) → it adds a type → `--element`'s type is one of them (before existence,
  * D10) → it lacks its created element (D1) → `--element` exists at `HEAD` → not owned (§4.8) → without
  * `--element`, its one candidate (several: their `<type>:<id>` in `details.candidates`; several frontier steps: their keys
@@ -31,10 +32,13 @@ import type { MemoryDocumentSummary } from '../memory/query';
 import { planAdoptions } from '../workflow/adopt';
 import { deduceWorkflowState, resolveInstanceRef, W_UNCOMMITTED_INPUTS, type Baseline, type DeducedStep, type Deduction, type DeductionSnapshot, type ElementRef, type Instance } from '../workflow/deduce';
 import { resolveProvenance } from '../workflow/provenance';
+import type { CommitAttribution } from '../storage';
 
 import { requireApproverAuthority } from './approval-authority';
 import { parseElementRef } from './element-ref';
 import { requireGitIdentity, type GitIdentity } from './git-identity';
+import { requireTeamMembership } from './team-membership';
+import { resolveGatedAgentContext, resolveOperationAgentContext } from './agent-context';
 import { missingOperandReason } from './registry';
 import { adoptionSubject, adoptionTrailers, writeProvenanceRecord } from './provenance-record';
 import { optionalReason, requireReason } from './require-reason';
@@ -42,6 +46,7 @@ import { coreErr, coreOk, type CoreResult } from './types';
 import { UsageError } from './usage-error';
 import { instancePlanIds, readDeductionSnapshotAtHead } from './workflow-deduction';
 import { buildStep, readNextInputs, stepLines, unresolvedRef, type Step } from './workflow-next';
+import { ambiguousStepKey, resolveFrontierKey } from './workflow-step-key';
 
 /** `spec-017` §10: `--plan --apply` without approver authority. */
 export const BULK_ADOPT_UNAUTHORIZED = 'user not authorized to apply adoptions in bulk';
@@ -112,7 +117,10 @@ function openInstances(deduction: Deduction): { id: string; startCommit: string 
   return deduction.instances.map((entry) => ({ id: entry.instance.id, startCommit: entry.instance.startCommit }));
 }
 
-/** One adoption at the current `HEAD`, checked as the single form checks it (refusal order from the instance on). */
+/**
+ * One adoption at the current `HEAD`, checked as the single form checks it (refusal order from the instance on).
+ * `attribution` is the agent the record names as co-author: the single form's, in an agent's session; `null` in bulk.
+ */
 function adoptOne(
   root: string,
   identity: GitIdentity,
@@ -121,6 +129,7 @@ function adoptOne(
   named: { type: string; id: string } | null,
   reason: string,
   approver: GitIdentity | null,
+  attribution: CommitAttribution | null,
 ): CoreResult<AdoptResult> {
   const snapshot = readDeductionSnapshotAtHead(root);
   const deduction = deduceWorkflowState(snapshot);
@@ -130,8 +139,10 @@ function adoptOne(
 
   let step: DeducedStep | undefined;
   if (stepKey !== undefined) {
-    step = frontier.find((candidate) => candidate.key === stepKey);
-    if (step === undefined) return coreErr({ code: 'CONFLICT', message: `step '${stepKey}' is not on the frontier of ${instance.id}`, details: { frontier: frontier.map((entry) => entry.key) } });
+    const resolved = resolveFrontierKey(frontier, stepKey);
+    if (resolved.kind === 'many') return ambiguousStepKey(stepKey, instance.id, resolved.steps);
+    if (resolved.kind === 'none') return coreErr({ code: 'CONFLICT', message: `step '${stepKey}' is not on the frontier of ${instance.id}`, details: { frontier: frontier.map((entry) => entry.key) } });
+    step = resolved.step;
   } else {
     const type = named!.type;
     const adding = frontier.filter((candidate) => candidate.additions.some((addition) => addition.type === type));
@@ -189,6 +200,7 @@ function adoptOne(
     reason,
     approver,
     trailers: adoptionTrailers(instance.id, key, element),
+    attribution,
   });
   if (!written.ok) return written;
 
@@ -227,7 +239,8 @@ export function workflowAdoptAtHead(root: string, request: AdoptRequest): CoreRe
     if (!parsed.ok) throw new UsageError(parsed.error.message);
     named = parsed.value;
   }
-  const reason = plan && !apply ? optionalReason(request.options) : requireReason(request.options);
+  // `--plan --apply` records its reason under an `Approver:` line (`spec-018` §3.3); the single form does not.
+  const reason = plan && !apply ? optionalReason(request.options) : requireReason(request.options, { approval: plan && apply });
   // A required positional: the CLI registrar refuses its absence before the operation runs; an in-process caller
   // that leaves it out gets the same usage refusal.
   const ref = request.ref;
@@ -236,14 +249,22 @@ export function workflowAdoptAtHead(root: string, request: AdoptRequest): CoreRe
   if (!plan) {
     const identity = requireGitIdentity(root);
     if (!identity.ok) return identity;
-    return adoptOne(root, identity.value, ref, request.step, named, reason!, null);
+    const member = requireTeamMembership(root, identity.value);
+    if (!member.ok) return member;
+    // The single form is not gated: the ungated agent context names the agent its record credits (`spec-018` §2.1).
+    const agent = resolveOperationAgentContext(root);
+    if (!agent.ok) return agent;
+    return adoptOne(root, identity.value, ref, request.step, named, reason!, null, agent.value.attribution);
   }
 
   let identity: GitIdentity | null = null;
   if (apply) {
     const checked = requireGitIdentity(root);
     if (!checked.ok) return checked;
-    const authorized = requireApproverAuthority(root, checked.value, BULK_ADOPT_UNAUTHORIZED);
+    const member = requireTeamMembership(root, checked.value);
+    if (!member.ok) return member;
+    const agent = resolveGatedAgentContext();
+    const authorized = requireApproverAuthority(root, checked.value, BULK_ADOPT_UNAUTHORIZED, agent, 'workflow adopt --plan --apply');
     if (!authorized.ok) return authorized;
     identity = checked.value;
   }
@@ -258,7 +279,7 @@ export function workflowAdoptAtHead(root: string, request: AdoptRequest): CoreRe
   const applied: Adoption[] = [];
   for (const entry of value.steps) {
     if (entry.recorded || entry.candidates.length !== 1) continue;
-    const one = adoptOne(root, identity, selected.instance.id, entry.step, entry.candidates[0]!, reason!, identity);
+    const one = adoptOne(root, identity, selected.instance.id, entry.step, entry.candidates[0]!, reason!, identity, null);
     if (!one.ok) return coreErr({ ...one.error, details: { ...(one.error.details as Record<string, unknown> | undefined), applied } });
     applied.push(...one.value.adopted);
   }

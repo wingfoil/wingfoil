@@ -12,8 +12,12 @@
  * ruling D-B, 2026-10-13): the build that manages this repository (`dl-095`) and serves the `{role}-session`
  * Prompts agents receive through `.mcp.json`, so its resolver is the one whose warnings matter. It needs no build.
  *
- * Roles come from the same build's `dna show --format json` (`team.roles[].name`), visited in ascending name order
- * (REQ-SYS-07); each listing's stdout payload `warnings` is what counts. The CLI's stderr is not relayed on success
+ * Roles come from the same build's `dna show --format json` (`team.roles[].name`) and from the keys of
+ * `.wingfoil/roles.yaml`'s `assignments` (task-340, `bug-459`: a binding under a role `dna.yaml` does not declare
+ * would otherwise never be swept; `global` is not a role, and an absent `roles.yaml` adds none), their union visited
+ * in ascending name order (REQ-SYS-07); each listing's stdout payload `warnings` is what counts, and a role
+ * `dna.yaml` does not declare gets, before its listing's warnings, the warning `bound in roles.yaml but not declared
+ * in dna.yaml team.roles`. The CLI's stderr is not relayed on success
  * (a pinned build prints `Warning: … unknown field(s) ignored` for fields newer than itself); it is quoted in an
  * exit-2 error. Read-only, offline, deterministic: it reads the working tree of `--root`, as `directives list` does.
  *
@@ -24,11 +28,19 @@
 'use strict';
 
 const { spawnSync } = require('node:child_process');
-const { existsSync } = require('node:fs');
+const { existsSync, readFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
+
+const yaml = require('js-yaml');
 
 /** The pinned build's entry point, relative to the repository holding this script (`dl-095`). */
 const PINNED_CLI = 'node_modules/wingfoil-released/dist/cli.js';
+
+/** The role-binding file, relative to `--root` (`spec-012`). */
+const ROLES_YAML = '.wingfoil/roles.yaml';
+
+/** The warning of a role `roles.yaml` binds but `dna.yaml` does not declare (task-340, `bug-459`). */
+const UNDECLARED_ROLE = 'bound in roles.yaml but not declared in dna.yaml team.roles';
 
 class UsageError extends Error {}
 
@@ -79,6 +91,28 @@ function runJson(cli, root, args) {
   throw new UsageError(`\`${label}\` printed no JSON object${firstStderr ? ` (${firstStderr})` : ''}`);
 }
 
+/**
+ * The roles `root`'s `roles.yaml` binds under `assignments` (its keys), or none when the file is absent. A file
+ * that is not YAML, or whose `assignments` is not a mapping, adds none either: the schema check is the pinned
+ * build's, whose `directives list` then exits non-zero and is reported as a failing command (task-215 F4).
+ *
+ * @param {string} root
+ * @returns {string[]}
+ */
+function boundRoles(root) {
+  const file = join(root, ROLES_YAML);
+  if (!existsSync(file)) return [];
+  let parsed;
+  try {
+    parsed = yaml.load(readFileSync(file, 'utf-8'));
+  } catch {
+    return [];
+  }
+  const assignments = parsed !== null && typeof parsed === 'object' ? /** @type {{ assignments?: unknown }} */ (parsed).assignments : undefined;
+  if (assignments === null || typeof assignments !== 'object' || Array.isArray(assignments)) return [];
+  return Object.keys(assignments);
+}
+
 /** @param {string} root */
 function check(root) {
   const cli = join(__dirname, '..', PINNED_CLI);
@@ -91,7 +125,8 @@ function check(root) {
     : [];
   if (names.length === 0) throw new UsageError('dna.yaml declares no team.roles');
   if (names.some((n) => typeof n !== 'string' || n === '')) throw new UsageError('a dna.yaml team.roles entry has no name');
-  const roles = [.../** @type {Set<string>} */ (new Set(names))].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  const declared = new Set(/** @type {string[]} */ (names));
+  const roles = [...new Set([...declared, ...boundRoles(root)])].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 
   const out = [];
   const err = [];
@@ -101,7 +136,7 @@ function check(root) {
     if (!Array.isArray(listing.warnings)) {
       throw new UsageError(`\`directives list --role ${role}\` printed no warnings array`);
     }
-    const warnings = listing.warnings.map(String);
+    const warnings = [...(declared.has(role) ? [] : [UNDECLARED_ROLE]), ...listing.warnings.map(String)];
     if (warnings.length === 0) {
       out.push(`${role}: ok`);
     } else {

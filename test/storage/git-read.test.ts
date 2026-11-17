@@ -4,12 +4,18 @@
  * carried inside the error, an exit status outside `accepted` thrown as `E_GIT_READ_FAILED`, a spawn
  * failure likewise. Throwaway temp repositories throughout.
  */
-import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { E_GIT_READ_FAILED, runGitRead, runGitReadBytes, StorageError } from '../../src/storage';
-import { commitAll, makeTempGitRepo, removeTempDir, writeFixtureFile } from './helpers/git-fixture';
+import {
+  commitAll,
+  makeBoundedOutsideDir,
+  makeTempGitRepo,
+  removeTempDir,
+  withGitCeiling,
+  writeFixtureFile,
+} from './helpers/git-fixture';
 
 describe('runGitRead / runGitReadBytes (task-142)', () => {
   const dirs: string[] = [];
@@ -45,12 +51,13 @@ describe('runGitRead / runGitReadBytes (task-142)', () => {
     ['runGitRead', runGitRead],
     ['runGitReadBytes', runGitReadBytes],
   ] as const)('%s throws E_GIT_READ_FAILED carrying git\'s message for a status it was not told to accept', (_name, read) => {
-    const notARepo = mkdtempSync(join(tmpdir(), 'wf-not-a-repo-'));
-    dirs.push(notARepo);
+    // task-350 AC 3 (bug-453): a directory outside any repository below a ceiling that is one.
+    const { dir: notARepo, ceiling } = makeBoundedOutsideDir();
+    dirs.push(ceiling);
 
     let thrown: unknown;
     try {
-      read(notARepo, ['log']);
+      withGitCeiling(ceiling, () => read(notARepo, ['log']));
     } catch (error) {
       thrown = error;
     }

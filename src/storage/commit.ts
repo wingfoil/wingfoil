@@ -58,6 +58,26 @@ export interface CommitOptions {
    * before.
    */
   readonly trailers?: readonly string[];
+  /**
+   * The agent attribution of `spec-018` §2.2 (task-334): in an agent's session, the `team.agents` entry and the model
+   * the commit's `Co-Authored-By:` and `AI-Model:` trailers name, appended by {@link stampedMessage} after the
+   * `WingFoil-Version:` line, in the same final paragraph. Passed explicitly by each writer's caller, never read from
+   * the invocation here (design D2): `agent execute`'s run record and `init` pass none (`spec-018` §1.1, §2.1). Absent,
+   * the message is byte for byte what it was before (`spec-018` §6 T-10).
+   */
+  readonly attribution?: CommitAttribution;
+}
+
+/**
+ * The agent a commit names as its co-author (`spec-018` §2.2–§2.4): the `team.agents` entry's `name` and `email`, the
+ * model identifier, and — when the entry is the first one by default (§2.3 rule 4) — the `note` the body opens with.
+ */
+export interface CommitAttribution {
+  readonly name: string;
+  readonly email: string;
+  readonly model: string;
+  /** The prose line `Attributed to the first team.agents entry, <name>: …`, the body's first paragraph (§2.3 rule 4). */
+  readonly note?: string;
 }
 
 /** The environment git runs with: `process.env`, with {@link CommitOptions.env} merged over it. */
@@ -96,8 +116,10 @@ function gitReadOptions(options: CommitOptions, accepted: readonly number[]): Gi
 /**
  * `message` with the build signature appended as the final trailer paragraph (task-192, `dl-111`): a blank
  * line, then `WingFoil-Version: <semver> (<sha>)` ({@link readBuildStamp}). The caller's
- * {@link CommitOptions.trailers}, when given, open that paragraph, the signature staying its last line
- * (task-226's phase record, task-227's step linkage).
+ * {@link CommitOptions.trailers}, when given, open that paragraph (task-226's phase record, task-227's step
+ * linkage); {@link CommitOptions.attribution}, when given, closes it with `Co-Authored-By:` and `AI-Model:` after the
+ * signature, and puts its `note` first in the body (`spec-018` §2.2, §2.3 rule 4; task-334). Without an attribution
+ * the signature is the paragraph's last line, as before.
  *
  * A final paragraph of trailers, never a line merged into the caller's body: git reads trailers from the
  * message's final paragraph only, and so does `parseReasonBlock` (`src/memory/commit-message.ts`),
@@ -106,8 +128,75 @@ function gitReadOptions(options: CommitOptions, accepted: readonly number[]): Gi
  * turn the whole body into the trailer block and cut a multi-line reason short. The caller's message
  * is trimmed of trailing whitespace first, which `--cleanup=whitespace` would drop anyway.
  */
-function stampedMessage(message: string, trailers: readonly string[] = []): string {
-  return `${message.replace(/\s+$/, '')}\n\n${[...trailers, formatVersionTrailer(readBuildStamp())].join('\n')}`;
+function stampedMessage(message: string, trailers: readonly string[] = [], attribution?: CommitAttribution): string {
+  const agentLines = attribution ? [`Co-Authored-By: ${attribution.name} <${attribution.email}>`, `AI-Model: ${attribution.model}`] : [];
+  const paragraph = [...trailers, formatVersionTrailer(readBuildStamp()), ...agentLines].join('\n');
+  return `${withNote(message.replace(/\s+$/, ''), attribution?.note)}\n\n${paragraph}`;
+}
+
+/**
+ * `message` with `note`, when given, as its body's first paragraph: right after the subject, before every other body
+ * line (`spec-018` §2.3 rule 4) — so a `Reason:` block, which runs to the trailer paragraph, never takes it in.
+ */
+function withNote(message: string, note: string | undefined): string {
+  if (note === undefined) return message;
+  const newline = message.indexOf('\n');
+  if (newline === -1) return `${message}\n\n${note}`;
+  const body = message.slice(newline + 1).replace(/^\s+/, '');
+  return body.length === 0 ? `${message.slice(0, newline)}\n\n${note}` : `${message.slice(0, newline)}\n\n${note}\n\n${body}`;
+}
+
+/** The code of {@link ApprovalTrailerError} (`spec-018` §3.3). */
+export const E_AGENT_TRAILER_ON_APPROVAL = 'E_AGENT_TRAILER_ON_APPROVAL';
+
+/** A line that makes a commit an approval commit: `Approver:`, any letter case (`spec-018` §0). */
+const APPROVER_LINE_RE = /^approver:/im;
+
+/** An agent trailer line, any letter case, anywhere in the message (`spec-018` §0) — the governance check's pattern. */
+const AGENT_TRAILER_LINE_RE = /^(co-authored-by|ai-model):/im;
+
+/** Each agent trailer key in its canonical spelling, as the refusal names it. */
+const AGENT_TRAILER_KEYS: Readonly<Record<string, string>> = { 'co-authored-by': 'Co-Authored-By', 'ai-model': 'AI-Model' };
+
+/**
+ * `E_AGENT_TRAILER_ON_APPROVAL` (`spec-018` §3.3, task-333 design D7): the commit primitive was asked to write an
+ * approval commit — its message has an `Approver:` line — that would carry an agent trailer (`Co-Authored-By:` or
+ * `AI-Model:`). Thrown before any path is written or staged and before a dry run's plan, so nothing was written; it
+ * reaches the CLI as the `error:` line, exit `1`. The backstop behind the agent-context refusal (§3.1): it holds for
+ * every writer, whatever brought the trailer.
+ */
+export class ApprovalTrailerError extends StorageError {
+  /** The subject of the refused commit. */
+  readonly subject: string;
+  /** The agent trailer key found first, canonically spelled (`Co-Authored-By` or `AI-Model`). */
+  readonly key: string;
+
+  constructor(subject: string, key: string) {
+    super(
+      E_AGENT_TRAILER_ON_APPROVAL,
+      `the commit '${subject}' records an approval and would carry an agent trailer (${key}:), which an approval never ` +
+        'carries (dl-212, git-conventions §7); nothing was written',
+    );
+    this.name = 'ApprovalTrailerError';
+    this.subject = subject;
+    this.key = key;
+    Object.setPrototypeOf(this, ApprovalTrailerError.prototype);
+  }
+}
+
+/**
+ * Refuse, by throwing {@link ApprovalTrailerError}, a stamped commit message that has an `Approver:` line and an agent
+ * trailer line (`spec-018` §3.3). Run first by each writer — {@link commitPaths}, {@link commitEmpty},
+ * {@link writeAndCommit} — on the message it would record, its {@link CommitOptions.trailers} and
+ * {@link CommitOptions.attribution} included.
+ */
+function refuseAgentTrailerOnApproval(message: string, options: CommitOptions): void {
+  const stamped = stampedMessage(message, options.trailers, options.attribution);
+  if (!APPROVER_LINE_RE.test(stamped)) return;
+  const found = AGENT_TRAILER_LINE_RE.exec(stamped);
+  if (found === null) return;
+  const subject = (/^.*/.exec(message) as RegExpExecArray)[0];
+  throw new ApprovalTrailerError(subject, AGENT_TRAILER_KEYS[(found[1] as string).toLowerCase()] as string);
 }
 
 /**
@@ -132,6 +221,8 @@ function stampedMessage(message: string, trailers: readonly string[] = []): stri
  * A mutating operation commits through {@link writeAndCommit}, which writes, commits and undoes a
  * refused commit in one place; during a dry run this function throws instead of committing (task-210).
  *
+ * @throws {@link ApprovalTrailerError} (`E_AGENT_TRAILER_ON_APPROVAL`) first, before `git add`, for an approval
+ *   commit that would carry an agent trailer (`spec-018` §3.3).
  * @throws whatever `git` raises (via `execFileSync`) — e.g. nothing staged to commit, or `root` is
  *   not a git repository. Callers that must translate those into a `CoreResult` do so at their layer
  *   (see `src/core/init.ts`); this primitive stays a thin, throwing mechanism by design.
@@ -142,6 +233,7 @@ export function commitPaths(
   message: string,
   options: CommitOptions = {},
 ): string {
+  refuseAgentTrailerOnApproval(message, options);
   refuseDuringDryRun('commitPaths');
   return commitPathsNow(root, paths, message, options);
 }
@@ -162,7 +254,7 @@ function commitPathsNow(root: string, paths: readonly string[], message: string,
   // runs collapsed, a `#` line kept — is the tool's, whatever `commit.cleanup` the operator's or the
   // repository's git config sets. Unpinned, `strip` deleted a reason line opening with `#` and
   // `verbatim` kept what `dl-067` clause 3 declares removed.
-  quietGit(root, ['commit', '--only', '--quiet', '--cleanup=whitespace', '-m', stampedMessage(message, options.trailers), '--', ...paths], commitOptions);
+  quietGit(root, ['commit', '--only', '--quiet', '--cleanup=whitespace', '-m', stampedMessage(message, options.trailers, options.attribution), '--', ...paths], commitOptions);
   return runGit(root, ['rev-parse', 'HEAD'], options).trim();
 }
 
@@ -194,11 +286,14 @@ export function stagedPaths(root: string, options: CommitOptions = {}): string[]
  * - **Dry run** (`dl-106` W2): inside `captureDryRun` nothing is committed; the plan is the subject, the
  *   full message, no paths and no diff.
  *
+ * @throws {@link ApprovalTrailerError} (`E_AGENT_TRAILER_ON_APPROVAL`) first, before a dry run's plan, for an
+ *   approval commit that would carry an agent trailer (`spec-018` §3.3).
  * @throws {@link CommitFailure} (`E_COMMIT_FAILED`) when git does not make the commit (a refusing hook);
  *   nothing was written, so there is nothing to put back.
  */
 export function commitEmpty(root: string, message: string, options: CommitOptions = {}): string {
-  const stamped = stampedMessage(message, options.trailers);
+  refuseAgentTrailerOnApproval(message, options);
+  const stamped = stampedMessage(message, options.trailers, options.attribution);
   if (isDryRunActive()) {
     stopWithPlan({ dryRun: true, subject: (/^.*/.exec(message) as RegExpExecArray)[0], message: stamped, paths: [], diff: '' }, options.plannedWarnings ?? options.warnings);
   }
@@ -260,10 +355,15 @@ function repoRelative(root: string, path: string): string {
  *   be put back, saying so. A filesystem failure is rethrown as it was raised (the index is untouched by
  *   then).
  *
+ * - **No agent trailer on an approval** (`spec-018` §3.3, task-333). Before the dry run's plan and before any
+ *   write, a message with an `Approver:` line and a `Co-Authored-By:` or `AI-Model:` line throws
+ *   {@link ApprovalTrailerError}: nothing is written or staged.
+ *
  * Callers run their confinement and dirty-target guards before calling: this primitive writes where it
  * is told.
  */
 export function writeAndCommit(root: string, changes: readonly PathChange[], message: string, options: CommitOptions = {}): string {
+  refuseAgentTrailerOnApproval(message, options);
   const planned: PlannedChange[] = changes.map((change) => ({
     absolute: isAbsolute(change.path) ? change.path : join(root, change.path),
     relative: repoRelative(root, change.path),
@@ -275,7 +375,7 @@ export function writeAndCommit(root: string, changes: readonly PathChange[], mes
       {
         dryRun: true,
         subject: (/^.*/.exec(message) as RegExpExecArray)[0],
-        message: stampedMessage(message, options.trailers),
+        message: stampedMessage(message, options.trailers, options.attribution),
         paths: sorted.map((change) => change.relative),
         diff: sorted.map((change) => planDiff(root, change.relative, change.content, gitEnv(options))).join(''),
       },

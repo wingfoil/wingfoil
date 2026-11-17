@@ -7,14 +7,14 @@ kind: sub
 description: >-
   Downcast the strategic vision into actionable engineering requirements:
   User Story Mapping -> Specification by Example (BDD) -> Volere Requirements (SARD) -> backlog.
-version: 1.0
+version: 1.1                     # 1.0 the first downcast; 1.1 task-358 (bug-435 item 4, bug-469): user-story-mapping's Stop-Check split into its coverage half, a command could decide it (manual until a command), and its edge-case half, a reader's judgement (manual on purpose); no phase or step changes
 
 phases:
   - name: user-story-mapping
     description: "Module 1 — explode journeys into atomic stories; extract MVP."
     include: user-story-mapping
     checks:
-      post: ["100% of MVP Canvas features covered; edge-case stories present"]   # Stop-Check
+      post: ["100% of MVP Canvas features covered", "edge-case stories present"]   # Stop-Check; split by task-358 (bug-435 item 4): the coverage half compares the canvas's feature ids with the story map's, which a command could decide; the edge-case half is a reader's judgement
 
   - name: specification-by-examples
     description: "Module 2 — translate MVP stories into Gherkin BDD scenarios."

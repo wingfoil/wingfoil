@@ -146,7 +146,8 @@ describe('AC 1 — the coverage reporters and the `test:report` script', () => {
 
   it('package.json declares `test:report`: one suite run, with coverage and Jest JSON into coverage/ (ruling D8)', () => {
     const pkg = JSON.parse(readFileSync(join(REPO_ROOT, 'package.json'), 'utf-8')) as { scripts?: Record<string, string> };
-    expect(pkg.scripts?.['test:report']).toBe('jest --coverage --json --outputFile=coverage/jest-results.json');
+    // task-349 (dl-170 Decision 1, ruling D2 (a)): through scripts/run-tests.cjs, so under the heavy-gate lock.
+    expect(pkg.scripts?.['test:report']).toBe('node scripts/run-tests.cjs --coverage --json --outputFile=coverage/jest-results.json');
   });
 });
 

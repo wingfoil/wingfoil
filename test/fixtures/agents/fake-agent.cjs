@@ -14,6 +14,10 @@
  * - `--lookup <session-id>` — prints the declared JSON document for that session (`session.lookup_args`,
  *   `usage.lookup_args`).
  * - `--summary` — prints a one-line summary (`summary.export_args`).
+ * - `--mcp-get <name>` — the conflict probe (`mcp.conflict_args`, task-356, `bug-372`): answers whether the
+ *   agent's own configuration declares an MCP server named `<name>`, by its exit status only, the shape of
+ *   `codex mcp get wingfoil` (exit `0` printing the server's name when a table is loaded; exit `1` and
+ *   `Error: No MCP server named '<name>' found.` on stderr otherwise — the design addendum's H1 of task-356).
  * - anything else is a launch: `[--headless] (--mcp-config <file> | --mcp-config-json <text>)
  *   (--prompt <text> | --prompt-file <file>) [--session-id <id>] [--resume <id>]`. `--mcp-config-json`
  *   carries the same JSON body as the file, as ONE argument: the shape of `mcp.via: config-arg`'s
@@ -28,7 +32,8 @@
  * - `WINGFOIL_FAKE_AGENT_CONNECT=1` — on a launch, connect to the `wingfoil` server named in the MCP
  *   config, complete `initialize`, and read the session Resource the bootstrap's context instruction
  *   names, by its full URI (§2.4; task-236, approver ruling (a) 2026-10-13: a real agent's model can read
- *   Resources but not get Prompts). The Resource's text is recorded verbatim.
+ *   Resources but not get Prompts). The Resource's text is recorded verbatim, and so is the server's `args`
+ *   from the MCP config (task-353: which root the registered server serves).
  * - `WINGFOIL_FAKE_AGENT_STDIN=1` — read stdin to its end and record it. Off by default: an interactive
  *   agent owns stdin, and an inherited pipe nobody closes would never end.
  * - `WINGFOIL_FAKE_AGENT_DOCUMENT` — the JSON document to print for `--lookup` and a headless launch,
@@ -38,6 +43,41 @@
  * - `WINGFOIL_FAKE_AGENT_LOOKUP=fail|hang` — `--lookup`, after recording, exits `1` with nothing on
  *   stdout (`fail`), or waits until a signal kills it (`hang`): a post-run lookup that fails or times
  *   out while the launch succeeded (`spec-016` §2.6).
+ * - `WINGFOIL_FAKE_AGENT_SIGNALS` — a file; on a launch, before its record line, the fake installs
+ *   listeners that append one line `<NAME>` to it per delivery of `SIGHUP` and `SIGINT` (it keeps
+ *   running) and of `SIGTERM` (it then exits `0`): how many times each signal reached the agent
+ *   (task-355, `bug-318`; `spec-016` §3.3 step 15).
+ * - `WINGFOIL_FAKE_AGENT_CHILD` — a file; on a launch, before its record line, the fake starts a child
+ *   `node -e` process that only waits (stdio ignored, not detached, so it stays in the fake's process
+ *   group) and writes the child's pid to the file: a process the agent started, which no signal of a
+ *   timed-out or signalled run may leave running (task-355, `bug-516`).
+ * - `WINGFOIL_FAKE_AGENT_CHILD_TRAP=1` — that child ignores `SIGTERM`, so only a `SIGKILL` ends it.
+ * - `WINGFOIL_FAKE_AGENT_MCP_GET=0|1|hang` — `--mcp-get`, after recording: exit `0` (a server of that name is
+ *   declared), exit `1` (none is, the default), or wait until a signal kills it (`hang`, a probe that times out).
+ * - `WINGFOIL_FAKE_AGENT_CLI=1` — on a launch, before its record line, the fake runs `wingfoil --version`, the name
+ *   looked up on its `PATH` with no shell, and `"$WINGFOIL_CLI" --version`, and records `cli: { path, variable, mode }`:
+ *   each command's stdout, trimmed (`null` when the command could not run or `WINGFOIL_CLI` is unset), and the
+ *   permission bits of the file `WINGFOIL_CLI` names, in octal (`null` when unset or absent) — what the agent's own
+ *   shell reaches as `wingfoil` (task-338, `spec-016` §2.4, `bug-369`). It also records `launcher`: the value of
+ *   `WINGFOIL_AGENT`, or `null` (`spec-018` §1.1). That value is a `team.agents` entry name, not a secret
+ *   (`REQ-SEC-08`): the one variable value the fake ever records, and only when asked to.
+ *
+ * - `WINGFOIL_FAKE_AGENT_COMMIT=1` — on a launch, after its record line and before it exits, the fake makes one
+ *   empty commit in its working directory (`git commit --allow-empty --no-verify -m "fake: work"`): an agent that
+ *   committed something since `state_ref` (task-353, `bug-500`; `spec-016` §3.3 step 16's start-up hint is not given
+ *   then).
+ *
+ * - `WINGFOIL_FAKE_AGENT_SAY` — a JSON array of `["out" | "err", "<text>"]` pairs; on a launch, after its record line and
+ *   before the headless document, the fake writes each text as is (no newline added) to its stdout (`out`) or its stderr
+ *   (`err`), in order, each write awaited before the next: the output a headless run forwards to the caller (task-336,
+ *   `dl-182` Q1 (a); `spec-016` §3.5).
+ * - `WINGFOIL_FAKE_AGENT_REGISTRY=1` — on a launch, before its record line, the fake records `pid` (its own
+ *   `process.pid`) and `registry`: one `{ path, entry }` per file under `<cwd>/.wingfoil/run/`, sorted by path, `path`
+ *   relative to `cwd` with `/` separators and `entry` the file's parsed JSON — the active registry while the agent runs
+ *   (task-336, `dl-181`; `spec-016` §7). An entry holds a pid, names and an instant, nothing secret (`REQ-SEC-08`).
+ *
+ * Every launch record also carries `cwd`, the fake's working directory (`process.cwd()`): where `agent execute` launched
+ * the agent (task-353, `bug-499`; `spec-016` §3.1, §3.3 step 14). A path, not a secret.
  *
  * `EXIT` and `WAIT` apply to a launch only. `agent execute` passes its environment to every child it
  * starts (§2.2), so the post-run `--version` and `--lookup` (§3.3 step 16) see the same variables, and
@@ -47,8 +87,9 @@
  */
 'use strict';
 
-const { spawn } = require('child_process');
-const { appendFileSync, readFileSync } = require('fs');
+const { execFileSync, spawn } = require('child_process');
+const { appendFileSync, existsSync, readdirSync, readFileSync, statSync, writeFileSync } = require('fs');
+const { join } = require('path');
 
 /** What `--version` prints, and what the manifests' `verified_with` names. */
 const VERSION = 'fake-agent 1.0.0';
@@ -187,7 +228,8 @@ function fetchResource(source, uri) {
       if (initialized.error) return finish(null, { initialize: initialized.error });
       send({ method: 'notifications/initialized' });
       const answer = await request(2, 'resources/read', { uri });
-      const result = { server: initialized.result.serverInfo, resource: { uri } };
+      // `args`: the server's argv as the MCP config declares it (task-353: the root it serves, `--project <root>`).
+      const result = { server: initialized.result.serverInfo, args: server.args, resource: { uri } };
       if (answer.error) return finish(null, { ...result, error: { code: answer.error.code, message: answer.error.message } });
       const [first] = answer.result.contents;
       finish(null, {
@@ -199,6 +241,107 @@ function fetchResource(source, uri) {
   });
 }
 
+/**
+ * `WINGFOIL_FAKE_AGENT_SIGNALS`: one line per delivery of `SIGHUP`, `SIGINT` and `SIGTERM`; the first two
+ * keep the fake running, `SIGTERM` then ends it with exit `0`.
+ */
+function trackSignals() {
+  const file = process.env.WINGFOIL_FAKE_AGENT_SIGNALS;
+  if (file === undefined || file === '') return;
+  for (const name of ['SIGHUP', 'SIGINT']) process.on(name, () => appendFileSync(file, `${name}\n`));
+  process.on('SIGTERM', () => {
+    appendFileSync(file, 'SIGTERM\n');
+    process.exit(0);
+  });
+}
+
+/**
+ * `WINGFOIL_FAKE_AGENT_CHILD`: start a child that only waits, in the fake's process group, and write its pid;
+ * with `WINGFOIL_FAKE_AGENT_CHILD_TRAP=1` the child ignores `SIGTERM`. The fake does not wait for it.
+ */
+function startChild() {
+  const file = process.env.WINGFOIL_FAKE_AGENT_CHILD;
+  if (file === undefined || file === '') return;
+  const trap = process.env.WINGFOIL_FAKE_AGENT_CHILD_TRAP === '1' ? "process.on('SIGTERM', () => undefined); " : '';
+  const child = spawn(process.execPath, ['-e', `${trap}setInterval(() => undefined, 60000)`], { stdio: 'ignore' });
+  child.unref();
+  writeFileSync(file, `${child.pid}\n`);
+}
+
+/** The trimmed stdout of `command --version` (no shell), or `null` when it cannot run or fails. */
+function versionOf(command) {
+  try {
+    return execFileSync(command, ['--version'], { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * `WINGFOIL_FAKE_AGENT_CLI=1`: what `wingfoil` and `"$WINGFOIL_CLI"` print for `--version` in the agent's environment,
+ * the shim's permission bits, and the `WINGFOIL_AGENT` value; an empty object otherwise.
+ */
+function cliFacts() {
+  if (process.env.WINGFOIL_FAKE_AGENT_CLI !== '1') return {};
+  const variable = process.env.WINGFOIL_CLI;
+  let mode = null;
+  if (variable !== undefined && variable !== '') {
+    try {
+      mode = (statSync(variable).mode & 0o777).toString(8);
+    } catch {
+      mode = null;
+    }
+  }
+  return {
+    cli: {
+      path: versionOf('wingfoil'),
+      variable: variable === undefined || variable === '' ? null : versionOf(variable),
+      mode,
+    },
+    launcher: process.env.WINGFOIL_AGENT ?? null,
+  };
+}
+
+/**
+ * `WINGFOIL_FAKE_AGENT_REGISTRY=1`: the fake's pid and every file under `<cwd>/.wingfoil/run/`, sorted by path, each
+ * parsed (a file that is not JSON is recorded as its text); an empty object otherwise.
+ */
+function registryFacts() {
+  if (process.env.WINGFOIL_FAKE_AGENT_REGISTRY !== '1') return {};
+  const base = '.wingfoil/run';
+  const files = [];
+  const walk = (relative) => {
+    const absolute = join(process.cwd(), relative);
+    if (!existsSync(absolute)) return;
+    for (const entry of readdirSync(absolute, { withFileTypes: true })) {
+      const path = `${relative}/${entry.name}`;
+      if (entry.isDirectory()) walk(path);
+      else files.push(path);
+    }
+  };
+  walk(base);
+  files.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  const registry = files.map((path) => {
+    const text = readFileSync(join(process.cwd(), path), 'utf-8');
+    try {
+      return { path, entry: JSON.parse(text) };
+    } catch {
+      return { path, entry: text };
+    }
+  });
+  return { pid: process.pid, registry };
+}
+
+/** `WINGFOIL_FAKE_AGENT_SAY`: write each declared text to stdout or stderr, in order, each write awaited. */
+async function say() {
+  const declared = process.env.WINGFOIL_FAKE_AGENT_SAY;
+  if (declared === undefined || declared === '') return;
+  for (const [stream, text] of JSON.parse(declared)) {
+    const target = stream === 'err' ? process.stderr : process.stdout;
+    await new Promise((resolve) => target.write(text, () => resolve()));
+  }
+}
+
 /** One launch: record, optionally connect, then print the headless document. Returns the exit code. */
 async function launch(argv, stdin) {
   const bootstrapFile = option(argv, '--prompt-file');
@@ -206,6 +349,8 @@ async function launch(argv, stdin) {
   const sessionId = option(argv, '--session-id') ?? option(argv, '--resume') ?? null;
   let mcp = null;
   let failure = null;
+  trackSignals();
+  startChild();
   if (process.env.WINGFOIL_FAKE_AGENT_CONNECT === '1') {
     const instruction = bootstrap === undefined || bootstrap === null ? null : CONTEXT_INSTRUCTION_RE.exec(bootstrap);
     const configFile = option(argv, '--mcp-config');
@@ -220,11 +365,17 @@ async function launch(argv, stdin) {
       }
     }
   }
-  record({ argv, stdin, env: Object.keys(process.env).sort(), mcp, ...(failure === null ? {} : { failure }) });
+  const cli = cliFacts();
+  const registry = registryFacts();
+  record({ argv, stdin, cwd: process.cwd(), env: Object.keys(process.env).sort(), mcp, ...cli, ...registry, ...(failure === null ? {} : { failure }) });
   if (failure !== null) {
     process.stderr.write(`fake-agent: ${failure}\n`);
     return 1;
   }
+  if (process.env.WINGFOIL_FAKE_AGENT_COMMIT === '1') {
+    execFileSync('git', ['-c', 'commit.gpgsign=false', 'commit', '--allow-empty', '--no-verify', '--quiet', '-m', 'fake: work'], { stdio: 'ignore' });
+  }
+  await say();
   if (argv.includes('--headless')) process.stdout.write(`${JSON.stringify(documentFor(sessionId))}\n`);
   return null;
 }
@@ -246,6 +397,17 @@ async function main() {
       return;
     }
     process.stdout.write(`${JSON.stringify(documentFor(option(argv, '--lookup') ?? null))}\n`);
+  } else if (argv.includes('--mcp-get')) {
+    record({ argv, stdin, env: Object.keys(process.env).sort(), mcp: null });
+    const name = option(argv, '--mcp-get') ?? '';
+    const answer = process.env.WINGFOIL_FAKE_AGENT_MCP_GET ?? '1';
+    if (answer === 'hang') return waitForSignal();
+    if (answer === '0') {
+      process.stdout.write(`${name}\n`);
+      return;
+    }
+    process.stderr.write(`Error: No MCP server named '${name}' found.\n`);
+    process.exitCode = 1;
   } else if (argv.includes('--summary')) {
     record({ argv, stdin, env: Object.keys(process.env).sort(), mcp: null });
     process.stdout.write('fake-agent: session summary\n');

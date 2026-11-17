@@ -40,7 +40,7 @@ notifications to v0.4 (R13), and fold `dl-104` into the `spec-003` revision revi
 and `E_NO_MAIN_WORKFLOW`. No check resolves a phase's `include:` against the loaded names (`bug-145`),
 which is why the Kanban scaffold's include-by-path (`bug-144`) passes. The production MCP server
 registers the read-only Resources `wingfoil://workflows` and `wingfoil://workflows/{name}`
-(`src/mcp/workflow-resource.ts:34-37`, wired by `registerReadOnlyResources`, `src/mcp/index.ts:84-90`)
+(`src/mcp/workflow-resource.ts:34-37`, wired by `registerReadOnlyResources`, `src/mcp/read-only-resources.ts:28-34`)
 and deliberately does not call `registerCoreModules` (`src/mcp/server.ts:19-26`), so the mechanical
 `wingfoil://workflow/list` URI exists only in tests.
 
@@ -132,7 +132,7 @@ checks that its target file does not exist on disk.
 | elements a step created or awaits | ascending `(type, id)` |
 | directives | ascending id (`spec-012` §5) |
 | approvers routed to | ascending `(name, email)` |
-| diagnostics | load-time diagnostics in `spec-003`'s order, then this spec's: `W_UNCOMMITTED_INPUTS` first, then `W_MEMORY_*` by path, then `W_INSTANCE_WORKFLOW_UNKNOWN` by instance order, then step-attached codes in frontier order |
+| diagnostics | load-time diagnostics in `spec-003`'s order, then this spec's: `W_UNCOMMITTED_INPUTS` first, then `W_MEMORY_*` by path, then `W_INSTANCE_WORKFLOW_UNKNOWN` in the start order of the plans it names (§3.3's order, ties by id), then step-attached codes in frontier order; `workflow status` appends its own after them, `W_INSTANCE_PRE_MARKER` last, in the order of its `open` (§2, transitory, §3.2) |
 
 - Memory documents are enumerated from `HEAD`'s tree in sorted path order, never by directory
   listing order.
@@ -167,9 +167,10 @@ message }`, one array named `diagnostics`; for these codes `file` is repository-
 | `W_MEMORY_INVALID_STATE` | warning | §1.4, P4.13 sc. 3 |
 | `W_MEMORY_UNREADABLE` | warning | §1.4 |
 | `W_UNRESOLVED_TOKEN` | warning | a token of a `where`, `produces` or action argument has no value on the element it resolves against (§4.1) — the element lacks the field, or the field is blank |
-| `W_INSTANCE_WORKFLOW_UNKNOWN` | warning | an open plan names a workflow the registry does not load; the instance is listed with an empty frontier |
+| `W_INSTANCE_WORKFLOW_UNKNOWN` | warning | an open plan — a plan with `parent` empty and status `draft` or `active` (§3.2) — names a workflow the registry does not load, whoever added it; the plan is not an instance (§3.2): it is never the active instance, no `<ref>` selects it, and the warning is how `workflow list`, `status` and `next` report it |
 | `W_APPROVAL_ROLE_WITHOUT_AUTHORITY` | warning | a member an approval is routed to does not hold the `approver` role (§5.1) |
-| `W_PROVENANCE_ORPHAN` | warning | a linkage, record or adoption in an instance's walk names a `<workflow>.<phase>` the registry does not declare and no `rekey` maps (§4.8); it is evidence of nothing. Not raised for an instance whose workflow the registry does not load: `W_INSTANCE_WORKFLOW_UNKNOWN` reports it |
+| `W_INSTANCE_PRE_MARKER` | warning | `workflow status` only, transitory (§3.2): an open instance it reports is kept only by the pre-marker rule — its start commit carries no start marker. `file` is the instance's plan, `path` is empty, the message is `instance <id> is kept by the pre-marker rule: restart it with workflow start`; one per such instance, in the order of the payload's `open`, after every other diagnostic of the payload |
+| `W_PROVENANCE_ORPHAN` | warning | a linkage, record or adoption in an instance's walk names a `<workflow>.<phase>` the registry does not declare and no `rekey` maps (§4.8); it is evidence of nothing. Not raised for a plan whose workflow the registry does not load: that plan is no instance (§3.2), its walk is not read, and `W_INSTANCE_WORKFLOW_UNKNOWN` reports it |
 | `W_PROVENANCE_CONFLICT` | warning | two or more claims on one element in the walks — linkages and adoptions, at least one of them an adoption — none descending from another (§4.8); the element counts as created by none of them |
 
 An error among `spec-003`'s diagnostics makes every workflow operation exit `1` (`VALIDATION`, §10).
@@ -189,12 +190,53 @@ record inside Memory, where it can be inspected, amended and approved like any e
 practice already in use: `git log --format=%s | grep '^wf(plan)'` counts 26 `add`, 26 `submit` and 20
 `finalize` commits at `997e8998`.
 
-**3.2 Open.** An instance is open when its plan's status is `draft` or `active`. A plan whose
-`workflow` names a workflow that is not startable, or whose `parent` is set, is ignored here.
+**The start marker** (`dl-217` (a), from `minor-v0.4`). Starting is an act, not a document's content: `workflow
+start` writes its `wf(plan): add <id>` commit with the trailer `WingFoil-Start: <workflow>` — the name of the
+workflow it starts — in the commit's final trailer paragraph, before the `WingFoil-Version:` line (`spec-008` §2,
+`git-conventions` §8). `memory add` never writes it, with or without `--workflow`, and no option asks for it. A
+**marked start** is the add commit of a plan whose `parent` is empty, in any status, that carries the trailer with a
+non-blank value in that paragraph; the marked starts are read for the plans `HEAD` holds, as §3.3 finds their start
+commits.
+
+**3.2 Open.** A plan whose `parent` is empty is an **open instance** when all three hold:
+
+- its status is `draft` or `active` (an **open plan**);
+- its `workflow` names a workflow the registry loads and that is startable;
+- `workflow start` opened it: its start commit (§3.3) carries the start marker, or — a plan added before the
+  marker existed — carries none and no marked start is an ancestor of it (the **pre-marker rule**, transitory as
+  stated below, which keeps the instances already open, `dl-217`'s ratification). A plan added without the marker once a marked start is in its
+  history — by `memory add --type plan`, by hand, or by a build older than the marker — is not an instance,
+  whatever it names and whatever its status.
+
+An open plan naming a workflow the registry does not load is no instance and is reported
+`W_INSTANCE_WORKFLOW_UNKNOWN` (§2), whether or not it carries the marker; one naming a loaded workflow that is not
+startable, and a phase plan (`parent` set), are ignored without a diagnostic. A plan that is no instance is never
+the active instance, no `<ref>` selects it (§10: `workflow is not open: <ref>`), and no walk is read for it (§4.8).
+A plan moved to another path starts at the commit that moved it (§3.3), which carries no marker: once a marked start
+precedes it, moving an instance's plan ends it as an instance.
+
+**The pre-marker rule is transitory** (approver ruling at `task-345`'s design gate, `D1` (a)). It exists only so that
+the instances opened before the marker existed stay open; it is not part of the instance model. While it lasts:
+
+- **It is made visible.** `workflow status` reports every open instance that only this rule keeps — an open
+  instance whose start commit carries no marker — with the warning `W_INSTANCE_PRE_MARKER` (§2, §7.4): on stdout,
+  as the console line `    warning: kept by the pre-marker rule: restart it with workflow start` under that
+  instance's lines, and in the payload's `diagnostics` (`--format json` and `--format yaml`, and the MCP Resource
+  that serves the same payload, `spec-004`). No other command raises it, and nothing is written on stderr. An
+  instance whose start commit carries the marker never gets it.
+- **Its removal condition** is that no WingFoil repository holds an open unmarked instance, checked by zero
+  `W_INSTANCE_PRE_MARKER` in `workflow status --format json` of each. Each such instance is ended (`workflow end`,
+  or `memory deprecate` of its plan) and, when its run goes on, restarted with `workflow start`, which writes the
+  marker.
+- **Its removal** is tracked by a follow-up element with a target release. Once the condition holds, that element
+  removes the rule — an unmarked plan is then never an instance — together with `W_INSTANCE_PRE_MARKER`, and amends
+  this section, §2 and §7.4. The code that applies the rule says the same in its comment.
 
 **3.3 Start order and the active instance.** An instance's **start commit** is the commit that added
 its plan file; its start position is that commit's position in `git rev-list --topo-order HEAD`. The
-open instances are ordered most recently started first; the **active instance** is the first.
+open instances (§3.2) are ordered most recently started first; the **active instance** is the first. A plan that
+is no instance takes no place in this order, so neither a draft plan just added nor a plan of ad-hoc work moves the
+active instance.
 `workflow end` of the active instance therefore makes the previous one active again (P4.3 sc. 2), and
 ending the last open instance leaves no active instance (P4.3 sc. 1). Every operation that works on
 one instance takes an optional positional `<ref>` — a workflow name (the most recently started open
@@ -225,11 +267,21 @@ criterion).
 A workflow that is includable as well as startable (`dl-109`) self-binds only when it runs as an
 instance; included, it has the element its includer provides (`spec-003` Layer 2 `element`).
 
-**3.5 The context element.** When a workflow that declares no `element` is started while the active
-instance has a bound element, `start` writes that element's id into the plan's `element` field as the
-instance's **context** (`Instance.context`) — as the practised plans do
+**3.5 The context element** (`bug-413` option (c), from `minor-v0.4`). A workflow that declares no `element` — an
+**element-less main**, the self-creating ones of §3.4 included — may record a **context** (`Instance.context`): the
+id of the element the run is started in, written into the plan's `element` field — as the practised plans do
 (`docs/05_plans/rl-v1/rel-v0.3/bug-ingest-rel-v0.3-planning-findings-plan.md`: `workflow:
-"bug-ingest"`, `element: "minor-v0.3"`). The context never binds and never enters deduction; what the
+"bug-ingest"`, `element: "minor-v0.3"`). `start` decides it in this order:
+
+- `--element <type>:<id>` sets it: the element must exist at `HEAD`, of any declared type, and the `<id>` may be a
+  short reference (`spec-008` §7), resolved among the documents of `<type>`; the plan records the full id;
+- `--element none` clears it: the plan records no context;
+- with no `--element`, the context is the active instance's bound element when the active instance's workflow
+  declares `element:`; when the active instance is itself an element-less main — one ingest started while another
+  is open, or a run started while the lifecycle instance is active — or no instance is open, there is none.
+
+`--element none` on a workflow that declares `element:` is refused as an absent element is (§10). The context
+never binds and never enters deduction; what the
 bug-ingest comment's "the created Memory file inherits that element" means for the created element's
 frontmatter is the Memory pillar's, not this spec's.
 
@@ -417,9 +469,10 @@ Four things are found there.
   alike under that rule: the claim that descends from every other claim of the element owns it, and two or more
   claims none descends from are a conflict (`task-293` design D2 (a)). When an element's claims are all linkages —
   two add commits naming it, as a cherry-picked add that keeps its trailers gives — every one of them counts and
-  none conflicts, as before provenance records existed (approver ruling (ii), 2026-10-24, `task-293` review). The
-  orphans of an instance whose workflow the registry does not load own nothing and raise no `W_PROVENANCE_ORPHAN`:
-  `W_INSTANCE_WORKFLOW_UNKNOWN` already reports that instance (`task-293` design D3 (a)).
+  none conflicts, as before provenance records existed (approver ruling (ii), 2026-10-24, `task-293` review). A
+  plan whose workflow the registry does not load is no instance (§3.2): its walk is not read, so its records own
+  nothing and raise no `W_PROVENANCE_ORPHAN`; `W_INSTANCE_WORKFLOW_UNKNOWN` reports the plan (`task-293` design D3
+  (a)).
 - **Re-entries.** A commit that moved an element to an earlier position of its `sequence` — a
   `reject` (`wf(<type>): reject <ids> [<from> → <to>]`) or a `park` (`dl-110`) naming it. After a
   re-entry of the element a workflow pass runs on, the `record` and `state` evidence of the phases
@@ -473,11 +526,17 @@ phase, deduction descends into the sub for each eligible or entered candidate, i
 instance to the step and `scope` is the step's element or collection entry. A step's **key** is
 `<workflow>.<phase>`, followed by `@<type>:<id>` or `@<collection>#<key>` when it has a scope (e.g.
 `dev-loop.red@task:task-130`); within one instance a key names one step. Several steps are ready at
-once when several iterations are in flight (parallel `dev-loop`s, `dl-014`). An instance is
-**complete** when its frontier is empty, except an instance whose workflow the registry does not load
-(`W_INSTANCE_WORKFLOW_UNKNOWN`, §2): its frontier is empty because nothing can be deduced, and it is
-reported `complete: false`; and an abandoned instance (§4.11), whose frontier is empty for the same reason,
-is reported `complete: false` too.
+once when several iterations are in flight (parallel `dev-loop`s, `dl-014`).
+**A key given to a command** (`--step <key>` of `finalize`, `adopt`, `memory add --workflow` and `agent execute`)
+names the frontier step whose key equals it. A key without a scope (`<workflow>.<phase>`, no `@`) that equals no
+frontier key names the frontier steps of that workflow and phase whatever their scope: exactly one is the step it
+names (a key copied before a binding resolved, `bug-ingest.capture` for `bug-ingest.capture@bug:<id>`, `bug-468`);
+two or more are refused, listing their keys (§10); none is the out-of-frontier refusal (§10). A key with a scope
+is matched exactly, and so is every key everywhere else (records, trailers, `rekey`'s `--from` and `--to`).
+Whatever the key given, the step's full key is what the command writes and prints. An instance is
+**complete** when its frontier is empty, except an abandoned instance (§4.11): its frontier is empty because
+nothing can be deduced, and it is reported `complete: false`. Every instance's workflow is loaded (§3.2), so no
+other instance has an empty frontier it cannot deduce.
 
 **4.10 Optional phases.** A phase with `optional: true` whose evidence is unsatisfied is **skipped**
 when a later phase of the same workflow is complete other than vacuously (§4.7); otherwise it is
@@ -500,8 +559,8 @@ approval on every element its actions move through a `gates` state — its **car
 | Carrier | Awaiting while |
 |---|---|
 | the bound element | it sits in a gate state the phase's actions pass through: the state an approve edge leaves (`memory.approve`, or a `set_state` to a gate's approve target — `release-line-cycle.approve`, release-line `planning`, `.wingfoil/memory.yaml:89`), or the gate state a `memory.submit` enters (`dev-loop.review`, task `in-review`) |
-| the selection (`spec-003` § "Selections") | each selected element sits in a gate state of its type (`release-planning.triage-bugs`: bugs `open`; `reconcile-governance`: decision-logs `in-discussion`, ADRs `pending`) |
-| the created elements | each element the step created sits in a gate state the phase's later actions pass through (`identify-specs`, `record-adrs`, `dev-loop.design`: `tech-spec`/`adr` `pending`; `end-of-life.announce`: a decision-log `in-discussion`) |
+| the selection (`spec-003` § "Selections") | each selected element sits in a gate state of its type (`release-planning.triage-bugs`: bugs `open`; `reconcile-governance`: decision-logs `in-discussion`, ADRs `pending`; `end-of-life.approve`: the decision-log tagged `end-of-life`, `in-discussion`) |
+| the created elements | each element the step created sits in a gate state the phase's later actions pass through (`identify-specs`, `record-adrs`, `dev-loop.design`: `tech-spec`/`adr` `pending`) |
 | the run elements of a typed `<T>.set_state(s)` | each targeted element (§4.2) sits in the gate whose approve target is `s` (`release-planning.commit-backlog`: tasks `pending → backlog`) |
 
 The approval is given when no carried element awaits any more — by `memory approve` (or a `reject`,
@@ -604,7 +663,10 @@ phase's `mode` allows (`fresh` always, plus the declared non-fresh mode), and `m
 runs — `fresh` in every v0.3 run, because `--resume`/`--ref` are v0.4. `distinct_from` (phase names) is
 reported as declared. `agentRole: true` marks a role listed in `dna.yaml`
 `team.agents[].executes_as` (`.wingfoil/dna.yaml:127`), which is the predicate `dl-135` point 1 uses
-for `agent list --waiting`. Nothing enforces them in v0.3.
+for `agent list --waiting`. Nothing enforces them in v0.3. `launch` is the phase's declared launch kind
+(`spec-003` Layer 2, `dl-183` Q1 (a)) — `interactive`, `headless` or `any` — or `null` when the phase declares
+none, which reads as `interactive`; it is reported as declared, so a reader can tell a declared kind from the
+default, and `agent execute` takes the run's kind from it (`spec-016` §3.2 step 7, v0.4).
 
 **6.4 Cadence** (`dl-105`). A declared `cadence` is reported. "Overdue" needs the current time and the
 last run's evidence, which `dl-105` R2 (c) keeps outside the repository while the trigger is
@@ -616,7 +678,7 @@ provisional; v0.3 reports `lastRun: "not-recorded"` and never computes overdue (
 Grammar (`spec-008` §1; target positional per `dl-082`; the shared selector `<ref>` of §3.3):
 
 ```
-wingfoil workflow start    <name> [--element <type>:<id>] [--title <t>] [--set phase=<v>] [--set scope=<v>]
+wingfoil workflow start    <name> [--element <type>:<id>|none] [--title <t>] [--set phase=<v>] [--set scope=<v>]
 wingfoil workflow end      [<ref>]
 wingfoil workflow next     [<ref>] [--assigned-to <who>]
 wingfoil workflow status   [<ref>]
@@ -649,18 +711,26 @@ with `--set` (`spec-008` §10, whose invalid-value errors apply unchanged):
   refused (`CONFLICT`) as a `--set phase=` one is. An `id_pattern` with a `{n}` counter, and a `path` with no
   `{id}`, are not checked here: the counter makes the id unique, and `memory add` refuses an occupied path.
 - `scope` = the workflow's name (ruling R18).
-- `title` = `--title`, else `<workflow> — <phase>`.
+- `title` = `--title`, else `<workflow> — <phase>`, with the `phase` the plan records.
+
+`workflow` and `phase` are written to the plan's frontmatter whatever the plan type's `id_pattern` and `path`
+declare (`task-346`, `bug-491`): a token the patterns hold is handed to `memory add` as a token, and a value they do
+not hold is written as a field. So `--set phase=` is accepted whether or not `{phase}` is a token; `--set scope=`
+stays a token only, refused as `spec-008` §10 refuses a `--set` naming no token when the patterns hold no `{scope}`.
 
 No `--set` is therefore ever mandatory. A project that nests its plans otherwise, as this repository
-does (`docs/05_plans/rl-v1/rel-v0.3/…`, `phase: "rel-v0.3"`), keeps its layout by passing `--set`. `start` then writes **two commits**, each touching only the
+does (`docs/05_plans/rl-v1/rel-v0.3/…`, `phase: "rel-v0.3"`), keeps its layout by passing `--set`. `start` then writes **one commit**, touching only the
 plan file (`verifyCommittedScope`, `spec-006` §6 item 2): `wf(plan): add <id>` through `memoryAdd`
-(fields `workflow`, `phase`, `element`, `title`, `status: draft`, the template body), then
-`wf(plan): submit <id>` (`draft → active`; the template's `required: [title, workflow, phase]` are all
-filled, `.wingfoil/memory.yaml:206-207`). If the second commit fails, the plan stays `draft`, the
-instance is open, and the error names `wingfoil memory submit <id>` as the way on. The new instance
-becomes active (P4.2 sc. 2; the others stay open). The output is the instance and its first frontier
-step ("its first step is initialized", P4.2 sc. 1). A project whose `memory.yaml` declares no `plan`
-type is refused (§10).
+(fields `workflow`, `phase`, `element`, `title`, `status: draft`, the template body), its final trailer paragraph
+carrying the start marker `WingFoil-Start: <name>` before `WingFoil-Version:` (§3.1). The plan is left `draft`, to
+be written (`task-346`, `bug-390`): its author writes the body and runs `wingfoil memory submit <id>` (`draft →
+active`, the template's `required` fields checked then), as for every element `memory add` creates — no approver's
+`memory amend` is needed to give the plan a body. The instance is open from the add, since the marker rides that
+commit and §3.2 admits a `draft` plan; `end` refuses it until it is submitted (§7.2). The new instance becomes active
+(P4.2 sc. 2; the others stay open). The output is the instance, its first frontier step ("its first step is
+initialized", P4.2 sc. 1) and the command that submits the plan, `wingfoil memory submit <id>` (§8 `submit`; on the
+console, the line `plan <id> is draft: write its body, then run wingfoil memory submit <id>` after the `started`
+line). A project whose `memory.yaml` declares no `plan` type is refused (§10).
 
 **7.2 `end`** (P4.3). Resolves the instance (§3.3); with none open: `no active workflow to end`
 (P4.3 sc. 3). A plan still in `draft` is refused with `workflow '<name>' was not submitted: run
@@ -678,8 +748,7 @@ keeps the steps whose role the named party holds: `me` is the git identity's ema
 consumes; the rest are reported as further ready steps. Exit `0` in every deduced case: with no open
 instance it prints `no open workflows`; with an empty frontier,
 `no next step: workflow '<name>' is complete` (P4.4 sc. 3). An abandoned instance (§4.11) says
-`no next step: workflow '<name>' is abandoned: its element <type>:<id> is <status>`, one whose workflow the
-registry does not load `no next step: workflow '<name>' is not loaded`, and a filter that keeps no step
+`no next step: workflow '<name>' is abandoned: its element <type>:<id> is <status>`, and a filter that keeps no step
 `no next step of workflow '<name>' is assigned to '<who>'`; each has `complete: false`. `me` matches
 emails case-insensitively; a `<who>` that names no member is read as a role name, and one that is neither
 a member's name or email nor a `team.roles` role (or `me` when the identity's email is no member's) is
@@ -689,6 +758,10 @@ reported as a warning.
 and marked, each with its top-level phase progress (`complete` | `current` | `pending` | `skipped`),
 its frontier, its pending approvals and its `late` candidates (§4.7); then the ungated elements
 (§5.1). With no open instance: `no open workflows`, exit `0` (P4.5 sc. 3), the ungated elements listed after it.
+While the transitory pre-marker rule lasts (§3.2), each reported instance that only that rule keeps open carries
+`W_INSTANCE_PRE_MARKER` (§2): the console line `    warning: kept by the pre-marker rule: restart it with workflow
+start` after that instance's lines, counted in the `<n> diagnostic(s)` line, and the diagnostic in the payload; with
+a `<ref>`, only for the instance it selects. Exit `0` as before; stderr carries nothing new.
 
 **7.5 `list`** (P4.6). Without `--all`: the startable workflows, plus every includable workflow that
 is the current phase's sub on some open instance's frontier (P4.6 sc. 1–2). With `--all`: every
@@ -745,14 +818,20 @@ writing and refuses on any `spec-003` error (`VALIDATION`): removing the last st
 
 **7.9 `finalize`** (ruling R11; `dl-104` D1 (b)–(c)). Records a phase's completion where the phase
 has no Memory or file evidence to deduce it from.
-- Resolves the instance (§3.3) and the step: `--step <key>` (§4.9), else the instance's next step.
-  The step must be on the frontier at `HEAD`: `step '<key>' is not on the frontier of <instance>`
-  (`CONFLICT`).
+- Resolves the instance (§3.3) and the step: `--step <key>` (§4.9, an unscoped key included), else the
+  instance's next step. The step must be on the frontier at `HEAD`: `step '<key>' is not on the frontier of
+  <instance>` (`CONFLICT`); an unscoped key naming several frontier steps is §10's ambiguity refusal.
 - The step's missing evidence must be `record` alone — a checkpoint (§4.3), an approval no element
   carries (§5.1), an `awaits` (§5.4), or `created` evidence of a step that created nothing (§4.3).
   Otherwise: `phase '<workflow>.<phase>' completes from its evidence: <missing kinds>` (`CONFLICT`) —
   a phase that should produce a document or move an element is never completed by a record
   (`dl-104` D1 rationale).
+- When the phase declares `approval:`, the authority check refuses an agent's session first, before the identity
+  is judged (`E_AGENT_CONTEXT`, `spec-018` §3, §10); the agent context is resolved only once the step's phase is
+  known, since only the phase says whether the operation is approver-gated (`spec-018` §2.6). Without `approval:`,
+  in an agent's session the record carries the agent trailers `Co-Authored-By:` and `AI-Model:` after
+  `WingFoil-Version:` (`spec-018` §2.1–§2.2, `spec-008` §2), signed by the entry `spec-018` §2.3 selects, and a
+  `--reason` comes after the body line of `spec-018` §2.3 rule 4 when the entry is the first one by default.
 - When the phase declares `approval:`, the git identity must hold approver authority (REQ-SEC-03,
   the same check `memory approve` makes) and `--reason` is required, non-blank and shaped as
   `dl-067`'s `Reason:` block; the body carries `Approver: <name> <email> (approver)` and
@@ -761,7 +840,8 @@ has no Memory or file evidence to deduce it from.
   outside the `wf({type})` grammar (`spec-003` verb table, closing paragraph) so `memory history`
   does not read it as a Memory operation; the trailer block carries `spec-003`'s phase-record
   trailers. The trailer block is the message's final paragraph — the one git reads trailers from — so
-  the record's trailers share it with the `WingFoil-Version:` line, which stays last (`spec-008` §2);
+  the record's trailers share it with the `WingFoil-Version:` line, which follows them, and only the agent
+  trailers come after it (`spec-008` §2);
   an `Approver:` / `Reason:` body is its own paragraph before it. A git identity is required (REQ-SEC-01).
   The commit is made with `git commit --only --allow-empty`, so nothing staged rides along, and it is
   refused while the index holds staged changes (`dl-106`; the write-guard row of §10).
@@ -773,13 +853,14 @@ has no Memory or file evidence to deduce it from.
 **7.10 What this spec requires of `memory add`** (`spec-008` owns the grammar; Consequences;
 approver ruling R16, 2026-09-30, `release-planning-rel-v0.3-plan`). `wingfoil memory add … --workflow <ref> [--step <key>]` links the
 element it adds to a step (§4.8), which is explicit and survives concurrent instances:
-- `<ref>` resolves to an open instance (§3.3); `--step` selects a frontier step whose phase declares
-  `memory.add(type: T)` for the `--type` given; without `--step`, the one such frontier step of the
+- `<ref>` resolves to an open instance (§3.3); `--step` selects a frontier step (§4.9, an unscoped key included)
+  whose phase declares `memory.add(type: T)` for the `--type` given; without `--step`, the one such frontier step of the
   instance. None: `no step of <instance> adds a <type>` (`CONFLICT`); several: the same refusal
   listing their keys, asking for `--step`. A `--step` that is not on the instance's frontier is refused as
   `finalize` refuses it (§10); `--step` without `--workflow` is a usage error (`spec-008` §12).
 - The add commit carries the trailers `WingFoil-Instance: <instance-id>` and `WingFoil-Step: <key>`, in
-  its final paragraph with the `WingFoil-Version:` build signature (`dl-111`), which stays its last line:
+  its final paragraph with the `WingFoil-Version:` build signature (`dl-111`), which follows them, and only the
+  agent trailers of `spec-008` §2 come after it:
   git reads trailers from that paragraph only, and so does the walk (§4.8).
 - Without `--workflow`, `memory add` is unchanged and links nothing; an element added this way can be linked later
   only by `workflow adopt` (§7.11).
@@ -787,7 +868,7 @@ element it adds to a step (§4.8), which is explicit and survives concurrent ins
 **7.11 `adopt`** (P4.21, `dl-187` rules 1–7, REQ-STATE-11; from `patch-v0.3.1`). Records which step an existing
 element counts as created by, without changing the element or rewriting history.
 - **Single form** (`--step`, `--element`, `--reason`; at least one of `--step` and `--element`, else a usage error,
-  `spec-008` §12). Resolves the instance (§3.3) and the step: `--step <key>`, which must be on the frontier at `HEAD`
+  `spec-008` §12). Resolves the instance (§3.3) and the step: `--step <key>` (§4.9, an unscoped key included), which must be on the frontier at `HEAD`
   (as `finalize` requires, §7.9), else the one frontier step whose phase adds the `--element`'s type (as
   `memory add --workflow` chooses, §7.10). The step's phase must add a type (`memory.add(type: T)` or a
   `{ type: T, path }` produces entry, `dl-187` rule 2) and its `created` evidence must be missing: the step created no
@@ -891,6 +972,7 @@ interface Step {
   fallback: { step: string; setState: string | null } | null;
   reentered: boolean; reentryCommit: string | null;
   mode: "fresh"; allowedModes: ("fresh" | "resume" | "reference")[]; distinctFrom: string[];
+  launch: "interactive" | "headless" | "any" | null;                 // null: not declared, reads interactive (§6.3)
   cadence: { recurring: unknown; lastRun: "not-recorded" } | null;   // null: `once` (§6.4)
 }
 interface NextResult { baseline: Baseline; instance: Instance | null; complete: boolean;
@@ -905,7 +987,8 @@ interface StatusResult { baseline: Baseline; active: string | null;
                                  late: ElementRef[] }[];
                          pendingApprovals: PendingApproval[]; ungated: ElementRef[]; ungatedRoutedTo: Member[];
                          message?: string; diagnostics: Diagnostic[] }
-interface StartResult    { baseline: Baseline; instance: Instance; next: Step | null; commits: string[] }
+interface StartResult    { baseline: Baseline; instance: Instance; next: Step | null; commits: string[];   // the add commit
+                           submit: string }                     // "wingfoil memory submit <id>" (§7.1)
 interface EndResult      { baseline: Baseline; ended: Instance; active: Instance | null; commit: string }
 interface FinalizeResult { baseline: Baseline; instance: Instance; finalized: Step; next: Step | null; commit: string }
 interface CreateResult   { baseline: Baseline; name: string; file: string; startable: boolean; includable: boolean; commit: string }
@@ -933,7 +1016,8 @@ interface PhaseView      { name: string; description: string | null; role: strin
                            iterate: { over: string; where: Record<string, unknown> | null } | null;
                            selection: { where: Record<string, unknown> } | null;
                            mode: "fresh" | "resume" | "reference"; allowedModes: ("fresh" | "resume" | "reference")[];
-                           distinctFrom: string[]; cadence: unknown; evidence: EvidenceKind[];
+                           distinctFrom: string[]; launch: "interactive" | "headless" | "any" | null;
+                           cadence: unknown; evidence: EvidenceKind[];
                            include: string | null; sub: WorkflowView | null }
 interface WorkflowView   { name: string; file: string; startable: boolean; includable: boolean; description: string | null;
                            element: string | null; phases: PhaseView[] }
@@ -993,21 +1077,21 @@ with P5.2.3 (v0.4); the production server serves no Tool today.
 | unknown workflow name (`start`, `show`, `remove`, a name `<ref>`); a `<ref>` that names neither a loaded workflow nor an instance plan at `HEAD` — a phase plan's id included (§3.1) | `unknown workflow: <name>` | `NOT_FOUND` | 1 |
 | not startable | `cannot start a sub workflow directly: <name>` | `VALIDATION` | 1 |
 | no `plan` type in `memory.yaml` | `memory type 'plan' is not declared in memory.yaml; workflow start records an instance as a plan element` | `VALIDATION` | 1 |
-| element required and absent, or `--element` of another type | `workflow '<name>' needs a <type> element: give --element <type>:<id>` | `VALIDATION` | 1 |
-| `--element` on a workflow that declares no element (`start`) | `workflow '<name>' declares no element: --element is not accepted` | `VALIDATION` | 1 |
+| element required and absent, `--element none`, or `--element` of another type | `workflow '<name>' needs a <type> element: give --element <type>:<id>` | `VALIDATION` | 1 |
 | element not found at `HEAD` | `element not found: <type>:<id>` | `NOT_FOUND` | 1 |
 | `--element` short reference matching several elements (`start`, `adopt`) | `ambiguous reference: <id> matches <N> elements` (`spec-008` §6; every full id in `details`, id order) | `CONFLICT` | 1 |
 | `--set phase=` collides (`start`) | `plan id already exists: <id>` | `CONFLICT` | 1 |
-| second `start` commit failed | `plan <id> was added but not submitted: run wingfoil memory submit <id>` | as the failure | 1 |
 | no open instance (`end`) | `no active workflow to end` | `NOT_FOUND` | 1 |
-| `<ref>` names a loaded workflow with no open instance, or an instance plan (`plan`, `parent` empty) at `HEAD` that is not open — `next`, `status`, `finalize`, `end` and `memory add --workflow <ref>` alike | `workflow is not open: <ref>` | `NOT_FOUND` | 1 |
+| `<ref>` names a loaded workflow with no open instance, or an instance plan (`plan`, `parent` empty) at `HEAD` that is no open instance (§3.2: closed, added without the start marker after a marked start, or naming a workflow the registry does not load) — `next`, `status`, `finalize`, `end` and `memory add --workflow <ref>` alike | `workflow is not open: <ref>` | `NOT_FOUND` | 1 |
 | plan in `draft` at `end` | `workflow '<name>' was not submitted: run wingfoil memory submit <id>` | `INVALID_TRANSITION` | 1 |
-| incomplete at `end` | `workflow '<name>' is not complete: current step <key>` — with an empty frontier, `…: it is abandoned: its element <type>:<id> is <status>` or `…: workflow '<name>' is not loaded`; the hint `wingfoil memory deprecate <id> abandons it` | `CONFLICT` | 1 |
+| incomplete at `end` | `workflow '<name>' is not complete: current step <key>` — with an empty frontier, `…: it is abandoned: its element <type>:<id> is <status>`; the hint `wingfoil memory deprecate <id> abandons it` | `CONFLICT` | 1 |
 | step not on the frontier (`finalize`, `memory add --step`, `adopt --step`, `agent execute --step`) | `step '<key>' is not on the frontier of <instance>`; `details.frontier` holds the frontier's keys in frontier order (`task-330`, `bug-340`) | `CONFLICT` | 1 |
+| an unscoped `--step` key names several frontier steps (`finalize`, `memory add --step`, `adopt --step`, `agent execute --step`; §4.9, `bug-468`) | `step '<key>' names <N> steps of <instance>: give --step, one of: <key>, <key>` (the keys in frontier order, also in `details.steps`) | `CONFLICT` | 1 |
 | no frontier step adds the type (`memory add --workflow`, §7.10; `adopt` without `--step`, §7.11) | `no step of <instance> adds a <type>` | `CONFLICT` | 1 |
 | several frontier steps add the type, no `--step` (`memory add --workflow`, `adopt`) | `no step of <instance> adds a <type> alone: give --step, one of: <key>, <key>` (the keys in frontier order, also in `details.steps`) | `CONFLICT` | 1 |
 | step has deducible evidence (`finalize`) | `phase '<workflow>.<phase>' completes from its evidence: <kinds>` | `CONFLICT` | 1 |
 | approval phase without authority (`finalize`) | the message `memory approve` gives (REQ-SEC-03) | as today | 1 |
+| approval phase run in an agent's session (`finalize`; `spec-018` §1 markers) | `E_AGENT_CONTEXT: 'workflow finalize' needs the approver and does not run in an agent's session (<markers>): …` (`spec-018` §3.2, with its `hint:`), before the authority check | `VALIDATION` | 1 |
 | approval phase without `--reason`, or a blank or malformed one (`finalize`) | `spec-008` / `dl-067` reason messages | — | 2 |
 | duplicate name (`create`) | `workflow already exists: <name>` | `CONFLICT` | 1 |
 | built-in (`remove`) | `built-in workflows cannot be removed` | `VALIDATION` | 1 |
@@ -1022,9 +1106,11 @@ with P5.2.3 (v0.4); the production server serves no Tool today.
 | no candidate, no `--element` (`adopt`) | `no candidate for <key>; name one with --element` | `CONFLICT` | 1 |
 | `--plan --apply` without approver authority | `user not authorized to apply adoptions in bulk` | as `memory approve`'s refusal | 1 |
 | `rekey` without approver authority | `user not authorized to rekey` | as `memory approve`'s refusal | 1 |
+| `--plan --apply` in an agent's session (`spec-018` §1 markers) | `E_AGENT_CONTEXT: 'workflow adopt --plan --apply' needs the approver and does not run in an agent's session (<markers>): …` (`spec-018` §3.2, with its `hint:`), before the authority check | `VALIDATION` | 1 |
+| `rekey` in an agent's session (`spec-018` §1 markers) | `E_AGENT_CONTEXT: 'workflow rekey' needs the approver and does not run in an agent's session (<markers>): …` (`spec-018` §3.2, with its `hint:`), before the authority check | `VALIDATION` | 1 |
 | `--from` still declared, or named by no record of the instance; `--to` not declared (`rekey`) | `cannot rekey <from>: it is still declared` / `no record of <instance> names <from>` / `unknown step: <to>` | `CONFLICT` | 1 |
 | `--to` is not a step of the instance's workflow or of a workflow it includes, directly or indirectly (`rekey`) | `<to> is not a step of <workflow> or of a workflow it includes` | `CONFLICT` | 1 |
-| dirty write target, missing git identity | the existing messages of `write-guard.ts` and REQ-SEC-01 | as today | 1 |
+| dirty write target, missing git identity, an identity outside `team.members` (`start`, `end`, `finalize`, `adopt` but `--plan` alone, `rekey`, `create`, `remove`) | the existing messages of `write-guard.ts` and REQ-SEC-01; `E_NOT_A_MEMBER: …` (`spec-006` §7, "Membership") | as today; `VALIDATION` | 1 |
 | missing `<name>`; malformed `--element` (`spec-008` §7); a `--set` name other than `phase` / `scope` on `start`; invalid `<name>` syntax; `--kind` with `--startable`/`--includable`; `create` with neither; unknown flag; on `adopt`, `--apply` without `--plan`, `--plan` with `--step` or `--element`, a missing or blank `--reason` (`dl-067`) where one is required; on `rekey`, a missing `--from`, `--to` or `--reason` | `spec-008` §2/§5/§12 messages | — | 2 |
 
 `next`, `status`, `list` and `show` exit `0` for every deduced outcome and `1` only for a `spec-003`
@@ -1034,7 +1120,7 @@ error or an unresolvable `<ref>`/name (`spec-005` §1's read-only rule).
 
 | Operation | Gating reads (at `HEAD`) | Reads on the filesystem | Writes (guarded by `requireUnmodifiedTarget`) |
 |---|---|---|---|
-| `start` | registry, `memory.yaml`, `dna.yaml`, the element, existing plans (id collision, `dl-101`) | — | the new plan file (two commits) |
+| `start` | registry, `memory.yaml`, `dna.yaml`, the element, existing plans (id collision, `dl-101`) | — | the new plan file (one commit) |
 | `end` | registry, the plan, deduction | — | the plan file |
 | `finalize` | registry, deduction, `dna.yaml` (authority) | — | nothing (an empty commit) |
 | `create` | registry (name uniqueness) | target file existence (`dl-086`) | the new file, `workflows.yaml` |
@@ -1102,7 +1188,7 @@ list --format json` with the pinned build 0.2.2 loads the same 23 workflows and 
   listed in §5.1 (7 before `task-199`, when `retrospective.approve` was one). The other 15 approval phases
   are carried by Memory: `bug-ingest.triage`, the three ingest `approve` phases, `release-line-cycle.approve`,
   `release-planning.triage-bugs|reconcile-governance|record-adrs|identify-specs|commit-backlog`,
-  `dev-loop.design|review`, `retrospective.approve` (its decision-log), `end-of-life.announce`, and
+  `dev-loop.design|review`, `retrospective.approve` (its decision-log), `end-of-life.approve` (its selection, the decision-log tagged `end-of-life`, since `task-351`), and
   `vision-change.impact-analysis` (`task-212`).
 - *Implicit owners:* `{id}` in a phase that adds an element is ambiguous until the entry takes
   `dl-104` D3's `{ type, path }` form. Until the alignment task rewrote the nine entries (`task-199`,
@@ -1219,7 +1305,8 @@ their command. The checkpoint phases stay 17. `test/core/workflow-repository-con
 
 **Settled at this revision** (review recommendation or approver ruling):
 - *OQ-1, where an open main is recorded:* a `plan` element with a new optional `parent` field (§3.1),
-  together with §3.4's binding and §7.1's add-then-submit, which make every started instance endable.
+  together with §3.4's binding and §7.1's add, whose `draft` plan its author submits, which make every started
+  instance endable (the add-then-submit in one call until `task-346`).
 - *OQ-2, positional names:* positional `<ref>` on every workflow command, no `--name` alias (§7);
   BDD and REQ-STATE-03 amended (Consequences).
 - *OQ-3, recording a checkpoint:* `workflow finalize` (ruling R11, §7.9).
@@ -1303,9 +1390,10 @@ their command. The checkpoint phases stay 17. `test/core/workflow-repository-con
       `no recipient for notification: unrouted role '<role>'` becomes P4.14's
       `no approver found for role '<role>' in dna.yaml` in v0.3 (§5.1), or is kept for the v0.4
       delivery.
-  - `docs/01_vision/X_cli-cmds.md` (`:163-170`): `workflow status --filter STATUS` is dropped (the
+  - `docs/01_vision/X_cli-cmds.md` (§ "Pillar 4: Project Workflow Commands", its `wingfoil workflow`
+    rows): `workflow status --filter STATUS` is dropped (the
     output is the full status); `workflow remove --verify-includes` is dropped (the check always
-    runs); interactive creation (`:169`) is not in v0.3; `workflow list` shows startable/includable,
+    runs); interactive creation (the `workflow create` row) is not in v0.3; `workflow list` shows startable/includable,
     not `kind`; `workflow finalize` and `memory add --workflow` are added.
   - `docs/01_vision/06_features.md`: `dl-109` Action 3 (the P4.2 / P4.6 descriptions for startable and
     includable); P4.8's "interactive" (`:87`) marked post-v0.3.
@@ -1671,3 +1759,80 @@ bound manual (21 occurrences), 17 checkpoints unchanged. Edited in place without
 reference (`spec-008` §7); the plan binds, and the adoption record names, the element's full id, and an ambiguous
 reference is a `CONFLICT` row (approver design gate 2026-11-01, D1 (b)). Edited in place without a supersede or a
 state change (`dl-047`), pending the approver's `memory amend`.
+
+**Revision (2026-11-07, `task-354-remove-the-import-cycles-between-src-core-and-src-agent-and-the-surface-imports-bypassing-src-core`)
+— the Context's location of `registerReadOnlyResources`.** `task-354` moved the function verbatim from `src/mcp/index.ts`
+to `src/mcp/read-only-resources.ts` to break the `src/mcp/index.ts` ↔ `src/mcp/server.ts` import cycle (`bug-345`); the
+barrel still re-exports it. The Context cited `src/mcp/index.ts:84-90`, it is now `src/mcp/read-only-resources.ts:28-34`
+(`grep -n "^export function registerReadOnlyResources" src/mcp/read-only-resources.ts` → 28; `dl-075` offset class). No
+rule changes. Edited in place without a supersede or a state change (`dl-047`), pending the approver's `memory amend`.
+
+**Revision (2026-11-07, `task-345-open-an-instance-only-from-a-plan-workflow-start-marked-and-fix-the-element-less-start-context`)
+— §1.3, §2, §3.1–§3.3, §3.5, §4.8, §4.9, §7, §7.1, §7.3 and §10.** `dl-217` (a), ratified with a marker `workflow
+start` writes and a rule that keeps the instances already open: `start`'s add commit carries `WingFoil-Start:
+<workflow>` in its final trailer paragraph (§3.1); a plan is an open instance only when it is open, names a loaded
+startable workflow and was opened by `start` — its start commit carries the marker, or carries none and no marked
+start is among its ancestors (§3.2); an open plan naming an unloaded workflow is no instance and stays reported by
+`W_INSTANCE_WORKFLOW_UNKNOWN`, so §4.8, §4.9, §7.3 and §10 drop the instance "whose workflow the registry does not
+load". `bug-413` option (c), the approver's ruling at the `minor-v0.4` planning: `--element <type>:<id>` on a
+workflow that declares no element sets the context, `--element none` clears it, and with neither the context is taken
+only from an active instance whose workflow declares `element:` (§3.5, §7, §10). Edited in place without a supersede
+or a state change (`dl-047`), pending the approver's `memory amend` at `task-345`'s design gate.
+
+**Revision (2026-11-08, `task-345-open-an-instance-only-from-a-plan-workflow-start-marked-and-fix-the-element-less-start-context`,
+design addendum) — §1.3, §2, §3.2 and §7.4: the pre-marker rule is transitory.** As the approver ruled at `task-345`'s
+design gate (`D1` (a), made transitory): §3.2 declares the pre-marker rule transitory, with its removal condition (no
+open unmarked instance in any WingFoil repository, checked by zero `W_INSTANCE_PRE_MARKER` in each) and its removal
+by a follow-up element with a target release; `workflow status` reports every instance the rule keeps open with the
+new warning `W_INSTANCE_PRE_MARKER` (§2), a console line under the instance and an entry in the payload's
+`diagnostics`, last (§1.3, §7.4). §3.5, §7.1 and §10 state no part of the rule beyond what §3.2 now qualifies, and are
+unchanged. Edited in place without a supersede or a state change (`dl-047`), pending the approver's `memory amend`.
+
+**Revision (2026-11-07, `task-335-add-the-headless-work-run-the-launch-phase-key-headless-interactive-timeout-next-on-a-waiting-step`)
+— §6.3, §8 and a Consequences citation.** A phase's `launch` (`spec-003` Layer 2, `dl-183` Q1 (a)) is reported on
+each `Step` and `PhaseView` as declared, `null` when absent (§6.3), so that `agent execute` takes a run's launch kind
+from the step it resolves (`spec-016` §3.2 step 7, `dl-183` Q4 (a)); the console renderings do not change. The
+Consequences bullet on `docs/01_vision/X_cli-cmds.md` cited its lines `:163-170` and `:169`, which the file's version
+1.7 had moved: it cites its section and rows instead (`bug-380`, `dl-075`). Edited in place without a supersede or a
+state change (`dl-047`), pending the approver's `memory amend`.
+
+**Revision (2026-11-08, `task-346-fix-workflow-start-s-plan-leave-it-to-be-written-fill-workflow-and-phase-always-and-make-the-dead-test-fail`)
+— §7.1, §8, §10, §11 and §13 (OQ-1).** `bug-390`: `start` writes only the plan's `add` and leaves the plan `draft`, to be written
+by its author and submitted with `wingfoil memory submit <id>`, which the output names (§8 `StartResult.submit`, a
+console line); the `submit` commit and §10's row for a failed second commit are gone, and §11 counts one commit. The
+instance is open from the add (the start marker rides it, §3.1, and §3.2 admits a `draft` plan), and `end` keeps
+refusing a `draft` plan (§7.2). `bug-491`: `workflow` and `phase` are written whatever the plan type's `id_pattern`
+and `path` declare, a value the patterns hold no token for as a field, so `--set phase=` is accepted on any plan type;
+the default `title` uses the `phase` the plan records. Edited in place without a supersede or a state change
+(`dl-047`), pending the approver's `memory amend` at `task-346`'s design gate.
+
+**Revision (2026-11-09, `task-351-adopt-the-published-software-template-packs-into-wingfoil-by-hand-after-a-per-file-comparison-r8`)
+— §5.1 and §12.** `end-of-life` adopts the `software@1.0.0` pack's phases (`end-of-life.yaml` 1.2): `announce` adds the
+decision-log tagged `end-of-life` with no approval, and a new phase `approve` selects it `in-discussion`. §5.1's
+example of a created-elements carrier (`end-of-life.announce`) becomes an example of a selection carrier
+(`end-of-life.approve`), and §12's list of the approval phases carried by Memory names `end-of-life.approve`; the count
+stays 15. Edited in place without a supersede or a state change (`dl-047`), pending the approver's `memory amend`.
+
+**Revision (2026-11-08, `task-356-pin-codex-s-c-override-behaviour-record-codex-cli-session-ids-and-resolve-an-unscoped-step-key`)
+— §4.9, §7.9, §7.10, §7.11 and §10: an unscoped step key.** A `--step` key without a scope that equals no frontier
+key names the frontier steps of its workflow and phase: one resolves to it, several are a new `CONFLICT` row of §10
+listing their keys, none keeps the out-of-frontier refusal with `details.frontier` (`bug-468`, the half of `bug-340`'s
+Expected Behavior that release-planning ruling R8 of `patch-v0.3.2` deferred). `bug-340` cited §4.9 and §7.10 for the
+rule, which neither stated. A scoped key, and every key outside `--step`, stays exact. Edited in place without a
+supersede or a state change (`dl-047`), pending the approver's `memory amend`.
+
+**Revision (2026-11-11, `task-333-refuse-approver-gated-verbs-in-an-agent-context-and-mutating-verbs-for-non-members-l0-spec-018`)
+— §10 gains the `E_AGENT_CONTEXT` rows and the membership refusal.** `spec-018` Consequences asks for an
+`E_AGENT_CONTEXT` row beside each authority row of §10 (`finalize` on an `approval:` phase, `--plan --apply`,
+`rekey`); `dl-220` Q2 (b) adds the membership refusal of `spec-006` §7 to every workflow command that writes, cited
+on the row of the other pre-flight refusals. The §7.9 sentences `spec-018` also asks for (the agent refusal on an
+`approval:` phase, the agent trailers on a phase without one) land with the attribution half, `task-334`. No other row
+changes. Edited in place without a supersede or a state change (`dl-047`), pending the approver's `memory amend`.
+
+**Revision (2026-11-12, `task-334-write-the-agent-attribution-trailers-from-the-mutating-verbs-and-restate-agents.md-5.1-for-l0-spec-018-2`)
+— §7.9 and §7.10: the agent refusal and the agent trailers.** `spec-018` Consequences asks §7.9 to state that on a
+phase that declares `approval:` the authority check refuses an agent context first, and that on a phase without one
+the record carries the agent trailers (§2.1); it also says where the gated resolution sits for `finalize`, only once
+the phase is known (`task-333` design D11). §7.9's and §7.10's sentences that kept `WingFoil-Version:` as the last
+line of the trailer paragraph now let the two agent trailers follow it (`spec-018` §2.2). No row of §10 changes.
+Edited in place without a supersede or a state change (`dl-047`), pending the approver's `memory amend`.

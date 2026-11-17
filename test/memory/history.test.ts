@@ -7,12 +7,15 @@
  * "state change" narrative from the commit body's `Approver:`/`Reason:` lines (CLAUDE.md §5.1) is
  * left to the feature task that renders `wingfoil memory history`'s output.
  */
-import { mkdtempSync } from 'fs';
-import { tmpdir } from 'os';
-import { join } from 'path';
-
 import { getMemoryHistory } from '../../src/memory/history';
-import { commitAll, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
+import {
+  commitAll,
+  makeBoundedOutsideDir,
+  makeTempGitRepo,
+  removeTempDir,
+  withGitCeiling,
+  writeFixtureFile,
+} from '../storage/helpers/git-fixture';
 
 const DOC_PATH = 'docs/04_memory/v0.1/task-900-doc.md';
 
@@ -76,9 +79,11 @@ describe('getMemoryHistory — git-log walk over one Memory document', () => {
   });
 
   it('throws E_GIT_READ_FAILED, rather than answering "no history", when `root` is not a git repository (task-142, bug-072)', () => {
-    repo = mkdtempSync(join(tmpdir(), 'wf-not-a-repo-'));
-    writeDoc(repo, 'draft'); // plain file write, no `git init`
-    expect(() => getMemoryHistory(repo, DOC_PATH)).toThrow(/E_GIT_READ_FAILED: .*not a git repository/s);
+    // task-350 AC 3 (bug-453): a directory outside any repository below a ceiling that is one.
+    const { dir, ceiling } = makeBoundedOutsideDir();
+    repo = ceiling;
+    writeDoc(dir, 'draft'); // plain file write, no `git init`
+    expect(() => withGitCeiling(ceiling, () => getMemoryHistory(dir, DOC_PATH))).toThrow(/E_GIT_READ_FAILED: .*not a git repository/s);
   });
 
   it('is deterministic — repeated calls over unchanged state produce the exact same result', () => {

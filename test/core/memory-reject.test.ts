@@ -306,12 +306,13 @@ describe('CORE_MODULES memory.memoryReject — P1.8 fit criteria', () => {
     assertPersistenceUnchanged(repo, unchanged);
   });
 
-  it('REQ-SEC-03: an email matching no `team.members` entry at all is refused the same way', async () => {
+  it('an email matching no `team.members` entry at all is refused by the membership step first (task-333, dl-220 Q2 (b), design D2)', async () => {
     gitOut(repo, ['config', 'user.email', 'stranger@example.invalid']);
     const result = await memoryRejectFn()({ root: repo, positional: 'task-101', options: { reason: 'x' } });
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.error.message).toBe("user not authorized to approve type 'task'");
+    // Before task-333 REQ-SEC-03's `user not authorized …`; a non-member is now told E_NOT_A_MEMBER (spec-006 §7).
+    expect(result.error.message.startsWith('E_NOT_A_MEMBER: the git identity WingFoil Test <stranger@example.invalid> is not a team member')).toBe(true);
   });
 
   /**

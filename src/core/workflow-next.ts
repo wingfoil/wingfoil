@@ -46,7 +46,7 @@ import {
   type ScopeRef,
   type TrailEntry,
 } from '../workflow/deduce';
-import type { Phase, PhaseMode, Workflow } from '../workflow/schema';
+import type { LaunchKind, Phase, PhaseMode, Workflow } from '../workflow/schema';
 
 import { APPROVER_ROLE } from './approval-authority';
 import { resolveRoleDirectives } from './context';
@@ -158,6 +158,8 @@ export interface Step {
   readonly mode: 'fresh';
   readonly allowedModes: readonly PhaseMode[];
   readonly distinctFrom: readonly string[];
+  /** The phase's declared `launch` kind (`spec-003` Layer 2, task-335), or `null` when it declares none (§6.3). */
+  readonly launch: LaunchKind | null;
   /** A recurring cadence (§6.4), or `null` for `once`. */
   readonly cadence: CadenceView | null;
 }
@@ -484,6 +486,7 @@ export function buildStep(step: DeducedStep, inputs: NextInputs): Step {
     mode: 'fresh',
     allowedModes: allowedModes(phase.mode),
     distinctFrom: phase.distinct_from ?? [],
+    launch: phase.launch ?? null,
     cadence: phase.cadence === 'once' ? null : { recurring: phase.cadence.recurring, lastRun: 'not-recorded' },
   };
 }
@@ -547,33 +550,32 @@ export function unresolvedRef<T>(known: KnownRefs, ref: string): CoreResult<T> {
  * A `ref` that names no open instance is `NOT_FOUND` (§10): `workflow is not open: <ref>` for a loaded
  * workflow or an instance plan, `unknown workflow: <ref>` for anything else ({@link unresolvedRef}).
  *
- * The §10 answer needs `snapshot`: a {@link Deduction} carries the open instances only, so without it the
- * function cannot tell a loaded workflow or a closed instance plan from a name that is nothing, and
- * answers `workflow is not open: <ref>` for every unresolved `ref`. That answer without the snapshot is
- * not reliable, and the snapshot becomes a mandatory argument in v0.4 (`bug-465`); pass it.
+ * The §10 answer needs `snapshot` — a {@link Deduction} carries the open instances only — so it is a mandatory
+ * argument (task-345, `bug-465`).
  *
  * @param snapshot the snapshot `deduction` was deduced from (`readDeductionSnapshotAtHead`).
+ * @param ref a workflow name or an open instance id; absent, the active instance.
  */
 export function selectWorkflowInstance(
   deduction: Deduction,
+  snapshot: Pick<DeductionSnapshot, 'workflows' | 'documents'>,
   ref?: string,
-  snapshot?: Pick<DeductionSnapshot, 'workflows' | 'documents'>,
 ): CoreResult<InstanceDeduction | null> {
   const found = resolveInstanceRef(deduction, ref);
   if (ref === undefined || found !== null) return coreOk(found);
-  if (snapshot === undefined) return coreErr({ code: 'NOT_FOUND', message: `workflow is not open: ${ref}`, details: { ref } });
   return unresolvedRef({ workflows: snapshot.workflows, plans: instancePlanIds(snapshot.documents) }, ref);
 }
 
 /**
- * Why an instance whose frontier is empty has no next step (`spec-017` §7.3): complete, abandoned (§4.11)
- * or its workflow not loaded. Shared by `next` and `finalize` (task-226).
+ * Why an instance whose frontier is empty has no next step (`spec-017` §7.3): complete, or abandoned (§4.11).
+ * Every instance's workflow is loaded (§3.2, task-345), so an incomplete one with no step is abandoned, its bound
+ * element set. Shared by `next` and `finalize` (task-226).
  */
 export function emptyFrontierMessage(selected: InstanceDeduction): string {
   const { instance, complete } = selected;
   if (complete) return noNextStepMessage(instance.workflow);
-  if (instance.abandoned) return `no next step: workflow '${instance.workflow}' is abandoned: its element ${instance.element!.type}:${instance.element!.id} is ${instance.element!.status}`;
-  return `no next step: workflow '${instance.workflow}' is not loaded`;
+  const element = instance.element!;
+  return `no next step: workflow '${instance.workflow}' is abandoned: its element ${element.type}:${element.id} is ${element.status}`;
 }
 
 /**
@@ -617,8 +619,9 @@ export function readNextInputs(root: string, snapshot: DeductionSnapshot, deduct
     memoryYaml: snapshot.memoryYaml,
     dnaYaml: snapshot.dnaYaml ?? null,
     bindings: snapshot.bindings ?? null,
-    rolesYaml: hasSteps ? loadRolesYamlAtCommit(root, snapshot.commit) : null,
-    directiveFiles: hasSteps ? loadDirectivesAtCommit(root, snapshot.commit) : [],
+    // The snapshot's commit is `HEAD`'s (`readDeductionSnapshotAtHead`): its files are named `HEAD:` (task-354).
+    rolesYaml: hasSteps ? loadRolesYamlAtCommit(root, snapshot.commit, 'HEAD') : null,
+    directiveFiles: hasSteps ? loadDirectivesAtCommit(root, snapshot.commit, 'HEAD') : [],
     plans: instancePlanIds(snapshot.documents),
   };
 }

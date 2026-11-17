@@ -34,6 +34,8 @@ tool uses.
 ```
 .wingfoil/                            ← WingFoil root for the dogfooding setup, at the repository root
 │                                        (moved from docs/self/.wingfoil/ by task-111 — see README.md)
+├── .gitignore                        ← `/run/`: the active run registry of `spec-016` §7, the one
+│                                        excluded subpath (§ `.gitignore` policy; written by `wingfoil init`)
 ├── README.md                         ← human-facing layout doc + rationale (this spec formalizes it)
 ├── WORKFLOW.md                       ← human-facing workflow reference (diagrams, phase by phase)
 ├── dna.yaml                          ← Project DNA (P2.4): modules, stack, team & roles, paths
@@ -230,6 +232,31 @@ if (root !== process.cwd()) throw new Error('E_NOT_AT_GIT_ROOT: run wingfoil fro
 `.wingfoil/` directories (a subdirectory of the project already containing its own `.wingfoil/`) are
 not supported — at most one WingFoil root per git root.
 
+**The named root (`--project <dir>`, from `minor-v0.4`, `dl-198` (a)).** When the global `--project <dir>`
+(`spec-008` §2) is given, the root is `<dir>` resolved against the current directory, and the only check is
+that it holds a `.git` entry (a directory in a clone, a file in a worktree): `findGitRoot` is not called, and
+nothing above or below `<dir>` is examined. A directory without one is refused with
+`E_NOT_AT_GIT_ROOT: --project is not a git root: <absolute dir>`, whether it is a subdirectory of a repository,
+outside every repository, a file or a missing path; `E_NO_GIT_ROOT` stays the answer of the walk alone. Without
+`--project` the algorithm above is unchanged.
+
+**Why the root is not inferred** (`dl-198` (c)'s documentation). A command run from a subdirectory could find
+the root upwards, as git does. WingFoil does not, for a read as for a write: the root is the current directory
+or the directory `--project` names. A tool that drives WingFoil from elsewhere — a headless agent launch, the MCP
+server an agent CLI starts in a working directory of its own — then names the repository it acts on rather than
+depending on where it was started, and the repository every read and write lands in is declared, never inferred
+(the `determinism` directive; `REQ-SYS-07`). The option was preferred to an upward search for read-only commands
+alone (`dl-198` (b)), which would have made the same command line answer from different repositories depending
+on the directory it was typed in.
+
+**The walk's ceiling, for tests** (`bug-406`, `bug-453`). `findGitRoot` takes an optional `ceiling` directory: the
+walk always examines the starting directory, then each of its ancestors below the ceiling, and stops before it
+would step into the ceiling, so a ceiling that is a proper ancestor of the starting directory is never examined,
+nor is anything above it, as git's own ceiling directories do. A ceiling that is not a proper ancestor of the
+starting directory changes nothing: the starting directory itself given as the ceiling is examined, and the walk
+goes on above it as without one. The CLI never passes one. It exists so that a test's "outside any repository"
+fixture bounds the walk itself and gives the same result whatever lies above the system temporary directory.
+
 ### Initialization-marker detection algorithm
 
 A project is WingFoil-initialized when `.wingfoil/` exists **and** contains at least one file:
@@ -256,8 +283,25 @@ responsibility (REQ-SYS-02: isolated load/validate per artifact), not the init-m
 ### `.gitignore` policy
 
 `.wingfoil/` must **never** appear in `.gitignore` — it is intentionally git-tracked in full (REQ-SYS-01:
-git is the single source of truth; there is no external state store to fall back to). No subpath
-within `.wingfoil/` is excluded.
+git is the single source of truth; there is no external state store to fall back to). One subpath within
+`.wingfoil/` is excluded, from v0.4: `.wingfoil/run/`, the active run registry of `spec-016` §7 (`dl-135` Q1 (a),
+`dl-181`). It is a process cache, not state — one file per running `agent execute` launch, removed when the launch
+ends — so committing it would record a process id and a wall-clock instant, never a fact about the project
+(REQ-SYS-03). `wingfoil init` excludes it with the file `.wingfoil/.gitignore`, holding a comment line and the line
+`/run/`, which it writes and commits with the rest of the scaffold; the project's own root `.gitignore` is never
+written. A project initialized before v0.4 has no such file: `agent execute` warns when the entry it creates is not
+ignored (`spec-016` §3.3 step 13), and adding the file is the user's commit. Nothing else under `.wingfoil/` is
+excluded.
+
+Per-clone state that must never be committed is kept in the repository's git directory, outside the working tree,
+not under `.wingfoil/`: it then needs no `.gitignore` entry and cannot be committed by mistake. The one such file is
+the session salt of `spec-016` §2.6, `wingfoil/session-salt` in the common git directory (`git rev-parse
+--git-common-dir`), shared by the clone's linked worktrees (`dl-168` Q1 (b)).
+
+The two rules answer two scopes. The salt is per clone and lives as long as the clone, so it sits in the common git
+directory, which every linked worktree shares. The active registry is per checkout: an agent runs in one working tree
+(`spec-016` §3.1), and `agent list --active` answers for the processes of that checkout, so it sits in the working
+tree, under `.wingfoil/run/`, git-ignored rather than outside it, where the ratified `spec-016` §7 placed it.
 
 ## Consequences
 
@@ -362,3 +406,37 @@ manifest key.** For `patch-v0.3.1`, the `roles.yaml` write contract gains item 5
 `spec-006` §6 item 7. The `dl-022` cross-spec review of the same date: the manifest's key is `include` (singular),
 as `spec-003` Layer 1 makes it canonical and `.wingfoil/workflows.yaml` writes it; the layout and the table said
 `includes:`. Edited in place without a supersede or a state change (`dl-047`), pending the approver's `memory amend`.
+
+**Revision (2026-11-12, `task-350-add-the-global-project-dir-option-naming-the-project-root-documenting-why-it-is-not-inferred`)
+— § Git-root detection algorithm: the named root, why it is not inferred, and the walk's ceiling.** `dl-198` (a), with
+(c)'s documentation: the global `--project <dir>` (`spec-008` §2) names the root, checked only for its own `.git`
+entry and refused with `E_NOT_AT_GIT_ROOT` otherwise; the section states why the root is never resolved upwards
+(`dl-198` (b) was not taken). `findGitRoot` gains an optional ceiling that only tests pass, so their "outside any
+repository" fixtures do not depend on what lies above the system temporary directory (`bug-406`, `bug-453`). The
+algorithm without `--project`, the layout and the init-marker algorithm are unchanged. Edited in place without a
+supersede or a state change (`dl-047`), pending the approver's `memory amend` at `task-350`'s design gate.
+
+**Revision (2026-11-12, `task-350-add-the-global-project-dir-option-naming-the-project-root-documenting-why-it-is-not-inferred`,
+review) — § Git-root detection algorithm, the walk's ceiling: what a ceiling bounds.** The paragraph said the walk
+never examines the ceiling or anything above it; it now says the walk stops before stepping into a ceiling that is a
+proper ancestor of the starting directory, and that a ceiling equal to the starting directory, like any other that is
+not a proper ancestor, changes nothing — the behaviour `findGitRoot` has and its tests pin. No other text changes.
+Edited in place without a supersede or a state change (`dl-047`), pending the approver's `memory amend`.
+
+**Revision (2026-11-13, `task-338-name-the-launching-build-in-the-bootstrap-set-wingfoil-agent-at-spawn-and-salt-the-session-id-per-clone`)
+— § `.gitignore` policy: where per-clone state lives.** `dl-168` Q1 (b) keeps a per-clone random salt for the
+`assign` session id (`spec-016` §2.6) "outside the repository (e.g. under `.git/`)": the section now says that such
+state lives in the common git directory, outside the working tree and not under `.wingfoil/`, so it needs no
+`.gitignore` entry, and names the one file, `wingfoil/session-salt`. The rule that `.wingfoil/` is tracked is
+unchanged. Edited in place without a supersede or a state change (`dl-047`), pending the approver's `memory amend` at
+`task-338`'s design gate.
+
+**Revision (2026-11-16, `task-336-forward-a-launched-agent-s-output-to-the-caller-with-an-optional-log-copy-and-keep-the-active-run-registry`)
+— § `.gitignore` policy: the one excluded subpath; § Directory layout.** `spec-016` §7 ships the active run registry
+in v0.4 (`dl-135` Q1 (a), `dl-181`) and named this policy as the one to amend: `.wingfoil/run/` becomes the one
+excluded subpath of `.wingfoil/`, through `.wingfoil/.gitignore` (`/run/`), which `wingfoil init` writes and commits;
+the user's root `.gitignore` is never written, and a project initialized before v0.4 is warned by `agent execute`. A
+closing paragraph says how this reads beside `task-338`'s rule on per-clone state: the salt is per clone, in the
+common git directory; the registry is per checkout, in the working tree. The layout tree gains the file. The rule
+that `.wingfoil/` is tracked is otherwise unchanged. Edited in place without a supersede or a state change
+(`dl-047`), pending the approver's `memory amend` at `task-336`'s design gate.

@@ -141,7 +141,8 @@ describe('scripts/write-build-info.cjs — the build record (dl-111 Q2 (a))', ()
   });
 
   it('`build` runs the writer after tsc, and `prepack` is not where it runs (publish.yml packs with --ignore-scripts)', () => {
-    expect(PKG.scripts.build).toBe('tsc -p tsconfig.build.json && node scripts/write-build-info.cjs');
+    // task-349 (dl-170 Decision 1): the tsc step runs under the machine-wide heavy-gate lock.
+    expect(PKG.scripts.build).toBe('node scripts/heavy-gate.cjs build -- tsc -p tsconfig.build.json && node scripts/write-build-info.cjs');
     expect(PKG.scripts.prepack ?? '').not.toContain('write-build-info');
   });
 });

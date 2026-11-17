@@ -29,17 +29,49 @@ const Argv = z.array(z.string());
 /** A non-empty string: a field whose empty value could only be a mistake. */
 const NonEmpty = z.string().min(1, 'must not be empty');
 
+/**
+ * `launch.<kind>.permissions` — the launch's permission posture (§2.2, `dl-223` (b), task-339): one argv fragment,
+ * for every role, or a map from a role name to a fragment. A map must declare `default`, the fragment of every role
+ * it does not name: that rule reads the map as a whole and names the field, so it is Pass 2's (`./manifest.ts`). The
+ * keys are not checked against `team.roles` (a built-in ships to projects with any role set). It holds no
+ * placeholder (§2.3). §3.3 step 14 appends the run's fragment after `launch.<kind>.args`.
+ */
+const Permissions = z.union([Argv, z.record(z.string(), Argv)]);
+
+/** A declared `launch.<kind>.permissions`: a fragment, or a role map with a `default` entry (`spec-016` §2.2). */
+export type LaunchPermissions = z.infer<typeof Permissions>;
+
+/**
+ * `launch.<kind>.trust` — how the agent CLI treats a launch directory it has not been told to trust (§2.2, `bug-500`,
+ * task-353): `implied`, that launch never stops to ask; `prompt`, the CLI may stop at its start-up to ask; or an argv
+ * fragment, the CLI's own option that trusts the launch directory, which §3.3 step 14 appends after the permission
+ * fragment. A fragment holds no placeholder (§2.3). Only `prompt` gives §3.3 step 16's start-up hint.
+ */
+const Trust = z.union([z.enum(['implied', 'prompt']), Argv]);
+
+/** A declared `launch.<kind>.trust`: `implied`, `prompt`, or an argv fragment (`spec-016` §2.2). */
+export type LaunchTrust = z.infer<typeof Trust>;
+
 /** `launch.interactive` — the v0.3 launch, the agent owning the terminal (`adr-012` point 4). */
 const InteractiveLaunch = z.strictObject({
   args: Argv,
   /** Whether the launch needs a terminal on stdin and stdout (§3.3 step 12); `required` when absent. */
   terminal: z.enum(['required', 'optional']).default('required'),
+  permissions: Permissions.optional(),
+  trust: Trust.optional(),
 });
 
-/** `launch.headless` — no terminal, a structured result; read from v1.0 (§3.5). */
+/**
+ * `launch.headless` — no terminal; read from v0.4 by the work run (§3.5, `dl-181`, task-335), whose stdout is
+ * captured: `output` says how it is read — `json`, one JSON document; `jsonl`, one JSON value per line; `none`, not
+ * read. The v0.4 work run reads from it only the session id under `session.id: output` (§2.6, task-356); the rest is
+ * `dl-182`/`dl-188`'s tasks, and the v1.0 verification run.
+ */
 const HeadlessLaunch = z.strictObject({
   args: Argv,
-  output: z.enum(['json', 'none']),
+  output: z.enum(['json', 'jsonl', 'none']),
+  permissions: Permissions.optional(),
+  trust: Trust.optional(),
 });
 
 /** The JSON paths `usage.fields` may declare (§2.2); an undeclared one yields `not-reported`. */
@@ -73,6 +105,12 @@ export const AdapterManifest = z.strictObject({
     // No `none`: an adapter that cannot register the `wingfoil` MCP server is refused (`adr-012`).
     via: z.enum(['config-file', 'config-arg', 'args']),
     template: NonEmpty.optional(),
+    /**
+     * An argv that exits `0` when the agent's own configuration already declares an MCP server named `wingfoil`,
+     * which the agent would merge into the server `agent execute` registers (§2.5, task-356, `bug-372`): run before
+     * the launch, no placeholder; exit `0` refuses it (§3.3 step 4, `MCP_SERVER_DECLARED`). Absent: no check.
+     */
+    conflict_args: z.array(NonEmpty).nonempty('must not be empty').optional(),
   }),
   session: z.strictObject({
     id: z.enum(['assign', 'output', 'lookup', 'none']),

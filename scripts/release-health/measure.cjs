@@ -149,6 +149,12 @@
  *   rather than a path, is counted `unresolved`, not judged; a typed `{ type, path }` entry is a Memory element, judged by P02;
  * - P02, P05: a governance finding saying no `memory.yaml`/`dna.yaml` was committed at the commit (history
  *   before the configuration existed) is counted `unchecked`, not failing;
+ * - P02 counts only transitions: the governance check's `plan-retrospective` findings (task-358, `bug-320`), reported
+ *   under rule `state` because they read a plan's document at its finalize, judge no transition and are left out
+ *   (`P02_EXCLUDED_CHECKS`; `bug-466`'s class, closed here for this check);
+ * - P01 counts only the well-formedness of `wf()` commits: the governance check's `co-author-identity` findings
+ *   (task-352, `bug-475`), reported under rule `body` on every commit of the range, merges included, judge the
+ *   attribution G08 measures and are left out (`P01_EXCLUDED_CHECKS`, design D4 (a));
  * - P04 the tasks touched in the window; each link must resolve at the point: `ref`, `bug`, `depends_on`,
  *   `supersedes` values (a `REQ-*` or feature id as such, else a Memory element id: its exact id, or a short id
  *   `<prefix>-<n>` exactly one element carries, task-241 F8), feature ids in
@@ -803,21 +809,42 @@ function measureBranches(ctx) {
  */
 const UNCHECKABLE_RE = /^no \.wingfoil\/(memory|dna)\.yaml is committed/;
 
-/** The commits whose `rules` findings are all uncheckable: counted apart from the failing ones. */
-function uncheckedCommits(report, rules) {
+/**
+ * The commits whose `rules` findings are all uncheckable: counted apart from the failing ones; a finding of a later
+ * check named in `excludedChecks` is not counted.
+ */
+function uncheckedCommits(report, rules, excludedChecks = []) {
   const shas = new Set();
   for (const finding of report.findings) {
+    if (finding.check !== undefined && excludedChecks.includes(finding.check)) continue;
     if (rules.includes(finding.rule) && UNCHECKABLE_RE.test(finding.message)) shas.add(finding.sha);
   }
   return shas.size;
 }
 
-/** Governance findings of `rules`, one failing item per commit: `<sha> <subject>: <messages>`. */
-function groupFindings(report, rules) {
+/**
+ * The later governance checks reported under rule `state` that judge no transition, so P02 ("Legal transitions",
+ * REQ-STATE-01) does not count them: `plan-retrospective` reads a finalized plan's `### Retrospective` (task-358).
+ */
+const P02_EXCLUDED_CHECKS = ['plan-retrospective'];
+
+/**
+ * The later governance checks reported under rule `body` that judge no `wf()` commit's well-formedness, so P01
+ * ("Well-formed `wf()` commits") does not count them: `co-author-identity` judges every commit's `Co-Authored-By:`
+ * against `dna.yaml`, the attribution G08 already measures (task-352 D4 (a), `bug-466`'s class).
+ */
+const P01_EXCLUDED_CHECKS = ['co-author-identity'];
+
+/**
+ * Governance findings of `rules`, one failing item per commit: `<sha> <subject>: <messages>`; a finding of a later
+ * check named in `excludedChecks` is not counted.
+ */
+function groupFindings(report, rules, excludedChecks = []) {
   /** @type {Map<string, { subject: string, messages: string[] }>} */
   const bySha = new Map();
   for (const finding of report.findings) {
     if (!rules.includes(finding.rule) || UNCHECKABLE_RE.test(finding.message)) continue;
+    if (finding.check !== undefined && excludedChecks.includes(finding.check)) continue;
     if (!bySha.has(finding.sha)) bySha.set(finding.sha, { subject: finding.subject, messages: [] });
     bySha.get(finding.sha).messages.push(finding.message);
   }
@@ -1007,8 +1034,10 @@ function conformanceIn(root, tree, point, base, dist) {
   const memoryYaml = loadYamlAt(root, point, '.wingfoil/memory.yaml');
   const dna = loadYamlAt(root, point, '.wingfoil/dna.yaml');
   return [
-    countEntry('P01', governance.checked, groupFindings(governance, ['subject', 'bracket', 'body']), { unchecked: uncheckedCommits(governance, ['subject', 'bracket', 'body']) }),
-    countEntry('P02', governance.checked + governance.otherCommits, groupFindings(governance, ['state']), { unchecked: uncheckedCommits(governance, ['state']) }),
+    countEntry('P01', governance.checked, groupFindings(governance, ['subject', 'bracket', 'body'], P01_EXCLUDED_CHECKS), {
+      unchecked: uncheckedCommits(governance, ['subject', 'bracket', 'body'], P01_EXCLUDED_CHECKS),
+    }),
+    countEntry('P02', governance.checked + governance.otherCommits, groupFindings(governance, ['state'], P02_EXCLUDED_CHECKS), { unchecked: uncheckedCommits(governance, ['state']) }),
     producesPresent(root, point, base, memoryYaml),
     traceability(root, point, commits, memoryYaml),
     rolesAndSessions(root, point, base, commits, dna, governance, dist),

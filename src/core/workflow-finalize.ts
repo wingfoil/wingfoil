@@ -29,19 +29,23 @@
  * index, whose staged changes refuse the commit (`requireCleanIndex`, `dl-106`).
  *
  * **Refusal order**, every one before the commit: an unrecordable `--reason` (exit 2, before any read) →
- * the git identity (REQ-SEC-01) → the instance → the step on the frontier → its evidence → on an
+ * the git identity (REQ-SEC-01) → the instance → the step on the frontier (a key without its scope: the one
+ * frontier step of its workflow and phase, `spec-017` §4.9, task-356) → its evidence → on an
  * `approval:` phase, a missing `--reason` (exit 2) and approver authority (REQ-SEC-03, the identity read
  * once, `bug-149`) → a dirty index.
  */
-import { commitEmpty } from '../storage';
+import { commitEmpty, type CommitAttribution } from '../storage';
 import { deduceWorkflowState, resolveInstanceRef, type Baseline, type DeducedStep, type Instance, type ScopeRef } from '../workflow/deduce';
 
 import { APPROVER_ROLE, requireApprovalAuthority } from './approval-authority';
 import { requireGitIdentity } from './git-identity';
+import { requireTeamMembership } from './team-membership';
+import { resolveGatedAgentContext, resolveOperationAgentContext } from './agent-context';
 import { optionalReason, requireReason } from './require-reason';
 import { coreErr, coreOk, type CoreResult } from './types';
 import { instancePlanIds, readDeductionSnapshotAtHead } from './workflow-deduction';
 import { buildStep, emptyFrontierMessage, readNextInputs, stepLines, unresolvedRef, type Step } from './workflow-next';
+import { ambiguousStepKey, resolveFrontierKey } from './workflow-step-key';
 import { requireCleanIndex } from './write-guard';
 
 /** The refusal when no `<ref>` is given and no instance is open (as `workflow end`'s, `spec-017` §10). */
@@ -113,6 +117,8 @@ export function workflowFinalizeAtHead(root: string, request: FinalizeRequest): 
   const given = optionalReason(request.options);
   const identity = requireGitIdentity(root);
   if (!identity.ok) return identity;
+  const member = requireTeamMembership(root, identity.value);
+  if (!member.ok) return member;
 
   const snapshot = readDeductionSnapshotAtHead(root);
   const deduction = deduceWorkflowState(snapshot);
@@ -123,26 +129,40 @@ export function workflowFinalizeAtHead(root: string, request: FinalizeRequest): 
   }
   const { instance, frontier } = selected;
   if (frontier.length === 0) return coreErr({ code: 'CONFLICT', message: emptyFrontierMessage(selected), details: { instance: instance.id } });
-  const step = request.step === undefined ? frontier[0]! : frontier.find((candidate) => candidate.key === request.step);
-  if (step === undefined) {
-    return coreErr({
-      code: 'CONFLICT',
-      message: `step '${request.step}' is not on the frontier of ${instance.id}`,
-      details: { frontier: frontier.map((candidate) => candidate.key) },
-    });
+  let step: DeducedStep = frontier[0]!;
+  if (request.step !== undefined) {
+    const resolved = resolveFrontierKey(frontier, request.step);
+    if (resolved.kind === 'many') return ambiguousStepKey(request.step, instance.id, resolved.steps);
+    if (resolved.kind === 'none') {
+      return coreErr({
+        code: 'CONFLICT',
+        message: `step '${request.step}' is not on the frontier of ${instance.id}`,
+        details: { frontier: frontier.map((candidate) => candidate.key) },
+      });
+    }
+    step = resolved.step;
   }
   if (!step.evidence.finalizable) return evidenceRefusal(step);
 
   // A frontier step's workflow and phase are loaded (deduction puts only loaded phases on a frontier).
   const phase = snapshot.workflows.find((workflow) => workflow.name === step.workflow)!.phases.find((candidate) => candidate.name === step.phase)!;
   const body: string[] = [];
+  let attribution: CommitAttribution | undefined;
   if (phase.approval !== undefined) {
-    const reason = requireReason(request.options);
-    const authorized = requireApprovalAuthority(root, authorityType(step, instance), identity.value);
+    const reason = requireReason(request.options, { approval: true });
+    // `spec-018` §2.6 (design D11): only here is the operation known to be approver-gated, so the gated agent context
+    // is resolved here, and the shared check refuses an agent's session first (§3.1).
+    const agent = resolveGatedAgentContext();
+    const authorized = requireApprovalAuthority(root, authorityType(step, instance), identity.value, agent, 'workflow finalize');
     if (!authorized.ok) return authorized;
     body.push(`Approver: ${identity.value.name} <${identity.value.email}> (${APPROVER_ROLE})`, `Reason: ${reason}`);
-  } else if (given !== undefined) {
-    body.push(`Reason: ${given}`);
+  } else {
+    // A phase without `approval:` is not gated: the ungated agent context, resolved once the phase is known
+    // (`spec-017` §7.9), names the agent the record's trailers credit (`spec-018` §2.1–§2.3).
+    const agent = resolveOperationAgentContext(root);
+    if (!agent.ok) return agent;
+    attribution = agent.value.attribution ?? undefined;
+    if (given !== undefined) body.push(`Reason: ${given}`);
   }
 
   const subject = `workflow: finalize ${instance.id} ${step.key}`;
@@ -151,7 +171,7 @@ export function workflowFinalizeAtHead(root: string, request: FinalizeRequest): 
 
   const finalized = buildStep(step, readNextInputs(root, snapshot, deduction));
   const message = body.length === 0 ? subject : `${subject}\n\n${body.join('\n')}`;
-  const sha = commitEmpty(root, message, { author: identity.value, trailers: phaseRecordTrailers(step) });
+  const sha = commitEmpty(root, message, { author: identity.value, trailers: phaseRecordTrailers(step), attribution });
 
   const after = readDeductionSnapshotAtHead(root);
   const deducedAfter = deduceWorkflowState(after);

@@ -12,12 +12,18 @@
  *    (task-330, `bug-339`). Then `dna.yaml` and
  *    `memory.yaml` at that `HEAD` (the stepless form resolves `HEAD` itself and reads no workflow file);
  *    the adapter tree listed, every entry that is not an adapter printed as a warning (`bug-290`).
- * 3. Resolution (§3.2 steps 1–5): the step ({@link selectFrontierStep}), its workflow and phase; the
+ * 3. Resolution (§3.2 steps 1–7): the step ({@link selectFrontierStep}), its workflow and phase, a step
+ *    that only waits refused without `--element` ({@link refuseWaitingStep}, task-335); the
  *    element (`--element`, else the step's, {@link stepTargetElement}) at `HEAD`; the role (`--role`, else
  *    the step's, {@link resolveStepRole}, else — stepless — the `developer` default with a warning,
- *    approver ruling R18); never `approver` (`REQ-SEC-03`); the agent ({@link selectAgent}); its adapter
- *    (`loadAdapter`, at `HEAD`).
- * 4. The adapter's `command` on `PATH` or at its repository path ({@link agentCommandFound}).
+ *    approver ruling R18); never a human-only role — `approver` always (`REQ-SEC-03`), any role `dna.yaml` marks
+ *    `human_only` (`isHumanOnlyRole`, task-340, `HUMAN_ONLY_ROLE`); the agent ({@link selectAgent}); its adapter
+ *    (`loadAdapter`, at `HEAD`); the launch kind ({@link resolveLaunchKind}, task-335): `--headless` /
+ *    `--interactive`, else the phase's `launch`, else `interactive`, with a warning on a contradiction.
+ * 4. The adapter declares that kind (`NO_LAUNCH_KIND`), then its `command` is on `PATH` or at its
+ *    repository path ({@link agentCommandFound}), then, when it declares `mcp.conflict_args`, the agent's own
+ *    configuration declares no MCP server named `wingfoil` ({@link mcpConflictCheck}, task-356, `MCP_SERVER_DECLARED`;
+ *    a dry run included).
  * 5. The git identity (`requireGitIdentity`), since the record is committed.
  * 6. The run log declared and unmodified (`runLogPreflight`, task-206).
  * 7. The execution context assembled and validated at `state_ref` (`assembleExecutionContext`, task-176).
@@ -25,58 +31,72 @@
  *    warnings, in their order), then the documents the builder could not read (`W_MEMORY_UNREADABLE`,
  *    task-171's handover) — through the warning sink, so the CLI renders each one at once, before the
  *    pre-flight. The builder's `notes` (`spec-012` §3: the DNA note, P5.3.3 sc. 3's "no relevant
- *    Memory") are not warnings and are not printed: they reach the agent with the Prompt (task-195).
+ *    Memory") are not warnings and are not printed: they reach the agent inside the session context, the
+ *    session Resource (task-195, task-355).
  * 9. The run id (§4.3, `nextRunId`).
- * 10. The bootstrap (§2.4) and the temporary files (§2.3), in the OS temporary directory
+ * 10. The bootstrap (§2.4), `mcp.template` rendered once ({@link renderMcpTemplate}: a command or argument
+ *    with an unpaired surrogate refused, a dry run included, task-355) and the temporary files (§2.3) — the
+ *    launching build's `wingfoil` shim among them ({@link cliShim}, task-338) — in the OS temporary directory
  *    ({@link withRunFiles}), removed on every exit path.
- * 11. The MCP pre-flight against the running build ({@link mcpPreflight}, §2.5).
- * 12. The terminal check, last, so every earlier refusal is reachable without a terminal.
+ * 11. The MCP pre-flight against the running build ({@link mcpPreflight}, §2.5): `initialize`, then the
+ *    session Resource the bootstrap names, the one carrier read (task-355, `bug-376`).
+ * 12. The terminal check, last, so every earlier refusal is reachable without a terminal; an interactive
+ *    launch only. A dry run, which spawns nothing, prints a warning there instead of refusing (`bug-392`).
  *
  * Then the caller's `launch` runs, with the temporary files still in place and the function that hands
  * the signals over from their cleanup to the launch (`withRunFiles`' `release`).
  *
- * Each distinct warning is printed once, and a label naming the resolved commit reads `HEAD:`
- * (`withDistinctWarnings`; task-218's review F5).
+ * Each distinct warning is printed once (`withDistinctWarnings`; task-218's review F5). Every read at the resolved
+ * commit names its files `HEAD:` itself, since that commit is `HEAD`'s (task-354, `bug-317`).
  *
  * **Baseline.** Every gating read is at the one `HEAD` commit resolved at step 2 (`dl-080` (B), the
  * `command-baseline` directive), which is also `state_ref`. Nothing is written to the repository: the
- * only files written are the temporary ones, outside it.
+ * only files written are the temporary ones, outside it (the launch adds, once per clone, the session salt in the
+ * git directory, outside the working tree: `./session-salt.ts`).
  *
  * **Determinism.** The bootstrap and the run id are pure functions of committed state and the request
  * (`REQ-SYS-07`); the temporary-file paths and the Node executable are host values that never reach the
  * context (`spec-016` Consequences).
  */
-import { accessSync, constants, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { accessSync, chmodSync, constants, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, isAbsolute, join, resolve } from 'node:path';
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 
-import { readPathAtRev } from '../storage';
+import { readBuildStamp, readPathAtRev } from '../storage';
 import { formatDiagnostic, ValidationError, type Diagnostic } from '../validation';
 import { reportWarning, withDistinctWarnings } from '../validation/warning';
 import { ambiguousReferenceError, resolveElementReference } from '../memory/reference';
 import { findMemoryDocumentByTypeAndIdAtRev, loadMemoryDocumentsAtRev } from '../memory/query';
-import { isRoleDefined } from '../dna/roles';
+import { isHumanOnlyRole, isRoleDefined } from '../dna/roles';
 import type { AgentEntry, DnaYaml } from '../dna/schema';
 import type { MemoryYaml } from '../memory/schema';
 import { diagnosticWarning } from '../core/agent-list';
-import { APPROVER_ROLE } from '../core/approval-authority';
 import { assembleExecutionContext, type ExecutionContextElement } from '../core/context';
 import { requireGitIdentity } from '../core/git-identity';
+import { requireTeamMembership } from '../core/team-membership';
 import { DNA_YAML_PATH, loadDnaYamlAtRev, loadMemoryYamlAtRev, MEMORY_YAML_PATH } from '../core/loaders';
 import { resolveRevision, RevisionError } from '../core/revision';
 import { coreErr, coreOk, type CoreResult } from '../core/types';
+import { UsageError } from '../core/usage-error';
 
 import type { Step } from '../core/workflow-next';
+import type { LaunchKind } from '../workflow/schema';
 
-import type { LaunchHost } from './launch';
+import type { TimeBound } from './duration';
+import { launchPermissions, LOOKUP_TIMEOUT_MS, runConflictProbe, type LaunchHost, type LaunchKindRun } from './launch';
+import type { AdapterManifest } from './schema';
 import { adapterTreeDiagnosticsAtRev, duplicateAdapterRefusal, loadAdapter, type LoadedAdapter } from './discovery';
+import { LOG_INTERACTIVE } from './output';
 import { ADHOC_PHASE, executionNotesSection, nextRunId, NO_WORKFLOW, recordSubject, runLogPreflight } from './run-log';
-import { readNextAtHead, resolveStepRole, selectFrontierStep, stepTargetElement, type StepSelector } from './step';
+import { readNextAtHead, refuseWaitingStep, resolveStepRole, selectFrontierStep, stepTargetElement, type StepSelector } from './step';
 
-/** The role of a run with no step and no `--role` (`X_cli-cmds.md:223`, approver ruling R18). */
+/**
+ * The role of a run with no step and no `--role` (`X_cli-cmds.md` § "Parameters for Agent Execution", the
+ * `--role` row; approver ruling R18).
+ */
 export const DEFAULT_ROLE = 'developer' as const;
 
 /** The warning that says the role was defaulted (§3.2 step 3). */
@@ -87,6 +107,35 @@ export const FRESH_MODE = 'fresh' as const;
 
 /** How long the MCP pre-flight may take, start-up included, before it counts as unreachable. */
 export const MCP_PREFLIGHT_TIMEOUT_MS = 30000;
+
+/** §3.3 step 12's dry-run warning (`bug-392`): a dry run spawns nothing, so it needs no terminal. */
+export const DRY_RUN_TERMINAL_WARNING = 'interactive launch needs a terminal on stdin and stdout: a run without --dry-run is refused here';
+
+/** The order `launch: any` tries the adapter's kinds in (`dl-183` Q3 (a)). */
+const ANY_LAUNCH_ORDER: readonly LaunchKindRun[] = ['interactive', 'headless'];
+
+/**
+ * §3.2 step 7 (task-335, `dl-183` Q1–Q3 (a)): the kind a run launches as — `option` (`--headless` /
+ * `--interactive`), else the phase's `declared` launch when it is `interactive` or `headless`, else
+ * `interactive`: for a stepless run (`declared` `null`), for a phase without `launch`, and for `launch: any`,
+ * which tries the adapter's declared kinds `interactive` first. `warning` is the clause, after `phase
+ * '<workflow>.<phase>' `, that the pipeline prints when the option names the other kind than the declared
+ * `interactive` or `headless`. Whether the adapter declares the kind is §3.3 step 4's check, not this one's.
+ */
+export function resolveLaunchKind(
+  declared: LaunchKind | null,
+  option: LaunchKindRun | undefined,
+  manifest: AdapterManifest,
+): { kind: LaunchKindRun; warning?: string } {
+  const fixed = declared === 'interactive' || declared === 'headless' ? declared : undefined;
+  if (option !== undefined) {
+    return fixed !== undefined && fixed !== option ? { kind: option, warning: `declares launch: ${fixed}; launching ${option} (--${option})` } : { kind: option };
+  }
+  if (fixed !== undefined) return { kind: fixed };
+  // `any`: the first kind the adapter declares, interactive first — interactive for every format-1 manifest (§2.2).
+  if (declared === 'any') return { kind: ANY_LAUNCH_ORDER.find((kind) => manifest.launch[kind] !== undefined) ?? 'interactive' };
+  return { kind: 'interactive' };
+}
 
 /** P5.4.3 sc. 3, verbatim (§3.7 `MCP_UNREACHABLE`). */
 export const MCP_UNREACHABLE_MESSAGE = 'context pre-load failed: MCP server unreachable';
@@ -118,14 +167,32 @@ export interface BootstrapInput {
    * and `email`, which the attribution line hands to the agent (`dl-117` Action 4, ruling R20 Q8).
    */
   readonly agent: { readonly name: string; readonly email: string };
+  /**
+   * The launching build's signature, `"<semver> (<sha>)"` (`readBuildStamp`, the record's `wingfoil` field, §4.2),
+   * which `{cli_line}` tells the agent `wingfoil --version` prints (task-338, `dl-180` (c)).
+   */
+  readonly build: string;
 }
 
-/** The fixed opening of §2.4's attribution line (task-228, `git-conventions` §7). */
-export const ATTRIBUTION_LINE_PREFIX = 'End every commit you write, except an approve or reject commit, with the trailer paragraph';
+/** The fixed opening of §2.4's attribution line (`spec-018` Consequences, task-338). */
+export const ATTRIBUTION_LINE_PREFIX = 'Commits wingfoil writes for you already end with';
 
-/** §2.4's attribution line for `agent`: the rule of `git-conventions` §7, with the entry that signs. */
+/**
+ * §2.4's attribution line for `agent`, `spec-018` Consequences' text (task-338, `bug-370`): the verbs write the
+ * trailers themselves (`spec-018` §2), so the agent passes `--ai-model`, signs only the commits it writes with plain
+ * `git commit`, and never runs an approver verb. WingFoil never fills the model: it does not know it before the run.
+ */
 export function attributionLine(agent: { readonly name: string; readonly email: string }): string {
-  return `${ATTRIBUTION_LINE_PREFIX} "Co-Authored-By: ${agent.name} <${agent.email}>" and "AI-Model: <the model identifier you run as>"; to a commit wingfoil writes, add them with git commit --amend --no-edit --trailer, never as a paragraph of their own (git-conventions §7, §8).`;
+  const coAuthor = `"Co-Authored-By: ${agent.name} <${agent.email}>"`;
+  return `${ATTRIBUTION_LINE_PREFIX} ${coAuthor} and an "AI-Model:" trailer: pass --ai-model <your model identifier> to each wingfoil command that writes a commit, or that trailer records "AI-Model: not-reported"; end a commit you write yourself with git commit with the trailer paragraph ${coAuthor} and "AI-Model: <your model identifier>"; never run memory approve, memory reject or memory amend, which refuse in your session (git-conventions §7).`;
+}
+
+/**
+ * §2.4's `{cli_line}` (task-338, `dl-180` (c), `bug-369`): the invocation the agent runs WingFoil commands with, and
+ * the signature that tells it the shim reached the launching build. The shim's path is in the environment only.
+ */
+function cliLine(build: string): string {
+  return `Run WingFoil commands as "wingfoil <command>": the build that launched you is first on your PATH, and "wingfoil --version" prints "${build}"; if it prints anything else, run "$WINGFOIL_CLI" in place of "wingfoil".`;
 }
 
 /**
@@ -140,8 +207,9 @@ function sessionContextUri(role: string, element: string, stateRef: string): str
 
 /**
  * The bootstrap prompt (§2.4): the only text WingFoil puts into the agent's initial prompt. Pure, with
- * no clock and no host data, LF-terminated. Its last line hands the agent the attribution rule and the
- * entry that signs (task-228). A change to any literal here is a revision of `spec-016`.
+ * no clock and no host data, LF-terminated. After the context instruction, the CLI line names the launching
+ * build (task-338); its last line hands the agent the attribution rule and the entry that signs (task-228). A
+ * change to any literal here is a revision of `spec-016`.
  */
 export function renderBootstrap(input: BootstrapInput): string {
   const contextInstruction = `Read the MCP resource "${sessionContextUri(input.role, input.element, input.stateRef)}".`;
@@ -149,6 +217,7 @@ export function renderBootstrap(input: BootstrapInput): string {
     `WingFoil run ${input.runId}: act as role "${input.role}" on element ${input.element}.`,
     `Your context is assembled at commit ${input.stateRef} and served by the "wingfoil" MCP server`,
     `registered for this session. Load it before any other action: ${contextInstruction}`,
+    cliLine(input.build),
     input.handoff,
     attributionLine(input.agent),
     '',
@@ -162,28 +231,96 @@ export interface McpServerCommand {
 }
 
 /**
- * The server `agent execute` registers and pre-flights (§2.5): the build that is running it — the Node
- * executable, and `[<that build's cli.js>, "mcp"]`, `cli.js` sitting one directory above this module in
- * the compiled layout (`dist/agent/` → `dist/cli.js`).
+ * The build that is running `agent execute` (§2.4, task-338): the Node executable and `[<that build's cli.js>]`,
+ * `cli.js` sitting one directory above this module in the compiled layout (`dist/agent/` → `dist/cli.js`).
  */
-export function runningBuildMcpServer(): McpServerCommand {
-  return { command: process.execPath, args: [join(__dirname, '..', 'cli.js'), 'mcp'] };
+export function runningBuildCli(): McpServerCommand {
+  return { command: process.execPath, args: [join(__dirname, '..', 'cli.js')] };
+}
+
+/**
+ * The server `agent execute` registers and pre-flights (§2.5): the build that is running it
+ * ({@link runningBuildCli}) with `["--project", <root>, "mcp"]`. `root` is the project root `agent execute`
+ * resolved, so the server serves it whatever working directory the agent CLI starts it in (task-350, `dl-198` (a)).
+ */
+export function runningBuildMcpServer(root: string): McpServerCommand {
+  const cli = runningBuildCli();
+  return { command: cli.command, args: [...cli.args, '--project', root, 'mcp'] };
+}
+
+/** A `wingfoil` shim: its file name and its text. */
+export interface CliShim {
+  readonly name: string;
+  readonly text: string;
+}
+
+/** `value` as one POSIX `sh` single-quoted word: a quote inside written `'\''`. */
+function shQuote(value: string): string {
+  return `'${value.split("'").join("'\\''")}'`;
+}
+
+/**
+ * The `wingfoil` shim of `cli` (§2.4, task-338, `dl-180` (c)): on POSIX `wingfoil`, a `/bin/sh` script that `exec`s
+ * the build's executable and arguments, each single-quoted, with the arguments it is given (`"$@"`); on win32
+ * `wingfoil.cmd`, one CRLF line running them, double-quoted, with `%*` (written, not exercised by CI). Pure.
+ */
+export function cliShim(cli: McpServerCommand, platform: NodeJS.Platform = process.platform): CliShim {
+  if (platform === 'win32') {
+    return { name: 'wingfoil.cmd', text: `@${[cli.command, ...cli.args].map((part) => `"${part}"`).join(' ')} %*\r\n` };
+  }
+  return { name: 'wingfoil', text: `#!/bin/sh\nexec ${[cli.command, ...cli.args].map(shQuote).join(' ')} "$@"\n` };
 }
 
 /** `mcp.template`'s placeholder tokens: the narrow class, so JSON braces are left alone (§2.3). */
 const TEMPLATE_TOKEN_RE = /\{([a-z][a-z0-9_]*)\}/g;
 
+/** The first code unit of `text` that is half of no surrogate pair, or `undefined` when there is none. */
+function firstUnpairedSurrogate(text: string): number | undefined {
+  for (let i = 0; i < text.length; i += 1) {
+    const unit = text.charCodeAt(i);
+    if (unit >= 0xd800 && unit <= 0xdbff) {
+      const next = i + 1 < text.length ? text.charCodeAt(i + 1) : 0;
+      if (next >= 0xdc00 && next <= 0xdfff) i += 1;
+      else return unit;
+    } else if (unit >= 0xdc00 && unit <= 0xdfff) {
+      return unit;
+    }
+  }
+  return undefined;
+}
+
+/** JSON text with every U+007F written as `\u007f`: TOML's basic string forbids it raw, JSON leaves it so (§2.3). */
+function jsonForTemplate(value: string | readonly string[]): string {
+  return JSON.stringify(value).replace(/\u007f/g, '\\u007f');
+}
+
 /**
  * Render `mcp.template` (§2.3): `{mcp_command}` becomes the executable as JSON string content (the
  * template quotes it; a quote or a backslash in the path stays valid), `{mcp_args}` the argv as a JSON
- * array. The manifest validator admits no other placeholder there, so any other token is left as is.
+ * array, every U+007F written as the escape `\u007f` in both, so the text is valid JSON and valid TOML
+ * (task-355, `bug-371`). The manifest validator admits no other placeholder there, so any other token is
+ * left as is.
+ *
+ * @returns The rendered text, or `VALIDATION` when the command or an argument holds an unpaired surrogate,
+ *   which neither JSON nor TOML can carry (§3.7): `mcp.template cannot carry the MCP server's command: it
+ *   holds an unpaired surrogate (U+D800)`, or `… the MCP server's argument <n>: …` with `<n>` from 1.
  */
-export function renderMcpTemplate(template: string, server: McpServerCommand): string {
-  return template.replace(TEMPLATE_TOKEN_RE, (token: string, name: string) => {
-    if (name === 'mcp_command') return JSON.stringify(server.command).slice(1, -1);
-    if (name === 'mcp_args') return JSON.stringify(server.args);
-    return token;
-  });
+export function renderMcpTemplate(template: string, server: McpServerCommand): CoreResult<string> {
+  const carried: [string, string][] = [['command', server.command], ...server.args.map((arg, index): [string, string] => [`argument ${index + 1}`, arg])];
+  for (const [what, value] of carried) {
+    const unit = firstUnpairedSurrogate(value);
+    if (unit !== undefined) {
+      const hex = unit.toString(16).toUpperCase().padStart(4, '0');
+      return coreErr({ code: 'VALIDATION', message: `mcp.template cannot carry the MCP server's ${what}: it holds an unpaired surrogate (U+${hex})` });
+    }
+  }
+  return coreOk(
+    template.replace(TEMPLATE_TOKEN_RE, (token: string, name: string) => {
+      if (name === 'mcp_command') return jsonForTemplate(server.command).slice(1, -1);
+      if (name === 'mcp_args') return jsonForTemplate(server.args);
+      return token;
+    }),
+  );
 }
 
 /** The temporary files a launch may need (§2.3), by the placeholder that names each one's path. */
@@ -194,6 +331,9 @@ const RUN_FILE_BASENAMES: Readonly<Record<RunFileName, string>> = {
   bootstrap_file: 'bootstrap.txt',
   mcp_config_file: 'mcp-config.json',
 };
+
+/** The directory of the run's temporary directory the shim is written in, the one put first on the agent's `PATH`. */
+const SHIM_DIR = 'bin';
 
 /** The signals that end `agent execute` before the spawn, and so must not leave the temporary files behind. */
 const CLEANUP_SIGNALS: readonly NodeJS.Signals[] = process.platform === 'win32' ? ['SIGINT', 'SIGTERM'] : ['SIGINT', 'SIGTERM', 'SIGHUP'];
@@ -207,10 +347,14 @@ const CLEANUP_SIGNALS: readonly NodeJS.Signals[] = process.platform === 'win32' 
  * task-218's review) removes the directory too, then ends the process by that same signal. `work`
  * receives `release`, which removes that handling: the launch calls it when it takes the signals over
  * (§3.3 step 15).
+ *
+ * With `shim` (task-338), its text is written too, owner-only and executable (`0700`), in a `bin` directory of
+ * its own (`0700`), and `work` receives its absolute path as `cliShim`; it goes with the directory.
  */
 export async function withRunFiles<T>(
   files: Partial<Record<RunFileName, string>>,
-  work: (paths: Partial<Record<RunFileName, string>>, release: () => void) => Promise<T>,
+  work: (paths: Partial<Record<RunFileName, string>>, release: () => void, cliShim?: string) => Promise<T>,
+  shim?: CliShim,
 ): Promise<T> {
   // The listeners go in before the directory exists (review fix 1), so no signal can leave it behind.
   let dir: string | undefined;
@@ -240,7 +384,16 @@ export async function withRunFiles<T>(
       writeFileSync(path, text, { encoding: 'utf-8', mode: 0o600 });
       paths[name] = path;
     }
-    return await work(paths, release);
+    let shimPath: string | undefined;
+    if (shim !== undefined) {
+      const bin = join(dir, SHIM_DIR);
+      mkdirSync(bin, { mode: 0o700 });
+      shimPath = join(bin, shim.name);
+      writeFileSync(shimPath, shim.text, { encoding: 'utf-8', mode: 0o700 });
+      // The mode a umask may have narrowed, set exactly: owner read, write and execute.
+      chmodSync(shimPath, 0o700);
+    }
+    return await work(paths, release, shimPath);
   } finally {
     // Removed before the last listeners come out, so no signal in between can leave it behind.
     if (dir !== undefined) rmSync(dir, { recursive: true, force: true });
@@ -309,14 +462,15 @@ export interface McpPreflightInput {
 }
 
 /**
- * §3.3 step 11: start the server, complete MCP `initialize`, get the `{role}-session` Prompt with
- * `element` and `state`, read the session Resource the bootstrap names (§2.4, task-236), and close. The
- * project's own registration (`.mcp.json`) is not read (§2.5). Any failure — the server does not start,
- * exits, refuses the Prompt or the Resource, returns no text, or exceeds `timeoutMs` — is `IO` with
- * P5.4.3 sc. 3's message verbatim, its cause as a `dl-055` detail line with the project root removed.
+ * §3.3 step 11: start the server, complete MCP `initialize`, read the session Resource the bootstrap names
+ * (§2.4, task-236), and close. The project's own registration (`.mcp.json`) is not read (§2.5). Any
+ * failure — the server does not start, exits, refuses the Resource, returns no text, or exceeds
+ * `timeoutMs` — is `IO` with P5.4.3 sc. 3's message verbatim, its cause as a `dl-055` detail line with the
+ * project root removed.
  *
- * Both carriers are checked, the Prompt first: the agent reads the Resource, and the Prompt serves the same
- * text to a client that gets Prompts; one deadline covers the whole exchange.
+ * The Resource is the one carrier checked, the one the agent reads: the `{role}-session` Prompt serves the
+ * same text from the same builder and is not fetched, so the context is assembled once per pre-flight
+ * (task-355, `bug-376`). One deadline covers the whole exchange.
  */
 export async function mcpPreflight(input: McpPreflightInput): Promise<CoreResult<undefined>> {
   const env = Object.fromEntries(Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined));
@@ -334,14 +488,6 @@ export async function mcpPreflight(input: McpPreflightInput): Promise<CoreResult
   });
   const exchange = async (): Promise<void> => {
     await client.connect(transport, { timeout: input.timeoutMs });
-    const prompt = await client.getPrompt(
-      { name: `${input.role}-session`, arguments: { element: input.element, state: input.stateRef } },
-      { timeout: input.timeoutMs },
-    );
-    const content = prompt.messages[0]?.content;
-    if (content === undefined || content.type !== 'text' || content.text === '') {
-      throw new Error(`the ${input.role}-session prompt returned no context text`);
-    }
     // task-236: the Resource the bootstrap names — what the agent will actually read.
     const uri = sessionContextUri(input.role, input.element, input.stateRef);
     const resource = await client.readResource({ uri }, { timeout: input.timeoutMs });
@@ -380,12 +526,22 @@ export interface AgentExecuteRequest {
   readonly role?: string;
   /** `--agent`; absent → the first agent with an adapter that executes the role. */
   readonly agent?: string;
+  /** `--headless` / `--interactive` (task-335); absent → the step's phase `launch`, else interactive (§3.2 step 7). */
+  readonly launch?: LaunchKindRun;
+  /** `--timeout`, parsed (§3.1); absent → unbounded. */
+  readonly timeout?: TimeBound;
+  /** `--log <path>` as given (§3.1, task-336); a run §3.2 step 7 resolves `interactive` refuses it (`LOG_INTERACTIVE`). */
+  readonly log?: string;
+  /** `--dry-run` is active: step 12 warns instead of refusing, since nothing is spawned (`bug-392`). */
+  readonly dryRun?: boolean;
 }
 
 /** The host facts the pipeline reads, each overridable by a caller (tests) and defaulted from the process. */
 export interface AgentExecuteHost extends LaunchHost {
   /** The server the pre-flight starts; {@link runningBuildMcpServer} by default. */
   readonly mcpServer?: McpServerCommand;
+  /** The build the agent's `wingfoil` shim runs (§2.4, task-338); {@link runningBuildCli} by default. */
+  readonly cli?: McpServerCommand;
   /** Whether stdin and stdout are both terminals (§3.3 step 12); the process's own by default. */
   readonly isTerminal?: () => boolean;
   /** The `PATH` step 4 searches; `process.env.PATH` by default. */
@@ -422,6 +578,14 @@ export interface PreparedLaunch {
   readonly files: Partial<Record<RunFileName, string>>;
   /** The rendered `mcp.template` under `mcp.via: config-arg` (§2.3 `{mcp_config}`); `undefined` otherwise. */
   readonly mcpConfig?: string | undefined;
+  /** The launch kind §3.2 step 7 resolved (task-335). */
+  readonly kind: LaunchKindRun;
+  /** `--timeout`'s bound, when given. */
+  readonly timeout?: TimeBound | undefined;
+  /** Absolute path of the launching build's `wingfoil` shim (§2.4, task-338), valid as long as {@link files}. */
+  readonly cliShim?: string | undefined;
+  /** `--log <path>` as given (§3.1, task-336): a headless run's only. */
+  readonly log?: string | undefined;
 }
 
 /** The process's own terminals: stdin and stdout both. */
@@ -437,9 +601,9 @@ function validationRefusal(error: ValidationError): CoreResult<never> {
 /** The committed pillar files the pipeline reads, or the refusal of an absent or invalid one. */
 function loadCommittedConfig(root: string, sha: string): CoreResult<{ dna: DnaYaml; memoryYaml: MemoryYaml }> {
   try {
-    const dna = loadDnaYamlAtRev(root, sha);
+    const dna = loadDnaYamlAtRev(root, sha, 'HEAD');
     if (dna === null) return coreErr({ code: 'NOT_FOUND', message: `${DNA_YAML_PATH} is not committed at HEAD, which agent execute reads: commit it first` });
-    const memoryYaml = loadMemoryYamlAtRev(root, sha);
+    const memoryYaml = loadMemoryYamlAtRev(root, sha, 'HEAD');
     if (memoryYaml === null) return coreErr({ code: 'NOT_FOUND', message: `${MEMORY_YAML_PATH} is not committed at HEAD, which agent execute reads: commit it first` });
     return coreOk({ dna, memoryYaml });
   } catch (error) {
@@ -501,6 +665,26 @@ function templateHasExecutionNotes(root: string, sha: string, templatePath: stri
 }
 
 /**
+ * §3.3 step 4's conflict check (task-356, `bug-372`; §2.5, §3.7 `MCP_SERVER_DECLARED`): when the adapter declares
+ * `mcp.conflict_args`, that argv is run ({@link runConflictProbe}); exit `0` means the agent's own configuration
+ * declares an MCP server named `wingfoil`, which the agent would merge into the server `agent execute` registers,
+ * and refuses the launch (`CONFLICT`, `details` the adapter and the argv). A non-zero exit passes; a probe that times
+ * out or cannot be started passes with one `warning:` line naming the adapter and the cause (approver ruling D1.3).
+ */
+export async function mcpConflictCheck(root: string, adapter: string, manifest: AdapterManifest, timeoutMs: number): Promise<CoreResult<undefined>> {
+  const argv = manifest.mcp.conflict_args;
+  if (argv === undefined) return coreOk(undefined);
+  const probe = await runConflictProbe(root, manifest.command, argv, timeoutMs);
+  if (probe.kind === 'failed') reportWarning(`adapter '${adapter}': the MCP server conflict check (mcp.conflict_args) ${probe.reason}: going on without it`);
+  if (probe.kind !== 'declared') return coreOk(undefined);
+  return coreErr({
+    code: 'CONFLICT',
+    message: `adapter '${adapter}': the agent's own configuration declares an MCP server named 'wingfoil', which it would merge into the server agent execute registers: remove or rename it`,
+    details: { adapter, argv: [...argv] },
+  });
+}
+
+/**
  * Run `agent execute`'s pipeline up to the spawn (§3.3 steps 2–12, see the module doc), then
  * `launch` with the prepared launch, while its temporary files exist. Warnings go through the warning
  * sink as they arise. Returns the first refusal, or what `launch` returns.
@@ -514,22 +698,17 @@ export async function agentExecutePipeline<T>(
   launch: (prepared: PreparedLaunch, releaseSignals: () => void) => Promise<CoreResult<T>>,
 ): Promise<CoreResult<T>> {
   // Each distinct warning is printed once — the pipeline and the context builder both load dna.yaml
-  // (task-218's review F5) — and a label naming the resolved commit reads `HEAD:`, the baseline every
-  // read of the run is at (spec-008 §11).
-  let sha: string | undefined;
-  return withDistinctWarnings(
-    () => runPipeline(root, request, host, launch, (resolved) => (sha = resolved)),
-    (text) => (sha === undefined ? text : text.split(`${sha}:`).join('HEAD:')),
-  );
+  // (task-218's review F5). The reads name the resolved commit `HEAD:` themselves, the baseline every read of
+  // the run is at (spec-008 §6, task-354): no warning is rewritten after the fact.
+  return withDistinctWarnings(() => runPipeline(root, request, host, launch));
 }
 
-/** {@link agentExecutePipeline}'s body; `onHead` learns the commit step 2 resolved. */
+/** {@link agentExecutePipeline}'s body. */
 async function runPipeline<T>(
   root: string,
   request: AgentExecuteRequest,
   host: AgentExecuteHost,
   launch: (prepared: PreparedLaunch, releaseSignals: () => void) => Promise<CoreResult<T>>,
-  onHead: (sha: string) => void,
 ): Promise<CoreResult<T>> {
   // Step 2 — one HEAD, every gating read at it. A step form reads the deduction first, so the HEAD it was
   // deduced at is the one every later read takes (task-235); a registry error refuses here.
@@ -543,7 +722,6 @@ async function runPipeline<T>(
     if (error instanceof RevisionError) return coreErr(error.toCoreError());
     throw error;
   }
-  onHead(sha);
   // The deduction's diagnostics, as `workflow next` lists them, one `warning:` line each (§3.3 step 2, bug-339).
   if (deduced?.ok === true) for (const diagnostic of deduced.value.diagnostics) reportWarning(diagnosticWarning(diagnostic));
   const config = loadCommittedConfig(root, sha);
@@ -562,6 +740,11 @@ async function runPipeline<T>(
     if (!deduced.ok) return deduced;
     const selected = selectFrontierStep(deduced.value, request.step!.key);
     if (!selected.ok) return selected;
+    // A step that only waits is refused, unless `--element` makes it an explicit target (dl-171 (c), task-335).
+    if (request.element === undefined) {
+      const runnable = refuseWaitingStep(selected.value);
+      if (!runnable.ok) return runnable;
+    }
     step = selected.value;
   }
   // §3.2 step 2 — the element: `--element`, else the step's; it must exist at HEAD.
@@ -588,21 +771,39 @@ async function runPipeline<T>(
     role = stepRole.value;
   }
   if (!isRoleDefined(dna, role)) return coreErr({ code: 'VALIDATION', message: `unknown role '${role}' (not defined in dna.yaml)` });
-  if (role === APPROVER_ROLE) return coreErr({ code: 'VALIDATION', message: `role '${APPROVER_ROLE}' is never executed by an agent` });
+  // §3.7 HUMAN_ONLY_ROLE (task-340, `dl-202` item 1): a human-only role — `approver` always — is refused before any
+  // side effect, whatever the options; `approver`'s message is the one it always had (approver ruling D6).
+  if (isHumanOnlyRole(dna, role)) return coreErr({ code: 'VALIDATION', message: `role '${role}' is never executed by an agent` });
   const agent = selectAgent(dna, role, request.agent);
   if (!agent.ok) return agent;
   const adapter = loadAdapter(root, agent.value.adapter!, sha, 'HEAD');
   if (!adapter.ok) return adapter;
   const manifest = adapter.value.manifest;
+  // §3.2 step 7 — the launch kind, after the human-only rule above, which no option relaxes.
+  const launchKind = resolveLaunchKind(step?.launch ?? null, request.launch, manifest);
+  if (launchKind.warning !== undefined && step !== undefined) reportWarning(`phase '${step.workflow}.${step.phase}' ${launchKind.warning}`);
+  const kind = launchKind.kind;
+  // §3.2 step 7 — `--log` on a run that resolves interactive: its output is the terminal's, and nothing copies it
+  // (task-336, `dl-182` Q4 (a)). A usage error, exit 2, as `--log` with `--interactive` is at step 1.
+  if (request.log !== undefined && kind === 'interactive') throw new UsageError(LOG_INTERACTIVE);
 
-  // Step 4 — the agent CLI can be started.
+  // Step 4 — the adapter declares the kind (NO_LAUNCH_KIND, never a fallback to the other), and its CLI can be started.
+  if (kind === 'headless' && manifest.launch.headless === undefined) {
+    return coreErr({ code: 'VALIDATION', message: `adapter '${adapter.value.name}' declares no headless launch` });
+  }
   if (!agentCommandFound(root, manifest.command, host.searchPath ?? process.env.PATH)) {
     return coreErr({ code: 'IO', message: `agent command '${manifest.command}' not found (adapter '${adapter.value.name}')` });
   }
+  // Step 4, last — the agent's own configuration declares no server named `wingfoil` it would merge into ours
+  // (§2.5, task-356, bug-372); a dry run asks too, since the probe launches no model (approver ruling D1.2).
+  const conflict = await mcpConflictCheck(root, adapter.value.name, manifest, host.lookupTimeoutMs ?? LOOKUP_TIMEOUT_MS);
+  if (!conflict.ok) return conflict;
 
-  // Step 5 — the identity the record commit (step 17) needs.
+  // Step 5 — the identity the record commit (step 17) needs, a team member's (`dl-220` Q2 (b), `spec-006` §7).
   const identity = requireGitIdentity(root);
   if (!identity.ok) return identity;
+  const member = requireTeamMembership(root, identity.value);
+  if (!member.ok) return member;
 
   // Step 6 — the run log, declared and unmodified (`runs` is spec-016 §4.1's declared category; `paths`
   // also admits a project's own categories through its typed catchall, task-312).
@@ -611,12 +812,12 @@ async function runPipeline<T>(
   if (!logPath.ok) return logPath;
 
   // Step 7 — the context, assembled and validated at state_ref.
-  const assembled = assembleExecutionContext(root, { role, element: target, stateRef: sha });
+  const assembled = assembleExecutionContext(root, { role, element: target, stateRef: sha, label: 'HEAD' });
   // The element was found at this same commit (step 3), so the builder's NOT_FOUND with
   // `details.unreadable` cannot arise here; its refusals pass through as they are.
   if (!assembled.ok) return assembled;
 
-  // Step 8 — its warnings, before the pre-flight (dl-050 option 4); the notes reach the agent with the Prompt.
+  // Step 8 — its warnings, before the pre-flight (dl-050 option 4); the notes reach the agent inside the session Resource.
   for (const warning of [...assembled.value.context.warnings, ...(assembled.warnings ?? [])]) {
     reportWarning(warning);
   }
@@ -637,16 +838,25 @@ async function runPipeline<T>(
     handoff: handoffLine(templateHasExecutionNotes(root, sha, templatePath)),
     // A team.agents entry that declares an adapter declares an email (dna.yaml schema, dl-158 Rule 2 (ii)).
     agent: { name: agent.value.name, email: agent.value.email ?? '' },
+    build: readBuildStamp(),
   });
-  const mcpServer = host.mcpServer ?? runningBuildMcpServer();
+  const mcpServer = host.mcpServer ?? runningBuildMcpServer(root);
+  // `mcp.template` rendered once, before anything is written or spawned: a command or argument it cannot carry
+  // is refused here, a dry run included (§3.3 step 10, §3.7; task-355, bug-371).
+  let rendered: string | undefined;
+  if (manifest.mcp.via === 'config-file' || manifest.mcp.via === 'config-arg') {
+    const template = renderMcpTemplate(manifest.mcp.template!, mcpServer);
+    if (!template.ok) return template;
+    rendered = template.value;
+  }
   const files: Partial<Record<RunFileName, string>> = {
     ...(manifest.prompt.via === 'file' ? { bootstrap_file: bootstrap } : {}),
-    ...(manifest.mcp.via === 'config-file' ? { mcp_config_file: renderMcpTemplate(manifest.mcp.template!, mcpServer) } : {}),
+    ...(manifest.mcp.via === 'config-file' && rendered !== undefined ? { mcp_config_file: rendered } : {}),
   };
   // Under `config-arg` the rendered template is not a file but one whole argv element (§2.3 `{mcp_config}`).
-  const mcpConfig = manifest.mcp.via === 'config-arg' ? renderMcpTemplate(manifest.mcp.template!, mcpServer) : undefined;
+  const mcpConfig = manifest.mcp.via === 'config-arg' ? rendered : undefined;
 
-  return withRunFiles(files, async (paths, releaseSignals) => {
+  return withRunFiles(files, async (paths, releaseSignals, shimPath) => {
     // Step 11 — the MCP pre-flight.
     const preflight = await mcpPreflight({
       root,
@@ -658,10 +868,11 @@ async function runPipeline<T>(
     });
     if (!preflight.ok) return preflight;
 
-    // Step 12 — the terminal check, last.
+    // Step 12 — the terminal check, last; an interactive launch only. A dry run spawns nothing: it warns (bug-392).
     const isTerminal = host.isTerminal ?? processHasTerminal;
-    if (manifest.launch.interactive.terminal === 'required' && !isTerminal()) {
-      return coreErr({ code: 'VALIDATION', message: 'interactive launch needs a terminal on stdin and stdout' });
+    if (kind === 'interactive' && manifest.launch.interactive.terminal === 'required' && !isTerminal()) {
+      if (request.dryRun !== true) return coreErr({ code: 'VALIDATION', message: 'interactive launch needs a terminal on stdin and stdout' });
+      reportWarning(DRY_RUN_TERMINAL_WARNING);
     }
 
     return launch({
@@ -682,11 +893,15 @@ async function runPipeline<T>(
       mcpServer,
       files: paths,
       mcpConfig,
+      kind,
+      timeout: request.timeout,
+      cliShim: shimPath,
+      log: request.log,
     }, releaseSignals);
-  });
+  }, cliShim(host.cli ?? runningBuildCli()));
 }
 
-/** The launch `--dry-run` prints (`spec-008` §2): the record commit it would make, and the run. */
+/** The launch `--dry-run` prints (`spec-008` §2): the record commit it would make, the run, and its launch. */
 export interface AgentLaunchPlan {
   readonly dryRun: true;
   /** `agent: record <run-id>`. */
@@ -704,6 +919,15 @@ export interface AgentLaunchPlan {
     readonly agent: string;
     readonly adapter: string;
     readonly state_ref: string;
+  };
+  /**
+   * The launch (`spec-016` §3.3 `--dry-run`, `dl-223` Action 3, task-339): the kind §3.2 step 7 resolved, and the
+   * permission fragment §3.3 step 14 would append for the run's role, `[]` when the adapter declares none. Not part
+   * of the record (§4.2): it is the manifest's at `state_ref`, for the record's `role`.
+   */
+  readonly launch: {
+    readonly kind: LaunchKindRun;
+    readonly permissions: readonly string[];
   };
   /** §2.4's bootstrap, the bytes the agent would be given. */
   readonly bootstrap: string;
@@ -725,6 +949,10 @@ export function launchPlan(prepared: PreparedLaunch): AgentLaunchPlan {
       agent: prepared.agent.name,
       adapter: `${prepared.adapter.kind}/${prepared.adapter.name}`,
       state_ref: prepared.stateRef,
+    },
+    launch: {
+      kind: prepared.kind,
+      permissions: [...launchPermissions(prepared.adapter.manifest, prepared.kind, prepared.role)],
     },
     bootstrap: prepared.bootstrap,
   };

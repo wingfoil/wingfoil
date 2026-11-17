@@ -66,11 +66,17 @@ interface ContextRequest {
   };
   stateRef: string;        // git commit SHA pinning "project state" (REQ-SYS-01/03)
   limits?: ContextLimits;  // optional caps; defaults in §6
+  label?: string;          // how warnings and errors name the revision; defaults to stateRef as given
 }
 ```
 
 `stateRef` makes "unchanged project state" concrete: the same `(role, element, stateRef)` MUST always
 produce the same bytes. If any input differs, output MAY differ; if none differ, output MUST NOT differ.
+
+`label` only names the revision in the `<label>:<path>` of a warning or an error the reads raise: a caller
+that resolved `HEAD` to the sha it passes as `stateRef` passes `label: 'HEAD'`, so a file is reported as
+`HEAD:<path>` rather than under a 40-hex label (`bug-317`). It never reaches the payload, so the bytes
+above stay a function of `(role, element, stateRef, limits)` alone.
 
 ### 3. Assembly pipeline (fixed order)
 
@@ -453,3 +459,11 @@ unfiltered listing carries kind 3 only, which was stale since `task-143` (skippe
 `buildDirectiveListing`, `danglingBindingWarnings` and `readRolesYaml` (`src/core/directives-list.ts`) and
 the tests in `test/core/directives-list.test.ts`. Edited in place without a supersede or a state change,
 as the earlier Revision notes were.
+
+**Revision (2026-11-07) — §2's `ContextRequest` gains the optional `label`, per
+`task-354-remove-the-import-cycles-between-src-core-and-src-agent-and-the-surface-imports-bypassing-src-core`
+(`bug-317`).** The readers at a revision labelled a file `<rev>:<path>` with whatever revision their caller
+passed, so `agent execute`, which resolves `HEAD` once and builds the context at that sha, rewrote every
+warning's sha back to `HEAD:` after the fact. The caller now names the revision itself; the rewrite goes. The
+payload, its format and the determinism contract are unchanged: `label` reaches warnings and errors only.
+Edited in place without a supersede or a state change, as the earlier Revision notes were.

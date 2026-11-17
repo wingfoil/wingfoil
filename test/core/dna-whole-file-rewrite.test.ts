@@ -51,6 +51,16 @@ const WARNING =
 
 type DnaVerb = 'dnaSet' | 'dnaAdd' | 'dnaUpdate' | 'dnaRemove';
 
+/**
+ * Make the fixture repository's git identity the first `team.members` entry of `dnaYaml` (task-333, `dl-220` Q2 (b)):
+ * every mutating verb now refuses an identity outside the committed team, and this repository's own `dna.yaml` is
+ * the fixture, so the test acts as its member instead of editing the file it pins byte for byte.
+ */
+function actAsFirstMember(repo: string, dnaYaml: string): void {
+  const members = (load(dnaYaml) as { team: { members: { email: string }[] } }).team.members;
+  execFileSync('git', ['-C', repo, 'config', 'user.email', (members[0] as { email: string }).email]);
+}
+
 function op(name: DnaVerb): CoreFn<unknown, unknown> {
   const operation = CORE_MODULES.find((module) => module.name === 'dna')?.operations[name];
   if (!operation) throw new Error(`fixture bug: "${name}" is not registered on the dna module`);
@@ -129,6 +139,7 @@ describe('dna verbs — the whole-file rewrite is refused unless --force (task-1
       repo = makeTempGitRepo();
       writeFixtureFile(repo, DNA_PATH, REAL_DNA);
       commitAll(repo, "seed WingFoil's own dna.yaml");
+      actAsFirstMember(repo, REAL_DNA);
     });
 
     it.each<[DnaVerb, string[], Record<string, string>]>([
@@ -168,6 +179,7 @@ describe('dna verbs — the whole-file rewrite is refused unless --force (task-1
       git(repo, ['config', 'core.autocrlf', autocrlf]);
       writeFixtureFile(repo, DNA_PATH, CRLF);
       commitAll(repo, 'seed a CRLF dna.yaml');
+      actAsFirstMember(repo, REAL_DNA);
     });
 
     it('`dna set project.name` succeeds in place, keeps CRLF and every comment, and commits only dna.yaml', async () => {

@@ -8,7 +8,8 @@
  *   backlog tasks its frontier holds two parallel `loop.implement@task:<id>` steps (`dl-014`), role
  *   `developer`, `mode: resume` (`spec-003` § "Execution independence"; v0.3 still runs `fresh`), whose
  *   `agent.execute` action carries the `agent` binding argv `workflow next` prints (`spec-017` §6.1).
- * - `chores` (startable, no element, adds none) has one phase with no scope: `NO_STEP_ELEMENT`.
+ * - `chores` (startable, no element, adds none) has one phase with no scope: its step runs on the instance's own
+ *   plan element (task-353, `bug-418`; before it, `NO_STEP_ELEMENT`).
  * - `roleless` (startable, bound to a `release`) has one phase that declares no role: `NO_STEP_ROLE`.
  * - `ghostly` ({@link GHOSTLY}, registered only by the test that wants it) has one phase whose role
  *   `dna.yaml` does not define (P5.3.2 sc. 3).
