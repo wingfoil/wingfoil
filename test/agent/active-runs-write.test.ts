@@ -12,7 +12,8 @@
  *   directories; removing what is not there is no error;
  * - `readActiveRuns`: an entry whose `id` is not the run id its path names is no entry; a temporary file of a rewrite
  *   (a name starting with `.`) is not read; a `.wingfoil/run` that is a file is `IO`; a file that is no entry and cannot
- *   be removed prints the not-an-entry line, then the could-not-remove line (review fix round, F5);
+ *   be removed prints one combined line, `…: not an active run entry: could not remove: <cause>` (review fix rounds,
+ *   F5 and FU1);
  * - another launch's entry is neither rewritten nor removed (review fix round, F2).
  */
 import { spawnSync } from 'node:child_process';
@@ -157,7 +158,7 @@ describe('task-336 — readActiveRuns, the edges (spec-016 §7, D10 (a))', () =>
   });
 
   (process.platform !== 'win32' && process.getuid?.() !== 0 ? it : it.skip)(
-    'a file that is no entry and cannot be removed: the not-an-entry line, then the could-not-remove line (review F5)',
+    'a file that is no entry and cannot be removed: one combined line, never a "removed" one (review F5, FU1)',
     () => {
       const base = root();
       put(base, 'task-m/red/1.json', 'garbage\n');
@@ -166,9 +167,9 @@ describe('task-336 — readActiveRuns, the edges (spec-016 §7, D10 (a))', () =>
       try {
         const { value, warnings } = captured(() => readActiveRuns(base));
         expect(value).toEqual({ ok: true, value: [] });
-        expect(warnings).toHaveLength(2);
-        expect(warnings[0]).toBe('.wingfoil/run/task-m/red/1.json: not an active run entry: removed');
-        expect(warnings[1]!.startsWith('.wingfoil/run/task-m/red/1.json: could not remove: ')).toBe(true);
+        expect(warnings).toHaveLength(1);
+        expect(warnings[0]!.startsWith('.wingfoil/run/task-m/red/1.json: not an active run entry: could not remove: ')).toBe(true);
+        expect(existsSync(join(dir, '1.json'))).toBe(true);
       } finally {
         chmodSync(dir, 0o755);
       }

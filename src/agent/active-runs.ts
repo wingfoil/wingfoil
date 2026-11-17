@@ -68,6 +68,11 @@ export function couldNotRemoveWarning(relativePath: string, cause: string): stri
   return `${ACTIVE_RUNS_DIR}/${relativePath}: could not remove: ${cause}`;
 }
 
+/** §7's one line for a file that is no entry and could not be removed, without the `warning: ` prefix (review FU1). */
+export function notAnEntryUnremovedWarning(relativePath: string, cause: string): string {
+  return `${ACTIVE_RUNS_DIR}/${relativePath}: not an active run entry: could not remove: ${cause}`;
+}
+
 /** §3.3 step 13's warning when the entry is not git-ignored, without the `warning: ` prefix (D8 (a)). */
 export const REGISTRY_NOT_IGNORED_WARNING = '.wingfoil/run/ is not git-ignored: add "/run/" to .wingfoil/.gitignore, or a running launch can be committed';
 
@@ -180,7 +185,9 @@ function registryFiles(root: string): string[] {
 /**
  * Read the registry under `root` (§7), pruning as it reads: an entry whose process is gone is removed; a file that is no
  * entry (unreadable, not JSON, not §7's keys and types, an `id` its path does not name) is removed with one `warning:`
- * line, {@link notAnEntryWarning}; a directory left empty is removed, `.wingfoil/run/` itself kept.
+ * line, {@link notAnEntryWarning}; a removal that fails is one line instead, {@link notAnEntryUnremovedWarning} for a
+ * file that is no entry and {@link couldNotRemoveWarning} for a dead entry, the file not listed and the read still `ok`;
+ * a directory left empty is removed, `.wingfoil/run/` itself kept.
  *
  * @returns the live entries in §5's active order; an absent `.wingfoil/run/` is `[]`; one that cannot be listed is
  *   `IO` `cannot read the active registry .wingfoil/run/: <cause>`.
@@ -208,12 +215,14 @@ export function readActiveRuns(root: string): CoreResult<ActiveRunEntry[]> {
       live.push(entry);
       continue;
     }
-    // Pruned: a file that is no entry says so first; a removal that fails is a warning, never a failed read (§7, F5).
-    if (entry === undefined) reportWarning(notAnEntryWarning(relativePath));
+    // Pruned: removed first, then reported (§7): a file that is no entry says so with the outcome of its removal, one
+    // line either way; a dead entry is silent unless its removal fails. A failed removal never fails the read (F5).
     try {
       removeFile(root, path);
+      if (entry === undefined) reportWarning(notAnEntryWarning(relativePath));
     } catch (error) {
-      reportWarning(couldNotRemoveWarning(relativePath, error instanceof Error ? error.message : String(error)));
+      const cause = error instanceof Error ? error.message : String(error);
+      reportWarning(entry === undefined ? notAnEntryUnremovedWarning(relativePath, cause) : couldNotRemoveWarning(relativePath, cause));
     }
   }
   return coreOk(live.sort(activeOrder));

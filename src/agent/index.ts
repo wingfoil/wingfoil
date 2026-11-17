@@ -74,6 +74,8 @@ export { SESSION_SALT_FILE, sessionSalt } from './session-salt';
 export {
   ACTIVE_RUNS_DIR,
   activeRunPath,
+  couldNotRemoveWarning,
+  notAnEntryUnremovedWarning,
   notAnEntryWarning,
   processAlive,
   readActiveRuns,

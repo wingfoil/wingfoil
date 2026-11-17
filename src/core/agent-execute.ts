@@ -14,7 +14,8 @@
  *
  * v0.4's `--resume` and `--ref` are not registered, so Commander refuses them as unknown options (exit `2`).
  */
-import { resolve, sep } from 'node:path';
+import { realpathSync } from 'node:fs';
+import { join, resolve, sep } from 'node:path';
 
 import { ACTIVE_RUNS_DIR } from '../agent/active-runs';
 import { parseDuration } from '../agent/duration';
@@ -68,12 +69,19 @@ export const AGENT_EXECUTE_LOG_IN_REGISTRY = 'invalid flag value: --log must not
 
 /**
  * Whether `log`, resolved against the current directory without following a symbolic link, is `<root>/.wingfoil/run`
- * or beneath it (§3.1, review F7): a file there would be read, and pruned, as a registry entry.
+ * — the root as given, or its real path — or beneath it (§3.1, review F7): a file there would be read, and pruned, as a registry entry.
  */
 function logInRegistry(root: string, log: string): boolean {
   const resolved = resolve(log);
-  const registry = resolve(root, ACTIVE_RUNS_DIR);
-  return resolved === registry || resolved.startsWith(`${registry}${sep}`);
+  // The root both as given and with its symbolic links resolved (review FU2: `--project` may name a link to it); the
+  // log itself is never followed. A root that cannot be resolved keeps its logical form only.
+  const registries = [resolve(root, ACTIVE_RUNS_DIR)];
+  try {
+    registries.push(join(realpathSync(root), ACTIVE_RUNS_DIR));
+  } catch {
+    // the logical form alone
+  }
+  return registries.some((registry) => resolved === registry || resolved.startsWith(`${registry}${sep}`));
 }
 
 /** A headless work run's success (§3.5): the stdout payload, the committed record. */
