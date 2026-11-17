@@ -889,6 +889,32 @@ Name-resolvability with the amendment in the tree: `npx jest test/docs/name-reso
 
 - `spec-016-agent-execution` — `--reason "Record task-336's second review-fix amendment of spec-016: a registry file that is no entry and cannot be removed is reported by one line that does not claim it was removed, and the refusal of a --log under .wingfoil/run/ also compares it with the registry under the root's real path, so a --project given through a symbolic link still meets it."`
 
+### review fix round 2 (qa, 2026-11-17)
+
+**Setup.** Head `c9bcaa577` (spec-016 amended); the task's PATH shim first on `PATH` in every call. Test commit:
+`0a640b9ae`. Contract: `### review fix round 2 design (architect, 2026-11-17)` and spec-016 §3.1 and §7 as amended.
+
+**Files.** Extended: `test/agent/active-runs-review.test.ts` (FU1), `test/cli/agent-execute-log-registry.integration.test.ts`
+(FU2).
+
+**Per item.**
+- **FU1, red-first** (POSIX, skipped as root: the file's directory made read-only, so its removal fails with `EACCES`).
+  A malformed file (`{"id":"x"}` at `task-m/red/1.json`) fails its first assertion, "no line containing `: removed`":
+  `toEqual([])` receives `[".wingfoil/run/task-m/red/1.json: not an active run entry: removed"]`. The test then pins
+  exactly one line, the prefix `.wingfoil/run/task-m/red/1.json: not an active run entry: could not remove: `, an `ok`
+  result that does not list the file, and the file still on disk. The guard (a dead entry pid `999999999`: exactly one
+  line with the prefix `.wingfoil/run/task-z/red/1.json: could not remove: `, an empty listing) passes today.
+- **FU2.** A fixture repository and a symbolic link to its root in a temporary directory outside it; `wingfoil
+  --project <link> agent execute --element task:task-202-explicit-override --role developer --headless --log …`:
+  - `--log <real root>/.wingfoil/run/x.log` (red-first) fails `toBe(2)` with `0` received: the run proceeds today;
+  - `--log <link>/.wingfoil/run/x.log` (characterization) passes on first run: exit `2`, the F7 message, nothing
+    spawned, no record, no file, `HEAD` unchanged.
+
+**Runs** (`npx jest <file> --maxWorkers=2`, after the last edit): active-runs-review 1 failed, 12 passed;
+agent-execute-log-registry 1 failed, 6 passed. `npx tsc --noEmit -p tsconfig.json` → exit 0, no diagnostic. `npx jest
+test/lint --maxWorkers=2` → `Test Suites: 16 passed`, `Tests: 165 passed`. No invisible character in the changed files
+(the prompt's `grep -nP` → exit 1).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
