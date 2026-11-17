@@ -38,8 +38,9 @@
   commit, and the step linkage, phase records and re-entries of its walk — `spec-017` §3.3, §4.8,
   `dl-104` D1 (b)); there is no separate `.wingfoil/state/` index.
 * **Rationale:** Avoids dual-source-of-truth drift; state lives next to the deliverable.
-* **Fit Criterion:** No `.wingfoil/state/` artifact exists; deleting any in-memory cache and recomputing state yields a
-  result identical to the prior computation for the same commit.
+* **Fit Criterion:** No `.wingfoil/state/` artifact exists (`.wingfoil/run/`, the git-ignored registry of running
+  launches, is a process cache, not state: no deduction reads it, `spec-016` §7); deleting any in-memory cache and
+  recomputing state yields a result identical to the prior computation for the same commit.
 * **Traceability:** Feature P4.13 (US-1-02, BDD `p4-workflow/P4.13-state-deduction.feature`).
 
 ### REQ-SYS-04 — Configurable per-type state machines

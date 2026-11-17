@@ -1,6 +1,6 @@
 /**
- * `wingfoil agent list [--past] [--waiting] [--element <type>:<id>] [--phase <name>]` (task-240,
- * `spec-016` §5; P5.3.4): the recorded agent runs, and the workflow steps waiting for an agent.
+ * `wingfoil agent list [--past] [--waiting] [--active] [--element <type>:<id>] [--phase <name>]` (task-240, task-336,
+ * `spec-016` §5; P5.3.4): the recorded agent runs, the workflow steps waiting for an agent, and the agents running now.
  *
  * **Two sources, one baseline** (`dl-135` point 1; `spec-016` §5.1, approver ruling R15; `spec-006` §6
  * item 6):
@@ -15,9 +15,13 @@
  * (`spec-017` §1.2), one per dirty path — the deduction's own when it runs, this module's (through the same
  * builder) when `--past` alone runs none.
  *
- * v0.3 limit (§5): with no active registry, a step an agent is running on right now is still listed as
- * waiting; `--active` is v0.4 and refused as an unknown option.
+ * **The active section** (task-336, `spec-016` §5, §7; `dl-181`): the live entries of the active registry
+ * (`src/agent/active-runs.ts`), read from the working tree's git-ignored `.wingfoil/run/` — a process cache with no
+ * `HEAD` to read, outside §5.1's exception — stale entries pruned as they are read, in §5's active order. A waiting
+ * step with a live entry of the same `workflow`, `phase` and `element` is left out of the waiting section (approver
+ * ruling D4 (a)). With none of `--past`, `--waiting` and `--active`, all three sections are shown (D13 (a)).
  */
+import { readActiveRuns, type ActiveRunEntry } from '../agent/active-runs';
 import { readRunLogsAt, type RunRecord } from '../agent/run-log';
 import type { DnaYaml } from '../dna/schema';
 import { DiagnosticsError, ValidationError, type Diagnostic } from '../validation';
@@ -36,11 +40,12 @@ import { buildStep, readNextInputs } from './workflow-next';
 /** The warning of a project whose `dna.yaml` declares no run log (§5: not an error for `list`). */
 export const NO_RUN_LOG_WARNING = 'dna.yaml declares no run log (paths.runs)';
 
-/** `agent list` params: the two section flags, and the two filters as value options (`spec-008` §12). */
+/** `agent list` params: the three section flags, and the two filters as value options (`spec-008` §12). */
 export interface AgentListParams {
   readonly root: string;
   readonly past?: boolean;
   readonly waiting?: boolean;
+  readonly active?: boolean;
   readonly options?: Readonly<Record<string, string | readonly string[] | undefined>>;
 }
 
@@ -71,6 +76,8 @@ export interface AgentListResult {
   readonly baseline: Baseline;
   readonly past?: readonly RunRecord[];
   readonly waiting?: readonly WaitingStep[];
+  /** The running launches (§7's entries), from the working tree's registry (task-336). */
+  readonly active?: readonly ActiveRunEntry[];
   readonly diagnostics: readonly Diagnostic[];
 }
 
@@ -99,12 +106,19 @@ function runLogDir(dnaYaml: DnaYaml | null): string | undefined {
 interface Selection {
   readonly past: boolean;
   readonly waiting: boolean;
+  readonly active: boolean;
   readonly element?: string;
   readonly phase?: string;
 }
 
 /** The waiting section from one deduction (§5): agent-role frontier steps, filtered, in frontier order. */
-function waitingSteps(root: string, snapshot: ReturnType<typeof readDeductionSnapshotAtHead>, deduction: ReturnType<typeof deduceWorkflowState>, selection: Selection): WaitingStep[] {
+function waitingSteps(
+  root: string,
+  snapshot: ReturnType<typeof readDeductionSnapshotAtHead>,
+  deduction: ReturnType<typeof deduceWorkflowState>,
+  selection: Selection,
+  running: readonly ActiveRunEntry[],
+): WaitingStep[] {
   const inputs = readNextInputs(root, snapshot, deduction);
   const steps: WaitingStep[] = [];
   for (const entry of deduction.instances) {
@@ -118,6 +132,8 @@ function waitingSteps(root: string, snapshot: ReturnType<typeof readDeductionSna
       const element = `${target.type}:${target.id}`;
       if (selection.element !== undefined && element !== selection.element) continue;
       if (selection.phase !== undefined && step.phase !== selection.phase) continue;
+      // D4 (a): a step an agent is running on right now is not waiting (`dl-135` point 1, `spec-016` §5).
+      if (running.some((entry) => entry.workflow === step.workflow && entry.phase === step.phase && entry.element === element)) continue;
       const role = step.role!; // an agent role is a role: `agentRole` is false for a step with none
       steps.push({ instance: step.instance, key: step.key, workflow: step.workflow, phase: step.phase, element, role, allowedModes: step.allowedModes, agents: agentsFor(inputs.dnaYaml, role) });
     }
@@ -139,13 +155,21 @@ export function agentListAtHead(root: string, selection: Selection): CoreResult<
   let waiting: WaitingStep[] | undefined;
   const diagnostics: Diagnostic[] = [];
 
+  // The registry (§7), read once from the working tree: the active section, and what the waiting section leaves out.
+  let running: ActiveRunEntry[] = [];
+  if (selection.active || selection.waiting) {
+    const read = readActiveRuns(root);
+    if (!read.ok) return read;
+    running = read.value;
+  }
+
   if (selection.waiting) {
     const snapshot = readDeductionSnapshotAtHead(root);
     if (snapshot.commit === '') resolveRevision(root, 'HEAD'); // no commit: the RevisionError agent show gives
     const deduction = deduceWorkflowState(snapshot);
     commit = snapshot.commit;
     dnaYaml = snapshot.dnaYaml ?? null;
-    waiting = waitingSteps(root, snapshot, deduction, selection);
+    waiting = waitingSteps(root, snapshot, deduction, selection, running);
     diagnostics.push(...deduction.diagnostics);
   } else {
     commit = resolveRevision(root, 'HEAD');
@@ -178,6 +202,13 @@ export function agentListAtHead(root: string, selection: Selection): CoreResult<
       baseline: { rev: 'HEAD', commit },
       ...(past === undefined ? {} : { past }),
       ...(waiting === undefined ? {} : { waiting }),
+      ...(selection.active
+        ? {
+            active: running.filter(
+              (entry) => (selection.element === undefined || entry.element === selection.element) && (selection.phase === undefined || entry.phase === selection.phase),
+            ),
+          }
+        : {}),
       diagnostics,
     },
     undefined,
@@ -188,23 +219,25 @@ export function agentListAtHead(root: string, selection: Selection): CoreResult<
 /**
  * `agent list` `CoreOperation.fn` (`mutates: false`; `spec-006` §3, `spec-016` §8).
  *
- * 1. The selection: `--past`, `--waiting`; neither or both select both sections. A malformed `--element`
+ * 1. The selection: `--past`, `--waiting`, `--active`; none of them, or all three, select every section (task-336,
+ *    D13 (a)). A malformed `--element`
  *    (`spec-008` §7) is a usage error (exit `2`), refused before the project is read.
  * 2. {@link agentListAtHead}; a `spec-003` error in the registry at `HEAD` is `VALIDATION` with every
  *    diagnostic in `details`, an invalid committed file `VALIDATION` with its issues, as `workflow status`.
  */
 export const agentListFn: CoreFn<unknown, AgentListResult> = async (params) => {
-  const { root, past, waiting, options } = params as AgentListParams;
+  const { root, past, waiting, active, options } = params as AgentListParams;
   const elementOption = single(options?.element);
   const phase = single(options?.phase);
   if (elementOption !== undefined) {
     const parsed = parseElementRef(elementOption);
     if (!parsed.ok) throw new UsageError(parsed.error.message);
   }
-  const both = past !== true && waiting !== true;
+  const every = past !== true && waiting !== true && active !== true;
   const selection: Selection = {
-    past: both || past === true,
-    waiting: both || waiting === true,
+    past: every || past === true,
+    waiting: every || waiting === true,
+    active: every || active === true,
     ...(elementOption === undefined ? {} : { element: elementOption }),
     ...(phase === undefined ? {} : { phase }),
   };
@@ -236,12 +269,14 @@ function tokens(record: RunRecord): string {
 }
 
 /**
- * `agent list`'s `--format console` (`spec-016` §5): one section per selected source, past first — a
- * heading with the count, then one line per item, or `no past runs` / `no waiting steps` for an empty one.
- * Diagnostics are not here: they print on stderr as `warning:` lines (the success warnings).
+ * `agent list`'s `--format console` (`spec-016` §5): one section per selected source, in the order past, waiting,
+ * active — a heading with the count, then one line per item, or `no past runs` / `no waiting steps` / `no active runs`
+ * for an empty one. An active line is `<id>  <role>  <agent>  <pid>  <started>`, `<started>` the entry's `started_ms` as
+ * an ISO 8601 UTC instant with milliseconds. Diagnostics are not here: they print on stderr as `warning:` lines (the
+ * success warnings).
  */
 export function renderAgentListConsole(value: unknown): string {
-  const { past, waiting } = value as AgentListResult;
+  const { past, waiting, active } = value as AgentListResult;
   const lines: string[] = [];
   if (past !== undefined) {
     if (past.length === 0) lines.push('no past runs');
@@ -250,6 +285,10 @@ export function renderAgentListConsole(value: unknown): string {
   if (waiting !== undefined) {
     if (waiting.length === 0) lines.push('no waiting steps');
     else lines.push(`waiting steps: ${waiting.length}`, ...waiting.map((step) => [step.key, step.role, step.agents.length === 0 ? 'none' : step.agents.join(', ')].join('  ')));
+  }
+  if (active !== undefined) {
+    if (active.length === 0) lines.push('no active runs');
+    else lines.push(`active runs: ${active.length}`, ...active.map((entry) => [entry.id, entry.role, entry.agent, String(entry.pid), new Date(entry.started_ms).toISOString()].join('  ')));
   }
   return `${lines.join('\n')}\n`;
 }

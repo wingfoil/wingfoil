@@ -1820,7 +1820,7 @@ Launch an agent CLI through its adapter on one Memory element, with its context 
 ```
 wingfoil agent execute [--next] [--workflow <ref>] [--step <key>] [--element <type:id>]
                        [--role <role>] [--agent <name>] [--headless | --interactive]
-                       [--timeout <duration>]
+                       [--timeout <duration>] [--log <path>]
 ```
 
 At least one of `--next`, `--workflow`, `--step` and `--element` is required.
@@ -1836,6 +1836,7 @@ At least one of `--next`, `--workflow`, `--step` and `--element` is required.
 | `--headless` | Launch the agent without a terminal, as a work run (new in 0.4, see below), whatever the step's phase declares in `launch:`. |
 | `--interactive` | Launch the agent in this terminal, whatever the step's phase declares in `launch:`. It is this command's own flag, distinct from the global `--no-interactive`, which keeps its meaning. `--headless` with `--interactive` exits `2` with `error: invalid flag combination: --headless cannot be combined with --interactive`. |
 | `--timeout <duration>` | Stop the agent after this long: `<n>s`, `<n>m` or `<n>h`, `<n>` a positive integer without a leading zero, at most `24h` (new in 0.4). At expiry the agent receives `SIGTERM`, and `SIGKILL` 10 seconds later if it has not exited. A value of another form exits `2` with `error: invalid flag value: --timeout expects <n>s, <n>m or <n>h, got "<value>"`, one over `24h` with `error: invalid flag value: --timeout must be at most 24h, got "<value>"`. |
+| `--log <path>` | Append a copy of a headless run's output to the file `<path>` (new in 0.4, see the headless work run below), a path relative to the current directory, created readable and writable by you only (mode `0600`) when absent; the output still reaches stderr. The copy holds the agent's lines only, as `--format console` shows them. When the file is inside the repository and git does not ignore it, `warning: --log <path> is inside the repository and not git-ignored: the agent's output may hold secrets`. A blank value exits `2` with `error: invalid flag value: --log must not be blank`, and a path in the active registry (`.wingfoil/run/` of the project, or a path beneath it) with `error: invalid flag value: --log must not name a file under .wingfoil/run/, the active registry`, both before the project is read; with `--interactive`, or on a run that launches interactive (no `--headless` and no phase declaring `launch: headless`), it exits `2` with `error: invalid flag combination: --log needs a headless launch, and this run launches interactive`. A file that cannot be opened exits `1` with `error: cannot write the log <path>: <cause>`, before the agent is started. |
 
 With a step (`--next`, `--workflow` or `--step`), the run's workflow and phase are the step's, so its run
 id is `<element-id>/<phase>/<n>`, `n` counting the runs of that element in that phase; the element is the
@@ -1949,6 +1950,17 @@ agent starts there, and the record is committed on the branch the worktree has c
 that sets the agent's directory apart from the root. A `<dir>` that is not a git root exits `1` with
 `error: E_NOT_AT_GIT_ROOT: --project is not a git root: <absolute dir>` before anything is read or written.
 
+**The active registry** (new in 0.4). While the agent runs, `agent execute` keeps one file for the run,
+`.wingfoil/run/<element-id>/<phase>/<n>.json`, holding its run id, the agent's process id, its workflow, phase,
+element, role, agent, session id (or `not-reported`) and the instant it started, and removes it when the run ends,
+recorded or not; [`wingfoil agent list --active`](#wingfoil-agent-list) lists these files. A launch whose run id
+already has a file whose process is still alive exits `1` with
+`error: run <run-id> is already running (pid <pid>)`, nothing started and nothing recorded; a file whose process is gone is removed and the launch goes on.
+`.wingfoil/run/` is local to the checkout and never committed: `wingfoil init` writes `.wingfoil/.gitignore` with
+the line `/run/`. When git does not ignore the file (a project initialized before 0.4), every launch prints
+`warning: .wingfoil/run/ is not git-ignored: add "/run/" to .wingfoil/.gitignore, or a running launch can be
+committed`. A `--dry-run` writes no such file, and creates no `--log` file, though it prints the `--log` warning.
+
 **Nothing is written on stdout** by an interactive launch, whose stdout belongs to the agent: every line
 `agent execute` prints goes to stderr, and `--format json` / `yaml` only reshape those lines, one document each
 — `{"warning": …}`, `{"notice": "run …: launching …"}`, `{"error": …, "hint"?, "details"?}`, and
@@ -1960,8 +1972,15 @@ with a phase that declares no `launch:`, and with `launch: any`. A flag that con
 kind prints `warning: phase '<workflow>.<phase>' declares launch: <declared>; launching <kind> (--<kind>)`.
 
 **The headless work run** (new in 0.4). The agent starts with no terminal: its stdin is not connected, its
-stdout is captured and not shown, its stderr is `agent execute`'s, and on Linux and macOS it runs in a process
-group of its own. Ctrl-C, `SIGTERM` and `SIGHUP` sent to `agent execute` are passed on to it; Ctrl-\ is
+stdout and stderr are both passed on to `agent execute`'s stderr line by line as they arrive, and on Linux and
+macOS it runs in a process group of its own. Under `--format console` each line is written as the agent wrote it;
+under `json` and `yaml` it is one `{"output": "<line>", "stream": "stdout" | "stderr"}` document, so stderr stays
+one document per message. Each stream keeps its own order; how the lines of the two interleave is the order they
+arrive. A line still unfinished at 64 KiB is passed on as it stands, and after the agent exits its streams are read
+for at most 10 seconds (a process it left behind may hold them open), a last line without a newline passed on with
+one. With `--log <path>` every such line is also appended to that file. **The output may hold secrets** (a token a
+tool printed, a credential in an error message), and nothing redacts it: WingFoil keeps no log of its own, and the
+output is never committed — not to the run record, not to the run log, not to any file but the one `--log` names. Ctrl-C, `SIGTERM` and `SIGHUP` sent to `agent execute` are passed on to it; Ctrl-\ is
 ignored. On Linux and macOS a passed-on signal and the `--timeout` signals reach the processes the agent
 started too, and once an agent a signal reached has exited, what is left of them is killed: nothing of a
 signalled or timed-out headless run outlives `agent execute`. Both built-in adapters declare a headless launch (`claude -p …`, `codex exec --json …`). An
@@ -2002,13 +2021,13 @@ none of `--next`, `--workflow`, `--step` and `--element` it exits `2` with
 
 ### `wingfoil agent list`
 
-List the recorded agent runs and the workflow steps waiting for an agent, as committed at HEAD.
+List the recorded agent runs, the workflow steps waiting for an agent (both as committed at HEAD) and the agents running now.
 
 ```
-wingfoil agent list [--past] [--waiting] [--element <type>:<id>] [--phase <name>]
+wingfoil agent list [--past] [--waiting] [--active] [--element <type>:<id>] [--phase <name>]
 ```
 
-Read-only. It has two sections:
+Read-only. It has three sections:
 
 - **past** (`--past`) — the runs the run log holds: every `<element-id>.jsonl` file directly in the
   directory `dna.yaml` declares in `paths.runs`, ordered by element id and then in the order the runs
@@ -2016,13 +2035,17 @@ Read-only. It has two sections:
 - **waiting** (`--waiting`) — the ready steps of every open workflow (the frontier `workflow status`
   shows, in the same order) whose role an agent executes, that is, a role some `team.agents` entry lists
   in `executes_as`. Each step names the agents, in `dna.yaml` order, that execute its role and declare an
-  `adapter`, so `agent execute` can launch them.
+  `adapter`, so `agent execute` can launch them. A step an agent is running on right now in this checkout (an entry
+  of the active section with the step's workflow, phase and element) is not waiting, and is left out (new in 0.4);
+- **active** (`--active`, new in 0.4) — the agents `agent execute` is running now in this checkout: the files of
+  its active registry, `.wingfoil/run/` (see [`wingfoil agent execute`](#wingfoil-agent-execute)), ordered by
+  element id, then phase, then run number.
 
-Without `--past` or `--waiting`, or with both, it prints both sections, past first.
-`--element <type>:<id>` keeps the runs and steps of one element (a step's element is the element it works on, else
-its workflow's, else the workflow's own plan, `plan:<instance-id>`, new in 0.4), and `--phase <name>` those of one phase. Nothing tracks running agents yet: a step an
-agent is working on right now is still listed as waiting, and `--active` comes later (v0.4); today it is an
-unknown option, exit `2`.
+Without any of `--past`, `--waiting` and `--active`, or with all three, it prints every section, in the order
+past, waiting, active (changed in 0.4: the active section is new).
+`--element <type>:<id>` keeps the runs, steps and running agents of one element (a step's element is the element it
+works on, else its workflow's, else the workflow's own plan, `plan:<instance-id>`, new in 0.4), and `--phase <name>`
+those of one phase. A step a colleague, or another worktree, is running is still listed as waiting.
 
 It reads the run log, `dna.yaml` and the workflow state **as committed at `HEAD`**, not the working tree
 (see [Git side effects](#git-side-effects)), so it agrees with `agent show` and with the run ids `agent
@@ -2031,6 +2054,13 @@ execute` counts. A run log you changed and did not commit is not read: a `warnin
 directory is neither read nor reported. A run log committed as a symbolic link is not read either: a
 `warning:` line names it (`W_RUN_LOG_SYMLINK`), and `diagnostics` carries it.
 
+The active section is the one read outside `HEAD`: `.wingfoil/run/` is a git-ignored cache that no commit holds,
+so it is read from the working tree. A file whose process is gone is removed as it is read; a file that is not a
+registry entry is removed too, with `warning: .wingfoil/run/<path>: not an active run entry: removed`. A file that
+cannot be removed stays, and is not listed: `warning: .wingfoil/run/<path>: could not remove: <cause>`, or, for a file
+that is not a registry entry, `warning: .wingfoil/run/<path>: not an active run entry: could not remove: <cause>`.
+None of these changes the exit code, and nothing git tracks is written.
+
 ```console
 $ wingfoil agent list
 past runs: 2
@@ -2038,16 +2068,20 @@ task-042-login-form/red/1  developer  claude  0  61.0s  1200/340
 task-042-login-form/green/1  developer  claude  130  245.3s  not-reported
 waiting steps: 1
 dev-loop.green@task:task-043-logout  developer  claude
+active runs: 1
+task-044-session-timeout/red/1  developer  claude  48211  2026-11-16T08:30:00.000Z
 ```
 
 A past run prints `<run-id>  <role>  <agent>  <exit status>  <duration>  <tokens>`: the duration in
 seconds, the tokens as `input/output`, or `not-reported` when the agent reported neither. A waiting step
-prints `<step key>  <role>  <agents>` (`none` when no agent of the role declares an adapter). An empty
-section prints `no past runs` or `no waiting steps`.
+prints `<step key>  <role>  <agents>` (`none` when no agent of the role declares an adapter). A running agent
+prints `<run-id>  <role>  <agent>  <pid>  <started>`, the instant it started in UTC with milliseconds. An empty
+section prints `no past runs`, `no waiting steps` or `no active runs`.
 
 `--format json` and `--format yaml` print `{"baseline": {"rev": "HEAD", "commit": "<sha>"}, "past":
 […records…], "waiting": [{"instance", "key", "workflow", "phase", "element", "role", "allowedModes",
-"agents"}…], "diagnostics": […]}`, with only the sections selected: each record is the run log's line, as
+"agents"}…], "active": [{"id", "pid", "workflow", "phase", "element", "role", "agent", "session",
+"started_ms"}…], "diagnostics": […]}`, with only the sections selected: each record is the run log's line, as
 [`agent show`](#wingfoil-agent-show) prints it; `element` is `<type>:<id>`, the element `agent execute --next`
 runs the step on (changed in 0.4: a step with no element of its own on a workflow with none names the workflow's
 plan, `plan:<instance-id>`, where it was `null`).
@@ -2058,8 +2092,9 @@ plan, `plan:<instance-id>`, where it was `null`).
   the file and the line — every run log is checked, whatever `--element` and `--phase` keep; with the past
   section, a `dna.yaml` not committed at `HEAD` → exit `1`, `error: .wingfoil/dna.yaml is not committed at
   HEAD, which agent list reads: commit it first`, and a `paths.runs` outside the project → exit `1`; an
-  error in the workflow files → exit `1`, as `workflow status`; a malformed `--element`, or `--active` →
-  exit `2`.
+  error in the workflow files → exit `1`, as `workflow status`; a `.wingfoil/run/` that cannot be read → exit
+  `1`, `error: cannot read the active registry .wingfoil/run/: <cause>`; a malformed `--element` → exit `2`
+  (changed in 0.4: `--active` is no longer an unknown option).
 - **Commit:** none.
 
 ### `wingfoil agent show`

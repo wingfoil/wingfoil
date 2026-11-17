@@ -3,10 +3,12 @@
  * with small agent and lookup scripts the tests point a manifest at: `agent-ok.cjs` (exits 0),
  * `silent.cjs` (prints nothing), `not-json.cjs`, `killed.cjs` (ends itself by SIGKILL),
  * `number-session.cjs` (prints `{"sid": 5}`), `fails.cjs` (exits 1), `exit3.cjs` (exits 3), `flood.cjs` (prints 1.1 MiB), `flood-stderr.cjs` (valid stdout, 1.1 MiB on stderr), `slow.cjs` (answers after 1.5 s) and `both.cjs` (prints a session id and
- * one count, and appends a line to `lookups.log` each time it runs).
+ * one count, and appends a line to `lookups.log` each time it runs). The repository also commits `.wingfoil/.gitignore`
+ * (task-336), so the active run registry a launch writes under `.wingfoil/run/` is git-ignored.
  */
 import type { AdapterManifest, LaunchInput } from '../../../src/agent';
 import { commitAll, git, makeTempGitRepo, writeFixtureFile } from '../../storage/helpers/git-fixture';
+import { WINGFOIL_GITIGNORE } from './agent-execute-fixture';
 
 const ELEMENT_ID = 'task-001-hand';
 
@@ -42,6 +44,8 @@ export function launchFixture(edit: (manifest: AdapterManifest) => AdapterManife
   const root = makeTempGitRepo();
   for (const [path, text] of Object.entries(SCRIPTS)) writeFixtureFile(root, path, text);
   writeFixtureFile(root, `docs/tasks/${ELEMENT_ID}.md`, `---\nid: ${ELEMENT_ID}\ntype: task\n---\n\n## Execution Notes\n`);
+  // task-336: the active registry git-ignored, as a v0.4 `wingfoil init` leaves it, so a launch warns of nothing (D8 (a)).
+  writeFixtureFile(root, '.wingfoil/.gitignore', WINGFOIL_GITIGNORE);
   commitAll(root, 'seed launch fixture');
   const stateRef = git(root, ['rev-parse', 'HEAD']).trim();
   return {

@@ -87,6 +87,31 @@ export function reportNotice(text: string): void {
   else process.stderr.write(`${text}\n`);
 }
 
+/** The agent stream a forwarded line came from (`spec-016` §3.5, task-336). */
+export type OutputStream = 'stdout' | 'stderr';
+
+/**
+ * **Forwarded output**: one line a headless agent wrote on its stdout or stderr (`spec-016` §3.5, `dl-182` Q1 (a),
+ * task-336), without its newline. It travels like a notice, to the sink the surface installs ({@link withOutputSink});
+ * the CLI renders it on stderr, the line as is under `console` and one `{ "output", "stream" }` document under
+ * `json` / `yaml`. Outside any sink it is written to stderr as is, followed by a newline.
+ */
+export type OutputSink = (line: string, stream: OutputStream) => void;
+
+const outputStore = new AsyncLocalStorage<OutputSink>();
+
+/** Run `run` with `sink` receiving every line {@link reportOutput} forwards inside it. */
+export function withOutputSink<T>(sink: OutputSink, run: () => T): T {
+  return outputStore.run(sink, run);
+}
+
+/** Forward one line of an agent's output: to the installed sink, or, with none, to stderr as a bare line. */
+export function reportOutput(line: string, stream: OutputStream): void {
+  const sink = outputStore.getStore();
+  if (sink !== undefined) sink(line, stream);
+  else process.stderr.write(`${line}\n`);
+}
+
 /**
  * Minimal structural view of a Zod object schema: only its declared top-level `shape` is needed.
  * Typed structurally rather than as `AnyZodObject` (spec-009 §2's listing) because Zod 4 — the

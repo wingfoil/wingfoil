@@ -9,6 +9,9 @@
  * task-355 (`bug-516`): an optional `pid`, so a headless launch on POSIX takes the process-group path
  * (`LaunchHost.signalGroup`); a child built without one has no `pid`, and the launch signals it with `kill`.
  *
+ * task-336 (`dl-182` Q1 (a)): an optional `stderr` stream, for a headless launch whose stderr is piped and forwarded
+ * line by line like its stdout (`spec-016` §3.5); a child built without it has no `stderr`, as before.
+ *
  * {@link settle} ends a child still running, so a test that fails before its child exits does not leave
  * `launchAgent` waiting, with its signal listeners installed, for the rest of the worker.
  */
@@ -28,12 +31,16 @@ export class FakeChild extends EventEmitter {
   readonly stdout = new PassThrough();
   /** The process id the launch reads for the process-group path (task-355); absent, as a `ChildProcess` that failed to spawn. */
   readonly pid: number | undefined;
+  /** Its piped stderr (task-336), when built with `{ stderr: true }`; absent otherwise. */
+  readonly stderr: PassThrough | undefined;
   constructor(
     private readonly answers: Partial<Record<NodeJS.Signals, SignalAnswer>> = {},
     pid?: number,
+    options: { readonly stderr?: boolean } = {},
   ) {
     super();
     this.pid = pid;
+    this.stderr = options.stderr === true ? new PassThrough() : undefined;
     setImmediate(() => this.emit('spawn'));
   }
   /** Whether it is still running. */
@@ -45,11 +52,12 @@ export class FakeChild extends EventEmitter {
     if (!this.running) return;
     this.exitCode = code;
     this.stdout.end();
+    this.stderr?.end();
     this.emit('exit', code, null);
     this.emit('close', code, null);
   }
   /**
-   * Exit with `code` and leave stdout open (task-356): a process the agent started still holds the pipe, so the
+   * Exit with `code` and leave stdout (and stderr, when piped) open (task-356): a process the agent started still holds the pipe, so the
    * stream ends only when the test ends it, or never.
    */
   exitKeepingStdout(code: number): void {
@@ -69,6 +77,7 @@ export class FakeChild extends EventEmitter {
       }
       this.signalCode = signal;
       this.stdout.end();
+      this.stderr?.end();
       this.emit('exit', null, signal);
       this.emit('close', null, signal);
     });

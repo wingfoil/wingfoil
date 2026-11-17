@@ -34,12 +34,12 @@ import {
   MULTI_LINE_AI_MODEL,
   withAgentInvocation,
 } from '../core/agent-context';
-import { withNoticeSink, withWarningSink } from '../validation/warning';
+import { withNoticeSink, withOutputSink, withWarningSink } from '../validation/warning';
 
 import { emitError } from './error';
 import { exitWith } from './exit';
 import { invalidFormatReason, isValidFormat, renderSuccess } from './output';
-import { emitNotice, emitStderrDocument, emitWarning, emitWarnings } from './warning';
+import { emitNotice, emitOutput, emitStderrDocument, emitWarning, emitWarnings } from './warning';
 
 /** Ambient dependencies {@link buildCliCommands} needs: how to resolve the project root and how to shape each operation's params. */
 export interface BuildCommandsOptions {
@@ -210,10 +210,15 @@ export function buildCliCommands(modules: readonly CoreModule[], options: BuildC
             ...(aiModel === undefined ? {} : { aiModel }),
           };
           const call = (): Promise<CoreResult<unknown>> => withAgentInvocation(invocation, () => operation.fn(params));
-          // A notice (`agent execute`'s launch banner, task-228) is rendered the same way, on stderr.
-          result = await withNoticeSink(
-            (text) => emitNotice(text, { format }),
-            () => withWarningSink((text) => emitWarning(text, { format }), () => (dryRun ? runAsDryRun(call) : call())),
+          // A notice (`agent execute`'s launch banner, task-228) is rendered the same way, on stderr, and so is each
+          // line of a headless agent's forwarded output (task-336, `spec-016` §3.5).
+          result = await withOutputSink(
+            (line, stream) => emitOutput(line, stream, { format }),
+            () =>
+              withNoticeSink(
+                (text) => emitNotice(text, { format }),
+                () => withWarningSink((text) => emitWarning(text, { format }), () => (dryRun ? runAsDryRun(call) : call())),
+              ),
           );
         } catch (error) {
           // Core owns exit-code selection for a thrown error too (spec-008 Consequences): a UsageError

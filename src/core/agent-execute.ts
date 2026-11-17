@@ -14,11 +14,17 @@
  *
  * v0.4's `--resume` and `--ref` are not registered, so Commander refuses them as unknown options (exit `2`).
  */
+import { realpathSync } from 'node:fs';
+import { join, resolve, sep } from 'node:path';
+
+import { ACTIVE_RUNS_DIR } from '../agent/active-runs';
 import { parseDuration } from '../agent/duration';
 import { agentExecutePipeline, launchPlan, type AgentExecuteHost, type AgentLaunchPlan } from '../agent/execute';
 import { launchAgent, runSummaryLine, type RecordedLaunch } from '../agent/launch';
+import { LOG_INTERACTIVE, logNotIgnoredWarning, notIgnoredInRepository } from '../agent/output';
 import type { RunRecord } from '../agent/run-log';
 import { isDryRunActive } from '../storage';
+import { reportWarning } from '../validation/warning';
 import { parseElementRef } from './element-ref';
 import { requireInitializedProject } from './init';
 import type { CoreFn, StderrReport } from './registry';
@@ -49,6 +55,35 @@ export const AGENT_EXECUTE_MISSING_TARGET = 'missing required argument: --next o
 /** §3.1: `--headless` with `--interactive` → exit `2` with this reason. */
 export const AGENT_EXECUTE_BOTH_KINDS = 'invalid flag combination: --headless cannot be combined with --interactive';
 
+/**
+ * `--log`'s option name (task-336, §3.1). A workaround: `test/lint/git-log-readers.test.ts` has no exemption and reads
+ * every quoted `log` token in `src/` as a `git log` reader, a false positive on an option name; remove it with that fix.
+ */
+export const AGENT_EXECUTE_LOG_OPTION = '--log'.slice('--'.length);
+
+/** §3.1: a blank `--log` (empty, or whitespace only) → exit `2` with this reason (task-336). */
+export const AGENT_EXECUTE_LOG_BLANK = 'invalid flag value: --log must not be blank';
+
+/** §3.1: a `--log` that resolves to `.wingfoil/run/` or beneath it → exit `2` with this reason (review F7). */
+export const AGENT_EXECUTE_LOG_IN_REGISTRY = 'invalid flag value: --log must not name a file under .wingfoil/run/, the active registry';
+
+/**
+ * Whether `log`, resolved against the current directory without following a symbolic link, is `<root>/.wingfoil/run`
+ * — the root as given, or its real path — or beneath it (§3.1, review F7): a file there would be read, and pruned, as a registry entry.
+ */
+function logInRegistry(root: string, log: string): boolean {
+  const resolved = resolve(log);
+  // The root both as given and with its symbolic links resolved (review FU2: `--project` may name a link to it); the
+  // log itself is never followed. A root that cannot be resolved keeps its logical form only.
+  const registries = [resolve(root, ACTIVE_RUNS_DIR)];
+  try {
+    registries.push(join(realpathSync(root), ACTIVE_RUNS_DIR));
+  } catch {
+    // the logical form alone
+  }
+  return registries.some((registry) => resolved === registry || resolved.startsWith(`${registry}${sep}`));
+}
+
 /** A headless work run's success (§3.5): the stdout payload, the committed record. */
 export interface WorkRunReport {
   readonly run: RunRecord;
@@ -62,8 +97,8 @@ function single(value: string | readonly string[] | undefined): string | undefin
 /**
  * Parse, check the project is initialized, run the pipeline, then plan (dry run) or launch. A usage
  * error (none of `--next`, `--workflow`, `--step`, `--element`; a malformed element-ref, `spec-008` §7;
- * `--headless` with `--interactive`; a malformed or too long `--timeout`, §12) is thrown as `UsageError`
- * before the project is read.
+ * `--headless` with `--interactive`; a malformed or too long `--timeout`, §12; a blank `--log`, or `--log` with
+ * `--interactive`, a `--log` under `.wingfoil/run/`, task-336) is thrown as `UsageError` before the project is read.
  */
 export const agentExecuteFn: CoreFn<unknown, AgentLaunchPlan | RecordedLaunch | WorkRunReport> = async (params) => {
   const { root, options, host, next, headless, interactive } = params as AgentExecuteParams;
@@ -80,6 +115,12 @@ export const agentExecuteFn: CoreFn<unknown, AgentLaunchPlan | RecordedLaunch | 
   const rawTimeout = single(options?.timeout);
   const timeout = rawTimeout === undefined ? undefined : parseDuration(rawTimeout);
   if (timeout !== undefined && 'error' in timeout) throw new UsageError(`invalid flag value: ${timeout.error}`);
+  // `--log` (task-336, §3.1, `dl-182` Q4 (a)): never blank, and only for a headless launch — refused here with
+  // `--interactive`, and at §3.2 step 7 on a run that resolves interactive.
+  const log = single(options?.log);
+  if (log !== undefined && log.trim() === '') throw new UsageError(AGENT_EXECUTE_LOG_BLANK);
+  if (log !== undefined && logInRegistry(root, log)) throw new UsageError(AGENT_EXECUTE_LOG_IN_REGISTRY);
+  if (log !== undefined && interactive === true) throw new UsageError(LOG_INTERACTIVE);
 
   const initialized = requireInitializedProject(root);
   if (!initialized.ok) return initialized;
@@ -95,11 +136,16 @@ export const agentExecuteFn: CoreFn<unknown, AgentLaunchPlan | RecordedLaunch | 
       agent: single(options?.agent),
       ...(launch === undefined ? {} : { launch }),
       ...(timeout === undefined ? {} : { timeout }),
+      ...(log === undefined ? {} : { log }),
       dryRun,
     },
     launchHost,
     async (prepared, releaseSignals) => {
-      if (dryRun) return coreOk(launchPlan(prepared));
+      if (dryRun) {
+        // §3.3 `--dry-run`: `--log`'s not-ignored warning is printed; the file is neither created nor opened.
+        if (prepared.log !== undefined && notIgnoredInRepository(root, prepared.log)) reportWarning(logNotIgnoredWarning(prepared.log));
+        return coreOk(launchPlan(prepared));
+      }
       const launched = await launchAgent(root, prepared, launchHost, releaseSignals);
       // A work run's record is its stdout payload (§3.5); the summary line was a notice.
       return launched.ok && prepared.kind === 'headless' ? coreOk({ run: launched.value.run }) : launched;

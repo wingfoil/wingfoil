@@ -776,6 +776,13 @@ function adapterScaffold(adapters: readonly BuiltinAdapterManifest[]): ScaffoldF
 }
 
 /**
+ * `.wingfoil/.gitignore` (task-336, `spec-011` § `.gitignore` policy, `spec-016` §7; approver ruling D2 (a)): the one
+ * git-ignored subpath of `.wingfoil/`, the active registry of running agents `.wingfoil/run/`, a process cache local
+ * to each checkout. A whole file of the scaffold, so `init` never rewrites a file of the user's (the root `.gitignore`).
+ */
+export const WINGFOIL_GITIGNORE = "# wingfoil agent execute's registry of running agents: local to this checkout, never committed.\n/run/\n";
+
+/**
  * The COMPLETE spec-011 `.wingfoil/` layout for `def`, as a `ScaffoldFile[]` sorted by path
  * (deterministic — REQ-SYS-07). Consumed by `initStorage(root, files, message)`; every path is under
  * `.wingfoil/` so init never writes outside the WingFoil root.
@@ -790,6 +797,8 @@ export function templateScaffold(
   const files: ScaffoldFile[] = [
     // Top-level pillar config (spec-011 "Top-level config files").
     { path: wf('dna.yaml'), content: dnaYaml(def) },
+    // The active registry git-ignored (spec-011 § `.gitignore` policy, task-336).
+    { path: wf('.gitignore'), content: WINGFOIL_GITIGNORE },
     { path: wf('memory.yaml'), content: memoryYaml() },
     { path: wf('roles.yaml'), content: rolesYaml() },
     { path: wf('workflows.yaml'), content: workflowsYaml(def) },

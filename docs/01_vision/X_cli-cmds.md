@@ -1,7 +1,7 @@
 # CLI Commands Reference — WingFoil
 
-**Version:** 2.4
-**Date:** 2026-11-14  
+**Version:** 2.5
+**Date:** 2026-11-16  
 **Status:** Approved
 
 ---
@@ -228,8 +228,8 @@ needs; `--template` names the methodology without a prompt; the mode inferred fr
 
 | Command | Description | Actors | Journeys | Notes |
 |---------|-------------|--------|----------|-------|
-| `wingfoil agent execute [--next] [--workflow <ref>] [--step <key>] [--element <type>:<id>] [--role <role>] [--agent <name>] [--headless \| --interactive] [--timeout <duration>]` | Launch agent with auto-loaded context (directives, Memory, target element) | All | 0a, 1, 2, 4, 6 | With `--next` (normal path): **workflow, phase, element and role are resolved from the active instance's next step**; `--workflow <ref>` and `--step <key>` select another instance or step and imply `--next`. Override with `--element type:id` (and optionally `--role`); `--agent` picks a `team.agents` entry. At least one of `--next`, `--workflow`, `--step`, `--element` is required. A step that only waits (an approval, an approval record, another party) is refused unless `--element` names the target. `--headless` launches the work run without a terminal, `--interactive` in this terminal, either one over the phase's `launch`; `--timeout` bounds the run. Records the run in the run log (`spec-016` §4). Pre-loads Memory context in <30 sec. `--resume` / `--ref` are v0.4 |
-| `wingfoil agent list [--past] [--waiting] [--element <type>:<id>] [--phase <name>]` | List the recorded agent runs and the workflow steps waiting for an agent | All | 1, 2, 4 | `--past` the run log at `HEAD`, `--waiting` the open instances' ready steps whose role an agent executes; neither (or both) shows both. `--element` and `--phase` filter both (`spec-016` §5) |
+| `wingfoil agent execute [--next] [--workflow <ref>] [--step <key>] [--element <type>:<id>] [--role <role>] [--agent <name>] [--headless \| --interactive] [--timeout <duration>] [--log <path>]` | Launch agent with auto-loaded context (directives, Memory, target element) | All | 0a, 1, 2, 4, 6 | With `--next` (normal path): **workflow, phase, element and role are resolved from the active instance's next step**; `--workflow <ref>` and `--step <key>` select another instance or step and imply `--next`. Override with `--element type:id` (and optionally `--role`); `--agent` picks a `team.agents` entry. At least one of `--next`, `--workflow`, `--step`, `--element` is required. A step that only waits (an approval, an approval record, another party) is refused unless `--element` names the target. `--headless` launches the work run without a terminal, `--interactive` in this terminal, either one over the phase's `launch`; `--timeout` bounds the run. A headless run's stdout and stderr are forwarded to stderr line by line; `--log <path>` appends a copy to a file (a headless launch only); the output may hold secrets and is never committed (`dl-182`). While the agent runs, its entry under the git-ignored `.wingfoil/run/` refuses a second launch of the run id (`spec-016` §7). Records the run in the run log (`spec-016` §4). Pre-loads Memory context in <30 sec. `--resume` / `--ref` are v0.4 |
+| `wingfoil agent list [--past] [--waiting] [--active] [--element <type>:<id>] [--phase <name>]` | List the recorded agent runs, the workflow steps waiting for an agent and the agents running now | All | 1, 2, 4 | `--past` the run log at `HEAD`, `--waiting` the open instances' ready steps whose role an agent executes and no agent is running, `--active` the running launches of the working tree's `.wingfoil/run/`; none of them (or all three) shows all three. `--element` and `--phase` filter every section (`spec-016` §5) |
 | `wingfoil agent show <run-id>` | Print one recorded agent run and the commit that added it | All | 1, 2, 4 | `<run-id>` is `<element-id>/<phase>/<n>` (`spec-016` §6) |
 
 ### Parameters for Agent Execution
@@ -397,6 +397,10 @@ Every command accepts these, except `--dry-run`, which only the commands that ch
 ---
 
 ## Revision history
+
+**Version 2.5 (2026-11-16) — `agent execute --log` and `agent list --active`, per `task-336` (`dl-182`, `dl-181`; `spec-016` §3.1, §5, §7).**
+The `agent execute` row gains `[--log <path>]` and says that a headless run's output is forwarded to stderr, may hold
+secrets and is never committed; the `agent list` row gains `[--active]`, the running launches of `.wingfoil/run/`.
 
 **Version 2.4 (2026-11-14) — `--entry-human_only` on `team.roles`, per `task-340` (`dl-202` item 1).**
 The `--entry-<field>` row lists `--entry-human_only`, the option derived from `team.roles` entries' new `human_only`
