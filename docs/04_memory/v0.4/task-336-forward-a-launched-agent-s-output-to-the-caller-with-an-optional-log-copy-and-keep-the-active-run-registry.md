@@ -826,6 +826,69 @@ passed, 668 total`, `Tests: 12179 passed, 12179 total`; `npm run test:coverage -
 exit callbacks (`git diff --stat 57bd43e3b..HEAD -- src/agent/launch.ts` → 26 insertions, 10 deletions); `postRunFacts`,
 the record literal and `HeadlessOutput.stdout` did not move.
 
+### review fix round 2 design (architect, 2026-11-17)
+
+The approver ruled the re-review's two low follow-ups fixed in the task, at head `074b4ba31`.
+
+**FU1, decided behaviour: one line per file.** A file that is no entry is removed first, then reported:
+- removed → `.wingfoil/run/<path>: not an active run entry: removed` (unchanged);
+- the removal fails for any cause other than `ENOENT` → one line, `.wingfoil/run/<path>: not an active run entry: could
+  not remove: <cause>`, and the not-an-entry line is not printed;
+- an entry whose process is gone and that cannot be removed keeps `.wingfoil/run/<path>: could not remove: <cause>`.
+
+In every case the file is not listed and the read succeeds.
+
+**FU2, decided behaviour.** F7's check refuses a `--log` whose path is `.wingfoil/run` or lies beneath it under either
+form of the root:
+- the root as given (`resolve(root, '.wingfoil/run')`, today's comparison);
+- the root's real path (`realpathSync(root)` joined with `.wingfoil/run`).
+
+The log path itself is still `resolve(log)`, without following a link. A `realpathSync` that fails cannot happen for a
+root that passed the git-root step; if it does, only the logical form is compared. The check is still decided before
+the project is read, exit `2`, same message.
+
+**Spec changes.** `spec-016` is prepared uncommitted (`git status --short` → ` M
+docs/04_memory/design/specs/spec-016-agent-execution.md`):
+- §3.1: the comparison's parenthesis now says the path is "compared as resolved, without following a symbolic link,
+  with the registry directory both under the project root as given and under the root's real path, its symbolic links
+  resolved, so a `--project` given through a link still meets the check".
+- §7: "for a file that is no entry, `.wingfoil/run/<path>: not an active run entry: could not remove: <cause>`, in
+  place of the line above; for an entry whose process is gone, `.wingfoil/run/<path>: could not remove: <cause>`. A
+  file is reported by one line, never two."
+- A Revision note dated 2026-11-17.
+
+No change is needed elsewhere:
+- `spec-008` §12 says "a path that resolves into the active registry's directory under the project root", which still
+  holds.
+- `docs/cli-reference.md` l.2059 quotes only the `removed` line, which is unchanged. The developer may add the new line
+  there, but no parity test requires it.
+
+Name-resolvability with the amendment in the tree: `npx jest test/docs/name-resolvability.test.ts --maxWorkers=2` →
+`Tests: 11 passed, 11 total`, so no allowlist row is needed.
+
+**What red pins (qa), red-first:**
+- **FU1:** `readActiveRuns` on a malformed file (for instance `{"id":"x"}` at `<el>/<ph>/1.json`) whose removal fails
+  with `EACCES` (its directory made read-only; POSIX, skipped as root) prints exactly one warning,
+  `.wingfoil/run/<el>/<ph>/1.json: not an active run entry: could not remove: <cause>` (pin the prefix up to the
+  cause). No line containing `: removed` is printed, the result is `ok` and does not list the file. The same setup
+  with a well-formed entry of a dead pid prints only `.wingfoil/run/<el>/<ph>/1.json: could not remove: <cause>`.
+- **FU2:** a fixture repository plus a symbolic link to its root (in the scratch temp directory, outside the
+  repository): `agent execute --project <link> --element … --headless --log <real root>/.wingfoil/run/x.log` → exit `2`,
+  `error: invalid flag value: --log must not name a file under .wingfoil/run/, the active registry`, nothing spawned, no
+  file created, `HEAD` unchanged. Also `--log <link>/.wingfoil/run/x.log` → the same, a characterization of today's
+  logical comparison.
+
+**What the developer changes:**
+- **FU1:** `readActiveRuns` (`src/agent/active-runs.ts` l.205–218) removes the file before reporting it. A file that is
+  no entry gets `notAnEntryWarning` on success, or a new combined line (for instance `notAnEntryUnremovableWarning`)
+  on failure. A dead entry keeps `couldNotRemoveWarning` (l.67).
+- **FU2:** `logInRegistry` (`src/core/agent-execute.ts` l.73–77) also compares with `join(realpathSync(root),
+  ACTIVE_RUNS_DIR)`, falling back to the logical form alone when `realpathSync` throws.
+
+### Pending amendments (approver) — review fix round 2
+
+- `spec-016-agent-execution` — `--reason "Record task-336's second review-fix amendment of spec-016: a registry file that is no entry and cannot be removed is reported by one line that does not claim it was removed, and the refusal of a --log under .wingfoil/run/ also compares it with the registry under the root's real path, so a --project given through a symbolic link still meets it."`
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
