@@ -358,6 +358,20 @@ so W1-R9's fix share is unchanged. `v0.4.1` has no release element yet; its 19 b
 (`grep -lE '^release: *"?v0\.4\.1"?([[:space:]]|$)' docs/04_memory/bugs/*.md`) set the convention, and the patch's
 release-planning creates it. `dl-236`, `dl-237` and `dl-238` stay `in-discussion` for the approver's own ruling.
 
+**Closing ingest (approver, 2026-11-17, as proposed).** `w0`'s closing ingest (merged `a74464ae2`, the bugs triaged
+by the approver) adds 7 bugs and 2 decision-logs with an empty `release`, swept under the same rule:
+
+| Release | Wave / home | Elements |
+|---------|-------------|----------|
+| `v0.4` | `w1`, joining a task's `bug:` list | `bug-548` → W1-16 |
+| `v0.4` | `w2` | `bug-543`, `bug-544` (with W1-21), `bug-545` |
+| `v0.4` | `w4` | `dl-240` (ruled before the task that adds the `directives` run-record key) |
+| `v0.4.1` | the agent-execute group | `bug-546`, `bug-547` |
+| `v1.0` | — | `bug-549` (closes when the pinned build reaches 0.4.0 or later; until then `agent list` and `agent show` are read with the code build once a run log holds a 19-key line), `dl-239` (with the external integrations, W1-R14) |
+
+The sweep now counts 41 bugs and 6 decision-logs, 47 stamps (`dl-207` not swept): `v0.4` 29, `v0.4.1` 13, `v1.0` 5.
+`dl-239` and `dl-240` stay `in-discussion` for the approver's own ruling.
+
 - **Interim for `bug-532`:** before every `workflow end <plan>`, `node scripts/check-retrospective.cjs <plan file>`
   exits `0`.
 - **`bug-534`:** if it breaks a `w1` gate, it is a stop-the-line (W0-R10) and moves forward.
@@ -404,6 +418,8 @@ Secret sweep from a checkout with `dist/` (the known false positives of `bug-402
 - 2026-11-17: W1-R14 (two inputs forwarded for the re-plan) proposed and approved as proposed.
 - 2026-11-17: W0.3 re-sweep (34 bugs, 5 decision-logs) proposed and ruled by the approver as proposed; its stamps wait
   for `task-337`'s merge and the closing ingest.
+- 2026-11-17: `task-337` merged (`02ffe01ca`): `w0` 27/27 `done`. Closing ingest merged (`a74464ae2`); its 9 elements
+  swept and ruled as proposed. `docs.examples.passing` PASS 6/6 on `02ffe01ca`, run by the approver (W0.2).
 
 #### W0 measures
 
