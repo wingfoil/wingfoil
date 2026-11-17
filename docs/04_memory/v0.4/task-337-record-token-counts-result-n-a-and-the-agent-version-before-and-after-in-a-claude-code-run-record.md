@@ -643,6 +643,23 @@ total` (11 more than red's 483: `usage.test.ts`, which did not run at red).
 
 None.
 
+### review fix round 1 (developer, 2026-11-17)
+
+- **F1 (should-fix-in-task, docs only)** — `docs/user-guide.md` §9.4 "What a run record says about the agent" said a
+  count nothing reported is `not-reported` "with a `warning:` line" naming `usage.transcript`; `messagesUsage`
+  (`src/agent/usage.ts`) warns only on a value of the wrong type, as `spec-016` §2.6 says. Fixed in `9e5c153b8` with
+  the reviewer's wording: a count nothing reported is `not-reported`, never `0`; a transcript that is missing or
+  unreadable gives a `warning:` line naming the adapter and `usage.transcript`, never the file's path —
+  consistent with `docs/cli-reference.md`'s `agent execute` entry.
+- **Same class**: `grep -rn "nothing reported\|names the adapter and .usage.transcript" docs/user-guide.md
+  docs/cli-reference.md src/agent/*.ts src/storage/builtin-adapters.ts` found only that sentence;
+  `grep -rn "count.*not-reported.*warning\|warning.*count.*not-reported"` on the same docs and on `src/agent/usage.ts`,
+  `src/agent/launch.ts` found only `launch.ts` l.711 ("A failure is `not-reported` and one warning"), which is about a
+  failure and correct.
+- **Tests**: `npx jest test/docs/user-guide-scaffold.test.ts test/docs/pages-render.test.ts test/docs/llms-txt.test.ts
+  test/docs/cli-reference.test.ts --maxWorkers=2` → `Test Suites: 4 passed, 4 total`, `Tests: 48 passed, 48 total`.
+- F2 (the lookup-failure text in `src/agent/launch.ts`) left as it is, for the approver to rule on.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
