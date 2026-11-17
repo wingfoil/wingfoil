@@ -770,6 +770,31 @@ failure of each file:
 
 **Candidate findings (not filed).** None.
 
+### review fix round 2 (developer, 2026-11-17)
+
+- **Base and guard.** Head `04529e0fd`; the PATH guard ran first through the task's PATH shim (the shim, `0.3.2
+  (d817b6df8574ff9e3975b131e5bd275ea1c93bcc)` twice); `git status --short` empty; `git rev-list --count HEAD..main` →
+  `0` at the start and at the end.
+- **F2, the code** (`31bb64e33`), as the architect's design above and amended `spec-008` §2 (`eaf977e5a`) say:
+  `src/agent/launch.ts` the failed usage lookup, `…: model and tokens not read from it`; `src/agent/usage.ts` the usage
+  lookup's and the headless output's wrong-type texts (`<label> model is not a non-empty string: not read from it`,
+  `<label> <key> is not a non-negative integer: not read from it`), the transcript's (`<key> is not a non-negative
+  integer in a message: not read from it`, `model is not a string in a message: not read from it`) and the TSDoc of
+  `documentUsage`, which now says why the text names the source.
+- **Sweep.** `grep -rn "recorded as not-reported" src/`, the session and version lines excluded → none after the edit;
+  the only other `src/` comment quoting a usage-source text was `documentUsage`'s TSDoc. No user document quotes them:
+  `grep -rn "recorded as not-reported\|not read from it\|usage lookup failed" docs/cli-reference.md docs/user-guide.md
+  docs/agents.md README.md` → exit `1`, no line.
+- **Tests.** The qa's 6 files (`npx jest test/agent/usage-read.test.ts test/agent/launch-process.test.ts
+  test/agent/launch-usage-sources.test.ts test/core/agent-execute.test.ts test/agent/launch-usage.test.ts
+  test/cli/agent-execute-launch.integration.test.ts --maxWorkers=2`, after `npm run -s build`) → `Test Suites: 6
+  passed, 6 total`, `Tests: 98 passed, 98 total` (12 failing before). The full suite (slot, build, `npm test --
+  --maxWorkers=2`, 15:34Z–15:53Z UTC) → `Test Suites: 679 passed, 679 total`, `Tests: 12319 passed, 12319 total`.
+- **Gates.** `npm run -s lint` → exit `0`; `npm run -s typecheck` (slot) → exit `0`; `npm run -s docs:api` → exit
+  `0`; `npm run -s check:governance -- --base origin/main` → `gated: 0 findings on 0 commits`, `history: 0 findings on
+  0 commits`.
+- T4: no test file touched (`git show --stat 31bb64e33` → the two `src/agent` files only).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
