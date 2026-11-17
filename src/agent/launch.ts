@@ -755,7 +755,7 @@ async function postRunFacts(input: PostRunInput): Promise<PostRunFacts> {
         if (manifest.usage.lookup_args === undefined) return undefined;
         const parsed = parseLookup(await lookup(manifest.usage.lookup_args));
         if (!parsed.ok) {
-          warn(`the usage lookup failed (${parsed.reason}): model and tokens recorded as not-reported`);
+          warn(`the usage lookup failed (${parsed.reason}): model and tokens not read from it`);
           return undefined;
         }
         return documentUsage(parsed.document, manifest.usage.fields ?? {}, "the usage lookup's");

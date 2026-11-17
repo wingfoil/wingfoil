@@ -62,7 +62,8 @@ export function yieldsUsage(usage: Pick<SourceUsage, 'model' | 'tokens'>): boole
 /**
  * The model and the counts at `fields`' paths in `document` (§2.6 `lookup`, `output`): a path not declared, or absent
  * in the document, is `not-reported` silently; a `model` that is not a non-empty string, or a count that is not a
- * non-negative integer, is `not-reported` with one warning, `<label> <key> is not … : recorded as not-reported`.
+ * non-negative integer, is `not-reported` with one warning, `<label> <key> is not …: not read from it` — it names the
+ * source, since a later source of `usage.from` may still supply that value (`spec-016` §2.6, `spec-008` §2).
  *
  * @param label - Who printed the document, as the warnings name it (`the usage lookup's`, `the headless output's`).
  */
@@ -72,14 +73,14 @@ export function documentUsage(document: unknown, fields: UsageFieldPaths, label:
   if (fields.model !== undefined) {
     const value = readJsonPath(document, fields.model);
     if (typeof value === 'string' && value !== '') model = value;
-    else if (value !== undefined) warnings.push(`${label} model is not a non-empty string: recorded as not-reported`);
+    else if (value !== undefined) warnings.push(`${label} model is not a non-empty string: not read from it`);
   }
   const count = (key: keyof RunTokens): ReportedCount => {
     const path = fields[key];
     if (path === undefined) return NOT_REPORTED;
     const value = readJsonPath(document, path);
     if (isCount(value)) return value;
-    if (value !== undefined) warnings.push(`${label} ${key} is not a non-negative integer: recorded as not-reported`);
+    if (value !== undefined) warnings.push(`${label} ${key} is not a non-negative integer: not read from it`);
     return NOT_REPORTED;
   };
   return { model, tokens: { input: count('input'), output: count('output'), cache_read: count('cache_read'), cache_write: count('cache_write') }, warnings };
@@ -138,7 +139,7 @@ function messagesUsage(messages: readonly unknown[], fields: UsageFieldPaths): S
       const value = readJsonPath(message, path);
       if (value === undefined) continue;
       if (!isCount(value)) {
-        warnings.push(`${key} is not a non-negative integer in a message: recorded as not-reported`);
+        warnings.push(`${key} is not a non-negative integer in a message: not read from it`);
         return NOT_REPORTED;
       }
       sum = (sum ?? 0) + value;
@@ -156,7 +157,7 @@ function messagesUsage(messages: readonly unknown[], fields: UsageFieldPaths): S
       if (typeof value !== 'string') wrong = true;
       else if (value !== '') models.add(value);
     }
-    if (wrong) warnings.push('model is not a string in a message: recorded as not-reported');
+    if (wrong) warnings.push('model is not a string in a message: not read from it');
     else if (models.size > 0) model = [...models].sort().join(', ');
   }
   return { model, tokens, warnings };
