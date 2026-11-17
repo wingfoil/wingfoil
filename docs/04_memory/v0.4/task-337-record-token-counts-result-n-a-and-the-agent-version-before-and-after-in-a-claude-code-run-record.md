@@ -720,6 +720,56 @@ cause), so it is not edited. `npx jest test/docs/name-resolvability.test.ts --ma
 - `spec-008-cli-grammar` (§2's warnings table, one row, and a dated revision at its end; uncommitted) — `memory amend
   spec-008-cli-grammar --reason "Word the agent execute usage-source warnings as what was not read from the source, since a later source of usage.from may supply the value, and align the version_args texts with the reads before the launch and after the run, for task-337 review finding F2 (spec-016 section 2.6)."`
 
+### review fix round 2 tests (qa, 2026-11-17)
+
+**Base and guard.** Head `d817b6df8` (the merge of `main` after the approver's amend of `spec-008`, `eaf977e5a`). The
+PATH guard ran first through the task's PATH shim (`command -v wingfoil && wingfoil --version && node dist/cli.js
+--version` → the shim, `0.3.2 (03e97689014c77f70b0655abb3abfd6c135f99dd)` twice), then `npm run -s build` → exit `0`.
+Test commit `5a7a39790`: test files only (`git show --stat 5a7a39790` → 6 files under `test/`, 13 lines changed).
+
+**What changed** (amended `spec-008` §2 warnings table, the design above). Each expected string takes the new ending;
+nothing else in those assertions changes:
+- the failed usage lookup, `…: model and tokens recorded as not-reported` → `…: model and tokens not read from it`:
+  `test/agent/launch-process.test.ts:62, 294, 307, 314`, `test/core/agent-execute.test.ts:264`,
+  `test/cli/agent-execute-launch.integration.test.ts:307`, `test/agent/launch-usage.test.ts:194`;
+- the wrong-type texts, `…: recorded as not-reported` → `…: not read from it`: the usage lookup's
+  (`test/core/agent-execute.test.ts:312, 313`), the headless output's (`test/agent/usage-read.test.ts:116`,
+  `test/agent/launch-usage-sources.test.ts:85`), the transcript's model (`test/agent/usage-read.test.ts:85`);
+- `test/agent/launch-usage.test.ts:166`: the transcript's wrong-type input warning, which a pattern matched without
+  its ending, is now pinned in full (`adapter 'hand': usage.transcript: input is not a non-negative integer in a
+  message: not read from it`): the one same-class text no assertion pinned.
+
+**Sweep.** `grep -rn "recorded as not-reported" test/`, the session and version lines excluded, → the 12 lines the
+design listed, no other; after the edit → `0`. `grep -rn "in a message\|not a non-empty string\|not a non-negative
+integer\|model and tokens" test/` found one more text without its ending: `test/agent/launch-usage.test.ts:166`, made
+exact above (`test/agent/usage.test.ts:112` matches only the key and the cause, so either ending passes; left as is).
+
+**The D4 case behind F2.** Already pinned, so no new test: `test/agent/launch-usage.test.ts` "[lookup, transcript]
+with a lookup that fails: its warning, then the transcript" (`usage.from: [lookup, transcript]`, the lookup prints no
+JSON, the transcript present) asserts that the record carries the transcript's values (`claude-opus-5-5`,
+`4/73/36139/9580`) and, from this commit, the warning `adapter 'hand': the usage lookup failed (printed no JSON): model
+and tokens not read from it`.
+
+**Run.** `npx jest test/agent/usage-read.test.ts test/agent/launch-process.test.ts
+test/agent/launch-usage-sources.test.ts test/core/agent-execute.test.ts test/agent/launch-usage.test.ts
+test/cli/agent-execute-launch.integration.test.ts --maxWorkers=2` → `Test Suites: 6 failed, 6 total`, `Tests: 12
+failed, 86 passed, 98 total`. Every failure is the new text against the old one, which the code still prints. First
+failure of each file:
+- `launch-process`: expected `… (ended by SIGKILL): model and tokens not read from it`, received `… model and tokens
+  recorded as not-reported` (4 failing);
+- `core/agent-execute`: expected `… (timed out after 1500 ms): model and tokens not read from it`, received `…
+  recorded as not-reported` (2 failing);
+- `agent-execute-launch.integration`: expected substring `warning: adapter 'fake': the usage lookup failed (exited 1):
+  model and tokens not read from it`, and stderr holds the old line (1 failing);
+- `launch-usage`: expected pattern `…input is not a non-negative integer in a message: not read from it$`, received
+  `…in a message: recorded as not-reported` (2 failing, the D4 case included);
+- `usage-read`: expected `model is not a string in a message: not read from it`, received `…: recorded as
+  not-reported` (2 failing);
+- `launch-usage-sources`: expected `… the headless output's input is not a non-negative integer: not read from it`,
+  received `…: recorded as not-reported` (1 failing).
+
+**Candidate findings (not filed).** None.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
