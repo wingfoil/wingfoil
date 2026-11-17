@@ -915,6 +915,45 @@ agent-execute-log-registry 1 failed, 6 passed. `npx tsc --noEmit -p tsconfig.jso
 test/lint --maxWorkers=2` → `Test Suites: 16 passed`, `Tests: 165 passed`. No invisible character in the changed files
 (the prompt's `grep -nP` → exit 1).
 
+### review fix round 2 (developer, 2026-11-17)
+
+**Setup.** Head `2cf73a5cf`; the task's PATH shim first on `PATH` in every call. `git rev-list --count HEAD..main` → `19`,
+so `git merge --no-edit main` first (no conflict), its trailers added with `git commit --amend --no-edit --trailer …`
+before any other commit: `f932986bd`. Contract: `### review fix round 2 design (architect, 2026-11-17)`, spec-016 §3.1
+and §7 as amended (`c9bcaa577`), qa's test commit `0a640b9ae`.
+
+**Commits.** `a5d32250b` fix(agent): FU1, FU2 (and my own suite's pin); `fe4351f5f` docs: the could-not-remove lines.
+
+**Per item.**
+- **FU1.** `readActiveRuns` (`src/agent/active-runs.ts` l.217–226) now removes first and reports after: a file that is
+  no entry prints `notAnEntryWarning` once its removal succeeds, or the one line `notAnEntryUnremovedWarning`,
+  `.wingfoil/run/<path>: not an active run entry: could not remove: <cause>` (l.72, l.225), when it fails for another
+  cause than `ENOENT`; a dead entry keeps `couldNotRemoveWarning`. My own round-1 pin in
+  `test/agent/active-runs-write.test.ts` (two lines) is now the one combined line, the file still on disk. Both new line
+  builders are exported from `src/agent/index.ts` beside `notAnEntryWarning`.
+- **FU2.** `logInRegistry` (`src/core/agent-execute.ts` l.74–84) compares `resolve(log)` with `<root>/.wingfoil/run`
+  both as the root is given and as `join(realpathSync(root), ACTIVE_RUNS_DIR)` (l.80), the log itself never followed; a
+  `realpathSync` that throws leaves the logical form alone. Still decided before the project is read.
+- **`docs/cli-reference.md`.** The `agent list` paragraph that lists the registry's `warning:` lines gains both
+  could-not-remove lines (my judgement: that paragraph already names the `removed` line, so it lists the outcomes
+  together).
+
+**Runs.** `npx jest test/agent/active-runs-review.test.ts test/cli/agent-execute-log-registry.integration.test.ts
+test/agent/active-runs-write.test.ts test/agent/active-runs.test.ts test/cli/agent-list-active.integration.test.ts
+test/docs/cli-reference.test.ts test/docs/name-resolvability.test.ts --maxWorkers=2` → `Test Suites: 7 passed`,
+`Tests: 74 passed` (the FU1 read-only case ran: `id -u` → `1000`).
+
+**Gates** (heavy ones after `waitslot.sh`, which printed nothing: no wait): `npm run lint` → exit 0; `npm run docs:api`
+→ exit 0; `npm run typecheck` → exit 0; `npm run build` then `npm test -- --maxWorkers=2` → exit 0, `Test Suites: 669
+passed, 669 total`, `Tests: 12207 passed, 12207 total`; `npm run test:coverage -- --maxWorkers=2` → exit 0, `All files
+| 98.83 | 96.46 | 98.51 | 99.45`, `src/agent/active-runs.ts` 92.54 / 84.21 / 100 / 93.33.
+
+**T4.** `git log --first-parent --no-merges --format=%h 0a640b9ae..HEAD -- test/agent/active-runs-review.test.ts
+test/cli/agent-execute-log-registry.integration.test.ts` → empty.
+
+**For task-337.** `src/agent/launch.ts` is not touched in this round (`git diff --stat 2cf73a5cf..HEAD --
+src/agent/launch.ts` → nothing): no hunk moved.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
