@@ -47,3 +47,14 @@ Each project picks a status filter and a level of process by itself; a strict fi
 - `docs/agents.md` is in no phase's `produces:`; `user-docs` aligns it with the approver's confirmation.
 - Related: `dl-212` (an approval is never recorded from an agent's session), `dl-211` (a generated cheat sheet per
   project), which may carry the level of process.
+
+### Retrospective
+
+<!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
+     reconstructed afterwards. One line per item: what happened, the evidence (a command and what it
+     printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
+     An item met while fixing goes in the fix task's own subsection; this one holds what belongs to
+     the bug itself (its finding, its triage, why it took more than one task). The retrospective's
+     `explore` reads this subsection first. -->
+
+- Fixed by `task-342` in the guides only, no code: `docs/agents.md` §2's `memory search` row no longer offers `--status`, §6 says an agent's own records stay pending until the approver approves them and are still current work, that the default search shows every state but `deprecated` while `--status approved` hides pending work, and that knowledge given in a request goes to a decision-log submitted for the approver; §7 names the two levels of process with the default rule (`e9d6eeee6`, pinned by `test/docs/hand-driven-cycle.test.ts`). The text was confirmed word for word at the design gate, as every edit of `docs/agents.md` is.
