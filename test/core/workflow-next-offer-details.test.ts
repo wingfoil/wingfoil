@@ -100,8 +100,23 @@ describe('task-376 — W_ACTION_ARGUMENT_NOT_PASSED (spec-017 §2)', () => {
   const workflow = (actions: string[]): Workflow => ({ name: 'w', phases: [{ name: 'p', actions }, { name: 'empty' }] }) as unknown as Workflow;
 
   it('a token of the patterns, an option of the verb, an unknown type and any other action are not reported', () => {
-    const actions = ['memory.add(type: task, title: "T", tags: [a], release: v1, slug: s)', 'memory.add(type: missing, odd: 1)', 'memory.add', 'memory.submit'];
+    const actions = ['memory.add(type: task, title: "T", tags: [a], release: v1)', 'memory.add(type: missing, odd: 1)', 'memory.add', 'memory.submit'];
     expect(actionArgumentDiagnostics([workflow(actions)], ['w.yaml'], MEMORY)).toEqual([]);
+  });
+
+  it.each<[string, string]>([
+    ['slug: s', "memory.add argument 'slug' cannot be passed: memory add --set reserves the name 'slug'"],
+    ['status: draft', "memory.add argument 'status' cannot be passed: memory add --set reserves the name 'status'"],
+    ['nnn: 7', "memory.add argument 'nnn' cannot be passed: memory add generates the numeric token {nnn}"],
+    ['odd: 1', "memory.add argument 'odd' cannot be passed: type 'task' has no token {odd} in its id_pattern or path"],
+  ])('%s is reported with the reason of its kind', (argument, message) => {
+    const diagnostics = actionArgumentDiagnostics([workflow([`memory.add(type: task, ${argument})`])], ['w.yaml'], MEMORY);
+    expect(diagnostics).toEqual([{ code: 'W_ACTION_ARGUMENT_NOT_PASSED', severity: 'warning', file: 'w.yaml', path: 'phases[0].actions[0]', message }]);
+  });
+
+  it('a numeric name no pattern holds has no such token', () => {
+    const diagnostics = actionArgumentDiagnostics([workflow(['memory.add(type: note, nnn: 7)'])], ['w.yaml'], MEMORY);
+    expect(diagnostics.map((entry) => entry.message)).toEqual(["memory.add argument 'nnn' cannot be passed: type 'note' has no token {nnn} in its id_pattern or path"]);
   });
 
   it('without memory.yaml no type is known, so nothing is reported', () => {

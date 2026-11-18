@@ -1264,11 +1264,13 @@ warning does not change the exit code; an error in any of the files exits `1`, w
 the error's details.
 
 New in 0.4: `workflow list`, and no other command, also warns about a `memory.add` action that declares an
-argument `memory add` has no way to take: neither `type`, `title` or `tags`, nor a token of the type's `id_pattern`
-or `path`. The warning is `W_ACTION_ARGUMENT_NOT_PASSED`, one per argument, for every workflow the configuration
-loads, with or without `--all`, after every other diagnostic: `memory.add argument '<name>' cannot be passed: type
-'<type>' has no token {<name>} in its id_pattern or path`. Its `file` is the workflow's file and its `path` is
-`phases[<p>].actions[<a>]`. The argument stays in the action, and is left out of the command `workflow next` offers.
+argument `memory add` has no way to take. The warning is `W_ACTION_ARGUMENT_NOT_PASSED`, one per argument, for every
+workflow the configuration loads, with or without `--all`, after every other diagnostic. Its `file` is the workflow's
+file, its `path` is `phases[<p>].actions[<a>]`, and its message starts `memory.add argument '<name>' cannot be passed:`
+and ends with the reason: `type '<type>' has no token {<name>} in its id_pattern or path`; `memory add --set reserves
+the name '<name>'`, for `id`, `type`, `status`, `title`, `tags`, `n`, `slug`, `date` and `author` (`type`, `title` and
+`tags` are options of `memory add`, so they are never reported); or `memory add generates the numeric token {<name>}`,
+for a counter such as `{nnn}`. The argument stays in the action, and is left out of the command `workflow next` offers.
 
 The workflows are also checked against the rest of the configuration: a phase `role` or
 `approval: { by_role }` that `dna.yaml`'s `team.roles` does not define (`E_PHASE_ROLE_UNKNOWN`), an
@@ -1316,9 +1318,8 @@ text is what `agent execute` loads), and each action with its interpolated text 
 
 New in 0.4, the offered `memory add` carries the arguments the action declares, in this order: `--type <T>`;
 `--title` with the action's title, else `<title>`; `--tags` with its tags joined by commas; one `--set <name>=<value>`
-per other argument that names a token of the type's `id_pattern` or `path`; a placeholder such as
-`--set version=<version>` per token of those patterns the action does not give and `memory add` does not fill itself;
-then `--workflow` and `--step`. A value
+per other argument that names a token of the type's `id_pattern` or `path` that `--set` can fill; a placeholder such as
+`--set version=<version>` per such token the action does not give; then `--workflow` and `--step`. A value
 taken from an element must use only the id characters (`a-z`, `0-9`, `-`, `.`): one that has none, or that holds
 anything else, prints as the placeholder of its argument. The console quotes an element a shell would split, as in
 `--title 'Fixed title here'`, and never a placeholder.
@@ -1541,7 +1542,7 @@ instance gives a value: `wingfoil memory submit <id>`, `wingfoil memory approve 
 memory reject <id> --reason <reason>`, `wingfoil memory deprecate <id>`, `wingfoil memory add --type <T> --title <title>
 … --workflow <instance-id> --step <key>` and `wingfoil agent execute --workflow <instance-id> --step <key>`. An argument
 the action declares literally is printed as declared; one that takes a value from an element is the placeholder of its
-name (`--title <title>`, `--set release=<release>`).
+name as a whole, a list included (`--title <title>`, `--tags <tags>`, `--set release=<release>`).
 
 - **Errors:** a name no workflow at `HEAD` has and no open instance holds → `unknown workflow: <ref>`, exit `1`; an error in the workflow files → exit `1`, as `workflow list`; no `<ref>`, or more than one → exit `2`.
 - **Commit:** none.

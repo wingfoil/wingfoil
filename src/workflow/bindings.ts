@@ -239,17 +239,18 @@ export function memoryAddPatternTokens(memoryYaml: MemoryYaml | null, type: stri
   return [...new Set([...patternTokens(entry.id_pattern ?? ''), ...patternTokens(entry.path)])];
 }
 
-/** The tokens `memory add --set` refuses, because the verb fills them itself or through an option of its own (`spec-008` §10). */
-const SELF_SOURCED_TOKENS: readonly string[] = ['id', 'type', 'status', 'title', 'tags', 'n', 'slug', 'date', 'author'];
+/** The names `memory add --set` reserves, because the verb fills them itself or through an option of its own (`spec-008` §10). */
+export const SET_RESERVED_NAMES: readonly string[] = ['id', 'type', 'status', 'title', 'tags', 'n', 'slug', 'date', 'author'];
 
 /**
  * The operands of `memory add` after `--type` (`spec-017` §6.1): `--title`, `--tags`, one `--set` per declared argument
- * naming a token of `tokens` ({@link memoryAddPatternTokens}), in declared order, then one placeholder `--set` per
- * token the action does not give and the verb does not source itself.
+ * naming a token of `tokens` ({@link memoryAddPatternTokens}) that can be passed, in declared order, then one placeholder
+ * `--set` per such token the action does not give. A name `--set` reserves and a numeric token, which the verb generates,
+ * cannot be passed: an argument naming one is left out.
  */
 export function memoryAddOperands(args: readonly MemoryAddArgument[], tokens: readonly string[]): string[] {
   const shown = ({ name, value }: MemoryAddArgument): string => (value === null || value === '' ? `<${name}>` : value);
-  const settable = tokens.filter((token) => !SELF_SOURCED_TOKENS.includes(token) && !isNumericToken(token));
+  const settable = tokens.filter((token) => !SET_RESERVED_NAMES.includes(token) && !isNumericToken(token));
   const tags = args.find((arg) => arg.name === 'tags');
   const declared = args.filter((arg) => settable.includes(arg.name));
   return [

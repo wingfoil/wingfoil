@@ -19,7 +19,7 @@
  */
 import type { RolesYaml } from '../directives/schema';
 import type { MemoryYaml } from '../memory/schema';
-import type { Diagnostic } from '../validation';
+import { isNumericToken, type Diagnostic } from '../validation';
 import {
   builtinCommand,
   memoryAddArguments,
@@ -27,6 +27,7 @@ import {
   memoryAddPatternTokens,
   memoryAddType,
   resolveToken,
+  SET_RESERVED_NAMES,
   SHOWN_OPERANDS,
   tokenArguments,
   tokenName,
@@ -193,8 +194,19 @@ export function listWorkflows(workflows: readonly Workflow[], deduction: Deducti
 }
 
 /**
- * One `W_ACTION_ARGUMENT_NOT_PASSED` per argument of a `memory.add` action that is neither an option of `memory add`
- * nor a token of its type's patterns (`spec-017` §2): by workflow in registry order, then phase, action and argument in
+ * Why `memory add` cannot take the argument `name` of a `memory.add(type: <type>)` action (`spec-017` §2, §6.1), or `null`
+ * when it can: `tokens` are the type's pattern tokens.
+ */
+function argumentRefusal(name: string, type: string, tokens: readonly string[]): string | null {
+  if (MEMORY_ADD_OPTIONS.includes(name)) return null;
+  if (SET_RESERVED_NAMES.includes(name)) return `memory add --set reserves the name '${name}'`;
+  if (!tokens.includes(name)) return `type '${type}' has no token {${name}} in its id_pattern or path`;
+  return isNumericToken(name) ? `memory add generates the numeric token {${name}}` : null;
+}
+
+/**
+ * One `W_ACTION_ARGUMENT_NOT_PASSED` per argument of a `memory.add` action that `memory add` cannot take
+ * (`spec-017` §2): by workflow in registry order, then phase, action and argument in
  * declared order. `files` holds each workflow's repository-relative file, parallel to `workflows`. Pure.
  */
 export function actionArgumentDiagnostics(workflows: readonly Workflow[], files: readonly string[], memoryYaml: MemoryYaml | null): Diagnostic[] {
@@ -204,18 +216,11 @@ export function actionArgumentDiagnostics(workflows: readonly Workflow[], files:
         const type = memoryAddType(token);
         if (type === null || memoryYaml === null || !Object.prototype.hasOwnProperty.call(memoryYaml.types, type)) return [];
         const tokens = memoryAddPatternTokens(memoryYaml, type);
-        return tokenArguments(token)
-          .map(([name]) => name)
-          .filter((name) => !MEMORY_ADD_OPTIONS.includes(name) && !tokens.includes(name))
-          .map(
-            (name): Diagnostic => ({
-              code: W_ACTION_ARGUMENT_NOT_PASSED,
-              severity: 'warning',
-              file: files[w]!,
-              path: `phases[${p}].actions[${a}]`,
-              message: `memory.add argument '${name}' cannot be passed: type '${type}' has no token {${name}} in its id_pattern or path`,
-            }),
-          );
+        return tokenArguments(token).flatMap(([name]): Diagnostic[] => {
+          const refusal = argumentRefusal(name, type, tokens);
+          if (refusal === null) return [];
+          return [{ code: W_ACTION_ARGUMENT_NOT_PASSED, severity: 'warning', file: files[w]!, path: `phases[${p}].actions[${a}]`, message: `memory.add argument '${name}' cannot be passed: ${refusal}` }];
+        });
       }),
     ),
   );
