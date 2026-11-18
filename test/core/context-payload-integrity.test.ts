@@ -220,7 +220,9 @@ describe('task-379 — the integrity of the context payload (spec-012 §7)', () 
         commitAll(repo, 'a bug at a task path');
         const { payload, context, warnings } = build();
         expect(context.memory).toEqual([]);
-        expect(payload).not.toContain('bug-007-astray');
+        expect(linesEqualTo(payload, '### bug:bug-007-astray')).toBe(0);
+        expect(linesEqualTo(payload, '<!-- begin:bug:bug-007-astray -->')).toBe(0);
+        expect(linesEqualTo(payload, '<!-- end:bug:bug-007-astray -->')).toBe(0);
         expect(payload).not.toContain('The astray body.');
         expect(warnings).toEqual([notDeclaredWarning(STRAY_BUG, 'bug')]);
         expectUniqueMarkers(payload);
