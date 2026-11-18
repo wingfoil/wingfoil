@@ -82,6 +82,16 @@ describe('task-379 — the edges of scalars as written', () => {
     expect(new WrittenTimestamp('2026-10-05')).toBeInstanceOf(WrittenScalar);
   });
 
+  it('the context holds a timestamp whose text is the one written', () => {
+    writeFixtureFile(repo, ELEMENT_PATH, elementMd(['created: 2026-10-05']));
+    commitAll(repo, 'a dated element');
+    const result = assembleExecutionContext(repo, { role: 'developer', element: { type: 'task', id: ELEMENT_ID }, stateRef: 'HEAD' });
+    if (!result.ok) throw new Error(result.error.message);
+    const created = result.value.context.element.frontmatter.created as WrittenTimestamp;
+    expect(created).toBeInstanceOf(WrittenTimestamp);
+    expect(created.text).toBe('2026-10-05');
+  });
+
   it('a key the document writes in the form of an internal name stays that string', () => {
     const written = '"\\uE000[\\"1.5\\",\\"1.50\\"]\\uE000"';
     const lines = payloadOf([`m: {${written}: x, 1.50: y}`]).split('\n');
