@@ -316,15 +316,18 @@ The parenthesised notes are not part of the payload. Format 1, block by block:
   no such type or that type's `path` pattern cannot produce the path; and one whose `{type}:{id}`
   repeats that of another document §6 would have found relevant, the first of them in path order being
   the one carried. A document two of whose frontmatter keys, at any depth, have the same text once each
-  key is kept as written (`"1.50"` and `1.50`) cannot be rendered, and is left out and reported under
-  that same rule. Every one of these is decided over all the documents §6 would find relevant, before
-  §6 bounds the set: a document left out takes no `maxDocs` or `maxBytes` slot, claims no `{type}:{id}`
+  key is kept as written (`"1.50"` and `1.50`) cannot be rendered; nor can one where a merge key leaves
+  a single YAML key with two texts (`<<: {1.5: x}` beside `1.50: y`), or whose frontmatter contains
+  itself through an alias. Each is left out and reported under that same rule. A key that overrides a
+  merged key of the same text (`<<: {a: 1}` beside `a: 2`) is one key under YAML, and is carried with
+  the overriding value. Every one of these is decided over all the documents §6 would find relevant,
+  before §6 bounds the set: a document left out takes no `maxDocs` or `maxBytes` slot, claims no `{type}:{id}`
   in the repeat rule, is reported whatever the limits, and no re-selection follows the read. A Memory
   document whose body holds the line that closes it
   (`<!-- end:{key} -->`, after canonicalization) is left out and always reported the same way. An
-  element or directive body holding its own end marker, an element with two frontmatter keys of the
-  same text, an element whose key is a carried directive's, or a directive id holding a control
-  character or `-->`, refuses the context as `VALIDATION` — a directive is never dropped (§5). These
+  element or directive body holding its own end marker, an element whose frontmatter cannot be
+  rendered for one of those reasons, an element whose key is a carried directive's, or a directive id
+  holding a control character or `-->`, refuses the context as `VALIDATION` — a directive is never dropped (§5). These
   reports are diagnostics, outside the payload, after the scan's own, in path order.
 - **Normative example.** `test/fixtures/context/golden-payload.md` is the format-1 payload of the
   context `test/core/context-payload-format.test.ts` builds by hand; the test compares the serializer's
@@ -510,3 +513,11 @@ defect refuses the context as `VALIDATION`, as its self-closing body does, becau
 document was rejected: one malformed sibling would then fail every context that finds it relevant. The check
 runs before §6 bounds the set, so the selection is that of the remaining documents. The payload stays format
 1. Edited in place without a supersede or a state change, as the earlier Revision notes were.
+
+**Revision (2026-11-18) — §7 completes the frontmatter that cannot be rendered, per
+`task-379-make-the-context-payload-s-markers-unique-keep-scalars-verbatim-resolve-the-commit-once`.** The
+review of that task found that a merge key can leave one YAML key with two texts, so a value YAML had
+overridden came back into the payload, and that frontmatter containing itself through an alias overflowed the
+stack of the builder. Both are now left out and reported like two keys of the same text, and an element with
+either defect refuses the context as `VALIDATION`. An ordinary merge override stays carried. The payload stays
+format 1. Edited in place without a supersede or a state change, as the earlier Revision notes were.
