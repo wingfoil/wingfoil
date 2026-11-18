@@ -457,7 +457,7 @@ describe('task-216 AC 2 — after a review reject, next reports the fallback ste
       expect(action(step, 'bug.sync_state(for_each: task.bug)').binding).toEqual({ kind: 'manual', expectedCommit: 'wf(bug): sync bug-1 [in-review → in-progress]' });
       expect(action(step, 'agent.execute').binding).toEqual({ kind: 'agent', argv: ['wingfoil', 'agent', 'execute', '--workflow', 'rc-1', '--step', 'dev-loop.red@task:task-1'] });
       expect(step.checks).toEqual({ pre: [], post: [{ token: 'tests.passing', binding: { kind: 'run', argv: ['npm', 'test'] }, evaluated: false }] });
-      expect(step.evidence).toEqual({ kinds: ['record'], missing: ['record'], finalizable: true });
+      expect(step.evidence).toEqual({ kinds: ['record'], missing: ['record'], finalizable: true, manualOnly: true });
       // The review phase declares the fallback the reject took (§5.2), reported on its step once it is reached.
       const review = buildReviewStep(repo);
       expect(review.fallback).toEqual({ step: 'red', setState: 'in-progress' });
