@@ -345,6 +345,9 @@ The new field is read through local types and the `STEP` evidence is not a fresh
 
 **Readings for the reviewer.** (1) `spec-017` §6.1 says `workflow show` prints "every operand a placeholder" while §7.6 writes `--title <title> …` and `<<field>>`: whether a declared title stays literal in `show` is not settled by the text, so the tests pin `show` only on actions that declare no title. (2) `W_ACTION_ARGUMENT_NOT_PASSED`'s `file` is pinned repository-relative (`.wingfoil/workflows/custom/demo.yaml`), as `spec-017` §2 states for its codes; the loader's own diagnostics print `workflows/custom/demo.yaml` in the same payload.
 
+**Correction (qa, 2026-11-18).** Commit `7318712dc50ffa34b84dd80eede1dc7b90532eb7` renames `argvByToken` to `argvByAction` in `test/core/workflow-next-offers.test.ts` (4 occurrences, no assertion changed): the blocking secret scan read the old name followed by an assignment as a credential (`dotenv-style-secret-line`, a false positive).
+`npx jest test/validation/secret-scan.test.ts test/core/workflow-next-offers.test.ts --maxWorkers=2 --noStackTrace` printed `Tests: 1 failed, 105 passed, 106 total` before that commit, since the scan still reported the committed name, and `Tests: 106 passed, 106 total` after it.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
