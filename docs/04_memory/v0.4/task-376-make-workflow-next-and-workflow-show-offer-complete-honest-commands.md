@@ -245,6 +245,106 @@ After the amendment `npx jest test/cli/workflow-unbound-none.integration.test.ts
 
 The first red (`564f2898e`) is withdrawn by `03f0b1b8c`. Its qa agent opened `src/core/workflow-next.ts` and part of `src/core/workflow-status.ts` before writing the tests, which `testing` T3 does not allow. The approver ruled that a new qa agent redoes the phase black-box. The section `### red (qa, 2026-11-18)` above describes the withdrawn tests and is not the contract of the new red.
 
+### red (qa, 2026-11-18)
+
+This section replaces the withdrawn red above. It was written by a new qa agent from the Acceptance Criteria, `spec-017` as amended at `6bfd29ec0`, `### design (architect, 2026-11-18)`, `### design gate (approver, 2026-11-18)` and real command output. No file under `src/` or `scripts/` was opened before the red commit, and neither the withdrawn section nor its commit was read.
+
+**Red commit:** `30727b3595f1135c97f109a90c4ec3bcb9bbdbb6`. Base `8d48ea8dc`; `git rev-list --count HEAD..main` printed `0`, so `main` was not merged.
+
+**Files.** New: `test/core/workflow-next-offers.test.ts` (AC 1, AC 4), `test/cli/workflow-next-offers.integration.test.ts` (AC 2, AC 3, AC 5). Changed pins, each stating the new contract:
+
+| File | Change | At red |
+|---|---|---|
+| `test/core/workflow-list-show.test.ts:407` | the shown `memory.add(type: task)` is the whole command with placeholders | fails: `argv` lacks `--title <title> --workflow <instance-id> --step <key>` |
+| `test/core/workflow-next.test.ts:460` | the evidence gains `manualOnly: true` | fails: the field is absent |
+| `test/core/workflow-status.test.ts:620`, `:628` | the evidence gains `manualOnly: false` | both fail: the field is absent |
+| `test/core/workflow-next-render.test.ts` (`STEP`) | the evidence is held in a constant carrying `manualOnly: false` | passes: the suite's expected console output does not change |
+
+The new field is read through local types and the `STEP` evidence is not a fresh literal, so the tree typechecks before and after the field ships: the red is the assertion, not TS2339. This departs from the design's expectation of a `tsc` red on purpose, because `test/lint/typecheck-clean.test.ts` would otherwise fail.
+
+**Per-AC mapping (all five red-first).**
+
+| AC | Bug | Tests | Observable pinned |
+|---|---|---|---|
+| 1 | `bug-486` | `workflow-next-offers.test.ts`, the two `AC 1` blocks | `manualOnly` for seven evidence combinations; a `run`-bound and a `manual`-bound checkpoint alike; the payload of `next` and `status`; both consoles |
+| 2 | `bug-439` | integration, `AC 2` | no `memory add` once linked or adopted, `done`, `pendingCreated` with `reaches` and `missingPaths`, `missing: [created]`, the console lines, a second type keeps its offer, a further element stays accepted (D5) |
+| 3 | `bug-490` | integration, `AC 3` | the argument order, `--set` of declared and of missing tokens, console quoting, interpolated values (D6), `W_ACTION_ARGUMENT_NOT_PASSED` on `workflow list` alone |
+| 4 | `bug-479` | `workflow-next-offers.test.ts`, `AC 4` | the seven whole commands with placeholders; `config.init` stays `wingfoil init` |
+| 5 | `bug-518` | integration, `AC 5` | one command per element for `approve`, `reject`, `submit`, `deprecate` (D4, D7), `notOffered` with its reason, each printed command executed, one and no eligible element, the `<id>` placeholder |
+
+**Runs.** `npx jest test/core/workflow-next-offers.test.ts test/cli/workflow-next-offers.integration.test.ts test/core/workflow-list-show.test.ts test/core/workflow-next.test.ts test/core/workflow-status.test.ts test/core/workflow-next-render.test.ts --maxWorkers=2`, exit `1`: `Test Suites: 5 failed, 1 passed, 6 total`, `Tests: 49 failed, 90 passed, 139 total`.
+
+| File | Failed | Passed |
+|---|---|---|
+| `test/cli/workflow-next-offers.integration.test.ts` | 26 | 13 |
+| `test/core/workflow-next-offers.test.ts` | 19 | 2 |
+| `test/core/workflow-status.test.ts` | 2 | 29 |
+| `test/core/workflow-list-show.test.ts` | 1 | 20 |
+| `test/core/workflow-next.test.ts` | 1 | 19 |
+| `test/core/workflow-next-render.test.ts` | 0 | 7 |
+
+`npx tsc --noEmit -p tsconfig.json`: exit `0`, no output. `npx jest test/lint --maxWorkers=2`: `Test Suites: 16 passed, 16 total`, `Tests: 165 passed, 165 total`.
+
+**The 15 tests of the two new files that pass at red** guard behaviour that must not change, or prove the fixture. The seven named `control:` run the literal commands the design expects to be offered and exit `0`, so a failing "as printed" test fails on what is offered and not on the fixture. The other eight: the add offered before the creation, `memory.submit` staying, a title outside the ID class printing `<title>`, no command but `workflow list` reporting the warning, one eligible element, the `<id>` placeholder, the console of `next` without the sentence on a checked step, and `config.init`.
+
+**First failing assertion of each red test** (`file:line`, test, the assertion that fails):
+
+- `workflow-next-offers.integration.test.ts:266` no action offers memory add, and the action reports the element in done: `expect(step.actions.filter((action) => isMemoryAdd(action.binding.argv))).toEqual([]);`
+- `workflow-next-offers.integration.test.ts:272` pendingCreated names the state the phase leaves it in; the kind created stays missing: `expect(step.pendingCreated).toEqual([{ element: { type: 'bug', id: ID, status: 'draft' }, reaches: 'pending', missi...`
+- `workflow-next-offers.integration.test.ts:282` the console prints the action as done and says what is really missing: `expect(lines).toContain(`    - ${DEMO_ADD} — done: ${ID}`);`
+- `workflow-next-offers.integration.test.ts:296` an element adopted by workflow adopt counts as created: no add is offered: `expect(add.binding.argv).toBeUndefined();`
+- `workflow-next-offers.integration.test.ts:308` a { type, path } entry not committed is named in missingPaths: `expect(step.pendingCreated).toEqual([{ element: { type: 'bug', id: ID, status: 'pending' }, reaches: 'pending', mis...`
+- `workflow-next-offers.integration.test.ts:318` a second type not created yet keeps its offer, and a further element stays accepted (design : `expect(actionOf(step, 'memory.add(type: bug, title: "First")').binding.argv).toBeUndefined();`
+- `workflow-next-offers.integration.test.ts:331` type, title and tags in the fixed order; an argument the verb cannot take is left out: `expect(actionOf(payload.next, DEMO_ADD).binding.argv).toEqual([`
+- `workflow-next-offers.integration.test.ts:339` the console quotes the title a shell would split: `expect(must(repo, ['workflow', 'next', 'demo']).stdout).toContain(`
+- `workflow-next-offers.integration.test.ts:349` a declared pattern token is a --set; a token not given is a --set placeholder, printed unquo: `expect(actionOf(payload.next, 'memory.add(type: release, kind: minor)').binding.argv).toEqual([`
+- `workflow-next-offers.integration.test.ts:369` memory.add(type: release, kind: minor) succeeds as printed once its placeholders are filled: `expect([run.status, run.stderr]).toEqual([0, '']);`
+- `workflow-next-offers.integration.test.ts:369` memory.add(type: task, title: "A task") succeeds as printed once its placeholders are filled: `expect([run.status, run.stderr]).toEqual([0, '']);`
+- `workflow-next-offers.integration.test.ts:396` a value holding a space prints the placeholder; a value in the ID class is printed: `expect(actionOf(payload.next, 'memory.add(type: task, title: "{release.title}", release: "{release.version}")').bin...`
+- `workflow-next-offers.integration.test.ts:402` a title around an interpolated value is one argv element: `expect(actionOf(payload.next, 'memory.add(type: decision-log, title: "Retrospective {release.version}")').binding.a...`
+- `workflow-next-offers.integration.test.ts:433` workflow list []: one warning per argument, by phase, action and argument, exit 0: `expect(ofFile(diagnostics, 'demo')).toEqual([expected('demo', 'phases[0].actions[0]', 'severity', 'bug')]);`
+- `workflow-next-offers.integration.test.ts:433` workflow list ["--all"]: one warning per argument, by phase, action and argument, exit 0: `expect(ofFile(diagnostics, 'demo')).toEqual([expected('demo', 'phases[0].actions[0]', 'severity', 'bug')]);`
+- `workflow-next-offers.integration.test.ts:447` comes after every other diagnostic of the payload: `expect(first).toBeGreaterThan(-1);`
+- `workflow-next-offers.integration.test.ts:487` memory.approve: a command for each pending element, argv the first, the draft one reported a: `expect(approve.binding.commands).toEqual([`
+- `workflow-next-offers.integration.test.ts:497` memory.reject: the same rule: `expect(reject.binding.commands).toEqual([`
+- `workflow-next-offers.integration.test.ts:506` memory.submit: one eligible element, so argv alone, the pending ones reported apart: `expect(submit.binding.argv).toEqual(['wingfoil', 'memory', 'submit', ALPHA]);`
+- `workflow-next-offers.integration.test.ts:516` memory.deprecate: every element has the edge, so nothing is reported apart: `expect(deprecate.binding.commands).toEqual([ALPHA, BETA, GAMMA].map((id) => ['wingfoil', 'memory', 'deprecate', id]));`
+- `workflow-next-offers.integration.test.ts:522` the console prints one command per element and the reason, never two ids in a command: `expect(text).toContain(`wingfoil memory approve ${BETA} --reason <reason>`);`
+- `workflow-next-offers.integration.test.ts:534` each command memory.approve prints exits 0 as printed, with the reason filled: `expect(commands).toHaveLength(count);`
+- `workflow-next-offers.integration.test.ts:534` each command memory.reject prints exits 0 as printed, with the reason filled: `expect(commands).toHaveLength(count);`
+- `workflow-next-offers.integration.test.ts:534` each command memory.deprecate prints exits 0 as printed, with the reason filled: `expect(commands).toHaveLength(count);`
+- `workflow-next-offers.integration.test.ts:557` the one command memory.submit prints exits 0 as printed: `expect(argv).toEqual(['wingfoil', 'memory', 'submit', ALPHA]);`
+- `workflow-next-offers.integration.test.ts:579` no eligible element: no argv, and the element is reported apart: `expect(approve.binding.argv).toBeUndefined();`
+- `workflow-list-show.test.ts:406` a self-creating main, an awaits, an iterate_over and a selection are shown as declared: `expect(reportBug).toMatchObject({`
+- `workflow-next-offers.test.ts:185` [record]: `expect(evidenceOf(built(kinds, missing, finalizable, created))).toEqual({ kinds, missing, finalizable, manualOnly });`
+- `workflow-next-offers.test.ts:185` [awaits, record]: `expect(evidenceOf(built(kinds, missing, finalizable, created))).toEqual({ kinds, missing, finalizable, manualOnly });`
+- `workflow-next-offers.test.ts:185` [created, record] with nothing created: `expect(evidenceOf(built(kinds, missing, finalizable, created))).toEqual({ kinds, missing, finalizable, manualOnly });`
+- `workflow-next-offers.test.ts:185` [created, record] with an element created: `expect(evidenceOf(built(kinds, missing, finalizable, created))).toEqual({ kinds, missing, finalizable, manualOnly });`
+- `workflow-next-offers.test.ts:185` [state, record]: `expect(evidenceOf(built(kinds, missing, finalizable, created))).toEqual({ kinds, missing, finalizable, manualOnly });`
+- `workflow-next-offers.test.ts:185` [record], not finalizable: `expect(evidenceOf(built(kinds, missing, finalizable, created))).toEqual({ kinds, missing, finalizable, manualOnly });`
+- `workflow-next-offers.test.ts:185` [state], not finalizable: `expect(evidenceOf(built(kinds, missing, finalizable, created))).toEqual({ kinds, missing, finalizable, manualOnly });`
+- `workflow-next-offers.test.ts:199` workflow next: the checkpoint of cp-run is manual only, whatever its binding kind: `expect(evidenceOf(result.next!)).toEqual({ kinds: ['record'], missing: ['record'], finalizable: true, manualOnly: t...`
+- `workflow-next-offers.test.ts:199` workflow next: the checkpoint of cp-manual is manual only, whatever its binding kind: `expect(evidenceOf(result.next!)).toEqual({ kinds: ['record'], missing: ['record'], finalizable: true, manualOnly: t...`
+- `workflow-next-offers.test.ts:205` workflow status: each frontier step carries the mark in its payload: `expect(steps.map((step) => [step.key, evidenceOf(step).manualOnly]).sort()).toEqual([`
+- `workflow-next-offers.test.ts:213` the console of next keeps (finalizable) and appends the manual-only sentence to the evidence: `expect(renderNextConsole(result).split('\n')).toContain('  evidence missing: record (finalizable) manual only: no e...`
+- `workflow-next-offers.test.ts:227` the console of status appends "; manual only" to the line of a manual-only step, and to no o: `expect(lineOf(renderStatusConsole(result))).toContain('; manual only');`
+- `workflow-next-offers.test.ts:264` memory.submit: `expect(argvByToken.get(token)).toEqual(argv);`
+- `workflow-next-offers.test.ts:264` memory.approve: `expect(argvByToken.get(token)).toEqual(argv);`
+- `workflow-next-offers.test.ts:264` memory.reject: `expect(argvByToken.get(token)).toEqual(argv);`
+- `workflow-next-offers.test.ts:264` memory.deprecate: `expect(argvByToken.get(token)).toEqual(argv);`
+- `workflow-next-offers.test.ts:264` memory.add(type: bug): `expect(argvByToken.get(token)).toEqual(argv);`
+- `workflow-next-offers.test.ts:264` memory.add(type: task): `expect(argvByToken.get(token)).toEqual(argv);`
+- `workflow-next-offers.test.ts:264` agent.execute: `expect(argvByToken.get(token)).toEqual(argv);`
+- `workflow-next.test.ts:460` red is current again, re-entered, and red's bug.sync_state expects 'wf(bug): sync bug-1 [in-: `expect(step.evidence).toEqual({ kinds: ['record'], missing: ['record'], finalizable: true, manualOnly: true });`
+- `workflow-status.test.ts:620` while its other evidence is missing, the step needs a record too but awaits nothing yet: `expect(step.evidence).toEqual({ kinds: ['state', 'record'], missing: ['state', 'record'], finalizable: false, manua...`
+- `workflow-status.test.ts:628` once its other evidence holds, it awaits the record (recordNeeded: true), finalizable, route: `expect(step.evidence).toEqual({ kinds: ['state', 'record'], missing: ['record'], finalizable: true, manualOnly: fal...`
+
+**Fixtures from real runs.** Scratch project built with `git init`, `wingfoil init --template Scrum --no-interactive` and the code build `0.3.2 (d8664e59f)`, the workflows of the integration file added. Producing commands: `workflow next <ref> [--format json]`, `workflow status`, `workflow show shown --format json`, `workflow list --all --format json`, `memory add … --workflow … --step …`, `workflow adopt adopted --step adopted.capture --element adr:adr-001-adopted-one --reason …`, `memory submit dl-002-beta --dry-run` (`illegal \`submit\` from "pending"`), `memory reject dl-001-alpha --reason x --dry-run` (`illegal \`reject\` from "draft"`).
+
+**Unasserted (`testing` T1).** No assertion covers: `reaches: null`; the order of `W_ACTION_ARGUMENT_NOT_PASSED` across workflows (registry order; only the order inside one workflow and the place after every other diagnostic are pinned); the layout of the console lines of `commands` and `notOffered` beyond the strings they hold; the console quoting of a shell character other than a space; how `workflow show` prints an action's declared `title` or `tags` and an interpolated argument.
+
+**Readings for the reviewer.** (1) `spec-017` §6.1 says `workflow show` prints "every operand a placeholder" while §7.6 writes `--title <title> …` and `<<field>>`: whether a declared title stays literal in `show` is not settled by the text, so the tests pin `show` only on actions that declare no title. (2) `W_ACTION_ARGUMENT_NOT_PASSED`'s `file` is pinned repository-relative (`.wingfoil/workflows/custom/demo.yaml`), as `spec-017` §2 states for its codes; the loader's own diagnostics print `workflows/custom/demo.yaml` in the same payload.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
