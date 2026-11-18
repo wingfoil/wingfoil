@@ -348,6 +348,44 @@ The new field is read through local types and the `STEP` evidence is not a fresh
 **Correction (qa, 2026-11-18).** Commit `7318712dc50ffa34b84dd80eede1dc7b90532eb7` renames `argvByToken` to `argvByAction` in `test/core/workflow-next-offers.test.ts` (4 occurrences, no assertion changed): the blocking secret scan read the old name followed by an assignment as a credential (`dotenv-style-secret-line`, a false positive).
 `npx jest test/validation/secret-scan.test.ts test/core/workflow-next-offers.test.ts --maxWorkers=2 --noStackTrace` printed `Tests: 1 failed, 105 passed, 106 total` before that commit, since the scan still reported the committed name, and `Tests: 106 passed, 106 total` after it.
 
+### design addendum (architect, 2026-11-18)
+
+Two gaps of the `spec-017` amendment, found at green. The second amendment is prepared uncommitted in this worktree.
+
+**Gap (a), a reserved token.** A `memory.add` argument naming a token `memory add --set` refuses is left out of the offered
+command with no warning, while AC 3 asks for a `workflow list` diagnostic for every argument that cannot be passed. §2 excluded
+every token of the patterns. `memory add --type bug --title probe --set slug=y --dry-run` prints
+`error: invalid flag value: --set cannot set "slug": memory add fills it itself or through its own option`, exit `2`
+(`spec-008` §10 lists the names). **Decision:** §6.1 leaves the argument out, and §2 reports it as
+`W_ACTION_ARGUMENT_NOT_PASSED` with the message
+`memory.add argument '<name>' cannot be passed: memory add --set reserves the name '<name>'`. The placeholders §6.1 prints for a
+token not given follow the same list, and a numeric token (`{nnn}`, `{n:3}`), which `memory add` generates, counts as reserved.
+
+**Gap (b), a declared literal in `workflow show`.** §6.1 said "every operand a placeholder", and §7.6 wrote `--title <title> …`.
+(a) a placeholder for every operand that depends on an instance or that only the user can give, a declared literal staying as
+declared; (b) a placeholder for every operand, literals included. **Recommended (a):** a literal does not depend on any
+instance, so hiding it would make `workflow show` less complete than the declaration it reads, against `bug-479`'s purpose. An
+argument that interpolates a value prints `<<name>>` as a whole, a list included.
+
+**What qa pins for the `slug` case (black box, through the CLI).** Fixture: a type whose `id_pattern` is `bug-{n}-{slug}` and a
+started workflow whose first phase declares `memory.add(type: bug, slug: fixed)`.
+
+| Command | Observable |
+|---|---|
+| `workflow list --format json` | exit `0`; exactly one `W_ACTION_ARGUMENT_NOT_PASSED`, with `severity: warning`, the workflow's repository-relative `file`, `path: phases[0].actions[0]` and the message `memory.add argument 'slug' cannot be passed: memory add --set reserves the name 'slug'` |
+| `workflow next --format json` | the offered `argv` holds no element containing `slug=`, and the payload's `diagnostics` hold no `W_ACTION_ARGUMENT_NOT_PASSED` |
+| `workflow show <name> --format json` | the shown `argv` holds no element containing `slug=` |
+| the offered command, with `<title>` filled, run as printed | exit `0`: `--set` refuses nothing |
+
+Positive control: in the same fixture, an argument naming an accepted token (a type with `{kind}` in its pattern,
+`kind: minor`) is offered as `--set kind=minor` and raises no diagnostic. For gap (b): `workflow show` prints a literal
+`title: "Fixed title here"` and `tags: [demo, two]` as declared, and prints `<title>` for `title: "Retro {release.version}"` and
+`<tags>` for `tags: [demo, "{release.version}"]`.
+
+**Pending amendment (approver).** `spec-017-workflow-commands-and-state-deduction`, §2, §6.1, §7.6 and a new Revision note,
+uncommitted. Reason:
+`Settle two gaps found at green: report a memory.add argument naming a token memory add --set reserves, and keep a declared literal as declared in workflow show (task-376 design addendum).`
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
