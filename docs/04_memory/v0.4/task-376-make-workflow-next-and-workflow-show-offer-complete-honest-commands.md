@@ -400,6 +400,61 @@ does not declare `nnn`; the offered command, with `<title>` filled, exits `0` an
 amendment's reason becomes:
 `Settle two gaps found at green: report a memory.add argument naming a token memory add --set reserves or a numeric token it generates, and keep a declared literal as declared in workflow show (task-376 design addendum).`
 
+### green (developer, 2026-11-18)
+
+**Commits.** `cc376b47b` (the five defects) and `228aab1cf` (the two further messages of `W_ACTION_ARGUMENT_NOT_PASSED`, after the amendment `ed64d5a2c`). The red in force is `30727b359`, with `7318712dc` and `d3bf12938` from the qa. Base unchanged: `git rev-list --count HEAD..main` printed `0` at the start and at the end of refactor, so `main` was not merged.
+
+**Red to green.** `npx jest test/cli/workflow-next-offers-reserved-tokens.integration.test.ts test/core/workflow-next-offer-details.test.ts test/cli/workflow-next-offers.integration.test.ts test/core/workflow-next-offers.test.ts test/core/workflow-list-show.test.ts test/core/workflow-next.test.ts test/core/workflow-status.test.ts test/core/workflow-next-render.test.ts test/validation/secret-scan.test.ts test/docs/cli-reference.test.ts --maxWorkers=2` printed `Test Suites: 10 passed, 10 total`, `Tests: 282 passed, 282 total`. The red section records `Tests: 49 failed, 90 passed, 139 total` for the first six files.
+
+**What was built.**
+
+| AC | Bug | Change | Observed on the code build |
+|---|---|---|---|
+| 1 | `bug-486` | `isManualOnly` in `src/core/workflow-next.ts`; the console of `next` and `status` | `workflow status --format json` on this repository: `release-planning.advance-pinned-build@release:minor-v1.0` has `"manualOnly":true`; its console line ends `; manual only` |
+| 2 | `bug-439` | `ActionView.done`; `DeducedStep.pendingCreated` in `src/workflow/deduce.ts` | scratch Scrum project, `workflow next bug-ingest-1-plan`: `memory.add(type: bug) — done: bug-001-login-crashes` and `evidence missing: created (bug-001-login-crashes is draft, the phase leaves it pending)` |
+| 3 | `bug-490` | `tokenArguments`, `memoryAddArguments`, `memoryAddOperands` in `src/workflow/bindings.ts`; `actionArgumentDiagnostics` in `src/core/workflow-list-show.ts` | `workflow list --format json` on this repository: two `W_ACTION_ARGUMENT_NOT_PASSED`, `dl` and `bug` of `release-planning`, as design D3 predicted |
+| 4 | `bug-479` | `builtinCommand` in `src/workflow/bindings.ts`, the one form `next` and `show` print | scratch Scrum project, `workflow show bug-ingest --format json`: `wingfoil memory submit <id>`, `wingfoil memory approve <id> --reason <reason>` |
+| 5 | `bug-518` | `hasTransitionEdge` in `src/memory/state-machine.ts`; `binding.commands`, `ActionView.notOffered` | the integration suite runs each printed command and pins exit `0` |
+
+**The two points the qa left open.** `workflow show` keeps a declared literal as declared and prints the placeholder of an interpolated argument, as `spec-017` §6.1 and §7.6 say since `ed64d5a2c`. The `file` of `W_ACTION_ARGUMENT_NOT_PASSED` is repository-relative, read from the snapshot's `workflowFiles`.
+
+**Allowlist.** The five `task-376` entries of `test/docs/name-resolvability.allowlist.ts` are removed: `grep -c "plannedBy: \['task-376'\]" test/docs/name-resolvability.allowlist.ts` printed `0`, and the suite passes.
+
+**New test file of the developer:** `test/core/workflow-next-offer-details.test.ts` (the parser, the operands, the edge predicate, the three messages, the console quoting).
+
+### refactor (developer, 2026-11-18)
+
+Every gate ran on `228aab1cf` with the five pending bug amendments in the working tree, after `waitslot.sh`, with `--maxWorkers=2`.
+
+| Gate | Command | Result |
+|---|---|---|
+| build | `npm run -s build` | exit `0` |
+| tests | `npm test -- --maxWorkers=2` | exit `1`: `Test Suites: 1 failed, 682 passed, 683 total`, `Tests: 1 failed, 12444 passed, 12445 total` |
+| coverage | `npm run test:coverage -- --maxWorkers=2` | exit `1`, the same one failure: `Tests: 1 failed, 12444 passed, 12445 total`; `All files` statements `98.82`, branches `96.44`, functions `98.52`, lines `99.45` |
+| lint | `npm run lint` | exit `0` |
+| API docs | `npm run docs:api` | exit `0` |
+| typecheck | `npm run typecheck` | exit `0` |
+| parity | `npx jest` on the eleven `docs.parity` files of `.wingfoil/workflows/bindings.yaml` | `Test Suites: 11 passed, 11 total`, `Tests: 81 passed, 81 total` |
+
+**The one failure is `bug-534`.** `test/cli/workflow-unbound-none.integration.test.ts`, "workflow next (console): exit 0, no unbound token on either stream and no "N diagnostic(s)" line": stdout ends with `5 diagnostic(s): --format json lists them`. `node dist/cli.js workflow next --format json` lists `{ W_UNCOMMITTED_INPUTS: 5 }`, one per pending bug amendment below. It clears when the approver records them.
+
+**T4.** `git log --first-parent --no-merges --format=%h <from>..HEAD -- <file>`, per file from its own commit, printed nothing for each: `test/core/workflow-next-offers.test.ts` from `7318712dc`; `test/cli/workflow-next-offers-reserved-tokens.integration.test.ts` from `d3bf12938`; `test/cli/workflow-next-offers.integration.test.ts`, `test/core/workflow-list-show.test.ts`, `test/core/workflow-next.test.ts`, `test/core/workflow-status.test.ts` and `test/core/workflow-next-render.test.ts` from `30727b359`.
+
+### self-review (developer, 2026-11-18)
+
+- **Each AC against its bug's Expected Behavior:** met, with the observations of the table above. `bug-486` also names "any deduction preview": `grep -rln "finalizable" src` prints `src/core/workflow-finalize.ts`, `src/core/workflow-next.ts` and `src/workflow/deduce.ts`, and `grep -rli "preview" src --include=*.ts` prints nothing, so `next` and `status`, which both build their steps with `buildStep`, are the readers.
+- **No other reader of an action's command:** `grep -rn "binding\.argv" src` prints only `src/core/workflow-list-show.ts` and `src/core/workflow-next.ts`.
+- **Absence with its positive case:** `workflow next`, `status` and `show` report no `W_ACTION_ARGUMENT_NOT_PASSED`, while `workflow list` reports it on the same project (`test/cli/workflow-next-offers.integration.test.ts`).
+- **Same class in the files touched:** `src/core/workflow-next.ts` held a second token-argument parser; it now reads the one in `src/workflow/bindings.ts`. The one-command rule covers `approve`, `reject`, `submit` and `deprecate` (D7).
+- **BDD:** `grep -n "wingfoil memory\|finalizable\|argv" docs/02_requirements/02_bdd/features/p4-workflow/P4.4-workflow-next.feature docs/02_requirements/02_bdd/features/p4-workflow/P4.7-workflow-show.feature` prints nothing: no scenario pins the changed output, and no feature file changed.
+- **`version:` bumps:** none; no `.wingfoil/` file changed.
+
+### Pending amendments (approver)
+
+Each is the bug's `### Retrospective`, uncommitted in this worktree. `bug-479` had no such subsection, so it also gains the heading `## Triage & Execution Notes`. Reason, the same for `bug-439`, `bug-479`, `bug-486`, `bug-490` and `bug-518`:
+`Record in the retrospective how task-376 fixed this bug and the command that shows it.`
+Until they are recorded, `test/cli/workflow-unbound-none.integration.test.ts` fails alone with `W_UNCOMMITTED_INPUTS` (`bug-534`).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -407,3 +462,7 @@ amendment's reason becomes:
      printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
      Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
      here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+
+- A variable name in the red file tripped the blocking secret scan, and only the full suite at refactor showed it: `npx jest test/validation/secret-scan.test.ts --maxWorkers=2` printed `Tests: 1 failed, 84 passed, 85 total` until the qa's rename `7318712dc`. Proposal: the qa runs that suite before a red commit, next to `test/lint`.
+- The design's reading of `spec-017` §2 left a reserved or numeric token out of the offered command with no warning; found at green, it took a second amendment (`ed64d5a2c`) and a further red (`d3bf12938`).
+- Five pending bug amendments keep the full suite and the coverage run at exit `1` on one test (`bug-534`), so neither gate can report a clean exit while a task closes bugs.
