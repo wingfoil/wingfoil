@@ -439,6 +439,119 @@ Each is prepared uncommitted in this worktree, and adds the bug's `### Retrospec
 - `bug-381-the-execution-context-re-resolves-its-commit-in-every-atrev-loader-and-reads-each-directive-body-with-its-own-git-spawn`:
   `--reason "Record the retrospective of the fix delivered by task-379."`
 
+### design addendum (architect, after review)
+
+**Base.** Head `679cf0035`, compared with base `4afbca9db`, each from a clean clone built with `npm run build`. Every row below ran `assembleExecutionContext` on a scratch repository of its own, with the construct in a Memory document linked from the element. 70 constructs ran. The direction below was tried on a throwaway copy outside the worktree; nothing of it is in this branch.
+
+**Root cause.** F1 and F3 are one defect: a scalar kept as written is an object while js-yaml is still loading, and the loader inspects that value. `!!set` requires each value to be `null`, so it refuses the object (F1, new in this task for null). A merge accepts any object and copies its enumerable fields, so a date adds a key `text` (F3, already on base through the timestamp type). F2 is a different defect: a key's text was made its identity, and YAML's identity is the resolved key.
+
+#### 1. Constructs against base
+
+| Construct (value valid on base) | Base | Head | Same? | Head must |
+|---|---|---|---|---|
+| `!!set {a: ~}`, `{a: null}`, `{a: Null}`, `{1.50: ~}`, `{a: *n}` | carried, `a: null` | **throws `YAMLException`** | different | carry, each scalar as written (`a: ~`, `a: null`, `a: Null`, `'1.50': ~`) |
+| `!!set {a: }`, `{? a, ? b}`, block `? a` | carried, `a: null` | the same | same | keep |
+| `!!omap [a: 1.50, b: ~]`, `!!pairs [a: 1.50, a: ~]` | `1.5`, `null` | `1.50`, `~` | different, intended | keep |
+| `!!omap [1.50: x]`, `!!pairs [1.50: x, ~: y]` | `'1.5'`, `'null'` | `'1.50'`, `'~'` | different, intended | keep |
+| `!!binary aGVsbG8=` | a map of byte indexes | the same | same | keep (candidate finding below) |
+| `!!timestamp 2026-10-05`, `!!timestamp "2026-10-05"` | `2026-10-05` | the same | same | keep |
+| `!!int 0x1F`, `!!float 1.50`, `!!float "1.50"`, `!!bool True`, `!!null ~` | `31`, `1.5`, `1.5`, `true`, `null` | `0x1F`, `1.50`, `1.50`, `True`, `~` | different, intended | keep |
+| `!!int "12"`, `!!float 1`, `!!bool "true"`, `!!null` with no text | `12`, `1`, `true`, `null` | the same | same | keep |
+| `!!null ""` | left out by the scan | the same | same | keep |
+| `!!str 1.50`, `!!str ~` | `'1.50'`, `'~'` | the same | same | keep |
+| `!!map {a: 1.50}`, `!!seq [1.50, ~]` | `1.5`, `null` | `1.50`, `~` | different, intended | keep |
+| `!!merge <<: {a: 1}` | merged | the same | same | keep |
+| Anchor and alias to a scalar, a null, a mapping, in a sequence, as a key | canonical | as written at each use | different, intended | keep |
+| Merge from a mapping, a list, an alias, a list of aliases | merged, canonical | merged, as written | different, intended | keep |
+| `m: {<<: 2026-10-05, b: 1}`, `<<: [2026-10-05]` (F3) | invented key `text` | the same | same | carry `b: 1` alone |
+| `<<: 1.50`, `<<: ~` | left out by the scan | the same | same | keep |
+| `a: &x {b: *x}`, `a: &x [*x]` | **throws `RangeError`** | **throws `RangeError`** | same | leave out and report (D6) |
+| Two date keys in one mapping | throws `YAMLException` | carried | different, intended | keep |
+
+#### 2. The merge-key rule
+
+**The keys of a mapping as written must correspond one to one with its keys under YAML.** A key under YAML is the resolved key the Memory scan names it by (`1.50` is `1.5`, `"1.50"` is `1.50`). This gives three outcomes: one YAML key with one text is carried, whatever overrode it; two YAML keys with one text is F2; one YAML key with two texts is the mirror of F2.
+
+| Case | YAML keys | Texts | Base | Head | Required |
+|---|---|---|---|---|---|
+| `{<<: {a: 1}, a: 2}` | 1 | 1 | `a: 2` | `a: 2` | carried, `a: 2` |
+| `{<<: *d, a: 9}` with `d: {a: 1, b: 2}` | 2 | 2 | `a: 9`, `b: 2` | the same | carried, `a: 9`, `b: 2` |
+| `{a: 2, <<: {a: 1}}` | 1 | 1 | `a: 2` | `a: 2` | carried, `a: 2` |
+| `{<<: [{a: 1}, {a: 2}]}` | 1 | 1 | `a: 1` | `a: 1` | carried, `a: 1` |
+| `{<<: {1.50: x}, 1.50: y}` | 1 | 1 | `'1.5': 'y'` | `'1.50': 'y'` | carried, `'1.50': 'y'` |
+| `{<<: {"1.50": x}, "1.50": y}` | 1 | 1 | `'1.50': 'y'` | the same | carried, `'1.50': 'y'` |
+| `{<<: {1.5: x}, "1.5": y}` | 1 | 1 | `'1.5': 'y'` | the same | carried, `'1.5': 'y'` |
+| `{<<: {"1.50": x}, 1.50: y}` (F2) | 2 | 1 | both keys | `x` lost | left out, same text |
+| `{<<: {1.50: x}, "1.50": y}` | 2 | 1 | both keys | `x` lost | left out, same text |
+| `{<<: [{"1.50": x}, {1.50: y}]}` | 2 | 1 | both keys | `y` lost | left out, same text |
+| `o: {m: {<<: {"1.50": x}, 1.50: y}}` (nested) | 2 | 1 | both keys | `x` lost | left out, same text |
+| `{<<: {"~": x}, ~: y}` | 2 | 1 | both keys | `x` lost | left out, same text |
+| `{<<: {1.5: x}, 1.50: y}` | 1 | 2 | `'1.5': 'y'` | **both, overridden `x` is back** | left out, two texts (D4) |
+| `{<<: {"1.5": x}, 1.50: y}` | 1 | 2 | `'1.5': 'y'` | **both** | left out, two texts (D4) |
+| `{<<: [{1.5: x}, {1.50: y}]}` | 1 | 2 | `'1.5': x` | **both** | left out, two texts (D4) |
+| `{<<: {null: x}, ~: y}` | 1 | 2 | `'null': 'y'` | **both** | left out, two texts (D4) |
+
+**Use on this repository at `679cf0035`:** of 1,373 Memory documents, 0 use a merge key, 0 an explicit tag and 0 an anchor or alias (a regular expression over each document's frontmatter, comments removed; it matched positive samples of each form and no negative sample).
+
+#### 3. What `spec-012` §7 already says
+
+The approved sentence: "A document two of whose frontmatter keys, at any depth, have the same text once each key is kept as written (`"1.50"` and `1.50`) cannot be rendered, and is left out and reported under that same rule."
+
+- **F2 follows from it**, with no new text: the merged key and the explicit key are two keys with one text. F1 and F3 follow from "Scalars as written", so they need none either.
+- **New text is needed** for one YAML key with two texts and for frontmatter that contains itself: the approved sentence covers neither. The amendment also states that an ordinary override is carried.
+
+#### Cases for the qa
+
+Through `assembleExecutionContext`, the construct in a Memory document linked from the element unless a row says otherwise. Under D4 (a), D5 (a) and D6 (a).
+
+| # | Frontmatter | Observable |
+|---|---|---|
+| 1 | `s: !!set {a: ~}` | carried, block lines `s:` and `  a: ~` |
+| 2 | `s: !!set {a: null}`, `s: !!set {a: Null}` | carried, `  a: null`, `  a: Null` |
+| 3 | `s: !!set {1.50: ~}` | carried, `  '1.50': ~` |
+| 4 | `n: &n ~` and `s: !!set {a: *n}` | carried, `'n': ~` and `  a: ~` |
+| 5 | Row 1 on the element | the context builds, section 1 holds `  a: ~` |
+| 6 | Row 1 on a relevant sibling that `limits: {maxDocs: 1}` ranks out | the context builds, the sibling is not carried and not reported |
+| 7 | `m: {<<: 2026-10-05, b: 1}` and `m: {<<: [2026-10-05], b: 1}` | carried, `m:` and `  b: 1`, no line `text` |
+| 8 | Each row of the merge table above marked "carried" | carried with exactly the lines given |
+| 9 | Each row marked "left out, same text" | not carried; `W_MEMORY_UNREADABLE (<path>): unreadable frontmatter in <path>: two of its frontmatter keys have the same text, so an execution context cannot carry it` |
+| 10 | Each row marked "left out, two texts" | not carried; the same line ending `a merge key gives one of its frontmatter keys two texts, so an execution context cannot carry it` |
+| 11 | `a: &x {b: *x}` and `a: &x [*x]` | not carried; the same line ending `its frontmatter contains itself through an alias, so an execution context cannot carry it` |
+| 12 | A row of 9 on the element | `ok: false`, `VALIDATION`, `element 'task:<id>' cannot enter an execution context: two of its frontmatter keys have the same text` |
+| 13 | A row of 10 on the element | `ok: false`, `VALIDATION`, `element 'task:<id>' cannot enter an execution context: a merge key gives one of its frontmatter keys two texts` |
+| 14 | A row of 11 on the element | `ok: false`, `VALIDATION`, `element 'task:<id>' cannot enter an execution context: its frontmatter contains itself through an alias` |
+| 15 | Rows 9, 10 and 11 on a document ranked after `maxDocs` | not carried, still reported; the next document takes the slot |
+| 16 | `m: {"\x01a\x02b\x03": x, b: 1}` | carried, the key rendered exactly as on base: `"\x01a\x02b\x03": x` |
+| 17 | Every row above | `assembleExecutionContext` never throws |
+| 18 | One fixture holding rows 1 to 16, built twice | byte-identical payloads, equal warnings |
+
+#### Direction for the developer
+
+1. **Keep a written scalar opaque to the loader.** `text` becomes non-enumerable, so a merge copies nothing from it (F3). The payload schema's `!!set` accepts a null kept as written as a null value (F1).
+2. **Separate a key's identity from its text.** During the load a key must be named by its resolved YAML key and its written text together; after the load, one walk of the value checks the rule of point 2 per mapping and rebuilds it with the written texts. The walk must memoize shared aliases and detect a value that contains itself. A typed key whose text equals its resolved key needs no second name, so `1.5` and `"1.5"` stay one key to the loader's own override.
+3. **No in-band confusion.** A key the document itself writes must never be read as the internal form: decode only what this load produced. Cover the case where such a key sits beside its genuine twin with a unit test of your own (on the prototype that document is left out, with the reason `its frontmatter cannot be read as written, so an execution context cannot carry it`).
+4. **No YAML error escapes.** `writtenFrontmatter` turns every `YAMLException` into the left-out result, not only `duplicated mapping key`; the element's path turns it into the `VALIDATION` refusal. With item 2's cycle check, no input of the 70 constructs reaches an uncaught throw on the prototype (`THROWS` count 0).
+5. **Keep the read as it is:** one batch, before §6's bounds, so AC 3's count of 4 `cat-file --batch` holds.
+
+**Measured on the prototype.** `npx jest test/core/context.test.ts test/core/context-builder.test.ts test/core/context-payload-format.test.ts test/core/context-payload-integrity.test.ts test/core/context-spawn-count.test.ts test/core/context-shipped-templates.test.ts test/mcp/session-context-resource.test.ts test/mcp/role-prompt-context.test.ts --maxWorkers=2 --noStackTrace` → 8 suites, 230 passed, with no test edited.
+
+| Payload of this repository, role `developer`, this task | Base | Head | Prototype |
+|---|---|---|---|
+| At `0253adfb3` | 323,427 bytes, `d212452097dc5c6b…` | identical | identical |
+| At `679cf0035` | 369,238 bytes, `4b8fe1fcc238853e…` | identical | identical |
+
+#### Decisions for the approver
+
+- **D4 (one YAML key with two texts).** (a) Leave the document out and report it; (b) carry the value YAML selects under the winning key's text. **Recommended: (a).** It never shows a value YAML overrode, and no document of this repository uses a merge key, so (b)'s own merge resolution would be code with no user.
+- **D5 (F3).** (a) Fix it in this task; (b) file it apart. **Recommended: (a).** It is the root cause of F1, and the F1 fix direction removes it.
+- **D6 (frontmatter that contains itself).** (a) Leave it out and report it in this task; (b) file it apart. **Recommended: (a).** The throw is already on base, but it breaks the contract that an expected failure is returned, in the function this task changes, and one such relevant document stops every context that reaches it.
+
+**Pending amendment (approver).** `spec-012-context-loader-relevance-filtering`, prepared uncommitted in this worktree under D4 (a) and D6 (a): §7 "What never enters a payload" and a new Revision note. Proposed reason:
+
+`--reason "Extend the frontmatter that cannot be rendered to a merge key that gives one key two texts and to frontmatter that contains itself through an alias, and state that an ordinary merge override is carried, per task-379."`
+
+**Candidate finding, not part of this task.** `s: !!binary aGVsbG8=` reaches the payload as a map of byte indexes (`'0': 104`, `'1': 101`, …) on base and on head; expected, the binary value as written. Suggested severity: low.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
