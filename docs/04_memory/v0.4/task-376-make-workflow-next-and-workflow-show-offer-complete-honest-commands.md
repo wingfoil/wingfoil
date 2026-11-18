@@ -386,6 +386,17 @@ Positive control: in the same fixture, an argument naming an accepted token (a t
 uncommitted. Reason:
 `Settle two gaps found at green: report a memory.add argument naming a token memory add --set reserves, and keep a declared literal as declared in workflow show (task-376 design addendum).`
 
+**Correction: a numeric token has its own message.** The sentence above that counts a numeric token as reserved is replaced
+by this paragraph. `--set` does not reserve `nnn`: with `id_pattern: "bug-{nnn}-{slug}"`,
+`memory add --type bug --title 'probe one' --set nnn=7 --dry-run` exits `0` and generates `bug-001-probe-one`, so the name is
+accepted and the value ignored, and "reserves the name" would be false. §2 therefore reports
+`memory.add argument 'nnn' cannot be passed: memory add generates the numeric token {nnn}`. qa pins, with that `id_pattern`
+and `memory.add(type: bug, nnn: 7)`: `workflow list --format json` exits `0` with exactly one `W_ACTION_ARGUMENT_NOT_PASSED`
+carrying that message; the `argv` of `workflow next` and `workflow show` hold no element containing `nnn=`, also when the action
+does not declare `nnn`; the offered command, with `<title>` filled, exits `0` and creates an id numbered by `memory add`. The
+amendment's reason becomes:
+`Settle two gaps found at green: report a memory.add argument naming a token memory add --set reserves or a numeric token it generates, and keep a declared literal as declared in workflow show (task-376 design addendum).`
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
