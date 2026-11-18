@@ -379,6 +379,66 @@ Warning line of case a: `W_MEMORY_UNREADABLE (<path>): unreadable frontmatter in
 
 `--reason "Leave out and report a Memory document with two frontmatter keys of the same text, refuse such an element as VALIDATION, and decide it before the bounds of section 6, per task-379."`
 
+### green (developer, 2026-11-18)
+
+**Base.** The branch at `4d589c8e9`, which holds the corrected red (`08dca4d25`), the `spec-012` amendment `34cad2c98` and the qa's `02c7e8f9d`. PATH guard: `command -v wingfoil` printed the task's PATH shim; `wingfoil --version` and `node dist/cli.js --version` both printed `0.3.2 (4d589c8e9bf252121e15652405d90fcbba4341ca)`. `git rev-list --count HEAD..main` printed `0`, so no merge was needed.
+
+**Commit.** `4f467fb93` `fix(core): task-379 — unique payload markers, scalars as written, one resolved commit`, changing the files of the design's `#### Files` list that are source: `src/core/context.ts`, `src/core/loaders.ts`, `src/core/index.ts`, `src/memory/query.ts`, `src/memory/index.ts`, `src/mcp/prompt.ts`.
+
+**Red to green.** `npx jest test/core/context-payload-integrity.test.ts test/core/context-spawn-count.test.ts test/core/context-payload-duplicate-keys.test.ts --maxWorkers=2 --noStackTrace` printed `Test Suites: 3 passed, 3 total` and `Tests: 57 passed, 57 total`.
+
+| AC | Implementation | Evidence |
+|---|---|---|
+| 1 `bug-265`, D1 (a) | `payloadCandidates` leaves out and reports a relevant document whose type is not declared for its path, or that repeats a key; `repeatedKeyProblem` refuses a repeat in `assembleExecutionContext` and `serializeExecutionContext` | `test/core/context-payload-integrity.test.ts`, AC 1 |
+| 2 `bug-267`, D2 (a), D3 (a) | `WrittenScalar`, base of `WrittenTimestamp`; the payload schema keeps the text of null, boolean, integer, float and timestamp scalars; `CONTEXT_PAYLOAD_FORMAT` stays `1` and its comment states the rule of `spec-012` Consequences | the same file, AC 2 |
+| 3 `bug-381` | `…AtCommit` readers, `parseDnaYaml` on the one read of `dna.yaml`, directive bodies in one `readPathsAtRev` | `test/core/context-spawn-count.test.ts` |
+| Amendment `34cad2c98` | Frontmatter as written is read for the element and every document §6 finds relevant before the bounds, in one batch: a document with two keys of one text is left out and reported, such an element refuses the context | `test/core/context-payload-duplicate-keys.test.ts` |
+
+### refactor (developer, 2026-11-18)
+
+**New test file.** `a5d2a774f` adds `test/core/context-written-scalars.test.ts` (7 tests): an explicit `!!null`, an alias, a merge key, the text a kept scalar names itself by, the barrel export, and `findMemoryDocumentByTypeAndIdAtCommit`. No existing test file changed: `git diff --name-only 4d589c8e9..HEAD -- test` lists only that file.
+
+**Measured again on this repository** (`assembleExecutionContext`, role `developer`, this task, git processes counted by wrapping `spawnSync` and `execFileSync` before requiring `dist/core/index.js`):
+
+| `stateRef` | Total | `rev-parse` | `show` | `ls-tree` | `cat-file` | Bytes | sha256 |
+|---|---|---|---|---|---|---|---|
+| `0253adfb3` (the design's commit), two runs | 11 | 1 | 3 | 3 | 4 | 323,427 | `d212452097dc5c6b4b58db52f41dc96d2bf695906ec3ca6e410403c2d0605315` |
+
+The design measured 27 processes before the change and the same sha256 prefix `d212452097dc5c6b`.
+
+**Gates**, each after the heavy-gate slot where it takes the lock, with the three pending bug amendments in the working tree:
+
+| Command | Result |
+|---|---|
+| `npm test -- --maxWorkers=2` | exit 1: `Test Suites: 1 failed, 682 passed, 683 total`, `Tests: 1 failed, 12394 passed, 12395 total` |
+| `npm run test:coverage -- --maxWorkers=2` | exit 1, the same single failure; `All files` 98.83 statements, 96.45 branches, 98.54 functions, 99.46 lines |
+| `npm run lint` | exit 0 |
+| `npm run docs:api` | exit 0 |
+| `npm run typecheck` | exit 0 |
+
+**The one failure is `bug-534`.** `test/cli/workflow-unbound-none.integration.test.ts`, "workflow next (console)", fails on `3 diagnostic(s)`. `node dist/cli.js workflow next --format json` names them: three `W_UNCOMMITTED_INPUTS`, one for each pending bug amendment. With the three amendments set aside, the same file printed `Tests: 4 passed, 4 total`. The document-parity suites under `test/docs/` ran inside the full suite and none failed.
+
+**Coverage against the last recorded figures.** The latest figures in a task's notes are those of `task-337`: 98.84, 96.45, 98.53, 99.45. Against them this branch is 0.01 lower on statements, equal on branches, and 0.01 higher on functions and lines. Those figures were not measured at this branch's base.
+
+### self-review (developer, 2026-11-18)
+
+- **T4.** `git log --first-parent --no-merges --format=%h <commit>..HEAD -- <file>` printed nothing for `test/core/context-payload-integrity.test.ts` from `08dca4d25`, `test/core/context-spawn-count.test.ts` from `96575eb7f` and `test/core/context-payload-duplicate-keys.test.ts` from `02c7e8f9d`.
+- **Scope.** `git diff --name-only 4d589c8e9..HEAD` lists the six source files above and the new test file. `src/core/agent-context.ts` and `src/core/revision.ts` are untouched, as the design rules.
+- **One commit.** `grep -c "AtRev(root, sha" src/core/context.ts` prints `3`, down from the design's `9`: the three left are `readPathAtRev` and `readPathsAtRev`, the storage reads that name the sha and resolve nothing.
+- **Bugs.** Each Expected Behavior is met: `bug-265` by the left-out rule (AC 1), `bug-267` by its first alternative, every scalar as written (AC 2), `bug-381` by the `…AtCommit` forms and the one batch (AC 3).
+- **Unasserted (`testing` T1).** The rethrow in `writtenFrontmatter` of a YAML error other than a duplicated mapping key has no test: the scan has parsed the same text, so no fixture reaches it.
+
+### Pending amendments (approver)
+
+Each is prepared uncommitted in this worktree, and adds the bug's `### Retrospective`:
+
+- `bug-265-the-context-payload-s-body-markers-are-not-unique-a-memory-document-whose-frontmatter-says-type-directive-reuses-a-directive-s-marker-key-and-two-documents-with-one-type-and-id-share-one`:
+  `--reason "Record the retrospective of the fix delivered by task-379."`
+- `bug-267-the-context-payload-rewrites-non-date-scalars-of-the-carried-frontmatter-1.50-as-1.5-0o17-as-15-0x1f-as-31-1e3-as-1000-12-as-12-and-a-tilde-as-null-while-dates-are-kept-as-written`:
+  `--reason "Record the retrospective of the fix delivered by task-379."`
+- `bug-381-the-execution-context-re-resolves-its-commit-in-every-atrev-loader-and-reads-each-directive-body-with-its-own-git-spawn`:
+  `--reason "Record the retrospective of the fix delivered by task-379."`
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -386,3 +446,6 @@ Warning line of case a: `W_MEMORY_UNREADABLE (<path>): unreadable frontmatter in
      printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
      Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
      here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+
+- A red assertion could not pass: `expect(payload).not.toContain('bug-007-astray')` while the fixture's element links that id in its own carried `depends_on`. Green stopped and the qa corrected it in `08dca4d25`. Proposal: a negative assertion on a payload names the heading or the marker, never a bare id.
+- Keeping scalars as written made `"1.50"` and `1.50` one key, a case the design did not cover; it surfaced at green and needed the `spec-012` amendment `34cad2c98` and a second red, `02c7e8f9d`.
