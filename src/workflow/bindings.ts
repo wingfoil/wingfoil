@@ -247,16 +247,30 @@ export function memoryAddPatternTokens(memoryYaml: MemoryYaml | null, type: stri
  * cannot be passed: an argument naming one is left out.
  */
 export function memoryAddOperands(args: readonly MemoryAddArgument[], tokens: readonly string[]): string[] {
-  const shown = ({ name, value }: MemoryAddArgument): string => (value === null || value === '' ? `<${name}>` : value);
+  return memoryAddOperandParts(args, tokens).map((part) => part.text);
+}
+
+/** One operand of `memory add`, and whether it holds a value the action gave rather than a placeholder (`spec-017` §6.1). */
+export interface MemoryAddOperandPart {
+  readonly text: string;
+  readonly given: boolean;
+}
+
+/** {@link memoryAddOperands}, each operand saying where it comes from: a value and a placeholder may be spelled alike. */
+export function memoryAddOperandParts(args: readonly MemoryAddArgument[], tokens: readonly string[]): MemoryAddOperandPart[] {
+  const flag = (text: string): MemoryAddOperandPart => ({ text, given: false });
+  const isGiven = ({ value }: MemoryAddArgument): boolean => value !== null && value !== '';
+  const shown = (arg: MemoryAddArgument): string => (isGiven(arg) ? arg.value! : `<${arg.name}>`);
   const settable = tokens.filter((token) => !RESERVED_SET_NAMES.has(token) && !isNumericToken(token));
   const tags = args.find((arg) => arg.name === 'tags');
   const declared = args.filter((arg) => settable.includes(arg.name));
+  const title = args.find((arg) => arg.name === 'title') ?? { name: 'title', value: null };
   return [
-    '--title',
-    shown(args.find((arg) => arg.name === 'title') ?? { name: 'title', value: null }),
-    ...(tags === undefined ? [] : ['--tags', shown(tags)]),
-    ...declared.flatMap((arg) => ['--set', `${arg.name}=${shown(arg)}`]),
-    ...settable.filter((token) => !declared.some((arg) => arg.name === token)).flatMap((token) => ['--set', `${token}=<${token}>`]),
+    flag('--title'),
+    { text: shown(title), given: isGiven(title) },
+    ...(tags === undefined ? [] : [flag('--tags'), { text: shown(tags), given: isGiven(tags) }]),
+    ...declared.flatMap((arg) => [flag('--set'), { text: `${arg.name}=${shown(arg)}`, given: isGiven(arg) }]),
+    ...settable.filter((token) => !declared.some((arg) => arg.name === token)).flatMap((token) => [flag('--set'), flag(`${token}=<${token}>`)]),
   ];
 }
 

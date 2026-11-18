@@ -31,7 +31,7 @@ import type { Diagnostic } from '../validation';
 import { reportWarning } from '../validation/warning';
 import {
   builtinCommand,
-  memoryAddOperands,
+  memoryAddOperandParts,
   memoryAddPatternTokens,
   memoryAddType,
   resolveToken,
@@ -40,6 +40,7 @@ import {
   unquoted,
   type BindingsYaml,
   type BuiltinOperands,
+  type MemoryAddOperandPart,
   type TokenBinding,
 } from '../workflow/bindings';
 import {
@@ -356,10 +357,37 @@ const TRANSITION_OPS: Readonly<Record<string, TransitionOp>> = {
   'memory.deprecate': 'deprecate',
 };
 
+/**
+ * The argv elements that hold a value rather than a placeholder, by position, for the console alone (`spec-017` §6.1): the
+ * spelling cannot tell a declared `<draft>` from a placeholder, and the JSON `argv` stays a plain list of strings. Only the
+ * code that builds a command knows; a command no builder registered is read by its spelling.
+ */
+const GIVEN_ELEMENTS = new WeakMap<readonly string[], ReadonlySet<number>>();
+
+/** The parts of the `memory add` operands of `action`, in the order the command prints them. */
+function addOperandParts(action: DeducedAction, inputs: NextInputs): MemoryAddOperandPart[] {
+  return memoryAddOperandParts(action.addArguments ?? [], memoryAddPatternTokens(inputs.memoryYaml, memoryAddType(action.token)));
+}
+
 /** The operands of a built-in command of `step`, with `id` for the element a Memory verb acts on (`spec-017` §6.1). */
 function stepOperands(action: DeducedAction, step: DeducedStep, inputs: NextInputs, id: string): BuiltinOperands {
-  const tokens = memoryAddPatternTokens(inputs.memoryYaml, memoryAddType(action.token));
-  return { id, instance: step.instance, step: step.key, add: memoryAddOperands(action.addArguments ?? [], tokens) };
+  return { id, instance: step.instance, step: step.key, add: addOperandParts(action, inputs).map((part) => part.text) };
+}
+
+/** The whole `wingfoil` command of an action, its given `memory add` operands registered for the console. */
+function wingfoilCommand(action: DeducedAction, step: DeducedStep, inputs: NextInputs, prefix: readonly string[]): string[] {
+  const argv = builtinCommand(action.token, prefix, stepOperands(action, step, inputs, '<id>'));
+  if (tokenName(action.token) === 'memory.add') {
+    GIVEN_ELEMENTS.set(argv, new Set(addOperandParts(action, inputs).flatMap((part, index) => (part.given ? [prefix.length + index] : []))));
+  }
+  return argv;
+}
+
+/** A project `run` command: every element is the project's own value, none a placeholder WingFoil prints. */
+function runCommand(run: readonly string[], text: string): string[] {
+  const argv = interpolateRun(run, text);
+  GIVEN_ELEMENTS.set(argv, new Set(argv.keys()));
+  return argv;
 }
 
 /** The binding of one action with no target to choose among, the step's operands filled (`spec-017` §6.1). */
@@ -367,11 +395,11 @@ function actionBinding(action: DeducedAction, step: DeducedStep, phase: Phase, i
   const binding = resolveToken(action.token, 'action', inputs.bindings);
   switch (binding.kind) {
     case 'wingfoil': // a built-in `wingfoil` binding always names its command (`bindings.ts`)
-      return { kind: 'wingfoil', argv: builtinCommand(action.token, binding.argv!, stepOperands(action, step, inputs, '<id>')) };
+      return { kind: 'wingfoil', argv: wingfoilCommand(action, step, inputs, binding.argv!) };
     case 'agent':
       return { kind: 'agent', argv: builtinCommand(action.token, binding.argv!, stepOperands(action, step, inputs, '<id>')) };
     case 'run':
-      return { kind: 'run', argv: interpolateRun(binding.argv!, action.text) }; // a `run` binding is its argv
+      return { kind: 'run', argv: runCommand(binding.argv!, action.text) }; // a `run` binding is its argv
     case 'manual': {
       // A step exists only for an open plan, a Memory element: `memory.yaml` is present.
       const commit = binding.source === 'built-in' ? expectedCommit(action, phase, inputs.memoryYaml!) : undefined;
@@ -722,15 +750,15 @@ export function humanNeededLine(step: Step): string | null {
   return approvalLine(awaiting, step.key);
 }
 
-/** An argv element as a POSIX shell reads it (`spec-017` §6.1): quoted when the shell would split it, a placeholder never. */
-function shellWord(element: string): string {
-  if (/^(?:[a-z][a-z0-9_-]*=)?<[a-z][a-z0-9_-]*>$/.test(element)) return element;
+/** An argv element as a POSIX shell reads it (`spec-017` §6.1): quoted when the shell would misread it, a placeholder never. */
+function shellWord(element: string, given: boolean): string {
+  if (!given && /^(?:[a-z][a-z0-9_-]*=)?<[a-z][a-z0-9_-]*>$/.test(element)) return element;
   if (element !== '' && !/[\s'"`$\\;&|()*?[\]<>!]|^[#~]/.test(element)) return element;
   return `'${element.replace(/'/g, `'\\''`)}'`;
 }
 
 /** A command as the console prints it. */
-const commandLine = (argv: readonly string[]): string => argv.map(shellWord).join(' ');
+const commandLine = (argv: readonly string[]): string => argv.map((element, index) => shellWord(element, GIVEN_ELEMENTS.get(argv)?.has(index) === true)).join(' ');
 
 /** The console lines of one action (`spec-017` §6.1): a creation already made, its commands, the targets left out. */
 function actionLines(action: ActionView): string[] {

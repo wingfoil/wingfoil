@@ -1321,8 +1321,9 @@ New in 0.4, the offered `memory add` carries the arguments the action declares, 
 per other argument that names a token of the type's `id_pattern` or `path` that `--set` can fill; a placeholder such as
 `--set version=<version>` per such token the action does not give; then `--workflow` and `--step`. A value
 taken from an element must use only the id characters (`a-z`, `0-9`, `-`, `.`): one that has none, or that holds
-anything else, prints as the placeholder of its argument. The console quotes an element a shell would split, as in
-`--title 'Fixed title here'`, and never a placeholder.
+anything else, prints as the placeholder of its argument. The console quotes an element a shell would misread, as in
+`--title 'Fixed title here'`, a declared value spelled like a placeholder included (`--title '<draft>'`), and never a
+placeholder.
 
 New in 0.4, a Memory verb offers **one command per element**, because each verb takes one id. `argv` is the first
 command, and `commands` lists them all when there are two or more. An element whose state has no edge for the verb is
