@@ -430,6 +430,7 @@ Secret sweep from a checkout with `dist/` (the known false positives of `bug-402
   class, the test reading the working tree, from a new source. With the report committed the suite passes
   (`npx jest test/cli/workflow-unbound-none.integration.test.ts` → 4/4). `docs.parity` runs inside the full suite.
 - 2026-11-18: this branch merged into `main` (`2326814fa`). The approver ruled `backlog_committed` = 50: W1-21 is filed with the `w1` tasks and counted in the baseline. Filing it now keeps 7 fix tasks of 23 open, 30.4 %, so the start set of `## Rulings W1` begins with the two fixes.
+- 2026-11-18: `w1` started from `main` `4afbca9db`. The first `red` of `task-376` and `task-379` withdrawn on the approver's ruling (T3, see the Retrospective): reverts `03f0b1b8c` and `6444299db`, new `qa` agents.
 
 #### W0 measures
 
@@ -441,3 +442,9 @@ Secret sweep from a checkout with `dist/` (the known false positives of `bug-402
   `task-336` with `task-335` in `backlog`); the order has to come from the plan.
 - A task's `design`, `red`, `green` and `refactor` are complete only by a record even when the task is `done`: four
   records per task, 108 for `w0` (W0-R3).
+- `testing` T3 (`red` is black-box) has no check behind it. In `w1` the `red` of `task-376` and of `task-379` read the
+  implementation before writing the tests, each agent saying so in its report; the approver had both reds withdrawn and
+  rewritten by new `qa` agents (2026-11-18). A look back over the `w0` `qa` agents whose launches were logged with an
+  id found 11 of 14 reading a file under `src/` before their first test file. The instructions forbade changing
+  `src/`, not reading it. The `w0` tasks are not reopened: each passed its review, its approval and the wave-checks. The
+  `qa` instructions now forbid the read; what checks it is a question for the retrospective.
