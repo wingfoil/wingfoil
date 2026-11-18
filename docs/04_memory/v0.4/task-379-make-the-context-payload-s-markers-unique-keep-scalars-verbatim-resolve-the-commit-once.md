@@ -552,6 +552,16 @@ Through `assembleExecutionContext`, the construct in a Memory document linked fr
 
 **Candidate finding, not part of this task.** `s: !!binary aGVsbG8=` reaches the payload as a map of byte indexes (`'0': 104`, `'1': 101`, …) on base and on head; expected, the binary value as written. Suggested severity: low.
 
+### rulings after review (approver, 2026-11-18)
+
+The independent review of head `679cf0035` returned REJECT. The approver ruled on the decisions of the design addendum after review, each as the architect recommended:
+
+- **Reject:** the task goes back to `in-progress` through `memory reject`, and the fix restarts from red.
+- **D4 (a):** a merge key that leaves one YAML key with two texts makes the document one that cannot be rendered: it is left out and reported.
+- **D5 (a):** the invented `text` key that a merge of a date puts in the payload is fixed in this task.
+- **D6 (a):** frontmatter that contains itself through an alias is left out and reported in this task.
+- **`spec-012` §7:** the amendment the addendum prepared is approved.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
