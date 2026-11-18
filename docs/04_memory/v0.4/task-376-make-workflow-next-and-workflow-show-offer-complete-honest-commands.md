@@ -241,6 +241,10 @@ After the amendment `npx jest test/cli/workflow-unbound-none.integration.test.ts
 
 **Unasserted (`testing` T1):** `workflow show` for an action's literal or interpolated arguments (`spec-017` §7.6 does not fix the name inside `<<field>>` for `{release.version}`); `pendingCreated` with `reaches: null` or a non-empty `missingPaths`; the id the offered `memory submit` names after a creation; the order of `W_ACTION_ARGUMENT_NOT_PASSED` between two workflows (within a workflow it is pinned); the exact console form of an element left out (its line, id and reason are pinned).
 
+### red withdrawn (approver ruling, 2026-11-18)
+
+The first red (`564f2898e`) is withdrawn by `03f0b1b8c`. Its qa agent opened `src/core/workflow-next.ts` and part of `src/core/workflow-status.ts` before writing the tests, which `testing` T3 does not allow. The approver ruled that a new qa agent redoes the phase black-box. The section `### red (qa, 2026-11-18)` above describes the withdrawn tests and is not the contract of the new red.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
