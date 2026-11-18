@@ -249,6 +249,10 @@ The test "the fixture answers" (both assemblies build, an absent element is `NOT
 
 **Departure from `testing` T3.** qa opened `src/core/context.ts` before writing the tests, which T3's black-box rule does not allow. The expected values come from the design's tables and the approver's rulings, and every message is the one the design quotes.
 
+### red withdrawn (approver ruling, 2026-11-18)
+
+The first red (`e760ce3d7`) is withdrawn by `6444299db`. Its qa agent opened `src/core/context.ts` before writing the tests, which `testing` T3 does not allow. The approver ruled that a new qa agent redoes the phase black-box. The section `### red (qa, 2026-11-18)` above describes the withdrawn tests and is not the contract of the new red.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
