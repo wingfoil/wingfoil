@@ -253,6 +253,70 @@ The test "the fixture answers" (both assemblies build, an absent element is `NOT
 
 The first red (`e760ce3d7`) is withdrawn by `6444299db`. Its qa agent opened `src/core/context.ts` before writing the tests, which `testing` T3 does not allow. The approver ruled that a new qa agent redoes the phase black-box. The section `### red (qa, 2026-11-18)` above describes the withdrawn tests and is not the contract of the new red.
 
+### red (qa, 2026-11-18)
+
+**This section replaces the withdrawn red** (`### red withdrawn` above). It was written by a new qa agent, black-box (`testing` T3), from the Acceptance Criteria, `spec-012`, `### design` and `### design gate`. No file under `src/` or `scripts/` was opened before the red commit, and neither the withdrawn section nor its commits were read. **One disclosure:** the first two jest runs printed jest's own failure code frames, which showed a few lines of `src/core/context.ts` around a throw (the start of `serializeExecutionContext`, and the signature of a frontmatter reader). No expected value comes from them. The runs after that use `--noStackTrace`.
+
+**Red commit:** `96575eb7fed4b8a033e4d13327c9adb1d42b1bb7`. T4 is measured from it.
+
+**Files:** `test/core/context-payload-integrity.test.ts` (AC 1, AC 2, determinism), `test/core/context-spawn-count.test.ts` (AC 3). No test imports a name that does not exist yet, so every red is an assertion or the stated `YAMLException`.
+
+**Run:** `npx jest test/core/context-payload-integrity.test.ts test/core/context-spawn-count.test.ts --maxWorkers=2 --noStackTrace` printed `Test Suites: 2 failed, 2 total` and `Tests: 30 failed, 13 passed, 43 total`. Per file: integrity 24 failed, 11 passed; spawn count 6 failed, 2 passed. Every test the design marks characterization passed on first run.
+
+**Gates before the red commit:** `npx tsc --noEmit -p tsconfig.json` exit 0, no output. `npx jest test/lint --maxWorkers=2 --noStackTrace` printed `Test Suites: 16 passed, 16 total` and `Tests: 165 passed, 165 total`.
+
+**AC 1 (`bug-265`), red-first:**
+
+| Case | Test | First failing assertion |
+|---|---|---|
+| a | a linked document typed directive at a task path | `Expected: 1`, `Received: 2` (`<!-- begin:directive:testing -->` lines) |
+| b | a linked document typed bug at a task path | `context.memory` expected `[]`, received the document |
+| b | a type named after an inherited Object member (`constructor`, the design's "no own" type) | payload holds `constructor:task-008-proto` |
+| c | two linked documents with one type and id | `Expected: 1`, `Received: 2` (`### task:task-006-dup` lines) |
+| d | maxDocs 1 | carried path expected `docs/04_memory/v0.1/task-006-dup.md`, received `docs/04_memory/v0.2/task-006-dup.md` |
+| d | maxDocs 2 | carried paths expected to hold `task-009-other.md`, received the second copy |
+| e | element requested as `directive:testing` | expected `ok: false` with `VALIDATION`, received a built context |
+| f | serialize: two Memory documents of one key; a Memory document with a carried directive's key; one with the element's key | `Expected substring: "marker key '…' names two bodies of an execution context"`, `Received function did not throw` |
+| g | the fixture holding every case | repeated keys expected `[]`, received `directive:testing` and others |
+
+**AC 1, characterization, passed on first run:** h (a deprecated first copy), i (documents scoring 0), j (a copy of the element), and a control: a linked bug at its declared path is carried.
+
+**AC 2 (`bug-267`), red-first:**
+
+| Case | Test | First failing assertion |
+|---|---|---|
+| a | `version: 1.50`, `mode: 0o17`, `hex: 0x1F`, `exp: 1e3`, `plus: +12`, `nothing: ~`, `flag: True`, `Nul: Null`, one test each | `section1` and `section4` expected `1`, received `0` |
+| b | flow list and flow mapping | `Expected substring` of the block `list:` with `1.50`, `~`, `True`, `0x1F` |
+| c | `1.50: numkey` | `Expected: 1`, `Received: 0` (`'1.50': numkey` lines) |
+| d | two date keys under one mapping | `YAMLException: duplicated mapping key (8:3)`, the throw the design records |
+| JSON | `JSON.stringify(context.element.frontmatter.version)` | `Expected: "\"1.50\""`, `Received: "1.5"` |
+
+**AC 2, characterization, passed on first run:** e, f, g, h, `CONTEXT_PAYLOAD_FORMAT` is `1` and the header says format 1, and `inf: .inf`.
+
+**AC 3 (`bug-381`), red-first.** The design's "today" figures are projections, measured here on this fixture (one content root, one element, one linked document) by the spies of `test/core/context-spawn-count.test.ts`, from the `Received` values of the run above. They match the design:
+
+| Case | Design "today" | Measured | Pinned "after" |
+|---|---|---|---|
+| a `rev-parse`, `stateRef: 'HEAD'` | 6 | 6 | 1 |
+| b `show`, D = 3 | 7 | 7 | 3 (`memory.yaml`, `dna.yaml`, `roles.yaml`) |
+| c `cat-file --batch` | 3 | 3 | 4 |
+| d total, D = 3 | 18 | 18 (`rev-parse` 6, `show` 7, `cat-file` 3, `ls-tree` 2) | 10 (`rev-parse` 1, `show` 3, `cat-file` 4, `ls-tree` 2) |
+| d total, D = 6 | 21 | 21 (`rev-parse` 6, `show` 10, `cat-file` 3, `ls-tree` 2) | 10, same split |
+| f `rev-parse` on `NOT_FOUND` | 4 | 4 | 1 |
+
+Case e (every `show` and `ls-tree` names the full sha) is characterization and passed on first run.
+
+**Determinism (REQ-SYS-07).** Two assemblies and a third on a `git clone`, all at one sha, compare payload bytes and `warnings`. The fixture holding every payload case but the two date keys passed on first run (characterization). The same fixture with the two date keys is red today with `YAMLException: duplicated mapping key (24:3)`.
+
+**Where this red differs from the design's tables, for the reviewer:**
+
+- `inf: .inf` is in the row of AC 2 case a, marked red, but that one line already passes today, so it is pinned as characterization. The other eight lines of the row are red.
+- The design calls the determinism check characterization on a fixture holding every case. Case d throws today, so the check is split in two as described above. Cases e and f produce no payload, so they are not in that fixture.
+- Case d's design wording is "`maxDocs: 1`". With two equally ranked copies a slot taken by the left-out copy would not change what `maxDocs: 1` carries, so the left-out copy is ranked first here (it sits in the element's release), and a `maxDocs: 2` test is added.
+- Case f also pins the two other repeats a hand-built context can hold (a directive's key, the element's key), from the design's sentence that a hand-built context "cannot render a repeat" and `spec-012` §7 "No two bodies of a payload share a key".
+
+**Unasserted (`testing` T1):** that the directive bodies are read in one batch is asserted only through its effects, the `show` list of case b and the equal totals for D = 3 and D = 6 of case d. No test inspects the stdin of a `cat-file --batch` call.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
