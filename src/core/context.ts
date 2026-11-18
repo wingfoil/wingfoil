@@ -7,7 +7,7 @@
  *
  * Every read is pinned to `spec-012` §2's `stateRef`: the entry resolves it once to a commit sha
  * (`resolveRevision`) and reads every pillar and every Memory document at that sha through task-137's
- * `…AtRev` readers. The working tree is never read, so the same `(role, element, stateRef, limits)`
+ * `…AtCommit` readers, so no reader resolves it again (`bug-381`). The working tree is never read, so the same `(role, element, stateRef, limits)`
  * yields the same bytes (§8, REQ-SYS-07).
  *
  * **Archived elements never reach a context** (REQ-STATE-06, the `{deprecated, superseded}` set
@@ -16,19 +16,20 @@
  * `isArchivedStatus`.
  */
 import * as jsYaml from 'js-yaml';
-import { CORE_SCHEMA, dump, load, Type } from 'js-yaml';
+import { CORE_SCHEMA, dump, load, Type, YAMLException } from 'js-yaml';
 
 import type { RolesYaml } from '../directives/schema';
 import type { DnaYaml, Module, Paths, Project, Stacks, Team } from '../dna/schema';
 import {
-  findMemoryDocumentByTypeAndIdAtRev,
+  findMemoryDocumentByTypeAndIdAtCommit,
   isArchivedStatus,
-  loadMemoryDocumentsAtRev,
+  loadMemoryDocumentsAtCommit,
   memoryUnreadableDiagnostic,
   type MemoryDocumentSummary,
 } from '../memory';
 import type { MemoryYaml } from '../memory/schema';
 import { readPathAtRev, readPathsAtRev, splitFrontmatter } from '../storage';
+import { pathPatternRegExp } from '../storage/memory-path';
 import { formatDiagnostic, isNewerFormatError, parseYaml, type Diagnostic } from '../validation';
 
 import { isRemovableCustomAssetPath } from './builtin-asset';
@@ -36,10 +37,10 @@ import {
   DNA_YAML_PATH,
   MEMORY_YAML_PATH,
   ROLES_YAML_PATH,
-  loadDirectivesAtRev,
-  loadDnaYamlAtRev,
-  loadMemoryYamlAtRev,
-  loadRolesYamlAtRev,
+  loadDirectivesAtCommit,
+  loadMemoryYamlAtCommit,
+  loadRolesYamlAtCommit,
+  parseDnaYaml,
   type DirectiveFile,
 } from './loaders';
 import {
@@ -229,7 +230,8 @@ export interface ContextRequest {
 export interface ContextElementDocument extends MemoryDocumentSummary {
   readonly type: string;
   readonly id: string;
-  /** As the document wrote it: a timestamp value is a {@link WrittenTimestamp} (its text as written), never a `Date`. */
+  /** As the document wrote it: a null, boolean, integer, float or timestamp scalar is a {@link WrittenScalar} (its
+   * text as written), never a number, a boolean or a `Date`. A key with no value is `null`. */
   readonly frontmatter: Record<string, unknown>;
 }
 
@@ -269,7 +271,7 @@ export interface ExecutionContext {
   /** §7 `## 3. Directives`: the role's directives and the globals, ascending by id ({@link resolveRoleDirectives}). */
   readonly directives: readonly ContextDirective[];
   /** §7 `## 4. Relevant Memory`, in §6 order and within the request's limits. Each `frontmatter` is as
-   * the document wrote it: a timestamp value is a {@link WrittenTimestamp} (its text as written), never a `Date`. */
+   * the document wrote it, as {@link ContextElementDocument.frontmatter} is. */
   readonly memory: readonly RelevantMemoryDocument[];
   /** {@link RoleDirectiveResolution.warnings}: §5.1's three kinds in their fixed order. Diagnostics
    * *about* the context, never part of the payload (dl-050, dl-051). */
@@ -323,55 +325,96 @@ export function validateExecutionContext(candidate: unknown): CoreResult<Executi
 
 /**
  * The payload's format version (`dl-150` option B, the `dl-149` format key): the first field of the
- * header comment. A change to the bytes §7 pins is a new format.
+ * header comment. A backward-incompatible change of the envelope §7 pins is a new format; a rendering
+ * that a YAML reader reads with the same values is not (`spec-012` Consequences).
  */
 export const CONTEXT_PAYLOAD_FORMAT = 1;
 
 /**
- * A YAML timestamp scalar exactly as its document wrote it (`bug-232`, review F1 of task-255): the
- * frontmatter the payload carries holds one of these where js-yaml's default schema would hold a
- * `Date`, so `2026-10-05`, `2026-10-05T00:00:00Z` and `2026-10-05 10:00:00 +02:00` are re-emitted
- * unchanged rather than normalized to an instant.
+ * A YAML null, boolean, integer, float or timestamp scalar exactly as its document wrote it (`bug-267`):
+ * the frontmatter the payload carries holds one of these where js-yaml's default schema would construct a
+ * value, so `1.50`, `0o17`, `0x1F`, `1e3`, `+12`, `~` and `True` are re-emitted unchanged.
  */
-export class WrittenTimestamp {
+export class WrittenScalar {
   constructor(
     /** The scalar's text, as written. */
     readonly text: string,
   ) {}
 
-  /** The text as written, so `JSON.stringify` of a context renders the timestamp as the document did. */
+  /** The text as written, so `JSON.stringify` of a context renders the scalar as the document did. */
   toJSON(): string {
     return this.text;
   }
+
+  /** The text as written: what a mapping key written as this scalar is named by. */
+  toString(): string {
+    return this.text;
+  }
+
+  /** Not `Object`: js-yaml names a mapping key of that class `[object Object]`, whatever its text. */
+  get [Symbol.toStringTag](): string {
+    return 'WrittenScalar';
+  }
 }
 
-// js-yaml 4 exports its built-in types as `types`; `@types/js-yaml` does not declare that export.
-const types = (jsYaml as unknown as { readonly types: Readonly<Record<'merge' | 'binary' | 'omap' | 'pairs' | 'set' | 'timestamp', Type>> }).types;
+/**
+ * A YAML timestamp scalar exactly as its document wrote it (`bug-232`, review F1 of task-255): `2026-10-05`,
+ * `2026-10-05T00:00:00Z` and `2026-10-05 10:00:00 +02:00` are re-emitted unchanged rather than normalized
+ * to an instant.
+ */
+export class WrittenTimestamp extends WrittenScalar {}
 
-/** js-yaml's timestamp tag and resolution, constructing a {@link WrittenTimestamp} instead of a `Date`. */
+/** A js-yaml built-in type; `@types/js-yaml` does not declare the `tag` every type has. */
+type BuiltInType = Type & { readonly tag: string };
+
+// js-yaml 4 exports its built-in types as `types`; `@types/js-yaml` does not declare that export.
+const types = (
+  jsYaml as unknown as {
+    readonly types: Readonly<Record<'null' | 'bool' | 'int' | 'float' | 'merge' | 'binary' | 'omap' | 'pairs' | 'set' | 'timestamp', BuiltInType>>;
+  }
+).types;
+
+/**
+ * `base` reading a scalar as a {@link WrittenScalar}. It still dumps what `base` dumps, because the DNA
+ * sections go through the same schema as validated values. An explicit `!!null` with no text has none to
+ * keep, and is `null`.
+ */
+function writtenScalarType(base: BuiltInType): Type {
+  return new Type(base.tag, {
+    kind: 'scalar',
+    resolve: (data: unknown) => base.resolve(data),
+    construct: (data: string | null) => (data === null ? null : new WrittenScalar(data)),
+    predicate: base.predicate ?? undefined,
+    represent: base.represent ?? undefined,
+    defaultStyle: base.defaultStyle ?? undefined,
+  });
+}
+
+/** js-yaml's timestamp tag and resolution, constructing a {@link WrittenTimestamp} instead of a `Date`. It is
+ * the one type that dumps a {@link WrittenScalar}, of whichever type the scalar was read: a dump needs only its text. */
 const WRITTEN_TIMESTAMP_TYPE = new Type('tag:yaml.org,2002:timestamp', {
   kind: 'scalar',
   resolve: (data: unknown) => types.timestamp.resolve(data),
   construct: (data: string) => new WrittenTimestamp(data),
-  instanceOf: WrittenTimestamp,
-  represent: (value: object) => (value as WrittenTimestamp).text,
+  instanceOf: WrittenScalar,
+  represent: (value: object) => (value as WrittenScalar).text,
 });
 
 /**
  * The schema the payload's frontmatter is read and dumped with: js-yaml's default schema (same implicit
- * and explicit types, so it accepts what the scan accepted) with {@link WRITTEN_TIMESTAMP_TYPE} in place
- * of the timestamp type. A timestamp is written back as written; a quoted date is a string that a reader
- * could take for a timestamp, so the dump keeps it quoted.
+ * and explicit types, so it resolves every scalar as the scan did) with the null, boolean, integer, float
+ * and timestamp types keeping the scalar's text. A scalar is written back as written; a quoted date or
+ * number is a string that a reader could take for one of those, so the dump keeps it quoted.
  */
 const PAYLOAD_YAML_SCHEMA = CORE_SCHEMA.extend({
-  implicit: [WRITTEN_TIMESTAMP_TYPE, types.merge],
+  implicit: [types.null, types.bool, types.int, types.float].map(writtenScalarType).concat(WRITTEN_TIMESTAMP_TYPE, types.merge),
   explicit: [types.binary, types.omap, types.pairs, types.set],
 });
 
 /** `value` with every `Date` — a value a caller built itself, never one the builder read — as its
  * ISO-8601 UTC text, at any depth, so {@link serializeExecutionContext} accepts it. */
 function withDatesAsWritten(value: unknown): unknown {
-  if (value instanceof WrittenTimestamp) return value;
+  if (value instanceof WrittenScalar) return value;
   if (value instanceof Date) return new WrittenTimestamp(value.toISOString());
   if (Array.isArray(value)) return value.map(withDatesAsWritten);
   if (isRecord(value)) return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, withDatesAsWritten(entry)]));
@@ -379,20 +422,29 @@ function withDatesAsWritten(value: unknown): unknown {
 }
 
 /**
- * The frontmatter of each document at `paths`, as commit `sha` holds it, read with
- * {@link PAYLOAD_YAML_SCHEMA} so its timestamps keep their text (`bug-232`). Every path was read and
- * parsed at `sha` by the scan already, with a schema that accepts the same documents, and each one
- * has a frontmatter block: the element is found, and a document carried, by its frontmatter's `type`
- * and `id`.
+ * The frontmatter of each document at `paths`, as commit `sha` holds it, all read in one batch with
+ * {@link PAYLOAD_YAML_SCHEMA} so its scalars keep their text (`bug-232`, `bug-267`). Every path was read and
+ * parsed at `sha` by the scan already, and each one has a frontmatter block: the element is found, and a
+ * document carried, by its frontmatter's `type` and `id`.
+ *
+ * `null` for a document two of whose keys have the same text once kept as written (`"1.50"` and `1.50`): two
+ * keys to the scan, one to this schema, so it cannot be rendered (`spec-012` §7).
  */
-function writtenFrontmatter(root: string, sha: string, paths: readonly string[]): Record<string, unknown>[] {
-  return readPathsAtRev(root, sha, [...paths]).map(
-    (raw) => load(splitFrontmatter(raw!).frontmatter!, { schema: PAYLOAD_YAML_SCHEMA }) as Record<string, unknown>,
-  );
+function writtenFrontmatter(root: string, sha: string, paths: readonly string[]): ReadonlyMap<string, Record<string, unknown> | null> {
+  const written = new Map<string, Record<string, unknown> | null>();
+  for (const [index, raw] of readPathsAtRev(root, sha, [...paths]).entries()) {
+    try {
+      written.set(paths[index]!, load(splitFrontmatter(raw!).frontmatter!, { schema: PAYLOAD_YAML_SCHEMA }) as Record<string, unknown>);
+    } catch (error) {
+      if (!(error instanceof YAMLException) || error.reason !== 'duplicated mapping key') throw error;
+      written.set(paths[index]!, null);
+    }
+  }
+  return written;
 }
 
-/** YAML for the payload: keys sorted ascending (§7), no line folding and no anchors, dates as written
- * (`bug-232`), so the text is a function of the value alone. */
+/** YAML for the payload: keys sorted ascending (§7), no line folding and no anchors, scalars as written
+ * (`bug-232`, `bug-267`), so the text is a function of the value alone. */
 function canonicalYaml(value: unknown): string {
   return dump(withDatesAsWritten(value), { schema: PAYLOAD_YAML_SCHEMA, sortKeys: true, lineWidth: -1, noRefs: true });
 }
@@ -488,6 +540,21 @@ function selfClosingBody(context: ExecutionContext): string | undefined {
 }
 
 /**
+ * The refusal of the first marker key two bodies of `context` share (`bug-265`), in payload order, or
+ * `undefined` when every key is unique. A Memory document that cannot be named has no key: the serializer
+ * refuses it for that.
+ */
+function repeatedKeyProblem(context: ExecutionContext): string | undefined {
+  const keys = [
+    `${context.element.type}:${context.element.id}`,
+    ...context.directives.map((directive) => directiveKey(directive.frontmatter.id)),
+    ...context.memory.filter((doc) => isNameable(doc.type, doc.id)).map((doc) => `${doc.type!}:${doc.id!}`),
+  ];
+  const repeated = keys.find((key, index) => keys.indexOf(key) !== index);
+  return repeated === undefined ? undefined : `marker key '${repeated}' names two bodies of an execution context`;
+}
+
+/**
  * Render a context as `spec-012` §7's canonical Markdown payload, format {@link CONTEXT_PAYLOAD_FORMAT}
  * (`dl-150` option B) — the bytes §8 holds identical across builds. Fixed headings in a fixed order,
  * one blank line between blocks; frontmatter and DNA sections as fenced YAML with sorted keys; every
@@ -501,7 +568,8 @@ function selfClosingBody(context: ExecutionContext): string | undefined {
  *   role …` (or `element type`/`element id`/`directive id`) when a header field or a directive id holds
  *   a control character or `-->`; `invalid Memory document <path>: …` for a document it cannot name;
  *   `… cannot enter an execution context: its body holds the line … that closes it` for a body that
- *   holds its own end marker.
+ *   holds its own end marker; `marker key '<key>' names two bodies of an execution context` for a key
+ *   two bodies share.
  */
 export function serializeExecutionContext(context: ExecutionContext): string {
   const valid = validateExecutionContext(context);
@@ -511,7 +579,8 @@ export function serializeExecutionContext(context: ExecutionContext): string {
     headerFieldProblem('element type', context.element.type) ??
     headerFieldProblem('element id', context.element.id) ??
     context.directives.map((directive) => headerFieldProblem('directive id', directive.frontmatter.id)).find((problem) => problem !== undefined) ??
-    selfClosingBody(context);
+    selfClosingBody(context) ??
+    repeatedKeyProblem(context);
   if (unsafe !== undefined) throw new Error(unsafe);
 
   const { role, stateRef, element, dna, directives, memory } = context;
@@ -640,13 +709,11 @@ function selectDnaSections(
     : { selection: selection as unknown as DnaSelection };
 }
 
-/** The Markdown body of each resolved directive, read at `sha` (`DirectiveFile.path` is relative to
- * `.wingfoil/`). */
+/** The Markdown body of each resolved directive, all read at `sha` in one batch (`bug-381`;
+ * `DirectiveFile.path` is relative to `.wingfoil/`). */
 function withBodies(root: string, sha: string, directives: readonly DirectiveFile[]): ContextDirective[] {
-  return directives.map((directive) => {
-    const raw = readPathAtRev(root, sha, `.wingfoil/${directive.path.split(/[\\/]/).join('/')}`) ?? '';
-    return { ...directive, body: splitFrontmatter(raw).body };
-  });
+  const raws = readPathsAtRev(root, sha, directives.map((directive) => `.wingfoil/${directive.path.split(/[\\/]/).join('/')}`));
+  return directives.map((directive, index) => ({ ...directive, body: splitFrontmatter(raws[index] ?? '').body }));
 }
 
 function stringField(frontmatter: Record<string, unknown>, key: string): string | undefined {
@@ -686,47 +753,97 @@ function requestProblem(request: ContextRequest): CoreError | undefined {
   return undefined;
 }
 
-/** What `payloadCandidates` returns: the documents §6 may rank, and the reports of those left out. */
+/** What `payloadCandidates` returns: the documents §6 may rank, the reports of those left out, and the
+ * frontmatter as written of the element and of every relevant document. */
 interface PayloadCandidates {
   readonly carried: readonly MemoryDocumentSummary[];
   /** `W_MEMORY_UNREADABLE` diagnostics, in path order. */
   readonly left: readonly Diagnostic[];
+  /** By path; `null` for a document {@link writtenFrontmatter} cannot render. */
+  readonly written: ReadonlyMap<string, Record<string, unknown> | null>;
 }
 
 /** Ranks with no bound: used only to learn which unnameable documents would have been relevant. */
 const UNBOUNDED: ContextLimits = { maxDocs: Number.MAX_SAFE_INTEGER, maxBytes: Number.MAX_SAFE_INTEGER };
 
+/** Whether `memory.yaml` declares `type` and that type's `path` pattern can produce `path`. `types` is a plain
+ * object parsed from YAML, so a type named after an `Object.prototype` member is read as an own property only. */
+function isDeclaredForPath(memoryYaml: MemoryYaml, type: string, path: string): boolean {
+  return Object.prototype.hasOwnProperty.call(memoryYaml.types, type) && pathPatternRegExp(memoryYaml.types[type]!.path).test(path);
+}
+
+/**
+ * The relevant documents left out for repeating a marker key, by path, each with its reason: the first in path
+ * order of the copies in `relevant` is carried and the others repeat it (`bug-265`). A copy §6 drops (archived, a
+ * draft, scoring 0) is not in `relevant`, so it never displaces the copy that can be carried.
+ */
+function repeatedKeyReasons(relevant: readonly MemoryDocumentSummary[]): ReadonlyMap<string, string> {
+  const firstPath = new Map<string, string>();
+  const reasons = new Map<string, string>();
+  // A path is listed at most once, so no two compare equal.
+  for (const doc of [...relevant].sort((a, b) => (a.path < b.path ? -1 : 1))) {
+    const key = `${doc.frontmatter.type as string}:${doc.frontmatter.id as string}`;
+    const first = firstPath.get(key);
+    if (first === undefined) firstPath.set(key, doc.path);
+    else reasons.set(doc.path, `its type and id repeat those of ${first}, so an execution context cannot name it`);
+  }
+  return reasons;
+}
+
 /**
  * The Memory documents §7 can carry (`dl-150` B), before §6 ranks them: a document needs a nameable
- * `type` and `id` ({@link isNameable}) for its heading and markers, and a body that does not hold its
- * own end marker ({@link closesItself}). An unnameable document is reported only when §6 would have
- * found it relevant — a repository's frontmatter-less files (grandfathered plans) would otherwise be
- * reported in every context; a self-closing one is always reported. Neither takes a slot in the
- * bounds, so the documents carried are what §6 selects among the rest.
+ * `type` and `id` ({@link isNameable}) for its heading and markers, a `type` declared for its path, frontmatter
+ * keys of distinct texts ({@link writtenFrontmatter}), a key no other relevant document holds
+ * ({@link repeatedKeyReasons}, `bug-265`), and a body that does not hold its own end marker ({@link closesItself}).
+ * All but the last are reported only when §6 would have found the document relevant — a repository's
+ * frontmatter-less files (grandfathered plans) would otherwise be reported in every context; a self-closing one is
+ * always reported. Each is decided over every relevant document, before §6's bounds: none takes a slot, and the
+ * reports do not depend on the limits.
  */
-function payloadCandidates(documents: readonly MemoryDocumentSummary[], element: RelevanceElementRef): PayloadCandidates {
-  const carried: MemoryDocumentSummary[] = [];
-  const unnamed: MemoryDocumentSummary[] = [];
+function payloadCandidates(
+  root: string,
+  sha: string,
+  documents: readonly MemoryDocumentSummary[],
+  element: RelevanceElementRef & { readonly path: string },
+  memoryYaml: MemoryYaml,
+): PayloadCandidates {
+  const named: MemoryDocumentSummary[] = [];
+  const unfit: MemoryDocumentSummary[] = [];
+  const unfitReasons = new Map<string, string>();
   const left: { readonly path: string; readonly diagnostic: Diagnostic }[] = [];
+  const leaveOut = (path: string, reason: string): void => {
+    left.push({ path, diagnostic: memoryUnreadableDiagnostic(path, reason) });
+  };
   for (const doc of documents) {
     const { type, id } = doc.frontmatter;
     if (!isNameable(type, id)) {
-      unnamed.push(doc);
+      unfit.push(doc);
+      unfitReasons.set(doc.path, 'no string type and id, so an execution context cannot name it');
       continue;
     }
     const key = `${type as string}:${id as string}`;
     if (closesItself(key, doc.body)) {
-      const reason = `its body holds the line ${JSON.stringify(endMarker(key))} that closes it in an execution context`;
-      left.push({ path: doc.path, diagnostic: memoryUnreadableDiagnostic(doc.path, reason) });
-    } else carried.push(doc);
+      leaveOut(doc.path, `its body holds the line ${JSON.stringify(endMarker(key))} that closes it in an execution context`);
+    } else if (isDeclaredForPath(memoryYaml, type as string, doc.path)) {
+      named.push(doc);
+    } else {
+      unfit.push(doc);
+      unfitReasons.set(doc.path, `its type '${type as string}' is not declared for its path, so an execution context cannot name it`);
+    }
   }
-  for (const doc of selectRelevantMemoryDocuments(unnamed, element, UNBOUNDED).documents) {
-    const reason = 'no string type and id, so an execution context cannot name it';
-    left.push({ path: doc.path, diagnostic: memoryUnreadableDiagnostic(doc.path, reason) });
-  }
+  for (const doc of selectRelevantMemoryDocuments(unfit, element, UNBOUNDED).documents) leaveOut(doc.path, unfitReasons.get(doc.path)!);
+
+  const relevant = selectRelevantMemoryDocuments(named, element, UNBOUNDED).documents;
+  const written = writtenFrontmatter(root, sha, [element.path, ...relevant.map((doc) => doc.path)]);
+  const unrendered = relevant.filter((doc) => written.get(doc.path) === null);
+  for (const doc of unrendered) leaveOut(doc.path, 'two of its frontmatter keys have the same text, so an execution context cannot carry it');
+  const repeats = repeatedKeyReasons(relevant.filter((doc) => written.get(doc.path) !== null));
+  for (const [path, reason] of repeats) leaveOut(path, reason);
+
   // A path is reported at most once, so no two compare equal.
   left.sort((a, b) => (a.path < b.path ? -1 : 1));
-  return { carried, left: left.map((entry) => entry.diagnostic) };
+  const carried = named.filter((doc) => written.get(doc.path) !== null && !repeats.has(doc.path));
+  return { carried, left: left.map((entry) => entry.diagnostic), written };
 }
 
 /**
@@ -745,7 +862,7 @@ function newerFormatSubject(
   label: string,
 ): CoreError | undefined {
   try {
-    findMemoryDocumentByTypeAndIdAtRev(root, sha, memoryYaml, wanted.type, wanted.id, { includeArchived: true });
+    findMemoryDocumentByTypeAndIdAtCommit(root, sha, memoryYaml, wanted.type, wanted.id, { includeArchived: true });
   } catch (error) {
     if (!isNewerFormatError(error)) throw error;
     return {
@@ -764,7 +881,7 @@ function newerFormatSubject(
  * The §3 pipeline, every read at the one commit `request.stateRef` resolves to:
  *
  * 1. **resolve-element**: every Memory document at that commit is read once
- *    (`loadMemoryDocumentsAtRev`); the element is found in that snapshot. Absent → `NOT_FOUND`;
+ *    (`loadMemoryDocumentsAtCommit`); the element is found in that snapshot. Absent → `NOT_FOUND`;
  *    archived (`isArchivedStatus`) → `VALIDATION`, since an archived document never enters a context
  *    (REQ-STATE-06). A `draft` element assembles.
  * 2. **load-dna** (§4): see `selectDnaSections`; modules match by name or path (ruling D3, `bug-233`).
@@ -772,8 +889,10 @@ function newerFormatSubject(
  *    commit; its warnings become `context.warnings`.
  * 4. **filter-memory** (§6): `selectRelevantMemoryDocuments` over the same snapshot, within
  *    `request.limits`, among the documents §7 can carry (`dl-150` B, `payloadCandidates`): one with
- *    no nameable `type` and `id` is left out, and reported only when it would have been relevant; one
- *    whose body holds its own end marker is left out and reported. Both reports are
+ *    no nameable `type` and `id`, with a `type` not declared for its path, with two frontmatter keys of the
+ *    same text, or repeating the key of a relevant document earlier in path order is left out, and reported
+ *    only when it would have been relevant; one whose body holds its own end marker is left out and
+ *    reported. The reports are
  *    `W_MEMORY_UNREADABLE` lines on the success warnings, after the scan's own, in path order.
  * 5. **validate** (P5.4.4 sc. 3) and **serialize** (§7).
  *
@@ -782,8 +901,9 @@ function newerFormatSubject(
  * `missing 'element'`; the refusal's `details.cause` names the file (`no .wingfoil/roles.yaml at <sha>`).
  * Before any read, a role or element field holding a control character or `-->`, or limits that are
  * not positive integers, are refused as `VALIDATION`. After the reads, an element or directive body
- * that holds its own end marker, or a directive id holding a control character or `-->`, refuses the
- * context as `VALIDATION`: neither may be dropped (§5 never truncates a directive).
+ * that holds its own end marker, an element with two frontmatter keys of the same text, an element whose
+ * key is a carried directive's, or a directive id holding a control character or `-->`, refuses the context
+ * as `VALIDATION`: none may be dropped (§5 never truncates a directive).
  *
  * A subject the commit holds in a `format:` newer than this build reads is refused as `VALIDATION` with
  * the `dl-149` `E_INVALID_FORMAT` text (task-195, `bug-263`), not reported as absent.
@@ -816,11 +936,11 @@ export function assembleExecutionContext(root: string, request: ContextRequest):
   // `W_MEMORY_UNREADABLE`, so one malformed sibling no longer fails every context. It reads archived
   // documents too — the archived subject is refused below, and §6 drops archived candidates itself.
   const diagnostics: Diagnostic[] = [];
-  const memoryYaml = loadMemoryYamlAtRev(root, sha, revLabel);
+  const memoryYaml = loadMemoryYamlAtCommit(root, sha, revLabel);
   const documents =
     memoryYaml === null
       ? null
-      : loadMemoryDocumentsAtRev(root, sha, memoryYaml, { onDiagnostic: (diagnostic) => diagnostics.push(diagnostic) });
+      : loadMemoryDocumentsAtCommit(root, sha, memoryYaml, { onDiagnostic: (diagnostic) => diagnostics.push(diagnostic) });
   const unreadable = diagnostics.map(formatDiagnostic);
   const found = documents?.find(
     (doc) => stringField(doc.frontmatter, 'type') === wanted.type && stringField(doc.frontmatter, 'id') === wanted.id,
@@ -847,39 +967,37 @@ export function assembleExecutionContext(root: string, request: ContextRequest):
   const element = found === undefined ? undefined : { ...found, type: wanted.type, id: wanted.id };
   const frontmatter = element?.frontmatter ?? {};
 
-  // `loadDnaYamlAtRev` validates; the raw text gives the declared section order, which the
-  // Zod-parsed object loses (schema keys come first there). `loadDnaYamlAtRev` is non-null whenever
-  // the raw read is: both read the same path at the same sha.
+  // One read of `dna.yaml`: `parseDnaYaml` validates it, and its text gives the declared section order,
+  // which the Zod-parsed object loses (schema keys come first there).
   const dnaRaw = readPathAtRev(root, sha, DNA_YAML_PATH);
+  const dnaLabel = `${revLabel}:${DNA_YAML_PATH}`;
   const dnaSelected =
-    dnaRaw === null
-      ? undefined
-      : selectDnaSections(loadDnaYamlAtRev(root, sha, revLabel)!, declaredKeyOrder(dnaRaw, `${revLabel}:${DNA_YAML_PATH}`), frontmatter);
+    dnaRaw === null ? undefined : selectDnaSections(parseDnaYaml(dnaRaw, dnaLabel), declaredKeyOrder(dnaRaw, dnaLabel), frontmatter);
   const dna = dnaSelected?.selection;
 
-  const rolesYaml = loadRolesYamlAtRev(root, sha, revLabel);
-  const resolution = rolesYaml === null ? undefined : resolveRoleDirectives(loadDirectivesAtRev(root, sha, revLabel), rolesYaml, role);
+  const rolesYaml = loadRolesYamlAtCommit(root, sha, revLabel);
+  const resolution = rolesYaml === null ? undefined : resolveRoleDirectives(loadDirectivesAtCommit(root, sha, revLabel), rolesYaml, role);
   const directives = resolution === undefined ? undefined : withBodies(root, sha, resolution.directives);
 
-  const candidates =
-    documents === null ? undefined : payloadCandidates(documents, { ...wanted, frontmatter });
+  // `element` is set whenever `documents` is: an absent element was refused above.
+  const candidates = documents === null ? undefined : payloadCandidates(root, sha, documents, element!, memoryYaml!);
+  const elementWritten = element === undefined ? undefined : candidates!.written.get(element.path);
+  if (elementWritten === null) {
+    return coreErr({ code: 'VALIDATION', message: `element '${label}' cannot enter an execution context: two of its frontmatter keys have the same text` });
+  }
   const relevant =
     candidates === undefined
       ? undefined
       : selectRelevantMemoryDocuments(candidates.carried, { ...wanted, frontmatter }, request.limits ?? DEFAULT_CONTEXT_LIMITS);
 
-  // The payload carries the frontmatter as written (`bug-232`): the element and the selected documents
-  // are re-read at the commit with the payload's schema. Selection above used the scan's parse.
-  const carried = [...(element === undefined ? [] : [element]), ...(relevant?.documents ?? [])];
-  const written = writtenFrontmatter(root, sha, carried.map((doc) => doc.path));
-  const offset = carried.length - (relevant?.documents.length ?? 0);
+  // The payload carries the frontmatter as written (`bug-232`, `bug-267`). Selection above used the scan's parse.
   const validated = validateExecutionContext({
     role,
     stateRef: sha,
-    element: element === undefined ? undefined : { ...element, frontmatter: written[0]! },
+    element: element === undefined ? undefined : { ...element, frontmatter: elementWritten },
     dna,
     directives,
-    memory: relevant?.documents.map((doc, index) => ({ ...doc, frontmatter: written[offset + index]! })),
+    memory: relevant?.documents.map((doc) => ({ ...doc, frontmatter: candidates!.written.get(doc.path)! })),
     warnings: resolution?.warnings ?? [],
   });
   if (!validated.ok) {
@@ -893,7 +1011,8 @@ export function assembleExecutionContext(root: string, request: ContextRequest):
   const context = validated.value;
   const unfit =
     context.directives.map((directive) => headerFieldProblem('directive id', directive.frontmatter.id)).find((problem) => problem !== undefined) ??
-    selfClosingBody(context);
+    selfClosingBody(context) ??
+    repeatedKeyProblem(context);
   if (unfit !== undefined) return coreErr({ code: 'VALIDATION', message: unfit });
   // In §3 stage order: the DNA note (ruling D3), then the relevance note (P5.3.3 sc. 3).
   const notes = [dnaSelected?.note, relevant?.note].filter((note): note is string => note !== undefined);

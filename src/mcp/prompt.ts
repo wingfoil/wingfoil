@@ -135,7 +135,7 @@ export interface SessionContext {
 
 /**
  * The execution context for `role`, `element` and `state` (task-195, spec-004 §3.2): `assembleExecutionContext`'s
- * §7 payload, as returned — never re-serialized, and never indexed by its body markers (`bug-265`). `state` is
+ * §7 payload, as returned, never re-serialized. `state` is
  * resolved once, here, and the builder reads everything at that sha, so neither a later commit nor an uncommitted
  * edit changes the answer. ONE builder for both carriers: the `{role}-session` Prompt wraps it in `messages`
  * ({@link buildContextPrompt}), the session Resource in `contents` (`./session-resource.ts`, task-236), so the two

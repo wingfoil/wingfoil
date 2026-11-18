@@ -729,7 +729,36 @@ export function findMemoryDocumentByTypeAndIdAtRev(
   id: string,
   options: MemoryTypeScanOptions = {},
 ): MemoryDocumentSummary | undefined {
-  const sha = resolveRevision(root, rev);
+  return findByTypeAndIdAtSha(root, resolveRevision(root, rev), rev, memoryYaml, type, id, options);
+}
+
+/**
+ * {@link findMemoryDocumentByTypeAndIdAtRev} for a `sha` already resolved to a commit (`resolveRevision`,
+ * `src/core/revision.ts`): the same lookup, without resolving the revision again (`bug-381`).
+ *
+ * @param sha - The full sha of a commit, as `resolveRevision` returned it; labels name it.
+ */
+export function findMemoryDocumentByTypeAndIdAtCommit(
+  root: string,
+  sha: string,
+  memoryYaml: MemoryYaml,
+  type: string,
+  id: string,
+  options: MemoryTypeScanOptions = {},
+): MemoryDocumentSummary | undefined {
+  return findByTypeAndIdAtSha(root, sha, sha, memoryYaml, type, id, options);
+}
+
+/** The (`type`, `id`) lookup at the commit `sha`; `rev` is how a diagnostic names the revision. */
+function findByTypeAndIdAtSha(
+  root: string,
+  sha: string,
+  rev: string,
+  memoryYaml: MemoryYaml,
+  type: string,
+  id: string,
+  options: MemoryTypeScanOptions,
+): MemoryDocumentSummary | undefined {
   const reports = typeScopedReports(memoryYaml, type, options);
   const documents = parseMemoryDocumentsAtSha(root, sha, rev, scanCommit(root, sha, memoryYaml), reports.scan);
   const found = findFirst(documents, isTypeAndId(type, id), reports.documents);
