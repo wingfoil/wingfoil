@@ -477,6 +477,43 @@ Until they are recorded, `test/cli/workflow-unbound-none.integration.test.ts` fa
 
 **R2 has no test: the approved text does not say what the case asks.** `spec-017` §6.1 reads "The command carries each argument the action declares", "`--tags` with the action's `tags` joined by commas" and "a value that has none, or that fails the class, is printed as the placeholder `<<name>>`". Leaving the operand out for `tags: []` departs from those sentences, so the case goes to the approver. Today `memory.add(type: bug, title: "Empty", tags: [])` prints `--tags <tags>` in `workflow next` and `workflow show`, console and JSON, and `tags: [a, b]` prints `--tags a,b`.
 
+### green (developer, after review)
+
+**Commit.** `3ac7eefef`. The red in force for this round is `326b2c25e`, `test/cli/workflow-next-offers-review-fixes.integration.test.ts`. `F4` (a declared `tags: []`) is not in this round: it waits for an approver ruling, and its behaviour is unchanged.
+
+| Finding | Change | Established by |
+|---|---|---|
+| F1 | `shellWord` in `src/core/workflow-next.ts` accepts in a placeholder's name every character a `--set` name may hold | the three `R1` tests of the red file; `test/core/workflow-next-offer-review-fixes.test.ts` |
+| F2 | new in-process tests cover the `done` line and the rethrow of `hasTransitionEdge`, which a malformed machine reaches, so it stays | coverage table below; the file `workflow-next.ts` now reports `100` statements, functions and lines |
+| F3 | `RESERVED_SET_NAMES` of `src/memory/add.ts` is exported and is the one list; `src/workflow/bindings.ts` and `src/core/workflow-list-show.ts` read it. `grep -rn "SET_RESERVED_NAMES" src` prints nothing. `.wingfoil/dna.yaml` declares no dependency between modules, and `grep -rln "from '../workflow" src/memory src/storage src/validation` prints nothing, so the import makes no cycle | `npx tsc --noEmit -p tsconfig.json`, exit `0` |
+| F5 | `hasTransitionEdge` answers `false` for `deprecate` from the state it targets, as `memory deprecate` refuses (`document already deprecated: <id>`); a `superseded` element keeps its command, since the verb accepts it. The doc comment says so, and `docs/cli-reference.md` names the case | the `R3` tests of the red file |
+
+**Gates**, on `3ac7eefef` with the five pending bug amendments in the working tree, each after `waitslot.sh`, with `--maxWorkers=2`:
+
+| Gate | Result |
+|---|---|
+| `npm test -- --maxWorkers=2` | exit `1`: `Test Suites: 1 failed, 684 passed, 685 total`, `Tests: 1 failed, 12474 passed, 12475 total` |
+| `npm run test:coverage -- --maxWorkers=2` | exit `1`, the same one failure |
+| `npm run lint` | exit `0` |
+| `npm run docs:api` | exit `0` |
+| `npm run typecheck` | exit `0` |
+| `npm run -s check:governance -- --base origin/main` | exit `0`: `gated: 0 findings on 0 commits`, `history: 0 findings on 0 commits` |
+
+**Coverage against the base `4afbca9db`:**
+
+| Column | Base | This round |
+|---|---|---|
+| statements | 98.84 | 98.85 |
+| branches | 96.45 | 96.50 |
+| functions | 98.53 | 98.56 |
+| lines | 99.45 | 99.46 |
+
+**The one failure is `bug-534`.** `test/cli/workflow-unbound-none.integration.test.ts`, "workflow next (console): exit 0, no unbound token on either stream and no "N diagnostic(s)" line". In a clean clone of `3ac7eefef` (`git clone --local`, `node_modules` linked, built), which holds none of the pending amendments, `npx jest test/cli/workflow-unbound-none.integration.test.ts --maxWorkers=2` printed `Test Suites: 1 passed, 1 total`, `Tests: 4 passed, 4 total`.
+
+**T4.** `git log --first-parent --no-merges --format=%h <from>..HEAD -- <file>` printed nothing for each: `test/cli/workflow-next-offers-review-fixes.integration.test.ts` from `326b2c25e`; `test/core/workflow-next-offers.test.ts` from `7318712dc`; `test/cli/workflow-next-offers-reserved-tokens.integration.test.ts` from `d3bf12938`; `test/cli/workflow-next-offers.integration.test.ts`, `test/core/workflow-list-show.test.ts`, `test/core/workflow-next.test.ts`, `test/core/workflow-status.test.ts` and `test/core/workflow-next-render.test.ts` from `30727b359`.
+
+**Pending amendments.** Unchanged: no retrospective of the five bugs became false in this round.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
