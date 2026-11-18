@@ -141,6 +141,28 @@ list, a step list or a workflow count this task changes: no `.wingfoil/` file ch
 `test/docs/name-resolvability.test.ts`: **23 suites, 373 tests passed**, exit `0`, before the amendment.
 With the amendment in the tree, `npx jest test/docs/name-resolvability.test.ts --maxWorkers=2`: 11 passed.
 
+**Rerun on the tree holding the uncommitted amendment** (`spec-017` and the allowlist, at `feddde64e`). A filtered
+`npm test -- <files>` takes no heavy-gate lock, so neither this run nor the one above is a heavy gate. After `bash waitslot.sh`:
+
+```
+npm test -- test/core/workflow-next.test.ts test/core/workflow-next-render.test.ts test/core/workflow-next-review-fixes.test.ts test/core/workflow-next-views.test.ts test/core/workflow-status.test.ts test/core/workflow-status-render.test.ts test/core/workflow-list-show.test.ts test/workflow/bindings.test.ts test/workflow/deduce.test.ts test/workflow/deduce-iterate.test.ts test/core/workflow-deduction.test.ts test/core/workflow-deduction-history.test.ts test/core/workflow-deduction-provenance.test.ts test/core/workflow-repository-conformance.test.ts test/core/workflow-bindings-complete.test.ts test/core/workflow-finalize-render.test.ts test/core/workflow-rekey-render.test.ts test/core/workflow-start-end-coverage.test.ts test/cli/workflow-list-diagnostics.integration.test.ts test/cli/workflow-list-show.integration.test.ts test/cli/workflow-unbound-none.integration.test.ts test/docs/cli-reference.test.ts test/docs/name-resolvability.test.ts --maxWorkers=2
+```
+
+Exit `1`, and jest printed:
+
+```
+Test Suites: 1 failed, 22 passed, 23 total
+Tests:       1 failed, 372 passed, 373 total
+Snapshots:   0 total
+Time:        32.466 s, estimated 37 s
+```
+
+The one failure is `test/cli/workflow-unbound-none.integration.test.ts`, "workflow next (console): exit 0, no unbound token on
+either stream and no "N diagnostic(s)" line", at line 45, `expect(run.stdout).not.toMatch(/^\d+ diagnostic\(s\)/m)`: stdout
+ends with `1 diagnostic(s): --format json lists them`. `node dist/cli.js workflow next --format json` names that diagnostic:
+`W_UNCOMMITTED_INPUTS`, file `spec-017`, the only one in the payload. This is the `bug-534` failure the pending amendment
+predicts; it clears when the approver records the amendment.
+
 #### Decisions for the approver
 
 - **D1. The manual-only mark.** (a) a separate `evidence.manualOnly: boolean`; (b) `finalizable: "manual"`.
