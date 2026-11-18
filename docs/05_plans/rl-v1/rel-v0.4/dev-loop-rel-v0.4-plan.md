@@ -179,7 +179,7 @@ re-plan checkpoint (W0.4), after `w0`'s last task, the wave-checks (W0.2) and th
 - **W1-R1 — growth is planned, and re-baselined at each re-plan.** Commit-backlog listed only `w0` on purpose, so
   `release.growth_threshold` (fires at the 34th task) would fire at every re-plan by construction. The `w1` tasks are
   recorded as planned growth in `minor-v0.4`'s `## Scope changes`, and `backlog_committed` is re-baselined to the tasks
-  of the listed waves (27 + 22 = 49, W1-R9) in the same `memory amend`, which also sets `waves: [w0, w1]`;
+  of the listed waves (27 + 22, plus W1-21 filed now for `w2` = 50, the approver's ruling of 2026-11-18) in the same `memory amend`, which also sets `waves: [w0, w1]`;
   `bug-506`'s release is stamped with the W0.3 series. Within a wave the threshold keeps measuring unplanned growth (W0-R10).
 - **W1-R2 — the approver-gated verbs are MCP Tools that always refuse.** `approve`, `reject` and `amend` are exposed
   (REQ-SYS-05's bijection holds, `spec-004` §4.2) and every MCP call is an agent context, so they refuse
@@ -268,7 +268,7 @@ the survey, re-read by the task's design. The command count goes from 35 to 41.
 | D — workflow readers | W1-17 → W1-14 → W1-15 |
 | Free | W1-23 (after W1-01), W1-02 last |
 
-Start set: W1-05, W1-01 (waits at `impact-analysis`: the fourth slot), W1-17 and W1-20. Not at once: W1-03 ∥ W1-06
+Start set: the fixes W1-17 and W1-20 first; W1-05 and W1-01 (waits at `impact-analysis`: the fourth slot) once one of the two is merged. W1-21 is filed now with `release: v0.4`, so `task.stop_the_line` counts it: 7 open fix tasks of 23 is 30.4 %, above `max_share` 30, until the first fix closes (6 of 22, 27.3 %). Not at once: W1-03 ∥ W1-06
 (same registry and count: the second writes the count and the `governance-check` capability), W1-04 ∥ W1-07
 (`release-publishing.yaml`), W1-05 ∥ W1-12/W1-13 (`src/core/index.ts`), W1-11 with any task pinning console output.
 
@@ -429,6 +429,7 @@ Secret sweep from a checkout with `dist/` (the known false positives of `bug-402
   untracked when the suite ran (`workflow next … --format json` → `W_UNCOMMITTED_INPUTS` on that file): `bug-534`'s
   class, the test reading the working tree, from a new source. With the report committed the suite passes
   (`npx jest test/cli/workflow-unbound-none.integration.test.ts` → 4/4). `docs.parity` runs inside the full suite.
+- 2026-11-18: this branch merged into `main` (`2326814fa`). The approver ruled `backlog_committed` = 50: W1-21 is filed with the `w1` tasks and counted in the baseline. Filing it now keeps 7 fix tasks of 23 open, 30.4 %, so the start set of `## Rulings W1` begins with the two fixes.
 
 #### W0 measures
 
