@@ -46,3 +46,149 @@ the action's other arguments; `bug-479`, `workflow show` prints a built-in bindi
 ## Execution Notes
 
 <!-- Filled by the dev-loop. -->
+
+### design (architect, 2026-11-18)
+
+**Base.** Branch cut from `main` `4afbca9db`. `depends_on: []`. `spec-017`, `spec-008` and `spec-003` are `approved`,
+`dl-090` is `ready`. Every command below ran in this worktree or in a scratch project built with
+`git init`, `wingfoil init --template Scrum --no-interactive` and the code build (`0.3.2 (4afbca9db…)`); nothing was
+finalized in either.
+
+#### What the reproductions show
+
+| Bug | Command (scratch project, a custom main `demo`) | Printed |
+|---|---|---|
+| `bug-490` | `workflow next demo-1-plan`, action `memory.add(type: bug, title: "Fixed title here", tags: [demo, two], severity: low)` | `wingfoil memory add --type bug --title <title> --workflow demo-1-plan --step demo.capture` |
+| `bug-439` | the same, after `memory add … --workflow demo-1-plan --step demo.capture` | the add command again, and `evidence missing: created` with the element `draft` |
+| `bug-479` | `workflow show demo --format json` | `"argv":["wingfoil","memory","submit"]`, `"argv":["wingfoil","memory","approve"]` |
+| `bug-486` | `workflow next demo-1-plan` on a step that created nothing | `evidence missing: record (finalizable)`, `{"kinds":["created","record"],"missing":["record"],"finalizable":true}` |
+| `bug-518` | `workflow next demo-1-plan`, a selection of one `draft` and three `pending` decision-logs | `wingfoil memory approve dl-001-alpha dl-002-beta dl-003-gamma dl-004-delta --reason <reason>` |
+
+Two facts the bugs do not state, each of which changes the design:
+
+1. **`memory approve` takes one id.** `memory approve dl-002-beta dl-003-gamma --reason x --dry-run` prints
+   `error: wingfoil memory approve takes one positional <id> (got 2 positionals)`, exit `2`; `memory submit` and
+   `memory deprecate` answer the same. `spec-008` §1 "One id per call" ratifies it. So filtering the ids is not enough:
+   a printed command naming two eligible elements still fails (D4).
+2. **The offered `memory add` can fail for a token the action does not give.** On this repository
+   `memory add --type task --title probe --dry-run` prints `error: E_MISSING_PATH_VALUE: path pattern
+   "docs/04_memory/{release}/{id}.md" is missing value(s) for: release`, exit `1`, and `--type release` asks for `{kind}`
+   and `{version}`. Reading the 19 `memory.add` actions of `.wingfoil/workflows/custom/` against `memory.yaml`: 5 leave a
+   token out (`initial-design.seed-releases`, `release-line-cycle.plan-next-release-line`, three of
+   `release-planning.build-backlog`), and 2 declare an argument `memory add` cannot take (`dl:` and `bug:` of
+   `build-backlog`; `--set severity=low` shows the refusal, `has no token {severity} in its id_pattern or path`).
+
+#### Design
+
+- **`bug-486`, AC 1.** `buildStep` adds `evidence.manualOnly: boolean` to `Step`: `finalizable` and no checkable evidence
+  behind the step, that is `kinds` minus `record` and `awaits` is empty, or is only `created` with `created` empty. The
+  binding kinds do not enter it, since no binding runs in this release. `DeducedStep.evidence` does not change, so the
+  deduction's pins hold. `finalizable` stays a boolean (D1). Console: `next` keeps the literal `(finalizable)` and appends
+  ` manual only: no evidence checks this step`; `status` appends `; manual only` to the frontier line.
+- **`bug-439`, AC 2.** A `memory.add` action whose `targets` are not empty reports them in `ActionView.done` and its
+  binding carries no `argv`; the console prints `- <text> — done: <ids>`. The deduction adds
+  `DeducedStep.pendingCreated` (per created element short of its exit state or path:
+  `{ element, reaches, missingPaths }`), which `Step` reports only when not empty; the console prints
+  `evidence missing: created (<id> is <status>, the phase leaves it <reaches>)`. The kind `created` stays in `missing`.
+- **`bug-490`, AC 3.** The list-aware `tokenArguments` moves from `src/workflow/deduce.ts` to `src/workflow/bindings.ts`,
+  so that both read one parser. The order of the command is fixed by `spec-017` §6.1 as amended: `--type`, `--title`,
+  `--tags`, the `--set` of the declared tokens, the `--set <name>=<<name>>` of the tokens not given, `--workflow`,
+  `--step`. `DeducedAction` gains the resolved arguments, computed where the frames are; an interpolated value outside
+  `spec-009`'s ID class prints as a placeholder (`dl-090` Q3 (a), D6). `stepLines` quotes an element a POSIX shell would
+  split, placeholders excepted.
+- **`bug-479`, AC 4.** One pure function in `bindings.ts` builds a built-in command from its operands; `workflow show`
+  calls it with placeholders and `workflow next` with the step's values, so the two cannot diverge. `resolveToken` keeps
+  its prefix `argv` (`test/workflow/bindings.test.ts`, `test/core/workflow-repository-conformance.test.ts:118` stay green).
+- **`bug-518`, AC 5.** `src/memory/state-machine.ts` gains a predicate over `resolveTransitionTarget`, so an offered verb
+  and the verb itself decide by one rule. Each target with an edge gets its own command (`argv` the first, `commands`
+  all of them when two or more); the others go to `ActionView.notOffered` with `no <verb> edge from '<state>'`, printed on
+  a line of their own. The rule covers `approve`, `reject`, `submit` and `deprecate`: one code path, one defect (W0-R10).
+
+#### Per-AC classification and what qa pins
+
+All five are **red-first**: each observable below is absent at `4afbca9db` (table above). A new field read through a
+`Step`-typed value gives two reds: `tsc` (TS2339) and, at run time under `isolatedModules`, `undefined`. No new export is
+imported by the tests. Fixtures mirror the `demo` workflow above; the command output is copied from a real run.
+
+| AC | Observable to pin | Interface | Test file (new) |
+|---|---|---|---|
+| 1 | `[record]`, `[awaits, record]` and `[created, record]` with nothing created give `manualOnly: true`; `[state, record]` gives `false`; a step not finalizable gives `false`; `finalizable` is still `true`/`false`. A `run`-bound and a `manual`-bound checkpoint answer alike. Console of `next` contains `(finalizable) manual only: no evidence checks this step`, of `status` `; manual only` | `buildStep`, `stepLines`, `renderStatusConsole` | `test/core/workflow-next-offers.test.ts` |
+| 2 | Draft element linked or adopted: no action's `argv` starts `wingfoil memory add`; `done` lists it; `pendingCreated` is `[{ element, reaches: 'pending', missingPaths: [] }]`; `evidence.missing` is `['created']`; the `memory.submit` command stays. Console line as designed. A second type not yet created keeps its offer | real CLI, `workflow next --format json` and console | `test/cli/workflow-next-offers.integration.test.ts` |
+| 3 | For the action of the table: `['wingfoil','memory','add','--type','bug','--title','Fixed title here','--tags','demo,two','--workflow',…,'--step',…]`; a pattern token as `--set kind=minor`; a token not given as `--set release=<release>`; `severity` left out and reported once by `workflow list --format json` as `W_ACTION_ARGUMENT_NOT_PASSED` with the `file`, `path` and message of `spec-017` §2, exit `0`, and by no other command. The console prints `--title 'Fixed title here'`. An interpolated value holding a space prints the placeholder | real CLI; `resolveToken` untouched | the same integration file |
+| 4 | `workflow show --format json`: `wingfoil memory submit <id>`, `approve <id> --reason <reason>`, `reject <id> --reason <reason>`, `deprecate <id>`, add with `--title <title>` and `--workflow <instance-id> --step <key>`, `agent execute --workflow <instance-id> --step <key>`; `config.init` stays `wingfoil init` | `showWorkflow` | `test/core/workflow-next-offers.test.ts` |
+| 5 | One `draft` and two `pending`: `commands` holds the two `pending` ids, one command each, `argv` equals the first; `notOffered` holds the `draft` one with `no approve edge from 'draft'`. **Each printed command, run as printed with the reason filled, exits `0`** (scrub the markers through `test/agent-markers.cjs`). One eligible: no `commands`. None eligible: no `argv`. No target known: `<id>` stays | real CLI | the same integration file |
+
+**Existing pins that change at red** (`grep -rn` of the argv and evidence shapes): `test/core/workflow-list-show.test.ts:407`
+(the shown add), `test/core/workflow-next.test.ts:460` and `test/core/workflow-status.test.ts:620,628` (`toEqual` of a step's
+evidence gain `manualOnly`), `test/core/workflow-next-render.test.ts:11` (a fixture typed `Step`). No test pins a phase
+list, a step list or a workflow count this task changes: no `.wingfoil/` file changes.
+
+#### Files and versions
+
+- **Code:** `src/workflow/bindings.ts`, `src/workflow/deduce.ts`, `src/memory/state-machine.ts`, `src/core/workflow-next.ts`,
+  `src/core/workflow-status.ts`, `src/core/workflow-list-show.ts`.
+- **Docs:** `docs/cli-reference.md` (`workflow next`, `show`, `list`).
+- **`version:` bumps: none.** `git diff --stat main -- .wingfoil` prints nothing, so `npm run check:mcp` and the pinned-build
+  reads have nothing to prove; `spec-017` and `docs/cli-reference.md` carry no `version:` field.
+- **At green:** remove the five `task-376` entries of `test/docs/name-resolvability.allowlist.ts`, which go stale when the
+  names ship.
+
+#### Tests run at design
+
+`bash waitslot.sh`, then `npm test -- <23 files> --maxWorkers=2`: the `workflow-next*`, `workflow-status*`,
+`workflow-list-show`, `bindings`, `deduce*`, `workflow-deduction*`, conformance, `workflow-bindings-complete`, render,
+`workflow-list-*` and `workflow-unbound-none` suites, `test/docs/cli-reference.test.ts` and
+`test/docs/name-resolvability.test.ts`: **23 suites, 373 tests passed**, exit `0`, before the amendment.
+With the amendment in the tree, `npx jest test/docs/name-resolvability.test.ts --maxWorkers=2`: 11 passed.
+
+#### Decisions for the approver
+
+- **D1. The manual-only mark.** (a) a separate `evidence.manualOnly: boolean`; (b) `finalizable: "manual"`.
+  **Recommended (a):** `finalizable` keeps its type for `src/core/workflow-finalize.ts:145` and for
+  `docs/examples/06-workflow-approval/run.sh:112`, which asserts the text `true`. `workflow finalize` does not read the mark.
+- **D2. The elements left out of a command.** (a) `ActionView.notOffered`, per action, with a reason, and a console line;
+  (b) a step-level list; (c) a diagnostic. **Recommended (a):** the reason belongs to the verb of that action.
+- **D3. Where the unpassable argument surfaces.** (a) a `workflow list`-only warning, `W_ACTION_ARGUMENT_NOT_PASSED`
+  (`spec-017` §2, as `W_INSTANCE_PRE_MARKER` is `status`-only); (b) a `spec-003` core row, carried by every workflow read.
+  **Recommended (a):** the criterion names `workflow list`, and (b) breaks `task-358`'s pin that the registry loads with no
+  diagnostic (`test/core/workflow-bindings-complete.test.ts:94`). `workflow list` on this repository will then report two
+  warnings, `dl` and `bug` of `build-backlog`, which stay declared because they are `workflow adopt`'s candidate rules.
+- **D4. AC 5 against `spec-008` §1.** The criterion speaks of "the command"; a verb takes one id. (a) one command per
+  element; (b) make the verbs variadic. **Recommended (a):** (b) reverses a ratified rule. `argv` stays runnable by itself.
+- **D5. A phase that adds several elements.** `build-backlog` and `seed-releases` add more than one element of a type.
+  Once the first exists, AC 2 removes the offer. (a) no offer, `memory add --workflow --step` stays accepted and
+  `docs/cli-reference.md` says so; (b) keep offering on such phases, which nothing in a declaration tells apart.
+  **Recommended (a).**
+- **D6. `dl-090` Q3 (a) and a title with a token.** `retrospective.capture` declares
+  `title: "Retrospective {release.version}"`, a partial interpolation by the letter of Q3. **Recommended:** read Q3's
+  whole-argument rule as binding `run` elements (`E_BINDING_PARTIAL_INTERPOLATION`, where `spec-003` places it), print the
+  title as one argv element, and hold every interpolated value to the ID class.
+- **D7. Two additions beyond the letter of the criteria.** The `--set <name>=<<name>>` placeholders and the one-command rule
+  for `submit`, `reject` and `deprecate`. **Recommended: keep both in this task**, as same-class defects in the code it
+  changes (W0-R10); without them the offered command still fails as printed.
+
+#### What other tasks may rely on
+
+- **Step keys do not change. `--format json` changes additively:** `evidence.manualOnly` always; `pendingCreated`, `done`,
+  `notOffered` and `binding.commands` only when they apply. One reading changes: `argv` never holds two ids, and a satisfied
+  `memory.add` has no `argv`, so a reader must treat `argv` as optional, as the type already says.
+- **`task-373`:** `W_ACTION_ARGUMENT_NOT_PASSED` is in the payload of `workflow list` alone; `next` and `status` gain no
+  diagnostic. The console keeps `(finalizable)` and the `evidence missing:` prefix.
+- **`task-374`:** it may read `manualOnly` and `pendingCreated` from any `Step`; `buildStep` stays the one builder.
+- **`task-379`:** no overlap: no context-payload file is touched, and no code outside `src/core/workflow-next.ts` reads an
+  action's `argv` (`grep -rn "binding\.argv" src`).
+
+### Pending amendments (approver)
+
+- `spec-017-workflow-commands-and-state-deduction` (§2, §6.1, §7.5, §7.6, §8 and a Revision note), with the five planned names
+  in `test/docs/name-resolvability.allowlist.ts`, uncommitted in this worktree. Reason:
+  `Specify the commands workflow next and workflow show offer: the manual-only mark, a creation already made, the arguments of memory add, one command per element and the placeholders of the static form (task-376 design gate).`
+  Until it is recorded, `test/cli/workflow-unbound-none.integration.test.ts` fails alone with `W_UNCOMMITTED_INPUTS` (`bug-534`).
+
+### Retrospective
+
+<!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
+     reconstructed afterwards. One line per item: what happened, the evidence (a command and what it
+     printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
+     Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
+     here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
