@@ -320,6 +320,59 @@ Case e (every `show` and `ls-tree` names the full sha) is characterization and p
 **Correction (`08dca4d252e35cbd3b64d98bcdce7ea2eb21ee25`).** AC 1 case b asserted that the payload never holds the text `bug-007-astray`, which cannot pass: the element's own `depends_on:` names that id and `spec-012` §7 carries the element's frontmatter. The test now asserts that the payload has no `### bug:bug-007-astray` heading and no `<!-- begin:bug:bug-007-astray -->` or `<!-- end:bug:bug-007-astray -->` line.
 **Run after the correction:** `npx jest test/core/context-payload-integrity.test.ts --maxWorkers=2 --noStackTrace` printed `Test Suites: 1 passed, 1 total` and `Tests: 35 passed, 35 total`, on a worktree holding the developer's uncommitted `src/` changes, which qa did not open.
 
+### design addendum (architect, 2026-11-18)
+
+**The gap.** D2 (a) keeps every typed scalar as written, so two keys that differ for the Memory scan can have one text for the payload's schema. Reproduced with js-yaml 4.3.2, loading each text with the default schema and with a schema whose null, boolean, integer, float and timestamp types keep their text:
+
+| Frontmatter | Scan (default schema) | Payload schema |
+|---|---|---|
+| `"1.50": x`, `1.50: y` | parses | `duplicated mapping key (2:1)` |
+| `"~": x`, `~: y` | parses | `duplicated mapping key (2:1)` |
+| `"True": x`, `True: y` | parses | `duplicated mapping key (2:1)` |
+| `"2026-10-05": x`, `2026-10-05: y` | parses | `duplicated mapping key (2:1)` |
+| `n:` holding `"0x1F": x`, `0x1F: y` | parses | `duplicated mapping key (3:3)` |
+| `1.5: x`, `1.50: y` | `duplicated mapping key (2:1)` | parses (the scan has already left it out) |
+
+So the scan accepts the document and the payload's read would throw, which `spec-012` §7 did not cover.
+
+**Options.**
+
+- **(a) Left out and reported.** A Memory document with two frontmatter keys of the same text is left out and reported as `W_MEMORY_UNREADABLE` when §6 would have found it relevant; the element or a resolved directive with the same defect refuses the context as `VALIDATION`.
+- **(b) `VALIDATION` for every document.** Any such document refuses the context.
+
+**Recommendation: (a).** It is the rule §7 already applies to a document that cannot be rendered, and it keeps the tolerance of the Memory scan: under (b) one malformed sibling fails every context that finds it relevant. The ruling is the approver's; the amendment below is written for (a).
+
+**The selection.** A document left out here takes no slot, because §7 leaves such documents out "before §6 bounds the set". The check therefore runs over every document §6 would find relevant, before the bounds, and **no re-selection follows the read**. A re-selection after reading only the selected documents would be wrong twice: a defective document that stops the `maxBytes` walk would never be read, so it would still cost its followers their place, and the report would depend on the limits.
+
+- **Cost, measured on this repository at `bd05056ec`** (one run, task-379 as the element): 1,060 of 1,373 documents are relevant before the bounds, against 11 selected. Ranking took 46 ms, one batched read of the 1,060 took 551 ms and parsing their frontmatter 17 ms.
+- **Spawns:** the check and the written frontmatter share one `git cat-file --batch`, so AC 3's count of 4 holds. The directive check reads the text of the bodies' batch, with no further spawn.
+- **Directive frontmatter is not carried in a payload**, so the directive refusal holds a file that would otherwise render correctly. It follows the rule as requested; only the directives resolved for the role are checked.
+- **Names:** the amendment adds no name to the name-resolvability allowlist (`npx jest test/docs/name-resolvability.test.ts --maxWorkers=2 --noStackTrace` with the amendment in the tree).
+
+**What qa pins (black-box, through `assembleExecutionContext`, under (a)).**
+
+| # | Case | Observable |
+|---|---|---|
+| a | A linked document with `"1.50": x` and `1.50: y` | the context builds; no heading and no marker for the document; section 4's count excludes it; the warning below |
+| b | The same defect written with `~`, `True`, a date, and nested under a key | as a |
+| c | The defective document ranks first, with `limits: {maxDocs: 1}` and a second linked document | the second document is carried |
+| d | The defective document is larger than `maxBytes`, followed by a small linked document | the small document is carried |
+| e | The defective document ranks after the `maxDocs` bound | not carried, and still reported |
+| f | Two documents with one `type` and `id`, the first in path order defective | the second is carried; only the first is reported |
+| g | The defective document scores 0 | not carried, not reported |
+| h | The element has the defect | `ok: false`, `VALIDATION`, `element 'task:<id>' cannot enter an execution context: two of its frontmatter keys have the same text` |
+| i | A directive bound to the role has the defect | `ok: false`, `VALIDATION`, `directive '<id>' cannot enter an execution context: two of its frontmatter keys have the same text` |
+| j | A directive not bound to the role has the defect | the context builds |
+| k | A document with `"1.50": x` and `1.5: y` (two texts) | carried, with both keys |
+| l | Two assemblies of a fixture holding a to g | byte-identical payloads, equal warnings |
+| m | The spawn count with a defective document present | `cat-file --batch` exactly 4 |
+
+Warning line of case a: `W_MEMORY_UNREADABLE (<path>): unreadable frontmatter in <path>: two of its frontmatter keys have the same text, so an execution context cannot carry it`.
+
+**Pending amendment (approver).** `spec-012-context-loader-relevance-filtering`, prepared uncommitted in this worktree: §7 "What never enters a payload" and a new Revision note. Proposed reason:
+
+`--reason "Leave out and report a Memory document with two frontmatter keys of the same text, refuse such an element or resolved directive as VALIDATION, and decide it before the bounds of section 6, per task-379."`
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
