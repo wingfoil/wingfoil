@@ -16,7 +16,7 @@
  * `isArchivedStatus`.
  */
 import * as jsYaml from 'js-yaml';
-import { CORE_SCHEMA, dump, load, Type, YAMLException } from 'js-yaml';
+import { CORE_SCHEMA, dump, load, Type, YAMLException, type Schema } from 'js-yaml';
 
 import type { RolesYaml } from '../directives/schema';
 import type { DnaYaml, Module, Paths, Project, Stacks, Team } from '../dna/schema';
@@ -336,24 +336,20 @@ export const CONTEXT_PAYLOAD_FORMAT = 1;
  * value, so `1.50`, `0o17`, `0x1F`, `1e3`, `+12`, `~` and `True` are re-emitted unchanged.
  */
 export class WrittenScalar {
-  constructor(
-    /** The scalar's text, as written. */
-    readonly text: string,
-  ) {}
+  readonly #text: string;
+
+  constructor(text: string) {
+    this.#text = text;
+  }
+
+  /** The scalar's text, as written. */
+  get text(): string {
+    return this.#text;
+  }
 
   /** The text as written, so `JSON.stringify` of a context renders the scalar as the document did. */
   toJSON(): string {
-    return this.text;
-  }
-
-  /** The text as written: what a mapping key written as this scalar is named by. */
-  toString(): string {
-    return this.text;
-  }
-
-  /** Not `Object`: js-yaml names a mapping key of that class `[object Object]`, whatever its text. */
-  get [Symbol.toStringTag](): string {
-    return 'WrittenScalar';
+    return this.#text;
   }
 }
 
@@ -375,41 +371,166 @@ const types = (
 ).types;
 
 /**
- * `base` reading a scalar as a {@link WrittenScalar}. It still dumps what `base` dumps, because the DNA
- * sections go through the same schema as validated values. An explicit `!!null` with no text has none to
- * keep, and is `null`.
+ * A typed scalar while js-yaml loads a frontmatter. The loader inspects what it is handed: it names a mapping key
+ * by `toString`, a merge copies an object's enumerable fields and `!!set` wants a null value. So this has no
+ * enumerable field, and as a key it answers {@link ScalarBeingRead.keyName}. {@link restoredFrontmatter} replaces it.
  */
-function writtenScalarType(base: BuiltInType): Type {
-  return new Type(base.tag, {
-    kind: 'scalar',
-    resolve: (data: unknown) => base.resolve(data),
-    construct: (data: string | null) => (data === null ? null : new WrittenScalar(data)),
-    predicate: base.predicate ?? undefined,
-    represent: base.represent ?? undefined,
-    defaultStyle: base.defaultStyle ?? undefined,
+class ScalarBeingRead {
+  readonly #written: WrittenScalar;
+  readonly #value: unknown;
+  readonly #keyName: string;
+
+  constructor(written: WrittenScalar, value: unknown, mark: string) {
+    this.#written = written;
+    this.#value = value;
+    const name = String(value);
+    this.#keyName = name === written.text ? name : `${mark}${JSON.stringify([name, written.text])}${mark}`;
+  }
+
+  get written(): WrittenScalar {
+    return this.#written;
+  }
+
+  get isNull(): boolean {
+    return this.#value === null;
+  }
+
+  /** The key as YAML names it, unless its text says otherwise: then both, between two marks. `1.5` stays the plain
+   * name, so it and `"1.5"` are the one key they are under YAML. */
+  toString(): string {
+    return this.#keyName;
+  }
+
+  /** Not `Object`: js-yaml names a mapping key of that class `[object Object]`, without asking it. */
+  get [Symbol.toStringTag](): string {
+    return 'ScalarBeingRead';
+  }
+}
+
+/** The schema of one frontmatter's load: js-yaml's default schema, whose typed scalars are {@link ScalarBeingRead}. */
+function loadingSchema(mark: string): Schema {
+  const keptType = (base: BuiltInType, written: (text: string) => WrittenScalar): Type =>
+    new Type(base.tag, {
+      kind: 'scalar',
+      resolve: (data: unknown) => base.resolve(data),
+      // An explicit `!!null` with no text has none to keep.
+      construct: (data: string | null) => (data === null ? null : new ScalarBeingRead(written(data), base.construct(data), mark)),
+    });
+  const scalar = (text: string): WrittenScalar => new WrittenScalar(text);
+  const setType = new Type(types.set.tag, {
+    kind: 'mapping',
+    resolve: (data: Record<string, unknown> | null) =>
+      Object.values(data ?? {}).every((value) => value === null || (value instanceof ScalarBeingRead && value.isNull)),
+    construct: (data: Record<string, unknown> | null) => data ?? {},
+  });
+  return CORE_SCHEMA.extend({
+    implicit: [
+      keptType(types.null, scalar),
+      keptType(types.bool, scalar),
+      keptType(types.int, scalar),
+      keptType(types.float, scalar),
+      keptType(types.timestamp, (text) => new WrittenTimestamp(text)),
+      types.merge,
+    ],
+    explicit: [types.binary, types.omap, types.pairs, setType],
   });
 }
 
-/** js-yaml's timestamp tag and resolution, constructing a {@link WrittenTimestamp} instead of a `Date`. It is
- * the one type that dumps a {@link WrittenScalar}, of whichever type the scalar was read: a dump needs only its text. */
-const WRITTEN_TIMESTAMP_TYPE = new Type('tag:yaml.org,2002:timestamp', {
-  kind: 'scalar',
-  resolve: (data: unknown) => types.timestamp.resolve(data),
-  construct: (data: string) => new WrittenTimestamp(data),
-  instanceOf: WrittenScalar,
-  represent: (value: object) => (value as WrittenScalar).text,
-});
-
 /**
- * The schema the payload's frontmatter is read and dumped with: js-yaml's default schema (same implicit
- * and explicit types, so it resolves every scalar as the scan did) with the null, boolean, integer, float
- * and timestamp types keeping the scalar's text. A scalar is written back as written; a quoted date or
- * number is a string that a reader could take for one of those, so the dump keeps it quoted.
+ * The schema the payload is dumped with: js-yaml's default schema, whose timestamp type also writes back every
+ * {@link WrittenScalar} as written. A quoted date or number is a string a reader could take for a typed scalar, so
+ * the dump keeps it quoted, and the DNA sections' validated values are dumped canonically.
  */
 const PAYLOAD_YAML_SCHEMA = CORE_SCHEMA.extend({
-  implicit: [types.null, types.bool, types.int, types.float].map(writtenScalarType).concat(WRITTEN_TIMESTAMP_TYPE, types.merge),
+  implicit: [
+    new Type(types.timestamp.tag, {
+      kind: 'scalar',
+      resolve: (data: unknown) => types.timestamp.resolve(data),
+      instanceOf: WrittenScalar,
+      represent: (value: object) => (value as WrittenScalar).text,
+    }),
+    types.merge,
+  ],
   explicit: [types.binary, types.omap, types.pairs, types.set],
 });
+
+/** Why a frontmatter cannot be rendered (`spec-012` §7). */
+const SAME_TEXT = 'two of its frontmatter keys have the same text';
+const TWO_TEXTS = 'a merge key gives one of its frontmatter keys two texts';
+const CONTAINS_ITSELF = 'its frontmatter contains itself through an alias';
+const NOT_READABLE = 'its frontmatter cannot be read as written';
+
+/** A mapping or a sequence js-yaml built: what holds other values. */
+function isContainer(value: unknown): value is Record<string, unknown> | unknown[] {
+  return Array.isArray(value) || (isRecord(value) && Object.getPrototypeOf(value) === Object.prototype);
+}
+
+/** A mark no key or string of `loaded` holds, so that a mark in a later load is one that load wrote. */
+function unusedMark(loaded: unknown): string {
+  const strings = new Set<string>();
+  const seen = new Set<unknown>();
+  const visit = (value: unknown): void => {
+    if (typeof value === 'string') strings.add(value);
+    if (!isContainer(value) || seen.has(value)) return;
+    seen.add(value);
+    if (!Array.isArray(value)) Object.keys(value).forEach((key) => strings.add(key));
+    Object.values(value).forEach(visit);
+  };
+  visit(loaded);
+  let mark = '';
+  while ([...strings].some((text) => text.includes(mark))) mark += '';
+  return mark;
+}
+
+/** Why the keys of one mapping have no one-to-one rendering, given each key's name under YAML and its written text. */
+function mappingKeysProblem(keys: readonly (readonly [name: string, text: string])[]): string | undefined {
+  const textOfName = new Map<string, string>();
+  const nameOfText = new Map<string, string>();
+  let problem: string | undefined;
+  for (const [name, text] of keys) {
+    if ((nameOfText.get(text) ?? name) !== name) return SAME_TEXT;
+    if ((textOfName.get(name) ?? text) !== text) problem = TWO_TEXTS;
+    nameOfText.set(text, name);
+    textOfName.set(name, text);
+  }
+  return problem;
+}
+
+/**
+ * The value `loaded` as its document wrote it: each {@link ScalarBeingRead} its {@link WrittenScalar}, each key its
+ * text. A shared alias is visited once. The problem, when there is one, is the frontmatter's reason not to be rendered.
+ */
+function restoredFrontmatter(loaded: unknown, mark: string): { readonly value: unknown; readonly problem?: string } {
+  const part = (key: string, index: 0 | 1): string =>
+    key.split(mark).map((piece, position) => (position % 2 === 0 ? piece : (JSON.parse(piece) as [string, string])[index])).join('');
+  const restored = new Map<object, unknown>();
+  const open = new Set<object>();
+  let problem: string | undefined;
+  const visit = (value: unknown): unknown => {
+    if (value instanceof ScalarBeingRead) return value.written;
+    if (typeof value === 'string') return part(value, 1);
+    if (!isContainer(value)) return value;
+    if (open.has(value)) {
+      problem ??= CONTAINS_ITSELF;
+      return value;
+    }
+    if (restored.has(value)) return restored.get(value);
+    open.add(value);
+    let result: unknown;
+    if (Array.isArray(value)) {
+      result = value.map(visit);
+    } else {
+      const keys = Object.keys(value);
+      problem ??= mappingKeysProblem(keys.map((key) => [part(key, 0), part(key, 1)]));
+      result = Object.fromEntries(keys.map((key) => [part(key, 1), visit(value[key])]));
+    }
+    open.delete(value);
+    restored.set(value, result);
+    return result;
+  };
+  const value = visit(loaded);
+  return problem === undefined ? { value } : { value, problem };
+}
 
 /** `value` with every `Date` — a value a caller built itself, never one the builder read — as its
  * ISO-8601 UTC text, at any depth, so {@link serializeExecutionContext} accepts it. */
@@ -421,26 +542,30 @@ function withDatesAsWritten(value: unknown): unknown {
   return value;
 }
 
-/**
- * The frontmatter of each document at `paths`, as commit `sha` holds it, all read in one batch with
- * {@link PAYLOAD_YAML_SCHEMA} so its scalars keep their text (`bug-232`, `bug-267`). Every path was read and
- * parsed at `sha` by the scan already, and each one has a frontmatter block: the element is found, and a
- * document carried, by its frontmatter's `type` and `id`.
- *
- * `null` for a document two of whose keys have the same text once kept as written (`"1.50"` and `1.50`): two
- * keys to the scan, one to this schema, so it cannot be rendered (`spec-012` §7).
- */
-function writtenFrontmatter(root: string, sha: string, paths: readonly string[]): ReadonlyMap<string, Record<string, unknown> | null> {
-  const written = new Map<string, Record<string, unknown> | null>();
-  for (const [index, raw] of readPathsAtRev(root, sha, [...paths]).entries()) {
-    try {
-      written.set(paths[index]!, load(splitFrontmatter(raw!).frontmatter!, { schema: PAYLOAD_YAML_SCHEMA }) as Record<string, unknown>);
-    } catch (error) {
-      if (!(error instanceof YAMLException) || error.reason !== 'duplicated mapping key') throw error;
-      written.set(paths[index]!, null);
-    }
+/** A frontmatter as written, or the reason it cannot be rendered (`spec-012` §7). */
+type WrittenFrontmatter = { readonly frontmatter: Record<string, unknown> } | { readonly problem: string };
+
+/** One frontmatter's text as written. The first load only finds a mark the second cannot confuse with the document's
+ * own text. A YAML error is an answer here, never a throw. */
+function readWrittenFrontmatter(text: string): WrittenFrontmatter {
+  try {
+    const mark = unusedMark(load(text));
+    const { value, problem } = restoredFrontmatter(load(text, { schema: loadingSchema(mark) }), mark);
+    return problem === undefined ? { frontmatter: value as Record<string, unknown> } : { problem };
+  } catch (error) {
+    if (error instanceof YAMLException) return { problem: NOT_READABLE };
+    throw error;
   }
-  return written;
+}
+
+/**
+ * The frontmatter of each document at `paths`, as commit `sha` holds it, all read in one batch so its scalars keep
+ * their text (`bug-232`, `bug-267`). Every path was read and parsed at `sha` by the scan already, and each one has a
+ * frontmatter block: the element is found, and a document carried, by its frontmatter's `type` and `id`.
+ */
+function writtenFrontmatter(root: string, sha: string, paths: readonly string[]): ReadonlyMap<string, WrittenFrontmatter> {
+  const raws = readPathsAtRev(root, sha, [...paths]);
+  return new Map(paths.map((path, index) => [path, readWrittenFrontmatter(splitFrontmatter(raws[index]!).frontmatter!)]));
 }
 
 /** YAML for the payload: keys sorted ascending (§7), no line folding and no anchors, scalars as written
@@ -759,8 +884,8 @@ interface PayloadCandidates {
   readonly carried: readonly MemoryDocumentSummary[];
   /** `W_MEMORY_UNREADABLE` diagnostics, in path order. */
   readonly left: readonly Diagnostic[];
-  /** By path; `null` for a document {@link writtenFrontmatter} cannot render. */
-  readonly written: ReadonlyMap<string, Record<string, unknown> | null>;
+  /** By path. */
+  readonly written: ReadonlyMap<string, WrittenFrontmatter>;
 }
 
 /** Ranks with no bound: used only to learn which unnameable documents would have been relevant. */
@@ -792,8 +917,8 @@ function repeatedKeyReasons(relevant: readonly MemoryDocumentSummary[]): Readonl
 
 /**
  * The Memory documents §7 can carry (`dl-150` B), before §6 ranks them: a document needs a nameable
- * `type` and `id` ({@link isNameable}) for its heading and markers, a `type` declared for its path, frontmatter
- * keys of distinct texts ({@link writtenFrontmatter}), a key no other relevant document holds
+ * `type` and `id` ({@link isNameable}) for its heading and markers, a `type` declared for its path, a frontmatter
+ * that can be rendered ({@link readWrittenFrontmatter}), a key no other relevant document holds
  * ({@link repeatedKeyReasons}, `bug-265`), and a body that does not hold its own end marker ({@link closesItself}).
  * All but the last are reported only when §6 would have found the document relevant — a repository's
  * frontmatter-less files (grandfathered plans) would otherwise be reported in every context; a self-closing one is
@@ -835,14 +960,18 @@ function payloadCandidates(
 
   const relevant = selectRelevantMemoryDocuments(named, element, UNBOUNDED).documents;
   const written = writtenFrontmatter(root, sha, [element.path, ...relevant.map((doc) => doc.path)]);
-  const unrendered = relevant.filter((doc) => written.get(doc.path) === null);
-  for (const doc of unrendered) leaveOut(doc.path, 'two of its frontmatter keys have the same text, so an execution context cannot carry it');
-  const repeats = repeatedKeyReasons(relevant.filter((doc) => written.get(doc.path) !== null));
+  const rendered = (path: string): boolean => !('problem' in written.get(path)!);
+  for (const doc of relevant) {
+    const entry = written.get(doc.path)!;
+    if ('problem' in entry) leaveOut(doc.path, `${entry.problem}, so an execution context cannot carry it`);
+  }
+  const repeats = repeatedKeyReasons(relevant.filter((doc) => rendered(doc.path)));
   for (const [path, reason] of repeats) leaveOut(path, reason);
 
   // A path is reported at most once, so no two compare equal.
   left.sort((a, b) => (a.path < b.path ? -1 : 1));
-  const carried = named.filter((doc) => written.get(doc.path) !== null && !repeats.has(doc.path));
+  // A document §6 finds irrelevant was not read, and §6 drops it again.
+  const carried = named.filter((doc) => !written.has(doc.path) || (rendered(doc.path) && !repeats.has(doc.path)));
   return { carried, left: left.map((entry) => entry.diagnostic), written };
 }
 
@@ -901,7 +1030,7 @@ function newerFormatSubject(
  * `missing 'element'`; the refusal's `details.cause` names the file (`no .wingfoil/roles.yaml at <sha>`).
  * Before any read, a role or element field holding a control character or `-->`, or limits that are
  * not positive integers, are refused as `VALIDATION`. After the reads, an element or directive body
- * that holds its own end marker, an element with two frontmatter keys of the same text, an element whose
+ * that holds its own end marker, an element whose frontmatter cannot be rendered, an element whose
  * key is a carried directive's, or a directive id holding a control character or `-->`, refuses the context
  * as `VALIDATION`: none may be dropped (§5 never truncates a directive).
  *
@@ -982,8 +1111,8 @@ export function assembleExecutionContext(root: string, request: ContextRequest):
   // `element` is set whenever `documents` is: an absent element was refused above.
   const candidates = documents === null ? undefined : payloadCandidates(root, sha, documents, element!, memoryYaml!);
   const elementWritten = element === undefined ? undefined : candidates!.written.get(element.path);
-  if (elementWritten === null) {
-    return coreErr({ code: 'VALIDATION', message: `element '${label}' cannot enter an execution context: two of its frontmatter keys have the same text` });
+  if (elementWritten !== undefined && 'problem' in elementWritten) {
+    return coreErr({ code: 'VALIDATION', message: `element '${label}' cannot enter an execution context: ${elementWritten.problem}` });
   }
   const relevant =
     candidates === undefined
@@ -994,10 +1123,13 @@ export function assembleExecutionContext(root: string, request: ContextRequest):
   const validated = validateExecutionContext({
     role,
     stateRef: sha,
-    element: element === undefined ? undefined : { ...element, frontmatter: elementWritten },
+    element: element === undefined ? undefined : { ...element, frontmatter: (elementWritten as { frontmatter: Record<string, unknown> }).frontmatter },
     dna,
     directives,
-    memory: relevant?.documents.map((doc) => ({ ...doc, frontmatter: candidates!.written.get(doc.path)! })),
+    memory: relevant?.documents.map((doc) => ({
+      ...doc,
+      frontmatter: (candidates!.written.get(doc.path) as { frontmatter: Record<string, unknown> }).frontmatter,
+    })),
     warnings: resolution?.warnings ?? [],
   });
   if (!validated.ok) {

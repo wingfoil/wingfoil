@@ -76,10 +76,23 @@ describe('task-379 — the edges of scalars as written', () => {
     expect(lines.filter((line) => line === '  size: 0x1F')).toHaveLength(2);
   });
 
-  it('a kept scalar names itself by its text, and a timestamp is one', () => {
-    expect(String(new WrittenScalar('1.50'))).toBe('1.50');
-    expect(Object.prototype.toString.call(new WrittenScalar('1.50'))).toBe('[object WrittenScalar]');
+  it('a kept scalar holds its text and no enumerable field, and a timestamp is one', () => {
+    expect(new WrittenScalar('1.50').text).toBe('1.50');
+    expect(Object.keys(new WrittenScalar('1.50'))).toEqual([]);
     expect(new WrittenTimestamp('2026-10-05')).toBeInstanceOf(WrittenScalar);
+  });
+
+  it('a key the document writes in the form of an internal name stays that string', () => {
+    const written = '"\\uE000[\\"1.5\\",\\"1.50\\"]\\uE000"';
+    const lines = payloadOf([`m: {${written}: x, 1.50: y}`]).split('\n');
+    expect(lines).toContain("  '1.50': 'y'");
+    const mark = String.fromCharCode(0xe000);
+    expect(lines.filter((line) => line.endsWith(': x'))).toEqual([`  ${mark}["1.5","1.50"]${mark}: x`]);
+  });
+
+  it('a typed scalar inside a !!pairs key and inside a sequence key keeps its text', () => {
+    const lines = payloadOf(['p: !!pairs [1.50: x]', '? [1.50, a]', ': v']).split('\n');
+    expect(lines).toEqual(expect.arrayContaining(["  - - '1.50'", '    - x', '1.50,a: v']));
   });
 
   it('the core barrel re-exports WrittenScalar', () => {
