@@ -157,6 +157,7 @@ No existing test pins the behaviour that changes: every suite above passes on th
 - **D1 (`bug-265`).** (a) Leave the offending document out and report it; (b) make the key unique by construction. **Recommended: (a).** (b) needs the path or a counter in the key, which §7 rules out ("ids, never filesystem paths"), changes the marker bytes of every payload and so needs format 2, and still hands the agent a malformed document. (a) does not change `CONTEXT_PAYLOAD_FORMAT`.
 - **D2 (`bug-267`).** (a) Carry every null, boolean, integer, float and timestamp scalar as written; (b) have §7 state that only timestamps are kept. **Recommended: (a).** A version `1.50` read as `1.5` and a file mode read in decimal are what the agent would act on, and (a) also removes the two-date-key crash, which (b) would leave to a separate fix. Under (a): strings keep their value and take the dump's quoting, a key with no value stays `null`, and the DNA sections stay canonical because they are validated values rather than the document's text.
 - **D3 (`CONTEXT_PAYLOAD_FORMAT` under D2 (a)).** (a) Stay at format 1; (b) bump to 2. **Recommended: (a).** The envelope does not change, the values read the same under the schema the block is dumped with, and `dl-149` bumps "only on a backward-incompatible change"; on this repository the payload is byte-identical (sha256 above). **The tension to rule on:** `spec-012`'s Consequences says a change to §7's byte format bumps `format:`, and the constant's comment says "a change to the bytes §7 pins is a new format", while a document that does write `1.50` gets different bytes from this build. Under (a) the Revision note records the reasoning and green rewords that comment. D2 (b) leaves the format at 1 with no such question.
+  - **Ruled (approver, 2026-11-18): D3 (a).** The payload stays format 1. The pending `spec-012` amendment aligns the Consequences bullet "Bounded by design" with that rule, and green rewords the comment of `CONTEXT_PAYLOAD_FORMAT` in `src/core/context.ts` to the same rule: a backward-incompatible change of the envelope bumps the format, a rendering that a YAML reader reads with the same values does not.
 
 #### Downstream: what `task-369` may rely on
 
@@ -171,7 +172,7 @@ No existing test pins the behaviour that changes: every suite above passes on th
 ### Pending amendments (approver)
 
 - `spec-012-context-loader-relevance-filtering`, prepared uncommitted in this worktree under the recommendations D1 (a), D2 (a), D3 (a): §7 "Scalars as written", "Marked bodies" and "What never enters a payload", §9, and a Revision note. A different ruling changes this text before red. Proposed reason:
-  `--reason "Make every marker key of the payload unique, carry every typed frontmatter scalar as written and state that stateRef is resolved once, per task-379 (bug-265, bug-267, bug-381); the payload stays format 1."`
+  `--reason "Make every marker key of the payload unique, carry every typed frontmatter scalar as written, state that stateRef is resolved once and align the Consequences format rule with dl-149, per task-379 (bug-265, bug-267, bug-381); the payload stays format 1."`
   Until it is recorded, `test/cli/workflow-unbound-none.integration.test.ts` fails alone with `W_UNCOMMITTED_INPUTS` in this worktree (`bug-534`).
 
 ### Retrospective
