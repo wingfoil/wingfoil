@@ -183,6 +183,72 @@ The approver recorded the step in `d142b7788` (`workflow finalize … dev-loop.d
 
 Green rewords the comment of `CONTEXT_PAYLOAD_FORMAT` in `src/core/context.ts` to the rule of `spec-012` Consequences (D3 (a)).
 
+### red (qa, 2026-11-18)
+
+**Red commit `e760ce3d7`** (`git log --oneline -1` → `e760ce3d7 test(core): 379 — failing test: unique payload markers, scalars as written, one resolved commit`), test files only: `test/core/context-payload-integrity.test.ts` (AC 1, AC 2, determinism) and `test/core/context-spawn-count.test.ts` (AC 3), both new. Base unchanged: `git rev-list --count HEAD..main` → `0`, no merge. PATH guard: `command -v wingfoil` printed the task's PATH shim; `wingfoil --version` and `node dist/cli.js --version` both printed `0.3.2 (d142b77888dd82e93f82231a377506f4f4de33e8)`.
+
+**Run.** `npx jest test/core/context-payload-integrity.test.ts test/core/context-spawn-count.test.ts --maxWorkers=2` → `Test Suites: 2 failed, 2 total`, 56 tests: 39 failed, 17 passed (`context-payload-integrity` 33 failed, 15 passed; `context-spawn-count` 6 failed, 2 passed). `npx tsc --noEmit -p tsconfig.json` → exit 0: no test imports a name that does not exist, so every red is an assertion or the defect's own exception. `npx eslint` on the two files → exit 0. `npx jest test/lint --maxWorkers=2` → `Test Suites: 16 passed, 16 total`, `Tests: 165 passed, 165 total`.
+
+**AC 1 (red-first, `bug-265`, D1 (a)),** `describe` "task-379 AC 1", first failing assertion of each red:
+
+| Case | Result today | First failing assertion |
+|---|---|---|
+| a | red | `linesEqualTo(payload, '<!-- begin:directive:testing -->')`: expected `1`, received `2` |
+| b | red | `context.memory`: expected `[]`, received the misplaced `bug` document |
+| c | red | `context.memory` paths: expected the first copy, received both copies |
+| d, `maxDocs: 1` | red | `warnings`: expected the repeated-key line, received `undefined` |
+| d, `maxDocs: 2` | red | ids: expected `task-006-dup`, `task-007-other`, received `task-006-dup` twice |
+| e | red | `toMatchObject`: expected `ok: false` with the `VALIDATION` message, received a built context |
+| f | red | `toThrow`: "Received function did not throw" |
+| g | red | repeated keys: expected `[]`, received `directive:testing` and `task:task-006-dup` |
+| h, i, j | characterization | pass on first run |
+
+Case d carries a second test beyond the design's table: with `maxDocs: 1` the copy left out and a copy holding a slot give the same carried list, so only `maxDocs: 2` observes that the copy takes no slot.
+
+**AC 2 (red-first, `bug-267`, D2 (a)),** `describe` "task-379 AC 2", each case on the element (section 1) and on a linked document (section 4):
+
+| Case | Result today | First failing assertion |
+|---|---|---|
+| a: `version: 1.50`, `mode: 0o17`, `hex: 0x1F`, `exp: 1e3`, `plus: +12`, `nothing: ~`, `flag: True`, `Nul: Null` | red, 8 × 2 | exact line count: expected `1`, received `0` |
+| a: `inf: .inf` | **passes on first run**, 2 tests | none (see below) |
+| b, flow sequence and flow mapping | red, 2 × 2 | `toContain` of the block form with each scalar as written |
+| c | red, 1 × 2 | line `'1.50': numkey`: expected `1`, received `0` |
+| d | red | `YAMLException: duplicated mapping key (9:3)`, the throw the design names |
+| `JSON.stringify(…version)` | red | expected `"1.50"` with its quotes, received `1.5` |
+| e, f, g (lines and `WrittenTimestamp`), h, `CONTEXT_PAYLOAD_FORMAT` is `1` | characterization | pass on first run |
+
+**A difference from the design's table.** AC 2 row a is marked red as a whole, but `inf: .inf` already reads back as `.inf`, because the canonical dump of that value is the text written. Its two tests pin the behaviour and pass today; no red was forced.
+
+**Determinism (REQ-SYS-07),** `describe` "task-379 — determinism": two assemblies and a third on a `git clone`, all at the same sha, compared by payload bytes and `warnings`.
+
+- On a fixture with cases a, b, c, h, i, j of AC 1 and the scalars of AC 2: characterization, passes on first run.
+- The same fixture plus AC 2 case d: red, `YAMLException: duplicated mapping key (25:3)`. It is a separate test because that case throws today, so a single fixture would leave no bytes to compare at red.
+- Cases e and f of AC 1 refuse rather than render, so they have no bytes to compare and are not in these fixtures.
+
+**AC 3 (red-first, `bug-381`),** `describe` "task-379 AC 3". The "today" figures were measured at red on this fixture shape in two ways that agree: the failures of the suite above, and a throwaway wrapper outside the worktree that replaces `child_process.spawnSync` and `execFileSync` before requiring `dist/core/index.js` and calls `assembleExecutionContext` once.
+
+| Measure | `rev-parse` | `show` | `ls-tree` | `cat-file` | Total |
+|---|---|---|---|---|---|
+| D = 3, element present | 6 | 7 | 2 | 3 | 18 |
+| D = 6, element present | 6 | 10 | 2 | 3 | 21 |
+| D = 3, element absent (`NOT_FOUND`) | 4 | 1 | 2 | 2 | 9 |
+
+These match the design's projections (18 and 21; 4 on `NOT_FOUND`).
+
+| Case | Result today | First failing assertion |
+|---|---|---|
+| a | red | `count`: expected `1`, received `6` |
+| b | red | `show` paths: expected the 3 pillar files, received those plus the 3 directives and `dna.yaml` a second time |
+| c | red | `count`: expected `4`, received `3` |
+| d, D = 3 | red | `total`: expected `10`, received `18` |
+| d, D = 6 | red | `total`: expected `10`, received `21` |
+| e | characterization | passes on first run |
+| f | red | `count`: expected `1`, received `4` |
+
+The test "the fixture answers" (both assemblies build, an absent element is `NOT_FOUND`) also passes on first run.
+
+**Departure from `testing` T3.** qa opened `src/core/context.ts` before writing the tests, which T3's black-box rule does not allow. The expected values come from the design's tables and the approver's rulings, and every message is the one the design quotes.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
