@@ -598,6 +598,35 @@ Red round after the reject, run black-box (`testing` T3): the contract was the r
 
 **Unasserted:** nothing of the 18 rows. Row 17 is asserted on all three placements; rows 12 to 14 and 18 assert every row of the merge table marked left out and both self-containing rows.
 
+### fix round after the reject (developer, 2026-11-18)
+
+**Contract.** The reject `55969875e`, `spec-012` §7 as amended by `1e878e683`, the rulings D4 (a), D5 (a), D6 (a), and the red `348fb5276`. PATH guard: `command -v wingfoil` printed the task's PATH shim; `wingfoil --version` and `node dist/cli.js --version` both printed `0.3.2 (4cb3a52aaa14e5417db016634b4b7ae82827a80d)`.
+
+**Commits.** `e4a09aaa6` (the fix) and `e3ae2000c` (the private-use mark named by its code point, no change of behaviour), both in `src/core/context.ts`; `e4a09aaa6` and the test commit after it extend my own `test/core/context-written-scalars.test.ts`.
+
+**What changed.** While js-yaml loads a frontmatter, a typed scalar is a `ScalarBeingRead`, an object with no enumerable field; one walk after the load replaces it with its `WrittenScalar` and each key with its text.
+
+| Item | Change | Evidence |
+|---|---|---|
+| Reject 1, `!!set` | The load schema's `!!set` accepts a null kept as written | rows 1 to 6 |
+| Reject 2, `{<<: {"1.50": x}, 1.50: y}` | A key is named by its YAML key and its text together, and the walk refuses two YAML keys of one text | rows 9, 12 |
+| Reject 3 and D4, `{<<: {1.5: x}, 1.50: y}` | The walk refuses one YAML key with two texts | rows 10, 13 |
+| D5, merged date | A merge copies nothing from a scalar, so the key `text` is gone | row 7 |
+| D6, frontmatter containing itself | The walk detects it, and memoizes shared aliases | rows 11, 14 |
+| No YAML error escapes | `readWrittenFrontmatter` answers every `YAMLException` as a reason not to render | row 17 |
+
+`npx jest test/core/context-payload-yaml-constructs.test.ts test/core/context-written-scalars.test.ts test/core/context-payload-integrity.test.ts test/core/context-spawn-count.test.ts test/core/context-payload-duplicate-keys.test.ts --maxWorkers=2 --noStackTrace` printed `Test Suites: 5 passed, 5 total` and `Tests: 142 passed, 142 total`.
+
+**No in-band confusion.** A first load with the default schema collects every key and string of the document, and the mark of the internal key names is one none of them holds. A document that writes the internal form as its own key therefore keeps that key as a string, beside its genuine twin: `test/core/context-written-scalars.test.ts`, "a key the document writes in the form of an internal name stays that string". The direction's left-out result for that case is not needed, so the reason `its frontmatter cannot be read as written` remains only for a `YAMLException`.
+
+**Corrections to the sections above.** The self-review's "Unasserted" statement said no fixture reaches a YAML error other than a duplicated key: the review showed `!!set` does, so the statement was false. The comment of `writtenFrontmatter` that said the scan and the payload's schema differ only on keys of one text is replaced.
+
+**A test weakened by this change.** `WrittenScalar` keeps its text in a private field, so `toEqual` between two instances no longer compares the text. The test at `test/core/context-payload-format.test.ts` line 368 therefore no longer proves the text it names, so `test/core/context-written-scalars.test.ts`, "the context holds a timestamp whose text is the one written", asserts `.text` through an assembly.
+
+**Measured at `e4a09aaa6`** (`assembleExecutionContext`, role `developer`, this task, `stateRef` `0253adfb3`, two runs): 11 git processes (`rev-parse` 1, `show` 3, `ls-tree` 3, `cat-file` 4), 323,427 bytes, sha256 `d212452097dc5c6b4b58db52f41dc96d2bf695906ec3ca6e410403c2d0605315`.
+
+**T4.** No red file is changed by these commits: `git diff --name-only 357376d0d..e3ae2000c` lists `src/core/context.ts` and `test/core/context-written-scalars.test.ts` only.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
