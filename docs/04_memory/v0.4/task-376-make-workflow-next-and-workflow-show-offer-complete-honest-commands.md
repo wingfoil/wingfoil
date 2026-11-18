@@ -215,6 +215,32 @@ The approver recorded the step in `7683245c6` (`workflow finalize … dev-loop.d
 
 After the amendment `npx jest test/cli/workflow-unbound-none.integration.test.ts --maxWorkers=2` passes in this worktree: the one failure of the design's rerun (372 of 373) was the uncommitted amendment (`bug-534`).
 
+### red (qa, 2026-11-18)
+
+**Red commit `564f2898e`** (`git rev-parse HEAD` after the commit), test files only. Base unchanged: `git rev-list --count HEAD..main` printed `0`, no merge.
+
+**Disclosure (`testing` T3).** Before writing the tests qa opened implementation files the tests constrain, which T3 forbids: `src/core/workflow-next.ts` (the whole file) and `src/core/workflow-status.ts` lines 195-228 (`instanceLines`, `renderStatusConsole`), to orient itself in the module; a `grep -rn renderStatusConsole src test` also printed lines of `src/core/index.ts`. No file under `scripts/` was opened. The expected values were taken from the design, the gate rulings, `spec-017` as amended and real command output, but the reading cannot be undone, so the reviewer should treat these tests as not strictly black-box.
+
+**Files.** New: `test/core/workflow-next-offers.test.ts` (AC 1, 4), `test/cli/workflow-next-offers.integration.test.ts` (AC 2, 3, 5), `test/cli/helpers/workflow-offers-fixture.ts` (their project). Pins changed to the new contract: `test/core/workflow-list-show.test.ts` (the shown add), `test/core/workflow-next.test.ts` and `test/core/workflow-status.test.ts` (two pins) (`manualOnly` in a step's evidence), `test/core/workflow-next-render.test.ts` (the `Step` fixture).
+
+**Run.** `npx jest test/core/workflow-next-offers.test.ts test/cli/workflow-next-offers.integration.test.ts test/core/workflow-list-show.test.ts test/core/workflow-next.test.ts test/core/workflow-status.test.ts test/core/workflow-next-render.test.ts --maxWorkers=2` printed `Test Suites: 5 failed, 1 passed, 6 total`, `Tests: 43 failed, 82 passed, 125 total`. Failed / passed per file: `workflow-next-offers.test.ts` 13 / 1, `workflow-next-offers.integration.test.ts` 26 / 6, `workflow-list-show.test.ts` 1 / 20, `workflow-next.test.ts` 1 / 19, `workflow-status.test.ts` 2 / 29, `workflow-next-render.test.ts` 0 / 7.
+
+`npx tsc --noEmit -p tsconfig.json` exit `0`; `npx jest test/lint --maxWorkers=2` printed `Tests: 165 passed, 165 total`; `npx eslint` on the seven files exit `0`. The `Step` fixture casts its evidence (`as Step['evidence']`): written plainly, `manualOnly` is TS2353 at red and fails `test/lint/typecheck-clean.test.ts`.
+
+**Per AC** (all red-first; first failing assertion):
+- **AC 1:** the five evidence tests and the status payload test: `toEqual` lacks `"manualOnly"`. Console of `next`: expected substring `evidence missing: record (finalizable) manual only: no evidence checks this step`, received the line without the mark.
+- **AC 2:** linked and adopted: `step.actions.filter(startsAdd)` expected `[]`, received the add action; `pendingCreated` received `undefined`; console: expected `- memory.add(type: bug) — done: bug-001-linked-one`; second type: `done` received `undefined`.
+- **AC 3:** each argv `toEqual` lacks the action's arguments (`Fixed title here`, `--tags`, `kind=minor`, `version=<version>`, `release=<release>`, `Retro v1`); console: expected `--title 'Fixed title here'`; run as printed: the task command exits `1`; `workflow list`: no `W_ACTION_ARGUMENT_NOT_PASSED` (length 0 for 3).
+- **AC 4:** six `workflow show` argv `toEqual` lack the operands (`<id>`, `--reason`, `--title`, `--workflow`, `--step`).
+- **AC 5:** `binding.commands` received `undefined`; submit and the single-eligible case: argv holds the ineligible ids; no eligible element: `toBeUndefined` received the argv; the three run-as-printed tests: `toHaveLength` on `undefined`.
+- **Changed pins:** `workflow-next.test.ts`, `workflow-status.test.ts` (2): `toEqual` lacks `"manualOnly"`; `workflow-list-show.test.ts`: `toMatchObject` lacks `--title`, `<title>`, `--workflow`, `<instance-id>`, `--step`, `<key>`. The render test passes: only its fixture changed.
+
+**Pass on first run, on purpose:** `config.init stays wingfoil init`, `no target known yet: the placeholder <id> stays`, `workflow next|status|show does not report them` (behaviour the task must keep), and two tests titled `control`, which prove the verbs accept the expected commands, so that the red tests fail on what is offered and not on the fixture.
+
+**Real output behind the fixtures.** A scratch project on the code build, the same configuration as the helper: `workflow start`, `workflow next <name> [--format json]`, `workflow status`, `workflow show <name> --format json`, `workflow list --format json`, `memory add` (with `--set`, and `--dry-run` for the refusals `E_MISSING_PATH_VALUE` and `has no token {severity}`). They gave the evidence shapes of AC 1, the step key `capture.file@bug:<id>` after a creation, and the diagnostic `file` form `workflows/custom/<name>.yaml`.
+
+**Unasserted (`testing` T1):** `workflow show` for an action's literal or interpolated arguments (`spec-017` §7.6 does not fix the name inside `<<field>>` for `{release.version}`); `pendingCreated` with `reaches: null` or a non-empty `missingPaths`; the id the offered `memory submit` names after a creation; the order of `W_ACTION_ARGUMENT_NOT_PASSED` between two workflows (within a workflow it is pinned); the exact console form of an element left out (its line, id and reason are pinned).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
