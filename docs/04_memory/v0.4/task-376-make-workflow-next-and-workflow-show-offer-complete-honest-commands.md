@@ -348,6 +348,9 @@ The new field is read through local types and the `STEP` evidence is not a fresh
 **Correction (qa, 2026-11-18).** Commit `7318712dc50ffa34b84dd80eede1dc7b90532eb7` renames `argvByToken` to `argvByAction` in `test/core/workflow-next-offers.test.ts` (4 occurrences, no assertion changed): the blocking secret scan read the old name followed by an assignment as a credential (`dotenv-style-secret-line`, a false positive).
 `npx jest test/validation/secret-scan.test.ts test/core/workflow-next-offers.test.ts --maxWorkers=2 --noStackTrace` printed `Tests: 1 failed, 105 passed, 106 total` before that commit, since the scan still reported the committed name, and `Tests: 106 passed, 106 total` after it.
 
+**Reserved and numeric tokens, declared literals (qa, 2026-11-18).** Commit `d3bf12938392abb409a83d643c837b8cc869a461` adds `test/cli/workflow-next-offers-reserved-tokens.integration.test.ts`, from `spec-017` §2, §6.1 and §7.6 as amended at `ed64d5a2c` and `### design addendum (architect, 2026-11-18)`. The branch already held the implementation, so 12 of its 14 tests passed on first run. `npx jest test/cli/workflow-next-offers-reserved-tokens.integration.test.ts --maxWorkers=2 --noStackTrace`, exit `1`: `Tests: 2 failed, 12 passed, 14 total`.
+Fail: `workflow list` with the reserved-name message for `slug` and `n` (`expect(listed(reservedBase)).toEqual(`, received `[]`), and `workflow list` with the numeric-token message for `nnn` (`expect(listed(numericBase)).toEqual(`, received `[]`). Pass on first run: `slug` left out of `workflow next` and `workflow show`, the offered command exiting `0`, the `kind: minor` control, `nnn` left out when declared and when not, the offered command creating `bug-001-probe-one`, and the five `workflow show` cases of declared literals and interpolated values.
+
 ### design addendum (architect, 2026-11-18)
 
 Two gaps of the `spec-017` amendment, found at green. The second amendment is prepared uncommitted in this worktree.
