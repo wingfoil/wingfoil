@@ -18,6 +18,7 @@
  * keep their payload and their working-tree baseline in v0.3 (§9, `src/mcp/workflow-resource.ts`).
  */
 import type { RolesYaml } from '../directives/schema';
+import { RESERVED_SET_NAMES } from '../memory/add';
 import type { MemoryYaml } from '../memory/schema';
 import { isNumericToken, type Diagnostic } from '../validation';
 import {
@@ -27,7 +28,6 @@ import {
   memoryAddPatternTokens,
   memoryAddType,
   resolveToken,
-  SET_RESERVED_NAMES,
   SHOWN_OPERANDS,
   tokenArguments,
   tokenName,
@@ -199,7 +199,7 @@ export function listWorkflows(workflows: readonly Workflow[], deduction: Deducti
  */
 function argumentRefusal(name: string, type: string, tokens: readonly string[]): string | null {
   if (MEMORY_ADD_OPTIONS.includes(name)) return null;
-  if (SET_RESERVED_NAMES.includes(name)) return `memory add --set reserves the name '${name}'`;
+  if (RESERVED_SET_NAMES.has(name)) return `memory add --set reserves the name '${name}'`;
   if (!tokens.includes(name)) return `type '${type}' has no token {${name}} in its id_pattern or path`;
   return isNumericToken(name) ? `memory add generates the numeric token {${name}}` : null;
 }

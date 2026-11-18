@@ -724,7 +724,7 @@ export function humanNeededLine(step: Step): string | null {
 
 /** An argv element as a POSIX shell reads it (`spec-017` §6.1): quoted when the shell would split it, a placeholder never. */
 function shellWord(element: string): string {
-  if (/^(?:[a-z][a-z0-9_-]*=)?<[a-z][a-z0-9-]*>$/.test(element)) return element;
+  if (/^(?:[a-z][a-z0-9_-]*=)?<[a-z][a-z0-9_-]*>$/.test(element)) return element;
   if (element !== '' && !/[\s'"`$\\;&|()*?[\]<>!]|^[#~]/.test(element)) return element;
   return `'${element.replace(/'/g, `'\\''`)}'`;
 }

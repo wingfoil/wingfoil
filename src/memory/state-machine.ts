@@ -320,13 +320,17 @@ export function resolveTransitionTarget(
 }
 
 /**
- * Whether `op` has an edge from `currentState` under `machine`: the one rule {@link resolveTransitionTarget} applies,
- * so that a command offered for a state and the verb that runs it cannot disagree (`spec-017` §6.1). Pure.
+ * Whether the verb `op` can run on a document in `currentState` under `machine` (`spec-017` §6.1), so that a command
+ * offered for a state and the verb that runs it cannot disagree: {@link resolveTransitionTarget} answers, and `deprecate`,
+ * whose wildcard edge that function keeps legal from any state, has none from its own target, because `memory deprecate`
+ * refuses a document already there. Pure.
+ *
+ * @throws whatever is not a refusal of the transition: a malformed `machine` is no answer about an edge.
  */
 export function hasTransitionEdge(machine: StateMachine, currentState: string, op: TransitionOp): boolean {
   try {
-    resolveTransitionTarget(machine, currentState, op);
-    return true;
+    const target = resolveTransitionTarget(machine, currentState, op);
+    return op !== 'deprecate' || target !== currentState;
   } catch (error) {
     if (error instanceof ValidationError) return false;
     throw error;

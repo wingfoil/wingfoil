@@ -1326,8 +1326,8 @@ anything else, prints as the placeholder of its argument. The console quotes an 
 
 New in 0.4, a Memory verb offers **one command per element**, because each verb takes one id. `argv` is the first
 command, and `commands` lists them all when there are two or more. An element whose state has no edge for the verb is
-in no command: the action's `notOffered` lists it with the reason, `no approve edge from 'draft'`, and the console
-prints it on a `not offered:` line. When no element remains the binding has no `argv`. `<id>` stands for an element not
+in no command, and neither is an element already `deprecated` for `memory deprecate`: the action's `notOffered` lists it
+with the reason, `no approve edge from 'draft'`, and the console prints it on a `not offered:` line. When no element remains the binding has no `argv`. `<id>` stands for an element not
 known yet, and `approve` and `reject` end with `--reason <reason>`.
 
 New in 0.4, once the step has created an element of the type a `memory.add` action adds, the action reports it in
