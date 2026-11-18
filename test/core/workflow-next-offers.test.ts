@@ -240,12 +240,12 @@ describe('task-376 AC 1 — the mark in the payload and on the console of next a
 
 describe('task-376 AC 4 — workflow show prints a built-in binding as a whole command with placeholders (bug-479, spec-017 §7.6)', () => {
   let repo: string;
-  let argvByToken: Map<string, string[] | undefined>;
+  let argvByAction: Map<string, string[] | undefined>;
   beforeAll(async () => {
     repo = makeTempGitRepo();
     writeProject(repo);
     const shown = await value<{ workflow: { phases: { actions: { token: string; binding: { argv?: string[] } }[] }[] } }>('workflowShow', repo, 'shown');
-    argvByToken = new Map(shown.workflow.phases[0]!.actions.map((action) => [action.token, action.binding.argv]));
+    argvByAction = new Map(shown.workflow.phases[0]!.actions.map((action) => [action.token, action.binding.argv]));
   });
   afterAll(() => removeTempDir(repo));
 
@@ -261,10 +261,10 @@ describe('task-376 AC 4 — workflow show prints a built-in binding as a whole c
     ],
     ['agent.execute', ['wingfoil', 'agent', 'execute', '--workflow', '<instance-id>', '--step', '<key>']],
   ])('%s', (token, argv) => {
-    expect(argvByToken.get(token)).toEqual(argv);
+    expect(argvByAction.get(token)).toEqual(argv);
   });
 
   it('config.init stays wingfoil init: it takes no operand', () => {
-    expect(argvByToken.get('config.init')).toEqual(['wingfoil', 'init']);
+    expect(argvByAction.get('config.init')).toEqual(['wingfoil', 'init']);
   });
 });
