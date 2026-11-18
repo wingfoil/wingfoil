@@ -455,6 +455,28 @@ Each is the bug's `### Retrospective`, uncommitted in this worktree. `bug-479` h
 `Record in the retrospective how task-376 fixed this bug and the command that shows it.`
 Until they are recorded, `test/cli/workflow-unbound-none.integration.test.ts` fails alone with `W_UNCOMMITTED_INPUTS` (`bug-534`).
 
+### red (qa, after review)
+
+**Red commit:** `326b2c25e883085c6f1f81c56b1b762ca664a16c`, on base `4f0d1f15c`. New file: `test/cli/workflow-next-offers-review-fixes.integration.test.ts`. Nothing under `src/` or `scripts/` was opened before this commit, and no developer commit was read.
+
+**Run.** `npx jest test/cli/workflow-next-offers-review-fixes.integration.test.ts --maxWorkers=2`, in a throwaway clone of `4f0d1f15c` built with `npm run build`, the new file copied in, exit `1`: `Tests: 5 failed, 4 passed, 9 total`. The same file in this worktree prints the same summary. `npx tsc --noEmit -p tsconfig.json`: exit `0`. `npx jest test/lint --maxWorkers=2 --noStackTrace`: `Tests: 165 passed, 165 total`. `npx jest test/validation/secret-scan.test.ts --maxWorkers=2 --noStackTrace`: `Tests: 85 passed, 85 total`, before and after the commit.
+
+| Case | Test | Class | At red |
+|---|---|---|---|
+| R1 | a token name holding an underscore | red-first | fails: `workflow next placeholders` prints `--set 'rel_line=<rel_line>'` |
+| R1 | a token name holding a hyphen | characterization | passes |
+| R1 | a token name holding neither | characterization | passes |
+| R3 | control: the verb refuses the element, exit 1 | characterization | passes: `error: document already deprecated: dl-001-second` |
+| R3 | created in the same phase | red-first | fails: `argv` is `["wingfoil", "memory", "deprecate", "dl-001-second"]` |
+| R3 | created in a later phase | red-first | fails: the same `argv` |
+| R3 | the console prints no memory deprecate command and names the reason | red-first | fails: the console prints `wingfoil memory deprecate dl-001-second` |
+| R3 | beside an element still live | red-first | fails: `argv` names `dl-001-second`, expected `dl-002-third` |
+| R3 | characterization: an element not deprecated keeps its command | characterization | passes |
+
+**R3 is reachable.** A created element that is not the instance's bound element, deprecated while its step stays open: the phase declares `memory.add` of a second type and `memory.deprecate`, and a `{ type, path }` entry keeps `created` missing. The reason pinned is §6.1's `no deprecate edge from 'deprecated'`. Definitions that do not reach it, by `workflow next --format json`: an element bound at start, or deprecated after the start (`abandoned`, no step); a context element (the target stays `<id>`); a `where` selection (the archived element never matches); `iterate_over` (the archived candidate is not entered); a created element that is the instance's own (`abandoned`); a second created element with no open path (the workflow is complete).
+
+**R2 has no test: the approved text does not say what the case asks.** `spec-017` §6.1 reads "The command carries each argument the action declares", "`--tags` with the action's `tags` joined by commas" and "a value that has none, or that fails the class, is printed as the placeholder `<<name>>`". Leaving the operand out for `tags: []` departs from those sentences, so the case goes to the approver. Today `memory.add(type: bug, title: "Empty", tags: [])` prints `--tags <tags>` in `workflow next` and `workflow show`, console and JSON, and `tags: [a, b]` prints `--tags a,b`.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
