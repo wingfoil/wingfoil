@@ -151,7 +151,8 @@ describe('task-376 — the console of an offered command (spec-017 §6.1)', () =
 
   it.each<[string, string]>([
     ['plain-word.1', 'plain-word.1'],
-    ['dev-loop.red@task:task-1/waves#w0', 'dev-loop.red@task:task-1/waves#w0'],
+    ['dev-loop.red@task:task-1/waves', 'dev-loop.red@task:task-1/waves'],
+    ['wave.re-plan@release:minor-v0.4/waves#w0', "'wave.re-plan@release:minor-v0.4/waves#w0'"],
     ['<id>', '<id>'],
     ['release=<release>', 'release=<release>'],
     ['two words', "'two words'"],

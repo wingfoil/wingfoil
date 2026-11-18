@@ -750,10 +750,14 @@ export function humanNeededLine(step: Step): string | null {
   return approvalLine(awaiting, step.key);
 }
 
-/** An argv element as a POSIX shell reads it (`spec-017` §6.1): quoted when the shell would misread it, a placeholder never. */
+/**
+ * An argv element as a POSIX shell reads it (`spec-017` §6.1): bare only when every character is one a shell leaves alone
+ * in any position, quoted otherwise, a placeholder never. An allow list, since a shell rewrites `x=~/notes` and `x{a,b}y`
+ * with no error.
+ */
 function shellWord(element: string, given: boolean): string {
   if (!given && /^(?:[a-z][a-z0-9_-]*=)?<[a-z][a-z0-9_-]*>$/.test(element)) return element;
-  if (element !== '' && !/[\s'"`$\\;&|()*?[\]<>!]|^[#~]/.test(element)) return element;
+  if (/^[A-Za-z0-9_@%+=:,./-]+$/.test(element)) return element;
   return `'${element.replace(/'/g, `'\\''`)}'`;
 }
 
