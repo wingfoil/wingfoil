@@ -170,7 +170,7 @@ message }`, one array named `diagnostics`; for these codes `file` is repository-
 | `W_INSTANCE_WORKFLOW_UNKNOWN` | warning | an open plan — a plan with `parent` empty and status `draft` or `active` (§3.2) — names a workflow the registry does not load, whoever added it; the plan is not an instance (§3.2): it is never the active instance, no `<ref>` selects it, and the warning is how `workflow list`, `status` and `next` report it |
 | `W_APPROVAL_ROLE_WITHOUT_AUTHORITY` | warning | a member an approval is routed to does not hold the `approver` role (§5.1) |
 | `W_INSTANCE_PRE_MARKER` | warning | `workflow status` only, transitory (§3.2): an open instance it reports is kept only by the pre-marker rule — its start commit carries no start marker. `file` is the instance's plan, `path` is empty, the message is `instance <id> is kept by the pre-marker rule: restart it with workflow start`; one per such instance, in the order of the payload's `open`, after every other diagnostic of the payload |
-| `W_ACTION_ARGUMENT_NOT_PASSED` | warning | `workflow list` only (§7.5): a `memory.add` action declares an argument `memory add` has no way to take (§6.1): neither `type`, `title` or `tags`, nor a token of the type's `id_pattern` or `path`. `file` is the workflow's file, `path` is `phases[<p>].actions[<a>]`, the message is `memory.add argument '<name>' cannot be passed: type '<type>' has no token {<name>} in its id_pattern or path`; one per such argument, by workflow in registry order, then phase, action and argument in declared order, after every other diagnostic of the payload |
+| `W_ACTION_ARGUMENT_NOT_PASSED` | warning | `workflow list` only (§7.5): a `memory.add` action declares an argument `memory add` has no way to take (§6.1): neither `type`, `title` or `tags`, nor a token of the type's `id_pattern` or `path` that can be passed. `file` is the workflow's file, `path` is `phases[<p>].actions[<a>]`, the message is `memory.add argument '<name>' cannot be passed: type '<type>' has no token {<name>} in its id_pattern or path`, for a name `--set` reserves (§6.1), `memory.add argument '<name>' cannot be passed: memory add --set reserves the name '<name>'`, and for any other numeric token (§6.1), `memory.add argument '<name>' cannot be passed: memory add generates the numeric token {<name>}`; one per such argument, by workflow in registry order, then phase, action and argument in declared order, after every other diagnostic of the payload |
 | `W_PROVENANCE_ORPHAN` | warning | a linkage, record or adoption in an instance's walk names a `<workflow>.<phase>` the registry does not declare and no `rekey` maps (§4.8); it is evidence of nothing. Not raised for a plan whose workflow the registry does not load: that plan is no instance (§3.2), its walk is not read, and `W_INSTANCE_WORKFLOW_UNKNOWN` reports it |
 | `W_PROVENANCE_CONFLICT` | warning | two or more claims on one element in the walks — linkages and adoptions, at least one of them an adoption — none descending from another (§4.8); the element counts as created by none of them |
 
@@ -637,15 +637,19 @@ and not on the instance's first (approver ruling R16, 2026-09-30, `release-plann
 
 A printed `wingfoil` argv is a whole command: what only the user can give is a placeholder — `<id>` for a
 target not known yet, `--title <title>` on `memory add`, `--reason <reason>` on `approve` / `reject`. `workflow show`
-prints the same commands with every operand a placeholder, since no instance is involved (§7.6).
+prints the same commands with a placeholder for every operand that depends on an instance or that only the user can
+give, since no instance is involved; a value the action declares as a literal stays as declared (§7.6).
 
 *The arguments of `memory.add`.* The command carries each argument the action declares, in this order: `--type <T>`;
 `--title` with the action's `title`, else `<title>`; `--tags` with the action's `tags` joined by commas; one
-`--set <name>=<value>` per other argument that names a token of the type's `id_pattern` or `path`, in declared order;
-one `--set <name>=<<name>>` per token of those patterns the action does not give and `memory add` does not source
-itself (`id`, `n`, `slug`, `date`, `author`), in the order the `id_pattern` then the `path` name them, because the
-command fails without it; then `--workflow` and `--step` (§4.8). Any other argument is left out and reported by
-`workflow list` (`W_ACTION_ARGUMENT_NOT_PASSED`, §2); it stays a rule of `workflow adopt`'s candidates (§7.11). A value
+`--set <name>=<value>` per other argument that names a token of the type's `id_pattern` or `path` that can be passed,
+in declared order; one `--set <name>=<<name>>` per such token the action does not give, in the order the
+`id_pattern` then the `path` name them, because the command fails without it; then `--workflow` and `--step` (§4.8).
+Two kinds of token cannot be passed. `--set` reserves `id`, `type`, `status`, `title`, `tags`, `n`, `slug`, `date` and
+`author` (`spec-008` §10). A numeric token (`{nnn}`, `{n:3}`) is generated by `memory add`: `--set` accepts a name such as
+`nnn`, but the id ignores its value. Any other argument, one naming either kind of token included, is left out and
+reported by `workflow list`
+(`W_ACTION_ARGUMENT_NOT_PASSED`, §2); it stays a rule of `workflow adopt`'s candidates (§7.11). A value
 fills one whole argv element, and each interpolated value in it must match `spec-009`'s ID character class (`dl-090`
 Q3 (a)): a value that has none, or that fails the class, is printed as the placeholder `<<name>>`. The console quotes an
 element a POSIX shell would split, and never a placeholder.
@@ -813,7 +817,8 @@ recursively (P4.7 sc. 2; `spec-003`'s `E_WORKFLOW_INCLUDE_CYCLE` bounds the recu
 the whole command of §6.1 with placeholders: `wingfoil memory submit <id>`, `wingfoil memory approve <id> --reason
 <reason>`, `wingfoil memory reject <id> --reason <reason>`, `wingfoil memory deprecate <id>`, `wingfoil memory add --type
 <T> --title <title> … --workflow <instance-id> --step <key>` and `wingfoil agent execute --workflow <instance-id> --step
-<key>`; an interpolated argument is written `<<field>>`. Unknown name:
+<key>`. An argument the action declares as a literal stays as declared; one that interpolates a value is written
+`<<name>>` as a whole, a list included. Unknown name:
 `unknown workflow: <name>` (P4.7 sc. 3). No instance state is involved.
 
 **7.7 `create`** (P4.8). Writes `.wingfoil/workflows/custom/<name>.yaml` — never under `built-in/`
@@ -1890,3 +1895,13 @@ command with placeholders. `bug-518`: a verb's command names only targets with a
 `notOffered`, and several targets give one command each, because `spec-008` §1 keeps one id per call. Step keys do not
 change; every field added to the payload is additive, and `argv` no longer holds several ids. Edited in place without a
 supersede or a state change (`dl-047`), pending the approver's `memory amend` at `task-376`'s design gate.
+
+**Revision (2026-11-18, `task-376-make-workflow-next-and-workflow-show-offer-complete-honest-commands`, design addendum)
+— §2, §6.1 and §7.6: a reserved token and a declared literal.** Found at green. A `memory.add` argument naming a token
+`memory add --set` reserves (`slug`, for one) or a numeric token `memory add` generates (`nnn`, for one) cannot be passed,
+yet §2 excluded every token of the patterns from `W_ACTION_ARGUMENT_NOT_PASSED`: §6.1 now leaves such an argument out of the
+offered command, §2 reports each kind with a message of its own, and the placeholders §6.1 prints for a token not given
+follow the same rule. §6.1's "every operand a
+placeholder" and §7.6's `<<field>>` did not settle `workflow show` on a declared literal: it prints a placeholder for an
+operand that depends on an instance or that only the user can give, and keeps a literal as declared. Edited in place without
+a supersede or a state change (`dl-047`), pending the approver's `memory amend`.
