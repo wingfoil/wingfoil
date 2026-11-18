@@ -1,0 +1,32 @@
+version: 1
+taxonomy:
+  categories:
+    task: work
+    bug: defect
+    adr: decision
+    decision-log: decision
+    change-proposal: decision
+    tech-spec: spec
+    release: release
+    release-line: release
+    service: external
+  patterns:
+    - match: ^(?:REQ-[A-Z]+-\d|US-)
+      category: requirement
+    - match: ^(?:[PX]\d+\.\d|J\d)
+      category: feature
+    - match: ^(?:minor|patch)-v|^rl-v|^v\d+\.\d
+      category: release
+    - match: ^task-\d
+      category: work
+    - match: ^bug-\d
+      category: defect
+    - match: ^(?:adr|dl|cp)-\d
+      category: decision
+    - match: ^spec-\d
+      category: spec
+    - match: ^svc-\d
+      category: external
+  requires:
+    adr:
+      - requirement
