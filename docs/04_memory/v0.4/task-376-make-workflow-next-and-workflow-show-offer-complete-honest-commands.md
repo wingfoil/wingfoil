@@ -514,6 +514,57 @@ Until they are recorded, `test/cli/workflow-unbound-none.integration.test.ts` fa
 
 **Pending amendments.** Unchanged: no retrospective of the five bugs became false in this round.
 
+### green (developer, after re-review)
+
+**Commits.** Red `a183d575d` (`test/cli/workflow-next-offers-shell-literals.integration.test.ts`), fix `da5d77c31`.
+
+**The defect.** The console decided from an element's spelling that it was a placeholder, so `memory.add(type: bug, title: "<draft>")` printed `--title <draft>`, which a shell reads as a redirection.
+
+**Red.** `npx jest test/cli/workflow-next-offers-shell-literals.integration.test.ts --maxWorkers=2` at `a183d575d`, before the fix, printed `Tests: 11 failed, 2 passed, 13 total`. The test that runs the printed title through `bash -c` received exit `1` and `bash: line 1: draft: No such file or directory`. The two that passed pin what must not change: a real placeholder stays unquoted, and the JSON `argv` holds each literal as declared.
+
+**The fix.** The origin of an operand now decides. `memoryAddOperandParts` in `src/workflow/bindings.ts` says of each `memory add` operand whether the action gave its value. `src/core/workflow-next.ts` keeps the positions of the given elements of a command it builds in a `WeakMap` keyed by the `argv` array, read only by the console, so the JSON `argv` stays a plain list of strings. Every element of a project `run` command counts as given. A command no builder registered, such as a hand-built `Step`, is still read by its spelling.
+
+**Same-class check, per path to `commandLine`.**
+
+| Path | What was checked | Result |
+|---|---|---|
+| `workflow next`, a `memory.add` title, tags and `--set` literal | new red file, three of them also through a real shell or the JSON payload | quoted |
+| one command holding a literal `<tags>` title and a real `<tags>` placeholder | new red file | the title quoted, the placeholder not |
+| `binding.commands` and a single Memory verb command | built from element ids and `<reason>`; no declared value reaches them | placeholders stay unquoted, pinned in `test/core/workflow-next-offer-shell-words.test.ts` |
+| a project `run` action | new red file, run through a real shell | quoted |
+| a check's `run` binding | `stepLines` prints actions only, so a check never reaches `commandLine` | not printed |
+| `workflow start`, `workflow finalize` | new red file | quoted: both print the step `buildStep` built |
+| `workflow adopt`, `workflow rekey` | read in `src/core/workflow-adopt.ts` and `src/core/workflow-rekey.ts`: both call `buildStep` then `stepLines` | same code path, no test of their own |
+| `workflow show` | `workflowShow` declares no `renderConsole`, so its console prints the payload | `commandLine` not reached; `argv` unchanged |
+
+**Gates**, on `da5d77c31` with the six pending files in the working tree, each after `waitslot.sh`, with `--maxWorkers=2`:
+
+| Gate | Result |
+|---|---|
+| `npm test -- --maxWorkers=2` | exit `1`: `Test Suites: 1 failed, 686 passed, 687 total`, `Tests: 1 failed, 12499 passed, 12500 total` |
+| `npm run test:coverage -- --maxWorkers=2` | exit `1`, the same one failure |
+| `npm run lint` | exit `0` |
+| `npm run docs:api` | exit `0` |
+| `npm run typecheck` | exit `0` |
+| `npm run -s check:governance -- --base origin/main` | exit `0`: `gated: 0 findings on 0 commits`, `history: 0 findings on 0 commits` |
+
+**The one failure is `bug-534`.** `test/cli/workflow-unbound-none.integration.test.ts`, "workflow next (console): exit 0, no unbound token on either stream and no "N diagnostic(s)" line". In a clean clone of `da5d77c31` (`git clone --local`, `node_modules` linked, built), which holds none of the pending files, `npx jest test/cli/workflow-unbound-none.integration.test.ts --maxWorkers=2` printed `Test Suites: 1 passed, 1 total`, `Tests: 4 passed, 4 total`.
+
+**Coverage against `main` at `4afbca9db`, covered/total:**
+
+| Column | Base | This round | Uncovered items |
+|---|---|---|---|
+| statements | 12553/12700 (98.84) | 12706/12853 (98.85) | +0 |
+| branches | 7778/8064 (96.45) | 7913/8199 (96.51) | +0 |
+| functions | 2426/2462 (98.53) | 2486/2522 (98.57) | +0 |
+| lines | 10493/10550 (99.45) | 10601/10658 (99.46) | +0 |
+
+Each changed source file also reports `uncovered +0` in all four columns: `src/core/workflow-next.ts`, `src/core/workflow-list-show.ts`, `src/core/workflow-status.ts`, `src/memory/add.ts`, `src/memory/state-machine.ts`, `src/workflow/bindings.ts`, `src/workflow/deduce.ts`.
+
+**T4.** `git log --first-parent --no-merges --format=%h <from>..HEAD -- <file>` printed nothing for each: `test/cli/workflow-next-offers-review-fixes.integration.test.ts` from `326b2c25e`; `test/core/workflow-next-offers.test.ts` from `7318712dc`; `test/cli/workflow-next-offers-reserved-tokens.integration.test.ts` from `d3bf12938`; `test/cli/workflow-next-offers.integration.test.ts`, `test/core/workflow-list-show.test.ts`, `test/core/workflow-next.test.ts`, `test/core/workflow-status.test.ts` and `test/core/workflow-next-render.test.ts` from `30727b359`.
+
+**Pending files.** The `spec-017` edit and the five bug retrospectives are untouched, and no sentence of theirs became false in this round.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
