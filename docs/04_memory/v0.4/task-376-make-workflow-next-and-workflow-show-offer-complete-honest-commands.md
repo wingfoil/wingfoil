@@ -207,6 +207,14 @@ predicts; it clears when the approver records the amendment.
   `Specify the commands workflow next and workflow show offer: the manual-only mark, a creation already made, the arguments of memory add, one command per element and the placeholders of the static form (task-376 design gate).`
   Until it is recorded, `test/cli/workflow-unbound-none.integration.test.ts` fails alone with `W_UNCOMMITTED_INPUTS` (`bug-534`).
 
+### design gate (approver, 2026-11-18)
+
+The approver recorded the step in `7683245c6` (`workflow finalize … dev-loop.design`), after the amendment `6bfd29ec0` (`wf(tech-spec): amend spec-017-workflow-commands-and-state-deduction`). The rulings, as the record states them:
+
+> Approve the design of task-376 as recommended: D1 a separate evidence.manualOnly boolean, finalizable stays a boolean; D2 the elements left out of a command are reported in the action's notOffered with a reason; D3 an argument memory add cannot take is the workflow list warning W_ACTION_ARGUMENT_NOT_PASSED only; D4 one command per element, since spec-008 keeps one id per call; D5 once a phase has created its first element the offer is dropped and memory add --workflow --step stays accepted; D6 the whole-argument rule of dl-090 Q3 binds run elements, and every interpolated value is held to the ID character class; D7 the --set placeholders and the one-command rule for submit, reject and deprecate stay in this task as same-class defects.
+
+After the amendment `npx jest test/cli/workflow-unbound-none.integration.test.ts --maxWorkers=2` passes in this worktree: the one failure of the design's rerun (372 of 373) was the uncommitted amendment (`bug-534`).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
