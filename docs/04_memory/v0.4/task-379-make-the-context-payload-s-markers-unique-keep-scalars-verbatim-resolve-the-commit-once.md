@@ -317,6 +317,9 @@ Case e (every `show` and `ls-tree` names the full sha) is characterization and p
 
 **Unasserted (`testing` T1):** that the directive bodies are read in one batch is asserted only through its effects, the `show` list of case b and the equal totals for D = 3 and D = 6 of case d. No test inspects the stdin of a `cat-file --batch` call.
 
+**Correction (`08dca4d252e35cbd3b64d98bcdce7ea2eb21ee25`).** AC 1 case b asserted that the payload never holds the text `bug-007-astray`, which cannot pass: the element's own `depends_on:` names that id and `spec-012` §7 carries the element's frontmatter. The test now asserts that the payload has no `### bug:bug-007-astray` heading and no `<!-- begin:bug:bug-007-astray -->` or `<!-- end:bug:bug-007-astray -->` line.
+**Run after the correction:** `npx jest test/core/context-payload-integrity.test.ts --maxWorkers=2 --noStackTrace` printed `Test Suites: 1 passed, 1 total` and `Tests: 35 passed, 35 total`, on a worktree holding the developer's uncommitted `src/` changes, which qa did not open.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
