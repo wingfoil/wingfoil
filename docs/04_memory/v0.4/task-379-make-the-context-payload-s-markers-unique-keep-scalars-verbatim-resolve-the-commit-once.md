@@ -41,3 +41,143 @@ body with its own git spawn.
 ## Execution Notes
 
 <!-- Filled by the dev-loop. -->
+
+### design (architect, 2026-11-18)
+
+**Base.** Branch head `0253adfb3`, cut from `main` `4afbca9db`. PATH guard: `command -v wingfoil` printed the task's PATH shim; `wingfoil --version` and `node dist/cli.js --version` both printed `0.3.2 (4afbca9dba91799797f5069f3ffa0a8f8e23ea5a)`. `depends_on: []`, so no dependency notes to read (`dl-015`). `spec-012` is `approved`; `dl-149` and `dl-150` are `ready`.
+
+**The three defects, reproduced at `0253adfb3`** (the code build, a scratch repository from `init --template Scrum` holding `bug-265`'s and `bug-267`'s documents, then `assembleExecutionContext(root, {role: 'developer', element: {type: 'task', id: 'task-001-older-probe'}, stateRef: 'HEAD'})`):
+
+- `bug-265`: section 4 holds `### directive:testing` with a second `<!-- begin:directive:testing -->`, and `### task:task-006-dup` twice.
+- `bug-267`: section 1 reads `exp: 1000`, `flag: true`, `hex: 31`, `mode: 15`, `nothing: null`, `plus: 12`, `version: 1.5`. `flag: True` is the same class, though the bug does not list it.
+- `bug-381`: `grep -c "AtRev(root, sha" src/core/context.ts` → `9`; the spawn counts are below.
+- **A same-class defect the bug does not name.** The timestamp type constructs an object, and js-yaml names an object key `[object Object]`, so a mapping with two date keys (`2026-10-05: first`, `2026-10-06: second`) makes `assembleExecutionContext` throw `YAMLException: duplicated mapping key (7:3)`, although the function's contract returns expected failures. The mechanism of AC 2 fixes it (design 2), so it is fixed in this task (the wave's rule for a same-class instance in a touched file).
+
+**What the choices cost on this repository** (at `0253adfb3`, every document `loadMemoryDocumentsAtCommit` returns, checked with `pathPatternRegExp` and a scan of the plain frontmatter scalars): 1,373 documents, 1,365 nameable, **0** whose `type` is not declared for its path, **0** repeated keys, **0** non-canonical plain scalars.
+
+#### Design
+
+1. **Unique marker keys (`bug-265`, `src/core/context.ts`).** `payloadCandidates` gains the `memory.yaml` and two more leave-outs, under the existing rule "reported only when §6 would have found it relevant", neither taking a slot in the bounds:
+   - **Type not declared for the path:** no own `memoryYaml.types[type]`, or `pathPatternRegExp(types[type].path)` does not match the path. Since `RESERVED_TYPE_NAMES` keeps `directive` out of `memory.yaml`, no Memory document can reach a `directive:` key. Reason text: `its type '<type>' is not declared for its path, so an execution context cannot name it`.
+   - **Repeated key:** among the documents §6 would find relevant, the first in path order is carried, the others are left out. A copy that is archived, a draft or irrelevant claims nothing, so it never displaces the copy that can be carried. Ranking runs only over documents whose key occurs twice, so a repository with no repeat pays nothing. Reason text: `its type and id repeat those of <path of the carried document>, so an execution context cannot name it`.
+   - **A key the leave-outs cannot reach:** an element requested as `directive:<id>` where that directive is carried. It cannot be dropped, so it refuses as `VALIDATION`, the treatment of a self-closing element body: `marker key '<key>' names two bodies of an execution context`. `serializeExecutionContext` throws the same message, so a hand-built context cannot render a repeat either.
+   - A copy of the subject element is already excluded by §6 (same `type` and `id`), so it needs no rule.
+2. **Scalars as written (`bug-267`, `src/core/context.ts`).** `WrittenScalar` (text, `toJSON`, `toString`, `Symbol.toStringTag`) becomes the base of `WrittenTimestamp`, which stays exported. The payload schema wraps js-yaml's `null`, `bool`, `int` and `float` types: same `resolve`, a `construct` keeping the text, and a `predicate`/`represent` that still dump a real JS number, boolean or null canonically, because the DNA sections go through the same dump. `Symbol.toStringTag` is what makes js-yaml name a key by its text. `@types/js-yaml` declares none of `tag`, `predicate`, `represent` or `defaultStyle`, so a local interface types them. A key with no value is a JS `null` with no text: it stays `null`, which `test/fixtures/context/golden-payload-shipped-templates.md` pins (`backlog_committed: null`).
+3. **One resolved commit (`bug-381`).** `context.ts` calls `loadMemoryYamlAtCommit`, `loadMemoryDocumentsAtCommit`, `loadRolesYamlAtCommit`, `loadDirectivesAtCommit` and a new `findMemoryDocumentByTypeAndIdAtCommit` (`src/memory/query.ts`); `withBodies` reads with one `readPathsAtRev`; `dna.yaml` is read once, parsed from the text already read for its key order (`parseDnaYaml` exported from `src/core/loaders.ts`, not from the core barrel).
+
+**Prototype.** All of the above was applied to a throwaway copy outside the worktree, to measure it; nothing of it is in this branch.
+
+| Measure (`assembleExecutionContext`, git processes by subcommand) | Before (`0253adfb3`) | After (prototype) |
+|---|---|---|
+| This repository, this task, role `developer` | 27: `rev-parse` 6, `show` 15, `ls-tree` 3, `cat-file` 3 | 11: `rev-parse` 1, `show` 3, `ls-tree` 3, `cat-file` 4 |
+| Scratch repository, 7 directives, 8 content roots | 29: `rev-parse` 6, `show` 11, `ls-tree` 9, `cat-file` 3 | 17: `rev-parse` 1, `show` 3, `ls-tree` 9, `cat-file` 4 |
+| Payload of this repository (323,427 bytes), sha256 | `d212452097dc5c6b…` | `d212452097dc5c6b…`, identical |
+
+The count wraps `child_process.spawnSync` and `execFileSync` before requiring `dist/core/index.js`, counts the calls whose file is `git` by their first argument after `-C <root>`, and calls `assembleExecutionContext` once (the method of `test/core/workflow-next-spawn-count.test.ts`). Two runs of the prototype on the scratch repository gave the same counts and the same sha256 (`8e809ea872baffa2…`).
+
+#### Acceptance criteria and what qa pins
+
+No test imports a name that does not exist yet, so `npx tsc --noEmit -p tsconfig.json` stays clean at red and each red is an assertion. Fixtures follow `test/core/context-payload-format.test.ts` (`makeTempGitRepo`, `writeFixtureFile`, `commitAll`, its `taskMd`, `directiveMd`, `DNA_YAML`, `ROLES_YAML`), with a `MEMORY_YAML` that also declares `bug` at `docs/04_memory/bugs/{id}.md`. Link a document from the element with `depends_on:` to make it relevant.
+
+| AC | Class | Test file |
+|---|---|---|
+| 1 `bug-265` | red-first | new `test/core/context-payload-integrity.test.ts` |
+| 2 `bug-267` | red-first | the same file |
+| 3 `bug-381` | red-first | new `test/core/context-spawn-count.test.ts` |
+
+**AC 1**, through `assembleExecutionContext(...).payload` and `.warnings`:
+
+| # | Case | Pin | Today |
+|---|---|---|---|
+| a | A linked `type: directive`, `id: testing` document at a task path | exactly one `<!-- begin:directive:testing -->`; no `### directive:testing` line; the warning below | red |
+| b | A linked `type: bug` document at a task path | not carried; the same warning with `'bug'` | red |
+| c | Two linked documents with one `type` and `id` | one heading and one marker pair; the first path's body; the second path reported | red |
+| d | c with `limits: {maxDocs: 1}` and a second linked document | the left-out copy takes no slot | red |
+| e | Element requested as `{type: 'directive', id: 'testing'}` | `ok: false`, `VALIDATION`, `marker key 'directive:testing' names two bodies of an execution context` | red |
+| f | `serializeExecutionContext` of a hand-built context with two Memory documents of one key | throws that message with the key | red |
+| g | Every case above | the `<!-- begin:` lines outside bodies are pairwise distinct | red |
+| h | First copy `status: deprecated`, second `backlog` | the second is carried, nothing reported | characterization |
+| i | a and c on documents not linked and scoring 0 | not carried, not reported | characterization |
+| j | A second file repeating the element's own `type` and `id` | not carried, not reported | characterization |
+
+Warning lines, copied from the prototype's output on the scratch repository (qa substitutes its own paths):
+
+```
+W_MEMORY_UNREADABLE (docs/memory/task/task-005-a.md): unreadable frontmatter in docs/memory/task/task-005-a.md: its type 'directive' is not declared for its path, so an execution context cannot name it
+W_MEMORY_UNREADABLE (docs/memory/task/task-006-dup.md): unreadable frontmatter in docs/memory/task/task-006-dup.md: its type and id repeat those of docs/memory/task/task-006-dup-copy.md, so an execution context cannot name it
+```
+
+**AC 2**, the choice of D2 (a), on the element (section 1) and on a linked Memory document (section 4):
+
+| # | Written | Payload line | Today |
+|---|---|---|---|
+| a | `version: 1.50`, `mode: 0o17`, `hex: 0x1F`, `exp: 1e3`, `plus: +12`, `nothing: ~`, `flag: True`, `Nul: Null`, `inf: .inf` | each unchanged | red |
+| b | `list: [1.50, ~, True, 0x1F]`, `nest: {a: 0o17, b: [+12]}` | block form, each scalar unchanged | red |
+| c | `1.50: numkey` | `'1.50': numkey` | red |
+| d | Two date keys under one mapping | builds; `'2026-10-05': first`, `'2026-10-06': second` | red (throws) |
+| e | `qnum: "1.50"`, `qdate: "2026-10-05"` | `qnum: '1.50'`, `qdate: '2026-10-05'` | characterization |
+| f | `empty:` | `empty: null` | characterization |
+| g | `created: 2026-10-05` | unchanged, and `context.element.frontmatter.created` is still a `WrittenTimestamp` | characterization |
+| h | A DNA number through the serializer (a hand-built `dna` section with `1.5`) | `1.5` | characterization |
+
+Also: `JSON.stringify(context.element.frontmatter.version)` is `"1.50"` (red), `CONTEXT_PAYLOAD_FORMAT` is `1` (characterization, under D3 (a)).
+
+**Determinism (REQ-SYS-07).** On one fixture holding every case of AC 1 and AC 2: two assemblies of the same request, and a third on a `git clone` of the fixture at the same sha, give byte-identical payloads and equal `warnings`. Characterization for the bytes; it stays meaningful only with the cases above in the fixture.
+
+**AC 3**, spying `child_process.spawnSync` and `execFileSync` as `test/core/workflow-next-spawn-count.test.ts` does, on a fixture with one content root and D directives. qa confirms the "today" column by running it at red:
+
+| # | Pin | Today | After |
+|---|---|---|---|
+| a | `rev-parse` count with `stateRef: 'HEAD'` | 6 | exactly 1 |
+| b | `show` count with D = 3 | 7 (4 + D) | exactly 3 (`memory.yaml`, `dna.yaml`, `roles.yaml`) |
+| c | `cat-file --batch` count | 3 | exactly 4 (the scan, the directive listing, the bodies, the written frontmatter) |
+| d | Total with D = 3 and with D = 6 | 18 and 21 | 10 and 10 |
+| e | Every `show` and `ls-tree` names the full sha `rev-parse` answered | holds | holds (characterization) |
+| f | `rev-parse` count when the element is absent (`NOT_FOUND`) | 4 | exactly 1 |
+
+#### Files
+
+- **Change:** `src/core/context.ts`, `src/core/loaders.ts` (export `parseDnaYaml`), `src/core/index.ts` (export `WrittenScalar`), `src/memory/query.ts` and `src/memory/index.ts` (the two `…AtCommit` lookups), `src/mcp/prompt.ts` (a comment that cites `bug-265` for "never indexed by its body markers", no longer true once the keys are unique).
+- **New tests:** the two files above.
+- **Not changed, though the task's Implementation Notes list them:** `src/core/agent-context.ts` holds the agent markers of `spec-018`, not the execution context (`sed -n 1,5p src/core/agent-context.ts`); `src/core/revision.ts` already gives what this needs.
+- **`version:` bumps: none.** No configuration file changes (`git diff --stat main...HEAD -- .wingfoil` prints nothing), so `npm run check:mcp` and the pinned workflow reads have nothing to prove. `spec-012` declares no `version:`.
+
+#### Tests run at design
+
+| Command (targeted, `--maxWorkers=2`) | Worktree | Prototype |
+|---|---|---|
+| `npx jest test/core/context.test.ts test/core/context-builder.test.ts test/core/context-payload-format.test.ts test/core/context-shipped-templates.test.ts test/core/loaders-label.test.ts test/mcp/session-context-resource.test.ts test/mcp/role-prompt-context.test.ts` | 7 suites, 200 passed | 7 suites, 200 passed, both golden payloads unchanged |
+| `npx jest test/memory/query.test.ts test/memory/query-at-rev.test.ts test/memory/query-tolerant.test.ts test/memory/query-type-scoped-warnings.test.ts test/memory/query-element-format.test.ts test/core/loaders.test.ts test/core/loaders-at-rev.test.ts test/core/loaders-label.test.ts` | 8 suites, 168 passed | 8 suites, 168 passed |
+| `npx jest test/docs/name-resolvability.test.ts`, with the amendment in the tree | 11 passed, no unlisted name, so the allowlist needs no entry | not run |
+
+No existing test pins the behaviour that changes: every suite above passes on the prototype unchanged. The full suite was not run at design.
+
+#### Decisions for the approver
+
+- **D1 (`bug-265`).** (a) Leave the offending document out and report it; (b) make the key unique by construction. **Recommended: (a).** (b) needs the path or a counter in the key, which §7 rules out ("ids, never filesystem paths"), changes the marker bytes of every payload and so needs format 2, and still hands the agent a malformed document. (a) does not change `CONTEXT_PAYLOAD_FORMAT`.
+- **D2 (`bug-267`).** (a) Carry every null, boolean, integer, float and timestamp scalar as written; (b) have §7 state that only timestamps are kept. **Recommended: (a).** A version `1.50` read as `1.5` and a file mode read in decimal are what the agent would act on, and (a) also removes the two-date-key crash, which (b) would leave to a separate fix. Under (a): strings keep their value and take the dump's quoting, a key with no value stays `null`, and the DNA sections stay canonical because they are validated values rather than the document's text.
+- **D3 (`CONTEXT_PAYLOAD_FORMAT` under D2 (a)).** (a) Stay at format 1; (b) bump to 2. **Recommended: (a).** The envelope does not change, the values read the same under the schema the block is dumped with, and `dl-149` bumps "only on a backward-incompatible change"; on this repository the payload is byte-identical (sha256 above). **The tension to rule on:** `spec-012`'s Consequences says a change to §7's byte format bumps `format:`, and the constant's comment says "a change to the bytes §7 pins is a new format", while a document that does write `1.50` gets different bytes from this build. Under (a) the Revision note records the reasoning and green rewords that comment. D2 (b) leaves the format at 1 with no such question.
+
+#### Downstream: what `task-369` may rely on
+
+- `assembleExecutionContext`'s signature and result shape are unchanged, and the payload stays format 1 (under D3 (a)).
+- Every `<!-- begin:{key} -->` in a returned payload is unique, so a body can be addressed by its key. Documents left out appear only in `warnings`.
+- The commit is resolved once and the directive bodies are read in one batch.
+- **It may not rely on:** any size bound (this repository's payload is still 323,427 bytes, `bug-374` stays with `task-369`), or an element-less call: `ContextRequest.element` stays required, so the role Resource needs its own path to the directives.
+- `task-369`'s Implementation Notes also list `src/core/agent-context.ts`, which is the agent-marker module; its design should place the size warning where `agent execute` assembles the context (`src/agent/execute.ts`).
+
+**Other open tasks.** `task-376` touches `src/core/workflow-next.ts`, `src/core/workflow-list-show.ts`, `src/workflow/bindings.ts` and `spec-017`: no file in common. No other `v0.4` task from `task-360` on names `src/core/context.ts`, `src/core/loaders.ts`, `src/memory/query.ts`, `src/mcp/prompt.ts` or `spec-012` (`grep -lE` over `docs/04_memory/v0.4/task-3[6-9]*.md` lists only this file).
+
+### Pending amendments (approver)
+
+- `spec-012-context-loader-relevance-filtering`, prepared uncommitted in this worktree under the recommendations D1 (a), D2 (a), D3 (a): §7 "Scalars as written", "Marked bodies" and "What never enters a payload", §9, and a Revision note. A different ruling changes this text before red. Proposed reason:
+  `--reason "Make every marker key of the payload unique, carry every typed frontmatter scalar as written and state that stateRef is resolved once, per task-379 (bug-265, bug-267, bug-381); the payload stays format 1."`
+  Until it is recorded, `test/cli/workflow-unbound-none.integration.test.ts` fails alone with `W_UNCOMMITTED_INPUTS` in this worktree (`bug-534`).
+
+### Retrospective
+
+<!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
+     reconstructed afterwards. One line per item: what happened, the evidence (a command and what it
+     printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
+     Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
+     here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
