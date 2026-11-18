@@ -373,6 +373,10 @@ Warning line of case a: `W_MEMORY_UNREADABLE (<path>): unreadable frontmatter in
 
 `--reason "Leave out and report a Memory document with two frontmatter keys of the same text, refuse such an element or resolved directive as VALIDATION, and decide it before the bounds of section 6, per task-379."`
 
+**The directive clause is withdrawn (2026-11-18).** A directive carries only its id and body in the payload, never its frontmatter (`spec-012` §7's template), so two frontmatter keys of the same text do not stop it from rendering; `VALIDATION` stays for the element alone, whose frontmatter enters `## 1. Task`. The qa pins the Memory document and the element (cases a to h and k to m), and no refused directive: cases i and j above are withdrawn, and no directive check is implemented. This reason replaces the one above:
+
+`--reason "Leave out and report a Memory document with two frontmatter keys of the same text, refuse such an element as VALIDATION, and decide it before the bounds of section 6, per task-379."`
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
