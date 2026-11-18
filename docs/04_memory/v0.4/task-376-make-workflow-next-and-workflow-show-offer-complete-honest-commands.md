@@ -565,6 +565,46 @@ Each changed source file also reports `uncovered +0` in all four columns: `src/c
 
 **Pending files.** The `spec-017` edit and the five bug retrospectives are untouched, and no sentence of theirs became false in this round.
 
+### green (developer, after the third review)
+
+**Commits.** Red `12e1f7845` (`test/cli/workflow-next-offers-shell-bytes.integration.test.ts`), fix `edd720d4a`.
+
+**The defect.** `shellWord` quoted from a list of dangerous characters, and the list was incomplete: bash rewrote a printed `x=~/notes` or `x{a,b}y` with exit `0` and no warning.
+
+**Red.** `npx jest test/cli/workflow-next-offers-shell-bytes.integration.test.ts --maxWorkers=2` at `12e1f7845`, before the fix, printed `Tests: 4 failed, 4 passed, 8 total`. Failed: the named values (`x=~/notes`, `see=~root`, `k=~`, `x{a,b}y`, `{1..3}` and `dir=~/out` arrived changed, the braces as several arguments), what bash receives against the JSON `argv`, the allow-list check (for example `a#b`, `a^b` and `a{b` were bare), and `memory add` writing the expanded home path into the title. The test of each printable character alone in its six positions passed before the fix: no single character was rewritten there, and the defect needs the combinations of the named values. It stays as a pin.
+
+**The route.** Every value goes through a project `run` binding, `ops.say(word: "<value>")`, which carries all 95 printable ASCII characters and the empty string to the console. A `memory.add` title reads `{a,b}` as a token, so braces are covered by the `run` route only; the file also runs one `memory add` with the title `x=~/notes` through a real shell.
+
+**The fix.** An element is printed bare only when it matches `^[A-Za-z0-9_@%+=:,./-]+$`, and quoted otherwise, the empty string included. The placeholder branch and `GIVEN_ELEMENTS` are unchanged. A step key holding `#` is now quoted, so the developer's own row in `test/core/workflow-next-offer-details.test.ts` follows; no file under T4 pinned a spelling this changes. `docs/cli-reference.md` already says the console quotes what a shell would misread, so it does not change.
+
+**Gates**, on `edd720d4a` with the six pending files in the working tree, each after `waitslot.sh`, with `--maxWorkers=2`:
+
+| Gate | Result |
+|---|---|
+| `npm test -- --maxWorkers=2` | exit `1`: `Test Suites: 1 failed, 687 passed, 688 total`, `Tests: 1 failed, 12511 passed, 12512 total` |
+| `npm run test:coverage -- --maxWorkers=2` | exit `1`, the same one failure |
+| `npm run lint` | exit `0` |
+| `npm run docs:api` | exit `0` |
+| `npm run typecheck` | exit `0` |
+| `npm run -s check:governance -- --base origin/main` | exit `0`: `gated: 0 findings on 0 commits`, `history: 0 findings on 0 commits` |
+
+**The one failure is `bug-534`.** `test/cli/workflow-unbound-none.integration.test.ts`, "workflow next (console): exit 0, no unbound token on either stream and no "N diagnostic(s)" line". In a clean clone of `edd720d4a` (`git clone --local`, `node_modules` linked, built), which holds none of the pending files, `npx jest test/cli/workflow-unbound-none.integration.test.ts --maxWorkers=2` printed `Test Suites: 1 passed, 1 total`, `Tests: 4 passed, 4 total`.
+
+**Coverage against `main` at `4afbca9db`, covered/total:**
+
+| Column | Base | This round | Uncovered items |
+|---|---|---|---|
+| statements | 12553/12700 (98.84) | 12706/12853 (98.85) | +0 |
+| branches | 7778/8064 (96.45) | 7911/8197 (96.51) | +0 |
+| functions | 2426/2462 (98.53) | 2486/2522 (98.57) | +0 |
+| lines | 10493/10550 (99.45) | 10601/10658 (99.46) | +0 |
+
+Each changed source file also reports `uncovered +0` in all four columns: `src/core/workflow-next.ts`, `src/core/workflow-list-show.ts`, `src/core/workflow-status.ts`, `src/memory/add.ts`, `src/memory/state-machine.ts`, `src/workflow/bindings.ts`, `src/workflow/deduce.ts`.
+
+**T4.** `git log --first-parent --no-merges --format=%h <from>..HEAD -- <file>` printed nothing for each: `test/cli/workflow-next-offers-shell-literals.integration.test.ts` from `a183d575d`; `test/cli/workflow-next-offers-review-fixes.integration.test.ts` from `326b2c25e`; `test/core/workflow-next-offers.test.ts` from `7318712dc`; `test/cli/workflow-next-offers-reserved-tokens.integration.test.ts` from `d3bf12938`; `test/cli/workflow-next-offers.integration.test.ts`, `test/core/workflow-list-show.test.ts`, `test/core/workflow-next.test.ts`, `test/core/workflow-status.test.ts` and `test/core/workflow-next-render.test.ts` from `30727b359`.
+
+**Pending files.** The `spec-017` edit and the five bug retrospectives are untouched, and no sentence of theirs became false in this round.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
