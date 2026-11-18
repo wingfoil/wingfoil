@@ -835,11 +835,11 @@ function selectDnaSections(
     : { selection: selection as unknown as DnaSelection };
 }
 
-/** The Markdown body of each resolved directive, all read at `sha` in one batch (`bug-381`;
- * `DirectiveFile.path` is relative to `.wingfoil/`). */
+/** The Markdown body of each resolved directive, all read at `sha` in one batch (`bug-381`): each was listed at
+ * that commit, so the batch answers its bytes (`DirectiveFile.path` is relative to `.wingfoil/`). */
 function withBodies(root: string, sha: string, directives: readonly DirectiveFile[]): ContextDirective[] {
   const raws = readPathsAtRev(root, sha, directives.map((directive) => `.wingfoil/${directive.path.split(/[\\/]/).join('/')}`));
-  return directives.map((directive, index) => ({ ...directive, body: splitFrontmatter(raws[index] ?? '').body }));
+  return directives.map((directive, index) => ({ ...directive, body: splitFrontmatter(raws[index]!).body }));
 }
 
 function stringField(frontmatter: Record<string, unknown>, key: string): string | undefined {

@@ -2,6 +2,8 @@
  * task-379 — what the green phase added beside the red tests: the edges of "scalars as written" (`spec-012` §7)
  * and the lookup at a resolved commit (`bug-381`).
  */
+import jsYaml from 'js-yaml';
+
 import * as core from '../../src/core';
 import { assembleExecutionContext, WrittenScalar, WrittenTimestamp } from '../../src/core/context';
 import { loadMemoryYamlAtCommit } from '../../src/core/loaders';
@@ -103,6 +105,64 @@ describe('task-379 — the edges of scalars as written', () => {
   it('a typed scalar inside a !!pairs key and inside a sequence key keeps its text', () => {
     const lines = payloadOf(['p: !!pairs [1.50: x]', '? [1.50, a]', ': v']).split('\n');
     expect(lines).toEqual(expect.arrayContaining(["  - - '1.50'", '    - x', '1.50,a: v']));
+  });
+
+  it('a !!set with no content is an empty mapping', () => {
+    expect(payloadOf(['s: !!set']).split('\n')).toContain('s: {}');
+  });
+
+  it('a mapping shared through an alias is rendered at each use', () => {
+    const lines = payloadOf(['a: &shared {k: 1.50}', 'b: *shared']).split('\n');
+    expect(lines.filter((line) => line === '  k: 1.50')).toHaveLength(2);
+  });
+
+  describe('an error of the frontmatter read', () => {
+    const PROBE = 'probe: 1';
+    const request = { role: 'developer', element: { type: 'task', id: ELEMENT_ID }, stateRef: 'HEAD' };
+    const realLoad = jsYaml.load;
+
+    /** Fail the read as written, and only that read: the scan parses the same text with no schema of its own. */
+    function failWrittenRead(error: Error): void {
+      jest.spyOn(jsYaml, 'load').mockImplementation(((text: string, options?: jsYaml.LoadOptions) => {
+        if (text.includes(PROBE) && options?.schema !== undefined) throw error;
+        return realLoad(text, options);
+      }) as typeof jsYaml.load);
+    }
+
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
+    it('a YAML error on the element refuses the context', () => {
+      writeFixtureFile(repo, ELEMENT_PATH, elementMd([PROBE]));
+      commitAll(repo, 'the element');
+      failWrittenRead(new jsYaml.YAMLException('probe'));
+      expect(assembleExecutionContext(repo, request)).toEqual({
+        ok: false,
+        error: { code: 'VALIDATION', message: `element 'task:${ELEMENT_ID}' cannot enter an execution context: its frontmatter cannot be read as written` },
+      });
+    });
+
+    it('a YAML error on a linked document leaves it out and reports it', () => {
+      const linked = 'docs/04_memory/v0.9/task-002-linked.md';
+      writeFixtureFile(repo, ELEMENT_PATH, elementMd(['depends_on: [task-002-linked]']));
+      writeFixtureFile(repo, linked, ['---', 'id: task-002-linked', 'type: task', 'release: "v0.9"', 'status: backlog', PROBE, '---', '', 'Linked.', ''].join('\n'));
+      commitAll(repo, 'a linked document');
+      failWrittenRead(new jsYaml.YAMLException('probe'));
+      const result = assembleExecutionContext(repo, request);
+      if (!result.ok) throw new Error(result.error.message);
+      expect(result.value.context.memory).toEqual([]);
+      expect(result.warnings).toEqual([
+        `W_MEMORY_UNREADABLE (${linked}): unreadable frontmatter in ${linked}: its frontmatter cannot be read as written, so an execution context cannot carry it`,
+      ]);
+    });
+
+    it('an error that is not a YAML one is not swallowed', () => {
+      writeFixtureFile(repo, ELEMENT_PATH, elementMd([PROBE]));
+      commitAll(repo, 'the element');
+      failWrittenRead(new TypeError('probe'));
+      expect(() => assembleExecutionContext(repo, request)).toThrow(TypeError);
+    });
   });
 
   it('the core barrel re-exports WrittenScalar', () => {
