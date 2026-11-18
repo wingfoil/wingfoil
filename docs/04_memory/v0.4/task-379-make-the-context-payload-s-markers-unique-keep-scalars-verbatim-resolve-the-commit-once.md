@@ -175,6 +175,14 @@ No existing test pins the behaviour that changes: every suite above passes on th
   `--reason "Make every marker key of the payload unique, carry every typed frontmatter scalar as written, state that stateRef is resolved once and align the Consequences format rule with dl-149, per task-379 (bug-265, bug-267, bug-381); the payload stays format 1."`
   Until it is recorded, `test/cli/workflow-unbound-none.integration.test.ts` fails alone with `W_UNCOMMITTED_INPUTS` in this worktree (`bug-534`).
 
+### design gate (approver, 2026-11-18)
+
+The approver recorded the step in `d142b7788` (`workflow finalize … dev-loop.design`), after the amendment `2f3341634` (`wf(tech-spec): amend spec-012-context-loader-relevance-filtering`). The rulings, as the record states them:
+
+> Approve the design of task-379 as recommended: D1 (a) a document whose type is not declared for its path, or whose type and id repeat another's, is left out and reported, and an element colliding with a carried directive refuses the context; D2 (a) every null, boolean, integer, float and timestamp scalar of the carried frontmatter is kept as written, strings keep the dump's quoting and the DNA sections stay canonical; D3 (a) the payload stays format 1: a backward-incompatible change of the envelope bumps the format under dl-149, a rendering a YAML reader reads with the same values does not, spec-012 Consequences states this rule, and green rewords the comment of CONTEXT_PAYLOAD_FORMAT to the same rule.
+
+Green rewords the comment of `CONTEXT_PAYLOAD_FORMAT` in `src/core/context.ts` to the rule of `spec-012` Consequences (D3 (a)).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
