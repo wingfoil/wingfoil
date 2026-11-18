@@ -563,6 +563,41 @@ The independent review of head `679cf0035` returned REJECT. The approver ruled o
 - **D6 (a):** frontmatter that contains itself through an alias is left out and reported in this task.
 - **`spec-012` §7:** the amendment the addendum prepared is approved.
 
+### red (qa, 2026-11-18)
+
+Red round after the reject, run black-box (`testing` T3): the contract was the round's 18 cases and merge table, `spec-012` §7 as amended, and real command output. No file under `src/` or `scripts/` was opened. After the red commit, grouping the failures of the run printed the first two lines of a jest code frame for the `RangeError` cases, which `--noStackTrace` does not suppress; the test file was not changed after that output.
+
+**File:** `test/core/context-payload-yaml-constructs.test.ts` (new), through the public `assembleExecutionContext`. **Red commit:** `348fb5276`.
+
+**Run:** `npx jest test/core/context-payload-yaml-constructs.test.ts --maxWorkers=2 --noStackTrace --verbose` printed `Tests: 68 failed, 8 passed, 76 total`.
+
+| Row | Classification | Tests | First failing assertion, or result |
+|---|---|---|---|
+| 1 to 4 | red-first | 5 | `expect(received).not.toThrow()`, `YAMLException`, `cannot resolve a node with !<tag:yaml.org,2002:set> explicit tag` |
+| 5 | red-first | 1 | the same assertion and error, on the element |
+| 6 | red-first | 1 | the same assertion and error, on the ranked-out sibling |
+| 7 | red-first | 2 | `expect(received).toEqual(expected)`, received the extra line `  text: '2026-10-05'` under `m:` |
+| 8 | characterization | 7 | passes on first run |
+| 9 | red-first | 5 | `expect(context.memory).toEqual([])`, received the document |
+| 10 | red-first | 4 | `expect(context.memory).toEqual([])`, received the document |
+| 11 | red-first | 2 | `expect(received).not.toThrow()`, `RangeError`, `Maximum call stack size exceeded` |
+| 12, 13 | red-first | 9 | `expect(result.ok).toBe(false)`, received `true` |
+| 14 | red-first | 2 | `expect(received).not.toThrow()`, `RangeError`, `Maximum call stack size exceeded` |
+| 15 | red-first | 22 | ranked after `maxDocs` (11): `expect(warnings).toEqual([...])`, the report is missing; ranked first, rows of 9 and 10 (9): `toEqual` on the carried paths, expected `task-003-next`, received `task-002-left-out`; ranked first, self-containing (2): `not.toThrow()`, `RangeError` |
+| 16 | characterization | 1 | passes on first run |
+| 17 | red-first | 3 | `expect(rowsThatThrow(...)).toEqual([])`, received the rows that threw (linked document, element, ranked out) |
+| 18 | red-first | 12 | fixture of the document rows (1): `not.toThrow()`, `YAMLException`; element rows of 9 and 10 (9): `expect(first.ok).toBe(false)`, received `true`; element rows of 11 (2): `not.toThrow()`, `RangeError` |
+
+**Row 15** is pinned in two placements per row, as `spec-012` §7 states both: the document ranked after the slot, and the document ranked first with the next document taking the slot.
+
+**Row 16's expected line** was measured: `node -e` calling js-yaml's `load` and `dump` with `sortKeys`, `lineWidth: -1`, `noRefs` on the escaped key printed `  "\x01a\x02b\x03": x` and `  b: 1`.
+
+**Row 18's fixture** was checked once on a temporary copy of the test restricted to the rows that pass today (`--testNamePattern 'one fixture of the document rows'`: `1 passed`); the copy was deleted before the commit, and `git status --short` then listed only the new test file.
+
+**Checks before the red commit:** `npx tsc --noEmit -p tsconfig.json` exit 0; `npx jest test/lint --maxWorkers=2 --noStackTrace` printed `Tests: 165 passed, 165 total`; `npx jest test/validation/secret-scan.test.ts --maxWorkers=2 --noStackTrace` printed `Tests: 85 passed, 85 total`.
+
+**Unasserted:** nothing of the 18 rows. Row 17 is asserted on all three placements; rows 12 to 14 and 18 assert every row of the merge table marked left out and both self-containing rows.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
