@@ -26,10 +26,22 @@
 import type { RolesYaml } from '../directives/schema';
 import type { DnaYaml } from '../dna/schema';
 import type { MemoryYaml, StateMachine } from '../memory/schema';
-import { resolveStateMachine } from '../memory/state-machine';
+import { hasTransitionEdge, resolveStateMachine, type TransitionOp } from '../memory/state-machine';
 import type { Diagnostic } from '../validation';
 import { reportWarning } from '../validation/warning';
-import { resolveToken, tokenName, type BindingsYaml, type TokenBinding } from '../workflow/bindings';
+import {
+  builtinCommand,
+  memoryAddOperands,
+  memoryAddPatternTokens,
+  memoryAddType,
+  resolveToken,
+  tokenArguments,
+  tokenName,
+  unquoted,
+  type BindingsYaml,
+  type BuiltinOperands,
+  type TokenBinding,
+} from '../workflow/bindings';
 import {
   deduceWorkflowState,
   resolveInstanceRef,
@@ -42,6 +54,7 @@ import {
   type EvidenceKind,
   type Instance,
   type InstanceDeduction,
+  type PendingCreated,
   type ProducesView,
   type ScopeRef,
   type TrailEntry,
@@ -83,8 +96,10 @@ export interface Member {
 /** An action's binding as a step reports it (`spec-017` §6.1, §8 `ActionView.binding`). */
 export interface StepBinding {
   readonly kind: TokenBinding['kind'];
-  /** The command to run, the step's operands filled: a `wingfoil`, `agent` or project `run` binding. */
+  /** The command to run, the step's operands filled: a `wingfoil`, `agent` or project `run` binding; the first of `commands`. */
   readonly argv?: readonly string[];
+  /** One command per element the verb acts on (`spec-008` §1), present only when there are two or more (`spec-017` §6.1). */
+  readonly commands?: readonly (readonly string[])[];
   /**
    * A `manual` Memory action's expected commit subject(s), by `spec-003`'s verb rule. One subject per line
    * when the targets need different brackets or types (one commit each).
@@ -99,6 +114,10 @@ export interface ActionView {
   readonly unresolved: readonly string[];
   readonly target: DeducedAction['target'];
   readonly binding: StepBinding;
+  /** A `memory.add` already made: the elements of its type the step created; its binding then offers no command (`spec-017` §6.1). */
+  readonly done?: readonly ElementRef[];
+  /** The targets with no edge for the verb, each with the reason; absent when there is none (`spec-017` §6.1). */
+  readonly notOffered?: readonly { readonly element: ElementRef; readonly reason: string }[];
 }
 
 /** One check, listed with its binding and never evaluated in v0.3 (`spec-017` §6.1, P4.12 is v1.0). */
@@ -148,7 +167,15 @@ export interface Step {
   readonly checks: { readonly pre: readonly CheckView[]; readonly post: readonly CheckView[] };
   readonly produces: readonly ProducesView[];
   readonly created: readonly ElementRef[];
-  readonly evidence: { readonly kinds: readonly EvidenceKind[]; readonly missing: readonly EvidenceKind[]; readonly finalizable: boolean };
+  readonly evidence: {
+    readonly kinds: readonly EvidenceKind[];
+    readonly missing: readonly EvidenceKind[];
+    readonly finalizable: boolean;
+    /** `finalizable`, and no evidence the engine can check stands behind the step: a person decides (`spec-017` §6.1). */
+    readonly manualOnly: boolean;
+  };
+  /** What the created elements lack while they keep `created` missing; absent otherwise (`spec-017` §6.1). */
+  readonly pendingCreated?: readonly PendingCreated[];
   readonly optional: boolean;
   readonly awaiting: Awaiting | null;
   readonly fallback: { readonly step: string; readonly setState: string | null } | null;
@@ -218,17 +245,6 @@ export function membersHoldingRole(dnaYaml: DnaYaml | null, role: string): Membe
     .filter((member) => member.roles.includes(role))
     .map((member) => ({ name: member.name, email: member.email ?? '' }))
     .sort((a, b) => compareText(a.name, b.name) || compareText(a.email, b.email));
-}
-
-/** The `name: value` arguments of a token's parentheses, unquoted (`git.merge(from: main)` → `{ from: 'main' }`). */
-function tokenArguments(text: string): Map<string, string> {
-  const args = new Map<string, string>();
-  const open = text.indexOf('(');
-  if (open === -1 || !text.endsWith(')')) return args;
-  for (const match of text.slice(open + 1, -1).matchAll(/([A-Za-z_][\w-]*)\s*:\s*("[^"]*"|'[^']*'|[^,\s)]+)/g)) {
-    args.set(match[1]!, match[2]!.replace(/^["']|["']$/g, ''));
-  }
-  return args;
 }
 
 /** The first argument of `….set_state(s)` / `….set_release(v)`, unquoted, or `null`. */
@@ -328,28 +344,32 @@ function expectedCommit(action: DeducedAction, phase: Phase, memoryYaml: MemoryY
 
 /** Replace each `{name}` element of a project `run` argv with the token's `name:` argument, when it has one. */
 function interpolateRun(run: readonly string[], text: string): string[] {
-  const args = tokenArguments(text);
-  return run.map((element) => element.replace(/^\{([^{}]+)\}$/, (whole, name: string) => args.get(name) ?? whole));
+  const args = new Map(tokenArguments(text));
+  return run.map((element) => element.replace(/^\{([^{}]+)\}$/, (whole, name: string) => unquoted(args.get(name) ?? whole)));
 }
 
-/** The binding of one action, with the step's operands filled (`spec-017` §6.1). */
+/** The Memory verbs that move one existing element, each with the transition it takes (`spec-017` §6.1). */
+const TRANSITION_OPS: Readonly<Record<string, TransitionOp>> = {
+  'memory.submit': 'submit',
+  'memory.approve': 'approve',
+  'memory.reject': 'reject',
+  'memory.deprecate': 'deprecate',
+};
+
+/** The operands of a built-in command of `step`, with `id` for the element a Memory verb acts on (`spec-017` §6.1). */
+function stepOperands(action: DeducedAction, step: DeducedStep, inputs: NextInputs, id: string): BuiltinOperands {
+  const tokens = memoryAddPatternTokens(inputs.memoryYaml, memoryAddType(action.token));
+  return { id, instance: step.instance, step: step.key, add: memoryAddOperands(action.addArguments ?? [], tokens) };
+}
+
+/** The binding of one action with no target to choose among, the step's operands filled (`spec-017` §6.1). */
 function actionBinding(action: DeducedAction, step: DeducedStep, phase: Phase, inputs: NextInputs): StepBinding {
   const binding = resolveToken(action.token, 'action', inputs.bindings);
-  const name = tokenName(action.token);
   switch (binding.kind) {
-    case 'wingfoil': {
-      // A whole command (review fix 2): the operands the verb requires, as placeholders where only the user
-      // can give them. `--workflow` / `--step` link the added element to the step (spec-017 §7.10, task-227).
-      const argv = [...binding.argv!]; // a built-in `wingfoil` binding always names its command (`bindings.ts`)
-      if (name === 'memory.add') argv.push('--title', '<title>', '--workflow', step.instance, '--step', step.key);
-      else if (name.startsWith('memory.')) {
-        argv.push(...(action.targets.length > 0 ? action.targets.map((target) => target.id) : ['<id>']));
-        if (name === 'memory.approve' || name === 'memory.reject') argv.push('--reason', '<reason>');
-      }
-      return { kind: 'wingfoil', argv };
-    }
+    case 'wingfoil': // a built-in `wingfoil` binding always names its command (`bindings.ts`)
+      return { kind: 'wingfoil', argv: builtinCommand(action.token, binding.argv!, stepOperands(action, step, inputs, '<id>')) };
     case 'agent':
-      return { kind: 'agent', argv: ['wingfoil', 'agent', 'execute', '--workflow', step.instance, '--step', step.key] };
+      return { kind: 'agent', argv: builtinCommand(action.token, binding.argv!, stepOperands(action, step, inputs, '<id>')) };
     case 'run':
       return { kind: 'run', argv: interpolateRun(binding.argv!, action.text) }; // a `run` binding is its argv
     case 'manual': {
@@ -360,6 +380,37 @@ function actionBinding(action: DeducedAction, step: DeducedStep, phase: Phase, i
     default:
       return { kind: 'unbound' };
   }
+}
+
+/**
+ * One action of a step (`spec-017` §6.1): a `memory.add` already made offers no command; a Memory verb offers one command
+ * per target with an edge for it (`spec-008` §1: one id per call), the other targets reported apart.
+ */
+function actionView(action: DeducedAction, step: DeducedStep, phase: Phase, inputs: NextInputs): ActionView {
+  const base = { token: action.token, text: action.text, unresolved: action.unresolved, target: action.target };
+  const name = tokenName(action.token);
+  if (name === 'memory.add' && action.targets.length > 0) return { ...base, binding: { kind: 'wingfoil' }, done: action.targets };
+  const op = TRANSITION_OPS[name];
+  if (op === undefined || action.targets.length === 0) return { ...base, binding: actionBinding(action, step, phase, inputs) };
+  // A target was found as a Memory element of its type, so `memory.yaml` is present and registers the type.
+  const hasEdge = (target: ElementRef): boolean => hasTransitionEdge(resolveStateMachine(inputs.memoryYaml!, target.type), target.status, op);
+  const prefix = resolveToken(action.token, 'action', inputs.bindings).argv!; // a built-in verb names its command
+  const commands = action.targets.filter(hasEdge).map((target) => builtinCommand(action.token, prefix, stepOperands(action, step, inputs, target.id)));
+  const notOffered = action.targets.filter((target) => !hasEdge(target)).map((element) => ({ element, reason: `no ${op} edge from '${element.status}'` }));
+  return {
+    ...base,
+    binding: { kind: 'wingfoil', ...(commands.length === 0 ? {} : { argv: commands[0]! }), ...(commands.length < 2 ? {} : { commands }) },
+    ...(notOffered.length === 0 ? {} : { notOffered }),
+  };
+}
+
+/**
+ * Whether no evidence the engine can check stands behind a finalizable step (`spec-017` §6.1): its kinds hold nothing
+ * but `record` and `awaits`, or `created` for a step that created nothing. The binding kinds do not enter it.
+ */
+function isManualOnly(step: DeducedStep): boolean {
+  const checkable = step.evidence.kinds.filter((kind) => kind !== 'record' && kind !== 'awaits' && (kind !== 'created' || step.created.length > 0));
+  return step.evidence.finalizable && checkable.length === 0;
 }
 
 /** A check token with its binding, never evaluated (`spec-017` §6.1). */
@@ -458,20 +509,15 @@ export function buildStep(step: DeducedStep, inputs: NextInputs): Step {
     agentRole,
     members: role === null ? [] : membersHoldingRole(inputs.dnaYaml, role),
     ...roleDirectives(role, inputs),
-    actions: step.actions.map((action) => ({
-      token: action.token,
-      text: action.text,
-      unresolved: action.unresolved,
-      target: action.target,
-      binding: actionBinding(action, step, phase, inputs),
-    })),
+    actions: step.actions.map((action) => actionView(action, step, phase, inputs)),
     checks: {
       pre: (phase.checks?.pre ?? []).map((token) => checkView(token, inputs.bindings)),
       post: (phase.checks?.post ?? []).map((token) => checkView(token, inputs.bindings)),
     },
     produces: step.produces,
     created: step.created,
-    evidence: step.evidence,
+    evidence: { ...step.evidence, manualOnly: isManualOnly(step) },
+    ...(step.pendingCreated === undefined ? {} : { pendingCreated: step.pendingCreated }),
     optional: step.optional,
     awaiting,
     // A re-entered step reports the fallback that re-entered it (§5.2); any other step its phase's own.
@@ -676,6 +722,43 @@ export function humanNeededLine(step: Step): string | null {
   return approvalLine(awaiting, step.key);
 }
 
+/** An argv element as a POSIX shell reads it (`spec-017` §6.1): quoted when the shell would split it, a placeholder never. */
+function shellWord(element: string): string {
+  if (/^(?:[a-z][a-z0-9_-]*=)?<[a-z][a-z0-9-]*>$/.test(element)) return element;
+  if (element !== '' && !/[\s'"`$\\;&|()*?[\]<>!]|^[#~]/.test(element)) return element;
+  return `'${element.replace(/'/g, `'\\''`)}'`;
+}
+
+/** A command as the console prints it. */
+const commandLine = (argv: readonly string[]): string => argv.map(shellWord).join(' ');
+
+/** The console lines of one action (`spec-017` §6.1): a creation already made, its commands, the targets left out. */
+function actionLines(action: ActionView): string[] {
+  const { binding } = action;
+  if (action.done !== undefined) return [`    - ${action.text} — done: ${action.done.map((element) => element.id).join(', ')}`];
+  const several = binding.commands !== undefined;
+  const detail = binding.argv !== undefined && !several ? `: ${commandLine(binding.argv)}` : binding.expectedCommit !== undefined ? `: expects ${binding.expectedCommit.split('\n').join(' | ')}` : '';
+  return [
+    `    - ${action.text} [${binding.kind}${detail}]`,
+    ...(binding.commands ?? []).map((command) => `        ${commandLine(command)}`),
+    ...(action.notOffered ?? []).map(({ element, reason }) => `        not offered: ${element.id} (${reason})`),
+  ];
+}
+
+/** What one created element lacks, as the evidence line says it (`spec-017` §6.1). */
+function describePendingCreated({ element, reaches, missingPaths }: PendingCreated): string {
+  const state = `${element.id} is ${element.status}, the phase leaves it ${reaches ?? 'in a state it cannot determine'}`;
+  return missingPaths.length === 0 ? state : `${state}, not committed: ${missingPaths.join(', ')}`;
+}
+
+/** The evidence line of a step (`spec-017` §6.1, §8). */
+function evidenceLine(step: Step): string {
+  const { missing, finalizable, manualOnly } = step.evidence;
+  const pending = (step.pendingCreated ?? []).map(describePendingCreated).join('; ');
+  const kinds = missing.map((kind) => (kind === 'created' && pending !== '' ? `created (${pending})` : kind)).join(', ');
+  return `  evidence missing: ${kinds === '' ? '(none)' : kinds}${finalizable ? ' (finalizable)' : ''}${manualOnly ? ' manual only: no evidence checks this step' : ''}`;
+}
+
 /** The console lines of one step (`spec-017` §8: key, trail, role, scope, actions with bindings, directive ids, human needed). */
 export function stepLines(step: Step, heading: string): string[] {
   const lines = [`${heading}: ${step.key}`];
@@ -685,12 +768,8 @@ export function stepLines(step: Step, heading: string): string[] {
   lines.push(`  role: ${step.role ?? '(none)'}${step.agentRole ? ' (an agent role)' : ''}${holders === '' ? '' : ` — held by ${holders}`}`);
   lines.push(`  directives: ${step.directives.length === 0 ? '(none)' : step.directives.map((directive) => directive.id).join(', ')}`);
   if (step.actions.length > 0) lines.push('  actions:');
-  for (const action of step.actions) {
-    const { binding } = action;
-    const detail = binding.argv !== undefined ? `: ${binding.argv.join(' ')}` : binding.expectedCommit !== undefined ? `: expects ${binding.expectedCommit.split('\n').join(' | ')}` : '';
-    lines.push(`    - ${action.text} [${binding.kind}${detail}]`);
-  }
-  lines.push(`  evidence missing: ${step.evidence.missing.length === 0 ? '(none)' : step.evidence.missing.join(', ')}${step.evidence.finalizable ? ' (finalizable)' : ''}`);
+  for (const action of step.actions) lines.push(...actionLines(action));
+  lines.push(evidenceLine(step));
   if (step.reentered) lines.push(`  re-entered after ${step.reentryCommit}`);
   const human = humanNeededLine(step);
   if (human !== null) lines.push(`  ${human}`);

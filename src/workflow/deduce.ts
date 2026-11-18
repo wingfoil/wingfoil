@@ -59,14 +59,26 @@ import { memoryUnreadableDiagnostic, type MemoryDocumentSummary } from '../memor
 import { isArchivedStatus, resolveStateMachine, validateFrontmatterState } from '../memory/state-machine';
 // The module, not the `../storage` barrel, as `src/memory/entry.ts` imports `resolveConfinedMemoryPath`.
 import { pathPatternRegExp } from '../storage/memory-path';
-import { isNumericToken, patternToSource, type Diagnostic, type ValidationError } from '../validation';
+import { isIdPiece, isNumericToken, patternToSource, type Diagnostic, type ValidationError } from '../validation';
 // The modules, not the `../core` barrel: `src/core` imports this one.
 import { creatingPhaseIndex, isImplicitOwnerProduces } from '../core/workflow-diagnostics';
 import { iterationStartState, workflowExitStates, type ExitStart, type PhaseExitState } from '../core/workflow-exit-state';
 
 import type { DnaYaml } from '../dna/schema';
 
-import { collectionEntryKey, collectionKeyIssues, memoryAddType, tokenName, typedStateType, type BindingsYaml, type CollectionEntry } from './bindings';
+import {
+  collectionEntryKey,
+  collectionKeyIssues,
+  memoryAddArguments,
+  memoryAddType,
+  tokenArguments,
+  tokenName,
+  typedStateType,
+  unquoted,
+  type BindingsYaml,
+  type CollectionEntry,
+  type MemoryAddArgument,
+} from './bindings';
 import { resolveProvenance, W_PROVENANCE_CONFLICT, W_PROVENANCE_ORPHAN, type AdoptionRecord, type RekeyRecord } from './provenance';
 import { workflowFacts, type Phase, type Workflow } from './schema';
 
@@ -346,6 +358,17 @@ export interface DeducedAction {
     readonly state: string | null;
     readonly peers: readonly { readonly id: string; readonly sources: readonly ElementRef[] }[];
   };
+  /** For a `memory.add`: the arguments it declares, each value resolved in the step's scope (`spec-017` §6.1). */
+  readonly addArguments?: readonly MemoryAddArgument[];
+}
+
+/** What an element a step created still lacks while it keeps `created` missing (`spec-017` §6.1, §8). */
+export interface PendingCreated {
+  readonly element: ElementRef;
+  /** The state the phase leaves it in (§4.4), `null` when that cannot be determined. */
+  readonly reaches: string | null;
+  /** The paths of its `{ type, path }` entries not committed. */
+  readonly missingPaths: readonly string[];
 }
 
 /**
@@ -384,6 +407,8 @@ export interface DeducedStep {
     /** `true` when the only evidence missing is a `record` (`workflow finalize`, §7.9). */
     readonly finalizable: boolean;
   };
+  /** The created elements that keep `created` missing, ascending `(type, id)`; absent when there is none (`spec-017` §6.1). */
+  readonly pendingCreated?: readonly PendingCreated[];
   /**
    * `true` when a re-entry of the element the pass runs on (§4.8) reaches this phase — it lies at or
    * after the `fallback.step` of the phase whose gate the re-entry left — so its `record` and `state`
@@ -751,32 +776,13 @@ function matches(field: unknown, wanted: readonly string[]): boolean {
 }
 
 /**
- * The `key: value` arguments of a token's parenthesised list, split at top-level commas, in order (quotes and brackets
- * kept). Called on `memory.add(type: T, …)` tokens, which always carry the list; a part with no `:` is no argument.
+ * A declared value as a command prints it (`spec-017` §6.1, `dl-090` Q3 (a)): its tokens substituted, or `null` when
+ * one has no value or a value outside `spec-009`'s ID characters, which only a placeholder can stand for.
  */
-function tokenArguments(token: string): [string, string][] {
-  const parts: string[] = [];
-  let depth = 0;
-  let quote: string | null = null;
-  let current = '';
-  for (const char of token.slice(token.indexOf('(') + 1, token.lastIndexOf(')'))) {
-    if (quote !== null) {
-      if (char === quote) quote = null;
-    } else if (char === '"' || char === "'") quote = char;
-    else if (char === '[' || char === '{') depth += 1;
-    else if (char === ']' || char === '}') depth -= 1;
-    else if (char === ',' && depth === 0) {
-      parts.push(current);
-      current = '';
-      continue;
-    }
-    current += char;
-  }
-  parts.push(current);
-  return parts.flatMap((part): [string, string][] => {
-    const colon = part.indexOf(':');
-    return colon === -1 ? [] : [[part.slice(0, colon).trim(), part.slice(colon + 1).trim()]];
-  });
+function printableValue(raw: string, frames: readonly Frame[]): string | null {
+  const values = [...raw.matchAll(TOKEN_RE)].map(([whole]) => resolveTokens(whole, frames).value);
+  if (values.some((value) => value === null || !isIdPiece(value))) return null;
+  return raw.replace(TOKEN_RE, (whole) => resolveTokens(whole, frames).value!);
 }
 
 /** The arguments `workflow adopt` never matches on: the type itself, and the title (`dl-187` rule 5). */
@@ -790,8 +796,7 @@ const UNMATCHED_ARGUMENTS: readonly string[] = ['type', 'title'];
 function declaredRules(token: string, frames: readonly Frame[]): [string, string][] {
   return tokenArguments(token).flatMap(([field, raw]): [string, string][] => {
     if (UNMATCHED_ARGUMENTS.includes(field) || raw.startsWith('[')) return [];
-    const unquoted = /^(["'])(.*)\1$/s.exec(raw)?.[2] ?? raw;
-    const value = resolveTokens(unquoted, frames).value;
+    const value = resolveTokens(unquoted(raw), frames).value;
     return value === null ? [] : [[field, value]];
   });
 }
@@ -1366,6 +1371,7 @@ class Deducer {
     let producesEvidence = false;
     let producesMissing = false;
     let createdPathsMissing = false;
+    const missingPaths = new Map<string, string[]>();
     (phase.produces ?? []).forEach((entry, k) => {
       if (typeof entry !== 'string') {
         const owned = created.filter((element) => element.type === entry.type);
@@ -1374,6 +1380,7 @@ class Deducer {
           const result = resolveTokens(entry.path, [...frames, { kind: 'element', type: entry.type, element, pending: false }]);
           report(`phases[${p}].produces[${k}].path`, result);
           if (result.value !== null) resolved.push(result.value);
+          if (result.value === null || !this.exists(result.value)) missingPaths.set(keyOf(element), [...(missingPaths.get(keyOf(element)) ?? []), result.value ?? entry.path]);
         }
         const exists = owned.length > 0 && resolved.length === owned.length && resolved.every((path) => this.exists(path));
         if (!exists) createdPathsMissing = true;
@@ -1436,6 +1443,7 @@ class Deducer {
       if (!this.hasRecord(instanceId, startCommit, stepName, scope, frame?.selfBound === true, reentries)) missing.push('record');
     }
 
+    const pendingCreated = missing.includes('created') ? this.pendingCreated(exit, created, missingPaths) : [];
     const actions = this.actionsOf(instanceId, startCommit, workflow, p, frames, exit, scope, created, selected, report);
     const additions = this.additionsOf(phase, frames, created);
     const reentry = newest(reentries);
@@ -1453,6 +1461,7 @@ class Deducer {
         produces,
         created: created.map(refOf),
         evidence: { kinds, missing, finalizable: missing.length === 1 && missing[0] === 'record' },
+        ...(pendingCreated.length === 0 ? {} : { pendingCreated }),
         reentered: reentries.length > 0,
         reentryCommit: reentry?.commit ?? null,
         reentryFallback: reentry?.fallback ?? null,
@@ -1534,7 +1543,8 @@ class Deducer {
       const base = { token, text, unresolved: unresolved.map((entry) => entry.token), boundFrom };
       const target = this.actionTarget(instanceId, startCommit, workflow, p, frames, exit, scope, created, selected, token, boundFrom, addedType);
       if (tokenName(token) === 'memory.add') addedType = memoryAddType(token);
-      return { ...base, ...target, targets: sorted(target.targets) };
+      const addArguments = tokenName(token) === 'memory.add' ? { addArguments: memoryAddArguments(token, (raw) => printableValue(raw, frames)) } : {};
+      return { ...base, ...target, ...addArguments, targets: sorted(target.targets) };
     });
   }
 
@@ -1608,6 +1618,20 @@ class Deducer {
         .sort(compareRefs),
     }));
     return { target: 'run', targetType: typed, targets: targets.map(refOf), source: { type: sourceType, state, peers } };
+  }
+
+  /**
+   * The created elements short of the state the phase leaves them in or of a committed `{ type, path }` entry
+   * (`spec-017` §6.1), by the rule of {@link Deducer.createdReachTargets}: an undetermined state is never reached.
+   */
+  private pendingCreated(exit: PhaseExitState, created: readonly Element[], missingPaths: ReadonlyMap<string, readonly string[]>): PendingCreated[] {
+    return created.flatMap((element): PendingCreated[] => {
+      const added = exit.created.find((entry) => entry.type === element.type);
+      const reaches = added?.state ?? null;
+      const short = added !== undefined && (reaches === null || !atOrAfter(resolveStateMachine(this.snapshot.memoryYaml!, element.type), element.status, reaches));
+      const paths = missingPaths.get(keyOf(element)) ?? [];
+      return short || paths.length > 0 ? [{ element: refOf(element), reaches, missingPaths: paths }] : [];
+    });
   }
 
   /**

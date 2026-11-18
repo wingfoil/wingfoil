@@ -320,6 +320,20 @@ export function resolveTransitionTarget(
 }
 
 /**
+ * Whether `op` has an edge from `currentState` under `machine`: the one rule {@link resolveTransitionTarget} applies,
+ * so that a command offered for a state and the verb that runs it cannot disagree (`spec-017` §6.1). Pure.
+ */
+export function hasTransitionEdge(machine: StateMachine, currentState: string, op: TransitionOp): boolean {
+  try {
+    resolveTransitionTarget(machine, currentState, op);
+    return true;
+  } catch (error) {
+    if (error instanceof ValidationError) return false;
+    throw error;
+  }
+}
+
+/**
  * The `<to>` of the illegal-transition contract message — what the verb the user typed reaches from
  * `<from>`. A transition verb names no target of its own, and {@link resolveTransitionTarget} refuses a
  * call exactly when the verb has no edge from the current state (`deprecate` is never refused), so on a
