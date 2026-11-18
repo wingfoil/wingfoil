@@ -627,6 +627,8 @@ Red round after the reject, run black-box (`testing` T3): the contract was the r
 
 **T4.** No red file is changed by these commits: `git diff --name-only 357376d0d..e3ae2000c` lists `src/core/context.ts` and `test/core/context-written-scalars.test.ts` only.
 
+**Coverage follow-up.** The first full coverage run of this round printed statements 98.82 and lines 99.44, below `main` at `4afbca9db` (98.84 and 99.45): `readWrittenFrontmatter`'s error path had no test. `test/core/context-written-scalars.test.ts` now drives it, with a `!!set` with no content and a mapping shared through an alias, and `withBodies` no longer carries a fallback for a directive its own listing named.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
