@@ -8,8 +8,8 @@ pillar: "P5"
 features: [P4.18, P4.19, P4.20, P4.21, P5.1.1, P5.1.4, P5.2.3]
 requirements: "docs/03_backlog/04_backlog/by-release/v0.4.json"
 release-line: "v1"
-backlog_committed: 27   # optional — set at release-planning's commit-backlog: the count of the release's tasks then (dl-100 §2); the growth threshold's baseline (memory.yaml `release.growth_threshold`)
-waves: [w0]              # optional — the release's wave keys, e.g. [w0] (dl-100 §1 (a)); a non-empty list fixed at commit-backlog; each later wave is appended at the previous wave's re-plan (every listed wave runs at once)
+backlog_committed: 50   # optional — set at release-planning's commit-backlog: the count of the release's tasks then (dl-100 §2); the growth threshold's baseline (memory.yaml `release.growth_threshold`)
+waves: [w0, w1]              # optional — the release's wave keys, e.g. [w0] (dl-100 §1 (a)); a non-empty list fixed at commit-backlog; each later wave is appended at the previous wave's re-plan (every listed wave runs at once)
 tmpl_version: 260703
 ---
 
@@ -64,6 +64,22 @@ Per `docs/01_vision/07_sequencer.md` (Week 4 Definition of Done):
 - npm package v0.4.0 published
 - Journey 5 (Casey - PM) and Journey 6 (Morgan - evolution) manually tested
 
+## Scope changes
+
+<!-- One row per task added after commit-backlog (dl-100 §2), written at the wave's re-plan checkpoint
+     that admitted it: the task, the element it came from (a bug, a decision-log, a review finding),
+     the checkpoint (`wave.re-plan` of which wave), and the count against `backlog_committed`. A patch
+     also records here the consumer notes triaged into it outside the retrospective (dl-163 R6). -->
+
+Recorded at `w0`'s re-plan checkpoint (rulings W1-R1 … W1-R14 and the W0.3 re-sweep of `dev-loop-rel-v0.4-plan`).
+Commit-backlog listed only `w0` on purpose: each wave's re-plan appends the next, so this growth is planned, and
+`backlog_committed` moves from 27 to 50, the task files of this release (W1-R1).
+
+| Task | From | Admitted at | Count vs backlog_committed |
+|---|---|---|---|
+| `task-360` … `task-381` (22 tasks, `wave: w1`: 16 feature, 6 fix) | the `w1` survey of this release's decision-logs and bugs; each task's Implementation Notes name its sources | `wave.re-plan` of `w0` | 50 task files carry `release: "v0.4"` (`grep -lE '^release: "v0\.4"' docs/04_memory/v0.4/task-*.md \| wc -l`), against the new baseline 50 |
+| `task-382` (1 task, `fix`, `wave: w2`) | W1-21, moved to `w2` by W1-R9 and filed with the `w1` tasks | `wave.re-plan` of `w0` | counted in the same 50 |
+
 ## Execution Notes
 
 ### Planning (release-planning)
@@ -85,6 +101,11 @@ Also moved here from v0.3 (2026-09-30, plan R13): the git-hook half of the notif
 
 <!-- Recurring blockers across tasks, tech-specs revised mid-release, review rejections and why,
      anything that deviated from the plan in Scope/Pillar Focus above. -->
+
+**`w0` closed (2026-11-17).** All 27 tasks are `done`, the last merge being `02ffe01ca`. The wave-checks passed on
+`cff227eb4`: the e2e smoke 85/85 (`docs/07_gates/rl-v1/rel-v0.4-w0-e2e-smoke.md`), the examples 6/6, coverage 98.84 %
+statements and 96.45 % branches, latency 34/34. The re-sweep stamped 47 elements (`5690a4b5c` … `a778b7d3e`): 29 for
+`v0.4`, 13 for `v0.4.1` and 5 for `v1.0`.
 
 ### Submit & Publishing
 
