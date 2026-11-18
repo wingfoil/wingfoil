@@ -477,8 +477,9 @@ function unusedMark(loaded: unknown): string {
     Object.values(value).forEach(visit);
   };
   visit(loaded);
-  let mark = '';
-  while ([...strings].some((text) => text.includes(mark))) mark += '';
+  const unit = String.fromCharCode(0xe000);
+  let mark = unit;
+  while ([...strings].some((text) => text.includes(mark))) mark += unit;
   return mark;
 }
 
