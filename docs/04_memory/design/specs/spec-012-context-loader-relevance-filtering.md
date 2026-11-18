@@ -288,16 +288,21 @@ The parenthesised notes are not part of the payload. Format 1, block by block:
   `sortKeys`, `lineWidth: -1`, `noRefs`) and the payload's YAML schema (next bullet). A dumped line at column 0 is a key or a `-` list item (YAML
   quotes a scalar beginning with `#` or a backtick, and indents multi-line scalars), so no line inside a
   YAML block can pass for a heading or a fence.
-- **Dates as written** (`bug-232`). The frontmatter the payload carries (the element's and each
-  selected document's) is read at `stateRef` with js-yaml's default schema whose timestamp type keeps
-  the scalar's text instead of constructing an instant, and dumped with the same schema. Every
-  timestamp is therefore re-emitted exactly as the document wrote it (`2026-10-05`,
-  `2026-10-05T00:00:00Z`, `2026-10-05 10:00:00 +02:00` unchanged), and a quoted date stays a quoted
-  string (in js-yaml's single quotes), never becoming plain. A `Date` that a caller of the serializer
-  built itself is written in its ISO-8601 UTC form.
+- **Scalars as written** (`bug-232`, `bug-267`). The frontmatter the payload carries (the element's and
+  each selected document's) is read at `stateRef` with js-yaml's default schema whose null, boolean,
+  integer, float and timestamp types keep the scalar's text instead of constructing a value, and dumped
+  with the same schema. Every such scalar is therefore re-emitted exactly as the document wrote it
+  (`1.50`, `0o17`, `0x1F`, `1e3`, `+12`, `~`, `True`, `2026-10-05`, `2026-10-05T00:00:00Z`,
+  `2026-10-05 10:00:00 +02:00` unchanged). A mapping key written as such a scalar keeps its text and is
+  a string, so the dump quotes it (`'1.50'`). A string keeps its value and takes the dump's quoting, so
+  a quoted date stays a quoted string (in js-yaml's single quotes), never becoming plain. A key with no
+  value has no text to keep and is written `null`. The DNA sections are validated values, not the
+  document's text, and are dumped canonically. A `Date` that a caller of the serializer built itself is
+  written in its ISO-8601 UTC form.
 - **Marked bodies.** Every body — the element's, each directive's, each Memory document's — is carried
   **verbatim** between `<!-- begin:{key} -->` and `<!-- end:{key} -->`, each marker on its own line;
   the key is `{type}:{id}` for the element and a Memory document, `directive:{id}` for a directive.
+  No two bodies of a payload share a key (`bug-265`), so a consumer can address a body by its key.
   Only the blank lines before the body and the whitespace after it are dropped (and the payload-wide
   canonicalization below applies); an empty body leaves the two markers on adjacent lines.
 - **Splitting rule.** Outside a marker pair, a line starting `# `, `## ` or `### ` is §7 structure;
@@ -306,11 +311,16 @@ The parenthesised notes are not part of the payload. Format 1, block by block:
 - **What never enters a payload.** A Memory document whose `type` or `id` is not a non-empty string
   free of control characters and `-->` cannot be named, and is never headed by its path: it is left
   out before §6 bounds the set and reported as `W_MEMORY_UNREADABLE` (`spec-017` §1.4) when §6 would
-  have found it relevant. A Memory document whose body holds the line that closes it
+  have found it relevant. Two more kinds of document are left out and reported under that same rule
+  (`bug-265`): one whose frontmatter `type` is not declared for its path, because `memory.yaml` declares
+  no such type or that type's `path` pattern cannot produce the path; and one whose `{type}:{id}`
+  repeats that of another document §6 would have found relevant, the first of them in path order being
+  the one carried. A Memory document whose body holds the line that closes it
   (`<!-- end:{key} -->`, after canonicalization) is left out and always reported the same way. An
-  element or directive body holding its own end marker, or a directive id holding a control character
-  or `-->`, refuses the context as `VALIDATION` — a directive is never dropped (§5). These reports
-  are diagnostics, outside the payload, after the scan's own, in path order.
+  element or directive body holding its own end marker, an element whose key is a carried directive's,
+  or a directive id holding a control character or `-->`, refuses the context as `VALIDATION` — a
+  directive is never dropped (§5). These reports are diagnostics, outside the payload, after the scan's
+  own, in path order.
 - **Normative example.** `test/fixtures/context/golden-payload.md` is the format-1 payload of the
   context `test/core/context-payload-format.test.ts` builds by hand; the test compares the serializer's
   output with it byte for byte. Where the golden fixture and the illustrative template above differ,
@@ -343,6 +353,8 @@ acceptance test for the module (Jest, comparing two independent assemblies of th
 - Target **< 30 s** end to end (`agent execute` target; P5.4.3). In practice bounded by `maxBytes`
   (256 KiB default) and `maxDocs` (40), keeping the payload well under agent token limits.
 - All I/O is local git-backed file reads (REQ-SYS-01); no network. Stages 2–4 may run concurrently.
+- `stateRef` is resolved to its commit once, every read names that commit, and the bodies of the
+  resolved directives are read in one batch (`bug-381`).
 
 ## Consequences
 
@@ -356,9 +368,10 @@ acceptance test for the module (Jest, comparing two independent assemblies of th
 - **Bounded by design.** If real workloads need larger contexts, tune `ContextLimits` — but any change to
   default caps, tier rules or ordering is a **breaking change to the selection** and MUST supersede this
   spec (new `spec-*`, `supersedes: spec-012-...`) so the Determinism Index baseline is re-established
-  intentionally, not silently. A change to the canonical envelope (§7's byte format) instead bumps the
-  payload's `format:` (format 1 since `dl-150`): the bump is the deliberate baseline reset, visible in
-  every payload's header.
+  intentionally, not silently. A backward-incompatible change of the canonical envelope (§7) instead
+  bumps the payload's `format:` (`dl-149`; format 1 since `dl-150`): the bump is the deliberate baseline
+  reset, visible in every payload's header. A rendering that a YAML reader reads with the same values
+  does not bump it, as with "Scalars as written" (§7).
 - **Semantic search later.** When embeddings arrive (v1.1), they enter as an *additional* deterministic
   tier or a re-ranked candidate set with a fixed tie-break — they must not reintroduce nondeterministic
   ordering. That is a future spec, not this one.
@@ -467,3 +480,16 @@ passed, so `agent execute`, which resolves `HEAD` once and builds the context at
 warning's sha back to `HEAD:` after the fact. The caller now names the revision itself; the rewrite goes. The
 payload, its format and the determinism contract are unchanged: `label` reaches warnings and errors only.
 Edited in place without a supersede or a state change, as the earlier Revision notes were.
+
+**Revision (2026-11-18) — §7 makes every marker key unique and carries every typed scalar as written, §9
+states the single resolution of `stateRef`, per
+`task-379-make-the-context-payload-s-markers-unique-keep-scalars-verbatim-resolve-the-commit-once`
+(`bug-265`, `bug-267`, `bug-381`).** A Memory document could reuse a directive's marker key through its own
+frontmatter, and two documents could share one; such a document is now left out and reported, as an
+unnameable one is, and an element whose key is a carried directive's refuses the context. The "Dates as
+written" bullet becomes "Scalars as written": the mechanism `bug-232` gave timestamps now also covers the
+null, boolean, integer and float types. The payload stays **format 1**: the envelope is unchanged, a
+block's values read the same under the schema it is dumped with, and `dl-149` bumps a format only on a
+backward-incompatible change. The Consequences bullet "Bounded by design" now states that same rule, in
+place of "a change to the canonical envelope". Edited in place without a supersede or a state change, as the earlier
+Revision notes were.
