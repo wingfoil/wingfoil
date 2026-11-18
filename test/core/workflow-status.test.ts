@@ -617,7 +617,7 @@ describe('task-225 AC 5 — an approval no element carries awaits a workflow fin
 
   it('while its other evidence is missing, the step needs a record too but awaits nothing yet', async () => {
     const step = frontierStep(await status(repo), 'planning.commit-backlog@release:minor-2');
-    expect(step.evidence).toEqual({ kinds: ['state', 'record'], missing: ['state', 'record'], finalizable: false, manualOnly: false });
+    expect(step.evidence).toEqual({ kinds: ['state', 'record'], missing: ['state', 'record'], finalizable: false });
     expect(step.awaiting).toBeNull();
   });
 
@@ -625,7 +625,7 @@ describe('task-225 AC 5 — an approval no element carries awaits a workflow fin
     commit(repo, { 'docs/releases/minor-2.md': element('release', 'minor-2', 'in-development') }, 'wf(release): approve minor-2 [planning → in-development]');
     const value = await status(repo);
     const step = frontierStep(value, 'planning.commit-backlog@release:minor-2');
-    expect(step.evidence).toEqual({ kinds: ['state', 'record'], missing: ['record'], finalizable: true, manualOnly: false });
+    expect(step.evidence).toEqual({ kinds: ['state', 'record'], missing: ['record'], finalizable: true });
     expect(step.awaiting).toEqual({ kind: 'approval', byRole: 'approver', elements: [], recordNeeded: true, routedTo: [MORGAN] });
     expect(value.pendingApprovals.map((entry) => entry.step)).toEqual(['planning.commit-backlog@release:minor-2']);
     expect(renderStatusConsole(value)).toContain('human needed: finalize planning.commit-backlog@release:minor-2 — routed to Morgan <morgan@example.invalid> (plan-1, planning.commit-backlog@release:minor-2)');

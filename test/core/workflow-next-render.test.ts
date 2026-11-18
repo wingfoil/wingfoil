@@ -30,7 +30,7 @@ const STEP: Step = {
   checks: { pre: [], post: [] },
   produces: [],
   created: [],
-  evidence: { kinds: ['state'], missing: [], finalizable: false, manualOnly: false } as Step['evidence'],
+  evidence: { kinds: ['state'], missing: [], finalizable: false },
   optional: false,
   awaiting: null,
   fallback: null,

@@ -404,7 +404,7 @@ describe('task-204 AC 2 — BDD P4.7: wingfoil workflow show (spec-017 §7.6)', 
   it('a self-creating main, an awaits, an iterate_over and a selection are shown as declared', async () => {
     const reportBug = ok(await show(repo, 'report-bug')).workflow.phases[0];
     expect(reportBug).toMatchObject({
-      actions: [{ token: 'memory.add(type: task)', binding: { kind: 'wingfoil', argv: ['wingfoil', 'memory', 'add', '--type', 'task', '--title', '<title>', '--workflow', '<instance-id>', '--step', '<key>'] } }],
+      actions: [{ token: 'memory.add(type: task)', binding: { kind: 'wingfoil', argv: ['wingfoil', 'memory', 'add', '--type', 'task'] } }],
       awaits: { party: 'upstream', evidence: { token: 'upstream.answered', binding: { kind: 'unbound' }, evaluated: false } },
       evidence: ['created', 'awaits', 'record'],
     });
