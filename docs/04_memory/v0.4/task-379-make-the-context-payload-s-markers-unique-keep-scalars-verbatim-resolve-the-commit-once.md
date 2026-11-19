@@ -790,6 +790,50 @@ red.
 **For the developer.** Every assembly in the file is wrapped in `expect(...).not.toThrow()`; a row passes only with a
 returned result.
 
+### green (developer, 2026-11-19)
+
+Fix round after the second reject (`92bb05f78`), under D7 (B), D8 (a) and D9 (a), against the red `5944eaeb0` (record `373444cac`). A fresh developer: the earlier green and fix rounds were another agent's.
+
+**Base.** Branch head `373444cac`. PATH guard: `command -v wingfoil` printed the task's PATH shim; `wingfoil --version` and `node dist/cli.js --version` both printed `0.3.2 (4ad0fda0803ba9bbb9247ecc63653fff615245be)`. `git rev-list --count HEAD..main` printed `0`, so no merge; `git merge-base HEAD main` printed `3c13e738ce51de1f5ae6d4f227302ce3dcf52a47`.
+
+**Commit.** `d94829c6b` `fix(core): task-379 — choose the internal key mark from every string the parser closes, answer every read error (bug-265, bug-267, bug-381)`, changing `src/core/context.ts` and my own `test/core/context-written-scalars.test.ts` (`git diff --name-only 373444cac..HEAD` lists those two).
+
+| Ruling | Change in `src/core/context.ts` | Evidence |
+|---|---|---|
+| D7 (B), the mark | `unusedMark(text)` loads the text once with js-yaml's default schema and a `listener`; it keeps the longest run of U+E000 in the result of every `close` event that is a string (a string a merge override then drops included, since its node closes before the merge), and returns U+E000 repeated once more. The payload's load and `restoredFrontmatter` are unchanged | `test/core/context-payload-written-marks.test.ts`, rows 1 to 4, 13, 14 |
+| D8 (a), the backstop | `readWrittenFrontmatter` catches every error and answers `its frontmatter cannot be read as written`; `YAMLException` is no longer imported | `test/core/context-written-scalars.test.ts`, the two tests "an error that is not a YAML one …" |
+| D9 (a), F2 | `WrittenScalar`'s text is a public `readonly text` constructor field again, as `WrittenTimestamp`'s was on `main` | `test/core/context-payload-format.test.ts` line 368, unchanged (`git diff --stat main...HEAD -- test/core/context-payload-format.test.ts` prints nothing) |
+| F3, comments | The comment of `unusedMark` states the run-length rule above; step 4 of `assembleExecutionContext` lists the frontmatter that cannot be rendered (two keys of one text, a merge key that gives one key two texts, a frontmatter that contains itself through an alias) and the one that cannot be read as written | `git show d94829c6b -- src/core/context.ts` |
+
+**My own test file**, changed as the rulings require: the test that pinned a rethrow (`toThrow(TypeError)`) contradicted D8 (a); it now asserts the element's refusal, and a new test asserts that a linked document is left out and reported for the same error. `Object.keys(new WrittenScalar('1.50'))` is now `['text']` (D9 (a)), and two `WrittenTimestamp`s with different texts are not `toEqual`.
+
+**Red to green.** `npx jest test/core/context-payload-written-marks.test.ts test/core/context-payload-yaml-constructs.test.ts --maxWorkers=2 --noStackTrace` printed `Test Suites: 2 passed, 2 total`, `Tests: 134 passed, 134 total` (58 and 76). With the other task-379 files and the format suite: `npx jest test/core/context-payload-written-marks.test.ts test/core/context-payload-yaml-constructs.test.ts test/core/context-written-scalars.test.ts test/core/context-payload-format.test.ts test/core/context-payload-integrity.test.ts test/core/context-spawn-count.test.ts test/core/context-payload-duplicate-keys.test.ts --maxWorkers=2 --noStackTrace` printed `Test Suites: 7 passed, 7 total`, `Tests: 233 passed, 233 total`. `npx jest test/core/context.test.ts test/core/context-builder.test.ts test/core/context-shipped-templates.test.ts test/mcp/session-context-resource.test.ts test/mcp/role-prompt-context.test.ts --maxWorkers=2 --noStackTrace` printed `Tests: 161 passed, 161 total`. `npx tsc --noEmit -p tsconfig.json` exit 0; `npx eslint src/core/context.ts test/core/context-written-scalars.test.ts` exit 0.
+
+**Measured on this repository** after `npm run -s build` (exit 0, after the heavy-gate slot), with a scratch script that wraps `child_process.spawnSync` and `execFileSync` before requiring `dist/core/index.js`, counts the `git` calls by the subcommand after `-C <root>`, and calls `assembleExecutionContext` (role `developer`, this task, `stateRef` `0253adfb3`), two runs, each printing:
+
+`total 11 {"rev-parse":1,"show":3,"ls-tree":3,"cat-file":4} bytes 323427 sha256 d212452097dc5c6b4b58db52f41dc96d2bf695906ec3ca6e410403c2d0605315 warnings 0`
+
+The same figures as the design's prototype and every earlier round.
+
+### corrections to earlier sections (developer, 2026-11-19)
+
+Earlier sections are not edited; these statements in them are false, and read as follows (F3 of the second reject):
+
+- `### fix round after the reject (developer, 2026-11-18)`, "No in-band confusion": "A first load with the default schema collects every key and string of the document" is false. The default schema's load drops a value a merge key overrides under YAML, which the payload's load keeps, so that walk did not see every string; head `d1de7b3ef` threw a `SyntaxError` on `m: {<<: {1.5: "x"}, 1.50: y}` (the second reject, item 1; the red `5944eaeb0`, row 1). From `d94829c6b` the mark is chosen from every string scalar the parser closes, a dropped one included.
+- The same section: "the reason `its frontmatter cannot be read as written` remains only for a `YAMLException`" no longer holds: under D8 (a) it answers every error of the read.
+- The same section, "A test weakened by this change": the weakening is undone. `WrittenScalar`'s text is a public field again, so `test/core/context-payload-format.test.ts` line 368 compares the text.
+- The comment of `unusedMark` ("A mark no key or string of `loaded` holds, …") and the comment of step 4 of `assembleExecutionContext` were corrected in code by `d94829c6b` (the table above).
+
+### self-review (developer, 2026-11-19)
+
+- **T4.** `git log --first-parent --no-merges --format=%h <commit>..HEAD -- <file>` printed nothing for `test/core/context-payload-written-marks.test.ts` from `5944eaeb0`, `test/core/context-payload-yaml-constructs.test.ts` from `348fb5276`, `test/core/context-payload-integrity.test.ts` from `08dca4d25`, `test/core/context-spawn-count.test.ts` from `96575eb7f` and `test/core/context-payload-duplicate-keys.test.ts` from `02c7e8f9d`. `test/core/context-payload-format.test.ts` is unchanged against `main` (above).
+- **Scope.** This round changes `src/core/context.ts` and `test/core/context-written-scalars.test.ts` only. Against `main`, `git diff --name-only main...HEAD -- src` lists `src/core/context.ts`, `src/core/index.ts`, `src/core/loaders.ts`, `src/mcp/prompt.ts`, `src/memory/index.ts`, `src/memory/query.ts`, the design's list; `src/core/agent-context.ts` and `src/core/revision.ts` are not in it.
+- **D8 (a), no uncaught throw.** The whole read (`unusedMark`, the payload's load, `restoredFrontmatter`) sits inside the `try` of `readWrittenFrontmatter`, whose `catch` returns the reason with no rethrow; the positive case is the `TypeError` test above, the YAML case the existing `YAMLException` tests. Row 13 of the red asserts that `assembleExecutionContext` returns in every placement of every row.
+- **D7 (B), soundness of the mark.** A decoded piece lies between two marks; the mark is longer than every run of U+E000 in a string the parser closed, so no such string holds it, and every piece is one this load wrote (`JSON.stringify` of two strings, no U+E000). The positive case of "a dropped string is seen": rows 1 to 4 of the red, whose hidden value only the merge source holds, now left out with the two-texts reason instead of throwing.
+- **Same class in the touched file.** `grep -n 'instanceof YAMLException' src/core/context.ts` prints nothing: no other catch narrows to a YAML error.
+- **Unasserted (`testing` T1).** Nothing of this round: each change has a test named above.
+- **Invisible characters.** The editing tool turned the typed `` of the regular expression in `unusedMark` into the raw character; it was rewritten as the escape before the commit (`grep -nP` over the changed files with the list of the round plus U+E000 printed nothing afterwards).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
