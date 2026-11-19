@@ -380,6 +380,14 @@ nothing); each amendment adds a Revision note instead.
   from, per dl-040 option 1 (task-364): §2 says so, §3's note states the Resource URI rule, the paths row reads
   wingfoil://paths as ratified, and the agent rows and bullets settle the run id's encoding."`
 
+### design gate (approver, 2026-11-19)
+
+The approver recorded the step in `e527cfab4` (`workflow finalize … dev-loop.design`), after the amendments `a15c05c15` (`wf(tech-spec): amend spec-004-mcp-surface-contract`) and `89e20213f` (`wf(tech-spec): amend spec-006-core-domain-api`). The rulings, as the record states them:
+
+> Approve the design of task-364 as recommended: D1 the CLI flags stay derived from the existing positional, options and flags fields, with no second declaration; D2 the declaration shape is unchanged, a repeatable option is an array of strings and a flag a boolean; D3 a Tool field takes the CLI spelling verbatim; D4 an operation that declares no parameters takes none and refuses any argument as unknown; D5 the registrar answers tools/list and tools/call itself with a JSON Schema derived directly, and task-367 replaces the empty Tools channel; D6 dry-run is a Tool input and co-author and ai-model are not; D7 only a required positional becomes part of a Resource URI, so the directives list role gap stays open for Resources; D8 a run id is one percent-encoded segment; D9 memory.approve takes no type argument in spec-004; D10 the registrar refuses a missing required argument before the operation runs, in the BDD wording, and task-367's gate settles its order against the agent refusal; D11 buildCoreParams is the single params builder.
+
+After the amendments `npx jest test/cli/workflow-unbound-none.integration.test.ts --maxWorkers=2` passes in this worktree (4 of 4): the failure the design expected with the specs uncommitted was `bug-534`.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
