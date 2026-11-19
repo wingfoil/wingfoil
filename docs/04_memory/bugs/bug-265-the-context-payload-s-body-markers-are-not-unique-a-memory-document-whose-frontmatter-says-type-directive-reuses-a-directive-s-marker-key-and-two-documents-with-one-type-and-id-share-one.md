@@ -65,3 +65,7 @@ section-4 heading reads as a directive.
 
 Captured on 2026-10-06 by `bug-ingest-rel-v0.3-w2b4a-review-findings-plan`, from the independent review of
 `task-255` (W2 B4a, `dev-loop-rel-v0.3-plan`), checked against `main` at `b0c3e472`.
+
+### Retrospective
+
+- Closed by `task-379` under ruling D1 (a): a relevant document whose `type` is not declared for its path, or whose `type:id` repeats another's, is left out and reported, and an element whose key is a carried directive's refuses the context. Evidence: `npx jest test/core/context-payload-integrity.test.ts --maxWorkers=2` passes its AC 1 cases.
