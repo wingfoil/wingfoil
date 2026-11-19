@@ -324,6 +324,83 @@ is touched, and no step record is written.
   `_(feat: P5.1.5)_` and US-2-11's `_(feat: P5.2.3)_` (removed and re-added with the restated clause). No edge story is
   added, so the edge-case table is unchanged.
 
+### red (qa, 2026-11-19)
+
+Role: qa, a fresh agent; this phase is also the vision-change's `downcast-scenarios` step (the plan's `## Phases /
+Steps` item 5). Contract: the design's per-AC table and "What the qa pins", the design gate (D1–D9 as recommended) and
+`cp-003`'s BDD subsection. Worktree on head `9a8cc4058` (`git rev-list --count HEAD..main` → 0, no merge). The task's
+PATH shim resolves `wingfoil`; `wingfoil --version` and `node dist/cli.js --version` both print
+`0.3.2 (a5c02f50622e235118fbb1f3cd7edcad61ed5228)`. Black box: no file under `src/` or `scripts/` was opened before the
+red commit; the expected values come from `cp-003`, `spec-019`, `spec-020`, `spec-018` §3.2 and the design notes.
+
+**Commits.**
+
+- `67d2aa05b` `docs(bdd): cp-003 — capabilities and verify features, P5.2.1 and P5.2.3 scenarios` (six files):
+  `features/p5-interaction/P5.1.5-capabilities.feature` (new, scenarios 1–4), `features/p1-memory/P1.14-verify.feature`
+  (new, scenarios 7–12, each over a throwaway repository with one approver and one developer in `team.members`),
+  `features/p5-interaction/P5.2.1-mcp-resources.feature` (+ scenarios 5–6), `features/p5-interaction/P5.2.3-mcp-tools.feature`
+  (+ the Scenario Outline 13 over `memory.approve`, `memory.reject`, `memory.amend`; the narrative follows US-2-11's
+  amendment; "with the agent as author" restated as the agent's `Co-Authored-By:` and `AI-Model:` trailers, D7; the
+  missing-argument scenario untouched for `task-367`'s gate), `docs/02_requirements/02_bdd/00_index.md` (P1.14 and P5.1.5
+  rows, folder counts, a dated re-count) and `README.md` (BDD cell `66 / 267` → `68 / 325`).
+- `6984d70b5` `test(docs): 360 — failing test: cp-003 SARD sentences, with the feature, story and BDD rows pinned` — the
+  **red commit**: `test/docs/vision-change-w1-rows.test.ts` (new; reads the real files, no fixture; `flat`/`between`
+  copied from `test/docs/l0-traceability.test.ts`). No new export, so no `.d.cts`.
+
+**Re-count (the BDD index's commands, from `docs/02_requirements/02_bdd`).** `find features/<pillar> -name '*.feature' |
+wc -l` → P1=14, P2=5, P3=8, P4=21, P5=18, X1=2, 68; `grep -rhE '^\s*Scenario( Outline)?:' features | wc -l` → 325 (312
+before the BDD commit, so 13 added); the first non-comment, non-tag, non-blank line is `Feature:` in 68/68 files, 10
+of which open with a `# Revised …` comment (the 2026-10-18 block said 8; the two extra come from later tasks).
+
+**Per-AC mapping** (`test/docs/vision-change-w1-rows.test.ts`, 39 tests):
+
+| AC | Class | Tests | Result at the red commit |
+|----|-------|-------|--------------------------|
+| 2 | characterization | `task-360 AC 2 — …`: the P1.14 and P5.1.5 pillar rows, the two `v0.4` rows, P5.2.3's `v0.4` row (no `Submit, approve`, has `E_AGENT_CONTEXT`), `**Total Features (MVP):** 68` equal to the 68 pillar id rows | 6 pass on first run |
+| 3 | characterization | `task-360 AC 3 — …`: US-0A-23 `_(feat: P5.1.5)_`, US-4-14 `_(feat: P1.14)_`, the index's P1.14 and P5.1.5 rows, its "Total MVP features" figure equal to the count of `06_features.md` | 5 pass on first run |
+| 4 | characterization | `task-360 AC 4 — …`: the two `Feature:` lines, the 13 scenario titles verbatim, the Outline's Examples and `E_AGENT_CONTEXT`, no "with the agent as author", the missing-argument scenario and its message unchanged | 18 pass on first run |
+| 5 | **red-first** | `task-360 AC 5 — …`: REQ-SEC-02 and REQ-SEC-03 Fit Criterion carry `spec-020`'s sentence verbatim; their Traceability names `spec-020` and `P1.14` (REQ-SEC-03 also `P5.2.3`, gate ruling D3); REQ-INT-01's names `spec-019` and `P5.1.5`; REQ-INT-03's Fit Criterion loses ``memory.submit`/`memory.approve` invoked via MCP`` and gains `E_AGENT_CONTEXT` (D4) | 10 fail, each on its assertion |
+| 1, 6, 7 | characterization, by command | none new (design table: `workflow status`/`next`, `check-release-exit.cjs`, `npx jest test/docs`) | — |
+
+REQ-SEC-03's `P5.2.3` case is the design gate's D3 ruling, which the design's pin list did not repeat; it is pinned
+because the ruling and `cp-003`'s SARD subsection both state it.
+
+**First failing assertion of each red test** (all `expect(received).toContain(expected)` unless stated):
+
+- REQ-SEC-02 / REQ-SEC-03 Fit Criterion: expected substring "A commit range in which a forged approval or an
+  out-of-band status change exists makes `wingfoil verify` exit `1`." (two tests);
+- REQ-SEC-02 Traceability: expected `spec-020`, expected `P1.14`; REQ-SEC-03 Traceability: expected `spec-020`,
+  `P1.14`, `P5.2.3`;
+- REQ-INT-01 Traceability: expected `spec-019`, expected `P5.1.5`;
+- REQ-INT-03: `expect(received).not.toContain(expected)`, expected substring not
+  "`memory.submit`/`memory.approve` invoked via MCP".
+
+**Runs.**
+
+- `npx jest test/docs/vision-change-w1-rows.test.ts --maxWorkers=2` (the JSON-summary form) → `Tests: 10 failed, 29
+  passed, 39 total`: the ten AC 5 cases fail, every other case passes.
+- `npx tsc --noEmit -p tsconfig.json` → exit 0, no error.
+- `npx jest test/lint --maxWorkers=2` → `Tests: 0 failed, 165 passed, 165 total`.
+- `npx jest test/validation/secret-scan.test.ts --maxWorkers=2` → `Tests: 0 failed, 85 passed, 85 total`.
+- After the heavy-gate slot wait, `npm test -- test/docs --maxWorkers=2` (a filtered run) → `Tests: 10 failed, 447
+  passed, 457 total`: the design's baseline 418, plus 39 new, of which only the ten AC 5 cases fail.
+
+**Post-check `downcast.in-scope(layer: scenarios)`** (bound `manual: true`), stated: every scenario added or edited is
+in `cp-003`'s BDD subsection, and nothing outside it changed. `git diff --stat 9a8cc4058 67d2aa05b` lists exactly the six
+files the subsection names (the two new feature files, `P5.2.1-mcp-resources.feature`, `P5.2.3-mcp-tools.feature`, the
+BDD `00_index.md` and README's BDD cell; 152 insertions, 6 deletions). `git diff 9a8cc4058 67d2aa05b --
+docs/02_requirements/02_bdd/features | grep -E '^[-+] {2}Scenario( Outline)?:|^-[^-]'` prints the 13 added titles —
+scenarios 1–13 of the subsection, verbatim — and two removed lines only: the P5.2.3 narrative's "record decisions
+without manual intervention." (US-2-11's amendment) and "And the change is committed to git with the agent as author"
+(D7), both named by the subsection; no scenario title is removed or renamed. It is a statement, not an engine record:
+the engine deduces all three downcast phases complete as soon as `update-vision` is recorded, because the
+specification sub-workflows' `produces:` directories already exist (`task-301`'s design gate D3; `spec-017` §12; the
+note of 2026-10-27 in `dl-166`), and the command that would give a delta downcast its own evidence is owed by
+`task-359`'s D2 (`downcast.in-scope` bound `manual: true` until a command).
+
+**Ambiguities and candidate findings.** None blocking. Every scenario of the subsection was written as listed. The
+2026-10-18 re-count recorded 267 scenarios, while 312 existed before this change (stated in the new re-count block).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
