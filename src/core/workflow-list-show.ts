@@ -18,9 +18,22 @@
  * keep their payload and their working-tree baseline in v0.3 (§9, `src/mcp/workflow-resource.ts`).
  */
 import type { RolesYaml } from '../directives/schema';
+import { RESERVED_SET_NAMES } from '../memory/add';
 import type { MemoryYaml } from '../memory/schema';
-import type { Diagnostic } from '../validation';
-import { resolveToken, tokenName, type BindingsYaml, type TokenBinding } from '../workflow/bindings';
+import { isNumericToken, type Diagnostic } from '../validation';
+import {
+  builtinCommand,
+  memoryAddArguments,
+  memoryAddOperands,
+  memoryAddPatternTokens,
+  memoryAddType,
+  resolveToken,
+  SHOWN_OPERANDS,
+  tokenArguments,
+  tokenName,
+  type BindingsYaml,
+  type TokenBinding,
+} from '../workflow/bindings';
 import { declaresState, deduceWorkflowState, type Baseline, type Deduction, type EvidenceKind } from '../workflow/deduce';
 import { workflowFacts, type Cadence, type LaunchKind, type Phase, type PhaseMode, type Workflow } from '../workflow/schema';
 
@@ -36,6 +49,12 @@ export const NO_WORKFLOWS_DEFINED = 'no workflows defined';
 
 /** The refusal of a `<ref>` that names no workflow (`spec-017` §10, BDD P4.7 sc. 3). */
 export const unknownWorkflowMessage = (name: string): string => `unknown workflow: ${name}`;
+
+/** `W_ACTION_ARGUMENT_NOT_PASSED` (`spec-017` §2, §7.5): a `memory.add` action declares an argument `memory add` cannot take. */
+export const W_ACTION_ARGUMENT_NOT_PASSED = 'W_ACTION_ARGUMENT_NOT_PASSED';
+
+/** The `memory.add` arguments the verb takes through an option of its own (`spec-017` §6.1). */
+const MEMORY_ADD_OPTIONS: readonly string[] = ['type', 'title', 'tags'];
 
 /** One entry of `workflow list` (`spec-017` §8 `ListResult`). */
 export interface ListEntry {
@@ -175,6 +194,39 @@ export function listWorkflows(workflows: readonly Workflow[], deduction: Deducti
 }
 
 /**
+ * Why `memory add` cannot take the argument `name` of a `memory.add(type: <type>)` action (`spec-017` §2, §6.1), or `null`
+ * when it can: `tokens` are the type's pattern tokens.
+ */
+function argumentRefusal(name: string, type: string, tokens: readonly string[]): string | null {
+  if (MEMORY_ADD_OPTIONS.includes(name)) return null;
+  if (RESERVED_SET_NAMES.has(name)) return `memory add --set reserves the name '${name}'`;
+  if (!tokens.includes(name)) return `type '${type}' has no token {${name}} in its id_pattern or path`;
+  return isNumericToken(name) ? `memory add generates the numeric token {${name}}` : null;
+}
+
+/**
+ * One `W_ACTION_ARGUMENT_NOT_PASSED` per argument of a `memory.add` action that `memory add` cannot take
+ * (`spec-017` §2): by workflow in registry order, then phase, action and argument in
+ * declared order. `files` holds each workflow's repository-relative file, parallel to `workflows`. Pure.
+ */
+export function actionArgumentDiagnostics(workflows: readonly Workflow[], files: readonly string[], memoryYaml: MemoryYaml | null): Diagnostic[] {
+  return workflows.flatMap((workflow, w) =>
+    workflow.phases.flatMap((phase, p) =>
+      (phase.actions ?? []).flatMap((token, a) => {
+        const type = memoryAddType(token);
+        if (type === null || memoryYaml === null || !Object.prototype.hasOwnProperty.call(memoryYaml.types, type)) return [];
+        const tokens = memoryAddPatternTokens(memoryYaml, type);
+        return tokenArguments(token).flatMap(([name]): Diagnostic[] => {
+          const refusal = argumentRefusal(name, type, tokens);
+          if (refusal === null) return [];
+          return [{ code: W_ACTION_ARGUMENT_NOT_PASSED, severity: 'warning', file: files[w]!, path: `phases[${p}].actions[${a}]`, message: `memory.add argument '${name}' cannot be passed: ${refusal}` }];
+        });
+      }),
+    ),
+  );
+}
+
+/**
  * `workflow list [--all]` at `HEAD` (`spec-017` §7.5).
  *
  * @throws `DiagnosticsError` (`VALIDATION`) when the registry at `HEAD` has a `spec-003` error;
@@ -182,7 +234,8 @@ export function listWorkflows(workflows: readonly Workflow[], deduction: Deducti
  */
 export function workflowListAtHead(root: string, all: boolean): ListResult {
   const snapshot = readDeductionSnapshotAtHead(root);
-  return listWorkflows(snapshot.workflows, deduceWorkflowState(snapshot), all);
+  const result = listWorkflows(snapshot.workflows, deduceWorkflowState(snapshot), all);
+  return { ...result, diagnostics: [...result.diagnostics, ...actionArgumentDiagnostics(snapshot.workflows, snapshot.workflowFiles, snapshot.memoryYaml)] };
 }
 
 // --- show ---------------------------------------------------------------------------------------
@@ -278,6 +331,18 @@ class Resolver {
     };
   }
 
+  /**
+   * An action with its binding (`spec-017` §7.6): a built-in command is whole, with placeholders. A declared literal
+   * argument is printed as declared; one that interpolates a value is the placeholder of its name.
+   */
+  private action(token: string): TokenView {
+    const binding = resolveToken(token, 'action', this.inputs.bindings);
+    if (binding.source !== 'built-in' || binding.argv === undefined) return { token, binding };
+    const declared = memoryAddArguments(token, (raw) => (/\{[^{}]*\}/.test(raw) ? null : raw));
+    const add = memoryAddOperands(declared, memoryAddPatternTokens(this.inputs.memoryYaml, memoryAddType(token)));
+    return { token, binding: { ...binding, argv: builtinCommand(token, binding.argv, { ...SHOWN_OPERANDS, add }) } };
+  }
+
   private check(token: string): CheckTokenView {
     return { token, binding: resolveToken(token, 'check', this.inputs.bindings), evaluated: false };
   }
@@ -299,7 +364,7 @@ class Resolver {
         role: phase.role ?? null,
         optional: phase.optional,
         ...this.directives(phase.role),
-        actions: (phase.actions ?? []).map((token) => ({ token, binding: resolveToken(token, 'action', this.inputs.bindings) })),
+        actions: (phase.actions ?? []).map((token) => this.action(token)),
         checks: { pre: (phase.checks?.pre ?? []).map((token) => this.check(token)), post: (phase.checks?.post ?? []).map((token) => this.check(token)) },
         produces: (phase.produces ?? []).map((entry) => {
           if (typeof entry !== 'string') return { pattern: entry.path, owner: entry.type, evidence: false };

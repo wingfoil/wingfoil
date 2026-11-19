@@ -8,6 +8,9 @@ import type { Deduction, DeducedStep, InstanceDeduction } from '../../src/workfl
 import { assigneeRoles, buildStep, humanNeededLine, membersHoldingRole, nextWorkflow, renderNextConsole, type NextInputs, type NextResult, type Step } from '../../src/core/workflow-next';
 import type { Workflow } from '../../src/workflow/schema';
 
+/** Held apart from {@link STEP} so the fixture typechecks both before and after `Step` declares `manualOnly` (task-376). */
+const EVIDENCE = { kinds: ['state'] as Step['evidence']['kinds'], missing: [] as Step['evidence']['missing'], finalizable: false, manualOnly: false };
+
 const STEP: Step = {
   key: 'loop.red@task:task-1',
   instance: 'rc-1',
@@ -30,7 +33,7 @@ const STEP: Step = {
   checks: { pre: [], post: [] },
   produces: [],
   created: [],
-  evidence: { kinds: ['state'], missing: [], finalizable: false },
+  evidence: EVIDENCE,
   optional: false,
   awaiting: null,
   fallback: null,

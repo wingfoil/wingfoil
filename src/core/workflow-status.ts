@@ -195,7 +195,8 @@ function instanceLines(entry: StatusEntry, preMarker: boolean): string[] {
   if (entry.frontier.length > 0) lines.push('    frontier:');
   for (const step of entry.frontier) {
     const missing = step.evidence.missing.length === 0 ? '' : `; missing: ${step.evidence.missing.join(', ')}`;
-    lines.push(`      - ${step.key} (${step.role ?? 'no role'}${missing})${step.reentered ? ` re-entered after ${step.reentryCommit}` : ''}`);
+    const manualOnly = step.evidence.manualOnly ? '; manual only' : '';
+    lines.push(`      - ${step.key} (${step.role ?? 'no role'}${missing}${manualOnly})${step.reentered ? ` re-entered after ${step.reentryCommit}` : ''}`);
     // A third party's line is the step's own; approvals are listed once, below.
     if (step.awaiting?.kind === 'party') lines.push(`        ${humanNeededLine(step)!}`);
   }

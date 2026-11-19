@@ -17,8 +17,10 @@
  */
 import { z } from 'zod';
 
+import { RESERVED_SET_NAMES } from '../memory/add';
+import type { MemoryYaml } from '../memory/schema';
 import { BINDINGS_YAML_FORMAT, formatField } from '../validation/format';
-import { ID_CHAR_CLASS } from '../validation/id';
+import { ID_CHAR_CLASS, isNumericToken, patternTokens } from '../validation/id';
 
 /** The bindings file, relative to `.wingfoil/` — the `file` of its diagnostics (spec-003 Layer 3). */
 export const BINDINGS_FILE = 'workflows/bindings.yaml' as const;
@@ -165,6 +167,138 @@ export function memoryAddType(token: string): string | null {
   if (tokenName(token) !== 'memory.add') return null;
   const match = /\btype\s*:\s*["']?([^"',)\s]+)/.exec(token);
   return match ? match[1]! : null;
+}
+
+/** `text` split at its top-level commas: a comma inside quotes, brackets or braces does not split. */
+function splitTopLevel(text: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let quote: string | null = null;
+  let current = '';
+  for (const char of text) {
+    if (quote !== null) {
+      if (char === quote) quote = null;
+    } else if (char === '"' || char === "'") quote = char;
+    else if (char === '[' || char === '{') depth += 1;
+    else if (char === ']' || char === '}') depth -= 1;
+    else if (char === ',' && depth === 0) {
+      parts.push(current);
+      current = '';
+      continue;
+    }
+    current += char;
+  }
+  parts.push(current);
+  return parts;
+}
+
+/** `value` without the pair of quotes around it, when it has one. */
+export function unquoted(value: string): string {
+  return /^(["'])(.*)\1$/s.exec(value)?.[2] ?? value;
+}
+
+/**
+ * The `key: value` arguments of a token's parenthesised list, in order, quotes and brackets kept
+ * (`memory.add(type: bug, tags: [a, b])` → `[['type', 'bug'], ['tags', '[a, b]']]`). A token with no list has none;
+ * a part with no `:` is no argument.
+ */
+export function tokenArguments(token: string): [string, string][] {
+  const open = token.indexOf('(');
+  const close = token.lastIndexOf(')');
+  if (open === -1 || close < open) return [];
+  return splitTopLevel(token.slice(open + 1, close)).flatMap((part): [string, string][] => {
+    const colon = part.indexOf(':');
+    return colon === -1 ? [] : [[part.slice(0, colon).trim(), part.slice(colon + 1).trim()]];
+  });
+}
+
+/** One argument a `memory.add` action declares, its `type` aside (`spec-017` §6.1). */
+export interface MemoryAddArgument {
+  readonly name: string;
+  /** The value to print, a list joined by commas; `null` when it can only be a placeholder. */
+  readonly value: string | null;
+}
+
+/**
+ * The arguments a `memory.add` token declares, each value read through `interpolate`, which answers `null` for a
+ * value that cannot be printed (`dl-090` Q3 (a)). One element of a list that cannot makes the whole list a placeholder.
+ */
+export function memoryAddArguments(token: string, interpolate: (raw: string) => string | null): MemoryAddArgument[] {
+  return tokenArguments(token)
+    .filter(([name]) => name !== 'type')
+    .map(([name, raw]) => {
+      if (!raw.startsWith('[')) return { name, value: interpolate(unquoted(raw)) };
+      const values = splitTopLevel(raw.slice(1, raw.lastIndexOf(']'))).map((entry) => interpolate(unquoted(entry.trim())));
+      return { name, value: values.includes(null) ? null : values.join(',') };
+    });
+}
+
+/** The tokens of `type`'s `id_pattern` and `path`, in that order, each once; none for a type `memory.yaml` does not hold. */
+export function memoryAddPatternTokens(memoryYaml: MemoryYaml | null, type: string | null): string[] {
+  if (memoryYaml === null || type === null || !Object.prototype.hasOwnProperty.call(memoryYaml.types, type)) return [];
+  const entry = memoryYaml.types[type]!;
+  return [...new Set([...patternTokens(entry.id_pattern ?? ''), ...patternTokens(entry.path)])];
+}
+
+/**
+ * The operands of `memory add` after `--type` (`spec-017` §6.1): `--title`, `--tags`, one `--set` per declared argument
+ * naming a token of `tokens` ({@link memoryAddPatternTokens}) that can be passed, in declared order, then one placeholder
+ * `--set` per such token the action does not give. A name `--set` reserves and a numeric token, which the verb generates,
+ * cannot be passed: an argument naming one is left out.
+ */
+export function memoryAddOperands(args: readonly MemoryAddArgument[], tokens: readonly string[]): string[] {
+  return memoryAddOperandParts(args, tokens).map((part) => part.text);
+}
+
+/** One operand of `memory add`, and whether it holds a value the action gave rather than a placeholder (`spec-017` §6.1). */
+export interface MemoryAddOperandPart {
+  readonly text: string;
+  readonly given: boolean;
+}
+
+/** {@link memoryAddOperands}, each operand saying where it comes from: a value and a placeholder may be spelled alike. */
+export function memoryAddOperandParts(args: readonly MemoryAddArgument[], tokens: readonly string[]): MemoryAddOperandPart[] {
+  const flag = (text: string): MemoryAddOperandPart => ({ text, given: false });
+  const isGiven = ({ value }: MemoryAddArgument): boolean => value !== null && value !== '';
+  const shown = (arg: MemoryAddArgument): string => (isGiven(arg) ? arg.value! : `<${arg.name}>`);
+  const settable = tokens.filter((token) => !RESERVED_SET_NAMES.has(token) && !isNumericToken(token));
+  const tags = args.find((arg) => arg.name === 'tags');
+  const declared = args.filter((arg) => settable.includes(arg.name));
+  const title = args.find((arg) => arg.name === 'title') ?? { name: 'title', value: null };
+  return [
+    flag('--title'),
+    { text: shown(title), given: isGiven(title) },
+    ...(tags === undefined ? [] : [flag('--tags'), { text: shown(tags), given: isGiven(tags) }]),
+    ...declared.flatMap((arg) => [flag('--set'), { text: `${arg.name}=${shown(arg)}`, given: isGiven(arg) }]),
+    ...settable.filter((token) => !declared.some((arg) => arg.name === token)).flatMap((token) => [flag('--set'), flag(`${token}=<${token}>`)]),
+  ];
+}
+
+/** What fills a built-in command: the step's values for `workflow next`, placeholders for `workflow show`. */
+export interface BuiltinOperands {
+  /** The element a Memory verb acts on. */
+  readonly id: string;
+  /** The instance and the step a `memory add` or an `agent execute` names. */
+  readonly instance: string;
+  readonly step: string;
+  /** `memory add`'s operands ({@link memoryAddOperands}). */
+  readonly add: readonly string[];
+}
+
+/** The operands `workflow show` prints, no instance being involved (`spec-017` §7.6). */
+export const SHOWN_OPERANDS: Omit<BuiltinOperands, 'add'> = { id: '<id>', instance: '<instance-id>', step: '<key>' };
+
+/**
+ * The whole command of a built-in binding (`spec-017` §6.1, §7.6), from the prefix {@link resolveToken} names: the one
+ * form `workflow next` and `workflow show` print, so that the two cannot diverge. Pure.
+ */
+export function builtinCommand(token: string, prefix: readonly string[], operands: BuiltinOperands): string[] {
+  const name = tokenName(token);
+  const link = ['--workflow', operands.instance, '--step', operands.step];
+  if (name === 'memory.add') return [...prefix, ...operands.add, ...link];
+  if (name === 'memory.approve' || name === 'memory.reject') return [...prefix, operands.id, '--reason', '<reason>'];
+  if (name.startsWith('memory.')) return [...prefix, operands.id];
+  return name.startsWith('agent.') ? [...prefix, ...link] : [...prefix];
 }
 
 /** The Memory verbs a workflow action may emit (spec-003 § "Action expressions", `dl-079` (A)). */
