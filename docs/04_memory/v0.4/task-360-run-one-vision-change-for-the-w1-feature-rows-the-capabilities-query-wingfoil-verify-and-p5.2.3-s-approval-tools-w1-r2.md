@@ -539,6 +539,40 @@ Against `code-review` and `traceability`, re-reading `git diff b3803048c HEAD` a
   features, as cp-003's schedule assigns them to v0.4 (vision-change, dl-132 note of 2026-10-12); the sequencer's v0.4
   row names them since 70290740b."`
 
+### review fixes (developer, 2026-11-19)
+
+The independent review returned APPROVE WITH FIXES, with three text fixes in documents. I made them on head `c4b1239a0`
+with the task's PATH shim. No code or test changed. The `minor-v0.4` amendment stays uncommitted and untouched.
+
+`8581830be` `docs(vision): cp-003 — review fixes: sequencer v0.3 count, canvas v0.4 marker, story-map edge total`
+(four files):
+
+1. `docs/01_vision/07_sequencer.md`, "Features per release": `→ 23, 9, 3` becomes `→ 25, 9, 3`, plus a note that v0.3
+   read 23 at its planning, before P5.3.4 and P5.3.5 joined it at `4c5fec67a`. The evidence:
+   `grep '^features:' docs/04_memory/planning/rl-v1/minor-v0.3.md | tr -cd ',' | wc -c` → 24, so the list holds 25
+   ids. `git log --oneline -G'P5.3.4' -- docs/04_memory/planning/rl-v1/minor-v0.3.md` →
+   `4c5fec67a wf(release): amend minor-v0.3 [in-development → in-development]`. The file is already at 2.2 on this
+   branch, so there is no second bump. The fix adds one line (`wc -l` → 489), so in the same commit
+   `docs/01_vision/00_index.md` records the `07_sequencer.md` document-map row (489 lines) and moves every range after
+   line 100 by one: Quick-lookup, the section list and the conventions pointer.
+2. `docs/01_vision/08_mvp-canvas.md`: "✓ Commit-range governance check (`wingfoil verify`)" gains " (v0.4)". The
+   canvas is already at 1.14, so there is no second bump. No line moves (`wc -l` → 222).
+3. `docs/02_requirements/01_user_story_map/00_index.md`: "**Edge-case stories total:** **14**" becomes **15**.
+   `grep -ohE '\bUS-[0-9A-Z]+-E[0-9]+\b' docs/02_requirements/01_user_story_map/0[1-7]_*.md | sort -u | wc -l` → 15.
+
+Post-check: `npx jest test/docs/vision-index.test.ts test/docs/vision-change-w1-rows.test.ts
+test/docs/bdd-dna-sections.test.ts --maxWorkers=2` → `Test Suites: 3 passed, 3 total`, `Tests: 60 passed, 60 total`.
+
+Same class, left as it is: the v0.3 row of "Active-day budgets per release" still reads 23 features. That row records
+the budget of v0.3's `build-backlog` (2026-09-30), set before `4c5fec67a`. It is a dated measurement, not a count of
+the current list, so the fix leaves it.
+
+**Corrected `--reason` for the pending `minor-v0.4` amendment** (the reviewer's nit: the earlier reason did not name
+the "Change-proposals" sentence). It replaces the one under `### Pending amendments (approver)`:
+`--reason "Add P1.14 (wingfoil verify) and P5.1.5 (wingfoil capabilities) to the release's features and one sentence
+on cp-003 to the Scope's Change-proposals item, as cp-003's schedule assigns the two features to v0.4 (vision-change,
+dl-132 note of 2026-10-12); the sequencer's v0.4 row names them since 70290740b."`
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
