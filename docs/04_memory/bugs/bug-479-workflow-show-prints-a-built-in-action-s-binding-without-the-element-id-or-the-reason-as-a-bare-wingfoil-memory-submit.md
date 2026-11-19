@@ -50,3 +50,9 @@ The argv stops at the verb; nothing marks that an operand and a required option 
   matched before this one (newest bug at the read: `bug-476`).
 - Source of the finding: `docs/09_retrospectives/rl-v1/rel-v0.4-planning-feedback-triage.md`, row C-04 (reproduced on
   0.3.2).
+
+## Triage & Execution Notes
+
+### Retrospective
+
+- Fixed by `task-376` (`cc376b47b`). In a scratch Scrum project, `workflow show bug-ingest --format json` on the code build prints the argv `wingfoil memory submit <id>` and `wingfoil memory approve <id> --reason <reason>`.
