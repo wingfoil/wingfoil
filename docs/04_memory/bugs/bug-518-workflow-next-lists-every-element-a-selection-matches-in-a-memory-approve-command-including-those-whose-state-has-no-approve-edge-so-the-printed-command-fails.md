@@ -63,3 +63,5 @@ Every matched element is listed, and the command fails on the first one already 
      An item met while fixing goes in the fix task's own subsection; this one holds what belongs to
      the bug itself (its finding, its triage, why it took more than one task). The retrospective's
      `explore` reads this subsection first. -->
+
+- Fixed by `task-376` (`cc376b47b`). Filtering the ids was not enough: `memory approve` takes one id (`spec-008` §1), so each element with an edge gets its own command and the others are listed in `notOffered`; `test/cli/workflow-next-offers.integration.test.ts` runs each printed command and pins exit `0`.
