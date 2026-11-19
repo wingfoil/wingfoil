@@ -729,6 +729,67 @@ the architect recommended:
   rulings; the developer fixes the red together with the inaccurate statements the addendum lists; a fresh
   reviewer then reviews the whole task.
 
+### red (qa, 2026-11-19)
+
+Third red round, after the second reject and the design gate that followed it. Written black-box from the round's
+contract, `spec-012` §7 and real command output; no file under `src/` or `scripts/` was opened.
+
+**Base.** `git rev-list --count HEAD..main` → `61`, so `git merge --no-edit main` first, amended with the attribution
+pair: merge commit `4ad0fda08`. PATH guard: `command -v wingfoil` → the task's PATH shim; `wingfoil --version` and
+`node dist/cli.js --version` → `0.3.2 (d1de7b3ef5384e2da8af05dee15769adaf68c3c8)` both.
+
+**Red commit `5944eaeb0`** (`git rev-parse HEAD` → `5944eaeb0e7ad8a67409bcf90822e5e4a2159dd6`), test files only:
+`test/core/context-payload-written-marks.test.ts` (new, 58 tests), through `assembleExecutionContext` and
+`ContextRequest` from `src/core/context`, the entry point the existing `test/core/context-payload-*.test.ts` files
+use; no new export is imported, so no `.d.cts` is needed. U+E000 is written in the source only as the escape; the
+YAML of the rows carries the YAML escape `\uE000` (or `\U0000E000`), the character itself only in the rows the
+contract marks raw (6 raw, 9, 10, 11). No existing test file was edited.
+
+**Placements.** Every row is assembled as a document linked from the element (`depends_on:`), as the element itself,
+and as a relevant sibling ranked after `limits: {maxDocs: 1}` behind a carried first document.
+
+**Run.** `npx jest test/core/context-payload-written-marks.test.ts --maxWorkers=2 --noStackTrace --json --outputFile=<scratch>/r.json`
+→ `Tests: 22 failed, 36 passed, 58 total`. `npx tsc --noEmit -p tsconfig.json` → exit 0, no error.
+`npx eslint test/core/context-payload-written-marks.test.ts` → exit 0. `npx jest test/lint --maxWorkers=2` → `165
+passed, 165 total`. `npx jest test/validation/secret-scan.test.ts --maxWorkers=2` → `85 passed, 85 total`.
+
+**Per row** (contract rows; first failing assertion at the head of this round):
+- **Rows 1 to 4 (red-first, except one variant)**, `rows 1 to 4 — a merge key giving one key two texts`: linked →
+  `[W_MEMORY_UNREADABLE … a merge key gives one of its frontmatter keys two texts, so an execution context cannot carry it]`;
+  element → `ok: false`, `VALIDATION`, `element 'task:task-001-active' cannot enter an execution context: a merge key
+  gives one of its frontmatter keys two texts`; ranked out → the warning on the ranked-out path, the first document
+  carried.
+  - row 1, row 2 with the long escape, row 3 (both variants), row 4: red-first in all three placements, first failing
+    assertion `expect(received).not.toThrow()` with `SyntaxError: Unexpected token 'x', "x" is not valid JSON`.
+  - row 2 with `null` between the marks: red-first in all three placements, `expect(received).not.toThrow()` with
+    `TypeError: Cannot read properties of null (reading '1')`.
+  - row 2 with a JSON list between the marks: passes on first run in all three placements (characterization at this
+    head).
+- **Rows 5 to 11 (characterization at this head)**, `rows 5 to 11 — U+E000 under no rule of §7 is carried as its own
+  string`: each row's lines are compared group by group (a column-0 line and exactly the indented lines under it) in
+  the document's YAML block (linked) or in section 1 (element), with no warning; ranked out, the row is neither carried
+  nor reported. All 33 tests pass on first run.
+- **Row 12**: the constructs `test/core/context-payload-yaml-constructs.test.ts` pins, that file unchanged:
+  `npx jest test/core/context-payload-yaml-constructs.test.ts --maxWorkers=2` → `76 passed, 76 total`.
+- **Row 13 (red-first)**, `row 13 — assembleExecutionContext returns in every placement, it never throws`, three
+  tests: `expect(received).toEqual(expected)` received six thrown rows in each placement (row 1, row 2 with `null`,
+  row 2 with the long escape, both row 3 variants, row 4).
+- **Row 14 (red-first)**, `row 14 — one fixture holding rows 1 to 11`: the first assembly fails
+  `expect(received).not.toThrow()` with the `SyntaxError` above. The test assembles twice and once on a
+  `cloneTempRepo` clone at the same sha, and also pins the carried paths (rows 5 to 11) and one two-texts warning per
+  left-out document in path order.
+
+**The same file against `main` at `4afbca9db`** (`git archive 4afbca9db` into a scratch directory, the same test file,
+the same jest command): `Tests: 42 failed, 16 passed, 58 total`. There rows 1 to 4 are carried without warning (no
+throw), and the string lines of rows 6, 7, 8, 9 and 10 are the contract's (`note: ⟨U+E000⟩ pomodoro`,
+`v: ⟨U+E000⟩["1.5","1.50"]⟨U+E000⟩`, `'n': ⟨U+E000⟩`, `t: |` / `  ⟨U+E000⟩line`, `  a: ⟨U+E000⟩x`); only the
+written-scalar lines differ (`'1.5'` for `'1.50'`, `'null'` for `'~'`, the timestamp key, the sequence key, `a: 1.50`).
+So the contract's string lines match what `main` prints, and no row of this head contradicts the contract outside a
+red.
+
+**For the developer.** Every assembly in the file is wrapped in `expect(...).not.toThrow()`; a row passes only with a
+returned result.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
