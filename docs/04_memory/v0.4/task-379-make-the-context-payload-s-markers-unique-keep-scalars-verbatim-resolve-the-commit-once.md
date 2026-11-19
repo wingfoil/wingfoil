@@ -834,6 +834,43 @@ Earlier sections are not edited; these statements in them are false, and read as
 - **Unasserted (`testing` T1).** Nothing of this round: each change has a test named above.
 - **Invisible characters.** The editing tool turned the typed `` of the regular expression in `unusedMark` into the raw character; it was rewritten as the escape before the commit (`grep -nP` over the changed files with the list of the round plus U+E000 printed nothing afterwards).
 
+### refactor (developer, 2026-11-19)
+
+No code change beyond `d94829c6b`. The gates ran after the notes commit `dd22ed849`, on a clean tree (`git status --short` printed nothing before each), one at a time, the heavy ones after the heavy-gate slot; the three bug Retrospectives were NOT in the tree (they are re-applied after submit), so `bug-534` could not occur:
+
+| Command | Result |
+|---|---|
+| `npm test -- --maxWorkers=2` | exit 0: `Test Suites: 694 passed, 694 total`, `Tests: 12737 passed, 12737 total`; the document-parity suites under `test/docs/` ran inside it |
+| `npm run test:coverage -- --maxWorkers=2` | exit 0, the same counts; `All files` 98.86 statements, 96.58 branches, 98.59 functions, 99.46 lines |
+| `npm run lint` | exit 0 |
+| `npm run docs:api` | exit 0 |
+| `npm run typecheck` | exit 0 (both `tsc --noEmit -p tsconfig.json` and `-p tsconfig.build.json`) |
+| `npm run -s check:governance -- --base origin/main` | `gated: 0 findings on 0 commits`, `history: 0 findings on 0 commits` |
+
+**Coverage against the merge base `3c13e738c`** (covered/total, from `coverage/coverage-summary.json` of the run above; the base figures are the ones the orchestrator's baseline gives):
+
+| Column | Base `3c13e738c` | Head | Uncovered, base → head |
+|---|---|---|---|
+| statements | 12706/12853 | 12827/12974 | 147 → 147 |
+| branches | 7911/8197 | 7977/8259 | 286 → 282 |
+| functions | 2486/2522 | 2526/2562 | 36 → 36 |
+| lines | 10601/10658 | 10696/10753 | 57 → 57 |
+
+No column regresses: each covered share is equal or higher, and no column has more uncovered items. Per changed source file at head (statements, branches, functions, lines): `src/core/context.ts` 384/385, **235/236**, 106/106, 318/318; `src/core/index.ts` 852/866, 387/403, 191/209, 683/686; `src/core/loaders.ts` 340/343, 125/136, 81/82, 302/303; `src/mcp/prompt.ts` 91/91, 48/48, 24/24, 82/82; `src/memory/query.ts` 256/256, 163/164, 65/65, 214/214; `src/memory/index.ts` is a re-export barrel `jest.config` excludes. The one uncovered branch of `src/core/context.ts` (lcov `BRDA:991`) is the rethrow in `newerFormatSubject` of an error that is not a newer-format one, code of an earlier round of this task that this round does not touch; the round's own code has every branch covered.
+
+### Pending amendments (approver)
+
+Re-applied after the submit and the bug syncs, uncommitted, each adding the bug's `### Retrospective`, then re-read against the code of `d94829c6b` and corrected in place wherever a sentence no longer held:
+
+- `bug-265-the-context-payload-s-body-markers-are-not-unique-a-memory-document-whose-frontmatter-says-type-directive-reuses-a-directive-s-marker-key-and-two-documents-with-one-type-and-id-share-one`:
+  `--reason "Record the retrospective of the fix delivered by task-379."`
+- `bug-267-the-context-payload-rewrites-non-date-scalars-of-the-carried-frontmatter-1.50-as-1.5-0o17-as-15-0x1f-as-31-1e3-as-1000-12-as-12-and-a-tilde-as-null-while-dates-are-kept-as-written`:
+  `--reason "Record the retrospective of the fix delivered by task-379."`
+- `bug-381-the-execution-context-re-resolves-its-commit-in-every-atrev-loader-and-reads-each-directive-body-with-its-own-git-spawn`:
+  `--reason "Record the retrospective of the fix delivered by task-379."`
+
+Until they are recorded, `test/cli/workflow-unbound-none.integration.test.ts` fails alone with `W_UNCOMMITTED_INPUTS` in this worktree (`bug-534`); on a clean clone of the head it passes (the full suite above ran without them).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -844,3 +881,4 @@ Earlier sections are not edited; these statements in them are false, and read as
 
 - A red assertion could not pass: `expect(payload).not.toContain('bug-007-astray')` while the fixture's element links that id in its own carried `depends_on`. Green stopped and the qa corrected it in `08dca4d25`. Proposal: a negative assertion on a payload names the heading or the marker, never a bare id.
 - Keeping scalars as written made `"1.50"` and `1.50` one key, a case the design did not cover; it surfaced at green and needed the `spec-012` amendment `34cad2c98` and a second red, `02c7e8f9d`.
+- In the fix round the internal key mark was chosen from a walk of a loaded value, which a merge override had already pruned, so a string hidden by the merge reached the decoding and threw (reject `92bb05f78`). Choosing it from the parser's own `close` events (`d94829c6b`) sees every string the text holds. Proposal: when a design relies on "no input holds X", the scan for X reads the parser's events or the raw text, never a loaded value.
