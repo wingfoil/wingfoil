@@ -100,7 +100,8 @@ export interface CoreOperation {
   readonly name: string;              // e.g. "memoryApprove"
   readonly mutates: boolean;          // true => MCP Tool, false => MCP Resource; CLI exposes both
   readonly fn: CoreFn<unknown, unknown>;
-  // CLI declaration, all optional; the CLI's --help and argument registration derive from them:
+  // Parameter metadata, all optional, declared once: the CLI's --help and argument registration, the
+  // MCP Tool input schema and the MCP Resource URI template all derive from it (dl-040 option 1):
   readonly flags?: readonly CoreFlag[];        // boolean --{name} flags, each with a description
   readonly options?: readonly CoreOption[];    // value-bearing --{name} <placeholder> options
   readonly description?: string;               // the one-line --help summary (= cli-reference first sentence)
@@ -131,6 +132,15 @@ every operation regardless of `mutates`, as a `wingfoil <module> <verb>` subcomm
 registrar and `src/mcp`'s Tool/Resource registrar, so adding an operation to `CoreModule.operations`
 is sufficient to make it reachable from both surfaces; no per-surface wiring is hand-written.
 
+The parameter metadata (`positional`, `options`, `flags`) is the one declaration of what an operation
+takes (`dl-040` option 1). Both registrars derive from it and neither declares a parameter of its own,
+except the ones derived from `mutates` (`--dry-run`, and `--co-author` / `--ai-model` on the CLI,
+`spec-018` §1–§2). An operation that declares none takes no parameter, on both surfaces. A surface call
+reaches the operation through the same `ParamsContext` shape whichever surface it came from: the
+positional as `positional` and `positionals`, the flags as `flags`, the value options as `options`
+(`src/core/registry.ts`). What the MCP side derives from the declaration is `spec-004`'s: a Tool's
+input schema (`spec-004` §4.3) and a Resource's URI (§3 below, `spec-004` §2.1).
+
 ### 3. Core functions (surface per `X_cli-cmds.md` and the ratified DLs; release per row)
 
 Grouped by **pillar** — the bold headings below are a human, editorial grouping and are **not**
@@ -156,8 +166,12 @@ exemption).
 > form and a `{module}://{query}` URI form; those were **superseded** by `spec-004` and corrected here
 > (reconciled as a fast-follow to `task-006`, whose review surfaced the discrepancy — see Process
 > Notes). `spec-004` §2.1 owns the fuller sub-resource addressing (`wingfoil://memory/{type}/{id}`,
-> `wingfoil://dna/{section}`); the mechanical zero-argument `wingfoil://{module}/{verb}` form shown
-> here is what a read-only op with no parameter metadata resolves to today (`src/mcp/registrar.ts`).
+> `wingfoil://dna/{section}`). The Resource URIs in the column below are the ones the registrar
+> derives (`src/mcp/registrar.ts`, `dl-040` option 1): `wingfoil://{module}/{verb}` (`wingfoil://{module}`
+> for a flat operation), followed by `/{<positional>}` when the operation declares a **required**
+> positional — a URI template, such as `wingfoil://memory/history/{id}`. An optional positional, the
+> value options and the flags of a read-only operation are not part of its URI: its Resource serves the
+> call that gives none of them.
 
 **Memory pillar** (P1, `src/memory`):
 
@@ -184,7 +198,7 @@ exemption).
 | `dnaShow`  | `dna`                | false   | `wingfoil dna show` | Resource `wingfoil://dna/show`    |
 | `dnaUpdate`  | `dna`              | true    | `wingfoil dna update` | Tool `dna.update`      |
 | `dnaInfer` | `dna` *(planned)*    | true    | `wingfoil dna infer`| Tool `dna.infer`         |
-| `paths`      | `paths`            | false   | `wingfoil paths`    | Resource `wingfoil://dna/paths` *(URI per `dl-040`; the registrar derives `wingfoil://paths`)* |
+| `paths`      | `paths`            | false   | `wingfoil paths`    | Resource `wingfoil://paths` (`dl-040`) |
 
 **Directives pillar** (P3, `src/directives`) — two nouns by design: singular `directive` for the
 per-directive mutations (BDD P3.1–P3.3), plural `directives` for the listing (BDD P3.4)
@@ -247,8 +261,8 @@ for cell):
 - **`audit` is a flat, self-named operation** (`dl-046` B(a)): module `audit`, op `audit`, so `deriveVerb`
   yields the bare `wingfoil audit` BDD P5.1.3 states and `deriveMcpResourceUri` the Resource
   `wingfoil://audit`, with no registrar change. That is the derivation the registrar applies to `paths`
-  today (`wingfoil://paths`); whether the `paths` row's MCP cell follows it is
-  `dl-040-spec-006-resource-uri-divergence`'s question.
+  (`wingfoil://paths`), which the `paths` row's MCP cell states
+  (`dl-040-spec-006-resource-uri-divergence`, ratified with option 1).
 
 **Agent execution** (P5.3, `src/agent` *(planned module, `spec-016` §1)*, `CoreModule.name` `agent`)
 — the v0.3 surface (`minor-v0.3` `features:` P5.3.1–P5.3.3; run tracking per `dl-135`; normative
@@ -257,8 +271,8 @@ contract in `spec-016` (agent execution), whose §8 carries the same three rows)
 | function         | module                | mutates | CLI                        | MCP                                         | feature |
 |-------------------|------------------------|---------|-----------------------------|----------------------------------------------|---------|
 | `agentExecute`    | `agent`                | true    | `wingfoil agent execute`    | Tool `agent.execute` *(v0.4; refuses until v1.0)* | P5.3.1  |
-| `agentList`       | `agent`                | false   | `wingfoil agent list`       | Resource `wingfoil://agent/list` *(v0.4; URI per `dl-040`)* | P5.3.4  |
-| `agentShow`       | `agent`                | false   | `wingfoil agent show`       | Resource `wingfoil://agent/show/{run-id}` *(v0.4; URI per `dl-040`)* | P5.3.5  |
+| `agentList`       | `agent`                | false   | `wingfoil agent list`       | Resource `wingfoil://agent/list` *(v0.4)* | P5.3.4  |
+| `agentShow`       | `agent`                | false   | `wingfoil agent show`       | Resource `wingfoil://agent/show/{run-id}` *(v0.4; the run id percent-encoded in one segment)* | P5.3.5  |
 
 - **`agentExecute` is `mutates: true`** because it commits the run record of `dl-114` (Q2 (b), with
   the session id `dl-135` point 2 adds), under the subject `agent: record <run-id>`, after launching
@@ -299,14 +313,15 @@ contract in `spec-016` (agent execution), whose §8 carries the same three rows)
 - **The shipped workflow Resources are unchanged in v0.3**: `wingfoil://workflows` and
   `wingfoil://workflows/{name}` (`spec-004` §2.1, hand-registered) keep their payload and their
   working-tree baseline (§6 item 4), so v0.3 makes no breaking change on the MCP surface. Aligning
-  them with `workflowList` / `workflowShow`'s v0.3 CLI payloads belongs with the URI unification of
-  `dl-040` (`in-discussion`, `release: "v0.4"`).
+  them with `workflowList` / `workflowShow`'s v0.3 CLI payloads is not decided by `dl-040` (`ready`):
+  its option 1 derives the URIs of the core operations' Resources and leaves these two hand-registered
+  Resources as they are.
 - **The agent Resources** are v0.4 (`dl-135` release split, plan R5). `dl-135` point 4 names the
-  Resource `wingfoil://agents/runs`; the cells above are the mechanical `wingfoil://{module}/{verb}`
-  form `registerCoreModules` would derive (`src/mcp/registrar.ts`). Which form the v0.4 Resource
-  takes, and how a run id containing `/` is addressed (percent-encoded, or three segments), is
-  `dl-040`'s and `spec-004`'s question, settled with that Resource (`spec-016` §7); the agent cells
-  are placeholders for the parity cross-reference, not a URI decision.
+  Resource `wingfoil://agents/runs`; the cells above are the URIs `registerCoreModules` derives
+  (`src/mcp/registrar.ts`, `dl-040` option 1), and `dl-135`'s name is not used. A run id
+  (`<element-id>/<phase>/<n>`) is one URI segment, its `/` percent-encoded as `%2F`: the registrar
+  percent-decodes every template variable before the call, as `spec-004` §2.1 does for the session
+  Resource. Which server serves these Resources is `spec-016` §7's.
 
 ### 4. Parity rule (structural, not tested-for)
 
@@ -341,8 +356,8 @@ contract in `spec-016` (agent execution), whose §8 carries the same three rows)
   - MCP **Resource** URIs: the `wingfoil://{module}/{query}[/{id}]` scheme — `spec-004` §2.1. Read-only;
     no Resource may accept a body that mutates state (enforced by `mutates: false` on the backing
     `CoreOperation`). The richer sub-resource addressing (`wingfoil://memory/{type}/{id}`,
-    `wingfoil://dna/{section}`) is `spec-004` §2.1's; the zero-argument `wingfoil://{module}/{verb}`
-    form is what an operation with no parameter metadata resolves to until a feature task adds it.
+    `wingfoil://dna/{section}`) is `spec-004` §2.1's; a core operation's Resource URI is derived from
+    its parameter metadata, by the rule §3's note states (`dl-040` option 1).
   - *(A prior version of this section specified snake-case `{module}_{verb}` Tools and a
     `{module}://{query}` URI scheme; both diverged from `spec-004` and were the source of the
     `task-006` reconciliation — see Process Notes.)*
@@ -990,3 +1005,15 @@ this section to cite both (`spec-018` Consequences). Step 2 lists the two sub-st
 "Membership" paragraph fixes the message `E_NOT_A_MEMBER`, the baseline (`HEAD`), the two cases that are not refused
 (no committed `dna.yaml`, an empty `team.members`) and the fail-closed reading of an invalid committed file. No other
 step moves. Edited in place without a supersede or a state change (`dl-047`), pending the approver's `memory amend`.
+
+**Revision (2026-11-19, `task-364-give-coreoperation-parameter-metadata-so-the-registrar-derives-resource-templates-and-tool-input-schemas-dl-040`)
+— the parameter metadata is the one declaration both surfaces derive from, and the `paths` row reads
+`wingfoil://paths`.** `dl-040` (`ready`, option 1) gives the MCP registrar the operations' parameters, so a Tool's
+input schema and a Resource's URI template are derived from the same `positional`, `options` and `flags` the CLI
+registers. §2 says so under the listing and in a paragraph after it; §3's note on MCP naming states the URI rule
+(a required positional becomes a `/{name}` template segment; an optional positional, the options and the flags stay out of it); the `paths` row reads
+`wingfoil://paths`, the URI the registrar derives, as the approver ruled at `dl-040`'s approval; the agent rows lose
+their "URI per `dl-040`" placeholders, and the agent Resources bullet fixes the run id's encoding (one segment,
+percent-encoded) and drops the open question; the bullet on the shipped workflow Resources and §5's Resource bullet
+no longer describe a zero-argument limitation. No row's function, module or `mutates` changes. Edited in place
+without a supersede or a state change (`dl-047`), pending the approver's `memory amend`.
