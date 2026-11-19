@@ -16,7 +16,7 @@
  * `isArchivedStatus`.
  */
 import * as jsYaml from 'js-yaml';
-import { CORE_SCHEMA, dump, load, Type, YAMLException, type Schema } from 'js-yaml';
+import { CORE_SCHEMA, dump, load, Type, type Schema } from 'js-yaml';
 
 import type { RolesYaml } from '../directives/schema';
 import type { DnaYaml, Module, Paths, Project, Stacks, Team } from '../dna/schema';
@@ -336,20 +336,15 @@ export const CONTEXT_PAYLOAD_FORMAT = 1;
  * value, so `1.50`, `0o17`, `0x1F`, `1e3`, `+12`, `~` and `True` are re-emitted unchanged.
  */
 export class WrittenScalar {
-  readonly #text: string;
-
-  constructor(text: string) {
-    this.#text = text;
-  }
-
-  /** The scalar's text, as written. */
-  get text(): string {
-    return this.#text;
-  }
+  constructor(
+    /** The scalar's text, as written. A public field, so two scalars compare equal only when their texts do; js-yaml
+     * never sees a `WrittenScalar` while it loads (it sees a {@link ScalarBeingRead}), so no merge copies it. */
+    readonly text: string,
+  ) {}
 
   /** The text as written, so `JSON.stringify` of a context renders the scalar as the document did. */
   toJSON(): string {
-    return this.#text;
+    return this.text;
   }
 }
 
@@ -465,22 +460,21 @@ function isContainer(value: unknown): value is Record<string, unknown> | unknown
   return Array.isArray(value) || (isRecord(value) && Object.getPrototypeOf(value) === Object.prototype);
 }
 
-/** A mark no key or string of `loaded` holds, so that a mark in a later load is one that load wrote. */
-function unusedMark(loaded: unknown): string {
-  const strings = new Set<string>();
-  const seen = new Set<unknown>();
-  const visit = (value: unknown): void => {
-    if (typeof value === 'string') strings.add(value);
-    if (!isContainer(value) || seen.has(value)) return;
-    seen.add(value);
-    if (!Array.isArray(value)) Object.keys(value).forEach((key) => strings.add(key));
-    Object.values(value).forEach(visit);
-  };
-  visit(loaded);
-  const unit = String.fromCharCode(0xe000);
-  let mark = unit;
-  while ([...strings].some((text) => text.includes(mark))) mark += unit;
-  return mark;
+/**
+ * The mark that names a key internally in the payload's load of `text`: U+E000 repeated once more than the longest
+ * run of U+E000 in any string scalar the parser closes while loading `text` with js-yaml's default schema, a string
+ * that a merge override then drops included (a `close` event fires for it before the merge). So the mark is longer
+ * than any run the document wrote, and a mark in the payload's load is one that load wrote.
+ */
+function unusedMark(text: string): string {
+  let longest = 0;
+  load(text, {
+    listener: (event, state) => {
+      if (event !== 'close' || typeof state.result !== 'string') return;
+      for (const run of state.result.match(/\uE000+/g) ?? []) longest = Math.max(longest, run.length);
+    },
+  });
+  return String.fromCharCode(0xe000).repeat(longest + 1);
 }
 
 /** Why the keys of one mapping have no one-to-one rendering, given each key's name under YAML and its written text. */
@@ -547,15 +541,15 @@ function withDatesAsWritten(value: unknown): unknown {
 type WrittenFrontmatter = { readonly frontmatter: Record<string, unknown> } | { readonly problem: string };
 
 /** One frontmatter's text as written. The first load only finds a mark the second cannot confuse with the document's
- * own text. A YAML error is an answer here, never a throw. */
+ * own text. Every error, a YAML one or any other, is an answer here, never a throw (`spec-012` §7): the document is
+ * one that cannot be rendered, left out and reported, and the element refuses the context. */
 function readWrittenFrontmatter(text: string): WrittenFrontmatter {
   try {
-    const mark = unusedMark(load(text));
+    const mark = unusedMark(text);
     const { value, problem } = restoredFrontmatter(load(text, { schema: loadingSchema(mark) }), mark);
     return problem === undefined ? { frontmatter: value as Record<string, unknown> } : { problem };
-  } catch (error) {
-    if (error instanceof YAMLException) return { problem: NOT_READABLE };
-    throw error;
+  } catch {
+    return { problem: NOT_READABLE };
   }
 }
 
@@ -1019,8 +1013,10 @@ function newerFormatSubject(
  *    commit; its warnings become `context.warnings`.
  * 4. **filter-memory** (§6): `selectRelevantMemoryDocuments` over the same snapshot, within
  *    `request.limits`, among the documents §7 can carry (`dl-150` B, `payloadCandidates`): one with
- *    no nameable `type` and `id`, with a `type` not declared for its path, with two frontmatter keys of the
- *    same text, or repeating the key of a relevant document earlier in path order is left out, and reported
+ *    no nameable `type` and `id`, with a `type` not declared for its path, with a frontmatter that cannot be
+ *    rendered (two keys of one text, a merge key that gives one key two texts, a frontmatter that contains
+ *    itself through an alias) or that cannot be read as written, or repeating the key of a relevant document
+ *    earlier in path order is left out, and reported
  *    only when it would have been relevant; one whose body holds its own end marker is left out and
  *    reported. The reports are
  *    `W_MEMORY_UNREADABLE` lines on the success warnings, after the scan's own, in path order.

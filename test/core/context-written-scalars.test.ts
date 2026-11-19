@@ -78,9 +78,10 @@ describe('task-379 — the edges of scalars as written', () => {
     expect(lines.filter((line) => line === '  size: 0x1F')).toHaveLength(2);
   });
 
-  it('a kept scalar holds its text and no enumerable field, and a timestamp is one', () => {
+  it('a kept scalar holds its text as its one public field, and a timestamp is one', () => {
     expect(new WrittenScalar('1.50').text).toBe('1.50');
-    expect(Object.keys(new WrittenScalar('1.50'))).toEqual([]);
+    expect(Object.keys(new WrittenScalar('1.50'))).toEqual(['text']);
+    expect(new WrittenTimestamp('2026-10-05')).not.toEqual(new WrittenTimestamp('1999-01-01'));
     expect(new WrittenTimestamp('2026-10-05')).toBeInstanceOf(WrittenScalar);
   });
 
@@ -157,11 +158,28 @@ describe('task-379 — the edges of scalars as written', () => {
       ]);
     });
 
-    it('an error that is not a YAML one is not swallowed', () => {
+    it('an error that is not a YAML one on the element refuses the context, and is never thrown', () => {
       writeFixtureFile(repo, ELEMENT_PATH, elementMd([PROBE]));
       commitAll(repo, 'the element');
       failWrittenRead(new TypeError('probe'));
-      expect(() => assembleExecutionContext(repo, request)).toThrow(TypeError);
+      expect(assembleExecutionContext(repo, request)).toEqual({
+        ok: false,
+        error: { code: 'VALIDATION', message: `element 'task:${ELEMENT_ID}' cannot enter an execution context: its frontmatter cannot be read as written` },
+      });
+    });
+
+    it('an error that is not a YAML one on a linked document leaves it out and reports it', () => {
+      const linked = 'docs/04_memory/v0.9/task-002-linked.md';
+      writeFixtureFile(repo, ELEMENT_PATH, elementMd(['depends_on: [task-002-linked]']));
+      writeFixtureFile(repo, linked, ['---', 'id: task-002-linked', 'type: task', 'release: "v0.9"', 'status: backlog', PROBE, '---', '', 'Linked.', ''].join('\n'));
+      commitAll(repo, 'a linked document');
+      failWrittenRead(new TypeError('probe'));
+      const result = assembleExecutionContext(repo, request);
+      if (!result.ok) throw new Error(result.error.message);
+      expect(result.value.context.memory).toEqual([]);
+      expect(result.warnings).toEqual([
+        `W_MEMORY_UNREADABLE (${linked}): unreadable frontmatter in ${linked}: its frontmatter cannot be read as written, so an execution context cannot carry it`,
+      ]);
     });
   });
 
