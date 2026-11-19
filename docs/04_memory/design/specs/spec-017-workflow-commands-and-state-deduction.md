@@ -652,13 +652,13 @@ reported by `workflow list`
 (`W_ACTION_ARGUMENT_NOT_PASSED`, §2); it stays a rule of `workflow adopt`'s candidates (§7.11). A value
 fills one whole argv element, and each interpolated value in it must match `spec-009`'s ID character class (`dl-090`
 Q3 (a)): a value that has none, or that fails the class, is printed as the placeholder `<<name>>`. The console quotes an
-element a POSIX shell would split, and never a placeholder.
+element a POSIX shell would misread, a declared value spelled like a placeholder included, and never a placeholder.
 
 *One command per element.* A Memory transition verb acts on one document per call (`spec-008` §1), so an action with
 several targets offers one command per target: the binding's `argv` is the first and its `commands` lists them all, in
 target order, present only when there are two or more. A target whose state has no edge for the verb
-(`resolveTransitionTarget`: for `approve` and `reject` a gate of its type, for `submit` a state `submit` may leave) is in
-no command: it is listed in the action's `notOffered`, with the reason `no <verb> edge from '<state>'`. When no target
+(`resolveTransitionTarget`: for `approve` and `reject` a gate of its type, for `submit` a state `submit` may leave; for
+`deprecate` every state but `deprecated`, which `memory deprecate` refuses) is in no command: it is listed in the action's `notOffered`, with the reason `no <verb> edge from '<state>'`. When no target
 remains the binding has no `argv`. A target not known yet stays the placeholder `<id>`.
 
 *A creation already made.* A `memory.add` action of whose type the step has created an element reports those elements
@@ -1905,3 +1905,11 @@ follow the same rule. §6.1's "every operand a
 placeholder" and §7.6's `<<field>>` did not settle `workflow show` on a declared literal: it prints a placeholder for an
 operand that depends on an instance or that only the user can give, and keeps a literal as declared. Edited in place without
 a supersede or a state change (`dl-047`), pending the approver's `memory amend`.
+
+**Revision (2026-11-18, `task-376-make-workflow-next-and-workflow-show-offer-complete-honest-commands`, review) — §6.1: an
+element already deprecated.** Found at review. `resolveTransitionTarget` answers `deprecated` from `deprecated`, so §6.1
+read literally kept a command that `memory deprecate` refuses with `document already deprecated`. §6.1 now names the
+`deprecate` edge: every state but `deprecated`; a `superseded` element keeps its command. §6.1 also said the console
+quotes what a shell would split: it quotes what a shell would misread, and a declared value spelled like a placeholder
+is a value, so it is quoted. Edited in place without a supersede or a state change (`dl-047`), pending the approver's
+`memory amend`.
