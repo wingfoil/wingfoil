@@ -44,6 +44,9 @@
   so that I can route agents by role. _(feat: P5.4.1)_
 * **[MVP · v0.4]** US-0A-14: As Alex, I want clear help, formatting, and error messages in the CLI so that I can configure
   the project without confusion _(cross-cutting)_. _(feat: P5.1.4)_
+* **[MVP · v0.4]** US-0A-23: As Morgan, I want to print the file formats my WingFoil build reads, its commands and the
+  capabilities it provides with `wingfoil capabilities` so that I know, before I install a template pack, whether this
+  build can run it; an agent reads the same document as the MCP Resource `wingfoil://capabilities`. _(feat: P5.1.5)_
 
 #### Edge cases (interruption / exception handling)
 
