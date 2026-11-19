@@ -68,3 +68,214 @@ describes them. This task runs **one** `vision-change` (`dl-132`) for the three 
 ## Execution Notes
 
 <!-- Filled by the dev-loop. -->
+
+### design (architect, 2026-11-19)
+
+Role: architect, drafting the `capture` for the product-owner (a role no agent executes, AGENTS.md §4); the
+architect's directives plus `traceability`. This phase is the `vision-change.capture` step and `impact-analysis`'s
+reverse walk of the instance `vision-change-rel-v0.4-w1-feature-rows-plan` (`add` `8f0a8f8dc`, `submit` `a13817111`),
+whose `## Phases / Steps` maps the vision-change phases onto the dev-loop agents.
+
+**Inputs read.** `spec-018` (approved) §1.2, §2.1, §3.2; `spec-019` (approved) §1, §2, §3.1, §6, §9, §12, Consequences;
+`spec-020` (approved) §2, §4.7, §8, §9, §10 AC-13, Consequences; `dl-132` (Q1 (a), Q2 (ii), elements 4–5); `dl-166`
+(Q1 (b), Q2 (ii)); `.wingfoil/workflows/custom/vision-change.yaml` 1.3; the `change-proposal` template; `cp-002` and its
+plan; `COLLABORATION.md`'s change-proposal rows; plan rulings W1-R2, W1-R3, W1-R10. `depends_on` is empty (dl-015: no
+Execution Notes to read); the downstream tasks' ACs read: `task-362` (AC 1–11), `task-365` (AC 10), `task-367` (AC 2,
+4, 9), `task-381` (AC 1–2).
+
+**Builds.** The task's PATH shim resolves `wingfoil`; pinned and code build both print
+`0.3.2 (3c13e738ce51de1f5ae6d4f227302ce3dcf52a47)` (`wingfoil --version`, `node dist/cli.js --version`).
+
+**Before adding.** `npm run -s wingfoil -- workflow next vision-change-rel-v0.4-w1-feature-rows-plan` (pinned) printed
+`next step: vision-change.capture`, role `product-owner`, the actions `memory.add(type: change-proposal)` (with the
+`--workflow … --step vision-change.capture` command) and `memory.submit`, `evidence missing: produces`; and one
+`warning: …dna.yaml: unknown field(s) ignored: team.roles[4].human_only, …` (the 0.3.2 pin predates `dl-202`'s field).
+
+**Commits of this phase (code build, `WINGFOIL="node $(pwd)/dist/cli.js"`).**
+
+- `7a7a47751` `wf(change-proposal): add cp-003-add-the-capabilities-and-verify-feature-rows-and-restate-p5.2.3-without-approve`
+  — `memory add --type change-proposal --title "…" --workflow vision-change-rel-v0.4-w1-feature-rows-plan --step
+  vision-change.capture`, after a `--dry-run` under `--format json` and `--format console` (both exit 0, the same
+  subject and paths). One file; trailers `WingFoil-Instance:`, `WingFoil-Step: vision-change.capture`,
+  `WingFoil-Version:`, then one `Co-Authored-By:`/`AI-Model: claude-opus-5-5` pair written by the verb
+  (`git log -1 --format=%B | grep -c '^Co-Authored-By:'` → 1). No amend.
+- `2b5d6bad5` `wf(change-proposal): submit cp-003-…` — `memory submit`, after both dry-runs: `draft → in-analysis`,
+  `Carries content: frontmatter field 'feature', frontmatter field 'kind', frontmatter field 'target_release', the
+  body`; one file; one trailer pair (`grep -c` → 1). The body holds the change, the analysis per layer and the
+  reverse walk with its commands (its `## Notes`). `kind: feature`, `feature: "P1.14, P5.1.5, P5.2.3"`,
+  `target_release: v0.4`.
+- After it, `workflow next` (pinned) prints `next step: vision-change.impact-analysis@change-proposal:cp-003-…`
+  (`in-analysis`), `evidence missing: state`, `human needed: approve or reject cp-003-… — routed to Roberto
+  Pompermaier`; `workflow status` lists `capture complete, impact-analysis current`.
+- `npm run -s check:governance -- --base origin/main` → `gated: 0 findings on 0 commits`, `history: 0 findings`,
+  `state not checked: 0 entries` (32 `wf()` commits and 33 others in the range), exit 0.
+
+**The analysis, in short** (the change-proposal holds it in full, with the commands of the walk):
+
+- Features: P1.14 `wingfoil verify` (Pillar 1, after P1.13) and P5.1.5 `wingfoil capabilities` (P5.1, after `audit`),
+  each in its pillar table, the `v0.4` table and the MVP summary; P5.2.3's v0.4 Notes lose "approve" and state the
+  refusal; the feature count 66 → 68 in `06_features.md`, `08_mvp-canvas.md`, `01_product-brief.md`, `00_index.md`
+  and `README.md`. Id rule: the next unused number of the group (`P1.<max+1>`, `P5.1.<max+1>`) and of the journey
+  over every story-map file (`US-<J>-<max+1>`), never renumbering or reusing; candidates checked free with
+  `grep -rn "P1\.14\|P5\.1\.5\|US-0A-23\|US-4-14" docs/` (one hit, `spec-020`'s own "for example P1.14").
+- Stories: US-0A-23 (`01_init-migrate.md`, Journey 0a step 2) for P5.1.5; US-4-14 (`05_conventions.md`, Journey 4
+  step 5) for P1.14; US-2-11 amended; the story-map index rows and counts (P1 14/14, P5 16/18, 66/68).
+- BDD: two new files, `p5-interaction/P5.1.5-capabilities.feature` and `p1-memory/P1.14-verify.feature`; two scenarios
+  added to `P5.2.1-mcp-resources.feature`; one Scenario Outline added to `P5.2.3-mcp-tools.feature`; the BDD index.
+- SARD: REQ-SEC-02 and REQ-SEC-03 gain `spec-020`'s fit sentence and traceability; REQ-INT-01 traceability only;
+  REQ-INT-03 restated (found by the walk); REQ-SYS-07 unchanged; the SARD index rows; one name-resolvability
+  allowlist entry.
+- Delivered elements: `spec-018` §1.2, `spec-004` §4.1/§4.3 and `spec-014` §3 are `task-367`'s amendments (its AC 9);
+  `spec-019` and `spec-020` need none; `minor-v0.4`'s `features:` gains P1.14 and P5.1.5 by the approver's
+  `memory amend`, prepared at `schedule`.
+
+**Command counts (W1-R10: counted, not changed).** AGENTS.md §1 states 35 commands (line 35); `docs/cli-reference.md`
+holds 35 entries (`grep -c` of its ``### `wingfoil …` `` headings → 35); no vision document states a total
+(`grep -rnoiE "[0-9]+ (CLI )?(leaf )?commands" docs/01_vision/` → only `X_cli-cmds.md`'s section numbers). With
+`capabilities` and `verify` the surface is 37; `align-agent-docs` writes the number.
+
+#### Per-criterion classification
+
+This is a documentation task: each step is a document edit whose acceptance is a parity or text check. The phase
+that writes a layer is the vision-change's (the plan's mapping); "pinned by" names the existing test and the new one.
+
+| AC | Class | Written at | Pinned by (existing) | What the qa pins at `downcast-scenarios` (new) |
+|----|-------|------------|----------------------|-----------------------------------------------|
+| 1 | characterization | this phase; the approver at `impact-analysis` | none: evidence is `workflow status` / `workflow next` (pinned), which deduce `capture complete` now and `impact-analysis complete` after the approve | nothing (no test reads a change-proposal's body; `downcast.in-scope` is bound `manual: true`) |
+| 2 | characterization | `update-vision` (architect, resumed) | `test/docs/vision-index.test.ts` (document map, every range, `INDEX_ANCHORS`), `vision-default-machine-text.test.ts` (06_features ≥ 1.15), `vision-revision-history.test.ts` (06_features is not judged: no `## Revision history`) | the rows exist (below) |
+| 3 | characterization | `downcast-stories` (architect, resumed) | `bdd-dna-sections.test.ts` reads `01_init-migrate.md` (no DNA story may name `conventions`; US-0A-23 does not) | the stories and the index counts (below) |
+| 4 | characterization | `downcast-scenarios` (qa = the dev-loop `red`) | none executes `.feature` files (`bdd-dna-sections.test.ts` header, `bug-106`) | the files and scenario titles (below) |
+| 5 | **red-first** (corrected from characterization) | `downcast-requirements` (developer = `green`) | `l0-traceability.test.ts` (REQ-SEC-03's pinned sentences must survive), `name-resolvability.test.ts` (SARD is scanned), `req-sec-06-confinement-text.test.ts`, `sard-state-from-history.test.ts` | the SARD sentences (below): they do not exist at the red commit, which precedes `downcast-requirements`, so the red is genuine, not fabricated |
+| 6 | characterization | `schedule` (developer = `refactor`) | `vision-index.test.ts` (the sequencer row's index); `node scripts/check-release-exit.cjs <cp path>` (the bound post-check) | nothing: the check is a command, and it exits `1` (`P1.14 is not in …minor-v0.4.md's features: (status in-development)`) until the approver records the release amendment |
+| 7 | characterization | every phase | `npx jest test/docs --maxWorkers=2` | — |
+
+**What the qa pins** (one new suite, e.g. `test/docs/vision-change-w1-rows.test.ts`; reads the real files, no fixture;
+copy the `flat`/`between` helpers of `test/docs/l0-traceability.test.ts` rather than importing them; deterministic,
+offline):
+
+- `docs/01_vision/06_features.md`: a Pillar 1 row starting `| P1.14 ` naming `` `wingfoil verify` ``; a P5.1 row
+  starting `| P5.1.5 ` naming `` `wingfoil capabilities` ``; both ids as rows of the `### **v0.4 …` table; the P5.2.3
+  row of that table does not contain `Submit, approve` and contains `E_AGENT_CONTEXT`; `**Total Features (MVP):** 68`
+  equals the number of `| P` / `| X` id rows of the pillar tables, counted by the test.
+- the story map: `US-0A-23` with `_(feat: P5.1.5)_` in `01_init-migrate.md`; `US-4-14` with `_(feat: P1.14)_` in
+  `05_conventions.md`; `00_index.md`'s pillar tables have P1.14 and P5.1.5 rows, and its "Total MVP features" figure
+  equals the test's count of `06_features.md`.
+- BDD: the two new files exist and their first line that is not a comment, a tag or blank is `Feature: P5.1.5
+  (US-0A-23) - …` / `Feature: P1.14 (US-4-14) - …`; the scenario titles the qa writes for scenarios 1–13 of the
+  change-proposal, verbatim; `P5.2.3-mcp-tools.feature` has a `Scenario Outline` whose Examples list `memory.approve`,
+  `memory.reject` and `memory.amend` and which quotes `E_AGENT_CONTEXT`; if D7 is accepted, the file no longer says
+  `with the agent as author`.
+- SARD (red at the red commit): REQ-SEC-02's and REQ-SEC-03's Fit Criterion contain `spec-020`'s sentence verbatim —
+  "A commit range in which a forged approval or an out-of-band status change exists makes `wingfoil verify` exit
+  `1`." (the spec's words; AC 5's paraphrase "holding" is not the pinned text) — and their Traceability contains
+  `spec-020` and `P1.14`; REQ-INT-01's Traceability contains `spec-019` and `P5.1.5`; if D4 is accepted, REQ-INT-03's
+  Fit Criterion no longer contains ``memory.submit`/`memory.approve` invoked via MCP`` and contains `E_AGENT_CONTEXT`.
+  The expected red: `toContain` / `not.toContain` failures on the SARD cases only, every other case green.
+- Before the red commit: `npx tsc --noEmit -p tsconfig.json` and `npx jest test/lint --maxWorkers=2` (W0-R11).
+
+#### Files expected to touch, by phase, and version bumps
+
+| Phase (agent) | Files | `version:` |
+|---------------|-------|------------|
+| `update-vision` (architect) | `docs/01_vision/06_features.md`, `docs/01_vision/00_index.md`, `docs/01_vision/08_mvp-canvas.md`, `docs/01_vision/01_product-brief.md`, `README.md` (the vision count), `test/docs/support/vision-index.ts` (`INDEX_ANCHORS`: `06_features.md:L102–104` → `L103–105`, the P1.14 row lands above it) | 06_features 1.17 → 1.18, 08_mvp-canvas 1.13 → 1.14, 01_product-brief 1.11 → 1.12, each with its `**Date:**`; `00_index.md` declares none (its `**Last indexed:**` and the document-map rows move); README and the test module declare none |
+| `downcast-stories` (architect) | `docs/02_requirements/01_user_story_map/00_index.md`, `01_init-migrate.md`, `05_conventions.md`, `03_review-workflow.md` | none: no story-map file declares a version (`grep -m2 -iE '^\*\*Version\|^version:'` over them prints nothing) |
+| `downcast-scenarios` (qa) | `features/p5-interaction/P5.1.5-capabilities.feature` (new), `features/p1-memory/P1.14-verify.feature` (new), `features/p5-interaction/P5.2.1-mcp-resources.feature`, `features/p5-interaction/P5.2.3-mcp-tools.feature`, `docs/02_requirements/02_bdd/00_index.md`, `README.md` (the BDD cell), the new suite | none (no BDD file or index declares one) |
+| `downcast-requirements` (developer) | `docs/02_requirements/03_sard/05_security-compliance.md`, `04_integrations.md`, `00_index.md`, `test/docs/name-resolvability.allowlist.ts` (`wingfoil verify` in `05_security-compliance.md`, `PLANNED`, `plannedBy: ['task-365']`) | none (no SARD file declares one) |
+| `schedule` (developer) | the change-proposal (hand `wf(change-proposal): assign release v0.4 to cp-003-…`, then `wf(change-proposal): finalize cp-003-… [accepted → scheduled]`, as `cp-002`'s `411cb44a7`, `017c204e3`), `docs/01_vision/07_sequencer.md` with its `00_index.md` row; `minor-v0.4` left uncommitted for the approver | 07_sequencer 2.1 → 2.2 |
+
+No `.wingfoil/` file changes, so `npm run check:mcp` and `workflow show` on the pinned build have nothing to prove;
+no workflow phase or step list changes: the twelve files `grep -rln "vision-change" test/ | wc -l` counts pin the workflow's
+definition, its bindings and the `change-proposal` type, none of which this change edits. No `src/` file is touched.
+
+#### Tests run (this phase)
+
+- After the heavy-gate slot wait, `npm test -- test/docs --maxWorkers=2` (a filtered run, so no gate line): `Test Suites: 37 passed, 37
+  total`, `Tests: 418 passed, 418 total`, exit 0 — the characterization baseline of AC 7, on the head after the
+  submit (`2b5d6bad5`).
+
+#### Pending amendments (approver)
+
+None at this gate. The ACs name no tech-spec amendment for this task: `spec-019` and `spec-020` are realised without
+change; `spec-018` §1.2, `spec-004` §4 and `spec-014` §3 are `task-367`'s and `task-362`'s (their AC 9 / AC 10). The one
+amendment this task owes — `minor-v0.4`'s `features:` gaining P1.14 and P5.1.5 — is prepared at `schedule`, after the
+change is accepted, with its `--reason` there.
+
+#### Decisions for the approver (at `impact-analysis`, with this design gate)
+
+- **D1 — the feature ids and where they sit.** (A) `wingfoil verify` = P1.14, Pillar 1 after P1.13 (it judges Memory and
+  approval records; `spec-020`'s own example); `wingfoil capabilities` = P5.1.5, under P5.1 after `audit` (a CLI command
+  first, the Resource second). (B) both under P5 (verify P5.1.6; capabilities P5.2.4 under MCP). **Recommend (A).**
+- **D2 — "approve" in P5.2.3's row.** (a) dropped from the row with no mention; (b) dropped from what the Tools do, and
+  one clause states that `approve`, `reject` and `amend` are listed and refuse (`E_AGENT_CONTEXT`). **Recommend (b)**: the
+  Tools exist (REQ-SYS-05), and a reader of a silent row would take them as absent.
+- **D3 — SARD text versus traceability.** Text: REQ-SEC-02, REQ-SEC-03 (the fit sentence), REQ-INT-03 (D4).
+  Traceability only: REQ-INT-01 (+ `spec-019`, P5.1.5), and REQ-SEC-03 also gains P5.2.3. REQ-SYS-07: no change (its
+  fit criterion is the execution context's; the document's determinism is `spec-019` §3.2 and the BDD scenario).
+  **Recommend as listed.**
+- **D4 — REQ-INT-03 restated in this change.** Its Fit Criterion promises `memory.approve` via MCP and a commit
+  "authored by the agent", which W1-R2 and `spec-018` §2.1 contradict; the task's AC 5 does not name it. (a) restate it
+  here, at `downcast-requirements`, with the text in the change-proposal; (b) leave it to `task-367`. **Recommend (a)**:
+  the vision row and the requirement change together, and `task-367`'s red would otherwise read a SARD that promises
+  what its AC 2 refuses.
+- **D5 — US-2-11 amended** ("record review decision" → the agent advances its own work, the approval stays the
+  approver's), with the P5.2.3 feature narrative. **Recommend yes.**
+- **D6 — a nominal scenario in `P1.14-verify.feature`** (`spec-020` T-1), beyond the five cases `spec-020` names, for the
+  BDD index's rule "≥1 nominal and ≥1 error/edge" per file. **Recommend yes.**
+- **D7 — "with the agent as author" in `P5.2.3-mcp-tools.feature`** contradicts `spec-018` §2.1 (author = the session's
+  git identity; the agent a co-author). (a) restate it "with the agent's `Co-Authored-By:` and `AI-Model:` trailers"
+  here; (b) leave it to `task-367` (W1-R3's mechanism). **Recommend (a)**, the step only; the mechanism stays
+  `task-367`'s.
+- **D8 — what stays untouched.** `05_journeys.md` (Journey 4's obstacle is about code conventions; the stories hang off
+  existing steps), `04_personas.md`, the P5.1 heading "Project Initialization", `08_mvp-canvas.md`'s "✗ Automated
+  validation". `README.md`'s vision and BDD counts are updated by the phases above, as `cp-002` did, although README is
+  `align-user-docs`' file. **Recommend as listed.**
+- **D9 — the sequencer's stale v0.4 count.** `07_sequencer.md`'s `v0.4` budget row reads 11 features and "Features per
+  release … → 23, 11, 3", while `minor-v0.4`'s `features:` lists 7 since its own `define-scope`
+  (`grep -n "^features:" docs/04_memory/planning/rl-v1/minor-v0.4.md`). `schedule` rewrites that row anyway (the ids
+  must be in it for `check-release-exit.cjs`). (a) `schedule` writes 9 (7 + P1.14 + P5.1.5), states the old 11 and
+  recomputes the proxy; (b) 13 (11 + 2), leaving the drift. **Recommend (a)** (a same-class instance in a file the task
+  touches, W0-R10).
+
+#### Contradictions with approved specs and ready decision-logs
+
+- REQ-INT-03's Fit Criterion and `P5.2.3-mcp-tools.feature`'s first scenario against `spec-018` §2.1 and W1-R2: D4, D7.
+- `spec-018` §1.2 cites `06_features.md:285`'s "Submit, approve, record memory", which this change removes: not a
+  contradiction once `task-367` amends §1.2 (its AC 9, W1-R2).
+- None with `spec-019`, `spec-020`, `dl-132` or `dl-166`.
+
+#### Downstream and risks
+
+- **`task-362`** reads `p5-interaction/P5.1.5-capabilities.feature` (scenarios 1–4) and the two capabilities scenarios
+  of `P5.2.1-mcp-resources.feature` (5–6). **`task-365`** reads `p1-memory/P1.14-verify.feature` (7–12). **`task-367`**
+  reads the new `Scenario Outline` of `P5.2.3-mcp-tools.feature` (13) and edits the untouched "missing required
+  argument" scenario to its gate's ruling (W1-R2).
+- **`task-381`** edits after this task is merged: `06_features.md` (this change adds the P1.14 row, the P5.1.5 row, two
+  v0.4 rows, the MVP summary lines and the total), the story map's `00_index.md` (pillar tables and the validation
+  counts: it starts from 66/68 with P5.3.4 and P5.3.5 still unmapped), and `03_review-workflow.md` (US-2-11). This
+  change does not edit `05_journeys.md` or `06_decisions.md`.
+- `test/docs/name-resolvability.allowlist.ts` is also edited by `task-362` and `task-365`: a textual merge conflict
+  is likely (low: keep every entry).
+- `task-379` (`src/core/context.ts`) and `task-364` (`src/core/index.ts`, `src/core/registry.ts`, `src/mcp`, the CLI
+  registrars): no shared file; no risk.
+- `bug-534`: no pending amendment at this gate, so `test/cli/workflow-unbound-none.integration.test.ts` is not expected
+  to fail here; at `schedule` the uncommitted `minor-v0.4` amendment makes it fail alone until the approver records it.
+
+#### Candidate findings (not filed)
+
+- `docs/01_vision/07_sequencer.md`: the `v0.4` row and the "Features per release" line count 11 features against
+  `minor-v0.4`'s 7 (`grep -n "^features:" docs/04_memory/planning/rl-v1/minor-v0.4.md` →
+  `features: [P4.18, P4.19, P4.20, P4.21, P5.1.1, P5.1.4, P5.2.3]`). Expected: the count of the release's `features:`.
+  Low; D9 proposes the fix in `schedule`.
+- `docs/02_requirements/02_bdd/00_index.md`: the folder layout reads `p4-workflow/ (20 features)`, while
+  `find features/p4-workflow -name '*.feature' | wc -l` → 21 (P4.21 added by `cp-002`). Expected 21. Low; the
+  `downcast-scenarios` re-count of this change rewrites the block.
+- `README.md`: the BDD cell reads `66 / 267`; `grep -rhE '^\s*Scenario( Outline)?:' docs/02_requirements/02_bdd/features | wc -l`
+  → 312. Low; the same re-count updates it.
+
+### Retrospective
+
+<!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
+     reconstructed afterwards. One line per item: what happened, the evidence (a command and what it
+     printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
+     Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
+     here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
