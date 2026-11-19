@@ -485,6 +485,131 @@ CoreResult.warnings" cases, `McpError: MCP error -32603: options.buildParams is 
 result's text must parse to the CLI's in-process `--dry-run --format json` payload; the history Resource text must equal
 the CLI's stdout without its final newline; a malformed escape must reject as an `McpError`.
 
+### green (developer, 2026-11-19)
+
+**Start.** The task's PATH shim first: `command -v wingfoil` → the shim, `wingfoil --version` and `node dist/cli.js --version`
+→ `0.3.2 (883cdfb26…)`. `git rev-list --count HEAD..main` → `0` at the start (head `722708cd7`), so no merge. The worktree
+contains `11f1736de` (`git merge-base --is-ancestor 11f1736de HEAD` → true).
+
+**Commit `222567a8f`** `feat(mcp): task-364 — derive Tool input schemas, Tool arguments and Resource templates from the
+parameter metadata (bug-272)`. Files, all from the design's `#### Files`:
+- `src/core/registry.ts`: new exports `buildCoreParams` (D11), `ToolInputProperty`, `ToolInputSchema`,
+  `deriveToolInputSchema` (D2, D3, D6: positional, options, flags in declaration order, then `dry-run` when the operation
+  mutates; `co-author` / `ai-model` never), `ToolArgumentsOutcome` and `toolArgumentsToParams` (D4, D10: unknown argument
+  first, in sorted order, then type and required checks in schema order; the context in the CLI registrar's shape, with
+  `options` `undefined` exactly where `withoutAgentOptions` makes it so). One private helper list (`toolParameters`) feeds
+  both functions, so the schema and the check cannot disagree. The doc comments of `CoreOption`, `CoreOperation.options`,
+  `ParamsContext` and its four fields no longer say the MCP surface cannot carry parameters (AC 6).
+- `src/mcp/registrar.ts`: `deriveMcpResourceUri` takes an optional `CorePositional` and appends `/{name}` for a required
+  one; a read-only operation with a required positional is a `ResourceTemplate` with `list: undefined`, whose read
+  percent-decodes the variable (a malformed escape → `invalid argument: <name> must be percent-encoded`, no details) and
+  passes `positional` and `positionals: [value]` (D7, D8); `tools/list` / `tools/call` are answered on `server.server`
+  with the derived schema, the argument check before the operation, `dry-run` through `runAsDryRun`, an unknown name →
+  `Tool <name> not found` (D5). The handlers are installed even with no mutating operation. No agent-invocation wrapping
+  (W1-R3 is `task-367`'s). The module doc and `registerCoreModules`' doc lose "zero-argument" and the `force` sentence.
+- `src/cli.ts`: passes `buildCoreParams` instead of its inline builder (same output: `test/cli/entrypoint.test.ts` passes,
+  below).
+- `src/core/index.ts` (comments only, the seven places of design item 3) and `src/mcp/workflow-resource.ts` (comment only).
+
+**Red → green**, targeted, in the worktree: `npx jest test/core/operation-parameters.test.ts test/core/tool-input-schema.test.ts
+test/mcp/tool-arguments.test.ts test/core/parity.test.ts test/mcp/registrar.test.ts test/mcp/read-only-agent-channel.test.ts
+--maxWorkers=2` → `Test Suites: 6 passed, 6 total`, `Tests: 44 passed, 44 total` (red: 22 failed, 22 passed, 44 total).
+The collateral reds: `npx jest test/mcp/resource-warnings.test.ts test/docs/mcp-surface-parity.test.ts test/mcp/error-details.test.ts
+test/mcp/success-warnings.test.ts test/mcp/server.test.ts test/mcp/resource-latency.test.ts test/cli/entrypoint.test.ts
+test/core/agent-execute.test.ts test/core/registry.test.ts test/core/production-registry.test.ts --maxWorkers=2` →
+`Test Suites: 9 passed, 9 total`, `Tests: 107 passed, 107 total` (resource-warnings' two cases included); `npx jest test/lint
+--maxWorkers=2` → `Test Suites: 16 passed, 16 total`, `Tests: 165 passed, 165 total` (`typecheck.clean` green);
+`npx tsc --noEmit -p tsconfig.json` → exit 0.
+
+**AC 6, the grep of design item 3.** `grep -rn "never populates\|zero-argument\|no per-request parameter\|never sets this field\|simply never sets" src/`
+→ no output, exit 1 (20 hits at design). Positive case: the same grep on `git show 4dd596f88:src/core/index.ts` hits
+(`zero-argument` at line 436). The `spec-006` §3 `paths` row reads `wingfoil://paths` since the approver's `89e20213f`.
+
+### refactor (developer, 2026-11-19)
+
+**Commit `5bf6a79e1`** `test(core): task-364 — cover the argument mapping's remaining cases and the unknown Tool name`. The
+first coverage run on `222567a8f` left `src/core/registry.ts` at 7 more uncovered branches and 2 more uncovered
+functions than the baseline, and `src/mcp/registrar.ts` at 3 more uncovered branches (lcov `BRDA:…,0` at
+`registry.ts` 408, 425, 470, 492, 514, 525 and `registrar.ts` 105, 207). The new `test/core/tool-arguments-params.test.ts`
+(mine, not a red file) drives them on synthetic operations; `templateVariable` reads the variable with `String()`
+(the SDK has matched the template, so the variable is present). No behaviour change.
+
+**Gates** (each heavy run after waiting for the shared slot, `--maxWorkers=2`, foreground in a tracked background command; the
+`bug-272` amendment in the tree):
+- `npm run -s build` → exit 0 (on `222567a8f`).
+- `npm run test:coverage -- --maxWorkers=2` → `Test Suites: 1 failed, 691 passed, 692 total`, `Tests: 1 failed, 12553
+  passed, 12554 total`, exit 1. The one failure is `test/cli/workflow-unbound-none.integration.test.ts` "workflow next
+  (console)", `1 diagnostic(s)`: `node dist/cli.js workflow next --format json` lists exactly one diagnostic,
+  `W_UNCOMMITTED_INPUTS` on the `bug-272` file (the pending amendment) — the `bug-534` class. The same test on a clean
+  clone of the head `5bf6a79e1` (`git clone --no-local`, `node_modules` linked): `npx jest
+  test/cli/workflow-unbound-none.integration.test.ts --maxWorkers=2` → `Tests: 4 passed, 4 total`.
+- Coverage against the merge base `3c13e738c`'s baseline (covered/total, the stored baseline summary compared file by file): statements 12706/12853 →
+  12804/12951, branches 7911/8197 → 7985/8271, functions 2486/2522 → 2506/2542, lines 10601/10658 → 10682/10739
+  (uncovered +0 in each); `All files` above 80 % in every column. Per changed file: `src/core/registry.ts` 39/39 →
+  104/104, 22/24 → 86/88, 12/12 → 24/24, 34/34 → 88/88; `src/mcp/registrar.ts` 29/29 → 62/62, 18/18 → 30/30, 6/6 →
+  15/15, 29/29 → 56/56; `src/cli.ts` 15/16 → 15/16, 11/13 → 9/11, 4/4 → 3/3, 14/14 → 14/14 (the removed inline builder
+  takes two covered branches and a function with it: uncovered +0, the percentage lower); `src/core/index.ts` and
+  `src/mcp/workflow-resource.ts` unchanged (comments only).
+- `npm test -- --maxWorkers=2` → the same counts and the same single `bug-534` failure, exit 1.
+- `npm run -s typecheck` → exit 0 (both tsc configs). `npm run -s lint` → exit 0. `npm run -s docs:api` → exit 0.
+- AC 7: `npx jest test/docs/cli-reference.test.ts test/core/parity.test.ts --maxWorkers=2` → `Test Suites: 2 passed`,
+  `Tests: 11 passed`; no usage text changed (`git diff 4dd596f88..HEAD --stat -- docs/cli-reference.md src/cli` → nothing:
+  `docs/cli-reference.md`, `src/cli/program.ts` and `src/cli/registrar.ts` untouched).
+- `docs.parity`: the `test/docs` suites are part of the full runs above, all green.
+
+`git rev-list --count HEAD..main` → `0` at the end of refactor: no merge.
+
+### self-review (developer, 2026-11-19)
+
+Per AC:
+- **AC 1** (characterization): the metadata is the existing `positional` / `options` / `flags` (D1);
+  `test/core/operation-parameters.test.ts` 4/4 green.
+- **AC 2**: `parity.test.ts` lists the three templates `wingfoil://agent/show/{run-id}`, `wingfoil://memory/history/{id}`,
+  `wingfoil://workflow/show/{ref}` and eight static URIs; `registrar.test.ts`' decoding and malformed-escape cases green.
+- **AC 3**: `tool-input-schema.test.ts` 5/5 (`memory.approve`: `required: ['id','reason']`).
+- **AC 4**: `tool-arguments.test.ts` 9/9 (context parity with the CLI for `memory approve` and `memory history`, the six
+  refusals with the operation not called, `dry-run`), and `read-only-agent-channel.test.ts`' real `memory.approve` on a
+  draft bug: text and `structuredContent` equal the CLI's `--format json` refusal, nothing persisted (`bug-272`).
+- **AC 5**: `parity.test.ts`' names / required equality for every mutating operation, green; the CLI half is untouched
+  derivation.
+- **AC 6**: the grep above; the `spec-006` amendment is recorded (`89e20213f`).
+- **AC 7**: above.
+
+T4: `git log --first-parent --no-merges --format=%h 4dd596f88..HEAD -- test/core/operation-parameters.test.ts
+test/core/tool-input-schema.test.ts test/mcp/tool-arguments.test.ts test/core/parity.test.ts test/mcp/registrar.test.ts
+test/mcp/read-only-agent-channel.test.ts test/mcp/helpers/channel-enumeration.ts` → empty.
+
+Checked against code-review / determinism: the schema, the argument check and the URI derivation are pure functions of the
+declaration (no clock, no randomness; unknown arguments sorted before the first is named; properties in declaration
+order). Same-class instances in the files touched: the comments listed in design item 3 are all rewritten (grep above).
+Scope: `git diff --stat main...HEAD -- src` names only `src/cli.ts`, `src/core/index.ts`, `src/core/registry.ts`,
+`src/mcp/registrar.ts`, `src/mcp/workflow-resource.ts`; `src/cli/`, `src/mcp/server.ts` and `.wingfoil/` untouched.
+`bug-272`'s Expected Behavior: arguments reach the operation mapped to the CLI's params (AC 4 parity), a real
+`CORE_MODULES` Tool is driven into an illegal transition with text and details equal to the CLI's, nothing persisted
+(snapshot): met in full.
+
+**Downstream — what each task may rely on** (as the design lists, now in code):
+- `task-365`: an option declared as a `CoreOption` is derived on the CLI and into the Tool schema with no other change; a
+  `mutates: false` operation still becomes a Resource (no opt-out exists; its design decides one).
+- `task-367` / `task-368`: `registerCoreModules` gives each mutating operation a Tool with `deriveToolInputSchema(op)` as
+  `inputSchema`, checks arguments with `toolArgumentsToParams`, and calls `buildParams` with the CLI's context; pass
+  `buildCoreParams`; `dry-run` is handled. The registrar owns `tools/list` / `tools/call` on the low-level server, so
+  `registerEmptyToolsChannel` must be replaced, not combined, and a later `registerTool` on the same server throws. The
+  agent invocation (W1-R3) is to be added around the call in `callCore` (no wrapping today: the call reads
+  `currentAgentInvocation()`'s default, `{ env: process.env }`).
+- `task-371` / `task-372`: options and operations declared the existing way are derived on both surfaces; shared files
+  `src/core/index.ts` (comments edited here) and `src/core/registry.ts`.
+
+**Declared slip.** While fixing a type error in green I ran `npx tsc --noEmit -p tsconfig.build.json` bare, once, outside
+the heavy-gate lock (no wait for the slot). It printed the same TS2322 as the `tsconfig.json` run and exited non-zero; the
+gate of record is `npm run -s typecheck` above.
+
+### Pending amendments (approver)
+
+- `bug-272-the-mcp-registrar-s-tool-handlers-drop-the-call-s-arguments-so-no-core-modules-tool-can-be-refused-on-an-illegal-transition-like-the-cli-and-task-016-s-req-sec-05-case-stays-unasserted`
+  — `--reason "Record the bug's retrospective: task-364 closes it by deriving each Tool's input schema and argument mapping
+  from the parameter metadata, and asserts the REQ-SEC-05 illegal-transition case on the real memory.approve Tool."`
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -492,3 +617,6 @@ the CLI's stdout without its final newline; a malformed escape must reject as an
      printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
      Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
      here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+
+- Two full coverage runs were needed: the first, on `222567a8f`, left new branches of `registry.ts` and `registrar.ts` uncovered (lcov `BRDA:…,0`, refactor above), and each run waited for the shared slot. Proposal: a green that adds exported functions lists, before its first coverage run, every branch of the new code and the test that drives it.
+- One bare `tsc -p tsconfig.build.json` outside the lock (declared in self-review): the `typecheck` npm script is the only allowed form, and a quick `tsc --noEmit -p tsconfig.json` was enough to see the error.
