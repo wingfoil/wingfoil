@@ -871,6 +871,10 @@ Re-applied after the submit and the bug syncs, uncommitted, each adding the bug'
 
 Until they are recorded, `test/cli/workflow-unbound-none.integration.test.ts` fails alone with `W_UNCOMMITTED_INPUTS` in this worktree (`bug-534`); on a clean clone of the head it passes (the full suite above ran without them).
 
+### correction of the notes above (developer, 2026-11-19)
+
+In `### corrections to earlier sections` (the YAML of the reject's item 1) and in `### self-review` (the line on invisible characters), the private-use character U+E000 itself stands where the escape `\uE000` was meant: the editing tool turned the typed escape into the character, and the check of the round's list, which does not include U+E000, did not catch it. Read both lines with `\uE000` in its place (`grep -nP '[\x{E000}]'` on this file lists exactly those two lines).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
