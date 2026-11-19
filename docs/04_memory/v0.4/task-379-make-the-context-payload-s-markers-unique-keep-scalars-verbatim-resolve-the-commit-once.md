@@ -713,6 +713,22 @@ A ranked-out sibling is reported only when it is not carried for one of these re
 
 **Candidate finding, not part of this task.** A frontmatter that doubles a list through aliases inflates the payload exponentially: 16 doublings (390 bytes of document) give a 4,719,546-byte payload on `main` (4,850,616 on route (B)), carried although the default `maxBytes` is 262,144. Measured with a scratch script that builds the document and calls `assembleExecutionContext`. Expected: the size bound holds for the rendered document, or such a document is left out and reported. Suggested severity: medium.
 
+### rulings after the second reject (approver, 2026-11-19)
+
+The re-review of head `d1de7b3ef` returned REJECT; the approver recorded it with `92bb05f78`. At the design gate that
+follows, the approver ruled on the decisions of `### design addendum 2 (architect, after the second reject)`, each as
+the architect recommended:
+
+- **D7 (B):** a document is carried with the mark chosen from every string scalar the parser closes, so a key the
+  document writes in the internal form is carried as its own string. No `spec-012` text changes.
+- **D8 (a):** `readWrittenFrontmatter` turns every error into the left-out result (the element's refusal), with the
+  reason `its frontmatter cannot be read as written`; no input reaches an uncaught throw from it.
+- **D9 (a):** the written text of a scalar is a public field again, so the existing assertion on it compares the text
+  with no edit to that test file.
+- **Route of this round:** a fresh qa writes the red from `#### Cases for the qa` of that addendum under these
+  rulings; the developer fixes the red together with the inaccurate statements the addendum lists; a fresh
+  reviewer then reviews the whole task.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
