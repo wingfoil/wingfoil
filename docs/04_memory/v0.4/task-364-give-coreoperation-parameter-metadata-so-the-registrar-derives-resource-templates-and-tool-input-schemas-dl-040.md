@@ -609,6 +609,7 @@ gate of record is `npm run -s typecheck` above.
 - `bug-272-the-mcp-registrar-s-tool-handlers-drop-the-call-s-arguments-so-no-core-modules-tool-can-be-refused-on-an-illegal-transition-like-the-cli-and-task-016-s-req-sec-05-case-stays-unasserted`
   — `--reason "Record the bug's retrospective: task-364 closes it by deriving each Tool's input schema and argument mapping
   from the parameter metadata, and asserts the REQ-SEC-05 illegal-transition case on the real memory.approve Tool."`
+- `spec-016-agent-execution` — `--reason "Align the agent rows of section 8 with spec-006 section 3 and settle section 7's run-id encoding as task-364's design gate ruled: one percent-encoded segment that the registrar decodes."`
 
 ### review fix F2 (qa, 2026-11-19)
 
@@ -618,6 +619,31 @@ and an empty registry lists `[]`. Commit `ecefb5452` (`test(core): task-364 — 
 parity test (review F2)`) rewrites only that sentence: the short-circuit to `[]` stays, described as structurally
 equivalent to the empty list `tools/list` returns. `git diff` before the commit showed the comment's four lines replaced
 by three, nothing else. Run: `npx jest test/core/parity.test.ts --maxWorkers=2` → `Tests: 0 failed, 7 passed, 7 total`.
+
+### review fix F1 (developer, 2026-11-19)
+
+The independent review found `spec-016` out of step with the `spec-006` amendment of the design gate (`89e20213f`): §8
+says its rows are the ones `spec-006` §3 carries, cell for cell, but its `agentList` / `agentShow` MCP cells still read
+"URI per `dl-040`" and "encoding per §7", and §7 still left the run id's encoding to "the v0.4 task". Edited in the
+worktree, LEFT UNCOMMITTED for the approver's `memory amend`
+(`docs/04_memory/design/specs/spec-016-agent-execution.md`):
+- §7, the bullet "The MCP surface of the `agent` module": the Resource takes `spec-004`'s derived `wingfoil://agent/…`
+  form (`dl-040` option 1), and a run id travels as one percent-encoded segment the registrar decodes (design gate D8);
+- §8, the `agentList` and `agentShow` MCP cells: Resource `wingfoil://agent/list` *(v0.4)* and
+  Resource `wingfoil://agent/show/{run-id}` *(v0.4; the run id percent-encoded in one segment)*, the text of
+  `spec-006` §3 lines 274–275;
+- a Revision note (2026-11-19, `task-364`), in the form the spec's earlier notes use.
+
+`git diff --stat -- docs/04_memory/design/specs/` → `spec-016-agent-execution.md | 18 +++++++++++++-----`, only those
+three places. Not edited, after checking: the Process note on Q7 ("the Resource's URI is `dl-040`'s (§7, §8)") and the
+Consequences list ("in v0.4, the `agent` Resource URI with `dl-040`") stay true, since `dl-040` is what fixes the URI;
+and §8's `agentExecute` cell (`*(v0.4; refuses until v1.0, §7)*`) differs from `spec-006` §3's
+(`*(v0.4; refuses until v1.0)*`) by its "§7" pointer, a difference older than this task (`git show 89e20213f` touches
+neither row), left for the approver to rule on.
+
+Run with the edit in the tree: `npx jest test/docs/name-resolvability.test.ts test/docs/mcp-surface-parity.test.ts
+test/docs/command-surface-specs.test.ts --maxWorkers=2` → `Test Suites: 3 passed, 3 total`, `Tests: 19 passed, 19 total`.
+The proposed reason is under `### Pending amendments (approver)`.
 
 ### Retrospective
 
