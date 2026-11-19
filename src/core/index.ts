@@ -268,6 +268,7 @@ export {
   selectDirectivesById,
   serializeExecutionContext,
   validateExecutionContext,
+  WrittenScalar,
   WrittenTimestamp,
 } from './context';
 export {

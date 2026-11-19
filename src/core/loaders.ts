@@ -360,7 +360,7 @@ export const DNA_YAML_PATH = '.wingfoil/dna.yaml' as const;
  * rides every issue this raises, so an error names the baseline it came from
  * (`HEAD:.wingfoil/dna.yaml`, not just a path on disk).
  */
-function parseDnaYaml(raw: string, filePath: string): DnaYaml {
+export function parseDnaYaml(raw: string, filePath: string): DnaYaml {
   let data: unknown;
   try {
     data = parseYaml(raw, filePath);
