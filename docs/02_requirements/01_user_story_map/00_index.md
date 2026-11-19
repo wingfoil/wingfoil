@@ -259,5 +259,5 @@ of each journey.
 | **Total** |                     |                    | **15** |
 
 - **Journeys with ≥1 edge-case story:** **8 / 8**
-- **Edge-case stories total:** **14** (all **[MVP]**)
+- **Edge-case stories total:** **15** (all **[MVP]**)
 - **Edge-case coverage:** **100% ✅**

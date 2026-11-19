@@ -96,7 +96,8 @@ A budget is set by each release's own `release-planning`. Until a release has on
   tier 2 and P5.4.5 moved to v1.0). `cp-003` adds P1.14 (`wingfoil verify`) and P5.1.5 (`wingfoil capabilities`)
   and restates P5.2.3, so the row counts 9 and the proxy is recomputed.
 - Features per release: the `features:` list of `minor-v0.3.md`, `minor-v0.4.md`, `minor-v1.0.md`
-  → 23, 9, 3 (after the scope changes below; 26, 8, 3 before them; v0.4 read 11 until `cp-003`'s schedule).
+  → 25, 9, 3 (after the scope changes below; 26, 8, 3 before them; v0.3 read 23 at its planning, before P5.3.4 and
+  P5.3.5 joined it at `4c5fec67a`; v0.4 read 11 until `cp-003`'s schedule).
 
 ### Calendar forecast
 

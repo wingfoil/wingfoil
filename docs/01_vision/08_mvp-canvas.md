@@ -70,7 +70,7 @@ in [`04_personas.md`](04_personas.md).
 ✓ Git-backed document storage (each type at the path `.wingfoil/memory.yaml` declares)  
 ✓ Element schema + per-type state machines (`.wingfoil/memory.yaml`)  
 ✓ Versioning & audit trail (git commits)  
-✓ Commit-range governance check (`wingfoil verify`)  
+✓ Commit-range governance check (`wingfoil verify`) (v0.4)  
 ✓ Add, search, history commands
 
 **Pillar 2: Project DNA (v0.1)**
