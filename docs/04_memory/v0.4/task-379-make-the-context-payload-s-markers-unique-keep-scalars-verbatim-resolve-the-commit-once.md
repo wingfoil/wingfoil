@@ -629,6 +629,90 @@ Red round after the reject, run black-box (`testing` T3): the contract was the r
 
 **Coverage follow-up.** The first full coverage run of this round printed statements 98.82 and lines 99.44, below `main` at `4afbca9db` (98.84 and 99.45): `readWrittenFrontmatter`'s error path had no test. `test/core/context-written-scalars.test.ts` now drives it, with a `!!set` with no content and a mapping shared through an alias, and `withBodies` no longer carries a fallback for a directive its own listing named.
 
+### design addendum 2 (architect, after the second reject)
+
+**Base.** Branch head `a25f6a39d` (its `src/` equals `d1de7b3ef`'s: `git diff --stat d1de7b3ef HEAD` lists four Memory files only). PATH guard: `command -v wingfoil` printed the task's PATH shim; `wingfoil --version` and `node dist/cli.js --version` both printed `0.3.2 (d1de7b3ef5384e2da8af05dee15769adaf68c3c8)`. Nothing in this section changes code or tests.
+
+**How it was measured.** Five builds outside the worktree: `main` at `4afbca9db` (a clone built with `npm run build` after the heavy-gate slot; `node dist/cli.js --version` printed `0.3.2 (4afbca9dba91799797f5069f3ffa0a8f8e23ea5a)`), head `d1de7b3ef` (this worktree's `dist/`, `build-info.json` commit `d1de7b3ef…`), and three copies of head whose compiled `readWrittenFrontmatter` was patched to route (A), to its broad variant and to route (B). Every construct of the re-review's two case lists (42 and 7 rows) and 14 rows added here ran through `assembleExecutionContext` on a scratch repository of its own, in three placements each: a linked document, the element, and a relevant sibling that `limits: {maxDocs: 1, maxBytes: 262144}` ranks out. 63 rows × 3 placements = 189 observations per build.
+
+**The defect, restated.** The mark that names a key internally (a key written `1.50` is named by its YAML key `1.5` and its text together) is chosen today from a first load with js-yaml's default schema. That load drops a value a merge key overrides under YAML, while the payload's load keeps it, because there the overriding key is named by two texts. So a string the document wrote can hold the mark, and decoding it throws: in the 189 observations head threw 18 times (6 rows × 3 placements: 12 `SyntaxError`, 6 `TypeError`), `main` 26 times (`RangeError` on frontmatter that contains itself, `YAMLException` on two date keys, both fixed by this task).
+
+#### The two routes
+
+- **(A) Left out and reported.** One fixed mark, U+E000. The load records every string scalar the parser closes (js-yaml's `listener` option); when one of them holds the mark and the load named at least one key internally, the document cannot be read as written: left out and reported, the element refused. A variant, "(A) broad", leaves out every document with the mark in a string, internal names or not.
+- **(B) Carried.** A first load with the default schema records every string scalar the parser closes, including one a merge override then drops; the mark is U+E000 repeated once more than the longest run of U+E000 in any of them. The payload's load and the decoding are head's, so a document that writes the internal form carries it as its own string.
+
+| Measure (189 observations) | `main` `4afbca9db` | head `d1de7b3ef` | (A) | (A) broad | (B) |
+|---|---|---|---|---|---|
+| Uncaught throws | 26 | 18 | **0** | **0** | **0** |
+| Carried | 98 | 68 | 44 | 42 | 68 |
+| Refused (element) | 1 | 23 | 41 | 42 | 29 |
+| Reason "cannot be read as written" | 0 | 0 | 63 | 66 | 0 |
+| Observations that differ from head | — | — | 30 | 33 | **18** (exactly head's throws) |
+
+- **Against head:** (B) changes only the 18 throwing observations, each into the result `spec-012` §7 already gives that document (the merge key leaves one YAML key with two texts, D4). (A) changes those 18 (with the reason "cannot be read as written") and 12 more rows: a document that holds U+E000 in a string beside a key written as a typed scalar whose text is not its YAML name (`1.50:`, `~:`, a date key, a `!!pairs` key, a sequence key holding `1.50`). Head and `main` carry all 12.
+- **Against `main`:** (B) leaves out or refuses only documents `main` carried in the ruled categories (two keys of one text, one key with two texts, frontmatter that contains itself) and the hidden-mark rows, which are two-text documents. (A) adds the 12 rows above (and (A) broad a 13th, a string with U+E000 and no typed key).
+- **This repository:** no document holds U+E000, raw or escaped, at `0253adfb3` (`git grep -l -P '\x{E000}' 0253adfb3 -- docs .wingfoil` and `git grep -l -iE '\\u0*e000' 0253adfb3 -- docs .wingfoil` printed nothing; the same patterns matched a scratch file holding the character and `test/core/context-written-scalars.test.ts` holding the escape). U+E000 is a real glyph in icon fonts, so the 12 rows are not only adversarial.
+- **Can an input still reach an uncaught throw?** (B): decoding parses only text between two marks, and a mark of that length occurs in no string the document wrote, so every such text is one this load wrote (`JSON.stringify` of two strings, which holds no U+E000); keys made from a sequence are joined with `,`, so a mark never abuts a written string. The other code of the read is total: the walk is bounded by js-yaml's nesting limit (100) and memoizes aliases (an alias chain 3,000 deep built and carried on every build). The payload's load cannot raise a `YAMLException` the scan's own load (the same default `load`) did not raise first, so on real input the YAML catch is not reached either; head's own test reaches it only by replacing `load`. (A): decoding runs only when no written string holds the mark, the same argument. Neither route needs a backstop for the 63 rows; whether to add one for code defects is D8.
+- **Complexity:** both add a `listener` and a scan of the strings it saw. (A) keeps one load and adds a "named internally" flag and a no-decode path; (B) keeps head's two loads and replaces `unusedMark` with a run-length count. About the same size; (B) has one code path fewer.
+- **Determinism (REQ-SYS-07):** both are functions of the frontmatter text alone: no clock, no randomness, no environment. Two runs of the 14 added rows on (A) and (B) printed identical output (`cmp` silent). The mark's length varies with the text but never reaches the payload.
+- **`spec-012` §7:** (B) needs no new text. "A string keeps its value and takes the dump's quoting" covers a written internal form, and the hidden-mark rows are the D4 sentence: "nor can one where a merge key leaves a single YAML key with two texts (`<<: {1.5: x}` beside `1.50: y`)". (A) needs a new sentence: §7 lists no reason that leaves out a document for holding a character, and the sentence on strings would then have an exception.
+
+**This repository's payload** (`assembleExecutionContext`, role `developer`, this task, `stateRef` `0253adfb3`): 323,427 bytes, sha256 `d212452097dc5c6b4b58db52f41dc96d2bf695906ec3ca6e410403c2d0605315`, 0 warnings, the same on `main`, head, (A), (A) broad, (B) and (B) with `text` public (F2). At `a25f6a39d`: 391,432 bytes, sha256 `022f544423c936af…`, the same on `main`, head, (A) and (B).
+
+**The departure (reject item 3).** Direction item 3 of the first addendum asked for the outcome of route (A): a document that writes the internal form is left out. The developer carried it as its own string, which is route (B)'s outcome, and picked the mark from a first load that does not see every string. So the developer delivered (B)'s outcome with an unsound mark choice. The outcome is sound; the mark choice was not.
+
+#### Cases for the qa
+
+Through the public `assembleExecutionContext`, each construct in the frontmatter of a Memory document linked from the element (`depends_on:`), of the element, and of a relevant sibling ranked out by `limits: {maxDocs: 1}`. ⟨U+E000⟩ stands for the private-use character, written in the YAML with the escape `\uE000` unless a row says raw. "Two-texts warning" is `W_MEMORY_UNREADABLE (<path>): unreadable frontmatter in <path>: a merge key gives one of its frontmatter keys two texts, so an execution context cannot carry it`; "unreadable warning" is the same line ending `its frontmatter cannot be read as written, so an execution context cannot carry it`. An element refusal is `ok: false`, `VALIDATION`, `element 'task:<id>' cannot enter an execution context: ` followed by the reason without its `so …` tail.
+
+| # | Frontmatter | Route (B) | Route (A) |
+|---|---|---|---|
+| 1 | `m: {<<: {1.5: "⟨U+E000⟩x⟨U+E000⟩"}, 1.50: y}` | linked: not carried, two-texts warning; element: refused, `a merge key gives one of its frontmatter keys two texts`; ranked out: not carried, two-texts warning | the same placements, with the unreadable warning and `its frontmatter cannot be read as written` |
+| 2 | Row 1's value as `"⟨U+E000⟩null⟨U+E000⟩"`, as `"⟨U+E000⟩["a","b"]⟨U+E000⟩"` (quotes escaped), and with `\U0000E000` for each mark | as row 1 | as row 1 |
+| 3 | `m: {<<: [{1.5: a}, {1.50: "⟨U+E000⟩x⟨U+E000⟩"}]}` and `m: {<<: {1.5: {"⟨U+E000⟩x⟨U+E000⟩": 1}}, 1.50: y}` | as row 1 | as row 1 |
+| 4 | Row 1 with the hidden value `"⟨U+E000⟩⟨U+E000⟩x⟨U+E000⟩⟨U+E000⟩"` and a second key `n: "⟨U+E000⟩"` | as row 1 | as row 1 |
+| 5 | `m: {"⟨U+E000⟩[\"1.5\",\"1.50\"]⟨U+E000⟩": x, 1.50: y}` (a key in the internal form beside its twin) | carried: `m:`, `  '1.50': 'y'`, `  ⟨U+E000⟩["1.5","1.50"]⟨U+E000⟩: x` | linked and ranked out: not carried, unreadable warning; element: refused, `its frontmatter cannot be read as written` |
+| 6 | `note: "⟨U+E000⟩ pomodoro"` and `m: {1.50: y}`, once with the escape and once raw | carried: `m:`, `  '1.50': 'y'`, `note: ⟨U+E000⟩ pomodoro` | as row 5 |
+| 7 | `v: "⟨U+E000⟩[\"1.5\",\"1.50\"]⟨U+E000⟩"` and `m: {1.50: y}` | carried: `m:`, `  '1.50': 'y'`, `v: ⟨U+E000⟩["1.5","1.50"]⟨U+E000⟩` | as row 5 |
+| 8 | `2026-10-05: x` and `n: "⟨U+E000⟩"`; `m: {~: x}` and `n: "⟨U+E000⟩"`; `o: !!pairs [1.50: "⟨U+E000⟩"]`; `? [1.50, "⟨U+E000⟩"]` with value `v` | carried: `'2026-10-05': x` and `'n': ⟨U+E000⟩`; `m:`, `  '~': x`, `'n': ⟨U+E000⟩`; `o:`, `  - - '1.50'`, `    - ⟨U+E000⟩`; `1.50,⟨U+E000⟩: v` | as row 5 |
+| 9 | A block scalar `t: |` whose line is `⟨U+E000⟩line` (raw), and `m: {1.50: y}` | carried: `m:`, `  '1.50': 'y'`, `t: |`, `  ⟨U+E000⟩line` | as row 5 |
+| 10 | `m: {a: "⟨U+E000⟩x"}` (raw, no typed key) | carried: `m:`, `  a: ⟨U+E000⟩x` | carried, the same lines ((A) broad: as row 5) |
+| 11 | `a: 1.50 # ⟨U+E000⟩` (raw, in a comment only) | carried: `a: 1.50` | carried: `a: 1.50` |
+| 12 | Every construct already pinned by `test/core/context-payload-yaml-constructs.test.ts` (rows 1 to 18 of the first addendum) | unchanged | unchanged |
+| 13 | Every row above, in every placement | `assembleExecutionContext` returns; it never throws | the same |
+| 14 | One fixture holding rows 1 to 11, assembled twice and once on a `git clone` | byte-identical payloads, equal warnings | the same |
+
+A ranked-out sibling is reported only when it is not carried for one of these reasons; a carried row ranked out is neither carried nor reported. Each row's carried lines were printed by the patched build of its route and, for the strings, are the lines `main` prints for the same document.
+
+#### Direction for the developer
+
+**Route (B), recommended.**
+
+1. Replace `unusedMark`: a first `load(text, { listener })` with js-yaml's default schema records the result of every `close` event whose result is a string; the mark is U+E000 repeated one more time than the longest run of U+E000 in those strings. Then head's payload load and `restoredFrontmatter`, unchanged.
+2. Keep one batch and the read before §6's bounds: AC 3's count of 4 `cat-file --batch` does not change (no new git call).
+3. Backstop, under D8 (a): `readWrittenFrontmatter` answers every error, not only a `YAMLException`, with the reason `its frontmatter cannot be read as written`. The test of your own file `test/core/context-written-scalars.test.ts` "an error that is not a YAML one is not swallowed" then asserts the left-out result instead of `toThrow(TypeError)`. Under D8 (b) that test stays.
+4. F2, under D9 (a): `WrittenScalar` keeps its text in a public readonly field again, as on `main`. The loader never sees a `WrittenScalar` (it sees `ScalarBeingRead`), so the field reaches no merge: on the patched build the 189 observations and the payload sha256 did not change, and `util.isDeepStrictEqual(new WrittenTimestamp('2026-10-05'), new WrittenTimestamp('1999-01-01'))` printed `false` (head: `true`). `test/core/context-payload-format.test.ts` line 368 then compares the text again with no edit. Your own test's `Object.keys(new WrittenScalar('1.50'))` assertion becomes `['text']`.
+
+**Route (A).** One load with the listener and a fixed U+E000; record whether `ScalarBeingRead.toString` returned an internal name; if a recorded string holds U+E000 and a name was internal, return the unreadable reason; if no name was internal, skip decoding. Items 2 to 4 as for (B); `spec-012` §7 needs the sentence of D7.
+
+**F3, in both routes** (each statement as it must read, with what establishes it):
+
+- The fix-round line "A first load with the default schema collects every key and string of the document" is false. Correct: the default schema's load drops a value that a merge key overrides under YAML but that the payload's load keeps, so it does not see every string; established by head throwing `SyntaxError` on row 1 (the probe, head build). The line is not edited in place: this section is its correction.
+- The comment of `unusedMark` ("A mark no key or string of `loaded` holds, so that a mark in a later load is one that load wrote") is false for the same reason. Under (B) the function's comment says: the mark is longer than any run of U+E000 in a string scalar the parser closed, including one a merge override drops, so a mark in the payload's load is one that load wrote.
+- The comment of `assembleExecutionContext`, step 4 (`src/core/context.ts`, "with two frontmatter keys of the same text"), omits two reasons. Correct: "with a frontmatter that cannot be rendered (two keys of one text, a merge key that gives one key two texts, a frontmatter that contains itself through an alias)" and, under D8 (a), "or that cannot be read as written". Established by head's results on `m: {<<: {1.5: x}, 1.50: y}` and `a: &x {b: *x}` (left out with those two reasons).
+- The pending `bug-267` Retrospective counts frontmatter that contains itself among the gaps that keeping scalars as written opened. Correct: `main` at `4afbca9db` already throws `RangeError: Maximum call stack size exceeded` on `a: &x {b: *x}` (the probe, `main` build, all three placements and 11 cycle rows), so it is a defect that predates the task and is fixed here under D6. Its "left out and reported" holds only once item 1 lands.
+
+#### Decisions for the approver
+
+- **D7 (the route).** (A) leave out and report a document whose string holds the mark beside an internally named key; (B) carry it, the mark chosen from every string scalar the parser closes. **Recommended: (B).** It changes only head's 18 throwing observations, each into the result `spec-012` §7 already prescribes, needs no spec text, and leaves out nothing `main` carried outside the ruled categories. (A) leaves out or refuses 12 more constructs that `main` and head carry, and needs a §7 sentence, for example: "A document one of whose strings holds U+E000 while one of its keys is written as a typed scalar whose text is not its key under YAML cannot be read as written, and is left out and reported under that same rule."
+- **D8 (backstop for a non-YAML error).** (a) `readWrittenFrontmatter` turns every error into the left-out result (the element's refusal), reason `its frontmatter cannot be read as written`; (b) it catches only a `YAMLException` and relies on the argument above. **Recommended: (a).** The requirement is categorical, and a defect of this code would otherwise fail every context that finds the document relevant. Its cost: a defect is reported as a warning rather than a crash, and the developer's test that pins the rethrow changes (direction item 3). No input of the 63 rows reaches it under (B). §7's "cannot be rendered … left out and reported" covers the result, so no spec text is prepared.
+- **D9 (F2).** (a) Make `text` a public field again, so line 368 needs no edit; (b) keep it private and have the qa change line 368 to assert `.text`. **Recommended: (a).** No test file changes, and no one edits a file outside this round's red under T4. Under (b) the edit is the qa's: the file is not a red file of this task, and a test change belongs to the qa.
+
+**Pending amendments (approver).** None for (B) under D8 (a) and D9 (a). If D7 is ruled (A), the sentence above goes into `spec-012` §7 before red, through the approver's `memory amend`.
+
+**Candidate finding, not part of this task.** A frontmatter that doubles a list through aliases inflates the payload exponentially: 16 doublings (390 bytes of document) give a 4,719,546-byte payload on `main` (4,850,616 on route (B)), carried although the default `maxBytes` is 262,144. Measured with a scratch script that builds the document and calls `assembleExecutionContext`. Expected: the size bound holds for the rendered document, or such a document is left out and reported. Suggested severity: medium.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
