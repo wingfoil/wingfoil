@@ -37,11 +37,11 @@ and edge cases, expressed in Gherkin (Given-When-Then).
 02_bdd/
 ├── 00_index.md
 └── features/
-    ├── p1-memory/        (13 features)
+    ├── p1-memory/        (14 features)
     ├── p2-dna/           (5 features)
     ├── p3-directives/    (8 features)
-    ├── p4-workflow/      (20 features)
-    ├── p5-interaction/   (17 features)
+    ├── p4-workflow/      (21 features)
+    ├── p5-interaction/   (18 features)
     └── x1-notification/  (2 features)
 ```
 
@@ -62,6 +62,7 @@ and edge cases, expressed in Gherkin (Given-When-Then).
 | P1.11   | US-0A-03   | `features/p1-memory/P1.11-memory-entries.feature`                  |
 | P1.12   | US-1-09    | `features/p1-memory/P1.12-keyword-search.feature`                  |
 | P1.13   | US-0A-04   | `features/p1-memory/P1.13-memory-element-schema.feature`           |
+| P1.14   | US-4-14    | `features/p1-memory/P1.14-verify.feature`                          |
 | P2.1    | US-0A-08   | `features/p2-dna/P2.1-dna-set.feature`                             |
 | P2.2    | US-3-03    | `features/p2-dna/P2.2-dna-show.feature`                            |
 | P2.3    | US-0B-03   | `features/p2-dna/P2.3-dna-infer.feature`                           |
@@ -100,6 +101,7 @@ and edge cases, expressed in Gherkin (Given-When-Then).
 | P5.1.2  | US-0B-02   | `features/p5-interaction/P5.1.2-init-infer.feature`                |
 | P5.1.3  | US-0B-01   | `features/p5-interaction/P5.1.3-audit.feature`                     |
 | P5.1.4  | US-0A-14   | `features/p5-interaction/P5.1.4-cli-ux.feature`                    |
+| P5.1.5  | US-0A-23   | `features/p5-interaction/P5.1.5-capabilities.feature`              |
 | P5.2.1  | US-1-07    | `features/p5-interaction/P5.2.1-mcp-resources.feature`             |
 | P5.2.2  | US-1-06    | `features/p5-interaction/P5.2.2-mcp-prompts.feature`               |
 | P5.2.3  | US-2-11    | `features/p5-interaction/P5.2.3-mcp-tools.feature`                 |
@@ -161,3 +163,17 @@ same commands as the 2026-10-17 re-count, on the suite as it is. The judgement r
 | `.feature` files per pillar                          | P1=13, P2=5, P3=8, P4=21, P5=17, X1=2 → **66** | `find features/<pillar> -name '*.feature' \| wc -l`, per pillar folder                      |
 | Total scenarios                                      | **267**                                        | `grep -rhE '^\s*Scenario( Outline)?:' features \| wc -l`                                     |
 | Files whose first line that is not a comment, a tag or blank is `Feature:` | **66/66** (8 open with a `# Revised …` comment) | `grep -m1 -v '^\s*\(#\|@\|$\)' <file>`, per file |
+
+### Re-count (2026-11-19)
+
+After `cp-003` added `features/p1-memory/P1.14-verify.feature` and
+`features/p5-interaction/P5.1.5-capabilities.feature`, and three scenarios to `P5.2.1-mcp-resources.feature` (two) and
+`P5.2.3-mcp-tools.feature` (one Scenario Outline) (vision-change downcast-scenarios), the same commands as the
+2026-10-17 re-count, on the suite as it is. Before `cp-003` the scenario count printed 312: the suite grew by 45
+scenarios after the 2026-10-18 re-count without one, and `cp-003` adds 13. The judgement rows were not re-run.
+
+| Check                                                | Result                                         | Command                                                                                     |
+|------------------------------------------------------|------------------------------------------------|---------------------------------------------------------------------------------------------|
+| `.feature` files per pillar                          | P1=14, P2=5, P3=8, P4=21, P5=18, X1=2 → **68** | `find features/<pillar> -name '*.feature' \| wc -l`, per pillar folder                      |
+| Total scenarios                                      | **325**                                        | `grep -rhE '^\s*Scenario( Outline)?:' features \| wc -l`                                     |
+| Files whose first line that is not a comment, a tag or blank is `Feature:` | **68/68** (10 open with a `# Revised …` comment) | `grep -m1 -v '^\s*\(#\|@\|$\)' <file>`, per file |
