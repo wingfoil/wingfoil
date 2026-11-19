@@ -433,8 +433,9 @@ function loadConfigOrError<R>(root: string, loader: () => R): CoreResult<R> {
  * `core/registry.ts` — task-026's single source of truth), interpreted here as the resource-path
  * **category**; `list` is the parsed `--list` flag (`ParamsContext.flags.list`, spread into params by
  * `buildParams`). `category`/`--list` are optional: an omitted category returns the whole `paths`
- * node (what the MCP surface's mechanical zero-argument `wingfoil://paths` Resource gets — it has no
- * per-request parameter, the same limitation `src/mcp/dna-resource.ts` documents for `dnaShow`).
+ * node (what the mechanical `wingfoil://paths` Resource serves: a Resource carries only a required
+ * positional, so it makes the call with none of the optional parameters, and a Tool takes them —
+ * task-364, `spec-006` §3).
  * `--list` is accepted (spec-008/X_cli-cmds.md's "drill-down") but currently a no-op on the returned
  * value: a DNA `paths` category is already a flat `string[]` with nothing coarser to collapse to, and
  * spec-005-cli-command-contract §4's own worked example (`paths sources --format json` ->
@@ -489,8 +490,8 @@ const pathsFn: CoreFn<unknown, PathsShowResult | Paths> = async (params) => {
  * `dna show [section]` (P2.2-implement-dna-show, task-026): resolves `ParamsContext.positional`
  * (`core/registry.ts` — the generic CLI-positional seam this task adds) as an optional DNA section
  * name. No `positional` -> the whole parsed `DnaYaml` (unchanged behavior, what the MCP
- * `wingfoil://dna/show` Resource still gets, since the MCP surface never sets this field — see
- * `ParamsContext.positional`'s own doc comment). `tech_stack` resolves as a BDD-compatibility alias
+ * `wingfoil://dna/show` Resource serves, since the positional is optional and a Resource carries only a
+ * required one — see `ParamsContext.positional`'s own doc comment). `tech_stack` resolves as a BDD-compatibility alias
  * for `stacks` (spec-002-dna-yaml-schema Consequences: the schema renamed the BDD's `tech_stack`
  * wording). An unknown section is a domain `NOT_FOUND` (`CoreResult.error`, exit `1` via
  * `exit-code.ts` — never a thrown exception and never exit `2`, since a read-only command can only
@@ -887,9 +888,9 @@ const DNA_ENTRY_OPTIONS: readonly CoreOption[] = dnaEntryOptionNames().map((fiel
  * `wingfoil memory add` params (P1.3, task-020-implement-memory-add) — the FIRST Memory-document
  * mutation. `options` is the value-bearing-option seam this task establishes
  * (`ParamsContext.options`, `core/registry.ts`), read as `--type`/`--title`/`--tags` and the repeatable
- * `--set <name>=<value>` (task-110, `spec-008-cli-grammar` §10), which arrives as a string array. The
- * MCP surface never populates it (task-030 wires the Tool input schema); a call with no options simply
- * has all of them absent, which the required checks below reject as usage errors.
+ * `--set <name>=<value>` (task-110, `spec-008-cli-grammar` §10), which arrives as a string array. A
+ * `memory.add` Tool call populates it from its arguments, in the same shape (task-364,
+ * `toolArgumentsToParams`); a call with no options simply has all of them absent, which the required checks below reject as usage errors.
  */
 export interface MemoryAddParams {
   readonly root: string;
@@ -1088,9 +1089,9 @@ const memoryAddFn: CoreFn<unknown, { id: string; path: string }> = async (params
  * task-026's generic bare `ParamsContext.positional` seam for the free-text keyword (mirroring
  * `dna show`'s `section`/`paths`'s `category`) and task-020's value-bearing `ParamsContext.options`
  * seam for the `--tag`/`--status`/`--type` metadata filters (mirroring `memoryAdd`'s `--type`/
- * `--title`/`--tags`). The MCP surface's mechanical zero-argument `wingfoil://memory/search` Resource
- * (spec-006 §3) never populates either field (see `ParamsContext.positional`/`.options`'s own doc
- * comments) — reading it degenerates to the "browse everything, no filter" call {@link memorySearchFn}
+ * `--title`/`--tags`). The mechanical `wingfoil://memory/search` Resource (spec-006 §3) serves the call
+ * with none of these optional parameters, since a Resource carries only a required positional
+ * (task-364; see `ParamsContext.positional`/`.options`'s own doc comments) — reading it degenerates to the "browse everything, no filter" call {@link memorySearchFn}
  * already treats an omitted keyword as; see this task's Execution Notes for why that is the correct
  * reading of spec-006's already-approved `memorySearch` row, not a workaround.
  */
@@ -1134,7 +1135,8 @@ const NO_MEMORY_SEARCH_MATCHES_MESSAGE = 'no documents matched the query';
 /**
  * `memory search` `CoreOperation.fn` (P1.5, `mutates: false` — the FIRST Memory-document READ
  * operation registered in `CORE_MODULES`; spec-006-core-domain-api §3 memory table pins its MCP
- * exposure to the mechanical zero-argument Resource `wingfoil://memory/search` verbatim, so no gap
+ * exposure to the mechanical Resource `wingfoil://memory/search` verbatim, which serves the call with
+ * none of its optional parameters (task-364), so no gap
  * exists to fill with a richer Resource template — see this task's Execution Notes). Wraps
  * task-008/023's `src/memory/query.ts` primitives — no scan/ranking/validation logic is
  * reimplemented here:
@@ -2041,10 +2043,9 @@ export interface DirectiveCreateParams {
 /**
  * `wingfoil directives list [--role <role>]` params (P3.4, task-053-directives-list). Reuses
  * task-020's value-bearing `ParamsContext.options` seam for the optional `--role` filter, exactly as
- * `memorySearch`'s `--tag`/`--status`/`--type` do. The MCP surface's mechanical zero-argument
- * `wingfoil://directives/list` Resource never populates it (see `ParamsContext.options`), which
- * degenerates to the unfiltered listing — the right default for a Resource that has no per-request
- * parameter.
+ * `memorySearch`'s `--tag`/`--status`/`--type` do. The mechanical `wingfoil://directives/list`
+ * Resource serves the call with none of its optional parameters (a Resource carries only a required
+ * positional, task-364, `spec-006` §3), which degenerates to the unfiltered listing.
  */
 export interface DirectivesListParams {
   readonly root: string;
@@ -2896,8 +2897,8 @@ export const CORE_MODULES: readonly CoreModule[] = [
         fn: memoryHistoryFn,
       },
       // The FIRST Memory-document READ operation (P1.5, spec-006 §3 memory table) — `mutates: false`,
-      // so by construction an MCP Resource (`wingfoil://memory/search`, the mechanical zero-argument
-      // form spec-006 §3 pins verbatim) + CLI command (`wingfoil memory search`). Its keyword rides the
+      // so by construction an MCP Resource (`wingfoil://memory/search`, the mechanical form
+      // spec-006 §3 pins verbatim, with none of its optional parameters) + CLI command (`wingfoil memory search`). Its keyword rides the
       // generic bare `positional` seam (task-026); `--tag`/`--status`/`--type` are OPTIONAL value
       // options (task-020's seam) — none is `required`, since the AC/BDD only mandate the bare keyword
       // form and the `--tag` filter (task-021-implement-memory-search's Execution Notes).
