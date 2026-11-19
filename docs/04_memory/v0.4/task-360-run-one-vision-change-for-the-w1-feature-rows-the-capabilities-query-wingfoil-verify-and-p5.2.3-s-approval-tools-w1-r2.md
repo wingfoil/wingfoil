@@ -401,6 +401,144 @@ note of 2026-10-27 in `dl-166`), and the command that would give a delta downcas
 **Ambiguities and candidate findings.** None blocking. Every scenario of the subsection was written as listed. The
 2026-10-18 re-count recorded 267 scenarios, while 312 existed before this change (stated in the new re-count block).
 
+### green (developer, 2026-11-19)
+
+Role: developer, a fresh agent; this phase is also the vision-change's `downcast-requirements` step (the plan's
+`## Phases / Steps` item 6). Contract: the design's per-AC table, the design gate (D1–D9 as recommended), `cp-003`'s SARD
+subsection and the red commit `6984d70b5`. Worktree on head `b3803048c` (`git rev-list --count HEAD..main` → 0, no
+merge). The task's PATH shim resolves `wingfoil`; `wingfoil --version` and `node dist/cli.js --version` both print
+`0.3.2 (6984d70b5f5e0cd399263cc48a0b3ef63ebf54f8)`. No `src/` file is touched.
+
+**Commit** `f8bd7fa2b` `docs(sard): cp-003 — REQ-SEC-02/03 fit sentence, REQ-INT-03 restated, REQ-INT-01 traceability`
+(four files):
+
+- `05_security-compliance.md`: REQ-SEC-02's and REQ-SEC-03's Fit Criterion end with `spec-020`'s sentence verbatim ("A
+  commit range in which a forged approval or an out-of-band status change exists makes `wingfoil verify` exit `1`.");
+  REQ-SEC-02's Traceability gains Feature P1.14 (US-4-14, `p1-memory/P1.14-verify.feature`) and the full `spec-020` id;
+  REQ-SEC-03's gains P1.14 and Feature P5.2.3 (US-2-11, `p5-interaction/P5.2.3-mcp-tools.feature`, D3) and the
+  `spec-020` id. REQ-SEC-03's sentences that `test/docs/l0-traceability.test.ts` pins are unchanged.
+- `04_integrations.md`: REQ-INT-01's Traceability gains Feature P5.1.5 (US-0A-23, `p5-interaction/P5.1.5-capabilities.feature`)
+  and the full `spec-019` id (traceability only); REQ-INT-03's Fit Criterion restated with `cp-003`'s proposed text
+  (D4): `memory.submit` via MCP commits with the agent's trailers (`spec-018` §2), `memory.approve`, `memory.reject`
+  and `memory.amend` are listed Tools that refuse with `E_AGENT_CONTEXT`, an illegal transition is rejected as on the
+  CLI path. Its Traceability keeps P5.2.3 and gains one dated sentence naming `cp-003`.
+- `00_index.md` (SARD): the registry rows REQ-INT-01 (+ P5.1.5), REQ-INT-03 (summary "Same validation as CLI; approval
+  Tools refuse"), REQ-SEC-02 (+ P1.14), REQ-SEC-03 (+ P1.14, P5.2.3); one sentence in the verification note: no
+  requirement added, totals 46. REQ-SYS-07 unchanged (D3).
+- `test/docs/name-resolvability.allowlist.ts`: `05_security-compliance.md|command|wingfoil verify`, `PLANNED`,
+  `plannedBy: ['task-365']`, in sorted position. It is needed: with the file at `HEAD` and the SARD edit in the tree,
+  `npx jest test/docs/name-resolvability.test.ts --maxWorkers=2` → `Tests: 1 failed, 10 passed, 11 total`, the
+  missing key `docs/02_requirements/03_sard/05_security-compliance.md|command|wingfoil verify`; with the entry, green.
+  `grep -c "wingfoil verify" docs/04_memory/v0.4/task-365-*.md` → 3.
+
+**Red → green.** At the red commit: `Tests: 10 failed, 29 passed, 39 total` (the qa's run). After `f8bd7fa2b`:
+`npx jest test/docs/vision-change-w1-rows.test.ts test/docs/name-resolvability.test.ts test/docs/l0-traceability.test.ts
+test/docs/req-sec-06-confinement-text.test.ts test/docs/sard-state-from-history.test.ts --maxWorkers=2` →
+`Test Suites: 5 passed, 5 total`, `Tests: 77 passed, 77 total`: the ten AC 5 cases pass, and the SARD suites the
+design names stay green.
+
+**Post-check `downcast.in-scope(layer: requirements)`** (bound `manual: true`), stated: every requirement added or
+edited is in `cp-003`'s SARD subsection, and nothing outside it changed. `git diff --stat f8bd7fa2b~1 f8bd7fa2b` lists
+the three SARD files and the allowlist, the four files the subsection names (30 insertions, 13 deletions); the hunks
+(`git diff -U0 … | grep '^@@'`) sit in REQ-INT-01's Traceability and REQ-INT-03's Fit Criterion/Traceability
+(`04_integrations.md` lines 16, 32), REQ-SEC-02's Fit Criterion/Traceability and REQ-SEC-03's
+(`05_security-compliance.md` lines 24, 27, 44, 47, 50), and the index rows; the REQ ids on changed index rows
+(`git diff f8bd7fa2b~1 f8bd7fa2b -- docs/02_requirements/03_sard/00_index.md | grep -E '^[-+]\|' | grep -oE
+'REQ-[A-Z]+-[0-9]+' | sort | uniq -c`) are REQ-INT-01, REQ-INT-03, REQ-SEC-02, REQ-SEC-03, two each. No requirement is
+added, so the totals stay 46. It is a statement, not an engine record: the engine deduces the three downcast phases
+complete once `update-vision` is recorded, because the specification sub-workflows' `produces:` directories already
+exist (`task-301`'s design gate D3; `spec-017` §12; the note of 2026-10-27 in `dl-166`), and the command that would
+give a delta downcast its own evidence is owed by `task-359`'s D2.
+
+### refactor (developer, 2026-11-19)
+
+This phase is also the vision-change's `schedule` step (the plan's item 7; role product-owner, drafted by the
+developer; the acceptance is the approver's `8f15da649`).
+
+**schedule.**
+
+- Pre-check: `grep -n '^target_release:' <cp-003>` → `target_release: "v0.4"`, not empty.
+- `70290740b` `docs(vision): cp-003 — sequencer 2.2: v0.4 row with P1.14 and P5.1.5` (two files):
+  `docs/01_vision/07_sequencer.md` 2.1 → 2.2, date 2026-11-19: the `v0.4` row of "Active-day budgets per release"
+  counts 9 features (was 11) and names them (P4.18, P4.19, P4.20, P4.21, P5.1.1, P5.1.4, P5.2.3, and P1.14, P5.1.5),
+  proxy 9 ÷ 14 × 12 ≈ 7.7, "≈ 8" (D9 (a)); a note stating the old 11 against the 7 of `minor-v0.4`'s `define-scope`;
+  "Features per release … → 23, 9, 3"; the forecast sum 39 → 38 (4 + 20 + 1 + 8 + 5), ≈ 40 with retrospectives,
+  "weeks = 40 ÷"; one "Scope changes" entry for `cp-003`. The file grows 480 → 488 lines (`wc -l`), so
+  `docs/01_vision/00_index.md`'s document-map row (2.2, 2026-11-19, 488), its Quick-lookup ranges and the
+  `07_sequencer.md` section list move by 4 (Calendar forecast, Scope changes) or 8 (everything after the scope
+  changes), in the same commit. `npx jest test/docs/vision-index.test.ts test/docs/vision-change-w1-rows.test.ts
+  --maxWorkers=2` → `Tests: 52 passed, 52 total`.
+- `cef4cb23a` `wf(change-proposal): assign release v0.4 to cp-003-add-the-capabilities-and-verify-feature-rows-and-restate-p5.2.3-without-approve`
+  — only `release: "v0.4"` (`git show --stat` → 1 file, 1 insertion, 1 deletion).
+- `50d556c67` `wf(change-proposal): finalize cp-003-add-the-capabilities-and-verify-feature-rows-and-restate-p5.2.3-without-approve [accepted → scheduled]`
+  — only `status` (1 file, 1 insertion, 1 deletion).
+- `node scripts/check-governance.cjs --base origin/main` after the two hand `wf()` commits → `gated: 0 findings on 0
+  commits`, `history: 0 findings on 0 commits`, `state not checked: 0 entries on 0 commits` (35 `wf()` commits and 46
+  others in the range), exit 0.
+- Post-check `vision-index.current`: `npx jest test/docs/vision-index.test.ts --maxWorkers=2` passes (above).
+- Post-check `change-proposal.assigned`: `node scripts/check-release-exit.cjs
+  docs/04_memory/change-proposals/cp-003-add-the-capabilities-and-verify-feature-rows-and-restate-p5.2.3-without-approve.md`
+  at `50d556c67`, before the amendment → exit `1`, two lines: `…: P1.14 is not in
+  docs/04_memory/planning/rl-v1/minor-v0.4.md's features: (status in-development)` and the same for `P5.1.5`. Expected:
+  the stamp, the release element and the sequencer row pass, and only the release's `features:` waits for the
+  approver's `memory amend`. With the amendment in the working tree the same command → exit `0`, no output.
+- The release amendment is prepared, uncommitted (below). With it in the tree, `node dist/cli.js workflow next --format
+  json` (code build) prints `complete: true`, `no next step: workflow 'vision-change' is complete`, and one diagnostic,
+  `W_UNCOMMITTED_INPUTS` on `docs/04_memory/planning/rl-v1/minor-v0.4.md` (the `bug-534` class).
+
+**Gates** (with the `minor-v0.4` amendment in the working tree; heavy ones after `waitslot.sh`, which waited behind
+another worktree's coverage run and a load above 14):
+
+- `npm test -- --maxWorkers=2` (the slot taken after `waitslot.sh`; `ps -eo pid,etime,args` showed my waiter
+  queued behind `task-379`'s `jest --coverage` and a load average of 24.24) → exit 1: `Test Suites: 1 failed, 688
+  passed, 689 total`, `Tests: 1 failed, 12553 passed, 12554 total`. The one failure is
+  `test/cli/workflow-unbound-none.integration.test.ts` › "workflow next (console): … no \"N diagnostic(s)\" line",
+  which received `1 diagnostic(s): --format json lists them`; `node dist/cli.js workflow next --format json` names it:
+  `W_UNCOMMITTED_INPUTS` on `docs/04_memory/planning/rl-v1/minor-v0.4.md`, the pending amendment below — the `bug-534`
+  class. On a clean clone of the head (`git clone --local` into a scratch directory, `node_modules` symlinked, checked
+  out at `50d556c67`, `npm run -s build` exit 0), `npx jest test/cli/workflow-unbound-none.integration.test.ts
+  --maxWorkers=2` → `Tests: 4 passed, 4 total`.
+- `npm run test:coverage -- --maxWorkers=2` → exit 1, the same single failure (`Tests: 1 failed, 12553 passed, 12554
+  total`); `All files`: Statements 98.85 %, Branches 96.51 %, Functions 98.57 %, Lines 99.46 %. No `src/` file
+  changes, so no per-file figure moves.
+- `npm run lint` → exit 0. `npm run docs:api` → exit 0. `npm run typecheck` (both tsc configs) → exit 0.
+- `docs.parity`: every `test/docs` suite passed inside the full run above (the only failing suite is under
+  `test/cli/`). No CLI or help text changed, so `docs/cli-reference.md` is untouched.
+- Doc versioning: `07_sequencer.md` 2.1 → 2.2 with its date (its first edit on this branch); no SARD file, the SARD
+  index, the vision index or the allowlist declares a `version:`.
+
+### self-review (developer, 2026-11-19)
+
+Against `code-review` and `traceability`, re-reading `git diff b3803048c HEAD` and the pending amendment:
+
+- AC 5: met — the ten AC 5 cases of `test/docs/vision-change-w1-rows.test.ts` pass (green above); the analysis's
+  REQ-SYS-07 "no change" stands (D3), REQ-SYS-07 untouched (`git diff b3803048c HEAD --
+  docs/02_requirements/03_sard/01_architecture.md` prints nothing).
+- AC 6: met in the tree — `release: "v0.4"` stamped (`cef4cb23a`), `cp-003` `scheduled` (`50d556c67`); the
+  `features:` amendment is prepared for the approver, and `check-release-exit.cjs` exits 0 with it, 1 without it.
+- AC 7: met — `07_sequencer.md` bumped; every `test/docs` suite green in the full run.
+- Element ids cited in the SARD edit resolve: `spec-019-the-capabilities-query-the-formats-a-build-reads-and-the-capabilities-it-provides`
+  and `spec-020-the-governance-check-verb-the-authority-and-state-rules-over-a-commit-range` are the file names under
+  `docs/04_memory/design/specs/` (`ls … | grep -E 'spec-019|spec-020'`), and `name-resolvability.test.ts` passes.
+- Hand `wf()` commits carry the full id, change one field each, and carry the two trailers
+  (`git log -1 --format=%B <sha> | grep -c '^Co-Authored-By:'` → 1 for `cef4cb23a`, `50d556c67`).
+- T4: `git log --first-parent --no-merges --format=%h 6984d70b5..HEAD -- test/docs/vision-change-w1-rows.test.ts` →
+  empty (and the BDD files of `67d2aa05b` are untouched: `git diff --stat b3803048c HEAD -- docs/02_requirements/02_bdd
+  README.md` prints nothing).
+- Invisible characters: `grep -nP` with the prompt's class over every changed file before each commit → no hit.
+- Same-class: the sequencer's stale v0.4 count (the design's candidate finding) is fixed here by D9; the forecast sum
+  that depends on it is recomputed in the same file. No other same-class instance found in the touched files.
+- The vision-change deduction: with the schedule committed, the code build's `workflow next --format json` reports the
+  instance `complete: true` (above), so the orchestrator's schedule record follows a state the engine already deduces.
+
+### Pending amendments (approver)
+
+- `minor-v0.4` (`docs/04_memory/planning/rl-v1/minor-v0.4.md`, `in-development`): `features:` gains P1.14 and P5.1.5
+  (`[P1.14, P4.18, P4.19, P4.20, P4.21, P5.1.1, P5.1.4, P5.1.5, P5.2.3]`) and the Scope's "Change-proposals" item one
+  sentence on `cp-003`. `--reason "Add P1.14 (wingfoil verify) and P5.1.5 (wingfoil capabilities) to the release's
+  features, as cp-003's schedule assigns them to v0.4 (vision-change, dl-132 note of 2026-10-12); the sequencer's v0.4
+  row names them since 70290740b."`
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -408,3 +546,10 @@ note of 2026-10-27 in `dl-166`), and the command that would give a delta downcas
      printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
      Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
      here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+
+- The heavy-gate slot dominated this phase: the full suite waited about an hour behind two other worktrees' runs and a
+  load above 14 (`ps -eo pid,etime,args`: my `waitslot.sh` at 01:03:49 behind `task-379`'s `jest --coverage`; load
+  24.24), then took 2066.894 s itself, and coverage queued again behind `task-364`'s. Proposal: a docs-only task could
+  run its full suite on a clean clone once, as the gate of record, instead of the worktree run plus the clone run.
+- `bug-534` met as expected: the uncommitted `minor-v0.4` amendment makes `test/cli/workflow-unbound-none.integration.test.ts`
+  fail alone with `W_UNCOMMITTED_INPUTS`; it passes on a clean clone of `50d556c67`.
