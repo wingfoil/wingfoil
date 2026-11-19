@@ -47,3 +47,154 @@ section claims every shipped warning is pinned, while four families of `agent ex
 ## Execution Notes
 
 <!-- Filled by the dev-loop. -->
+
+### design (architect, 2026-11-19)
+
+**Inputs and base.** `depends_on: []` (no `dl-015` gate). Base: `main` `948140355` plus the `wf(task): start` commit and
+the four bug syncs `[planned → in-progress]` (`git log --oneline -5` → head `b28a629a0`; `git merge-base HEAD main` →
+`9481403555126ac80a086ef5fdffa4c227857d15`). PATH guard: `command -v wingfoil` → the task's PATH shim; `wingfoil
+--version` and `node dist/cli.js --version` → `0.3.2 (9481403555126ac80a086ef5fdffa4c227857d15)`. Contracts read:
+`dl-071` (`ready`, approve `825dee118`, Reason "the recommended option (B), as the document states it", so S3's
+appended hint), REQ-SEC-03, `spec-005` §3.1–§3.2, `spec-006` §7, `spec-008` §6, `spec-009` §2, `spec-013` § `version`,
+`spec-016` §2.6, `spec-018` §3 (all `approved`, `sed -n 5p`), `dl-055` (`ready`); `task-330`'s design gate D4 (bug-340:
+"the CLI and MCP carry `details` from bug-303 (v0.4) on"). No `.wingfoil/` file changes (`git diff --stat -- .wingfoil`
+empty), so `npm run check:mcp` and the pinned-build workflow reads are not required; no config `version:` bump.
+
+**The defects, reproduced on this base** (code build, a scratch repository outside the worktree, `GIT_CONFIG_GLOBAL=
+/dev/null`, `init --template Scrum`, `probe_unknown_key: 1` appended to `.wingfoil/dna.yaml` and committed):
+- `bug-304`: `dna show 2>&1 >/dev/null` → `warning: .wingfoil/dna.yaml: unknown field(s) ignored: probe_unknown_key`
+  (`--format json` → `{"warning":".wingfoil/dna.yaml: unknown field(s) ignored: probe_unknown_key"}`); `timeout 10
+  node dist/cli.js mcp </dev/null 2>&1 >/dev/null` → `Warning: .wingfoil/dna.yaml: unknown field(s) ignored:
+  probe_unknown_key`, exit 0, and the same `Warning:` line under `mcp --format json`. `grep -rn "Warning: " src` → only
+  `src/validation/warning.ts:48` and `:64` (the two fallbacks) and two doc comments; `grep -n "withWarningSink" -r src`
+  → installed by `src/cli/registrar.ts:220` and `src/core/workflow-create-remove.ts:137` only. `runInit` also never
+  writes `result.warnings` (`src/cli/init-command.ts:111-116`).
+- `bug-303`: a TypeScript-AST enumeration of every `details:` object literal under `src/` (a scratch script using the
+  repository's `typescript`) finds 31 keys in the modules that build core errors: `issues` (31 sites), `diagnostics`,
+  `cause`, `unreadable` and 27 others (`adapter applied argv awaiting candidates element exit_status file frontier id
+  instance instances kinds markers missing name pid record ref referrers rev run_id staged step steps timeout type`;
+  `record` and `unreadable` come through the same-file helpers `recordDetails` (`src/agent/run-log.ts:663`) and
+  `unreadableDetails` (`src/agent/execute.ts:650`)). `errorDetails` renders two of them. Dropped today, contrary to the
+  bug's note that none is: `details.cause` of a context refusal on the CLI (`src/core/context.ts:1137`, re-mapped by
+  hand only in `src/mcp/prompt.ts:125`), `details.unreadable` (`context.ts:1083`), `details.frontier` of the four
+  off-frontier refusals (`src/agent/step.ts:77`, `src/core/memory-add-link.ts:74`, `src/core/workflow-adopt.ts:144`,
+  `src/core/workflow-finalize.ts:140`; `task-330` D4 left it to this bug), `details.applied` of a failed bulk adoption
+  (`workflow-adopt.ts:283`: the adoptions already committed, in no message), `details.argv` (`src/agent/execute.ts:683`)
+  and `details.file` (`src/core/workflow-create-remove.ts:197`).
+- The authority refusal: an agent's shell gets `E_AGENT_CONTEXT` before it (expected, `spec-018` §3.1), so its bytes
+  come from the existing test that drives it with the markers scrubbed: `test/cli/program.integration.test.ts:750`
+  pins `"error: user not authorized to approve type 'task'\n"` for a project whose one member holds `reviewer`.
+
+**Per-AC classification and what qa pins** (`dl-014` T1). Expected reds for a new export: `tsc` TS2305 and, under
+`isolatedModules`, a jest `undefined`/TypeError at the use site — never a fabricated red.
+
+| AC | Class | Observable, interface, test file |
+|----|-------|----------------------------------|
+| 1 | red-first | **Core:** new `test/core/approval-authority-hint.test.ts`, temp repos (`test/core/helpers` fixtures as in `approval-authority-approver.test.ts`), `NO_AGENT`. (a) committed `team.members: []`, identity `{name: 'Ada Lovelace', email: 'ada@example.invalid'}`: `requireApprovalAuthority(root, 'task', id, NO_AGENT, 'memory approve')` `toEqual` `{ok: false, error: {code: 'VALIDATION', message: "user not authorized to approve type 'task'", hint: "no team member holds the 'approver' role yet: add one with 'wingfoil dna add team.members --value \"Ada Lovelace\" --entry-email ada@example.invalid --entry-roles approver', then retry"}}`; (b) one member holding `developer` only, asked by that member: `hint` = `"no team member holds the 'approver' role yet: add approver to the roles of a team.members entry with 'wingfoil dna update', then retry"`; (c) a second member holds `approver`: no `hint` key (`toEqual`); (d) the working tree grants the asker, `HEAD` does not: the message keeps the uncommitted-grant suffix and has no `hint`; (e) `requireApproverAuthority(root, id, 'user not authorized to rekey', NO_AGENT, 'workflow rekey')` with `members: []`: message `user not authorized to rekey`, the (a) hint. **CLI, fresh init:** `test/cli/fresh-init-transitions.test.ts`, a new `describe` with its own repo (helper `runCliEntry`, which scrubs the markers): `init --template <first TEMPLATES entry>`, `memory add --type task`, `memory submit`, `memory approve <id> --reason ok` → exit 1, stderr exactly `error: user not authorized to approve type 'task'\nhint: <(a) with "WingFoil Test" / wf-test@example.invalid>\n`; with `--format json` exactly one line `{"error":"user not authorized to approve type 'task'","hint":"…"}`; then the hinted `dna add team.members …` (exit 0) and the approve again → exit 0. **Existing pin updated:** `test/cli/program.integration.test.ts:750` expects the (b) hint line after the error line (its single member holds `reviewer`). |
+| 2 | red-first | New `test/core/error-details-keys.test.ts`. (1) **Enumeration:** parse every `git ls-files 'src/**/*.ts'` file outside `src/cli/` and `src/mcp/` (they render, they do not build errors) with `typescript`; for each `details:` property assignment take the object literal's property names (a spread is skipped: it forwards keys found at their own site); a call to a function declared in the same file is followed to the object literal it returns; `<expr>.details` is forwarding and skipped; any other initializer fails the test with its `file:line`. Every key found must be in `DETAIL_KEYS` (new export of `src/core/error-details.ts`, `Readonly<Record<string, 'entry' \| 'labelled' \| 'stated'>>`); the failure lists `key (file:line)`. Assert the entry class is exactly `{cause, diagnostics, issues, unreadable}` and the labelled class exactly `{applied, argv, file, frontier}`. (2) **Rendering** (`errorDetails`, existing export): `cause` alone → `[{detail: cause}]`; `issues: [{detail: 'x'}], cause: 'x'` → one entry; `unreadable: ['a', 'b']` → two `detail` entries after the issues'; `frontier: ['s1', 's2']` → `{detail: 'frontier: s1, s2'}`; `frontier: []` → nothing; `applied: [{step: 's', element: {type: 'task', id: 't'}, commit: 'abc'}]` → `{detail: 'applied: [{"step":"s","element":{"type":"task","id":"t"},"commit":"abc"}]'}`; an undeclared key `zeta: 'v'` → `{detail: 'zeta: v'}`, after the labelled ones, keys ascending; `instance: 'x'` (stated) → nothing; an error with only `issues` or only `diagnostics` renders exactly as today (the existing `test/core/error-details.test.ts` stays green unchanged). (3) **CLI:** `test/cli/error-details.test.ts` gains a case driving a derived command whose core refusal carries `frontier` (in-process, as its AC1 cases do): console stderr `error: <reason>\n  frontier: a, b\n`; json `{"error":"<reason>","details":[{"detail":"frontier: a, b"}]}`. **Existing pins updated:** `test/cli/agent-execute-diagnostics.integration.test.ts:70` and `test/cli/workflow-finalize.integration.test.ts:93` (exact stderr of an off-frontier refusal) gain the `  frontier: …` line, its value copied from a real run of the test's fixture. |
+| 3 | red-first | `test/validation/warning.test.ts`: `WARNING_PREFIX === 'warning: '` and `formatWarningLine('a\nb') === 'warning: a\n  b\n'` (new exports of `src/validation/warning.ts`); `reportWarning('once')` outside any sink writes `'warning: once\n'`; the existing `:127` expectation becomes `['warning: twice\n']`. `test/cli/init-command.test.ts`: `runInit` with an injected `deps.init` that calls `reportWarning('probe')` and returns `{ok: true, value: …, warnings: ['after']}` → console stderr `warning: probe\nwarning: after\n`, stdout the payload; `--format json` → `{"warning":"probe"}\n{"warning":"after"}\n`. `test/cli/mcp-command.test.ts`: `runMcp` on a temp repo whose committed `.wingfoil/dna.yaml` carries `probe_unknown_key: 1`, `start` stubbed → stderr exactly `warning: .wingfoil/dna.yaml: unknown field(s) ignored: probe_unknown_key\n` (console) and `{"warning":".wingfoil/dna.yaml: unknown field(s) ignored: probe_unknown_key"}\n` (`format: 'json'`) — the fixture text is the real output above. New `test/docs/warning-prefix.test.ts`: no line of any tracked `src/**/*.ts` writes the literal `` `Warning: `` / `'Warning: `` (red until green), and spec-009 § 2 and spec-013 § `version`, above their `## Process Notes`, contain no `Warning: ` (green once the amendments are recorded). |
+| 4 | characterization | `test/docs/spec-008-section-6.test.ts` (new): spec-008 § 6, between `### 6.` and `### 7.`, holds a table row whose reason cell starts `` `E_NOT_A_MEMBER: the git identity <name> <email> is not a team member`` with exit `` `1` `` and names `init` as excluded; the row's message and hint are byte-equal to `spec-006` §7's fenced block (read from the file, not retyped). Passes once the amendment is recorded, before red. |
+| 5 | characterization | Same file: every warning text `agent execute` builds in `src/agent/launch.ts` lines 716–819 and `src/agent/usage.ts` (`not read from it` texts) appears in spec-008 § 6's table — `the agent CLI changed during the run: version_args printed '<before>' before the launch and '<after>' after it`, `the headless output is not one JSON document`, `the headless output is over 1 MiB`, `the headless output carries no session id`, `usage.transcript: `, `the transcript of session <session> <reason>`, `is not a non-negative integer in a message: not read from it`, `model is not a string in a message: not read from it` — and the sentence before the table names the warnings left to `spec-016` ("are outside this claim"). |
+
+**Design.**
+- **D1 hint** (`src/core/approval-authority.ts`): `requireApproverAuthority`, the one check behind `approve`, `reject`,
+  `amend`, the approval `finalize`, `adopt --plan --apply` and `rekey`, adds `hint` to its `VALIDATION` refusal when no
+  member of the committed `dna.yaml` holds `approver` and the working tree does not grant the asker; the message is
+  untouched (REQ-SEC-03 verbatim, `dl-071` S3). The registrar already renders `CoreError.hint` (`src/cli/registrar.ts:258`):
+  console `hint:` line right after `error:`, `hint` field under json/yaml, stderr only. No `src/cli/error.ts` change.
+- **D2 details rule** (`src/core/error-details.ts`): `DETAIL_KEYS`, the closed table above; render order: `diagnostics`
+  (precedence kept) or `issues`, then `unreadable`, then `cause`, then labelled keys and undeclared keys, ascending; an
+  entry equal to one listed is not repeated; labelled value: string as is, string array `, `-joined, else
+  `JSON.stringify`; empty string or array adds nothing. `src/mcp/prompt.ts`'s `contextRefusalDetails` becomes
+  `errorDetails(error)` (identical output by the dedupe). `src/agent/execute.ts` keeps its double carry (deduped).
+- **D3 prefix** (`src/validation/warning.ts`): `WARNING_PREFIX` and `formatWarningLine(text)` (prefix, continuation
+  lines indented two spaces, trailing newline); both fallbacks write through it; `src/cli/warning.ts`'s `console` branch
+  writes `formatWarningLine(text)`. `runInit` wraps `init(...)` in `withWarningSink(emitWarning…)` and writes
+  `emitWarnings(result.warnings)` before the payload; `runMcp` wraps `loadDnaRoleSet` likewise; the serving MCP server
+  keeps the fallback (now `warning: `).
+
+**Files to touch.** `src/core/approval-authority.ts`, `src/core/error-details.ts`, `src/validation/warning.ts`,
+`src/cli/warning.ts`, `src/cli/init-command.ts`, `src/cli/mcp-command.ts`, `src/mcp/prompt.ts`, `scripts/e2e-smoke.cjs`
+(the approve step's `expect` gains `hint`, `SMOKE_NAME`/`SMOKE_EMAIL` interpolated: the fresh-init smoke scenario),
+`docs/cli-reference.md` (`memory approve` errors: the hint), `docs/user-guide.md` (§ approve line 577: the hint);
+qa's test files above; the five specs and the allowlist below (pending). `src/cli/error.ts` (named by the task) needs no
+change. No `version:` bump: no `.wingfoil/` config file, and none of these docs carries one.
+
+**Tests that pin text this task changes** (`grep -rn` over `test/`): `test/validation/warning.test.ts:127` (`Warning:`);
+`test/cli/program.integration.test.ts:750` (the bare authority refusal, no approver in its fixture);
+`test/cli/agent-execute-diagnostics.integration.test.ts:70` and `test/cli/workflow-finalize.integration.test.ts:93`
+(off-frontier refusal, exact stderr). Checked and unaffected: `program.integration.test.ts:846` and
+`test/core/approval-authority*.test.ts` (an approver exists in their fixtures, or `toMatchObject`/`.message`),
+`test/cli/unknown-field-warning.integration.test.ts:53` (asserts no `Warning: ` line), `test/cli/workflow-adopt.
+integration.test.ts:145` (`toContain`), `scripts/e2e-smoke.cjs:206` (checks the listed `expect` paths only). No workflow
+phase/step list or count changes.
+
+**Existing tests run** (targeted, `--maxWorkers=2`, worktree, before any edit):
+`npx jest test/core/error-details.test.ts test/cli/error-details.test.ts test/validation/warning.test.ts
+test/cli/init-command.test.ts test/cli/mcp-command.test.ts` → 5 suites, 41 passed;
+`npx jest test/core/approval-authority.test.ts test/core/approval-authority-approver.test.ts
+test/core/approval-authority-baseline.test.ts test/cli/approval-authority-baseline.integration.test.ts
+test/cli/unknown-field-warning.integration.test.ts` → 5 suites, 36 passed; `npx jest test/cli/success-warnings.test.ts
+test/cli/fresh-init-transitions.test.ts test/cli/program.integration.test.ts` → 3 suites, 107 passed; `npx jest
+test/mcp/role-prompt-context.test.ts test/mcp/role-prompts.test.ts test/docs/name-resolvability.test.ts` → 3 suites, 55
+passed. With the pending amendments in the tree: `npx jest test/docs/name-resolvability.test.ts` first failed on the
+three new names (`DETAIL_KEYS`, `WARNING_PREFIX`, `formatWarningLine`), then, with their allowlist entries,
+`npx jest test/docs/name-resolvability.test.ts test/docs/exit-codes-parity.test.ts test/docs/command-surface-specs.test.ts
+test/docs/l0-traceability.test.ts test/docs/enumeration-parity.allowlist.test.ts` → 5 suites, 37 passed, and `npx jest
+test/docs/dry-run-documented.test.ts test/docs/commands-parity.test.ts test/core/dna-show.test.ts
+test/core/memory-amend.test.ts test/docs/agent-output-secrets.test.ts` → 5 suites, 49 passed.
+
+**Coverage baseline.** The baseline of this worktree's base `948140355` is not produced yet; until it is, compare with
+the baseline of `3c13e738c` (`coverage-summary.json` of that sha): total lines 10601/10658, statements 12706/12853,
+functions 2486/2522, branches 7911/8197; per file: `src/core/error-details.ts` lines 18/18 branches 23/23,
+`src/core/approval-authority.ts` 31/31 · 14/14, `src/validation/warning.ts` 60/60 · 44/45, `src/cli/warning.ts` 16/17 ·
+10/10, `src/cli/init-command.ts` 41/47 · 21/22, `src/cli/mcp-command.ts` 22/22 · 7/8, `src/mcp/prompt.ts` 82/82 · 48/48.
+
+**For `task-370`** (W1-11, never at once with this task): it may rely on `WARNING_PREFIX`/`formatWarningLine` as the one
+console warning line, on `emitWarning`/`emitWarnings`/`emitError` keeping their signatures and json/yaml shapes, on
+`errorDetails` returning `readonly ErrorDetail[]` (`{file?, detail?}`) under the `DETAIL_KEYS` rule, and on `hint`
+travelling as `CoreError.hint`.
+
+**Decisions for the approver** (each with a recommendation).
+- D1 — the hint: the two texts of AC1 (a)/(b), on stderr only, console `hint:` line and json/yaml `hint` field, omitted
+  when a member holds `approver` or the working tree grants the asker; applied by the shared check, so also on `reject`,
+  `amend`, the approval `finalize`, `adopt --plan --apply`, `rekey`. Alternative: placeholders `<name>`/`<email>` instead
+  of the asker's identity. *Recommended:* as written (the `E_NOT_A_MEMBER` hint interpolates the asker too).
+- D2 — the details rule: (A) three classes as above, the four labelled keys rendered (`frontier` as `task-330` D4
+  expected), undeclared keys rendered, a test that fails on an undeclared key; (B) render every non-entry key (more
+  lines on about twenty refusals, most repeating their reason); (C) entry keys only, the rest declared silent (leaves
+  `frontier`, `applied`, `argv`, `file` dropped). *Recommended:* (A).
+- D3 — the prefix lives in `src/validation/warning.ts` (`WARNING_PREFIX`, `formatWarningLine`), the CLI renderer, the
+  fallbacks, `init` and `mcp` share it; `mcp`'s serving phase stays on the fallback. *Recommended:* as written.
+- D4 — printed text that changes: `Warning: ` → `warning: ` on `mcp`, `init` and every fallback (a script grepping
+  `^Warning: ` changes; the pinned build 0.3.2 keeps the old line until the pin advances); the authority refusal gains a
+  second stderr line / a `hint` key where no member holds `approver`; refusals carrying `cause`, `unreadable`, `frontier`,
+  `applied`, `argv` or `file` gain detail lines and json `details` entries (the MCP `structuredContent.details` too). No
+  `error:` line, exit code or stdout changes. *Recommended:* accept; `CHANGELOG.md` records it at `user-docs`.
+- D5 — five spec amendments where the task names two: `spec-005` (the rule lives in §3.1), `spec-006` §7 step 4 (one
+  sentence), `spec-009` §2 (the fallback's line) beside `spec-008` and `spec-013`. *Recommended:* record all five.
+- D6 — no new BDD scenario: P1.7 sc.3 keeps its message, the hint is pinned in spec-008 §6 and by the fresh-init test
+  and the smoke. *Recommended:* none.
+
+### Pending amendments (approver)
+
+Prepared in this worktree, uncommitted (`dl-047`), to be recorded with `memory amend` before red:
+- `spec-008-cli-grammar` — `--reason "Pin the authority refusal's hint and the E_NOT_A_MEMBER row in section 6, state one warning prefix for every command, init and mcp included, and pin the four families of agent execute warnings the table left out, for task-375 (dl-071 option B, bug-304, bug-536, bug-548)."`
+- `spec-005-cli-command-contract` — `--reason "Declare one rule for every details key in section 3.1, entry, labelled and stated keys in one closed table with undeclared keys rendered, for task-375 (bug-303)."`
+- `spec-006-core-domain-api` — `--reason "Say in section 7 step 4 that the authority refusal carries a hint when no committed member holds approver, its message unchanged, for task-375 (dl-071 option B)."`
+- `spec-009-validation-strategy` — `--reason "Write a warning raised outside any sink with the one console prefix warning:, for task-375 (bug-304)."`
+- `spec-013-directive-frontmatter-schema` — `--reason "Quote the version warnings with the console prefix warning:, for task-375 (bug-304)."`
+
+The same change adds three `PLANNED` entries (`plannedBy: ['task-375']`) to `test/docs/name-resolvability.allowlist.ts`
+for the names the amended specs give code not written yet: `spec-005` `DETAIL_KEYS`; `spec-008` `WARNING_PREFIX` and
+`formatWarningLine`. It is left uncommitted with the amendments and committed by green once the approver has recorded
+them. Until then a full-suite run in this worktree may fail `test/cli/workflow-unbound-none.integration.test.ts` with
+`W_UNCOMMITTED_INPUTS` (`bug-534`).
+
+### Retrospective
+
+<!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
+     reconstructed afterwards. One line per item: what happened, the evidence (a command and what it
+     printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
+     Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
+     here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
