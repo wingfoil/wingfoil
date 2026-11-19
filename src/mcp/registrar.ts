@@ -101,8 +101,8 @@ function toolRefusal(text: string): CallToolResult {
  * Malformed encoding is a failed read naming the parameter.
  */
 function templateVariable(variables: Readonly<Record<string, string | string[]>>, name: string): string {
-  const raw = variables[name];
-  const text = Array.isArray(raw) ? raw.join(',') : (raw ?? '');
+  // The SDK matched the template, so the variable is present; `String` of a one-string value is the value.
+  const text = String(variables[name]);
   try {
     return decodeURIComponent(text);
   } catch {
