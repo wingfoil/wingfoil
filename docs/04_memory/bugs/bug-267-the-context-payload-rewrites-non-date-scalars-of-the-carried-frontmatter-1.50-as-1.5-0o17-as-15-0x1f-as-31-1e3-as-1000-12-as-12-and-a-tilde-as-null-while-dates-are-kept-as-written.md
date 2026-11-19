@@ -53,3 +53,9 @@ read in decimal.
 
 Captured on 2026-10-06 by `bug-ingest-rel-v0.3-w2b4a-review-findings-plan`, from the independent review of
 `task-255` (W2 B4a, `dev-loop-rel-v0.3-plan`), checked against `main` at `b0c3e472`.
+
+### Retrospective
+
+- Closed by `task-379` under ruling D2 (a): every null, boolean, integer, float and timestamp scalar is carried as written. Keeping the text opened gaps the design first missed: `"1.50"` beside `1.50` are two YAML keys with one text, and a merge key can give one YAML key two texts. Such a document is left out and reported, and such an element refuses the context: `spec-012` §7 was amended for it (`34cad2c98`, `1e878e683`), and `test/core/context-payload-duplicate-keys.test.ts` and `test/core/context-payload-yaml-constructs.test.ts` pin the rule.
+- Frontmatter that contains itself through an alias is not a gap this task opened: `main` at `4afbca9db` already throws `RangeError: Maximum call stack size exceeded` on `a: &x {b: *x}`. The task leaves such a document out and reports it too, under ruling D6 (a), pinned by the same `test/core/context-payload-yaml-constructs.test.ts`.
+- While the frontmatter is read, a key whose text is not its YAML key is named internally between two marks. The mark is chosen from every string scalar the parser closes, including a string a merge override then drops, so a string the document writes is never read as an internal name (`d94829c6b`, `test/core/context-payload-written-marks.test.ts`). Any other error of that read leaves the document out with the reason `its frontmatter cannot be read as written`, and the element refuses the context.
