@@ -59,4 +59,4 @@ each action and inferring it.
 
 ### Retrospective
 
-- None.
+- Fixed by `task-376` (`cc376b47b`). On this repository, `workflow status --format json` on the code build reports `release-planning.advance-pinned-build@release:minor-v1.0`, this bug's own example, with `"manualOnly":true`, and its console line ends in `; manual only`.
