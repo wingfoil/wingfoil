@@ -610,6 +610,15 @@ gate of record is `npm run -s typecheck` above.
   — `--reason "Record the bug's retrospective: task-364 closes it by deriving each Tool's input schema and argument mapping
   from the parameter metadata, and asserts the REQ-SEC-05 illegal-transition case on the real memory.approve Tool."`
 
+### review fix F2 (qa, 2026-11-19)
+
+The doc comment of `actualMcpToolsAsCliForm` in `test/core/parity.test.ts` (a red file, T4) said that with zero mutating
+operations `tools/list` is a protocol-level "Method not found"; since green the registrar answers `tools/list` itself
+and an empty registry lists `[]`. Commit `ecefb5452` (`test(core): task-364 — correct the tools/list comment of the
+parity test (review F2)`) rewrites only that sentence: the short-circuit to `[]` stays, described as structurally
+equivalent to the empty list `tools/list` returns. `git diff` before the commit showed the comment's four lines replaced
+by three, nothing else. Run: `npx jest test/core/parity.test.ts --maxWorkers=2` → `Tests: 0 failed, 7 passed, 7 total`.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
