@@ -272,6 +272,14 @@ change is accepted, with its `--reason` there.
 - `README.md`: the BDD cell reads `66 / 267`; `grep -rhE '^\s*Scenario( Outline)?:' docs/02_requirements/02_bdd/features | wc -l`
   → 312. Low; the same re-count updates it.
 
+### design gate (approver, 2026-11-19)
+
+The approver recorded the step in `26e778981` (`workflow finalize … dev-loop.design`), after the change-proposal's acceptance `8f15da649` (`wf(change-proposal): approve cp-003-add-the-capabilities-and-verify-feature-rows-and-restate-p5.2.3-without-approve [in-analysis → accepted]`), which holds the product-owner's acceptance at `vision-change.impact-analysis`. The rulings, as the record states them:
+
+> Approve the design of task-360 as recommended: D1 P1.14 for verify under Pillar 1 and P5.1.5 for capabilities under P5.1; D2 P5.2.3 drops approve from what the Tools do and gains one clause saying approve, reject and amend refuse; D3 REQ-SEC-02, REQ-SEC-03 and REQ-INT-03 change text, REQ-INT-01 and the P5.2.3 link of REQ-SEC-03 change traceability only, REQ-SYS-07 stays; D4 REQ-INT-03 is restated in this change; D5 US-2-11 and the P5.2.3 narrative are amended; D6 P1.14-verify.feature gains a nominal scenario; D7 the agent-as-author wording of P5.2.3-mcp-tools.feature becomes the agent's attribution trailers; D8 the journeys, personas, the P5.1 heading and the canvas line stay untouched; D9 schedule rewrites the sequencer's v0.4 row from the release's features.
+
+After the gate the vision-change's next step is `vision-change.update-vision` (`npm run -s wingfoil -- workflow next vision-change-rel-v0.4-w1-feature-rows-plan`).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
