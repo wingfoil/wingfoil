@@ -51,4 +51,4 @@ The argument is dropped from the command with no diagnostic.
 
 ### Retrospective
 
-- None.
+- Fixed by `task-376` (`cc376b47b`). The offered `memory add` carries `--title`, `--tags` and `--set`; on this repository `workflow list --format json` on the code build now reports `W_ACTION_ARGUMENT_NOT_PASSED` twice, for the `dl` and `bug` arguments of `release-planning`'s `build-backlog`, which stay declared as `workflow adopt`'s candidate rules.
