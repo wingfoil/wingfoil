@@ -71,7 +71,36 @@ recorded as skipped, the parity tests green, and this plan `done`.
 - `workflow start` with `--set scope=rl-v1/rel-v0.4 --set phase=rel-v0.4-w1-feature-rows` (a dry run first) wrote
   this plan's `add` as `8f0a8f8dc` and left it `draft`, so this body is written before its `submit`.
 
+- `capture` (architect drafting for the product-owner): `cp-003` added with the step link (`7a7a47751`, trailers
+  `WingFoil-Instance`/`WingFoil-Step`) and submitted (`2b5d6bad5`, `draft → in-analysis`); the reverse walk is in its
+  `## Notes`.
+- `impact-analysis`: the approver accepted `cp-003` (`8f15da649`, `in-analysis → accepted`) and recorded `task-360`'s
+  design gate (`26e778981`, D1–D9) in the same queue entry.
+- `update-vision`: `afdb83b81` (`06_features.md` 1.18 with `00_index.md` and the vision-index anchors in the same
+  commit, canvas 1.14, brief 1.12, README count); recorded by `9a8cc4058` after `npx jest
+  test/docs/vision-index.test.ts` passed 13 of 13.
+- The three downcasts and `schedule` have no record of their own. Once `update-vision` was recorded, the engine
+  deduced all three downcasts complete (task-301 design gate D3, `spec-017` §12, the note in `dl-166`), and
+  `workflow finalize … downcast-stories` was refused as not on the frontier; `task-359`'s D2 owes the command that
+  would give a delta downcast its own evidence. Each downcast's in-scope statement is in the task notes of the agent
+  that did it, and each downcast commit names `cp-003` and its layer: `959955317` (`docs(usm)`), `67d2aa05b`
+  (`docs(bdd)`), `f8bd7fa2b` (`docs(sard)`). The engine likewise deduced `schedule` complete from `cp-003`'s state
+  (`workflow finalize … schedule` printed "no next step: workflow 'vision-change' is complete"); its evidence is the
+  sequencer `70290740b`, the assign `cef4cb23a` and the finalize `50d556c67` (`accepted → scheduled`).
+- `node scripts/check-release-exit.cjs` on `cp-003` exits 1 until the approver records the `minor-v0.4` `features:`
+  amendment (P1.14, P5.1.5), and 0 with it in the tree.
+- Review: APPROVE WITH FIXES; the three text fixes were made in the task, with no re-review. Two follow-ups went to
+  the wave's closing ingest: REQ-SYS-05's traceability without P5.1.5, and `deprecate` named as a working Tool in
+  P5.2.3's Notes and REQ-INT-03 while `dl-220` may make it approver-gated for some types.
+
 ### Retrospective
 
 - `workflow start` prints the started instance as `(active)` and, on the next line, says the plan is `draft`
   (`8f0a8f8dc`); the two lines disagree. Proposal: the first line names the plan's real state.
+- The three downcasts and `schedule` of a vision-change run inside a dev-loop task are deduced complete before
+  their work exists, so the plan's "each step's record in order" could not be met; the work kept its order and each
+  in-scope statement went into the task notes (`9a8cc4058`; the note in `dl-166`, `task-359` D2). Proposal: none
+  beyond `task-359`'s D2.
+- A vision-change run mapped onto the four dev-loop agents worked: capture and the reverse walk at design, the
+  approver's acceptance and the design gate in one queue entry, the BDD files at red, the SARD and schedule at green
+  (`8f15da649`, `26e778981`, `67d2aa05b`, `f8bd7fa2b`, `50d556c67`).
