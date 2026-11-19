@@ -56,4 +56,4 @@ commit (`npm run build`, then `node dist/cli.js`).
 
 ### Retrospective
 
-None.
+- Closed by `task-379`: one `assembleExecutionContext` on this repository at `0253adfb3` starts 11 git processes instead of the 27 the design measured (`rev-parse` 1, `show` 3, `ls-tree` 3, `cat-file` 4), with a payload of the same sha256, `d212452097dc5c6b…`.
