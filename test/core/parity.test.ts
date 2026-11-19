@@ -75,10 +75,9 @@ function hasAnyMutatingOperation(modules: readonly CoreModule[]): boolean {
 
 /**
  * The actual Tool names an MCP client sees for `modules`, converted to the CLI's `noun verb` form
- * (spec-004 §4.1: `.` <-> ` `). The MCP SDK only installs a `tools/list` request handler the first
- * time a Tool is registered (`McpServer`'s lazy `setToolRequestHandlers`) — with zero mutating
- * operations, `tools/list` is a protocol-level "Method not found", not an empty list, so that case
- * short-circuits to `[]` without making the call (structurally equivalent: 0 Tools registered).
+ * (spec-004 §4.1: `.` <-> ` `). The registrar answers `tools/list` itself (task-364), so a registry
+ * with zero mutating operations lists `[]`; that case short-circuits to `[]` without making the call,
+ * which is structurally equivalent to the empty list `tools/list` returns (0 Tools registered).
  */
 async function actualMcpToolsAsCliForm(modules: readonly CoreModule[]): Promise<string[]> {
   if (!hasAnyMutatingOperation(modules)) return [];
