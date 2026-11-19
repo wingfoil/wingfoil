@@ -388,6 +388,103 @@ The approver recorded the step in `e527cfab4` (`workflow finalize … dev-loop.d
 
 After the amendments `npx jest test/cli/workflow-unbound-none.integration.test.ts --maxWorkers=2` passes in this worktree (4 of 4): the failure the design expected with the specs uncommitted was `bug-534`.
 
+### red (qa, 2026-11-19)
+
+**Red commit `4dd596f88`** (`git log --oneline -1` → `4dd596f88 test(mcp): 364 — failing test: Tool input schemas, argument
+mapping and Resource templates derived from the parameter metadata`), test files only. Base: `git rev-list --count HEAD..main`
+→ `0`, no merge. Black box: no file under `src/` or `scripts/` was opened; expected values come from the ACs, the design, the
+gate rulings, `spec-004` §2.1/§4.3 and `spec-006` §2/§3 as amended (`a15c05c15`, `89e20213f`), the `--help` of the compiled
+CLI, and the real runs below. No `.d.cts` is written: every new symbol is imported from a TypeScript module.
+
+**Files.** New: `test/core/operation-parameters.test.ts`, `test/core/tool-input-schema.test.ts`,
+`test/mcp/tool-arguments.test.ts`. Edited, each only as the design says:
+- `test/core/parity.test.ts`: the production Resource list loses `wingfoil://agent/show`, `wingfoil://memory/history` and
+  `wingfoil://workflow/show` (their comments moved with them), a new `listResourceTemplates()` assertion pins the three
+  templates (AC 2), and a new `it` compares every mutating operation's CLI parameter names and required names with its
+  Tool's `inputSchema` (AC 5); the Tools list and the `-32601` comment are unchanged;
+- `test/mcp/registrar.test.ts`: a new `describe` (AC 2): `deriveMcpResourceUri` with a third argument (imported from
+  `src/mcp/registrar`), and a synthetic `x show` with a required `run-id` read through its template (decoded value; a
+  malformed escape refused with an `McpError` naming the parameter);
+- `test/mcp/read-only-agent-channel.test.ts`: the module doc no longer calls the real illegal-transition case unasserted,
+  and a new `describe` drives the real `memory.approve` Tool into it (AC 4);
+- `test/mcp/helpers/channel-enumeration.ts`: `connectCoreModuleSurface` passes `buildCoreParams` instead of
+  `(ctx) => ({ root: ctx.root })`, and its doc says so.
+
+**Fixture commands** (scratch repository outside the worktree, the task's PATH shim, code build of this worktree):
+`git init`; `node dist/cli.js init --template Scrum` → exit 0, commit `chore(wingfoil): initialize .wingfoil/ with the Scrum
+template`; `node dist/cli.js memory add --type bug --title probe` → `{"id": "bug-001-probe", "path":
+"docs/memory/bug/bug-001-probe.md"}`, exit 0, tree clean. Then `node dist/cli.js memory approve bug-001-probe --reason x
+--format json` → exit 1, stderr
+`{"error":"illegal transition draft -> (none) for type 'bug'","details":[{"file":"docs/memory/bug/bug-001-probe.md","detail":"illegal `approve` from \"draft\": not a `gates` state — `approve` is only legal from a gate"}]}`,
+the same document the design recorded; console format → `error: illegal transition draft -> (none) for type 'bug'` and the
+indented detail line, exit 1; `git log --oneline | wc -l` → `2` after both (nothing written). The tests build the same
+fixture with the same two commands (`spawnCapture` on `dist/cli.js`, `withoutAgentMarkers(process.env)`) and compare the
+Tool against a CLI run made in the test, not against a stored string. `memory history bug-001-probe --format json` and
+`memory add --type bug --title t2 --dry-run --format json` were run the same way to see the payload shapes; the tests run
+those two in-process through `buildProgram`, so both sides stamp `WingFoil-Version:` from the same (source) build.
+
+**Run.** `npx jest test/core/operation-parameters.test.ts test/core/tool-input-schema.test.ts test/mcp/tool-arguments.test.ts
+test/core/parity.test.ts test/mcp/registrar.test.ts test/mcp/read-only-agent-channel.test.ts --maxWorkers=2` → `Tests: 22
+failed, 22 passed, 44 total` (operation-parameters 0 failed / 4, tool-input-schema 5 / 5, tool-arguments 9 / 9, parity 2 / 7,
+registrar 3 / 12, read-only-agent-channel 3 / 7). `npx tsc --noEmit -p tsconfig.json` → exit 2, only the intended
+diagnostics: TS2305 for `deriveToolInputSchema` and `ToolInputSchema` (`tool-input-schema.test.ts`) and `buildCoreParams`
+(`tool-arguments.test.ts`, `helpers/channel-enumeration.ts`), TS2554 three times in `registrar.test.ts` (the three-argument
+`deriveMcpResourceUri`). `npx jest test/lint --maxWorkers=2` → `Tests: 1 failed, 164 passed, 165 total`: the one failure is
+`typecheck.clean`, listing those same intended diagnostics. `npx jest test/validation/secret-scan.test.ts` → passed.
+
+**Collateral reds of the helper edit** (expected, pass once `buildCoreParams` exists): `npx jest
+test/mcp/resource-warnings.test.ts test/docs/mcp-surface-parity.test.ts test/validation/secret-scan.test.ts --maxWorkers=2` →
+`Tests: 2 failed, 93 passed, 95 total`; the two are `resource-warnings.test.ts`'s "core-derived Resources carry
+CoreResult.warnings" cases, `McpError: MCP error -32603: options.buildParams is not a function`. In
+`read-only-agent-channel.test.ts` the two pre-existing synthetic Tool-call cases fail the same way (below).
+
+**Per AC** (first failing assertion of each test):
+- **AC 1 (characterization)**, `test/core/operation-parameters.test.ts`: "enumerates the registry …", "… pairwise distinct",
+  "no operation declares a parameter of its own named dry-run, co-author or ai-model", "every declared name is spelled
+  ^[a-z][a-z0-9_-]*$" → all four pass on first run.
+- **AC 2 (red-first)**:
+  - parity "the read-only production operations are exactly the Resources listed …" → `toEqual` on the Resource list:
+    received `+ wingfoil://agent/show`, `+ wingfoil://memory/history`, `+ wingfoil://workflow/show`;
+  - registrar "deriveMcpResourceUri appends /{<name>} for a required positional, and only then" → expected
+    `wingfoil://memory/history/{id}`, received `wingfoil://memory/history` (TS2554 under `tsc`);
+  - registrar "a read of the template percent-decodes the variable …" → `McpError: MCP error -32602: … Resource
+    wingfoil://x/show/a%2Fb%2F1 not found`;
+  - registrar "a variable that is not valid percent-encoding is a failed read naming the parameter" → expected substring
+    `invalid argument: run-id must be percent-encoded`, received `… Resource wingfoil://x/show/%E0%A4%A not found`.
+- **AC 3 (red-first)**, `test/core/tool-input-schema.test.ts`: all five tests ("memory.approve: id and reason as strings …",
+  "memory.add: the repeatable --set …", "memory.search (read-only) …", "an operation that declares no parameter …", "each
+  listed Tool's inputSchema equals deriveToolInputSchema …") → `TypeError: (0 , registry_1.deriveToolInputSchema) is not a
+  function` (TS2305 under `tsc`).
+- **AC 4 (red-first)**:
+  - tool-arguments "memory.approve: the Tool call and `wingfoil memory approve` hand the builder equal contexts" →
+    `toEqual`: the Tool's context has `positional`, `positionals` and `options` `undefined` where the CLI's has
+    `bug-001-probe`, `["bug-001-probe"]`, `{ reason: "x" }` (`bug-272`);
+  - tool-arguments "memory history: the Resource read …" → `McpError: MCP error -32602: … Resource
+    wingfoil://memory/history/bug-001-probe not found`;
+  - tool-arguments, the six refusals (`{}` → `missing required argument: id`; `{id}` → `missing required argument: reason`;
+    `{id, reason, type}` → `unknown argument: type`; `{id: 5, reason}` → `invalid argument: id must be a string`;
+    `memory.add {…, set: 'a=b'}` → `invalid argument: set must be an array of strings`; `directive.assign {…, force:
+    'yes'}` → `invalid argument: force must be a boolean`) → `toEqual` on `content`: received the text `(0 ,
+    registry_1.buildCoreParams) is not a function` (today the call reaches the builder whatever its arguments);
+  - tool-arguments "memory.add with dry-run: true writes nothing …" → `expect(result.isError).toBeFalsy()`, received `true`;
+  - read-only-agent-channel "memory.approve on a draft bug: isError, the CLI's refusal text and details, and nothing
+    persisted by either surface" → `toEqual` on `content`: expected `illegal transition draft -> (none) for type 'bug'`,
+    received `options.buildParams is not a function`;
+  - read-only-agent-channel, pre-existing, through the helper: "the only write path (a Tool) surfaces a CoreResult.error
+    as isError …" → expected substring `illegal transition: draft to approved`, received `options.buildParams is not a
+    function`; "a successful Tool call returns the value with no isError flag" → `isError` `true`.
+- **AC 5 (red-first)**, parity "every mutating operation's CLI parameters and Tool input properties carry the same names and
+  the same required ones" → `toEqual` for `agent.execute`: CLI `agent, dry-run, element, headless, interactive, log, next,
+  role, step, timeout, workflow`, Tool `[]`.
+- **AC 6, AC 7**: no test, as the design states (review checks the amendments and the grep; AC 7 is `npx jest
+  test/docs/cli-reference.test.ts test/core/parity.test.ts --maxWorkers=2` at review — the only `parity.test.ts` edits are
+  AC 2's and AC 5's above, none a usage text).
+
+**For the developer.** The refusal content is exactly `[{ type: 'text', text }]`; the illegal-transition Tool result's
+`structuredContent` must `toEqual` the CLI's parsed `--format json` stderr document (`{ error, details }`); the dry-run Tool
+result's text must parse to the CLI's in-process `--dry-run --format json` payload; the history Resource text must equal
+the CLI's stdout without its final newline; a malformed escape must reject as an `McpError`.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
