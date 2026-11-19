@@ -43,7 +43,7 @@ line count (`awk 'END{print NR}'`).
 | [`04_personas.md`](04_personas.md)                     | 1.2 | 2026-10-07 | Approved | 149   | The primary persona (Morgan) and the 7 personas (Alex, Sam, Jordan, Morgan, Casey, Taylor, the maintainer)              |
 | [`05_journeys.md`](05_journeys.md)                     | 1.6 | 2026-10-10 | Approved | 287   | 8 end-to-end user journeys (0a, 0b, 1–6): steps, obstacles, success                                                     |
 | [`06_features.md`](06_features.md)                     | 1.18 | 2026-11-19 | Approved | 554   | 68 features (by pillar + by release) and the data-model / implementation notes                                          |
-| [`07_sequencer.md`](07_sequencer.md)                   | 2.1 | 2026-10-18 | Approved | 480   | Active-day budgets, actuals and calendar forecast; the original 5-week plan; per-release Definition of Done, risks      |
+| [`07_sequencer.md`](07_sequencer.md)                   | 2.2 | 2026-11-19 | Approved | 488   | Active-day budgets, actuals and calendar forecast; the original 5-week plan; per-release Definition of Done, risks      |
 | [`08_mvp-canvas.md`](08_mvp-canvas.md)                 | 1.14 | 2026-11-19 | Approved | 222   | MVP canvas: problem/solution/value, target users, metrics, success criteria                                             |
 | [`X_cli-cmds.md`](X_cli-cmds.md)                       | 2.5 | 2026-11-16 | Approved | 532   | CLI command reference: signatures, parameters, release timeline, per-persona usage                                      |
 | [`X_lean-inception-plan.md`](X_lean-inception-plan.md) | —   | 2026-06-11 | —        | 42    | Workshop plan: sessions, key decisions, output list                                                                     |
@@ -62,12 +62,12 @@ line count (`awk 'END{print NR}'`).
 | Persona details (pains, goals, AI-usage)                            | `04_personas` L9–149 · quick summary `01_product-brief` L106–160                                       |
 | End-to-end user flows                                               | `05_journeys` (per-journey ranges below)                                                               |
 | The full feature list + feature IDs (P1.x…X1.x)                     | `06_features` L9–170                                                                                   |
-| Which feature ships in which version                                | `06_features` L171–326 · `07_sequencer` scope changes L113–142 · `01_product-brief` GTM L203–248       |
+| Which feature ships in which version                                | `06_features` L171–326 · `07_sequencer` scope changes L117–150 · `01_product-brief` GTM L203–248       |
 | CLI commands, flags & parameters                                    | `X_cli-cmds` (per pillar below)                                                                        |
 | Data model: `memory.yaml`, state machines, workflow kinds, fallback | `06_features` L383–554 · `02_product-vision` Main/Sub L62–69                                           |
 | Reference workflow templates (Scrum/Kanban/Lean/Trunk-Based)        | `02_product-vision` L31–103 · `06_features` P4.18–P4.20 (L103–105)                                     |
-| Schedule: active-day budgets, actuals, forecast                     | `07_sequencer` L9–142 · original plan L143–154 · `01_product-brief` L249–265                           |
-| Definition of Done per release                                      | `07_sequencer` L378–447                                                                                |
+| Schedule: active-day budgets, actuals, forecast                     | `07_sequencer` L9–150 · original plan L151–162 · `01_product-brief` L249–265                           |
+| Definition of Done per release                                      | `07_sequencer` L386–455                                                                                |
 | Success metrics & criteria                                          | `01_product-brief` L161–196 & L266–312 · `08_mvp-canvas` L107–132 & L163–202                           |
 | The Determinism Index (I, P, O) and who controls each component     | `01_product-brief` North Star L163–183 and Solution L39–79 · `08_mvp-canvas` L109–119 · `03_is-isnot`  |
 | Competitive differentiators (Replaces / Works with)                 | `01_product-brief` L80–105 · `08_mvp-canvas` L133–151                                                  |
@@ -147,15 +147,15 @@ line count (`awk 'END{print NR}'`).
 
 ### `07_sequencer.md`
 
-- Re-baseline on active days — L9–142 (Actuals v0.1–v0.2 L25, Active-day budgets L64, Calendar forecast L97, Scope
-  changes since the original plan L113)
-- Timeline Overview (original plan) — L143–154
-- Week-by-Week Breakdown (Week 1 L157, Week 2 L191, Week 3 L224, Week 4 L274, Week 5 L310) — L155–343
-- Critical Path — L344–362
-- Risk Mitigation — L363–377
-- Definition of Done per release (v0.1 L380, v0.2 L392, v0.3 L405, v0.4 L419, v1.0 L433) — L378–447
-- Success Criteria (v1.0 MVP) — L448–471
-- Capacity & Assignments — L472–480
+- Re-baseline on active days — L9–150 (Actuals v0.1–v0.2 L25, Active-day budgets L64, Calendar forecast L101, Scope
+  changes since the original plan L117)
+- Timeline Overview (original plan) — L151–162
+- Week-by-Week Breakdown (Week 1 L165, Week 2 L199, Week 3 L232, Week 4 L282, Week 5 L318) — L163–351
+- Critical Path — L352–370
+- Risk Mitigation — L371–385
+- Definition of Done per release (v0.1 L388, v0.2 L400, v0.3 L413, v0.4 L427, v1.0 L441) — L386–455
+- Success Criteria (v1.0 MVP) — L456–479
+- Capacity & Assignments — L480–488
 
 ### `08_mvp-canvas.md`
 
@@ -197,7 +197,7 @@ line count (`awk 'END{print NR}'`).
 - **Pillars:** Project Memory, Project DNA, Project Directives, Project Workflow, Interaction Layer.
 - **Versions/releases:** v0.1 (Memory+DNA) → v0.2 (Directives) → v0.3 (Workflow) → v0.4 (Interaction Layer) → v1.0 (MVP
   complete). The original plan's dates (Jul 10 / 17 / 24 / 31 / Aug 7, 2026) are no longer the schedule; budgets in
-  active days and the current forecast are in `07_sequencer` L9–142.
+  active days and the current forecast are in `07_sequencer` L9–150.
 - **Feature IDs:** `P<pillar>.<n>` (e.g. `P4.13`), sub-grouped for Pillar 5 as `P5.<group>.<n>`; extras as `X1.n`.
 - **Journeys:** `0a`, `0b`, `1`–`6` (8 total).
 - **Storage layout:** `.wingfoil/{memory.yaml, dna.yaml, workflows.yaml}` + dirs
