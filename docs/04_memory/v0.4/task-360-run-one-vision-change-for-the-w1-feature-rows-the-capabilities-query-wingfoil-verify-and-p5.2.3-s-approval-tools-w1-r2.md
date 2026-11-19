@@ -280,6 +280,50 @@ The approver recorded the step in `26e778981` (`workflow finalize … dev-loop.d
 
 After the gate the vision-change's next step is `vision-change.update-vision` (`npm run -s wingfoil -- workflow next vision-change-rel-v0.4-w1-feature-rows-plan`).
 
+### update-vision and downcast-stories (architect, 2026-11-19)
+
+Resumed after the gate (`8f15da649` accepts `cp-003`, `26e778981` records the design gate, D1–D9 as recommended), on
+head `d37bc1cda`, with the task's PATH shim. Only the two layers below; no BDD, SARD, sequencer or change-proposal file
+is touched, and no step record is written.
+
+**update-vision** — `afdb83b81` `docs(vision): cp-003 — P1.14 and P5.1.5 feature rows, P5.2.3 restated, counts 66 → 68`
+(`git commit --only`, six files):
+
+- `docs/01_vision/06_features.md` 1.17 → 1.18 (date 2026-11-19): the P1.14 row after P1.13 and the P5.1.5 row after
+  P5.1.4 (D1); P5.2.3's pillar row gains "; the approver-gated verbs are listed and always refuse" and its v0.4 Notes
+  read "Submit, park, deprecate, record memory; `approve`, `reject`, `amend` refuse (`E_AGENT_CONTEXT`)" (D2); P1.14
+  and P5.1.5 rows in the v0.4 table; the MVP summary's Pillar 1 line for P1.14 and `capabilities` in the P5.1 line;
+  "Total Features (MVP): 68". The pillar tables hold 68 id rows (`sed -n 1,170p docs/01_vision/06_features.md | grep
+  -cE '^\| (P|X)[0-9]'` → 68).
+- `docs/01_vision/08_mvp-canvas.md` 1.13 → 1.14: "✓ Commit-range governance check (`wingfoil verify`)" under Pillar 1,
+  and the `06_features.md` row of its document list reads 68.
+- `docs/01_vision/01_product-brief.md` 1.11 → 1.12: its `06_features.md` link line reads 68 (in place, no line moves).
+- `README.md`: the "MVP features" cell 66 → 68 (the BDD cell is the qa's re-count).
+- `docs/01_vision/00_index.md`: `**Last indexed:**` 2026-11-19; the document-map rows of `06_features.md` (1.18,
+  2026-11-19, 554 lines, 68 features), `08_mvp-canvas.md` (1.14, 222 lines) and `01_product-brief.md` (1.12); every
+  `06_features` and `08_mvp-canvas` range shifted by the lines inserted above it; "P1.1–P1.14"; "total = 68".
+- `test/docs/support/vision-index.ts`: `INDEX_ANCHORS` `06_features.md:L102–104` → `L103–105` (P4.18–P4.20 moved by
+  the P1.14 row), in the same commit as the index, as the module's comment requires.
+- Post-check `vision-index.current`: `npx jest test/docs/vision-index.test.ts --maxWorkers=2` → `Tests: 13 passed, 13
+  total`. After the heavy-gate slot wait, `npx jest test/docs --maxWorkers=2` → `Test Suites: 37 passed, 37 total`,
+  `Tests: 418 passed, 418 total` (on the working tree that became `afdb83b81`).
+
+**downcast-stories** — `959955317` `docs(usm): cp-003 — US-0A-23, US-4-14, US-2-11 amended, index 66/68` (four files):
+
+- `01_init-migrate.md`: US-0A-23 (Journey 0a step 2, `_(feat: P5.1.5)_`); `05_conventions.md`: US-4-14 (Journey 4
+  step 5, `_(feat: P1.14)_`); `03_review-workflow.md`: US-2-11's "so that" clause restated (D5); `00_index.md`: the
+  P1.14 and P5.1.5 rows of the pillar tables and the Module 1 validation counts (68 total, 66 mapped, 66/68; P1 14/14,
+  P5 16/18 with 5.1×5; P5.3.4 and P5.3.5 still unmapped, `task-381`). No story-map file declares a version.
+- `npx jest test/docs/bdd-dna-sections.test.ts test/docs/vision-index.test.ts --maxWorkers=2` → `Tests: 21 passed, 21
+  total`.
+- **Post-check `downcast.in-scope(layer: stories)`** (bound `manual: true`), stated: every story added or edited is in
+  `cp-003`'s user-story subsection, and nothing outside it changed. `git diff --stat HEAD~1 HEAD` lists exactly the four
+  files the subsection names (17 insertions, 7 deletions); the story ids on changed lines, `git diff HEAD~1 HEAD | grep
+  -E '^[-+][^-+]' | grep -oE "US-[0-9A-Z]+-[0-9E]+" | sort | uniq -c`, are `US-0A-23` and `US-4-14` (US-2-11's id line
+  is unchanged context; its body lines change), and the feature markers on changed lines are `_(feat: P1.14)_`,
+  `_(feat: P5.1.5)_` and US-2-11's `_(feat: P5.2.3)_` (removed and re-added with the restated clause). No edge story is
+  added, so the edge-case table is unchanged.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
