@@ -309,7 +309,7 @@ export function renderAddDocument(scaffold: string, fields: AddDocumentFields): 
  * or through its own option (`id`, `type`, `status`, `title`, `tags`), and the tokens with a source of
  * their own (`n`, `slug`, `date`, `author` — `spec-001`'s placeholder table).
  */
-const RESERVED_SET_NAMES: ReadonlySet<string> = new Set(['id', 'type', 'status', 'title', 'tags', 'n', 'slug', 'date', 'author']);
+export const RESERVED_SET_NAMES: ReadonlySet<string> = new Set(['id', 'type', 'status', 'title', 'tags', 'n', 'slug', 'date', 'author']);
 
 /**
  * The refusal of a reserved `--set` name, saying where its value comes from (`spec-008` §10). `date`

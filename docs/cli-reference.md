@@ -570,7 +570,7 @@ New in 0.3: with `--workflow`, the document is **created by** a step of that ins
 whose phase declares `memory.add` of this `--type`: the only one, or the one `--step` names. The add commit
 records the link in its trailers, `WingFoil-Instance: <instance-id>` and `WingFoil-Step: <key>`, next to
 `WingFoil-Version:`. `workflow next` prints the whole command for each step that adds an element, so you
-only fill in the title:
+only fill in its placeholders, such as the title:
 
 ```console
 $ wingfoil memory add --type bug --title "Broken link" --workflow bug-ingest-1-plan --step bug-ingest.capture
@@ -1263,6 +1263,15 @@ and `wingfoil://workflows/{name}` keep the 0.2.x content and read the working tr
 warning does not change the exit code; an error in any of the files exits `1`, with every diagnostic in
 the error's details.
 
+New in 0.4: `workflow list`, and no other command, also warns about a `memory.add` action that declares an
+argument `memory add` has no way to take. The warning is `W_ACTION_ARGUMENT_NOT_PASSED`, one per argument, for every
+workflow the configuration loads, with or without `--all`, after every other diagnostic. Its `file` is the workflow's
+file, its `path` is `phases[<p>].actions[<a>]`, and its message starts `memory.add argument '<name>' cannot be passed:`
+and ends with the reason: `type '<type>' has no token {<name>} in its id_pattern or path`; `memory add --set reserves
+the name '<name>'`, for `id`, `type`, `status`, `title`, `tags`, `n`, `slug`, `date` and `author` (`type`, `title` and
+`tags` are options of `memory add`, so they are never reported); or `memory add generates the numeric token {<name>}`,
+for a counter such as `{nnn}`. The argument stays in the action, and is left out of the command `workflow next` offers.
+
 The workflows are also checked against the rest of the configuration: a phase `role` or
 `approval: { by_role }` that `dna.yaml`'s `team.roles` does not define (`E_PHASE_ROLE_UNKNOWN`), an
 `approval: { by_person }` that names no `team.members[]` entry, a Memory type `memory.yaml` does not
@@ -1304,9 +1313,30 @@ hold it and whether an agent runs as it (`agentRole`), the role's directives (`i
 text is what `agent execute` loads), and each action with its interpolated text and its binding:
 
 - `wingfoil`: the whole command, with the step's operands filled and placeholders for what only you can
-  give — `memory add --type <T> --title <title> --workflow <instance> --step <key>`, or a Memory verb with
-  the ids it acts on (`<id>` when none is known yet) and, for `approve` / `reject`, `--reason <reason>`;
+  give — `memory add` or a Memory verb, as described below;
 - `agent`: `wingfoil agent execute --workflow <instance> --step <key>`.
+
+New in 0.4, the offered `memory add` carries the arguments the action declares, in this order: `--type <T>`;
+`--title` with the action's title, else `<title>`; `--tags` with its tags joined by commas; one `--set <name>=<value>`
+per other argument that names a token of the type's `id_pattern` or `path` that `--set` can fill; a placeholder such as
+`--set version=<version>` per such token the action does not give; then `--workflow` and `--step`. A value
+taken from an element must use only the id characters (`a-z`, `0-9`, `-`, `.`): one that has none, or that holds
+anything else, prints as the placeholder of its argument. The console quotes an element a shell would misread, as in
+`--title 'Fixed title here'`, a declared value spelled like a placeholder included (`--title '<draft>'`), and never a
+placeholder.
+
+New in 0.4, a Memory verb offers **one command per element**, because each verb takes one id. `argv` is the first
+command, and `commands` lists them all when there are two or more. An element whose state has no edge for the verb is
+in no command, and neither is an element already `deprecated` for `memory deprecate`: the action's `notOffered` lists it
+with the reason, `no approve edge from 'draft'`, and the console prints it on a `not offered:` line. When no element remains the binding has no `argv`. `<id>` stands for an element not
+known yet, and `approve` and `reject` end with `--reason <reason>`.
+
+New in 0.4, once the step has created an element of the type a `memory.add` action adds, the action reports it in
+`done`, its binding has no `argv`, and the console prints `- <action> — done: <ids>`. `memory add --workflow --step`
+stays accepted for a further element of that step. While such an element is short of the state the phase leaves it
+in, or of a `{ type, path }` file, the step's `pendingCreated` lists each one with its `element`, `reaches` and
+`missingPaths`, and the console says so: `evidence missing: created (bug-001-login is draft, the phase leaves it
+pending)`.
 
 The `memory add` command runs as printed (see [`memory add`](#wingfoil-memory-add)). The `agent` binding runs as
 printed (see [`wingfoil agent execute`](#wingfoil-agent-execute)). A step that waits for a third party is completed by a
@@ -1322,8 +1352,9 @@ The other binding kinds:
 - `run`: a command bound in `workflows/bindings.yaml`; `unbound`: none.
 
 Checks are listed with their binding and `"evaluated": false`: nothing is run. A step also reports the
-evidence still missing (`finalizable: true` when only a record is, which `workflow finalize` writes),
-`fallback`, `reentered` and `reentryCommit` after a reject, `mode`, `allowedModes`, `distinctFrom` and a
+evidence still missing (`finalizable: true` when only a record is, which `workflow finalize` writes; new in 0.4,
+`manualOnly: true` when no evidence WingFoil can check stands behind that step, so a person has to decide, and the
+console appends `manual only: no evidence checks this step`), `fallback`, `reentered` and `reentryCommit` after a reject, `mode`, `allowedModes`, `distinctFrom` and a
 recurring `cadence` (`lastRun: "not-recorded"`). The console view prints the key, trail, scope, role,
 directive ids, actions with their bindings, the missing evidence and a "waiting for" or "human needed"
 line; `--format json|yaml` prints the full payload,
@@ -1432,8 +1463,9 @@ change is reported as `W_UNCOMMITTED_INPUTS`, never read. Without `<ref>`, every
 (the most recently started) first and marked `*`; with `<ref>` (a workflow name or an open instance id), that one.
 
 For each instance: its element, its top-level phases (`complete`, `current`, `pending`, `skipped`, with the
-iteration counts of an `iterate_over` phase), its frontier — the ready steps, each as `workflow next` reports it
-— and its `late` elements (matched by a live query after a later phase closed it).
+iteration counts of an `iterate_over` phase), its frontier — the ready steps, each as `workflow next` reports it,
+the line of a step marked `manualOnly` ending in `; manual only` (new in 0.4) — and its `late` elements (matched by a
+live query after a later phase closed it).
 
 Then the **pending approvals**: a step whose phase declares `approval:` and whose element sits in the gate state
 the phase is there to decide (a task `in-review` at `dev-loop.review`), or, for a phase that moves no element
@@ -1503,7 +1535,15 @@ checks are listed, never run: `"evaluated": false`), `produces` with the Memory 
 alone), `mode`, `allowedModes` and `distinctFrom`, `cadence`, the kinds of evidence that complete the phase
 (`state`, `created`, `produces`, `selection`, `include`, `awaits`, `record`), and, for a phase that includes
 another workflow, that workflow resolved the same way under `sub`. The payload is
-`{"baseline": {…}, "workflow": {…}, "diagnostics": […]}`, the diagnostics as `workflow list` reports them.
+`{"baseline": {…}, "workflow": {…}, "diagnostics": […]}`, the diagnostics as `workflow list` reports them, except
+`W_ACTION_ARGUMENT_NOT_PASSED`, which `workflow list` alone reports.
+
+New in 0.4, a built-in binding's `argv` is the whole command `workflow next` offers, with placeholders where no
+instance gives a value: `wingfoil memory submit <id>`, `wingfoil memory approve <id> --reason <reason>`, `wingfoil
+memory reject <id> --reason <reason>`, `wingfoil memory deprecate <id>`, `wingfoil memory add --type <T> --title <title>
+… --workflow <instance-id> --step <key>` and `wingfoil agent execute --workflow <instance-id> --step <key>`. An argument
+the action declares literally is printed as declared; one that takes a value from an element is the placeholder of its
+name as a whole, a list included (`--title <title>`, `--tags <tags>`, `--set release=<release>`).
 
 - **Errors:** a name no workflow at `HEAD` has and no open instance holds → `unknown workflow: <ref>`, exit `1`; an error in the workflow files → exit `1`, as `workflow list`; no `<ref>`, or more than one → exit `2`.
 - **Commit:** none.
