@@ -1,7 +1,7 @@
 # MVP Canvas — WingFoil v1.0 (MVP Complete)
 
-**Version:** 1.13
-**Date:** 2026-10-18
+**Version:** 1.14
+**Date:** 2026-11-19
 **Status:** Approved
 
 ---
@@ -70,6 +70,7 @@ in [`04_personas.md`](04_personas.md).
 ✓ Git-backed document storage (each type at the path `.wingfoil/memory.yaml` declares)  
 ✓ Element schema + per-type state machines (`.wingfoil/memory.yaml`)  
 ✓ Versioning & audit trail (git commits)  
+✓ Commit-range governance check (`wingfoil verify`)  
 ✓ Add, search, history commands
 
 **Pillar 2: Project DNA (v0.1)**
@@ -212,7 +213,7 @@ Each document's version, date and status are listed in one place, the document m
 | `03_is-isnot.md`           | What WingFoil is/isn't, does/doesn't do                                        |
 | `04_personas.md`           | 7 personas: Morgan (primary), Alex, Sam, Jordan, Casey, Taylor, the maintainer |
 | `05_journeys.md`           | 8 user journeys (0a, 0b, 1–6) with scenarios and obstacles                     |
-| `06_features.md`           | 66 features across 5 pillars, organized by release version                     |
+| `06_features.md`           | 68 features across 5 pillars, organized by release version                     |
 | `07_sequencer.md`          | Active-day budgets, actuals, forecast; original plan                           |
 | `08_mvp-canvas.md`         | This file — MVP canvas with success criteria                                   |
 | `X_cli-cmds.md`            | CLI commands reference (all pillars)                                           |

@@ -341,7 +341,7 @@ docs/
 | Layer          | Artifact                                                    | Count    |
 |----------------|-------------------------------------------------------------|----------|
 | Vision         | User journeys                                               | 8        |
-| Vision         | MVP features (5 pillars + notifications)                    | 66       |
+| Vision         | MVP features (5 pillars + notifications)                    | 68       |
 | User Story Map | Journey files · edge-case / interruption stories            | 7 · 15   |
 | BDD            | Gherkin feature files / scenarios                           | 66 / 267 |
 | SARD           | Architecture & NFR requirements (measurable Fit Criteria)   | 46       |
