@@ -52,3 +52,338 @@ the CLI is.
 ## Execution Notes
 
 <!-- Filled by the dev-loop. -->
+
+### design (architect, 2026-11-19)
+
+**Inputs read.** `depends_on: []` (no dl-015 hard gate). `bug-272` (in-progress), `dl-040` (`ready`, `f6c6e0b3d`: option 1
+ratified, "spec-006 §3's paths row is amended to `wingfoil://paths`"), `spec-004` and `spec-006` (both `approved`,
+`grep -n '^status' docs/04_memory/design/specs/spec-00[46]*.md`), REQ-SYS-05, `P5.2.3-mcp-tools.feature`,
+`test/core/parity.test.ts`, the dev-loop plan's rulings W1-R2 / W1-R3 / W1-R4, and the backlog entries of `task-365`,
+`task-367`, `task-368`, `task-371`, `task-372`.
+
+**What exists (the finding the design rests on).** The parameter metadata the ACs ask for is already declared once
+per operation: `CoreOperation.positional` (`CorePositional`), `.options` (`CoreOption`, with `required`, `repeatable`,
+`valueName`, `description`) and `.flags` (`CoreFlag`) in `src/core/registry.ts`. The CLI already derives every
+argument from them (`src/cli/program.ts` lines 250–276 register one Commander argument/option per declaration;
+`src/cli/registrar.ts` lines 115–123 add only what `mutates` derives: `--dry-run`, `--co-author`, `--ai-model`). The
+gap is MCP-side only: `registerCoreModules` (`src/mcp/registrar.ts` lines 100–161) registers each Tool with no input
+schema and a handler that takes no argument, and builds the params from `{moduleName, operationName, root}` alone.
+Every operation of `CORE_MODULES` declares its parameters (33 operations, listed with a scratch script over
+`dist/core/index.js`; no name repeats inside an operation, none is spelled outside `^[a-z][a-z0-9_-]*$`, every option
+carries a description).
+
+**bug-272 reproduced on this head** (`e23e3e3d3`, code build): a scratch repository (`git init`;
+`node dist/cli.js init --template Scrum`; `node dist/cli.js memory add --type bug --title probe` → `bug-001-probe`,
+`draft`), and a Node script wiring `registerCoreModules(server, CORE_MODULES, {resolveRoot, buildParams})` with
+`src/cli.ts`'s builder over the SDK's in-memory transport:
+- `listTools()` → 22 Tools; `memory.approve`'s `inputSchema` is `{"type":"object","properties":{}}`;
+- `callTool({name:'memory.approve', arguments:{id:'bug-001-probe', reason:'x'}})` →
+  `{"content":[{"type":"text","text":"missing required argument: <id>"}],"isError":true}`;
+- `listResourceTemplates()` → `[]`; `listResources()` → 11 static URIs, `wingfoil://memory/history`,
+  `wingfoil://agent/show` and `wingfoil://workflow/show` among them.
+
+The CLI on the same element (`node dist/cli.js memory approve bug-001-probe --reason x --format json`, exit 1) prints
+on stderr the fixture the illegal-transition test compares against:
+`{"error":"illegal transition draft -> (none) for type 'bug'","details":[{"file":"docs/memory/bug/bug-001-probe.md","detail":"illegal `approve` from \"draft\": not a `gates` state — `approve` is only legal from a gate"}]}`.
+The same run in console format prints `error: illegal transition draft -> (none) for type 'bug'` and the indented
+detail line. The refusal comes before the agent-context check: the run above was made in an agent's shell and still
+got the transition refusal. Other CLI wordings recorded the same way: `memory submit bug-001-probe --foo x` →
+`error: unknown option '--foo'` (exit 2); `memory approve bug-001-probe` → `error: missing required argument: --reason`
+(exit 2); `memory approve` → `error: missing required argument: <id>` + `hint: usage: wingfoil memory approve <id>
+--reason <text>` (exit 2).
+
+**SDK facts the design depends on** (`@modelcontextprotocol/sdk` 1.32.0, `node_modules/.../dist/cjs/server/mcp.js`):
+`McpServer.registerTool` hands a handler its arguments only when the Tool has an `inputSchema`, a Zod schema, and
+validates them itself, refusing with `Input validation error: Invalid arguments for tool <name>: …` (lines 168, 209–227);
+`UriTemplate.match` (`shared/uriTemplate.js` lines 166–238) matches a simple `{var}` as one segment (`[^/,]+`), does
+not percent-decode (`new UriTemplate('wingfoil://agent/show/{run-id}').match('wingfoil://agent/show/task-1%2Fgreen%2F1')`
+→ `{"run-id":"task-1%2Fgreen%2F1"}`; the unencoded form → `null`), and matches a `{?a,b}` query only when every
+variable is present, in order.
+
+#### Design
+
+1. **`src/core/registry.ts`** — new exports, each pure (REQ-SYS-07), with TypeDoc comments:
+   - `ToolInputSchema` / `ToolInputProperty` (types) and `deriveToolInputSchema(operation: CoreOperation): ToolInputSchema`:
+     `{ type: 'object', properties, required?, additionalProperties: false }`. Properties in this order: the positional
+     (its declared name), each option in declaration order, each flag in declaration order, then `dry-run` when
+     `operation.mutates` (description from `DRY_RUN_FLAG`). Types: positional and option → `{type:'string'}`, repeatable
+     option → `{type:'array', items:{type:'string'}}`, flag → `{type:'boolean'}`; each carries the declaration's
+     `description` when it has one. `required`: the positional when `required: true`, then each `required: true`
+     option, in declaration order; the key is absent when the list is empty. Names are the CLI spelling (D3).
+     `--co-author` / `--ai-model` never appear (D6).
+   - `toolArgumentsToParams(operation, args: Readonly<Record<string, unknown>> | undefined)` →
+     `{ ok: true; context: { positional?, positionals, flags?, options? }; dryRun: boolean } | { ok: false; reason: string }`.
+     Checks, first finding wins: an argument the schema does not name → `unknown argument: <name>` (the first in sorted
+     order); then in property order, a wrong type → `invalid argument: <name> must be a string` / `must be a boolean` /
+     `must be an array of strings`, or a required one absent → `missing required argument: <name>`. The context is the
+     shape the CLI registrar hands `buildParams` for the same invocation: `positionals` = `[value]` or `[]`,
+     `positional` = `positionals[0]`; `flags` = every flag the operation declares → its boolean (`false` when absent),
+     `undefined` when it declares none (`dry-run` is the registrar's and goes to `dryRun`, as `withoutDryRun` does on
+     the CLI); `options` = the given declared options (a repeatable one as its array), `undefined` when the operation
+     declares none, and also `undefined` when none is given on an operation the CLI derives `--co-author` for
+     (`mutates && agentAttribution !== false`) — the CLI's `withoutAgentOptions` result.
+   - `buildCoreParams: ParamsBuilder` — the builder `src/cli.ts` holds inline today
+     (`{ root, positional, positionals, options, ...flags }`), moved here so the CLI, the test harness and `task-367`'s
+     production wiring use one builder (D11). `src/cli.ts` imports it.
+   - Doc comments that say the MCP surface never populates `positional` / `positionals` / `flags` / `options`
+     (`CoreOperation.options`, the `ParamsContext` block and its four fields) are rewritten: a Tool call populates them
+     through `toolArgumentsToParams`; a Resource populates `positional` / `positionals` from a required positional's
+     template variable and nothing else (D7).
+2. **`src/mcp/registrar.ts`**:
+   - `deriveMcpResourceUri(moduleName, verb, positional?: CorePositional)` appends `/{<name>}` when
+     `positional?.required === true` (flat: `wingfoil://x/{name}`); the two-argument call is unchanged.
+   - A read-only operation with a required positional is registered as `new ResourceTemplate(uri, { list: undefined })`
+     (so `resources/list` omits it and `resources/templates/list` lists it); its read callback percent-decodes the
+     variable (`decodeURIComponent`; a `URIError` → a failed read `invalid argument: <name> must be percent-encoded`, no
+     details) and calls `buildParams` with `positional` and `positionals: [value]`. Every other read-only operation
+     keeps its static URI.
+   - Tools (D5): the registrar answers `tools/list` and `tools/call` itself on `server.server` (the pattern
+     `registerEmptyToolsChannel` in `src/mcp/server.ts` uses), with no Zod schema. `tools/list` → one entry per
+     mutating operation in `enumerateOperations` order: `name`, `description` (unchanged:
+     `` `${module} ${verb} (mutating)` ``), `inputSchema: deriveToolInputSchema(operation)`. `tools/call` → an unknown
+     name is `Tool <name> not found` (`isError`, the wording the empty channel uses); otherwise
+     `toolArgumentsToParams`; a refusal is `{content:[{type:'text', text: reason}], isError: true}` and the operation is
+     not called; else `buildParams({moduleName, operationName, root: resolveRoot(), ...context})`, the call run through
+     `runAsDryRun` when `dryRun`, and the result rendered exactly as today (success text + `structuredContent` warnings;
+     refusal text + `structuredContent {error, details}`). The handlers are installed even when no operation mutates, so
+     `tools/list` answers `[]` there instead of JSON-RPC `-32601`.
+   - No agent-invocation wrapping is added: the call reads `currentAgentInvocation()`'s default, as today. W1-R3's
+     mechanism is `task-367`'s.
+   - The module doc and `registerCoreModules`' doc lose the "zero-argument" description and the `--force` sentence.
+3. **Comments of the dl-040 gap (AC 6).** The two `dl-040` cites by line are `src/core/registry.ts`'s `CoreOperation.options`
+   doc (line 178 here) and the `ParamsContext` doc (lines 295–301): both rewritten as in item 1. Same class, rewritten
+   in the same change: `src/mcp/registrar.ts` line 18; `src/mcp/workflow-resource.ts` lines 8–10; `src/core/index.ts`
+   lines 436, 492, 891, 1091–1092, 1137, 2044–2045 and 2899 (each states what an MCP Resource receives; the new text
+   says the Resource serves the call with none of the optional parameters, and a Tool takes them). Baseline:
+   `grep -rn "never populates\|zero-argument\|no per-request parameter\|never sets this field\|simply never sets" src/`
+   → 20 hits now; after green, none that describes the MCP surface as unable to carry parameters.
+4. **CLI unchanged.** `src/cli/program.ts` and `src/cli/registrar.ts` are not edited (D1); `docs/cli-reference.md` is
+   not edited (AC 7).
+
+#### Acceptance criteria — classification and what qa pins
+
+| AC | Class | Why |
+|----|-------|-----|
+| 1 | characterization (corrected from red-first) | the declarations exist and the CLI derives from them (above); a red would have to be fabricated |
+| 2 | red-first | `resources/templates/list` is `[]` today |
+| 3 | red-first | every Tool's `inputSchema` is `{type:'object',properties:{}}` today |
+| 4 | red-first | the Tool call answers `missing required argument: <id>` whatever it is sent (bug-272) |
+| 5 | red-first | the equality test compares the CLI with Tool schemas that are empty today; the CLI half is already derived |
+| 6 | characterization | a spec amendment (prepared below) and comment edits: no behaviour |
+| 7 | characterization | the grammar does not change; both suites pass today (run below) |
+
+Expected reds for the new exports (lesson of W3 B9): `tsc --noEmit -p tsconfig.json` → TS2305 (`deriveToolInputSchema`,
+`toolArgumentsToParams`, `buildCoreParams`, `ToolInputSchema` not exported) and TS2554 (`deriveMcpResourceUri` called
+with 3 arguments); jest, which does not type-check, → `TypeError: … is not a function` for the three functions, and an
+assertion failure for the three-argument `deriveMcpResourceUri` (the third argument is ignored today). Import the new
+symbols from `../../src/core/registry` and `../../src/mcp/registrar`, not from the barrels.
+
+- **AC 1 — `test/core/operation-parameters.test.ts` (new).** For every operation of `enumerateOperations(CORE_MODULES)`:
+  the names of its positional, options and flags, plus `dry-run` when it mutates, are pairwise distinct; none of the
+  operation's own declarations is named `dry-run`, `co-author` or `ai-model`; every name matches `^[a-z][a-z0-9_-]*$`.
+  Passes on first run (verified with the scratch script above). Fixture: none, the real registry.
+- **AC 2 — `test/core/parity.test.ts`** (second production test) and **`test/mcp/registrar.test.ts`**.
+  - parity: `listResources()` URIs equal exactly `wingfoil://agent/list`, `wingfoil://directives/list`,
+    `wingfoil://dna/show`, `wingfoil://memory/search`, `wingfoil://paths`, `wingfoil://workflow/list`,
+    `wingfoil://workflow/next`, `wingfoil://workflow/status`; `listResourceTemplates()` `uriTemplate`s equal exactly
+    `wingfoil://agent/show/{run-id}`, `wingfoil://memory/history/{id}`, `wingfoil://workflow/show/{ref}`. The comments
+    beside the removed entries are moved with them; the file's comment on `-32601` (lines 76–82) and the short-circuit
+    in `actualMcpToolsAsCliForm` may stay or go, the Tools list itself is unchanged.
+  - registrar unit: `deriveMcpResourceUri('memory', 'history', {name:'id', required:true, description:'d'})` →
+    `wingfoil://memory/history/{id}`; with `required` absent → `wingfoil://memory/history`; flat
+    (`'x', '', {name:'n', required:true, …}`) → `wingfoil://x/{n}`; two arguments → unchanged.
+  - registrar over a synthetic module (module `x`, read op `xShow` declaring `positional: {name:'run-id', required:true}`
+    whose `fn` returns `coreOk(params)` with a `buildParams` that echoes the context): reading
+    `wingfoil://x/show/a%2Fb%2F1` returns text whose JSON has `positional: 'a/b/1'` and `positionals: ['a/b/1']`;
+    reading `wingfoil://x/show/%E0%A4%A` rejects with an `McpError` whose message contains
+    `invalid argument: run-id must be percent-encoded`.
+- **AC 3 — `test/core/tool-input-schema.test.ts` (new)** and a `tools/list` assertion.
+  - `deriveToolInputSchema(memoryApprove)` (the operation object read from `CORE_MODULES`) `toEqual`
+    `{type:'object', properties:{ id:{type:'string', description: op.positional.description}, reason:{type:'string',
+    description: <reason option's description>}, 'dry-run':{type:'boolean', description: DRY_RUN_FLAG.description} },
+    required:['id','reason'], additionalProperties:false}`, and `Object.keys(properties)` equals
+    `['id','reason','dry-run']` (order).
+  - `memory.add`: `set` is `{type:'array', items:{type:'string'}, …}`, `required` is `['type','title']`; `memory.search`
+    (read): no `dry-run`, no `required` key; a synthetic op with no declaration: `{type:'object', properties:{},
+    additionalProperties:false}` (read) / only `dry-run` (mutating).
+  - over `registerCoreModules(CORE_MODULES)`: each listed Tool's `inputSchema` `toEqual`s
+    `deriveToolInputSchema(<its operation>)`, and for every mutating operation `required` equals
+    `[positional if required, …required options]`.
+- **AC 4 — `test/mcp/tool-arguments.test.ts` (new)** and **`test/mcp/read-only-agent-channel.test.ts`**.
+  - Context parity (the evidence the orchestrator asked for): a spy `ParamsBuilder` that records each context and returns
+    `buildCoreParams(ctx)`. CLI side: `buildProgram(CORE_MODULES, {resolveRoot, buildParams: spy})` +
+    `parseAsync(['node','wingfoil','memory','approve','bug-001-probe','--reason','x'])` (exit handling as in
+    `test/cli/program.integration.test.ts`); Tool side: `callTool({name:'memory.approve', arguments:{id:'bug-001-probe',
+    reason:'x'}})`. The two recorded contexts `toEqual` each other (`positional`, `positionals`, `flags`, `options`; the
+    root is the same fixture). Read operation: `memory history bug-001-probe` against `readResource({uri:
+    'wingfoil://memory/history/bug-001-probe'})`, the contexts equal, and the Resource text equals the CLI's
+    `--format json` stdout without its final newline.
+  - Argument refusals on `memory.approve`, each `isError: true` with exactly this text, the operation not called (spy
+    count unchanged): `{}` → `missing required argument: id`; `{id:'bug-001-probe'}` → `missing required argument:
+    reason`; `{id:'bug-001-probe', reason:'x', type:'bug'}` → `unknown argument: type`; `{id:5, reason:'x'}` →
+    `invalid argument: id must be a string`; on `memory.add`, `{type:'bug', title:'t', set:'a=b'}` → `invalid argument:
+    set must be an array of strings`; on `directive.assign`, `{directive:'d', role:'r', force:'yes'}` → `invalid
+    argument: force must be a boolean`.
+  - Illegal transition, REQ-SEC-05 (`task-016`'s case, in `read-only-agent-channel.test.ts`, whose module doc then
+    stops calling it unasserted): fixture a committed repository with a draft element (`node dist/cli.js init
+    --template Scrum` + `memory add --type bug --title probe`, as above, or (not tried at design) `test/core/helpers/l0-fixture.ts`'s
+    `buildL0Repo`); `snapshotPersistence` before; Tool `memory.approve {id, reason:'x'}` → `isError: true`, text
+    `illegal transition draft -> (none) for type 'bug'`, `structuredContent` equal to the CLI's `--format json` stderr
+    document for the same call (run the CLI in the test, `test/cli/helpers/spawn-cli.ts` with
+    `withoutAgentMarkers(process.env)`, and compare the parsed objects; the fixture string above is what it printed
+    here); `assertPersistenceUnchanged` after both.
+  - `test/mcp/helpers/channel-enumeration.ts`: `connectCoreModuleSurface` passes `buildCoreParams` instead of
+    `(ctx) => ({ root: ctx.root })` (the bug's step 3 correction).
+  - A `dry-run: true` call of `memory.add` on the fixture writes no commit (`HEAD` unchanged) and returns the dry-run
+    payload the CLI's `--dry-run --format json` prints for the same arguments.
+- **AC 5 — `test/core/parity.test.ts`** (new `it` in the production `describe`): for every mutating operation, the
+  parameter names of its `buildCliCommands` command (`positional?.name`, `flags[].name`, `options[].name`) minus
+  `co-author` and `ai-model` equal `Object.keys` of its listed Tool's `inputSchema.properties` as sets; and the CLI's
+  required names (`positional.required`, `options[].required`) equal the Tool's `required ?? []`. Fails today on the
+  empty schemas.
+- **AC 6** — no test. The reviewer checks the amendment below is in the working tree and re-runs the grep of design
+  item 3.
+- **AC 7** — no new test: `npx jest test/docs/cli-reference.test.ts test/core/parity.test.ts --maxWorkers=2` at review;
+  the only edits to those files are AC 2's and AC 5's in `parity.test.ts` (Resource and template lists, the schema
+  equality), none of them a usage text.
+
+qa runs `npx tsc --noEmit -p tsconfig.json` and `npx jest test/lint --maxWorkers=2` before the red commit.
+
+#### Files expected to change
+
+- green: `src/core/registry.ts`, `src/mcp/registrar.ts`, `src/cli.ts`, `src/core/index.ts` (comments only, lines in
+  design item 3), `src/mcp/workflow-resource.ts` (comment only). `src/mcp/index.ts` only if `toolArgumentsToParams`
+  needs a re-export (not planned).
+- red (qa): `test/core/operation-parameters.test.ts` (new), `test/core/tool-input-schema.test.ts` (new),
+  `test/mcp/tool-arguments.test.ts` (new), `test/core/parity.test.ts`, `test/mcp/registrar.test.ts`,
+  `test/mcp/read-only-agent-channel.test.ts`, `test/mcp/helpers/channel-enumeration.ts`.
+- pending amendments (uncommitted): `docs/04_memory/design/specs/spec-004-mcp-surface-contract.md`,
+  `docs/04_memory/design/specs/spec-006-core-domain-api.md`.
+- Not touched: `src/cli/program.ts`, `src/cli/registrar.ts`, `src/mcp/server.ts`, `docs/cli-reference.md`, `.wingfoil/`,
+  `test/docs/name-resolvability.allowlist.ts` (the amendments name no symbol that does not exist yet: the new function
+  names are in these notes, not in the specs).
+
+**Version bumps: none.** No `.wingfoil/` file changes (`git diff --stat main -- .wingfoil` → empty), so `npm run
+check:mcp` and the pinned-build `workflow list` / `workflow show` reads are not needed, and no workflow step list or
+count is pinned by a changed file. `spec-004` and `spec-006` carry no `version:` key (`grep -n '^version'` on both →
+nothing); each amendment adds a Revision note instead.
+
+#### Tests run at design (targeted, `--maxWorkers=2`, the task's PATH shim first, in the worktree)
+
+- `npx jest test/core/registry.test.ts test/core/parity.test.ts test/mcp/registrar.test.ts test/mcp/error-details.test.ts
+  test/mcp/success-warnings.test.ts test/mcp/read-only-agent-channel.test.ts test/core/production-registry.test.ts
+  --maxWorkers=2` → `Test Suites: 7 passed, 7 total`, `Tests: 59 passed, 59 total` (before the amendments).
+- `npx jest test/docs/mcp-surface-parity.test.ts test/docs/cli-reference.test.ts test/cli/registrar.test.ts
+  test/docs/name-resolvability.test.ts test/docs/command-surface-specs.test.ts test/cli/entrypoint.test.ts
+  --maxWorkers=2` → `6 passed`, `71 passed` (before the amendments).
+- With the amendments in the tree: `npx jest test/docs/name-resolvability.test.ts test/docs/mcp-surface-parity.test.ts
+  test/docs/command-surface-specs.test.ts test/docs/enumeration-parity.allowlist.test.ts --maxWorkers=2` → `4 passed`,
+  `22 passed`; `npx jest test/docs/commands-parity.test.ts test/docs/dry-run-documented.test.ts
+  test/docs/exit-codes-parity.test.ts test/docs/x-cli-cmds-citations.test.ts --maxWorkers=2` → `4 passed`, `14 passed`;
+  `npx jest test/lint --maxWorkers=2` → `16 passed`, `165 passed`; `node scripts/lint-claims.cjs` on the two specs →
+  `23 warnings`, the same count as without the amendments.
+- Tests that pin what changes: `test/core/parity.test.ts` (Resource list, lines 194–217), `test/mcp/registrar.test.ts`
+  line 83 (a fixture's `['wingfoil://paths']`, unchanged: its op declares no required positional),
+  `test/mcp/error-details.test.ts` (reads `wingfoil://memory/history` of a fixture op that declares no positional:
+  unchanged). Every other `callTool` in `test/mcp/` and `test/core/` passes `arguments: {}` to fixture ops with no
+  declaration, which the new check accepts (`grep -rn "arguments:" test/mcp test/core test/docs | grep -v "arguments: {}"`
+  → only `getPrompt` calls and `server.test.ts`'s call to the production server, which serves no Tool).
+- `bug-534` class: while the two amendments are uncommitted, a full suite in this worktree fails
+  `test/cli/workflow-unbound-none.integration.test.ts` with `W_UNCOMMITTED_INPUTS`; that alone, with the same test green
+  on a clean clone of the head, is that bug (the w1 ruling).
+
+#### Decisions for the approver (design gate)
+
+- **D1 — CLI flags: derived, not hand-written.** They already are (`src/cli/program.ts` 250–276). Recommendation (a):
+  keep the existing `positional` / `options` / `flags` as THE metadata, no second declaration; AC 5 is met by derivation
+  plus the equality test. (b) a new `parameters` field replacing the three: 33 declarations rewritten in
+  `src/core/index.ts`, which `task-371` and `task-372` also edit, for no new capability.
+- **D2 — shape of a declaration.** Recommendation (a): unchanged. Positional: one, `name` / `required` / `description`;
+  options: `name` / `required` / `description` / `repeatable` / `valueName`; flags: `name` / `description`. The type is
+  implied (positional and option: string; `repeatable: true`: array of strings; flag: boolean), because every CLI value
+  reaches the operation as a string it parses itself (`agent execute --timeout`). (b) a `type` field (`number`, …):
+  the Tool would then take a value the CLI never passes, and the operation would see two shapes.
+- **D3 — Tool field names.** Recommendation (a): the CLI spelling without dashes, verbatim (`entry-executes_as`,
+  `assigned-to`, `run-id`, `dry-run`). It changes no existing MCP payload: the production server serves no Tool
+  (`tools/list` → `[]`), and the registrar's results are unchanged; only `inputSchema` goes from empty to derived.
+  (b) camelCase: a second mapping (Commander's own `commanderKey` is the CLI's internal one), and `entry-executes_as`
+  has no clean camelCase form.
+- **D4 — an operation that declares no metadata.** Recommendation (a): it takes no parameter — an empty schema (plus
+  `dry-run` when it mutates), every other argument refused `unknown argument: <name>`; never refused at registration
+  (the fixture registries of the `test/mcp/` and `test/core/` suites declare bare operations; `grep -rln registerCoreModules test | wc -l` → 10 files), and no warning (a registrar has no channel to print one on).
+- **D5 — who validates Tool arguments.** Recommendation (A): the registrar answers `tools/list` / `tools/call` on the
+  low-level server with a JSON Schema derived directly, and checks the arguments itself with the wording of the
+  `spec-004` §4.3 amendment, whose missing-argument line is the BDD's (`missing required argument: reason`). (B)
+  `McpServer.registerTool` with derived Zod shapes: the SDK refuses with `Input validation error: Invalid arguments for
+  tool memory.approve: …`, which the BDD scenario does not accept. Consequence of (A): with no mutating operation,
+  `tools/list` answers `[]` instead of `-32601`; a later `registerTool` on the same server throws in the SDK, which
+  `task-367` meets when it replaces `registerEmptyToolsChannel`.
+- **D6 — the parameters derived from `mutates`.** Recommendation: `dry-run` is a Tool input, honoured through
+  `runAsDryRun` as on the CLI (`spec-008` §2: every mutating command takes it); `co-author` and `ai-model` are not
+  (W1-R3: the agent identity of a Tool call is the server's, settled at `task-367`).
+- **D7 — optional parameters of a Resource.** Recommendation (a): only a required positional enters the URI (a `/{name}`
+  template segment); an optional positional, the options and the flags of a read-only operation stay off the Resource,
+  which serves the call that gives none of them. (b) RFC 6570 query templates (`wingfoil://directives/list{?role}`) with
+  a matcher of our own, since the SDK's needs every query variable present and in order. (a) because no server serves
+  derived Resources (the production server serves its hand-registered ones; `task-367` / `task-368` register Tools).
+  **Contradiction to rule:** `dl-040`'s Context says option 1 also closes the `directivesList` `--role` gap; under (a)
+  that gap stays open for Resources, and the amended `spec-006` §3 note says so in one place. (b) closes it, at the cost
+  of a custom `UriTemplate` subclass.
+- **D8 — a run id in a URI.** Recommendation: one segment, percent-encoded (`task-1%2Fgreen%2F1`), decoded by the
+  registrar for every template variable, as `spec-004` §2.1 already does for the session Resource; `spec-006`'s
+  agent bullet stops calling it an open question. Alternative: `{+run-id}` (reserved expansion, matches `/`), which no
+  other WingFoil URI uses.
+- **D9 — `type` in `memory.approve`'s arguments.** `spec-004` §4.3 (`approved`) says the Tool requires `type`, `id`,
+  `reason`; AC 3 says the id and `reason`, and the CLI takes no `--type`. Recommendation: amend §4.3 (prepared below)
+  and refuse `type` as an unknown argument. Alternative: an optional `type` checked against the document's type, a
+  parameter the CLI does not have (against REQ-SYS-05's one-to-one).
+- **D10 — where a missing required argument is refused, and in which words.** Recommendation: in the registrar, before
+  the operation, as `missing required argument: <name>` (the BDD's wording) for the positional and the required
+  options alike. The words differ from the CLI's (`<id>`, `--reason`) by the BDD's choice; every refusal the operation
+  itself returns — the illegal transition included — is the CLI's text and details. By construction the argument check
+  runs before any refusal the operation makes, the agent-context refusal of `task-367` included (W1-R2's order
+  question, which `task-367`'s gate settles).
+- **D11 — one params builder.** Recommendation: `buildCoreParams` in `src/core/registry.ts`, used by `src/cli.ts`, the
+  test harness and `task-367`'s production wiring, so "the params the CLI registrar builds" is one function.
+
+#### Downstream — what each task may rely on
+
+- `task-365` (`wingfoil verify`): declare `--base` and `--introduced-at` as `CoreOption` entries; nothing else is
+  needed for the CLI. Note: a `mutates: false` operation is derived into a Resource (`wingfoil://verify`, no required
+  positional); its AC 1 "CLI only" has no declarative opt-out today and `spec-006` §4.2 forbids a name list, so its
+  design must decide one.
+- `task-367` / `task-368`: `registerCoreModules` gives every mutating operation a Tool whose `inputSchema` is
+  `deriveToolInputSchema(op)`, whose arguments are checked by `toolArgumentsToParams` and reach `buildParams` in the
+  CLI's `ParamsContext` shape; `buildCoreParams` is the builder to pass; `dry-run` is handled. They must replace
+  `registerEmptyToolsChannel` rather than add to it (D5), and add the agent invocation (W1-R3) around the call.
+- `task-371`: an option added the existing way is derived on both surfaces with no registrar change. It starts after
+  this task is merged, and its design adds `task-364` to its `depends_on`. Shared files: `src/core/index.ts` (this task
+  edits comments at the lines of design item 3) and `src/core/registry.ts`.
+- `task-372`: the same shared files as `task-371`; nothing of this design constrains its new operations beyond
+  declaring their parameters the existing way.
+
+#### Risks for the other open tasks
+
+- `task-379` (`src/core/context.ts`): no shared file.
+- `task-360` (vision-change, `docs/01_vision`, `docs/02_requirements`): the `spec-004` §4.3 amendment cites the wording
+  of `P5.2.3-mcp-tools.feature`'s missing-argument scenario (`memory.approve` without `reason`); W1-R2 drops "approve"
+  from P5.2.3's row, so if `task-360` rewrites that scenario, the cited wording must stay `missing required argument:
+  <name>` or the amendment's reference follows it.
+
+### Pending amendments (approver)
+
+- `spec-004-mcp-surface-contract` — `--reason "Derive each Tool's input schema and the URI of a Resource derived from a
+  core operation from the operations' parameter metadata, per dl-040 option 1 (task-364, bug-272): §4.3 states the
+  schema and the argument check with its four refusals, the memory.approve example loses its type argument, and §2.1
+  gains a bullet on the derived URIs."`
+- `spec-006-core-domain-api` — `--reason "Record the parameter metadata as the one declaration both surfaces derive
+  from, per dl-040 option 1 (task-364): §2 says so, §3's note states the Resource URI rule, the paths row reads
+  wingfoil://paths as ratified, and the agent rows and bullets settle the run id's encoding."`
+
+### Retrospective
+
+<!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
+     reconstructed afterwards. One line per item: what happened, the evidence (a command and what it
+     printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
+     Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
+     here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
