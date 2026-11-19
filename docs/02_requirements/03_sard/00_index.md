@@ -76,9 +76,9 @@ chain is recorded in each requirement's `Traceability` field in the part files 0
 
 | ID         | Title                       | Fit Criterion (summary)                       | Traceability (feature-ids)         |
 |------------|-----------------------------|-----------------------------------------------|------------------------------------|
-| REQ-INT-01 | MCP Resources read-only     | Write via Resources refused                   | P5.2.1               |
+| REQ-INT-01 | MCP Resources read-only     | Write via Resources refused                   | P5.2.1, P5.1.5       |
 | REQ-INT-02 | MCP Prompts role-based      | Prompt embeds 100% role directives            | P5.2.2, P3.6         |
-| REQ-INT-03 | MCP Tools state mutation    | Same validation as CLI; agent-authored commit | P5.2.3               |
+| REQ-INT-03 | MCP Tools state mutation    | Same validation as CLI; approval Tools refuse | P5.2.3               |
 | REQ-INT-04 | CLI exit-code contract      | 0/1/2 matrix asserted; check exit 0 pass / 1 fail / 2 blocked | P1.3, P1.6, P1.7, P5.1.4, P4.12, P4.15 (+ all command features) |
 | REQ-INT-05 | Machine-readable formats    | json/yaml parse valid                         | P2.5, P4.5                         |
 | REQ-INT-06 | Git operations as actions   | Effect produced; conflict aborts clean        | P4.10                              |
@@ -91,8 +91,8 @@ chain is recorded in each requirement's `Traceability` field in the part files 0
 | ID         | Title                                 | Fit Criterion (summary)          | Traceability (feature-ids) |
 |------------|---------------------------------------|----------------------------------|----------------------------|
 | REQ-SEC-01 | Git identity required                 | No identity → mutation refused   | P1.2                    |
-| REQ-SEC-02 | Complete audit trail                  | author+timestamp on 100% changes | P1.2, P1.7, P1.8, P1.10 |
-| REQ-SEC-03 | Role-based approval authority         | Unauthorized approve rejected    | P1.7, P4.14             |
+| REQ-SEC-02 | Complete audit trail                  | author+timestamp on 100% changes | P1.2, P1.7, P1.8, P1.10, P1.14 |
+| REQ-SEC-03 | Role-based approval authority         | Unauthorized approve rejected    | P1.7, P4.14, P1.14, P5.2.3 |
 | REQ-SEC-04 | Mandatory reason on verbs             | Missing --reason → exit 2        | P1.7, P1.8, P1.9        |
 | REQ-SEC-05 | Read-only agent read channel          | Cross-ref REQ-INT-01/03          | P5.2.1, P5.2.3          |
 | REQ-SEC-06 | Storage confinement                   | Write/delete outside project root refused | P1.3, P1.6–P1.9, P1.11, P2.1, P3.1, P3.2, P3.3, P5.1.1 |
@@ -118,7 +118,9 @@ chain is recorded in each requirement's `Traceability` field in the part files 0
 
 > Recorded when the registry held 43 requirements. `REQ-STATE-10` (added 2026-10-01, `task-141`) and `REQ-SEC-12`
 > (added 2026-10-05, `task-175`, `dl-090` Action 2) each carry a `Fit Criterion:` line, so the 100% coverage above
-> still holds; so does `REQ-STATE-11` (added 2026-10-18, `cp-002`).
+> still holds; so does `REQ-STATE-11` (added 2026-10-18, `cp-002`). `cp-003` (2026-11-19) adds no requirement: it
+> edits the Fit Criterion of REQ-SEC-02, REQ-SEC-03 and REQ-INT-03 and the traceability of REQ-SEC-02, REQ-SEC-03 and
+> REQ-INT-01, so the totals stay 46.
 
 | Check                                    | Result                                                                       |
 |------------------------------------------|------------------------------------------------------------------------------|

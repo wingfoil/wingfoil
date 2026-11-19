@@ -13,7 +13,11 @@
 * **Rationale:** Agents consume context without the ability to corrupt state through the read channel.
 * **Fit Criterion:** A write attempt through the MCP Resources interface is refused with `"resources are read-only"`; a
   read of an existing resource returns content + metadata.
-* **Traceability:** Feature P5.2.1 (US-1-07, BDD `p5-interaction/P5.2.1-mcp-resources.feature`).
+* **Traceability:** Feature P5.2.1 (US-1-07, BDD `p5-interaction/P5.2.1-mcp-resources.feature`, which also holds the
+  scenarios of the Resource `wingfoil://capabilities`); Feature P5.1.5 (US-0A-23, BDD
+  `p5-interaction/P5.1.5-capabilities.feature`). The capabilities Resource is
+  `spec-019-the-capabilities-query-the-formats-a-build-reads-and-the-capabilities-it-provides`, linked by `cp-003`
+  (2026-11-19).
 
 ### REQ-INT-02 — MCP Prompts (role-based)
 
@@ -29,9 +33,11 @@
 
 * **Description:** The MCP server exposes Tools for agents to submit deliverables and update workflow state.
 * **Rationale:** Agents advance the workflow programmatically, with the same validation as the CLI.
-* **Fit Criterion:** `memory.submit`/`memory.approve` invoked via MCP transition state and create a git commit authored
-  by the agent; an illegal transition is rejected identically to the CLI path.
-* **Traceability:** Feature P5.2.3 (US-2-11, BDD `p5-interaction/P5.2.3-mcp-tools.feature`).
+* **Fit Criterion:** `memory.submit` invoked via MCP transitions state and creates one git commit carrying the agent's
+  trailers (`spec-018` §2); `memory.approve`, `memory.reject` and `memory.amend` are listed Tools whose every call is
+  refused with `E_AGENT_CONTEXT`; an illegal transition is rejected identically to the CLI path.
+* **Traceability:** Feature P5.2.3 (US-2-11, BDD `p5-interaction/P5.2.3-mcp-tools.feature`). Restated by `cp-003`
+  (2026-11-19): the approver-gated verbs refuse in an agent's session (`spec-018` §3.2), and every MCP call is one.
 
 ### REQ-INT-04 — CLI exit-code contract
 
