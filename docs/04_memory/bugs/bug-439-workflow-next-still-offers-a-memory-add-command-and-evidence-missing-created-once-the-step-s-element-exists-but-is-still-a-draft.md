@@ -78,4 +78,4 @@ The creation action and its command are printed as if no element existed, and th
 
 ### Retrospective
 
-- None.
+- Fixed by `task-376` (`cc376b47b`). On the reproduction above, in a scratch Scrum project, `workflow next bug-ingest-1-plan` on the code build prints `memory.add(type: bug) — done: bug-001-login-crashes` and `evidence missing: created (bug-001-login-crashes is draft, the phase leaves it pending)`, and no `memory add` command.
