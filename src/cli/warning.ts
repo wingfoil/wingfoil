@@ -6,7 +6,8 @@
  * without it (`spec-005` §2: stdout carries only the payload). Its shape follows the format, as an
  * error's does (`./error.ts`):
  *
- * - `console`: `warning: <text>`, beside the `error: ` prefix. A continuation line of a multi-line
+ * - `console`: `warning: <text>`, beside the `error: ` prefix, written by `formatWarningLine`
+ *   (`src/validation/warning.ts`, the one console prefix, task-375). A continuation line of a multi-line
  *   warning is indented, so no line of it can begin with the greppable `warning: ` or `error: `.
  * - `json`: one `{"warning": "<text>"}` document per line.
  * - `yaml`: one `warning: <text>` YAML document per warning, opened by `---` and closed by `...`, so
@@ -20,6 +21,7 @@
  */
 import { dump as yamlDump } from 'js-yaml';
 
+import { formatWarningLine } from '../validation/warning';
 import type { OutputFormat } from './output';
 
 /** Write one warning to stderr in the active `--format`'s shape (see the module doc). Writes only. */
@@ -29,7 +31,7 @@ export function emitWarning(text: string, opts: { format: OutputFormat }): void 
   } else if (opts.format === 'yaml') {
     process.stderr.write('---\n' + yamlDump({ warning: text }) + '...\n');
   } else {
-    process.stderr.write(`warning: ${text.replace(/\n/g, '\n  ')}\n`);
+    process.stderr.write(formatWarningLine(text));
   }
 }
 

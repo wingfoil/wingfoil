@@ -470,7 +470,9 @@ the single write, so "the state is unchanged" holds on every refusal by construc
    `task-180`), except `reject` and `park`, which return the element along a reject or `returns`
    edge and take no slot check (`dl-156` Q2 (i), `task-274`).
 4. **Authority** (REQ-SEC-03), on `approve` and `reject` → exit `1`,
-   `user not authorized to approve type '<type>'`, read from the `dna.yaml` committed at `HEAD`. Its first
+   `user not authorized to approve type '<type>'`, read from the `dna.yaml` committed at `HEAD`; when no
+   member of that file holds `approver`, the refusal also carries the `hint` `spec-008` §6 words, saying how
+   to grant it (`dl-071` (B)), and its message is unchanged. Its first
    step, before `dna.yaml` is read, is `refuseAgentContext` (`spec-018` §3.1): with any agent marker present
    the operation is refused with `E_AGENT_CONTEXT` (`spec-018` §3.2), so the session is refused before its
    identity is judged.
@@ -1017,3 +1019,10 @@ their "URI per `dl-040`" placeholders, and the agent Resources bullet fixes the 
 percent-encoded) and drops the open question; the bullet on the shipped workflow Resources and §5's Resource bullet
 no longer describe a zero-argument limitation. No row's function, module or `mutates` changes. Edited in place
 without a supersede or a state change (`dl-047`), pending the approver's `memory amend`.
+
+**Revision (2026-11-19, `task-375-tell-an-operator-with-no-approver-how-to-grant-it-and-render-every-error-detail-with-one-warning-prefix-dl-071`)
+— §7 step 4: the authority refusal's hint, per `dl-071` (B).** A freshly initialized project has no member holding
+`approver`, so every approval was refused with REQ-SEC-03's bare string and nothing pointing at the fix. Step 4 now
+says that the refusal carries a `hint`, worded in `spec-008` §6, when no committed member holds the role; the message
+stays REQ-SEC-03's, word for word (`dl-071` S3). No step moves. Edited in place without a supersede or a state change
+(`dl-047`), pending the approver's `memory amend` at `task-375`'s design gate.

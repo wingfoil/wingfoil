@@ -90,7 +90,13 @@ describe('task-226 — wingfoil workflow finalize on the compiled CLI', () => {
   it('spec-017 §10 — a step not on the frontier: exit 1, the CONFLICT message, nothing committed', () => {
     const before = head(repo);
     const run = runCliEntry(repo, ['workflow', 'finalize', '--step', 'release-cycle.ship@release:minor-1']);
-    expect([run.status, run.stdout, run.stderr]).toEqual([1, '', "error: step 'release-cycle.ship@release:minor-1' is not on the frontier of rc-1\n"]);
+    // task-375 AC 2 (bug-303, spec-005 §3.1): `details.frontier` renders as one labelled line; the frontier is the one
+    // step `workflow next rc-1 --format json` names on this fixture.
+    expect([run.status, run.stdout, run.stderr]).toEqual([
+      1,
+      '',
+      "error: step 'release-cycle.ship@release:minor-1' is not on the frontier of rc-1\n  frontier: release-cycle.smoke@release:minor-1\n",
+    ]);
     expect(head(repo)).toBe(before);
   });
 

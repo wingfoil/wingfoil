@@ -211,7 +211,8 @@ The warning is never written from inside a loader: `emitUnknownFieldWarning` rai
 stderr, through its one warning renderer (`spec-008` §6) in the active `--format` — `warning: <text>`,
 `{"warning": "<text>"}` or a YAML document — so diagnostic text never mixes into structured stdout and
 a structured stderr stays a stream of parseable documents (`spec-005` §3.2). Outside any sink (the MCP
-server, a library caller) it is written to stderr as `Warning: <text>`.
+server while it serves, a library caller) it is written to stderr as the same console line, `warning: <text>`
+(`spec-008` §6's one prefix, `bug-304`).
 
 ### 3. Shared error-code convention
 
@@ -313,3 +314,10 @@ follows: a key absent from `shape` is unknown only when the schema has no catcha
 The listing gains `hasTypedCatchall`, and the "Trigger point" paragraph no longer limits the recursion to
 `.passthrough()` levels. No other section changed. Edited in place without a supersede or a state change
 (`dl-047`).
+
+**Revision (2026-11-19, `task-375-tell-an-operator-with-no-approver-how-to-grant-it-and-render-every-error-detail-with-one-warning-prefix-dl-071`)
+— §2: a warning outside any sink reads `warning: `, per `bug-304`.** The line a warning takes outside any sink was
+`Warning: <text>`, while the CLI's renderer wrote `warning: <text>`, so the same loader warning read differently on
+`dna show` and on `mcp`. Both now write the one console line `spec-008` §6 defines. No validation rule changes.
+Edited in place without a supersede or a state change (`dl-047`), pending the approver's `memory amend` at
+`task-375`'s design gate.

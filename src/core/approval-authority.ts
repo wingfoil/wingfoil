@@ -100,7 +100,9 @@ function workingTreeWouldGrant(root: string, email: string): boolean {
  *    granted it, a second sentence names the baseline, so a user whose editor shows them as an
  *    approver is told why the tool disagrees instead of being left to argue with the file on their
  *    screen. That diagnostic is the half of option (b) — refusing while `dna.yaml` is modified —
- *    worth keeping; the refusal itself remains a statement about the repository.
+ *    worth keeping; the refusal itself remains a statement about the repository. Otherwise, when no
+ *    committed member holds `approver` at all, the refusal carries a `hint` saying how to grant it
+ *    (`dl-071` (B), task-375; see `noApproverHint`), its message unchanged.
  * 2. **No committed `dna.yaml` at all** — an untracked file, or a repository with no commits: there
  *    is no record to read, so no authority can be established.
  * 3. **A committed `dna.yaml` that does not parse or validate** — the baseline is unreadable, which
@@ -185,5 +187,25 @@ export function requireApproverAuthority(
     ? ` — the working tree's '${DNA_YAML_PATH}' grants it, but that change is not committed, and approval authority ` +
       `is read from the committed configuration (adr-006); commit '${DNA_YAML_PATH}' first, then retry`
     : '';
-  return coreErr({ code: 'VALIDATION', message: `${refusal}${uncommittedGrant}` });
+  const hint = uncommittedGrant === '' ? noApproverHint(committed, identity) : undefined;
+  return coreErr({ code: 'VALIDATION', message: `${refusal}${uncommittedGrant}`, ...(hint !== undefined ? { hint } : {}) });
+}
+
+/**
+ * The `hint` of an authority refusal when no `team.members` entry of the committed `dna.yaml` holds the `approver`
+ * role (`dl-071` (B), S3; `spec-008` §6; task-375): how to grant it, the refusal's own message untouched. With
+ * `team.members` empty (the `init` scaffold) it names the `dna add` that adds the asker as the approver, `identity`
+ * the git identity the check judged; with members, none an approver, it points at `dna update`. `undefined` when a
+ * member holds `approver`: the refusal is then a denial, with nothing to suggest.
+ */
+function noApproverHint(committed: DnaYaml, identity: GitIdentity): string | undefined {
+  const members = committed.team.members;
+  if (members.some((member) => member.roles.includes(APPROVER_ROLE))) return undefined;
+  if (members.length === 0) {
+    return (
+      "no team member holds the 'approver' role yet: add one with " +
+      `'wingfoil dna add team.members --value "${identity.name}" --entry-email ${identity.email} --entry-roles approver', then retry`
+    );
+  }
+  return "no team member holds the 'approver' role yet: add approver to the roles of a team.members entry with 'wingfoil dna update', then retry";
 }

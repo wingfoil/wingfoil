@@ -747,7 +747,12 @@ paths:
       const unchanged = snapshotPersistence(approveRepo);
       const result = runCliInRoot(approveRepo, 'memory', 'approve', 'task-101', '--reason', 'ok');
       expect(result.status).toBe(1);
-      expect(result.stderr).toBe("error: user not authorized to approve type 'task'\n");
+      // task-375 AC 1 (dl-071 (B)): the one member holds `reviewer`, so no member is an approver — the pinned line,
+      // then the hint line saying how to grant the role (spec-008 §6).
+      expect(result.stderr).toBe(
+        "error: user not authorized to approve type 'task'\n" +
+          "hint: no team member holds the 'approver' role yet: add approver to the roles of a team.members entry with 'wingfoil dna update', then retry\n",
+      );
       expect(readFileSync(join(approveRepo, 'docs/memory/task/task-101.md'), 'utf-8')).toContain('status: pending');
       assertPersistenceUnchanged(approveRepo, unchanged);
     });

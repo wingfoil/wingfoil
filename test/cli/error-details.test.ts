@@ -25,6 +25,7 @@ import { coreErr } from '../../src/core/types';
 const CONTRACT = "illegal transition draft -> (none) for type 'task'";
 const FILE = 'docs/memory/task/task-001-x.md';
 const DETAIL = 'not a `gates` state: `approve` is only legal from a gate';
+const FRONTIER_REASON = "step 'loop.review@task:task-1' is not on the frontier of delivery-1";
 
 const MODULES: CoreModule[] = [
   {
@@ -85,6 +86,18 @@ const MODULES: CoreModule[] = [
             code: 'VALIDATION',
             message: 'refused',
             details: { issues: [{ code: 'E_VALIDATION', path: '', file: '', message: 'm', detail: 'first\nerror: second' }] },
+          }),
+      },
+      // task-375 AC 2 (bug-303): an off-frontier refusal's `details` — `step` and `instance` are stated (the reason names
+      // them), `frontier` is labelled and gets one `<key>: <value>` line.
+      memoryPark: {
+        name: 'memoryPark',
+        mutates: true,
+        fn: async () =>
+          coreErr({
+            code: 'CONFLICT',
+            message: FRONTIER_REASON,
+            details: { step: 'loop.review@task:task-1', instance: 'delivery-1', frontier: ['a', 'b'] },
           }),
       },
       // No `details` at all — the shape every pre-existing consumer sees, which must not change.
@@ -170,5 +183,36 @@ describe('AC1 — CoreError.details on the CLI surface (dl-055 option 1)', () =>
     await command('submit').run('console');
     await command('submit').run('json');
     expect(stderr()).toBe(`error: document not found: task-999\n${JSON.stringify({ error: 'document not found: task-999' })}\n`);
+  });
+});
+
+describe('task-375 AC 2 — a labelled details key reaches the CLI operator (bug-303, spec-005 §3.1)', () => {
+  let exitSpy: jest.SpyInstance;
+  let stderrSpy: jest.SpyInstance;
+  let stdoutSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    exitSpy = jest.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    stdoutSpy = jest.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    stderrSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+  });
+
+  afterEach(() => {
+    exitSpy.mockRestore();
+    stdoutSpy.mockRestore();
+    stderrSpy.mockRestore();
+  });
+
+  const stderr = (): string => stderrSpy.mock.calls.map((call) => String(call[0])).join('');
+
+  it('console: the error line, then one indented `frontier: a, b` line; the stated step and instance add none', async () => {
+    await command('park').run('console');
+    expect(stderr()).toBe(`error: ${FRONTIER_REASON}\n  frontier: a, b\n`);
+    expect(exitSpy).toHaveBeenCalledWith(1);
+  });
+
+  it('json: one details entry carrying the labelled line', async () => {
+    await command('park').run('json');
+    expect(stderr()).toBe(`${JSON.stringify({ error: FRONTIER_REASON, details: [{ detail: 'frontier: a, b' }] })}\n`);
   });
 });
