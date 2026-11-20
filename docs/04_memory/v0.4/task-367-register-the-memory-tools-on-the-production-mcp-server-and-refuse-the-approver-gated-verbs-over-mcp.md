@@ -511,6 +511,28 @@ summary):
 - No fixture of command output is copied into a test: every CLI output a case compares is produced by the case itself
   (`spawnCapture` of `dist/cli.js`, or of the pinned build for AC 7).
 
+### red addition (qa, 2026-11-20)
+
+**Commit:** `546f6bf07` (`test(mcp): task-367 — failing test: the session Resource's server lists only the memory
+Tools`), one file: `test/mcp/session-context-resource.test.ts`, the case formerly "tools/list stays empty
+(REQ-SEC-05)" (lines 166–170, the only change, `git diff` checked). It now asserts that `tools/list` on `createMcpServer`
+names exactly the seven Memory Tools of D6, in the order the other red files use (`memory.add`, `memory.amend`,
+`memory.approve`, `memory.deprecate`, `memory.park`, `memory.reject`, `memory.submit`), and none whose name holds
+`session`; its REQ-SEC-05 wording is "the only Tools are the memory module's". This closes the "Not edited, for green"
+item of the red notes above.
+
+**Run** (the task's PATH shim first): `npx jest test/mcp/session-context-resource.test.ts --maxWorkers=2 --noStackTrace
+--json --outputFile=<scratch>/r.json`, read through its summary → `Tests: 1 failed, 14 passed, 15 total`; the failure is
+the edited case, `- Expected - 9 / + Received + 1`, the seven names expected and `Array []` received (no Tool served
+yet). `npx tsc --noEmit -p tsconfig.json` → exit 2 with the same two intended errors (TS2353 `env` in
+`test/mcp/helpers/production-tools.ts`, TS2307 `src/mcp/wire-errors`); `npx jest test/lint --maxWorkers=2` → `Tests: 1
+failed, 164 passed, 165 total`, the one failure `typecheck.clean`.
+
+**AC 8 departure, ruled accepted by supervision (2026-11-20).** The design asked for one case per call site of
+`resolveOperationAgentContext(` (12 sites); red wrote 17 operation cases, the registry's attributed operations, which
+together reach every ungated site. The mapping of each case to a site's file is by elimination, and no assertion
+checks it (stated in the test's module doc).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
