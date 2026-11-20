@@ -104,11 +104,6 @@ export interface CapabilitiesDocument {
   readonly capabilities: readonly string[];
 }
 
-/** Ascending UTF-16 code-unit order (`spec-019` §3.2). */
-function byCodeUnit(a: string, b: string): number {
-  return a < b ? -1 : a > b ? 1 : 0;
-}
-
 /**
  * Build the capabilities document of `modules` and `build` (`spec-019` §3): `formats` from `FILE_KIND_FORMATS`,
  * `commands` the union of every operation of `modules` (`"<module> <verb>"`, or `"<module>"` for a self-named one)
@@ -116,19 +111,22 @@ function byCodeUnit(a: string, b: string): number {
  * in `commands`. Pure: the same inputs give the same document, keys in §3.2's insertion order.
  */
 export function buildCapabilitiesDocument(modules: readonly CoreModule[], build: BuildIdentity): CapabilitiesDocument {
+  // `Array.prototype.sort` with no comparator orders strings by UTF-16 code units (`spec-019` §3.2), never by locale;
+  // the three lists hold no duplicate (kinds and names are unique, commands go through a `Set`).
   const formats: Record<string, { lowest: number; highest: number }> = {};
-  for (const entry of [...FILE_KIND_FORMATS].sort((a, b) => byCodeUnit(a.kind, b.kind))) {
-    formats[entry.kind] = { lowest: entry.lowest, highest: entry.highest };
+  for (const kind of FILE_KIND_FORMATS.map((entry) => entry.kind).sort()) {
+    const entry = FILE_KIND_FORMATS.find((candidate) => candidate.kind === kind)!;
+    formats[kind] = { lowest: entry.lowest, highest: entry.highest };
   }
   const derived = enumerateOperations(modules).map(({ module, operation }) => {
     const verb = deriveVerb(module.name, operation.name);
     return verb === '' ? module.name : `${module.name} ${verb}`;
   });
-  const commands = [...new Set([...derived, ...BOOTSTRAP_COMMANDS])].sort(byCodeUnit);
+  const commands = [...new Set([...derived, ...BOOTSTRAP_COMMANDS])].sort();
   const shipped = new Set(commands);
   const capabilities = CAPABILITIES.filter((entry) => entry.requires.every((command) => shipped.has(command)))
     .map((entry) => entry.name)
-    .sort(byCodeUnit);
+    .sort();
   return {
     format: CAPABILITIES_DOCUMENT_FORMAT,
     wingfoil: { version: build.version, commit: build.commit },
