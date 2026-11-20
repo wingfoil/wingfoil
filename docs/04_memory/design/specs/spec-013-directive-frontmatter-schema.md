@@ -118,7 +118,7 @@ A `version` never fails the Directives pillar. A quoted value loads as written. 
 number loads as the number it parses to; when that number does not read back as written (`1.10` →
 `1.1`, `1.0` → `1`), loading warns the author to quote it. A value that is neither a string nor a
 number is dropped with a warning, and the rest of the file loads. These warnings are spec-009 §2
-stderr warnings (`Warning: <file>: …`), like the unknown-field one.
+stderr warnings (`warning: <file>: …` in `console`, `spec-008` §6), like the unknown-field one.
 
 ### `format`
 
@@ -210,3 +210,10 @@ were thirteen once `git-conventions` landed (`task-178`), and `task-270` adds `w
 directive uses only the fields this spec declares. No field, rule or other section changed. Edited in
 place without a supersede or a state change (`dl-047`); pending the approver's sign-off at `task-270`'s
 review.
+
+**Revision (2026-11-19, `task-375-tell-an-operator-with-no-approver-how-to-grant-it-and-render-every-error-detail-with-one-warning-prefix-dl-071`)
+— `version`: the warnings' prefix, per `bug-304`.** The section quoted the directive loader's warnings as
+`Warning: <file>: …`, the line only a warning raised outside the CLI's sink still printed. Every warning now carries
+the one console prefix `spec-008` §6 defines, `warning: `, so the section quotes that. No loading rule changes.
+Edited in place without a supersede or a state change (`dl-047`), pending the approver's `memory amend` at
+`task-375`'s design gate.

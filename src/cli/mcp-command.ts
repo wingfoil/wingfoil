@@ -17,10 +17,12 @@ import { loadDnaRoleSet } from '../core';
 import { errorDetails } from '../core/error-details';
 import { exitCodeForThrow } from '../core/exit-code';
 import { startMcpServer } from '../mcp/server';
+import { withWarningSink } from '../validation/warning';
 
 import { emitError } from './error';
 import { exitWith } from './exit';
 import { isValidFormat, type OutputFormat } from './output';
+import { emitWarning } from './warning';
 
 /** The options `runMcp` acts on (injected so the resolve-root/error path needs no real stdio server). */
 export interface McpCliDeps {
@@ -51,7 +53,8 @@ export interface McpCliDeps {
  * 2. read the DNA role set (`loadDnaRoleSet`): refused when the root has no `.wingfoil/`, with the
  *    shared not-initialized message, which names no path (`bug-035`), or when `dna.yaml` cannot be
  *    loaded, with the loader's reason and details. This is the one start-time read spec-014 §2
- *    allows (`dl-049` (b)); `createMcpServer` itself still reads nothing.
+ *    allows (`dl-049` (b)); `createMcpServer` itself still reads nothing. A warning it raises is
+ *    written through the CLI's one renderer, in the active format (task-375).
  *
  * It then hands the server start a closure returning the already-resolved root and the role set. On
  * success it does not exit — the server runs over stdio until the transport closes, and stdout carries
@@ -71,7 +74,9 @@ export async function runMcp(deps: McpCliDeps): Promise<void> {
     return;
   }
 
-  const roles = loadDnaRoleSet(root);
+  // A warning the pre-flight read raises goes through the one renderer, in the active `--format`
+  // (task-375, `bug-304`, `spec-008` §6); the serving server keeps the fallback, the same line.
+  const roles = withWarningSink((text) => emitWarning(text, { format }), () => loadDnaRoleSet(root));
   if (!roles.ok) {
     emitError(roles.error.message, { format, details: errorDetails(roles.error) });
     exitWith(1);

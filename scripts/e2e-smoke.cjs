@@ -199,11 +199,17 @@ function smokeSteps(template) {
     { args: ['dna', 'set', 'project.name', '--value', 'WingFoil smoke'], exit: 0 },
     task('Approved task', 'approved'),
     edge('submit', 'approved', 'draft', 'pending'),
-    // spec-005 §1 exit 1: no approver is bound yet (REQ-SEC-03), so the approve is refused and writes nothing.
+    // spec-005 §1 exit 1: no approver is bound yet (REQ-SEC-03), so the approve is refused and writes nothing; the
+    // refusal's hint names the `dna add` the next step runs (dl-071 (B), spec-008 §6, task-375).
     {
       args: ['memory', 'approve', '{approved.id}', '--reason', 'smoke: no approver bound', ...JSON_FORMAT],
       exit: 1,
-      expect: { error: "user not authorized to approve type 'task'" },
+      expect: {
+        error: "user not authorized to approve type 'task'",
+        hint:
+          "no team member holds the 'approver' role yet: add one with " +
+          `'wingfoil dna add team.members --value "${SMOKE_NAME}" --entry-email ${SMOKE_EMAIL} --entry-roles approver', then retry`,
+      },
     },
     {
       args: ['dna', 'add', 'team.members', '--value', SMOKE_NAME, '--entry-email', SMOKE_EMAIL, '--entry-roles', 'approver'],

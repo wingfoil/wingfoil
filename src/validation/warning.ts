@@ -21,9 +21,24 @@
  * raised, so it precedes whatever the command prints after it (an error, or `agent execute`'s pre-flight
  * refusal, `spec-016` §3.3 step 8). The mode travels in an `AsyncLocalStorage`, as the dry run's does,
  * so no loader signature changes. Outside any sink (the MCP server, a library caller) the warning is
- * written to stderr as `Warning: <text>`, the line these loaders always wrote.
+ * written to stderr as the one console line, {@link formatWarningLine} (`warning: <text>`, `spec-008` §6
+ * "One console prefix", task-375, `bug-304`).
  */
 import { AsyncLocalStorage } from 'node:async_hooks';
+
+/**
+ * The one console prefix of a warning line (`spec-008` §6 "One console prefix", task-375, `bug-304`): the CLI
+ * renderer (`src/cli/warning.ts`), the fallbacks below, `init` and the `mcp` pre-flight all write it.
+ */
+export const WARNING_PREFIX = 'warning: ';
+
+/**
+ * The console line of one warning: {@link WARNING_PREFIX}, the text with each continuation line indented two
+ * spaces (so no line of it can begin with the greppable `warning: ` or `error: `), and a trailing newline.
+ */
+export function formatWarningLine(text: string): string {
+  return `${WARNING_PREFIX}${text.replace(/\n/g, '\n  ')}\n`;
+}
 
 /** Where a raised warning goes: one operator-facing sentence, no prefix. */
 export type WarningSink = (text: string) => void;
@@ -40,12 +55,12 @@ export function withWarningSink<T>(sink: WarningSink, run: () => T): T {
 
 /**
  * Raise one warning: to the sink {@link withWarningSink} installed around the running operation, or,
- * with none installed, to stderr as `Warning: <text>`.
+ * with none installed, to stderr as {@link formatWarningLine}'s line.
  */
 export function reportWarning(text: string): void {
   const sink = sinkStore.getStore();
   if (sink !== undefined) sink(text);
-  else process.stderr.write(`Warning: ${text}\n`);
+  else process.stderr.write(formatWarningLine(text));
 }
 
 /**
@@ -61,7 +76,7 @@ export function withDistinctWarnings<T>(run: () => T, rewrite: (text: string) =>
     if (seen.has(shown)) return;
     seen.add(shown);
     if (outer !== undefined) outer(shown);
-    else process.stderr.write(`Warning: ${shown}\n`);
+    else process.stderr.write(formatWarningLine(shown));
   }, run);
 }
 

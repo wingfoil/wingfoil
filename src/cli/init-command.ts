@@ -22,9 +22,12 @@ import {
   resolveTemplate,
 } from '../core/surface-reads';
 
+import { withWarningSink } from '../validation/warning';
+
 import { emitError } from './error';
 import { exitWith } from './exit';
 import { invalidFormatReason, isValidFormat, renderSuccess, type OutputFormat } from './output';
+import { emitWarning, emitWarnings } from './warning';
 
 /** The parsed flag surface `runInit` acts on (global `--format`/`--interactive` + local `--template`). */
 export interface InitCliOptions {
@@ -107,8 +110,12 @@ export async function runInit(options: InitCliOptions, deps: InitCliDeps): Promi
   if (template === null) return; // usage error already emitted + exited (2)
 
   const init = deps.init ?? initWingfoilProject;
-  const result = init(deps.root, template);
+  // A warning raised while `init` runs, and the result's own, reach stderr through the one renderer,
+  // in the active `--format`, before the payload, as on every registrar command (task-375, `bug-304`,
+  // `spec-008` §6).
+  const result = withWarningSink((text) => emitWarning(text, { format }), () => init(deps.root, template));
   if (result.ok) {
+    emitWarnings(result.warnings, { format });
     process.stdout.write(renderSuccess(result.value, format));
   } else {
     // `details` too, as every derived command does (task-130 review, spec-005 §3.1).

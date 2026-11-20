@@ -172,3 +172,56 @@ describe('runMcp — the `wingfoil mcp` command handler (spec-014 §1)', () => {
     expect(startCalls).toEqual([{ root: project, roles: ['reviewer', 'developer'], name: 'wingfoil', version: '1.2.3' }]);
   });
 });
+
+/**
+ * task-375 AC 3 (red-first, `bug-304`; `spec-008` §6 "Warnings on a successful command" — `mcp` installs the sink around
+ * its pre-flight; approver ruling D3) — the unknown-field warning the pre-flight raises while it reads `dna.yaml` is
+ * written by the one renderer, before the server starts: `warning: <text>` in `console`, `{"warning": "<text>"}` under
+ * `format: 'json'`. The text is the one `wingfoil mcp` printed on a fresh `init --template Scrum` repository whose
+ * committed `.wingfoil/dna.yaml` carries `probe_unknown_key: 1` (today as `Warning: …` in both formats, the red).
+ */
+describe('task-375 AC 3 — runMcp writes the pre-flight warning with the one prefix (bug-304)', () => {
+  const TEXT = '.wingfoil/dna.yaml: unknown field(s) ignored: probe_unknown_key';
+  let exitSpy: jest.SpyInstance;
+  let stderrSpy: jest.SpyInstance;
+  let project: string;
+  let started: number;
+
+  beforeAll(() => {
+    project = seedProject(`${DNA_YAML}probe_unknown_key: 1\n`);
+  });
+  afterAll(() => removeTempDir(project));
+
+  beforeEach(() => {
+    exitSpy = jest.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    stderrSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    started = 0;
+  });
+  afterEach(() => {
+    exitSpy.mockRestore();
+    stderrSpy.mockRestore();
+  });
+
+  const emitted = (): string => stderrSpy.mock.calls.map((call) => String(call[0])).join('');
+  const deps = (format?: 'console' | 'json'): McpCliDeps => ({
+    resolveRoot: () => project,
+    version: '1.2.3',
+    ...(format === undefined ? {} : { format }),
+    start: async () => {
+      started += 1;
+    },
+  });
+
+  it('console: exactly one `warning: ` line, then the server starts, no exit', async () => {
+    await runMcp(deps());
+    expect(emitted()).toBe(`warning: ${TEXT}\n`);
+    expect(started).toBe(1);
+    expect(exitSpy).not.toHaveBeenCalled();
+  });
+
+  it("format 'json': exactly one {\"warning\"} line, then the server starts", async () => {
+    await runMcp(deps('json'));
+    expect(emitted()).toBe(`${JSON.stringify({ warning: TEXT })}\n`);
+    expect(started).toBe(1);
+  });
+});

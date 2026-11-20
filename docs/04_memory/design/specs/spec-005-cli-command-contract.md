@@ -168,6 +168,23 @@ error: <reason>
   error: illegal transition approved -> (none) for type 'task'
     docs/memory/task/task-200.md: illegal `submit` from "approved": a `waiting` state — its forward edge fires only via a Workflow action, not `submit`
   ```
+- **One rule for every `details` key** (`bug-303`). The issues are one of the keys a core error's
+  `details` may carry. `src/core/error-details.ts` declares every key core errors use in one closed
+  table, `DETAIL_KEYS`, each of one of three classes:
+  - an **entry** key is rendered by its own rule, in this order: `diagnostics` (spec-003 diagnostics,
+    one line each in the reason form, the one the reason already is left out) or else `issues` (as
+    above); then `unreadable` (one line per string, or per issue-shaped object as an issue); then
+    `cause` (a string, one line);
+  - a **labelled** key — a value the reason does not state, such as the steps on a frontier — is one
+    line, `<key>: <value>`: a string as is, an array of strings `, `-joined, any other value as compact
+    JSON; an empty string or array adds no line;
+  - a **stated** key — a value the reason already states, such as the instance or the step it names —
+    is data for a caller of `src/core` and adds no line.
+
+  Labelled lines follow the entry lines, in key order. An entry already listed is not listed again, so
+  a `cause` an issue repeats prints once. A key the table does not declare is never dropped: it is
+  rendered as a labelled key; and a test fails on such a key wherever a core error is built, so a new
+  key is declared, in one of the three classes, in the change that adds it.
 - **Unknown-command suggestion:** when a command token — the first one after `wingfoil` (and any
   recognized global flags), or a verb under its noun — matches no known command at that level, the CLI
   computes the closest command **at that level** and, when one is close enough, writes the `hint:`
@@ -204,8 +221,8 @@ error: <reason>
 - `error` is required and carries the same reason text as the console `<reason>`.
 - `hint` is present only when a suggestion applies (same condition as §3.1); otherwise the field is
   omitted rather than set to `null`.
-- `details` is present only when at least one issue names a `file` or a `detail` (same condition as
-  §3.1's detail lines, same order, the same rule for a file the reason already names); each entry
+- `details` is present only when §3.1's rule leaves at least one entry naming a `file` or a `detail`
+  (the same entries as §3.1's detail lines, same order, the same rule for a file the reason already names); each entry
   carries only the fields left to it. The field is
   **additive**: a consumer that reads only `error` is unaffected.
 - The `yaml` variant is the same structure serialized as YAML instead of JSON.
@@ -260,8 +277,9 @@ function detailLine(detail: ErrorDetail): string {
 }
 ```
 
-`ErrorDetail` (`{ file?, detail? }`) and the selection of entries from `CoreError.details.issues` live
-in `src/core/error-details.ts`, so the CLI and the MCP surface (`spec-004`) show the same entries.
+`ErrorDetail` (`{ file?, detail? }`) and the selection of entries from `CoreError.details` (§3.1's
+`DETAIL_KEYS` rule) live in `src/core/error-details.ts`, so the CLI and the MCP surface (`spec-004`) show
+the same entries.
 
 ### 4. Worked examples
 
@@ -470,6 +488,19 @@ contract listed five of the six pillar nouns: `directives`, the plural noun `win
 under, was missing, though `spec-008-cli-grammar` §1 names it. The contract already applied to that command;
 only the list was short. No exit code, format or other rule changed. Edited in place without a supersede or
 a state change (`dl-047`); pending the approver's `memory amend` at `task-239`'s review.
+
+**Revision (2026-11-19, `task-375-tell-an-operator-with-no-approver-how-to-grant-it-and-render-every-error-detail-with-one-warning-prefix-dl-071`)
+— §3.1–§3.2: one rule for every `details` key, per `bug-303`.** §3.1 named `CoreError.details.issues` as the
+only source of detail lines, while `src/core/error-details.ts` already read spec-003 `diagnostics` too (task-136)
+and every other key a core error carried (`cause`, `unreadable`, a frontier's steps, …) was dropped on the CLI and
+MCP unless a caller re-mapped it by hand. §3.1 now states the rule: a closed table of every key core errors use;
+entry keys rendered by their own rule (`diagnostics` or `issues`, then `unreadable`, then `cause`); labelled keys,
+values the reason does not state, rendered as `<key>: <value>` lines; stated keys declared as data the reason
+already states; a key the table does not declare rendered as a labelled one rather than dropped; and a test that
+fails on such a key. §3.2's `details` condition and the closing sentence follow it. An error that carries only
+`issues`, only `diagnostics`, or stated keys beside them renders as before; one carrying `unreadable`, `cause` or a
+labelled key gains their lines. No exit code or reason changes. Edited in place without a supersede or a state
+change (`dl-047`), pending the approver's `memory amend` at `task-375`'s design gate.
 
 **Revision (2026-11-20, `task-362-add-wingfoil-capabilities-and-the-wingfoil-capabilities-resource-spec-019-task-a`)
 — Context's flat commands gain `capabilities`.** `spec-019` (`approved`, "Amendments owed") adds the flat command
