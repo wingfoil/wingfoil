@@ -18,6 +18,8 @@ read the [user guide](user-guide.md); for runnable scenarios see [`examples/`](e
 Run `wingfoil` from the **root of a git repository** that has been initialized with `wingfoil init`.
 Outside a git repository a command fails with `error: E_NO_GIT_ROOT: not inside a git repository`; in a
 subdirectory it fails with `error: E_NOT_AT_GIT_ROOT: run wingfoil from the project root` (both exit `1`).
+The one exception is [`wingfoil capabilities`](#wingfoil-capabilities), new in 0.4, which reads no project and runs
+anywhere.
 
 New in 0.4: to run a command on a project from another directory, name its root with the global
 `--project <dir>` — `wingfoil --project ../my-project workflow status`, or after the verb,
@@ -80,7 +82,7 @@ Accepted by every command, except `--dry-run`, which only the commands that chan
 | `--dry-run` | New in 0.3. Show the commit the command would make, and make nothing. Taken by every command that changes the project — `memory add`, `submit`, `approve`, `reject`, `deprecate`, `park`, `amend`, `dna set`, `add`, `update`, `remove`, `directive create`, `assign`, `remove`, `workflow start`, `end`, `finalize`, `create`, `remove`, `adopt`, `rekey`, `agent execute` — after the verb (`wingfoil memory submit task-001-my-first-task --dry-run`); any other command refuses it as an unknown option (exit `2`). The command runs all its checks, then prints `{"dryRun": true, "subject", "message", "paths", "diff"}`: the commit subject, its full message, the files it would contain, and the unified diff from the last commit — and exits `0`, leaving the working tree, the index and the branch untouched. If the real run would be refused, the dry run is refused the same way, with the same exit code; the warnings the real run would print are printed too, a rewrite warning worded as a plan (`dna.yaml would be rewritten as a whole file (--force): …`). The diff is of what the commit would store — after your `core.autocrlf` or `.gitattributes` line-ending conversion — and is laid out with git's default diff settings, whatever your own git configuration says, so `git show` with a customized `diff.*` configuration can group the same changes into different hunks. It does not run git hooks, for a `memory approve` that also moves a superseded document it shows only the approve commit, and for `workflow start` only the plan's `add` commit. `workflow finalize`'s, `workflow adopt`'s and `workflow rekey`'s commits change no file, so their `paths` is `[]` and their `diff` is empty. `agent execute` prints the launch it would make instead, with no `message` or `diff`: its commit records how the agent's run ended, which cannot be known beforehand (see [`agent execute`](#wingfoil-agent-execute)). |
 | `--co-author <name>` | New in 0.4. Says the command runs in an agent's session, as the `team.agents` entry `<name>`. Taken by every command that takes `--dry-run` except `agent execute`, after the verb; any other command refuses it as an unknown option (exit `2`), and a blank `<name>` is refused at exit `2` (`error: invalid flag value: --co-author must not be blank`). It is one of the agent markers (`spec-018` §1), beside the `WINGFOIL_AGENT`, `CLAUDE_CODE_CHILD_SESSION` and `CODEX_SANDBOX` environment variables, defined with any value, the empty one included (`CLAUDECODE` is not one): with any of them present, the commands that need the approver — `memory approve`, `reject`, `amend`, `workflow finalize` on an approval phase, `workflow adopt --plan --apply`, `workflow rekey` — are refused (exit `1`, `error: E_AGENT_CONTEXT: '<command>' needs the approver and does not run in an agent's session (<markers>): …`, with a `hint:` line), before anything is written. Run them yourself, from a terminal no agent started. On the other commands their commit names the agent: `Co-Authored-By: <name> <<email>>` and `AI-Model:` (see `--ai-model`) after `WingFoil-Version:`, in the same final paragraph, from the `team.agents` entry `<name>` — without `--co-author`, the entry a non-blank `WINGFOIL_AGENT` names, else the one whose `adapter` matches the session (`CLAUDE_CODE_CHILD_SESSION` → `claude-code`, `CODEX_SANDBOX` → `codex-cli`), else the first entry, said in the commit body's first line and by `warning: W_AGENT_ENTRY_GUESSED: …`. A `<name>` naming no `team.agents` entry exits `1` (`error: unknown team.agents entry …`), and so does an entry with no `email`, with nothing written; with no `team.agents` entry at all the commit names no co-author and `warning: W_NO_AGENT_ENTRY: …` is printed. Without any marker every commit is what it was before 0.4. |
 | `--ai-model <id>` | New in 0.4. The model identifier the agent's `AI-Model:` trailer records. Taken by the commands that take `--co-author`, after the verb; without it the `WINGFOIL_AGENT_MODEL` environment variable's value, and without either `not-reported`. It is not an agent marker. Refused at exit `2` before anything is read: a blank value (`error: invalid flag value: --ai-model must not be blank`), a value holding a line break or another control character, tab included (`error: invalid flag value: --ai-model must be one line`), and the option given in a session no agent marker marks (`error: invalid flag combination: --ai-model needs an agent context (--co-author, or a session an agent started)`). `WINGFOIL_AGENT_MODEL` follows the same one-line rule (`error: invalid environment value: WINGFOIL_AGENT_MODEL must be one line`), and a blank one counts as unset. The value is written trimmed. |
-| `--project <dir>` | New in 0.4. Run on the project rooted at `<dir>` instead of the current directory, before or after the verb; `<dir>` must itself be a git root (see [Where to run it](#where-to-run-it)). `--help` and `--version` keep their precedence: with either, the value is not checked. |
+| `--project <dir>` | New in 0.4. Run on the project rooted at `<dir>` instead of the current directory, before or after the verb; `<dir>` must itself be a git root (see [Where to run it](#where-to-run-it)). `--help` and `--version` keep their precedence: with either, the value is not checked. `wingfoil capabilities` reads no project, so it does not check a non-blank value either; a blank one exits `2` there too. |
 | `--verbose` | Emit diagnostic logs to stderr. |
 | `--no-color` | Disable ANSI colors. Accepted, but no output is colored yet, so it changes nothing; neither does the `NO_COLOR` environment variable. Both will apply once `console` has a colored rendering (P5.1.4, `dl-043`). |
 | `--no-interactive` | Fail on a missing argument instead of prompting for it. |
@@ -295,6 +297,60 @@ execution context as `<role>-session` with `element` and `state` (`{element}` is
 `warnings`, for agents whose client can read Resources but not get Prompts. It is never listed by `resources/list`:
 read it by its full URI, which [`wingfoil agent execute`](#wingfoil-agent-execute) gives the agent. A role not in
 `dna.yaml` is refused with `no session context for undefined role '<role>'`.
+
+New in 0.4: the Resource `wingfoil://capabilities` returns what
+[`wingfoil capabilities --format json`](#wingfoil-capabilities) prints, without the final newline. These are
+WingFoil's capabilities, unrelated to the protocol capabilities an MCP `initialize` exchanges.
+
+---
+
+### `wingfoil capabilities`
+
+Print the file formats this WingFoil reads, its commands and the capabilities it provides. New in 0.4.
+
+```
+wingfoil capabilities
+```
+
+The answer is a property of the build, not of a project: the command reads no project, runs no git command and
+works anywhere — at a project root, in a subdirectory, outside every git repository — printing the same bytes for
+the same build. A non-blank `--project` is accepted and not checked. A pack or a tool reads it to learn whether
+this WingFoil can read its files and provides what it needs.
+
+The document has five keys, in this order: `format` (the document's own format, `1`), `wingfoil` (`version` and
+`commit`, the two halves of `wingfoil --version`), `formats` (each file kind — `agent-adapter`, `bindings`,
+`directive`, `dna`, `memory`, `memory-template`, `roles`, `workflow`, `workflows` — mapped to the `lowest` and
+`highest` format this build reads), `commands` (every command, without the `wingfoil ` prefix) and `capabilities`
+(`agent-execute`, `directive-verbs`, `dna-verbs`, `mcp-server`, `memory-verbs`, `workflow-tracking`: each present
+when every command it requires ships). Every list is sorted. `--format json` prints it on one line, `--format yaml`
+as YAML, and `--format console` (the default) as text:
+
+```console
+$ wingfoil capabilities
+wingfoil 0.4.0 (0123456789abcdef0123456789abcdef01234567), capabilities document format 1
+
+formats read (kind: lowest..highest):
+  agent-adapter: 1..1
+  …
+  workflows: 1..1
+
+commands (36):
+  agent execute
+  …
+  workflow status
+
+capabilities (6):
+  agent-execute
+  …
+  workflow-tracking
+```
+
+(`…` stands for the lines left out here; the real output prints every item.)
+
+- **Errors:** an operand (`error: wingfoil capabilities takes no positional (got 1 positional)`), an unsupported
+  `--format`, a blank `--project` or an unknown option such as `--dry-run` exit `2`. There is no other refusal and no
+  warning.
+- **Commit:** none.
 
 ---
 
