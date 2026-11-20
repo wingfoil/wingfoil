@@ -277,6 +277,14 @@ Left uncommitted in this worktree, each to be recorded with `memory amend` at th
 
 - None outside the task. (`bug-534`'s interplay is D7.)
 
+### design gate (approver, 2026-11-20)
+
+The approver recorded the step in `0567fb155` (`workflow finalize … dev-loop.design`), after the amendment `115e5c5eb` (`wf(tech-spec): amend spec-008-cli-grammar`). The rulings, as the record states them:
+
+> Approve the design of task-373 as recommended: D1 each diagnostic is one stderr line warning: <code> (<file>): <message>, or <code>: <message> with no file, in payload order with no deduplication; D2 the json and yaml stdout keeps its top-level diagnostics key byte-identical and stderr carries one warning document per entry, as agent list does; D3 the scope is workflow status, workflow next and agent list, with workflow list and show left to task-370; D4 the pre-marker stdout line is removed and becomes a stderr warning like every other diagnostic, reversing the stdout half of task-345's ruling D1 (a) while the rule stays transitory; D5 spec-008 §2 and §6 and spec-017 §3.2, §7.3, §7.4 and §8 are amended; D6 option (a), all five on-purpose warning sources of the suite are fixed, as characterization; D7 the workflow-unbound-none assertion becomes that stdout holds no W_ code and no diagnostic(s) line, and bug-534 stays in w2; D8 task-362 and task-367 merge first and task-373 takes main after both.
+
+The other amendment of the gate is `3bafa88a1` (`wf(tech-spec): amend spec-017-workflow-commands-and-state-deduction`). The approver ruled D1–D8 as recommended ("tutto come raccomandato"), D4 explicitly included: it reverses the stdout half of `task-345`'s ruling `D1` (a), and the pre-marker rule stays transitory. Merge order (D8, supervision): `task-362`, then `task-367`, then this task takes `main`; a conflict in `src/core/index.ts` stops the line.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
