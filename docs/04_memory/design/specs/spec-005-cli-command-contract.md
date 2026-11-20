@@ -11,7 +11,7 @@ tmpl_version: 260703
 ## Context
 
 Every `wingfoil` command — regardless of pillar (`memory`, `dna`, `directive`, `directives`, `workflow`, `agent`) or
-flat command (`init`, `mcp`, `paths`, `audit`; `init` and `mcp` are the bootstrap commands,
+flat command (`init`, `mcp`, `paths`, `capabilities`, `audit`; `init` and `mcp` are the bootstrap commands,
 `spec-008-cli-grammar` §1) — is consumed by two audiences that need a **stable, predictable
 contract** independent of the specific command's arguments: (1) humans reading console output, and
 (2) scripts, CI pipelines, and other tools parsing exit codes and structured output.
@@ -470,3 +470,9 @@ contract listed five of the six pillar nouns: `directives`, the plural noun `win
 under, was missing, though `spec-008-cli-grammar` §1 names it. The contract already applied to that command;
 only the list was short. No exit code, format or other rule changed. Edited in place without a supersede or
 a state change (`dl-047`); pending the approver's `memory amend` at `task-239`'s review.
+
+**Revision (2026-11-20, `task-362-add-wingfoil-capabilities-and-the-wingfoil-capabilities-resource-spec-019-task-a`)
+— Context's flat commands gain `capabilities`.** `spec-019` (`approved`, "Amendments owed") adds the flat command
+`wingfoil capabilities` (P5.1.5); Context's list of flat commands names it. Its exit codes and texts are this spec's
+(`spec-019` §2); nothing else changes. Edited in place without a supersede or a state change (`dl-047`), pending the
+approver's `memory amend`.
