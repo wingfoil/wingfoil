@@ -139,7 +139,9 @@ describe('task-362 — wingfoil capabilities on the compiled CLI (spec-019 §1�
   it('AC 1 — capabilities --help shows spec-019 §1\'s description and example, exit 0', () => {
     const run = wingfoil(REPO_ROOT, ['capabilities', '--help']);
     expect(run.status).toBe(0);
-    expect(run.stdout).toContain(DESCRIPTION);
-    expect(run.stdout).toContain(EXAMPLE);
+    // Commander wraps help text at 80 columns when stdout is not a TTY: whitespace runs, newlines included, are collapsed.
+    const collapse = (text: string): string => text.replace(/\s+/g, ' ');
+    expect(collapse(run.stdout)).toContain(collapse(DESCRIPTION));
+    expect(collapse(run.stdout)).toContain(collapse(EXAMPLE));
   });
 });

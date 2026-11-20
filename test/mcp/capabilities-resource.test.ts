@@ -5,8 +5,9 @@
  *
  * - T-15: `createMcpServer` over the SDK's in-memory transport; a read returns one entry, `application/json`, no
  *   `warnings`, whose `text` is `JSON.stringify` of the operation's value (`capabilitiesFn`, the function the CLI
- *   command runs) and the `--format json` stdout of the same build without its final `\n`; the `resolveRoot` the
- *   server was given is not called by the read.
+ *   command runs); the Resource `node dist/cli.js mcp` serves over stdio is the `--format json` stdout of the same
+ *   dist build without its final `\n` (one build, one `commit`); the `resolveRoot` the in-process server was given is
+ *   not called by the read.
  * - T-16: `resources/list` lists it as `capabilities.read` with §6's description; a read carrying a write intent is
  *   refused with `resources are read-only` (`spec-004` §2.3).
  * - `registerCapabilitiesResource` is exported by `src/mcp/capabilities-resource.ts` and re-exported by the `src/mcp`
@@ -16,6 +17,7 @@
  * such Resource, and `src/mcp/capabilities-resource.ts` does not exist (TS2307; the `require` throws `Cannot find module`).
  */
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { join } from 'node:path';
 import { z } from 'zod';
@@ -58,17 +60,33 @@ describe('task-362 AC 8 — T-15: Read the capabilities document as an MCP resou
     expect(entry.text).toBe(JSON.stringify(operation.value));
   });
 
+  // Both sides from the same dist build: an in-process server runs from src/, whose build stamp is `unknown` (dl-111),
+  // while dist/ stamps the build's commit, so the comparison is made against `node dist/cli.js mcp` over stdio.
   it('its text is what `wingfoil capabilities --format json` prints from the same build, without the final newline', async () => {
-    const { client } = await connected();
-    const result = await client.readResource({ uri: URI });
+    const transport = new StdioClientTransport({
+      command: process.execPath,
+      args: [CLI_ENTRY, 'mcp'],
+      cwd: REPO_ROOT,
+      env: withoutAgentMarkers(process.env) as Record<string, string>,
+      stderr: 'pipe',
+    });
+    const client = new Client({ name: 'task-362-capabilities-dist', version: '0.0.0' });
+    let text: string;
+    try {
+      await client.connect(transport);
+      const result = await client.readResource({ uri: URI });
+      text = (result.contents[0] as { text: string }).text;
+    } finally {
+      await client.close().catch(() => undefined);
+    }
     const run = spawnCapture(process.execPath, [CLI_ENTRY, 'capabilities', '--format', 'json'], {
       cwd: REPO_ROOT,
       env: withoutAgentMarkers(process.env) as NodeJS.ProcessEnv,
       timeout: 60000,
     });
     expect({ status: run.status, stderr: run.stderr }).toEqual({ status: 0, stderr: '' });
-    expect(`${(result.contents[0] as { text: string }).text}\n`).toBe(run.stdout);
-  });
+    expect(`${text}\n`).toBe(run.stdout);
+  }, 60000);
 });
 
 describe('task-362 AC 8 — T-16: listed, and read-only (spec-019 §6, spec-004 §2.3)', () => {
