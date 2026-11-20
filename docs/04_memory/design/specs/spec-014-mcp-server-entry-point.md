@@ -93,34 +93,36 @@ startMcpServer(options): Promise<McpServer>
   start-time read the server depends on, the DNA role set, happens before construction, in the
   pre-flight of `wingfoil mcp` (§1, `dl-049` (b)), and arrives as `roles`.
 
-### 3. Channel scope — read-only Resources and Prompts, an empty Tools channel
+### 3. Channel scope — read-only Resources and Prompts, and the Memory Tools
 
-`createMcpServer` registers exactly these channels (`spec-004` §1), and nothing that writes:
+`createMcpServer` registers exactly these channels (`spec-004` §1):
 
 ```ts
 registerReadOnlyResources(server, { resolveRoot });          // spec-004 §2 — Memory, DNA, Workflow Resources + write refusal (P5.2.1, v0.1)
 registerRolePrompts(server, { resolveRoot, roles });         // spec-004 §3 — one {role}-session Prompt per role (P5.2.2, v0.2)
-// the Tools channel, empty until P5.2.3 (v0.4):
-//   initialize advertises `tools: {}`; tools/list → { tools: [] };
-//   tools/call → an isError result "Tool <name> not found" (a Tool refusal, spec-004 §4.3 item 4)
+registerCoreTools(server, <the memory module of CORE_MODULES>, { resolveRoot, buildParams: buildCoreParams });
+                                                             // spec-004 §4 — the Memory Tools, derived (P5.2.3, v0.4)
 ```
 
-Neither the Prompts nor the Tools capability declares `listChanged`: the role set is fixed at start
-(§1), and the Tools list is empty. A client probing `tools/list` gets an empty list rather than a
-JSON-RPC `-32601` (`bug-151`).
+The Tools are derived from `CORE_MODULES`, never registered by hand: `registerCoreTools` is the Tools half of the
+registrar (`spec-004` §4.3), so `tools/list` lists one Tool per `mutates: true` operation of the modules it is given —
+for the `memory` module, `memory.add`, `amend`, `approve`, `deprecate`, `park`, `reject` and `submit` — and `tools/call`
+runs each call as an agent context (`spec-018` §1.2). The server passes it the `memory` module alone in this
+revision; the DNA, directive, workflow and agent Tools follow in v0.4 (P5.2.3), when it passes `CORE_MODULES` whole,
+with no other change. An unknown Tool name is an `isError` result `Tool <name> not found`.
 
-It does **not** call `registerCoreModules(server, CORE_MODULES, …)`. That registrar would advertise a
-mutating **Tool** for every `mutates: true` `CoreOperation` (as of task-025, `dnaSet` → the `dna.set`
-Tool) — and Tools are P5.2.3 (v0.4) scope, explicitly out of scope for the P5.2.1 read-only skeleton.
-Registering it would put a mutating write path onto a surface this milestone requires to be strictly
-read-only. The operation-derived read-only Resources it would also add (`wingfoil://dna/show`,
-`wingfoil://paths`) are already subsumed by `spec-004` §2.1's richer, hand-registered scheme
-(`wingfoil://dna`, `wingfoil://dna/{section}`), so nothing read-only is lost by the omission.
+Neither the Prompts nor the Tools capability declares `listChanged`: the role set is fixed at start (§1), and so is
+the Tool list.
 
-When Tools ship (P5.2.3, v0.4), the production server adds `registerCoreModules` alongside
-`registerReadOnlyResources`, in place of the empty Tools channel. The entry
-point (`wingfoil mcp` + `startMcpServer`) is unchanged by those additions — only the channel-set inside
-`createMcpServer` grows. This spec governs the entry point; `spec-004` governs each channel's contract.
+It does **not** register the Resources the registrar derives from the read-only operations (`wingfoil://dna/show`,
+`wingfoil://paths`, …): they are subsumed by `spec-004` §2.1's richer, hand-registered scheme (`wingfoil://dna`,
+`wingfoil://dna/{section}`), so the server registers the Tools half only.
+
+Every JSON-RPC error the server sends carries the reason alone in `error.message` (`spec-004` §1, `bug-034`): the
+server removes the SDK's `MCP error <code>: ` prefix from an outgoing error response, on whatever transport it is
+connected to — stdio in `startMcpServer`, the in-memory transport in tests. The entry point (`wingfoil mcp` +
+`startMcpServer`) is unchanged by these additions — only the channel set inside `createMcpServer` grew. This spec
+governs the entry point; `spec-004` governs each channel's contract.
 
 ## Consequences
 
@@ -165,3 +167,11 @@ only the semver. §3 was titled "v0.1 channel scope — read-only Resources only
 since v0.2; it now lists the Resources, the Prompts and the empty Tools channel. No channel contract
 of `spec-004` changed here. Edited in place without a supersede or a state change, per `dl-047` (no
 `version:` field).
+
+**Revision (2026-11-20, `task-367-register-the-memory-tools-on-the-production-mcp-server-and-refuse-the-approver-gated-verbs-over-mcp`,
+`bug-034`) — §3: the Memory Tools replace the empty Tools channel.** P5.2.3 ships in v0.4: the server registers the
+Tools the registrar derives from the `memory` module of `CORE_MODULES` (`memory.approve`, `memory.reject` and
+`memory.amend` among them, refusing every call, `cp-003`, `spec-018` §1.2), and none of the Resources it derives; the
+other modules' Tools follow in v0.4. §3 also states that the server removes the SDK's `MCP error <code>: ` prefix from
+the errors it sends. No rule of the entry point, the pre-flight or the transport is amended. Edited in place without a
+supersede or a state change, per `dl-047` (no `version:` field), pending the approver's `memory amend`.
