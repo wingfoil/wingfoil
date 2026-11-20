@@ -1,7 +1,7 @@
 # Sequencer — WingFoil MVP (v0.1 → v1.0)
 
-**Version:** 2.1
-**Date:** 2026-10-18
+**Version:** 2.2
+**Date:** 2026-11-19
 **Status:** Approved
 
 ---
@@ -71,7 +71,7 @@ A budget is set by each release's own `release-planning`. Until a release has on
 | v0.2.2  | —        | **≈ 2.2** by task count; ≈ 4 by `dl-096`'s proxy; expect nearer 4 | v0.2.2 `build-backlog`: 14 tasks ÷ 6.5 per active day; see the note below       |
 | v0.3    | 23       | **≈ 18.6** by task count; ≈ 66 by task size                     | v0.3 `build-backlog` (2026-09-30): 121 tasks ÷ 6.5 per active day; see the note below |
 | v0.3.1  | 1        | ≈ 1 for P4.21; the patch's own work is set by its `release-planning` | proxy, 1 ÷ 14 × 12 ≈ 0.9 (`cp-002`); see the note below                        |
-| v0.4    | 11       | ≈ 9                                                              | proxy, 11 ÷ 14 × 12                                                             |
+| v0.4    | 9        | ≈ 8; the release's own work is set by its `release-planning`     | proxy, 9 ÷ 14 × 12 ≈ 7.7: P4.18, P4.19, P4.20, P4.21, P5.1.1, P5.1.4, P5.2.3, and P1.14, P5.1.5 (`cp-003`); see the note below |
 | v1.0    | 3        | ≈ 5                                                              | the plan's own estimate; the proportional figure is ≈ 3                        |
 
 - **v0.2.2 is a patch with no feature scope of its own**, so the feature proxy does not apply to it. Its
@@ -91,20 +91,25 @@ A budget is set by each release's own `release-planning`. Until a release has on
   (`adopt`, `rekey`; `transfer` in v0.4). The proxy covers the feature alone; the rest of the patch — the pin
   advance, the hand adoption of the template packs and the Memory preparation (`dl-186` S3) — is budgeted by
   the patch's own `release-planning`.
+- **v0.4's feature count (`cp-003`, scheduled 2026-11-19).** The row read 11 features (≈ 9 active days), while
+  `minor-v0.4`'s own `define-scope` left 7 in its `features:` (P4.18, P4.19, P4.20, P4.21, P5.1.1, P5.1.4, P5.2.3;
+  tier 2 and P5.4.5 moved to v1.0). `cp-003` adds P1.14 (`wingfoil verify`) and P5.1.5 (`wingfoil capabilities`)
+  and restates P5.2.3, so the row counts 9 and the proxy is recomputed.
 - Features per release: the `features:` list of `minor-v0.3.md`, `minor-v0.4.md`, `minor-v1.0.md`
-  → 23, 11, 3 (after the scope change below; 26, 8, 3 before it).
+  → 25, 9, 3 (after the scope changes below; 26, 8, 3 before them; v0.3 read 23 at its planning, before P5.3.4 and
+  P5.3.5 joined it at `4c5fec67a`; v0.4 read 11 until `cp-003`'s schedule).
 
 ### Calendar forecast
 
 **Cadence assumption: about 5 active days a week (the rate observed 09-14 → 09-28), with work running
 continuously from October 2026 and no pause.**
 
-- The budgets sum to ≈ 39 active days (4 + 20 + 1 + 9 + 5, taking v0.2.2 at the proxy and v0.3.1 at its
-  feature proxy), **≈ 41 with a retrospective per release**. The v0.3 → v0.4 move below shifts two days between releases and leaves
+- The budgets sum to ≈ 38 active days (4 + 20 + 1 + 8 + 5, taking v0.2.2 at the proxy, v0.3.1 at its
+  feature proxy and v0.4 at its 9-feature proxy), **≈ 40 with a retrospective per release**. The v0.3 → v0.4 move below shifts two days between releases and leaves
   the sum unchanged.
 - At 5 active days a week that is **about 8 weeks**: **v1.0 (the MVP) around late November 2026**,
   against the original plan's 2026-08-07.
-- This is a **projection, not a commitment**. If the cadence changes, recompute: weeks = 41 ÷ active
+- This is a **projection, not a commitment**. If the cadence changes, recompute: weeks = 40 ÷ active
   days per week. If a release's own `release-planning` sets a different budget, it replaces the proxy
   above.
 - **Refresh rule** (`dl-096` Q2 (i)): each release's retrospective records the release's actual active
@@ -133,6 +138,10 @@ approver during v0.3's `release-planning` (`release-planning-rel-v0.3-plan`, rul
   `dl-186`, `dl-187`): `adopt` and `rekey` in v0.3.1, so that this repository's state is adopted into the engine
   before v0.4's planning; `transfer` in v0.4. A patch may carry a feature (`dl-092`; ruled at `cp-002`'s
   impact-analysis).
+- **The governance check (P1.14) and the capabilities query (P5.1.5) are added to v0.4** (v2.2, 2026-11-19,
+  `cp-003` through `vision-change`, `spec-019`, `spec-020`); P5.2.3's MCP Tools no longer approve: `approve`,
+  `reject` and `amend` are listed and refuse in an agent's session (`spec-018` §3.2). v0.4's row counts the 7
+  features of its `define-scope` plus these two.
 
 ---
 

@@ -49,6 +49,9 @@
   with feedback so that I send it back for rework. _(feat: P1.8)_
 * **[MVP · v0.3]** US-4-12: As Morgan, I want on rejection the workflow to jump to a `fallback` step in the same
   workflow, optionally setting new document state (`fallback.set_state`), so that I handle rejections gracefully. _(feat: P4.15)_
+* **[MVP · v0.4]** US-4-14: As Morgan, I want CI to check every pushed commit range with `wingfoil verify --base <rev>`
+  so that a forged approval, an approval without authority or a status changed outside a Memory operation fails the
+  build (exit `1`) instead of reaching the audit trail unnoticed. _(feat: P1.14)_
 
 #### Edge cases (interruption / exception handling)
 

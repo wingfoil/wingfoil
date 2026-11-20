@@ -1,7 +1,7 @@
 # Features — WingFoil
 
-**Version:** 1.17
-**Date:** 2026-10-18  
+**Version:** 1.18
+**Date:** 2026-11-19  
 **Status:** Approved
 
 ---
@@ -35,6 +35,7 @@ persist their configuration and state files.
 | P1.11 | Memory Entries (git-backed)            | 0a, 0b, 1, 2, 3    | All                 | Store documents, decisions, artifacts at the paths each type declares in `.wingfoil/memory.yaml`, inside the project root, with versioning                        | Infrastructure |
 | P1.12 | Keyword Memory Search                  | 1, 3, 5            | Alex, Casey         | Find relevant docs by keyword and metadata                                                                                                                       | Feature        |
 | P1.13 | Memory Element Schema (`memory.yaml`)  | 0a, 0b, 2, 4       | All                 | Define each element type (path pattern, name, description, tags, **allowed states + transitions**) in `.wingfoil/memory.yaml`; basis for per-type state machines | Infrastructure |
+| P1.14 | `wingfoil verify`                      | 4, 5               | Morgan, Casey       | Check a commit range against the Memory and approval contracts (subject grammar, state edges, approval authority, a status changed outside a Memory operation); a gated finding exits `1`, so CI fails on a forged approval | Command        |
 
 ---
 
@@ -124,6 +125,7 @@ Dual interface (CLI for humans, MCP Server for agents).
 | P5.1.2 | `wingfoil init --mode infer` | 0b                       | Morgan, Alex | Initialize WingFoil on existing project with codebase inference                  | Command |
 | P5.1.3 | `wingfoil audit`             | 0b                       | Morgan, Alex | Scan project and summarize current state (languages, frameworks, structure)      | Command |
 | P5.1.4 | CLI UX Improvements          | 0a, 0b, 1, 2, 3, 4, 5, 6 | All          | Better help, formatting, error messages, shell integration                       | Feature |
+| P5.1.5 | `wingfoil capabilities`      | 0a, 0b, 1                | Alex, Morgan, Agents | Print the file formats the build reads, its commands and the capabilities it provides, as one document that depends on the build alone (no project, no git); agents read it as the MCP Resource `wingfoil://capabilities` | Command |
 
 #### **5.2 — MCP Server**
 
@@ -131,7 +133,7 @@ Dual interface (CLI for humans, MCP Server for agents).
 |--------|------------------------------------|------------|--------|-------------------------------------------------------------------------------|--------|
 | P5.2.1 | MCP Resources (DNA + Memory)       | 1, 2, 3    | Agents | Agents can efficiently fetch DNA entries and Memory documents (read-only)     | Server |
 | P5.2.2 | MCP Prompts (role-based templates) | 1, 2, 3    | Agents | Auto-load role-specific directives and instruction templates at session start | Server |
-| P5.2.3 | MCP Tools (state management)       | 1, 2, 3, 4 | Agents | Agents can submit deliverables and update workflow state via MCP tools        | Server |
+| P5.2.3 | MCP Tools (state management)       | 1, 2, 3, 4 | Agents | Agents can submit deliverables and update workflow state via MCP tools; the approver-gated verbs are listed and always refuse | Server |
 
 #### **5.3 — Agent Execution**
 
@@ -282,10 +284,12 @@ operation of P4.21, follows in v0.4.
 | P5.1.1     | `wingfoil init --template {name}` | Low        | Template system                       | Low      | High     | CLI flag for templates            | Flag of P5.1.1 (init); v0.1 had menu selection |
 | P5.1.4     | CLI UX Improvements               | Low        | None                                  | Low      | High     | Polish help, formatting, errors   | Better user experience                         |
 | P5.4.5     | Agent-Assisted Init Wizard        | Medium     | Agent SDK, conversation               | Medium   | High     | Natural language setup            | Alternative to Q&A mode                        |
-| P5.2.3     | MCP Tools (state management)       | Medium     | Workflow state, MCP spec              | Medium   | High     | Agents can update workflow state  | Submit, approve, record memory                 |
+| P5.2.3     | MCP Tools (state management)       | Medium     | Workflow state, MCP spec              | Medium   | High     | Agents can update workflow state  | Submit, park, deprecate, record memory; `approve`, `reject`, `amend` refuse (`E_AGENT_CONTEXT`) |
 | P4.18      | Reference Workflow Templates                | Low        | Workflow config                          | Low      | High     | Fast onboarding with proven workflows | Scrum, Kanban, Lean, Trunk-Based                  |
 | P4.19      | Template Expansion                          | Low        | Workflow config                          | Low      | High     | Generate workflow + directives        | From template selection                           |
 | P4.20      | Template Customization                      | Low        | Workflow config                          | Low      | Medium   | Override defaults                     | Adapt templates to team                           |
+| P1.14      | `wingfoil verify`                 | Medium     | Memory schema (P1.13), commit grammar, DNA roles | Medium | High | Catch forged approvals and out-of-band status changes in CI | `spec-020`; `--base`, `--introduced-at` |
+| P5.1.5     | `wingfoil capabilities`           | Low        | Build metadata, command registry      | Low      | High     | A pack checks a build before it installs | `spec-019`; also the Resource `wingfoil://capabilities` |
 
 ---
 
@@ -333,6 +337,7 @@ operation of P4.21, follows in v0.4.
 - ✓ Element schema + per-type state machines (P1.13) — `.wingfoil/memory.yaml`
 - ✓ Add, Search, History commands (P1.3, P1.5, P1.10)
 - ✓ Keyword search (P1.12)
+- ✓ Commit-range governance check (P1.14) — `wingfoil verify`, **v0.4**
 
 **Pillar 2 — Project DNA:**
 
@@ -359,7 +364,7 @@ operation of P4.21, follows in v0.4.
 
 **Pillar 5 — Interaction Layer:**
 
-- ✓ CLI Commands (P5.1) — init, audit, etc.
+- ✓ CLI Commands (P5.1) — init, audit, capabilities, etc.
 - ✓ MCP Server (P5.2) — Resources, Prompts, Tools
 - ✓ Agent Execution (P5.3) — auto-loaded context
 - ✓ Agent Configurations (P5.4) — roles, directive binding
@@ -369,7 +374,7 @@ operation of P4.21, follows in v0.4.
 - ✓ Reference Workflow Templates (P4.18–P4.20) — Scrum, Kanban, Lean, Trunk-Based — **v0.4**
 - ✓ Notification System (X1) — Basic approvals
 
-**Total Features (MVP):** 66 core features across all pillars
+**Total Features (MVP):** 68 core features across all pillars
 **Release Timeline:** 5 weeks (v0.1 → v1.0)
 **Target Adoption:** ≥1 real team by v0.2, ≥3 teams by v1.0
 

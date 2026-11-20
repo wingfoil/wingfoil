@@ -61,7 +61,8 @@
   `wingfoil memory approve [document-id] --reason "..."` recording approver, timestamp, and reason so that review is
   auditable and tied to directives. _(feat: P1.7)_
 * **[MVP · v0.4]** US-2-11: As the agent, I want to submit deliverables and update workflow state via MCP Tools so that I
-  record review decision without manual intervention. _(feat: P5.2.3)_
+  advance my own work without manual intervention, while an approval, a rejection or an amendment stays the approver's
+  (the Tools for them refuse). _(feat: P5.2.3)_
 
 ### Future (Post-MVP)
 

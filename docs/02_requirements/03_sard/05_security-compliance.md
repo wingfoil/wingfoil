@@ -21,10 +21,13 @@
   also record a reason.
 * **Rationale:** Auditability is a core value proposition (Casey, Morgan).
 * **Fit Criterion:** `git log` verification over all `.wingfoil/` changes shows author + timestamp for every change with
-  **0** "unknown author"; `memory history` lists each transition with author, timestamp, and reason.
+  **0** "unknown author"; `memory history` lists each transition with author, timestamp, and reason. A commit range in
+  which a forged approval or an out-of-band status change exists makes `wingfoil verify` exit `1`.
 * **Traceability:** Feature P1.2 (US-0A-02, BDD `p1-memory/P1.2-versioning-audit-trail.feature`); Feature P1.7
   (US-2-10, BDD `p1-memory/P1.7-memory-approve.feature`); Feature P1.8 (US-4-11, BDD `p1-memory/P1.8-memory-reject.feature`);
-  Feature P1.10 (US-5-08, BDD `p1-memory/P1.10-memory-history.feature`).
+  Feature P1.10 (US-5-08, BDD `p1-memory/P1.10-memory-history.feature`); Feature P1.14 (US-4-14, BDD
+  `p1-memory/P1.14-verify.feature`). The commit-range check is
+  `spec-020-the-governance-check-verb-the-authority-and-state-rules-over-a-commit-range`, added by `cp-003` (2026-11-19).
 
 ### REQ-SEC-03 — Role-based approval authority
 
@@ -41,13 +44,18 @@
   predicate, one string, so `requireApprovalAuthority` takes no verb parameter for it and an operator learns a single
   message. An attempt from a session an agent marker marks (`spec-018` §1) is rejected first, whoever the git
   identity is, with `"E_AGENT_CONTEXT: '<command>' needs the approver and does not run in an agent's session
-  (<markers>): …"` (`spec-018` §3.2), and the state is unchanged.
+  (<markers>): …"` (`spec-018` §3.2), and the state is unchanged. A commit range in which a forged approval or an
+  out-of-band status change exists makes `wingfoil verify` exit `1`.
 * **Traceability:** Feature P1.7 (US-2-10, BDD `p1-memory/P1.7-memory-approve.feature`); Feature P1.8 (US-4-11,
   BDD `p1-memory/P1.8-memory-reject.feature`); Feature P4.14 (US-4-07,
-  BDD `p4-workflow/P4.14-approval-routing.feature`). Widened from `approve` alone to both approval-gate verbs by
+  BDD `p4-workflow/P4.14-approval-routing.feature`); Feature P1.14 (US-4-14, BDD `p1-memory/P1.14-verify.feature`);
+  Feature P5.2.3 (US-2-11, BDD `p5-interaction/P5.2.3-mcp-tools.feature`), whose approver-gated Tools always refuse
+  under this requirement (`spec-018` §3.2). Widened from `approve` alone to both approval-gate verbs by
   `dl-063-p1-8-reject-message-and-authority-trace` (2026-09-21, clause B), which also added P1.8's authority
   scenario; `amend` named beside them, as it runs the same check (`dl-108` A2 (i), `bug-395`). The agent-session
   refusal is `dl-212` D1, specified by `spec-018-approval-binding-l0-agent-markers-attribution-trailers-and-the-approver-verb-refusal`.
+  The commit-range check and the P1.14 and P5.2.3 links are `cp-003` (2026-11-19), the check specified by
+  `spec-020-the-governance-check-verb-the-authority-and-state-rules-over-a-commit-range`.
   `memory deprecate` stays outside this requirement: it is not an approval gate (no `Approver:` line, no
   authority check), per `dl-027-req-sec-04-deprecate-reason-scope`.
 
