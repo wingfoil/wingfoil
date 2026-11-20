@@ -72,3 +72,7 @@ parity of illegal-transition refusals is neither met nor tested on the Tool chan
 
 Captured on 2026-10-06 by `bug-ingest-rel-v0.3-w2b4b-review-findings-plan`, from `task-184`'s developer notes and
 review F4 (W2 B4b, `dev-loop-rel-v0.3-plan`), reproduced against `main` at `f15096a2`.
+
+### Retrospective
+
+- Closed by task-364 (`dl-040` option 1): `registerCoreModules` now gives each mutating operation a Tool whose `inputSchema` is derived from its `positional`, `options` and `flags` (`deriveToolInputSchema`), checks a call's arguments and maps them to the `ParamsContext` the CLI registrar builds (`toolArgumentsToParams`), and `connectCoreModuleSurface` passes the CLI's own builder (`buildCoreParams`) instead of the root alone (this bug's step 3). The REQ-SEC-05 case is asserted in `test/mcp/read-only-agent-channel.test.ts`: the real `memory.approve` Tool on a draft bug answers `illegal transition draft -> (none) for type 'bug'`, its `structuredContent` equals the CLI's `--format json` refusal for the same call, and nothing is persisted by either surface. The production `wingfoil mcp` server still registers no Tool; serving these is `task-367`'s.
