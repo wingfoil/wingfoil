@@ -5,7 +5,7 @@ title: "WingFoil v0.4 - Interaction Layer + Polish"
 status: in-development
 version: "v0.4"
 pillar: "P5"
-features: [P4.18, P4.19, P4.20, P4.21, P5.1.1, P5.1.4, P5.2.3]
+features: [P1.14, P4.18, P4.19, P4.20, P4.21, P5.1.1, P5.1.4, P5.1.5, P5.2.3]
 requirements: "docs/03_backlog/04_backlog/by-release/v0.4.json"
 release-line: "v1"
 backlog_committed: 50   # optional — set at release-planning's commit-backlog: the count of the release's tasks then (dl-100 §2); the growth threshold's baseline (memory.yaml `release.growth_threshold`)
@@ -37,6 +37,8 @@ R6 and S2):
   decision-logs that place themselves after v1.0.
 - **Change-proposals:** `cp-001` (a feature for the vision-change process, P4.22) is accepted into v0.4; its
   `update-vision`, downcasts and `schedule` run as one task, and P4.22 joins `features:` when `schedule` stamps it.
+  `cp-003` (P1.14 `wingfoil verify`, P5.1.5 `wingfoil capabilities`, P5.2.3 restated: the approval Tools refuse) is
+  scheduled into v0.4 (2026-11-19, `task-360`); P1.14 and P5.1.5 join `features:`.
 
 **Budget and reservation** (`dl-100` §4 (b), `dl-191`, `dl-133`): about 125–135 tasks after tier 2 left: tier 1 and
 the decision-logs ratified for v0.4 at `reconcile-governance`, and about 40 fix tasks; build-backlog fixes the count. At least 20 % of the task budget is reserved for bug fixes and governance debt,

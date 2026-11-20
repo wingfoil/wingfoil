@@ -75,10 +75,9 @@ function hasAnyMutatingOperation(modules: readonly CoreModule[]): boolean {
 
 /**
  * The actual Tool names an MCP client sees for `modules`, converted to the CLI's `noun verb` form
- * (spec-004 §4.1: `.` <-> ` `). The MCP SDK only installs a `tools/list` request handler the first
- * time a Tool is registered (`McpServer`'s lazy `setToolRequestHandlers`) — with zero mutating
- * operations, `tools/list` is a protocol-level "Method not found", not an empty list, so that case
- * short-circuits to `[]` without making the call (structurally equivalent: 0 Tools registered).
+ * (spec-004 §4.1: `.` <-> ` `). The registrar answers `tools/list` itself (task-364), so a registry
+ * with zero mutating operations lists `[]`; that case short-circuits to `[]` without making the call,
+ * which is structurally equivalent to the empty list `tools/list` returns (0 Tools registered).
  */
 async function actualMcpToolsAsCliForm(modules: readonly CoreModule[]): Promise<string[]> {
   if (!hasAnyMutatingOperation(modules)) return [];
@@ -193,27 +192,35 @@ describe('REQ-SYS-05 parity — production registry (src/core/index.ts CORE_MODU
 
     const { resources } = await client.listResources();
     expect(resources.map((r) => r.uri).sort()).toEqual([
-      // task-220's `agent.agentShow` and task-240's `agent.agentList` are `mutates: false`: the
-      // mechanical registrar derives a Resource for each here. The production server does not run
-      // `registerCoreModules`, so it serves neither before v0.4 (spec-016 §7, §8).
+      // task-240's `agent.agentList` is `mutates: false`: the mechanical registrar derives a Resource
+      // for it here. The production server does not run `registerCoreModules`, so it does not serve it
+      // before v0.4 (spec-016 §7, §8).
       'wingfoil://agent/list',
-      'wingfoil://agent/show',
       'wingfoil://directives/list',
       'wingfoil://dna/show',
-      // task-049-memory-history's `memory.memoryHistory` is `mutates: false`, so the mechanical
-      // registrar derives a Resource for it, exactly as it did for `memory.memorySearch`.
-      'wingfoil://memory/history',
       'wingfoil://memory/search',
       'wingfoil://paths',
       'wingfoil://workflow/list',
       // task-216's `workflow.workflowNext` (read-only): the mechanical test-only Resource; the production
       // server serves `wingfoil://workflows/-/next` instead (task-239, spec-017 §9).
       'wingfoil://workflow/next',
-      // task-204's `workflow.workflowShow` (read-only); not served by the production server (spec-017 §9).
-      'wingfoil://workflow/show',
       // task-225's `workflow.workflowStatus` (read-only): the mechanical test-only Resource; the production
       // server serves `wingfoil://workflows/-/status` instead (task-239, spec-017 §9).
       'wingfoil://workflow/status',
+    ]);
+    // task-364 (`dl-040` option 1, `spec-004` §2.1, `spec-006` §3): a read-only operation that declares a
+    // required positional is a URI template, which `resources/templates/list` lists and `resources/list` does not.
+    const { resourceTemplates } = await client.listResourceTemplates();
+    expect(resourceTemplates.map((template) => template.uriTemplate).sort()).toEqual([
+      // task-220's `agent.agentShow` is `mutates: false`: the mechanical registrar derives a Resource for
+      // it here; the production server does not serve it before v0.4 (spec-016 §7, §8). The run id is one
+      // percent-encoded segment (`spec-006` §3).
+      'wingfoil://agent/show/{run-id}',
+      // task-049-memory-history's `memory.memoryHistory` is `mutates: false`, so the mechanical
+      // registrar derives a Resource for it, exactly as it did for `memory.memorySearch`.
+      'wingfoil://memory/history/{id}',
+      // task-204's `workflow.workflowShow` (read-only); not served by the production server (spec-017 §9).
+      'wingfoil://workflow/show/{ref}',
     ]);
     // Every `mutates: true` operation is registered ONLY as a Tool (never a Resource), so none appears
     // above; the Tools list below is the mutating set the surface advertises.
@@ -251,5 +258,38 @@ describe('REQ-SYS-05 parity — production registry (src/core/index.ts CORE_MODU
     // cross-check below ties the Tools count to the registry's `mutates: true` count.
     const mutatingCount = CORE_MODULES.flatMap((module) => Object.values(module.operations)).filter((operation) => operation.mutates).length;
     expect(tools).toHaveLength(mutatingCount);
+  });
+
+  // task-364 AC 5 (`dl-040` option 1, `spec-004` §4.3): the CLI's parameters and the Tool's input schema are
+  // derived from the same metadata, so for every mutating operation they carry the same names (the CLI's
+  // `--co-author` / `--ai-model` aside, which are not Tool inputs, design D6) and the same required ones.
+  it('every mutating operation\'s CLI parameters and Tool input properties carry the same names and the same required ones', async () => {
+    const commands = buildCliCommands(CORE_MODULES as CoreModule[], { resolveRoot: () => '/fixture-root', buildParams: () => ({}) });
+    const server = new McpServer({ name: 'parity-test-params', version: '0.0.0' });
+    registerCoreModules(server, CORE_MODULES as CoreModule[], { resolveRoot: () => '/fixture-root', buildParams: () => ({}) });
+    const [serverTransport, clientTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: 'parity-test-params-client', version: '0.0.0' });
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    const { tools } = await client.listTools();
+
+    const mutatingCommands = commands.filter((command) => command.mutates);
+    expect(mutatingCommands.length).toBe(tools.length);
+    const agentOptions = new Set(['co-author', 'ai-model']);
+    for (const command of mutatingCommands) {
+      const name = `${command.noun}.${command.verb}`;
+      const tool = tools.find((candidate) => candidate.name === name);
+      const cliNames = [
+        ...(command.positional ? [command.positional.name] : []),
+        ...(command.flags ?? []).map((flag) => flag.name),
+        ...(command.options ?? []).map((option) => option.name),
+      ].filter((parameter) => !agentOptions.has(parameter));
+      const cliRequired = [
+        ...(command.positional?.required === true ? [command.positional.name] : []),
+        ...(command.options ?? []).filter((option) => option.required === true).map((option) => option.name),
+      ];
+      expect({ name, parameters: Object.keys(tool?.inputSchema.properties ?? {}).sort() }).toEqual({ name, parameters: cliNames.sort() });
+      expect({ name, required: [...(tool?.inputSchema.required ?? [])].sort() }).toEqual({ name, required: cliRequired.sort() });
+    }
+    await client.close();
   });
 });

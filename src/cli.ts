@@ -22,6 +22,7 @@
 import { exitWith } from './cli/exit';
 import { buildProgram } from './cli/program';
 import { CORE_MODULES } from './core';
+import { buildCoreParams } from './core/registry';
 import { resolveProjectRoot } from './core/surface-reads';
 import { UsageError } from './core/usage-error';
 
@@ -35,12 +36,10 @@ buildProgram(CORE_MODULES, {
     if (project !== undefined && project.trim().length === 0) throw new UsageError(BLANK_PROJECT);
     return resolveProjectRoot(process.cwd(), { project });
   },
-  // task-026's single bare `positional` (`ctx.positional`, read by `dnaShowFn`/`pathsFn` as
-  // section/category), task-025's full `positionals` list (read by `dnaSetFn` as `<key> <value>`),
-  // task-028's additive `flags` spread (e.g. `paths`'s `--list` -> `list: true`), plus task-020's
-  // value-bearing `options` record (read by `memoryAddFn` as `type`/`title`/`tags`). A command with no
-  // positional/flags/options is unaffected.
-  buildParams: (ctx) => ({ root: ctx.root, positional: ctx.positional, positionals: ctx.positionals, options: ctx.options, ...(ctx.flags ?? {}) }),
+  // The one params builder (task-364 design D11, `src/core/registry.ts`): task-026's single bare `positional`,
+  // task-025's full `positionals` list, task-028's additive `flags` spread (e.g. `paths`'s `--list` -> `list: true`)
+  // and task-020's value-bearing `options` record. The MCP registrar's callers pass the same function.
+  buildParams: buildCoreParams,
 })
   .then((program) => program.parseAsync(process.argv))
   .catch((error: unknown) => {

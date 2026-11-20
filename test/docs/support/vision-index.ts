@@ -74,7 +74,7 @@ function header(text: string, key: string): string | null {
  * primary-persona notes (cited in *Quick lookup* and in the section maps) and the P4.18–P4.20 rows. A new one is
  * added here deliberately, in the same change as the index.
  */
-export const INDEX_ANCHORS: ReadonlySet<string> = new Set(['01_product-brief.md:L108', '08_mvp-canvas.md:L57', '06_features.md:L102–104']);
+export const INDEX_ANCHORS: ReadonlySet<string> = new Set(['01_product-brief.md:L108', '08_mvp-canvas.md:L57', '06_features.md:L103–105']);
 
 /** The text of the `## <title>` section of `index`, up to the next `---` rule or `## ` heading. */
 function section(index: string, title: RegExp): string | null {

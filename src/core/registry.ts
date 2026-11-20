@@ -8,6 +8,7 @@
  * mapping — spec-006 §5), a deterministic (REQ-SYS-07) enumerator, and the generic parity-diff
  * primitive the REQ-SYS-05 fit criterion's "0 unmatched operations" assertion is built on.
  */
+import { DRY_RUN_FLAG } from './dry-run';
 import type { CoreResult } from './types';
 
 /**
@@ -22,8 +23,8 @@ export type CoreFn<P, R> = (params: P) => Promise<CoreResult<R>>;
  * {@link CoreOperation.flags}, which are BOOLEAN presence flags (`--list`): an option carries a
  * string VALUE (`.option('--<name> <value>')`). `required` is declarative metadata: the operation's
  * own `CoreFn` enforces it (throwing a `UsageError` → exit 2, consistent with `dna set`'s in-fn arg
- * validation, task-025); it is surfaced here so `src/cli/program.ts` (and, later, the MCP Tool
- * input schema) can describe the option without duplicating that knowledge. task-021's
+ * validation, task-025); it is surfaced here so `src/cli/program.ts` and the MCP Tool input schema
+ * ({@link deriveToolInputSchema}, task-364) describe the option without duplicating that knowledge. task-021's
  * `memory submit`/etc. reuse this exact mechanism — the ONE value-option seam, not a parallel one.
  */
 export interface CoreOption {
@@ -175,8 +176,9 @@ export interface CoreOperation<P = unknown, R = unknown> {
    * {name:'tags'}]` for `memory add`). Additive alongside {@link flags}: an operation declaring none
    * keeps exactly the bare shape it had before. `src/cli/program.ts` registers one
    * `--{name} <value>` Commander option per entry and threads the parsed values into
-   * {@link ParamsContext.options}; the MCP surface never populates them (task-030 wires the Tool input
-   * schema). See {@link CoreOption}.
+   * {@link ParamsContext.options}; the MCP registrar derives the same entries into the Tool's input
+   * schema ({@link deriveToolInputSchema}) and threads a Tool call's arguments into the same record
+   * ({@link toolArgumentsToParams}, task-364, `dl-040` option 1). See {@link CoreOption}.
    */
   readonly options?: readonly CoreOption[];
   /**
@@ -296,9 +298,11 @@ export function deriveVerb(moduleName: string, operationName: string): string {
  * operand of the invocation: `src/cli/program.ts` reads the operands of every derived command, whether
  * or not its operation declares a {@link CorePositional} (which only names the operand for `--help`),
  * and threads them through `command.run` into `ctx.positional`/`ctx.positionals`; `flags` is populated from the matching
- * operation's `CoreOperation.flags` declaration (`./registry.ts`). The MCP adapter's own mechanical,
- * zero-argument Resource/Tool registration (`src/mcp/registrar.ts`) never populates either — a
- * `buildParams` that ignores both (every `ParamsBuilder` before this task) keeps working unchanged.
+ * operation's `CoreOperation.flags` declaration (`./registry.ts`). The MCP registrar (`src/mcp/registrar.ts`)
+ * populates the same fields for a Tool call, from its arguments, through {@link toolArgumentsToParams}
+ * (task-364, `dl-040` option 1); a Resource read populates `positional`/`positionals` from a required
+ * positional's URI template variable and nothing else, and a Resource with no template variable serves
+ * the call that gives none of the optional parameters (`spec-006` §3).
  */
 export interface ParamsContext {
   readonly moduleName: string;
@@ -312,10 +316,9 @@ export interface ParamsContext {
    * operation's `buildParams` reads it under whatever param name that operation's own `CoreFn`
    * expects (`dnaShow`'s `section`, `paths`'s `category`), and an operation needing a *required*
    * positional still owns that validation in its own `CoreFn` — this seam only carries the raw
-   * value from the CLI adapter through to `buildParams`. The MCP surface has no equivalent
-   * mechanical concept today (a zero-argument Resource template can't carry one — spec-004 §2.1's
-   * own `wingfoil://dna/{section}` addressing is the MCP-side answer, wired independently in
-   * `src/mcp/dna-resource.ts`), so an MCP `buildParams` simply never sets this field.
+   * value from the CLI adapter through to `buildParams`. On the MCP surface a Tool call sets it from
+   * the argument named after the declared positional, and a Resource read from the URI template
+   * variable of a required positional (task-364); a Resource without one leaves it unset.
    */
   readonly positional?: string;
   /**
@@ -330,25 +333,25 @@ export interface ParamsContext {
    * {@link positional} is exactly `positionals?.[0]` and is kept unchanged for the single-positional
    * read ops that predate this (`dna show [section]`, `paths [category]`), so their `buildParams` and
    * `CoreFn`s are untouched; the four DNA path verbs (`dnaSet` and the three mutation verbs) read
-   * `positionals` instead. Same additive contract as {@link positional}/{@link flags}: the MCP surface never
-   * populates it (a zero-argument Tool/Resource template carries no positional — see {@link positional}),
-   * so an MCP `buildParams` simply never sets it.
+   * `positionals` instead. On the MCP surface it is set exactly when {@link positional} is, as the
+   * one-element list (a Tool call with no positional argument sets `[]`, as the CLI does), see {@link positional}.
    */
   readonly positionals?: readonly string[];
   /**
    * This operation's declared {@link CoreOperation.flags} names mapped to their parsed boolean
    * values (task-028-implement-paths-category — e.g. `{ list: true }` for `wingfoil paths sources
-   * --list`). Additive alongside `positional`: an operation declaring no flags never has this set,
-   * and the MCP surface never populates it (same rationale as `positional`).
+   * --list`). Additive alongside `positional`: an operation declaring no flags never has this set.
+   * A Tool call sets it from its boolean arguments, every declared flag present (`false` when not
+   * given), as the CLI does; a Resource read never sets it (task-364).
    */
   readonly flags?: Readonly<Record<string, boolean>>;
   /**
    * This operation's declared {@link CoreOperation.options} names mapped to their parsed string
    * VALUES (task-020-implement-memory-add — e.g. `{ type: 'decision', title: 'Use PostgreSQL' }` for
    * `wingfoil memory add --type decision --title 'Use PostgreSQL'`). Additive alongside `flags`: an
-   * operation declaring no value options never has this set, and the MCP surface never populates it
-   * (a zero-argument Tool template carries none — same rationale as `positional`/`flags`; task-030
-   * wires the MCP Tool input schema separately). An absent optional option is simply omitted from the
+   * operation declaring no value options never has this set. A Tool call sets it from its string
+   * arguments through {@link toolArgumentsToParams}, in the CLI's shape; a Resource read never sets it
+   * (task-364). An absent optional option is simply omitted from the
    * record rather than present-as-`undefined`. A {@link CoreOption.repeatable} option's value is the
    * array of its occurrences (task-110).
    */
@@ -361,6 +364,173 @@ export interface ParamsContext {
  * so the registrars stay operation-agnostic (spec-006 §2).
  */
 export type ParamsBuilder = (ctx: ParamsContext) => unknown;
+
+/**
+ * The one params builder both surfaces use (task-364 design D11): the context's `root`, `positional`,
+ * `positionals` and `options` as they are, plus every flag spread under its own name (`paths`'s
+ * `--list` → `list: true`). `src/cli.ts` passes it to `buildProgram`, and an MCP server passes it to
+ * `registerCoreModules`, so "the params the CLI builds" for an invocation is one function. Pure (REQ-SYS-07).
+ */
+export function buildCoreParams(ctx: ParamsContext): Record<string, unknown> {
+  return { root: ctx.root, positional: ctx.positional, positionals: ctx.positionals, options: ctx.options, ...(ctx.flags ?? {}) };
+}
+
+/** One property of a {@link ToolInputSchema}: a string, a boolean, or an array of strings, with the declaration's description. */
+export interface ToolInputProperty {
+  readonly type: 'string' | 'boolean' | 'array';
+  /** Present only on an `array`: its items are strings. */
+  readonly items?: { readonly type: 'string' };
+  readonly description?: string;
+}
+
+/**
+ * The JSON Schema of a Tool's arguments (`spec-004` §4.3, task-364): one property per declared parameter
+ * under its CLI spelling, the required ones listed, nothing else accepted.
+ */
+export interface ToolInputSchema {
+  readonly type: 'object';
+  readonly properties: Readonly<Record<string, ToolInputProperty>>;
+  /** The required parameters, positional first; absent when none is required. */
+  readonly required?: readonly string[];
+  readonly additionalProperties: false;
+}
+
+/** One parameter of an operation as a Tool takes it: its name, its property, whether it is required, and what it is. */
+interface ToolParameter {
+  readonly name: string;
+  readonly property: ToolInputProperty;
+  readonly required: boolean;
+  readonly kind: 'positional' | 'option' | 'flag' | 'dry-run';
+}
+
+/** A property with the description, when the declaration has one. */
+function property(type: 'string' | 'boolean', description: string | undefined): ToolInputProperty {
+  return description === undefined ? { type } : { type, description };
+}
+
+/**
+ * The parameters a Tool of `operation` takes, in schema order (`spec-004` §4.3, design D2, D3, D6): the
+ * positional, each option, each flag, in declaration order, then `dry-run` when the operation mutates.
+ * `--co-author` and `--ai-model`, which the CLI derives from `mutates`, are not Tool inputs (W1-R3).
+ */
+function toolParameters(operation: CoreOperation): ToolParameter[] {
+  const out: ToolParameter[] = [];
+  const positional = operation.positional;
+  if (positional !== undefined) {
+    out.push({ name: positional.name, property: property('string', positional.description), required: positional.required === true, kind: 'positional' });
+  }
+  for (const option of operation.options ?? []) {
+    const prop: ToolInputProperty =
+      option.repeatable === true
+        ? { type: 'array', items: { type: 'string' }, ...(option.description === undefined ? {} : { description: option.description }) }
+        : property('string', option.description);
+    out.push({ name: option.name, property: prop, required: option.required === true, kind: 'option' });
+  }
+  for (const flag of operation.flags ?? []) {
+    out.push({ name: flag.name, property: property('boolean', flag.description), required: false, kind: 'flag' });
+  }
+  if (operation.mutates) {
+    out.push({ name: DRY_RUN_FLAG.name, property: property('boolean', DRY_RUN_FLAG.description), required: false, kind: 'dry-run' });
+  }
+  return out;
+}
+
+/**
+ * Derive the input schema of `operation`'s Tool from its parameter metadata — the `positional`,
+ * `options` and `flags` the CLI derives its arguments from (task-364, `dl-040` option 1, `spec-004` §4.3).
+ * A positional or an option is a `string`, a repeatable option an `array` of strings, a flag and
+ * `dry-run` a `boolean`. An operation that declares nothing takes nothing (plus `dry-run` when it
+ * mutates, design D4). Pure (REQ-SYS-07): the same declaration derives the same schema, in the same order.
+ */
+export function deriveToolInputSchema(operation: CoreOperation): ToolInputSchema {
+  const parameters = toolParameters(operation);
+  const properties: Record<string, ToolInputProperty> = {};
+  for (const parameter of parameters) properties[parameter.name] = parameter.property;
+  const required = parameters.filter((parameter) => parameter.required).map((parameter) => parameter.name);
+  return { type: 'object', properties, ...(required.length > 0 ? { required } : {}), additionalProperties: false };
+}
+
+/** What a Tool call's arguments become (see {@link toolArgumentsToParams}). */
+export type ToolArgumentsOutcome =
+  | {
+      readonly ok: true;
+      /** The fields of the {@link ParamsContext} the CLI registrar builds for the same invocation. */
+      readonly context: Pick<ParamsContext, 'positional' | 'positionals' | 'flags' | 'options'>;
+      /** Whether the call asked for `dry-run` (a mutating operation only). */
+      readonly dryRun: boolean;
+    }
+  | { readonly ok: false; readonly reason: string };
+
+/** The type refusal of `parameter`'s value, or `undefined` when the value has its schema type. */
+function typeRefusal(parameter: ToolParameter, value: unknown): string | undefined {
+  if (parameter.property.type === 'boolean') {
+    return typeof value === 'boolean' ? undefined : `invalid argument: ${parameter.name} must be a boolean`;
+  }
+  if (parameter.property.type === 'array') {
+    return Array.isArray(value) && value.every((item) => typeof item === 'string')
+      ? undefined
+      : `invalid argument: ${parameter.name} must be an array of strings`;
+  }
+  return typeof value === 'string' ? undefined : `invalid argument: ${parameter.name} must be a string`;
+}
+
+/**
+ * Check a Tool call's `args` against `operation`'s {@link deriveToolInputSchema} and map them to the
+ * {@link ParamsContext} fields the CLI registrar builds for the same invocation (task-364, `bug-272`,
+ * `spec-004` §4.3, design D10). The first finding refuses the call, in this order: an argument the
+ * schema does not name (`unknown argument: <name>`, the first in sorted order); then, in schema order,
+ * a value of the wrong type (`invalid argument: <name> must be a string` / `a boolean` / `an array of
+ * strings`) or a required parameter that is absent (`missing required argument: <name>`).
+ *
+ * The context mirrors `src/cli/registrar.ts`: `positionals` is the positional's one value or `[]`, and
+ * `positional` its first element; `flags` holds every declared flag (`false` when not given), or is
+ * `undefined` when the operation declares none (`dry-run` goes to `dryRun`, never to `flags`); `options`
+ * holds the given declared options (a repeatable one as its array), or is `undefined` when the operation
+ * declares none, or when none is given on an operation for which the CLI derives `--co-author`. Pure.
+ */
+export function toolArgumentsToParams(operation: CoreOperation, args: Readonly<Record<string, unknown>> | undefined): ToolArgumentsOutcome {
+  const given = args ?? {};
+  const parameters = toolParameters(operation);
+  const known = new Set(parameters.map((parameter) => parameter.name));
+  const unknown = Object.keys(given).filter((name) => !known.has(name)).sort();
+  if (unknown.length > 0) return { ok: false, reason: `unknown argument: ${unknown[0]}` };
+
+  for (const parameter of parameters) {
+    const value = given[parameter.name];
+    if (value === undefined) {
+      if (parameter.required) return { ok: false, reason: `missing required argument: ${parameter.name}` };
+      continue;
+    }
+    const refusal = typeRefusal(parameter, value);
+    if (refusal !== undefined) return { ok: false, reason: refusal };
+  }
+
+  const positionalName = operation.positional?.name;
+  const positionalValue = positionalName === undefined ? undefined : given[positionalName];
+  const positionals: readonly string[] = typeof positionalValue === 'string' ? [positionalValue] : [];
+
+  const declaredFlags = operation.flags ?? [];
+  const flags =
+    declaredFlags.length === 0 ? undefined : Object.fromEntries(declaredFlags.map((flag) => [flag.name, given[flag.name] === true]));
+
+  const declaredOptions = operation.options ?? [];
+  let options: Record<string, string | readonly string[]> | undefined;
+  if (declaredOptions.length > 0) {
+    const values: Record<string, string | readonly string[]> = {};
+    for (const option of declaredOptions) {
+      const value = given[option.name];
+      if (typeof value === 'string' || Array.isArray(value)) values[option.name] = value as string | readonly string[];
+    }
+    const takesCoAuthor = operation.mutates && operation.agentAttribution !== false;
+    options = takesCoAuthor && Object.keys(values).length === 0 ? undefined : values;
+  }
+
+  return {
+    ok: true,
+    context: { positional: positionals[0], positionals, flags, options },
+    dryRun: operation.mutates && given[DRY_RUN_FLAG.name] === true,
+  };
+}
 
 /** The result of {@link computeParityDiff}: entries present on only one side, each sorted. */
 export interface ParityDiff {

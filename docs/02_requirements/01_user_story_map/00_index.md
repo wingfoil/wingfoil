@@ -113,6 +113,7 @@ journeys). Table ordered by pillar.
 | P1.11   | Memory Entries (git-backed)           | v0.1    | MVP | 0a           |
 | P1.12   | Keyword Memory Search                 | v0.1    | MVP | 1            |
 | P1.13   | Memory Element Schema (`memory.yaml`) | v0.1    | MVP | 0a           |
+| P1.14   | `verify`                              | v0.4    | MVP | 4            |
 
 ### Pillar 2 — Project DNA
 
@@ -171,6 +172,7 @@ journeys). Table ordered by pillar.
 | P5.1.2  | `init --mode infer`                 | v0.4      | MVP | 0b           |
 | P5.1.3  | `audit`                             | v0.4      | MVP | 0b           |
 | P5.1.4  | CLI UX Improvements (cross-cutting) | v0.4      | MVP | 0a           |
+| P5.1.5  | `capabilities`                      | v0.4      | MVP | 0a           |
 | P5.2.1  | MCP Resources (DNA + Memory)        | v0.1      | MVP | 1            |
 | P5.2.2  | MCP Prompts (role-based)            | v0.2      | MVP | 1            |
 | P5.2.3  | MCP Tools (state management)        | v0.4      | MVP | 2            |
@@ -221,14 +223,15 @@ enforcement*, the Post-MVP Opportunity column of `05_journeys.md` → Journey 4)
 
 > **Rule:** 100% of features in `08_mvp-canvas.md` must be mapped under **[MVP]**.
 
-- **Total MVP features (`06_features.md` → "Total Features (MVP): 66"):** 66
-- **Features mapped under [MVP] in this story map:** 64 (the 64 rows in Pillar tables 1–5 + X1 above)
+- **Total MVP features (`06_features.md` → "Total Features (MVP): 68"):** 68
+- **Features mapped under [MVP] in this story map:** 66 (the 66 rows in Pillar tables 1–5 + X1 above)
 - **Unmapped MVP features:** 2 — P5.3.4 `agent list` and P5.3.5 `agent show`, added to `06_features.md` without a
-  user story (re-measured 2026-10-18, `cp-002`; `bug-399`)
-- **MVP coverage:** **64/66**
+  user story (re-measured 2026-11-19, `cp-003`; `bug-399`)
+- **MVP coverage:** **66/68**
 
-Coverage verification per pillar (re-measured 2026-10-18 against `06_features.md`'s pillar tables): P1 = 13/13,
-P2 = 5/5, P3 = 8/8, P4 = 21/21, P5 = 15/17 (5.1×4, 5.2×3, 5.3×3 of 5, 5.4×5), X1 = 2/2 → **64/66**.
+Coverage verification per pillar (re-measured 2026-11-19 against `06_features.md`'s pillar tables, after `cp-003` added
+P1.14 and P5.1.5): P1 = 14/14, P2 = 5/5, P3 = 8/8, P4 = 21/21, P5 = 16/18 (5.1×5, 5.2×3, 5.3×3 of 5, 5.4×5), X1 = 2/2
+→ **66/68**.
 
 ### Edge-case coverage (Stop-Check — second clause)
 
@@ -256,5 +259,5 @@ of each journey.
 | **Total** |                     |                    | **15** |
 
 - **Journeys with ≥1 edge-case story:** **8 / 8**
-- **Edge-case stories total:** **14** (all **[MVP]**)
+- **Edge-case stories total:** **15** (all **[MVP]**)
 - **Edge-case coverage:** **100% ✅**

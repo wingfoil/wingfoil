@@ -10,9 +10,10 @@
  * structural mechanisms already exist (task-006 registrar + task-011 resources + task-039/058 prompts);
  * this suite asserts the REQ-SEC-05 property
  * end-to-end over a real MCP `Client`. The AC case of a *mutating* Tool call rejected on an illegal
- * state-machine transition, identical to the CLI, is asserted here only through the registrar's
- * `isError` mechanism, with a synthetic op: no test calls a real `CORE_MODULES` mutating Tool into
- * an illegal-transition refusal (task-184 recorded it as unasserted, dl-121 T1). The production
+ * state-machine transition, identical to the CLI, is asserted twice: through the registrar's `isError`
+ * mechanism with a synthetic op, and (task-364, `bug-272`) by calling the real `CORE_MODULES` Tool
+ * `memory.approve` on a draft element of a committed fixture, whose refusal text and details equal the
+ * CLI's `--format json` refusal for the same call and after which nothing is persisted. The production
  * server registers no Tool at all (see the last `describe`), and the registry's mutating operations
  * are asserted below as the Tool set the operation-derived surface would advertise.
  */
@@ -22,6 +23,8 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { coreErr, coreOk, CORE_MODULES, type CoreModule, type CoreResult } from '../../src/core';
 import { WRITE_REFUSAL_MESSAGE } from '../../src/mcp';
 import { createMcpServer } from '../../src/mcp/server';
+import { withoutAgentMarkers } from '../agent-markers.cjs';
+import { CLI_ENTRY, spawnCapture } from '../cli/helpers/spawn-cli';
 import { commitAll, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
 
 import {
@@ -156,6 +159,43 @@ describe('REQ-SEC-05 — the operation-derived surface over the real CORE_MODULE
     ]);
   });
 
+});
+
+describe('REQ-SEC-05 — a real CORE_MODULES mutating Tool refused on an illegal transition, as the CLI is (task-364, bug-272)', () => {
+  const BUG_FILE = 'docs/memory/bug/bug-001-probe.md';
+  let root: string;
+
+  /** Run the compiled CLI in the fixture, outside any agent's session (`spec-018` §6). */
+  function wingfoil(args: readonly string[]) {
+    return spawnCapture('node', [CLI_ENTRY, ...args], { cwd: root, env: withoutAgentMarkers(process.env) });
+  }
+
+  beforeAll(() => {
+    root = makeTempGitRepo();
+    const init = wingfoil(['init', '--template', 'Scrum']);
+    expect(init.status).toBe(0);
+    const add = wingfoil(['memory', 'add', '--type', 'bug', '--title', 'probe']);
+    expect(add.status).toBe(0);
+    expect(JSON.parse(add.stdout)).toEqual({ id: 'bug-001-probe', path: BUG_FILE });
+  });
+
+  afterAll(() => removeTempDir(root));
+
+  it('memory.approve on a draft bug: isError, the CLI\'s refusal text and details, and nothing persisted by either surface', async () => {
+    const before = snapshotFiles(root, [BUG_FILE]);
+    const { client } = await connectCoreModuleSurface(CORE_MODULES, { resolveRoot: () => root });
+
+    const result = await client.callTool({ name: 'memory.approve', arguments: { id: 'bug-001-probe', reason: 'x' } });
+    const cli = wingfoil(['memory', 'approve', 'bug-001-probe', '--reason', 'x', '--format', 'json']);
+
+    expect(cli.status).toBe(1);
+    const cliRefusal = JSON.parse(cli.stderr) as { error: string; details: unknown };
+    expect(cliRefusal.error).toBe("illegal transition draft -> (none) for type 'bug'");
+    expect(result.isError).toBe(true);
+    expect(result.content).toEqual([{ type: 'text', text: cliRefusal.error }]);
+    expect(result.structuredContent).toEqual(cliRefusal);
+    assertFilesUnchanged(root, before);
+  });
 });
 
 describe('REQ-SEC-05 — the shipped production surface: Prompts advertised, no Tools, nothing persisted (task-058)', () => {

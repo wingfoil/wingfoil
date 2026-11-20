@@ -5,9 +5,9 @@
  * `wingfoil://workflow/list` Resource (task-006-dual-interface-shared-core, the generic
  * `wingfoil://{module}/{verb}` transform of the `workflowList` `CoreOperation`), which the
  * `wingfoil mcp` server does not serve; this module adds the spec-004 §2.1-conformant plural `wingfoil://workflows` addressing plus
- * per-workflow single-document addressing, neither of which `registerCoreModules`'s mechanical,
- * zero-argument URI derivation can produce (spec-006 §2's `CoreOperation` shape has no
- * sub-resource/parameter metadata — see `src/mcp/registrar.ts`'s own doc comment).
+ * per-workflow single-document addressing, neither of which `registerCoreModules`'s mechanical URI
+ * derivation produces (it derives `wingfoil://workflow/show/{ref}` from the operation's required
+ * positional, task-364 — see `src/mcp/registrar.ts`'s own doc comment).
  *
  * A workflow's `name` (Layer 2 `Workflow.name`, spec-003-workflows-yaml-schema) is the addressing key
  * — both `kind: main` and `kind: sub` workflows are addressable through the same URI form; nothing
