@@ -294,6 +294,134 @@ on any line, so a doc comment that quotes the old prefix in backticks is a hit t
 `DETAIL_KEYS` as a plain record of `entry` / `labelled` / `stated` and requires the stated class to cover every other
 key the walk finds. `runMcp`'s `start` stub counts calls: the warning must be written before `start` is called once.
 
+### green (developer, 2026-11-20)
+
+**Base.** `git rev-list --count HEAD..main` → `59` at the start; `git merge --no-edit main` conflicted on
+`spec-006-core-domain-api.md` (task-364's and this task's Revision paragraphs at the same place), the merge was aborted
+and reported; on supervision's ruling the merge was redone with the union of both paragraphs, task-364's first:
+`9e3f97fe5` (`git diff 9e3f97fe5^2 9e3f97fe5 -- <spec-006>` → only this task's two hunks; `grep -c` of conflict markers
+→ `0`). The 13 red files after the merge, before any code (`npx jest <the 13 red files> --maxWorkers=2 --json`):
+`Tests: 29 failed, 165 passed, 194 total`, per file the red record's counts exactly (core/validation/docs 18 failed /
+31 passed, CLI 11 failed / 134 passed). Merge base now `169ecd71b`. PATH guard: `command -v wingfoil` → the task's
+PATH shim; `wingfoil --version` and `node dist/cli.js --version` → `0.3.2 (7feeba57b2317c43684774ef0ce55bab5041a245)`.
+
+**Commit `6d03102d7`** `feat(cli): task-375 — the authority refusal's hint, one rule for every details key, one warning
+prefix (bug-303, bug-304)`, the design's files only:
+- `src/core/approval-authority.ts` (D1): `requireApproverAuthority` adds `hint` (new private `noApproverHint`) when no
+  `team.members` entry of the committed `dna.yaml` holds `approver` and the working tree does not grant the asker:
+  members empty → the `dna add team.members --value "<name>" --entry-email <email> --entry-roles approver` text with
+  the judged identity; members, none an approver → the `dna update` text. The message is untouched. Every caller
+  (`approve`, `reject`, `amend`, the approval `finalize`, `adopt --plan --apply`, `rekey`) gets it through the one
+  check; the registrar already renders `CoreError.hint`.
+- `src/core/error-details.ts` (D2): `DETAIL_KEYS` (31 keys: entry `cause diagnostics issues unreadable`, labelled
+  `applied argv file frontier`, the other 23 stated); `errorDetails` renders `diagnostics` or `issues`, then
+  `unreadable` (a string, or an issue-shaped object as an issue), then `cause`, then labelled and undeclared keys in
+  ascending key order (`labelledLine`: string, `, `-joined string array, else compact JSON; empty adds nothing), and
+  never pushes an entry equal to one already listed.
+- `src/mcp/prompt.ts`: `contextRefusalDetails` removed, `errorDetails(error)` instead (the `cause` it re-mapped is now
+  an entry key); the `CoreError` import it alone used is dropped.
+- `src/validation/warning.ts` (D3): `WARNING_PREFIX` and `formatWarningLine`; both fallbacks write through it; the two
+  doc comments quoting the old prefix reworded. `src/cli/warning.ts`'s `console` branch writes `formatWarningLine`.
+- `src/cli/init-command.ts`: `init(...)` runs inside `withWarningSink(emitWarning…)`; on success `emitWarnings(result
+  .warnings)` before the payload. `src/cli/mcp-command.ts`: `loadDnaRoleSet` runs inside the same sink; the serving
+  server keeps the fallback, which now writes `warning: `.
+- `scripts/e2e-smoke.cjs`: the refused approve's `expect` gains `hint`, `SMOKE_NAME`/`SMOKE_EMAIL` interpolated.
+- `docs/cli-reference.md` (`memory approve` errors) and `docs/user-guide.md` (§ approve): the hint, new in 0.4.
+`src/validation/index.ts` was not changed (the new exports are imported from `../validation/warning`, as the red
+tests and `src/cli/registrar.ts` do), so the scope stays the design's list.
+
+**red → green.** The same 12 red test suites (the 13th red file is the helper) after the commit:
+`npx jest <the 12 suites> --maxWorkers=2 --noStackTrace` → `Test Suites: 12 passed, 12 total`, `Tests: 194 passed, 194
+total` (red: 29 failed, 165 passed). The frontier pins pass as written: the core's `details.frontier` is the string
+array of the frontier's keys, so no red was questioned. Neighbours of the changed code: `npx jest
+test/core/error-details.test.ts test/mcp/role-prompt-context.test.ts test/mcp/role-prompts.test.ts
+test/docs/cli-reference.test.ts test/core/approval-authority.test.ts test/core/approval-authority-approver.test.ts
+test/core/approval-authority-baseline.test.ts test/cli/unknown-field-warning.integration.test.ts
+test/cli/success-warnings.test.ts test/cli/e2e-smoke.test.ts test/docs/name-resolvability.test.ts test/lint
+--maxWorkers=2` → `Test Suites: 27 passed, 27 total`, `Tests: 342 passed, 342 total`.
+
+### refactor (developer, 2026-11-20)
+
+No code restructuring beyond green. One test file of mine, in two commits, written after coverage runs showed
+`src/core/error-details.ts` below its baseline: `8fe7601d8` `test(core): task-375 — the edges of errorDetails' details
+rule (bug-303)` (`test/core/error-details-edges.test.ts`: an issue-shaped and an empty `unreadable` entry, a labelled
+key holding `undefined` / `''`, a non-string array as JSON, no `details`; the run at `6d03102d7` had shown branches
+52/57) and `8c203d006` `test(core): task-375 — a labelled object value is compact JSON (bug-303)` (the run at
+`8fe7601d8` showed 56/57, the object branch of `labelledLine`). `npx jest test/core/error-details-edges.test.ts
+--maxWorkers=2` → `Tests: 5 passed, 5 total`; `npx eslint test/core/error-details-edges.test.ts` → exit 0.
+
+Gates (heavy ones after `waitslot.sh`, `--maxWorkers=2`, in this worktree, with the four bug Retrospectives uncommitted):
+- `npm run -s build` → exit 0; `npm test -- --maxWorkers=2` (head `6d03102d7`) → exit 1: `Test Suites: 1 failed, 702
+  passed, 703 total`, `Tests: 1 failed, 12883 passed, 12884 total`. The one failure is
+  `test/cli/workflow-unbound-none.integration.test.ts` "workflow next (console) …": `Expected pattern: not /^\d+
+  diagnostic\(s\)/m`, the output ending `4 diagnostic(s): --format json lists them` — the four uncommitted bug files,
+  `bug-534`'s class. The same test on a clean clone of the head
+  (`git clone` of this worktree into a scratch directory, `git checkout 8c203d006`, `git status --short` → no line,
+  `node_modules` linked; `npx jest test/cli/workflow-unbound-none.integration.test.ts --maxWorkers=2`) → `Tests: 4
+  passed, 4 total`, so the worktree failure is the uncommitted inputs alone (the approver's `bug-534` ruling).
+- `npm run test:coverage -- --maxWorkers=2`, last run on head `8c203d006` → exit 1, `Test Suites: 1 failed, 703 passed,
+  704 total`, `Tests: 1 failed, 12891 passed, 12892 total`, the same `workflow-unbound-none` failure (`4
+  diagnostic(s)`); `All files` statements 98.88 %, branches 96.63 %, functions 98.61 %, lines 99.47 % (> 80 %).
+- `npm run -s lint` → exit 0, no output. `npm run -s docs:api` → exit 0, no output. `npm run -s typecheck` (both tsc
+  configurations) → exit 0, no output.
+- `docs.parity` and `test/docs/cli-reference.test.ts`: inside the full suite above (every `test/docs` suite passed; the
+  targeted run of `test/docs/cli-reference.test.ts` and `test/docs/name-resolvability.test.ts` is in green).
+
+**Coverage** against the baseline of the merge base `169ecd71b` (the baseline of
+`169ecd71b19f1e2321051ee2070c59986de784e0` measured on a clean clone; `sha256sum -c coverage-summary.json.sha256` → `coverage-summary.json: OK`,
+sha256 `b9e4500309376827c3b8b781f44a950899519b5f0417c6ddf81db556145e5f63`), covered/total:
+
+| file | statements | branches | functions | lines |
+|------|------------|----------|-----------|-------|
+| `total` | 12925/13072 (98.87) -> 12979/13126 (98.88) | 8051/8333 (96.61) -> 8091/8373 (96.63) | 2546/2582 (98.6) -> 2557/2593 (98.61) | 10777/10834 (99.47) -> 10813/10870 (99.47) |
+| `src/core/error-details.ts` | 23/23 (100) -> 58/58 (100) | 23/23 (100) -> 57/57 (100) | 2/2 (100) -> 7/7 (100) | 18/18 (100) -> 41/41 (100) |
+| `src/core/approval-authority.ts` | 36/36 (100) -> 44/44 (100) | 14/14 (100) -> 22/22 (100) | 7/7 (100) -> 9/9 (100) | 31/31 (100) -> 37/37 (100) |
+| `src/validation/warning.ts` | 67/67 (100) -> 70/70 (100) | 44/45 (97.77) -> 44/45 (97.77) | 16/16 (100) -> 17/17 (100) | 60/60 (100) -> 63/63 (100) |
+| `src/cli/warning.ts` | 19/20 (95) -> 20/21 (95.23) | 10/10 (100) -> 10/10 (100) | 4/5 (80) -> 4/5 (80) | 16/17 (94.11) -> 17/18 (94.44) |
+| `src/cli/init-command.ts` | 43/49 (87.75) -> 48/54 (88.88) | 21/22 (95.45) -> 21/22 (95.45) | 3/7 (42.85) -> 5/9 (55.55) | 41/47 (87.23) -> 44/50 (88) |
+| `src/cli/mcp-command.ts` | 23/23 (100) -> 27/27 (100) | 7/8 (87.5) -> 7/8 (87.5) | 2/2 (100) -> 4/4 (100) | 22/22 (100) -> 24/24 (100) |
+| `src/mcp/prompt.ts` | 91/91 (100) -> 89/89 (100) | 48/48 (100) -> 46/46 (100) | 24/24 (100) -> 23/23 (100) | 82/82 (100) -> 80/80 (100) |
+
+(The baseline's `coverage-summary.json` against this run's `coverage/coverage-summary.json`, baseline -> head.) No total and no
+changed file has more uncovered items than the baseline.
+
+### self-review (developer, 2026-11-20)
+
+- **AC 1** — met: `test/core/approval-authority-hint.test.ts` (a)–(e), `test/cli/fresh-init-transitions.test.ts`
+  "task-375 AC 1 …" (console, json, the hinted remedy then a successful approve) and `program.integration.test.ts`
+  sc.3 pass (green run above). Positive case of the exclusions: (c) a member holds approver and (d) the working tree
+  grants the asker give no `hint`, both asserted with `toEqual`.
+- **AC 2** — met: `test/core/error-details-keys.test.ts` 15/15 (the AST walk finds no undeclared key and no
+  unsupported site), `test/cli/error-details.test.ts` (console `  frontier: a, b` line, json `details`), the two
+  off-frontier pins in `agent-execute-diagnostics` and `workflow-finalize`. The MCP surface renders through the same
+  `errorDetails` (`src/mcp/registrar.ts`, not touched).
+- **AC 3** — met: `test/validation/warning.test.ts`, `init-command.test.ts`, `mcp-command.test.ts`,
+  `test/docs/warning-prefix.test.ts` pass. Same class searched: `grep -rn "Warning: " src` → no line;
+  `grep -rn "warning: \${" src` → none (every console warning line is `formatWarningLine`'s).
+- **AC 4, AC 5** — characterization, `test/docs/spec-008-section-6.test.ts` 13/13, on the amended `spec-008` (`2dfd6fb91`).
+- **T4:** `git log --first-parent --no-merges --format=%h 6da2eb4f5..HEAD -- <the 13 red files>` → empty (exit 0, no
+  line).
+- Invisible characters: the `grep -nP` of the prompt's class over every changed file before each commit → no hit.
+- Printed changes (gate D4): `Warning: ` → `warning: ` on `mcp`, `init` and the fallbacks; the hint line / `hint` key;
+  detail lines for `cause`, `unreadable`, `frontier`, `applied`, `argv`, `file`. No `error:` line, exit code or stdout
+  changes. A refusal that listed the same issue twice now lists it once (the "not listed again" rule of `spec-005`
+  §3.1); no test pinned such a duplicate (full suite above).
+- **For `task-370`** (W1-11): it may rely on `WARNING_PREFIX` / `formatWarningLine` (`src/validation/warning.ts`) as the
+  one console warning line, written by `src/cli/warning.ts`'s `emitWarning` and by both fallbacks; on
+  `emitWarning` / `emitWarnings` / `emitError` keeping their signatures and json/yaml shapes; on `init` and the `mcp`
+  pre-flight rendering warnings through `emitWarning` in the active format; on `errorDetails` returning
+  `readonly ErrorDetail[]` under `DETAIL_KEYS`; on `hint` travelling as `CoreError.hint`.
+- Candidate finding (not fixed, not filed): `src/mcp/registrar.ts` drops `CoreError.hint` from a Tool's error result,
+  so the MCP surface does not carry the new authority hint; `task-367` owns that file and that drop.
+
+### Pending amendments (approver)
+
+Left uncommitted in this worktree, each to be recorded with `memory amend`:
+- `bug-303-errordetails-renders-only-details.issues-and-details.diagnostics-so-every-other-details-key-is-dropped-on-the-cli-and-mcp` — `--reason "Record the bug's Retrospective: six details keys were already dropped on main, not none as its notes said, and task-375 fixed it with DETAIL_KEYS."`
+- `bug-304-warnings-carry-two-prefixes-the-cli-registrar-prints-warning-while-init-mcp-and-spec-013-still-use-warning` — `--reason "Record the bug's Retrospective: task-375 made warning: the one console prefix, init and the mcp pre-flight included."`
+- `bug-536-spec-008-section-6-has-no-row-for-e-not-a-member` — `--reason "Record the bug's Retrospective: the E_NOT_A_MEMBER row came with task-375's design-gate amendment of spec-008, with no code change."`
+- `bug-548-spec-008-section-2-says-the-text-of-each-warning-shipped-today-is-pinned-but-its-table-leaves-out-four-families-of-agent-execute-warnings` — `--reason "Record the bug's Retrospective: the four agent execute warning families came with task-375's design-gate amendment of spec-008, with no code change."`
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -301,3 +429,12 @@ key the walk finds. `runMcp`'s `start` stub counts calls: the warning must be wr
      printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
      Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
      here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+
+- The start-of-phase `git merge --no-edit main` conflicted on `spec-006-core-domain-api.md`: `task-364` and this task
+  each appended a Revision paragraph at the end of the same section, both from approved amendments. The merge was
+  aborted and reported; supervision ruled the union, `9e3f97fe5`. Proposal: a Revision note of a spec amended by two
+  tasks of one wave conflicts by construction; the orchestrator could merge the first task's amendment into the
+  second task's branch before its design gate.
+- Coverage took three heavy runs (`6d03102d7`, `8fe7601d8`, `8c203d006`) because each run showed one more uncovered
+  branch of `labelledLine`; reading the uncovered `BRDA` lines of `coverage/lcov.info` after the first run, for every
+  branch at once, would have saved one.
