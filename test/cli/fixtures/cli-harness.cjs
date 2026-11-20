@@ -34,18 +34,14 @@ function main() {
 
   const { buildProgram } = require(path.join(distDir, 'cli', 'program.js'));
   const { CORE_MODULES } = require(path.join(distDir, 'core', 'index.js'));
+  const { buildCoreParams } = require(path.join(distDir, 'core', 'registry.js'));
 
   return buildProgram(CORE_MODULES, {
     resolveRoot: () => fixtureRoot,
-    // Mirrors the real `src/cli.ts` production wiring: main's single bare `positional`
-    // (task-026-implement-dna-show's seam), task-025's full `positionals` list (every command reads at
-    // most one, since `dl-082-cli-parameter-shape`),
-    // task-028's additive `flags` spread (e.g. `paths`'s `--list`), plus task-020's value-bearing
-    // `options` record (e.g. `memory add --type/--title/--tags`, `memory search --tag/--status/--type`
-    // — task-021) — this harness must stay in lockstep with `cli.ts`'s own buildParams. Previously
-    // missing `options: ctx.options` here meant NO CLI integration test could ever exercise a
-    // value-option end-to-end (task-021 found this while writing the `memory search --tag` e2e test).
-    buildParams: (ctx) => ({ root: ctx.root, positional: ctx.positional, positionals: ctx.positionals, options: ctx.options, ...(ctx.flags ?? {}) }),
+    // The real `src/cli.ts` production wiring, not a hand copy of it (task-367): `buildCoreParams`, the one params
+    // builder both surfaces pass, so the harness cannot drift from `cli.ts` (a hand copy once missed
+    // `options: ctx.options`, task-021).
+    buildParams: buildCoreParams,
   }).then((program) => program.parseAsync(['node', 'wingfoil', ...cliArgs]));
 }
 

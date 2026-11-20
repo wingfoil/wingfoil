@@ -3,7 +3,8 @@
  *
  * An **agent marker** is one fact of the invocation that says the command runs in an agent's session: WingFoil's
  * launcher variable `WINGFOIL_AGENT`, the `--co-author` option, and the vendor variables `CLAUDE_CODE_CHILD_SESSION`
- * (Claude Code) and `CODEX_SANDBOX` (Codex CLI). {@link AGENT_MARKERS} is the closed, ordered set: nothing else in
+ * (Claude Code) and `CODEX_SANDBOX` (Codex CLI), and the MCP Tools channel — a call that came through the MCP server
+ * (row 5, `spec-018` §1.2, task-367). {@link AGENT_MARKERS} is the closed, ordered set: nothing else in
  * `src/` spells a marker variable, so the CLI, `agent execute` and the shipped check read the same list, and the set
  * grows only by a revision of `spec-018` (§1.3). `CLAUDECODE` is deliberately not a marker: an IDE sets it in the
  * terminals it opens for the human too (§1).
@@ -27,8 +28,9 @@
  * {@link withAgentInvocation} with `process.env` and the `--co-author` value; {@link currentAgentInvocation} reads it
  * back inside the operation, its awaited continuations included — an `AsyncLocalStorage`, the pattern of the dry run
  * (`src/storage/dry-run.ts`) and the warning sink (`src/validation/warning.ts`), so no operation signature changes.
- * With none set — an in-process caller, a library — it is `{ env: process.env }`: the environment markers still
- * hold, fail-closed (the MCP surface is not a marker, `spec-018` §1.2).
+ * The MCP Tools registrar (`src/mcp/tools.ts`) wraps each Tool call in it with the server's environment and
+ * `surface: 'mcp'`, so every Tool call is an agent context (`spec-018` §1.2, task-367). With none set — an in-process
+ * caller, a library, a Resource read — it is `{ env: process.env }`: the environment markers still hold, fail-closed.
  *
  * Deterministic: a pure function of its inputs; the marker order is the table's, never the environment's.
  */
@@ -40,13 +42,16 @@ import type { CoreOption } from './registry';
 import { coreErr, coreOk, type CoreResult } from './types';
 
 /** The id of an agent marker: its environment variable's name, or the option's spelling (`spec-018` §3.2 `details`). */
-export type AgentMarkerId = 'WINGFOIL_AGENT' | '--co-author' | 'CLAUDE_CODE_CHILD_SESSION' | 'CODEX_SANDBOX';
+export type AgentMarkerId = 'WINGFOIL_AGENT' | '--co-author' | 'CLAUDE_CODE_CHILD_SESSION' | 'CODEX_SANDBOX' | 'mcp';
 
 /** One agent marker of `spec-018` §1. */
 export interface AgentMarker {
   readonly id: AgentMarkerId;
-  /** An environment variable, or an option given on the command line. */
-  readonly kind: 'environment' | 'option';
+  /**
+   * An environment variable, an option given on the command line, or the surface the call came through (row 5, the MCP
+   * Tools channel, `spec-018` §1.2, task-367).
+   */
+  readonly kind: 'environment' | 'option' | 'surface';
   /** How a refusal names it when present (`spec-018` §3.2). */
   readonly phrase: string;
 }
@@ -57,6 +62,7 @@ export const AGENT_MARKERS: readonly AgentMarker[] = Object.freeze([
   Object.freeze({ id: '--co-author', kind: 'option', phrase: '--co-author was given' }),
   Object.freeze({ id: 'CLAUDE_CODE_CHILD_SESSION', kind: 'environment', phrase: 'CLAUDE_CODE_CHILD_SESSION is set' }),
   Object.freeze({ id: 'CODEX_SANDBOX', kind: 'environment', phrase: 'CODEX_SANDBOX is set' }),
+  Object.freeze({ id: 'mcp', kind: 'surface', phrase: 'the call came through the MCP server' }),
 ] as const satisfies readonly AgentMarker[]);
 
 /**
@@ -158,6 +164,11 @@ export interface AgentInvocation {
   readonly coAuthor?: string;
   /** The `--ai-model` value, when the option was given (`spec-018` §2.4; read by `task-334`). */
   readonly aiModel?: string;
+  /**
+   * The surface the call came through, when it is a marker: `'mcp'` for a Tool call of the MCP server, which sets it
+   * around every `tools/call` (`spec-018` §1 row 5, §1.2, task-367). The CLI sets none.
+   */
+  readonly surface?: 'mcp';
 }
 
 /** {@link resolveAgentContext}'s request: the invocation, and whether the operation is approver-gated. */
@@ -185,6 +196,7 @@ export function currentAgentInvocation(): AgentInvocation {
 /** Whether `marker` is present in `invocation`: a defined variable (empty included), or a given option. */
 function isPresent(marker: AgentMarker, invocation: AgentInvocation): boolean {
   if (marker.kind === 'option') return invocation.coAuthor !== undefined;
+  if (marker.kind === 'surface') return invocation.surface === marker.id;
   return Object.prototype.hasOwnProperty.call(invocation.env, marker.id) && invocation.env[marker.id] !== undefined;
 }
 

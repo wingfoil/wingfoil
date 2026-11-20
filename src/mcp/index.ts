@@ -16,7 +16,7 @@
  * `registerWriteRefusalHandler` (the structural `resources/write` refusal, spec-004 §2.3).
  * `registerReadOnlyResources` (`./read-only-resources.ts`) wires all five together — the one call `createMcpServer` (the
  * `wingfoil mcp` server) makes for the Resources; it does not call
- * `registerCoreModules`. See `./read-only.ts` for the shared write-refusal/not-found conventions every one of
+ * `registerCoreModules`, and serves the Memory Tools through `registerCoreTools` (task-367). See `./read-only.ts` for the shared write-refusal/not-found conventions every one of
  * these Resources follows.
  */
 
@@ -25,6 +25,15 @@ export const MODULE_NAME = 'mcp-server' as const;
 
 export { registerCoreModules, deriveMcpToolName, deriveMcpResourceUri } from './registrar';
 export type { RegisterCoreModulesOptions } from './registrar';
+
+// task-367 (P5.2.3, `spec-004` §4, `spec-014` §3): the Tools half of the registrar, the one `createMcpServer` calls
+// for the Memory Tools; every Tool call runs as an agent context (`spec-018` §1.2). See `./tools.ts`.
+export { registerCoreTools } from './tools';
+export type { RegisterCoreToolsOptions } from './tools';
+
+// task-367 (`bug-034`): the production server strips the SDK's `MCP error <code>: ` prefix from every JSON-RPC error
+// it sends, at the transport. See `./wire-errors.ts`.
+export { stripMcpErrorPrefix, withBareErrorMessages } from './wire-errors';
 
 export {
   registerMemoryResources,
@@ -74,7 +83,7 @@ export { registerReadOnlyResources } from './read-only-resources';
 export type { RegisterReadOnlyResourcesOptions } from './read-only-resources';
 
 // The production stdio entry point (task-030-implement-mcp-resources, spec-014-mcp-server-entry-point):
-// `createMcpServer` builds a real `McpServer` with the read-only Resources and Prompts channels above wired on,
+// `createMcpServer` builds a real `McpServer` with the read-only Resources and Prompts channels and the Memory Tools wired on,
 // `startMcpServer` connects it over `StdioServerTransport`. Exported here so the `bin`/`wingfoil mcp`
 // seam imports the whole `src/mcp` surface from one module.
 export { createMcpServer, startMcpServer } from './server';
