@@ -64,3 +64,315 @@ which this task amends anyway, still cites `X_cli-cmds.md` by a bare line range.
 ## Execution Notes
 
 <!-- Filled by the dev-loop. -->
+
+### design (architect, 2026-11-20)
+
+**Inputs read.** dl-015: `depends_on: [task-360]` (`done`) — its notes fix the BDD this task meets:
+`p5-interaction/P5.1.5-capabilities.feature` scenarios 1–4 and `P5.2.1-mcp-resources.feature` scenarios 5–6 (`67d2aa05b`),
+feature P5.1.5 (`cp-003`). `task-364` (`done`) is the base the derivation rests on; its notes say a task may rely on: a
+`mutates: false` operation is derived into a Resource, a flat one at the static URI `wingfoil://<module>`
+(`deriveMcpResourceUri`); `buildCoreParams` is the one params builder; the production server does not call
+`registerCoreModules`. Contract: `spec-019` (`approved`, `4b6b9bb9f`, never amended since: `git log --oneline --
+docs/04_memory/design/specs/spec-019-*.md` → its add, submit and approve only), `dl-177` (`ready`). `grep '^status'` on
+`spec-004`, `-005`, `-006`, `-008`, `-014`, `-019` → `approved` each; `dl-177` → `ready`. The amendments below build on the
+specs' text at this head (`cbd89badb`), which includes `task-364`'s `a15c05c15` (`spec-004` §2.1 derived URIs, §4.3) and
+`89e20213f` (`spec-006` §2 parameter metadata, §3 MCP note), and `dafd4aa38` (`spec-016`, the run-id encoding; not touched
+here); `spec-008`'s last amend is `eaf977e5a`, `spec-005`'s `887568ea1`, `spec-014`'s `b934fd3ef`. `task-375`'s amends are
+not on `main` and nothing here depends on them. Bug `bug-513` (`in-progress`): its Steps to Reproduce grep, run here
+before the amendment, printed `spec-006` (the 2026-09-21 Revision note) and the two decision-logs `dl-041`, `dl-042`.
+Rulings in force: W1-R4 (Tools/Resources derived from `CORE_MODULES`), W1-R10 (the command count is `align-agent-docs`').
+
+**What the code does at this head** (read in the worktree): every derived command resolves the root —
+`src/cli/registrar.ts` calls `options.resolveRoot()` inside the `buildParams` call of `run`, and the test-only MCP
+registrar's `callCore` (`src/mcp/registrar.ts`) does too; the blank-`--project` refusal lives in the `bin`'s closure
+(`src/cli.ts`, `BLANK_PROJECT`), which `buildProgram` (`src/cli/program.ts`) binds to the global `--project` value and
+hands to the registrar, `init` and `mcp`; `readBuildStamp` (`src/storage/build-stamp.ts`) returns one string; nine
+`_FORMAT` constants in `src/validation/format.ts`; `CORE_MODULES` has 33 operations and the CLI 35 leaf commands.
+
+**A throwaway prototype, to learn what the change breaks** (not the implementation; never pushed): a clone of this
+head in the task's scratch directory, outside the worktree, with the minimum of design items 1–9 below (the field, the
+two registrars, the moved blank check, the module, the Resource), committed there as `fdfed3b38`. On it:
+- `npx tsc --noEmit -p tsconfig.json` (src and test) printed nothing: `ParamsContext.root` made optional breaks no type.
+- `npm run build` (after `waitslot.sh`) → `build exit=0`; `node dist/cli.js capabilities --format json` → exit `0`; that
+  document without `wingfoil`, `JSON.stringify` + `\n`, is byte-equal (`cmp`) to the line written from `spec-019`
+  §3.5's lists (1018 bytes, sha256 `eba2cb26e41ae6b147efaef871660416aded23c22ab03e77940ba8f81562d794`); the same command
+  from a `mktemp -d` directory with `LANG=C LC_ALL=tr_TR.UTF-8 TZ=Pacific/Kiritimati` → exit `0`, stdout byte-equal
+  (`cmp`), stderr empty; `capabilities extra` → `error: wingfoil capabilities takes no positional (got 1 positional)`,
+  exit `2`; `--project ""` → `error: invalid flag value: --project must not be blank`, exit `2`; `--project
+  /nonexistent --format json` → the same bytes; `capabilities --help` shows the description and the example.
+- The worktree's own build, for contrast: `node dist/cli.js capabilities` → `error: unknown command 'capabilities'`, exit `2`.
+- **Machine fact for qa:** this host has a stray empty directory `/tmp/.git` (`ls -ld /tmp/.git` → `drwxr-xr-x … nov 18`).
+  `git -C <mktemp dir> rev-parse --show-toplevel` → `fatal: not a git repository`, but WingFoil's walk, which looks for
+  a `.git` entry, takes `/tmp` as a root: `node dist/cli.js paths` from such a directory → `error: E_NOT_AT_GIT_ROOT: run
+  wingfoil from the project root`, exit `1`, not `E_NO_GIT_ROOT`. A T-9 precondition must therefore use git, not WingFoil.
+- `npm test -- --maxWorkers=2` (after `waitslot.sh`, the heavy-gate lock; the prototype had no spec amendment, no
+  fixture, no TSDoc and no reference entry) → `Test Suites: 13 failed, 686 passed, 699 total`, `Tests: 18 failed, 12805
+  passed, 12823 total`, exit `1`. The failures are the list in *Existing tests that pin what changes*.
+
+#### Design
+
+1. **`src/core/registry.ts`.** `CoreOperation` gains `readonly readsProject?: false` (TypeDoc: the `agentAttribution`
+   pattern; declared only by `capabilities`). `ParamsContext.root` becomes `readonly root?: string`: present for every
+   operation that reads a project, absent for a `readsProject: false` one (D1). `buildCoreParams` is unchanged (it copies
+   `root` as it is). No other export changes.
+2. **`src/validation/format.ts`.** New export `FILE_KIND_FORMATS`: a frozen array of frozen `{ kind, lowest, highest }`,
+   one per row of `spec-019` §3.1, in code-unit order of `kind`, each `highest` the constant itself, `lowest` the same
+   constant for `agent-adapter` and `1` for the eight `formatField` kinds; exported type `FileKindFormat`.
+3. **`src/storage/build-stamp.ts`.** New export `readBuildIdentity(moduleDir = __dirname): { version: string; commit:
+   string }` — the one reader of the two files; `readBuildStamp` becomes `` `${version} (${commit})` `` of it (§3.1's "one
+   shared reader"). Re-exported by `src/storage/index.ts` and `src/core/surface-reads.ts`, beside `readBuildStamp`.
+4. **`src/core/capabilities.ts` (new).** Exports `CAPABILITIES_DOCUMENT_FORMAT` (`1 as const`), `BOOTSTRAP_COMMANDS`
+   (frozen `['init', 'mcp']`), `CAPABILITIES` (frozen `{ name, requires }[]`, §4.2's six rows, in code-unit order of
+   `name`, `requires` as §4.2 lists them), `RESERVED_CAPABILITY_NAMES` (frozen `['migrate', 'pack-install',
+   'workflow-engine']`), the types `CapabilitiesDocument`, `CapabilityEntry` and `BuildIdentity`,
+   `buildCapabilitiesDocument(modules: readonly CoreModule[], build: BuildIdentity): CapabilitiesDocument` (pure; §3.2:
+   keys in §3.1's order, `formats` / `commands` / `capabilities` sorted by `a < b`, never `localeCompare`, no duplicate;
+   `commands` = `enumerateOperations(modules)` as `"<module> <verb>"` or `"<module>"` when `deriveVerb` is `''`, plus
+   `BOOTSTRAP_COMMANDS`; a capability is present iff each of its `requires` is in `commands`), and
+   `renderCapabilitiesConsole(document): string` (§3.5's layout, one final `\n`, a section with no item prints its
+   heading with `(0)`). It imports `registry` and `../validation/format` only, never `./index` (no cycle, `task-354`).
+5. **`src/core/index.ts`.** A new module in `CORE_MODULES`, `{ name: 'capabilities', operations: { capabilities: { name:
+   'capabilities', mutates: false, readsProject: false, description: 'print the file formats this WingFoil reads, its
+   commands and the capabilities it provides', example: 'wingfoil capabilities --format json', renderConsole, fn:
+   capabilitiesFn } } }`, no module `description` (the flat `paths` precedent). `capabilitiesFn` (exported, so the MCP
+   Resource calls the same function, §6) returns `coreOk(buildCapabilitiesDocument(CORE_MODULES, readBuildIdentity()))`,
+   `CORE_MODULES` read at call time. The barrel re-exports `buildCapabilitiesDocument` and the constants.
+6. **`src/cli/registrar.ts`.** `BuildCommandsOptions` gains `readonly checkProject?: () => void`. In `run`, for an
+   operation whose `readsProject === false`, the params are built without `root` and `options.checkProject?.()` is
+   called in its place, inside the same `try`, so the blank-`--project` `UsageError` exits `2` through
+   `exitCodeForThrow`; every check before it (`--format`, the operand count) is unchanged. No operation name appears in
+   the registrar (`spec-006` §4.2).
+7. **`src/cli/program.ts` and `src/cli.ts`** (D2). The blank-`--project` check and its message move from `src/cli.ts` to
+   `src/cli/program.ts`: `buildProgram` defines `checkProject()` (throws `UsageError('invalid flag value: --project must
+   not be blank')` for a blank global `--project`), runs it first inside its bound `resolveRoot` closure — so `init`,
+   `mcp` and every project-reading command keep today's order and text — and passes it to `buildCliCommands` as
+   `checkProject`. `src/cli.ts`'s closure only calls `resolveProjectRoot`.
+8. **`src/mcp/registrar.ts`.** `callCore` omits `root` and never calls `options.resolveRoot()` for a `readsProject:
+   false` operation. The Resource is derived as before (`wingfoil://capabilities`, static, `capabilities (read-only)`).
+9. **`src/mcp/capabilities-resource.ts` (new) and `src/mcp/server.ts`.** `registerCapabilitiesResource(server)`
+   registers `capabilities.read` at `wingfoil://capabilities` with §6's description; its handler calls
+   `refuseIfWriteIntent(extra._meta)` first, then `coreResultResource(uri, await capabilitiesFn({}))` — no
+   `resolveRoot` parameter at all. `createMcpServer` calls it after `registerSessionContextResource`. `src/mcp/index.ts`
+   re-exports it.
+10. **`docs/cli-reference.md`** (green, T-18): the ``### `wingfoil capabilities` `` entry under *Setup*, after
+    `wingfoil mcp`, first sentence = the `--help` description; the output, the three formats, "no project needed", the
+    exit codes; *Where to run it* gains the `capabilities` exception to `E_NO_GIT_ROOT`, and the Global options
+    `--project` row names `capabilities` beside `--help` / `--version` for a non-blank value. The header's "release
+    **0.3**" is `align-user-docs`' (W1-R10), not this task's.
+11. **`governance-check` (OQ-4 (a)).** `task-365` has not started (`status: backlog`), and W1-03 never runs alongside
+    W1-06, so this task lands first and does **not** add it: `task-365`, merging second, adds the `CAPABILITIES` entry
+    (`requires: ['verify']`), the §4.2 row by a `spec-019` amendment at its design gate, and the fixture's seventh name.
+    The tests below compare against `CAPABILITIES`' names, never a literal 6 outside the fixture, so that is a one-row
+    change plus the fixture. If `task-365` were merged first, this task's green would add it, with the `spec-019`
+    amendment brought back to the approver (a stop of this design).
+
+#### Acceptance criteria — classification and what qa pins
+
+All ten are confirmed as the task file classifies them; no red is fabricated: today `node dist/cli.js capabilities` →
+`error: unknown command 'capabilities'`, exit `2` (`spec-019` Context; re-run on this head's build, above), and no export named below exists
+(`grep -rn "FILE_KIND_FORMATS\|readsProject\|readBuildIdentity\|buildCapabilitiesDocument" src` → nothing).
+
+Expected reds of the new exports (B9 lesson): `npx tsc --noEmit -p tsconfig.json` → TS2307 (`src/core/capabilities`,
+`src/mcp/capabilities-resource` not found) and TS2305 (`FILE_KIND_FORMATS`, `readBuildIdentity`, `capabilitiesFn` not
+exported); jest (no type-check) → `Cannot find module` for the two new modules, and `TypeError: … is not a function` /
+`undefined` for the new exports of existing modules. Import from the leaf modules (`../../src/core/capabilities`,
+`../../src/validation/format`, `../../src/storage/build-stamp`, `../../src/mcp/capabilities-resource`), not the barrels.
+CLI cases spawn `dist/cli.js` through `test/cli/helpers/spawn-cli.ts` with `withoutAgentMarkers(process.env)`.
+
+| AC | Class | Test file (qa) | What it pins |
+|----|-------|----------------|--------------|
+| 1 | red-first | `test/core/capabilities.test.ts` (new) | in `CORE_MODULES` a module `capabilities` whose only operation `capabilities` has `mutates: false`, `readsProject: false`, no `positional`, `flags`, `options`; `description` and `example` equal to `spec-019` §1's two strings; `deriveVerb('capabilities','capabilities') === ''` |
+| 2 | red-first | `test/cli/capabilities.integration.test.ts` (new) | T-9: `--format json` from the repository root and from a fresh `mkdtempSync(join(tmpdir(), …))` directory with `LANG=C`, `LC_ALL=tr_TR.UTF-8`, `TZ=Pacific/Kiritimati` → both exit `0`, stdout byte-equal, stderr `''`; precondition in the same test: `git -C <dir> rev-parse --git-dir` exits non-zero (never WingFoil's own walk: see the `/tmp/.git` fact above; `makeBoundedOutsideDir` will not do either, its ceiling is a repository). T-14: `--project /nonexistent` → exit `0`, the same stdout; `--project ""` → exit `2`, stdout `''`, stderr `error: invalid flag value: --project must not be blank\n`. In-process, `test/cli/registrar.test.ts`: a synthetic module whose op declares `readsProject: false`, run through `buildCliCommands` with a `resolveRoot` spy → spy not called, `buildParams` receives a context with no `root` key; with `checkProject` throwing a `UsageError` → exit `2`; the same op without the field → `resolveRoot` called once. `test/mcp/registrar.test.ts`: the same op over `registerCoreModules`, `readResource({ uri: 'wingfoil://x' })` (flat module `x`) → the spy not called |
+| 3 | red-first | `test/cli/capabilities.integration.test.ts`, `test/core/capabilities.test.ts` | T-3: `formats` deep-equals `FILE_KIND_FORMATS` as §3.1's mapping and its keys are in `a < b` order; `Object.keys` of the document is `['format','wingfoil','formats','commands','capabilities']`, of `wingfoil` `['version','commit']`, of each range `['lowest','highest']`. T-6: `` `${version} (${commit})` `` equals `node dist/cli.js --version`'s stdout minus `\n`; `buildCapabilitiesDocument(CORE_MODULES, readBuildIdentity(<fixture moduleDir with package.json and no build-info.json>))` → `commit: 'unknown'` (the fixture layout `test/storage/build-stamp.test.ts` already builds). T-11: stdout of `--format json` is `JSON.stringify(doc) + '\n'` (one line); `--format yaml` parses (js-yaml `load`) to the JSON document and equals `dump(doc)`; `renderCapabilitiesConsole` of a hand-written document (version `0.4.0`, commit `0123…4567`, two kinds, three commands, no capability) equals the §3.5 layout text, `capabilities (0):` with no item line, one final `\n`; and the spawned `--format console` equals `renderCapabilitiesConsole(JSON.parse(<json stdout>))` |
+| 4 | red-first | `test/core/capabilities.test.ts` (T-1), `test/core/capabilities-format-readers.test.ts` (new, T-2) | T-1: every export of `src/validation/format.ts` whose name ends `_FORMAT` and whose value is a number is the `highest` of exactly one `FILE_KIND_FORMATS` entry; 9 entries; kinds unique, kebab-case, in `a < b` order; `E_INVALID_FORMAT` is not among them. T-2: one reader probe per kind — copy the fixture texts and loaders of `test/core/format-key.test.ts`'s `KINDS` (dna, memory, roles, directive, workflows, workflow, bindings), `resolveAddType` for `memory-template` (that file's template `describe`), `parseAdapterManifest` (`src/agent/manifest.ts`) for `agent-adapter`; for each entry `f` in `lowest..highest` accepted; `highest + 1` refused with an issue `E_INVALID_FORMAT` (the template one through `resolveAddType`'s `E_VALIDATION format` message, as that file pins it); `agent-adapter` with no key refused, the eight others accepted; and the probe table's kinds equal `FILE_KIND_FORMATS`' kinds, so a new kind without a probe fails |
+| 5 | red-first | `test/core/capabilities.test.ts` | T-4: `commands` = sorted union of `enumerateOperations(CORE_MODULES)`'s names and `BOOTSTRAP_COMMANDS`, no duplicate, contains `capabilities`, `paths`, `init`, `mcp`, and is `a < b` sorted (assert `[...c].sort((a,b)=>a<b?-1:a>b?1:0)` equals it). T-5: equal as sets to the leaf commands of `buildProgram(CORE_MODULES, …)` — the walk of `test/docs/cli-reference.test.ts` / `test/docs/x-cli-cmds.test.ts`, `help` excluded |
+| 6 | red-first | `test/core/capabilities.test.ts` | T-7: for each capability and each command it requires, `buildCapabilitiesDocument` over a copy of `CORE_MODULES` without that operation (or `BOOTSTRAP_COMMANDS` cannot be removed: for `mcp-server` remove nothing and assert the entry's `requires` is `['mcp']` and present) lacks exactly the capabilities requiring it; over the full list every `CAPABILITIES` name is present. T-8: names match `^[a-z][a-z0-9]*(-[a-z0-9]+)*$`, unique; `RESERVED_CAPABILITY_NAMES` equals `['migrate','pack-install','workflow-engine']` and none is in `CAPABILITIES` or in the document; every `requires` entry is in the document's `commands`; `CAPABILITIES`' names equal §4.2's six (a literal list here only) |
+| 7 | red-first | `test/core/capabilities.test.ts` + `test/core/fixtures/capabilities-document.json` (new, committed at red) | T-10: the built document without `wingfoil`, `JSON.stringify` + `\n`, equals the file's bytes. The fixture is the 1018-byte line (sha256 `eba2cb26e41ae6b147efaef871660416aded23c22ab03e77940ba8f81562d794`) written from `spec-019` §3.5's lists — nine kinds at `1..1`, the 36 commands, the six capabilities — and byte-equal to the prototype's real output (above). If `task-365` merges first the fixture gains `verify` and `governance-check` (item 11) |
+| 8 | red-first | `test/mcp/capabilities-resource.test.ts` (new), `test/core/parity.test.ts`, `test/mcp/registrar.test.ts`, `test/cli/mcp-registration.test.ts` | T-15: `createMcpServer({ resolveRoot: spy, roles: ['developer'] })` over the in-memory transport; `readResource({ uri: 'wingfoil://capabilities' })` → one entry, `mimeType: 'application/json'`, no `warnings`, `text` equal to `JSON.stringify((await capabilitiesFn({})).value)` and to the spawned `--format json` stdout minus `\n` (same build); the spy's call count unchanged by the read. T-16: `listResources()` contains `wingfoil://capabilities` with name `capabilities.read` and §6's description; a read with `_meta: { 'wingfoil/write-intent': true }` rejects with a message containing `resources are read-only`. T-17: `parity.test.ts`'s exact list of derived static URIs gains `wingfoil://capabilities`. The two pins of the production server's Resource list follow: `test/mcp/registrar.test.ts` (task-323 AC 2, the four URIs → five) and `test/cli/mcp-registration.test.ts` (`resources: 4` → `5` in the real-build case) |
+| 9 | red-first | `test/cli/capabilities.integration.test.ts` | T-12: `capabilities extra` → exit `2`, stderr `error: wingfoil capabilities takes no positional (got 1 positional)\n`. T-13: `capabilities --dry-run` → exit `2`, stderr `error: unknown option '--dry-run'\n`; `--format text capabilities` → exit `2`, `error: invalid --format value "text", expected one of: console, json, yaml\n`. "No new code": `grep -rhoE "\b[EW]_[A-Z_]+" src/core/capabilities.ts src/mcp/capabilities-resource.ts` → nothing (reviewer check, no test) |
+| 10 | characterization | — | `test/docs/cli-reference.test.ts` and `test/cli/help-describes-every-command.test.ts` go red by themselves once the command ships without its entry (green writes it). The amendments are below; their tests are run there |
+| 11 | characterization | — (reviewer: the bug's grep) | after the `spec-006` amendment `grep -rnE "X_cli-cmds\.md:[0-9]" docs/04_memory/design docs/02_requirements` prints only `dl-041` and `dl-042` (records, kept as written): no spec (run below). A test of the bug-380 class exists for `spec-016`/`spec-017` (`test/docs/x-cli-cmds-citations.test.ts`); qa may add `spec-006` to its `SPECS` list — optional, it passes after the amendment |
+
+BDD: scenarios 1–4 of `P5.1.5-capabilities.feature` are T-9 / T-11 / T-12 above and scenarios 5–6 of
+`P5.2.1-mcp-resources.feature` are T-15 / T-16; qa cites the scenario names in the test titles, as the other BDD-backed
+suites do. qa runs `npx tsc --noEmit -p tsconfig.json` and `npx jest test/lint --maxWorkers=2` before the red commit.
+
+#### Existing tests that pin what changes (qa updates them at red)
+
+From the prototype's full run (above); each is red at red only where noted, otherwise it follows the change at green:
+- `test/core/parity.test.ts` — the exact list of derived static Resource URIs gains `wingfoil://capabilities` (T-17, qa).
+- `test/core/production-registry.test.ts` — "registers exactly the operations listed" gains `capabilities.capabilities` (qa).
+- `test/mcp/registrar.test.ts` — task-323 AC 2's four production URIs become five, `wingfoil://capabilities` added (qa).
+- `test/cli/mcp-registration.test.ts` — the real-build case's `resources: 4` becomes `resources: 5` (qa); the comment
+  listing the four URIs gains the fifth.
+- `test/cli/project-option.integration.test.ts` — AC 1's sweep ("every leaf command … refused with E_NOT_AT_GIT_ROOT")
+  and AC 2's sweep ("every leaf command exits 1 …") both include `capabilities`, which now exits `0`. qa excludes from
+  both sweeps the leaves whose operation declares `readsProject: false` (looked up in `CORE_MODULES`, never a name
+  literal), and adds that the excluded set is exactly `['capabilities']` so the exclusion cannot grow silently.
+- `test/docs/agents-md.test.ts` — "names every shipped command" and "states the number of commands" (`/— 36 commands/`
+  expected): AGENTS.md §1 is held to the surface by a test, against W1-R10 (D7).
+- `test/docs/cli-reference.test.ts` (two cases) — green's entry (AC 10).
+- `test/docs/api-docs.test.ts` — TSDoc on every new export (green; the prototype had none).
+- `test/lint/import-graph.test.ts` — the prototype's `src/mcp/server.ts` imported `../storage/build-stamp` directly; the
+  design's Resource calls `capabilitiesFn` through `src/core`, which this gate requires (`spec-006` §1).
+- `test/docs/command-surface-specs.test.ts` (three cases), `test/docs/commands-parity.test.ts`,
+  `test/docs/mcp-surface-parity.test.ts`, `test/docs/x-cli-cmds.test.ts` ("exactly one command row") — the spec, vision
+  and allowlist amendments below, which the prototype lacked; with them in the tree these pass after green (checked
+  below for the half that does not need the command).
+
+#### Files expected to change
+
+- green: `src/core/capabilities.ts` (new), `src/core/index.ts`, `src/core/registry.ts`, `src/validation/format.ts`,
+  `src/storage/build-stamp.ts`, `src/storage/index.ts`, `src/core/surface-reads.ts`, `src/cli/registrar.ts`,
+  `src/cli/program.ts`, `src/cli.ts`, `src/mcp/registrar.ts`, `src/mcp/capabilities-resource.ts` (new),
+  `src/mcp/server.ts`, `src/mcp/index.ts`, `docs/cli-reference.md`; and the stale rows of the two allowlists once the
+  names ship (`test/docs/name-resolvability.allowlist.ts`, `test/docs/enumeration-parity.allowlist.ts`, which red does
+  not touch).
+- red (qa): the new suites and fixture above; `test/cli/registrar.test.ts`, `test/mcp/registrar.test.ts`,
+  `test/core/parity.test.ts`, `test/cli/mcp-registration.test.ts`, `test/cli/project-option.integration.test.ts`
+  , optionally `test/docs/x-cli-cmds-citations.test.ts` (AC 11).
+- design (this phase, uncommitted, approved at the gate): the five spec amendments; `docs/01_vision/X_cli-cmds.md`,
+  `.wingfoil/directives/custom/command-baseline.md`, `test/docs/name-resolvability.allowlist.ts`,
+  `test/docs/enumeration-parity.allowlist.ts` (D4).
+- Not touched: AGENTS.md, `spec-008`'s command count, `README.md`, `docs/user-guide.md`, `docs/agents.md`, `CHANGELOG.md`
+  (W1-R10, `user-docs`); `spec-019` itself.
+
+**Version bumps.** `.wingfoil/directives/custom/command-baseline.md` `1.8 → 1.9` (first edit on this branch against
+`main`'s `1.8`, date `2026-11-20`); `docs/01_vision/X_cli-cmds.md` `2.5 → 2.6` with its `**Version 2.6 (2026-11-20)**`
+history entry (`test/docs/x-cli-cmds.test.ts` holds the entries in descending order). The specs carry no `version:` key;
+each amendment adds a Revision note. `docs/cli-reference.md` has no version key. None of the four configuration files of
+`test/lint/version-bump.test.ts` changes.
+
+**`.wingfoil/` proved on the pinned build** (the directive is the only `.wingfoil/` change): `npm run check:mcp` → exit
+`0` (`.mcp.json "wingfoil" runs the pinned wingfoil 0.3.2 … resources: 4, tools: 0`; the build under development the
+same); `npm run -s wingfoil -- directives list --format json` → exit `0`, stderr empty, `command-baseline` listed with
+`"version":"1.9"`; `npm run -s wingfoil -- workflow list` → exit `0`; `workflow show dev-loop` → exit `0`. No workflow
+file changes, so no step list or count is pinned by this change.
+
+#### Tests run at design (targeted, `--maxWorkers=2`, the task's PATH shim first, in the worktree)
+
+Before the amendments:
+- `npx jest test/core/registry.test.ts test/core/production-registry.test.ts test/core/parity.test.ts
+  test/validation/format.test.ts test/storage/build-stamp.test.ts test/mcp/server.test.ts test/mcp/registrar.test.ts
+  --maxWorkers=2` → `Test Suites: 7 passed, 7 total`, `Tests: 95 passed, 95 total`.
+- `npx jest test/cli/registrar.test.ts test/cli/registrar-ai-model.test.ts test/cli/registrar-co-author.test.ts
+  test/cli/registrar-dry-run.test.ts test/cli/program.test.ts test/cli/entrypoint.test.ts --maxWorkers=2` → `6 passed`,
+  `121 passed`; `npx jest test/cli/program.integration.test.ts test/cli/project-option.integration.test.ts
+  --maxWorkers=2` → `2 passed`, `92 passed`.
+- `npx jest test/docs/cli-reference.test.ts test/docs/commands-parity.test.ts test/docs/command-surface-specs.test.ts
+  test/docs/mcp-surface-parity.test.ts test/docs/x-cli-cmds.test.ts test/docs/x-cli-cmds-citations.test.ts
+  --maxWorkers=2` → `6 passed`, `37 passed`; `npx jest test/docs/name-resolvability.test.ts
+  test/docs/enumeration-parity.allowlist.test.ts test/docs/project-option-docs.test.ts test/directives/schema.test.ts
+  test/docs/directive-remove-baseline-docs.test.ts test/docs/dl-086-citations.test.ts --maxWorkers=2` → `6 passed`, `50 passed`.
+
+With the amendments in the tree:
+- the second pair of runs above → the name/allowlist six: `6 passed`, `50 passed`; the parity six: `5 passed, 1 failed`
+  — the one failure is `test/docs/x-cli-cmds.test.ts` › "every row of a command no build ships is marked *Not built*":
+  the `capabilities` row precedes the command, the expected red until green (D4). Without the two allowlist edits the
+  name and parity gates listed 8 + 4 unlisted findings, which the edits plan for `task-362`.
+- `npx jest test/directives test/core/loaders.test.ts test/core/dev-loop-v1-5.test.ts test/docs/workflow-rekey-docs.test.ts
+  test/lint --maxWorkers=2` → `Test Suites: 35 passed, 35 total`, `Tests: 470 passed, 470 total`.
+- `node scripts/lint-claims.cjs` on the five specs, `X_cli-cmds.md` and the directive → `56 warnings`, the same count as
+  without the amendments (`git stash`, re-run, `git stash pop`).
+- AC 11: `grep -rnE "X_cli-cmds\.md:[0-9]" docs/04_memory/design docs/02_requirements` → only
+  `dls/dl-042-…md:41` and `dls/dl-041-…md:36`; no spec.
+- `bug-534`: while the amendments are uncommitted, a full suite in this worktree is expected to fail
+  `test/cli/workflow-unbound-none.integration.test.ts` alone with `W_UNCOMMITTED_INPUTS` (not run here; the prototype's
+  full run was in a clean clone).
+
+#### Decisions for the approver (design gate)
+
+- **D1 — the `readsProject: false` mechanism.** (a) The optional field on `CoreOperation`; `ParamsContext.root` becomes
+  optional and is absent for such an operation; the CLI registrar calls `checkProject` instead of `resolveRoot`, the MCP
+  registrar omits the root (items 1, 6, 8). (b) Keep `root: string` and pass a stand-in (`''`, `process.cwd()`): a value
+  an operation could misread, and the current directory is exactly what §1 says it never reads. (c) Wire it by hand
+  like `init`: against §1 (a `CoreModule`) and §3.3 (derived commands). **Recommend (a)**; the prototype type-checks with
+  it, tests included.
+- **D2 — where the blank-`--project` exit `2` moves.** (a) Into `src/cli/program.ts`: a `checkProject` step run first in
+  `buildProgram`'s bound `resolveRoot` (so every other command keeps today's order and text) and passed to the registrar
+  for `readsProject: false` (item 7). (b) A Commander `preAction` hook: it would run before the operand check, so
+  `wingfoil paths a b --project ""` would report the blank value instead of the surplus, against `spec-008` §1's order.
+  (c) Keep it in `src/cli.ts` and inject a second closure: every `buildProgram` caller must pass it. **Recommend (a).**
+  Consequence: `test/cli/fixtures/cli-harness.cjs` refuses a blank `--project` too; no suite passes one through it
+  (`grep -rn "'--project', ''" test` → only `project-option.integration.test.ts`, which spawns `dist/`).
+- **D3 — the fixture and what pins byte identity outside a repository.** (a) qa writes
+  `test/core/fixtures/capabilities-document.json` at red from `spec-019` §3.5's lists (the 1018-byte line above, equal to
+  the prototype's output); T-10 compares bytes; T-9 pins the same bytes from outside every repository under another
+  locale and time zone (spawned, precondition by `git rev-parse`); T-6 pins `wingfoil` against `--version`, which the
+  fixture leaves out because the commit differs per build. (b) Generate the fixture from the code at test time: T-10
+  would compare the code with itself. **Recommend (a).** Every later command task edits the fixture (`spec-019` §5: by
+  design, review sees it).
+- **D4 — the amendments, and when the non-Memory ones are committed.** The five spec amendments are `memory amend`s
+  before red (pending list below). `X_cli-cmds.md`, the `command-baseline` directive and the two allowlists are not Memory
+  elements: (a) the orchestrator commits them, as approved here, in one commit right after the approver's amends and
+  before red; `test/docs/x-cli-cmds.test.ts` › "marked *Not built*" is then red until green, named as an expected red.
+  (b) Green commits them with the code: the tree stays green, but uncommitted files ride through red. **Recommend (a).**
+- **D5 — `governance-check` (OQ-4 (a)).** This task lands first and does not add it; `task-365` adds the entry, the §4.2
+  row (its `spec-019` amendment) and the fixture's names (item 11). **Recommend as stated.**
+- **D6 — the production Resource.** (a) Hand-registered by `registerCapabilitiesResource`, calling `capabilitiesFn`, the
+  operation's own function (`spec-019` §6). (b) Serve it through `registerCoreModules` on the production server: that
+  also serves every other derived Resource, which `spec-004` §2.1 says production does not. **Recommend (a)**, and that
+  `task-367` registers only the derived Tools on the production server (W1-R4 names Tools): otherwise the derived
+  `wingfoil://capabilities` is registered twice and the SDK refuses the second registration.
+- **D7 — AGENTS.md §1 is gated, against W1-R10.** `test/docs/agents-md.test.ts` requires §1 to name every shipped command
+  and to state their number (`/— 36 commands/` with this command): the full suite fails at green unless AGENTS.md §1
+  changes in this task. (a) Green adds `capabilities` to §1's top-level list and writes 36 (`task-365` then writes 37):
+  W1-R10's concern was a number one task makes stale for the other; the gate already forces each to write the current
+  one. (b) Keep W1-R10 literally and accept a red `agents-md` test until `align-agent-docs` — a broken gate on `main`.
+  **Recommend (a)**; `align-agent-docs` still owns the rest of AGENTS.md, `.wingfoil/README.md` and `WORKFLOW.md`.
+
+#### Risks for the other open tasks
+
+- **`task-367`** (design; `src/mcp/registrar.ts`, `src/mcp/server.ts`): both tasks edit `createMcpServer` (one line
+  added here; `task-367` replaces `registerEmptyToolsChannel`) and `callCore` in the registrar (here: no root for a
+  `readsProject: false` operation; there: the agent invocation around the call) — a textual conflict at merge, small.
+  Both amend `spec-004` (here §1, §2.1; there §4) and `spec-014` §3 (both): whichever merges second rebases its amendment
+  text. The duplicate-registration risk of D6 is real if `task-367` calls the whole registrar on the production server.
+- **`task-375`** (green; `src/core/error-details.ts`, `src/validation/warning.ts`, `src/cli/mcp-command.ts`,
+  `src/mcp/prompt.ts`): none of these files is in this task's list; `src/cli/registrar.ts` imports `error-details`
+  unchanged. No conflict expected.
+- **`task-365`** (never together): same `CORE_MODULES`, fixture, AGENTS.md count (D7), allowlists and `spec-006`/`-008`
+  rows; the second to merge updates the fixture and the count.
+- **`task-363`** (Task B) reads the fixture's path and `node dist/cli.js capabilities --format json`: it starts after this merge.
+- **`task-370`** (generic console renderer, `dl-043`): must keep this command's own `renderConsole` (`spec-019` §3.2).
+- **`task-371`, `task-372`** and every later command task: each new command changes the fixture (T-10) and AGENTS.md's
+  count (D7).
+
+### Pending amendments (approver)
+
+Prepared in the worktree, left uncommitted (`git diff --stat` lists them):
+
+- `spec-004-mcp-surface-contract` — `--reason "Add the wingfoil://capabilities Resource that spec-019 section 6 specifies
+  (task-362): the section 1 channel tree and the section 2.1 URI block list it, and a section 2.1 bullet states its
+  content, that it reads no project, its write refusal and that it is not the MCP initialize capabilities."`
+- `spec-005-cli-command-contract` — `--reason "Name capabilities among the flat commands of the Context, as the Amendments
+  owed of spec-019 require (task-362)."`
+- `spec-006-core-domain-api` — `--reason "Record the capabilities operation, which reads no project, as the Amendments
+  owed of spec-019 require (task-362): section 2 gains the readsProject field, section 3 its row and a bullet, section 6
+  item 8 and the row none, the build only; and cite the Pillar 3 table of X_cli-cmds.md by section heading instead of a
+  line range (bug-513)."`
+- `spec-008-cli-grammar` — `--reason "Add the capabilities command, which reads no project, as the Amendments owed of
+  spec-019 require (task-362): section 1 names it and says it skips the root step after the blank project refusal, the
+  project row of section 2 says a non-blank value is not checked, section 11 gains the row the build, no project, and
+  section 12 says it declares no flag."`
+- `spec-014-mcp-server-entry-point` — `--reason "Add the capabilities Resource to the channel scope of section 3, as
+  spec-019 section 6 requires (task-362): createMcpServer registers it with no resolveRoot."`
+
+Approved at this gate, committed per D4 (not Memory elements, no `memory amend`): `docs/01_vision/X_cli-cmds.md` (2.6:
+the Pillar 5 row, the `--project` row's sentence, the v0.4 timeline, the history entry), `.wingfoil/directives/custom/
+command-baseline.md` (1.9: *No baseline — an operation that reads no project, by name*), `test/docs/name-resolvability.
+allowlist.ts` (the eight names the amendments introduce, and fifteen `spec-019` rows re-reasoned, all `PLANNED`, planned
+by `task-362` — `wingfoil capabilities`, `wingfoil capabilities --format json`, `wingfoil capabilities --project
+/nonexistent`, `wingfoil [global-flags] capabilities`, `capabilities.read`, `wingfoil.commit`, `src/core/capabilities.ts`,
+`test/core/fixtures/capabilities-document.json`, `BOOTSTRAP_COMMANDS`, `CAPABILITIES_DOCUMENT_FORMAT`,
+`FILE_KIND_FORMATS`, `RESERVED_CAPABILITY_NAMES`, `buildCapabilitiesDocument`, `readsProject`,
+`registerCapabilitiesResource` — and the 0.3.2 baseline fixture by `task-363`), `test/docs/enumeration-parity.allowlist.ts`
+(four `capabilities` surpluses planned by `task-362`). Green removes the rows that go stale once the names ship.
+
+### Retrospective
+
+<!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
+     reconstructed afterwards. One line per item: what happened, the evidence (a command and what it
+     printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
+     Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
+     here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
