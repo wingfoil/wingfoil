@@ -413,6 +413,12 @@ with no code of their own. `agent.execute` needs its own refusal before it is se
 - With them, uncommitted: `test/docs/name-resolvability.allowlist.ts`, one line for `spec-014`'s `registerCoreTools`
   (`PLANNED`, `task-367`), committed by red after the `spec-014` amend.
 
+### design gate (approver, 2026-11-20)
+
+The approver recorded the step in `dd8275851` (`workflow finalize … dev-loop.design`), after the spec amendments `e9442d562`, `faa50d3ab`, `ffab1d8c7`, `f4a0b4acb`, `dafd4aa38`, `89e20213f`. The rulings, as the record states them:
+
+> Approve the design of task-367 as recommended: D1 the MCP Tools channel is spec-018 agent marker row 5, set around every tools/call, with the signing entry and AI-Model from the server's environment and no co-author or ai-model Tool input; D2 the CLI's check order holds, argument check, identity, membership and transition before the agent refusal, and REQ-INT-03 is read as no call succeeding; D3 a Tool refusal's structuredContent is the CLI's json error object with hint, details and warnings; D4 the SDK's MCP error prefix is stripped at the transport; D5 the four amendments of spec-004, spec-008, spec-014 and spec-018 as prepared; D6 the production server serves the memory module only until task-368, a staged module filter stated in spec-014; D7 one warning sink per Tool call and thrown errors mapped to isError results; D8 the harness takes buildCoreParams; D9 bug-538 in full with no new seam for src/cli.ts; D10 docs/agents.md is left to user-docs; D11 AC 7 and AC 8 classified as corrected; D12 no change for the run-id template variable, a decision-log candidate.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
