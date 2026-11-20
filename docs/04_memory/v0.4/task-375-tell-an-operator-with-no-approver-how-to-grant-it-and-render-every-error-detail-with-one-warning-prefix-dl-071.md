@@ -197,6 +197,103 @@ The approver recorded the step in `2393f145a` (`workflow finalize … dev-loop.d
 
 > Approve the design of task-375 as recommended: D1 the authority refusal gains a hint on stderr, a console hint line and a json hint field, naming the dna add or dna update command with the asker's own identity, left out when a member holds approver or the working tree grants the asker, and carried by every caller of the shared check; D2 every details key is entry, labelled or stated in one closed table, labelled and undeclared keys render as key and value, and a test fails on an undeclared key; D3 the one warning prefix lives in src/validation/warning.ts and is shared by the CLI renderer, the fallbacks, init and the mcp pre-flight; D4 the printed changes are Warning to warning, the hint, and the detail lines of refusals that carry cause, unreadable, frontier, applied, argv or file, with no error line, exit code or stdout change and the CHANGELOG written at user-docs; D5 the five specs are amended, not only the two the task names; D6 no new BDD scenario, P1.7 scenario 3 stays verbatim.
 
+### red (qa, 2026-11-20)
+
+**Red commit `6da2eb4f5`** (`git log -1 --format='%H %s'` → `6da2eb4f535d632314d3ce9b0c7cc9f8cc704ee0 test(cli): task-375 —
+failing test: …`), test files only. Base unchanged: `git rev-list --count HEAD..main` → `0`, no merge. PATH guard:
+`command -v wingfoil` → the task's PATH shim; `wingfoil --version` and `node dist/cli.js --version` → `0.3.2
+(7feeba57b2317c43684774ef0ce55bab5041a245)`. Black box: no file under `src/` or `scripts/` was opened; one command of
+this phase named `src/cli/mcp-command.ts` in a `grep … | head -0` and printed nothing.
+
+**Files.** New: `test/core/approval-authority-hint.test.ts`, `test/core/error-details-keys.test.ts`,
+`test/core/helpers/details-keys.ts` (the AST walk of AC 2, a helper so the walk is one function), `test/docs/warning-prefix.test.ts`,
+`test/docs/spec-008-section-6.test.ts`. Changed, as the design names them:
+- `test/cli/fresh-init-transitions.test.ts` — a new `describe` (AC 1), its own repository; the existing suites untouched;
+- `test/cli/program.integration.test.ts` — `memory approve` sc.3: the expected stderr gains the (b) hint line;
+- `test/cli/error-details.test.ts` — the synthetic registry gains `memoryPark` (an off-frontier refusal with `step`,
+  `instance`, `frontier: ['a', 'b']`) and a new `describe` with its console and json cases (AC 2); the AC1 cases untouched;
+- `test/cli/agent-execute-diagnostics.integration.test.ts` and `test/cli/workflow-finalize.integration.test.ts` — the
+  exact stderr of the off-frontier refusal gains its `  frontier: …` line (AC 2);
+- `test/validation/warning.test.ts` — imports `WARNING_PREFIX` and `formatWarningLine`; the fallback case's title and
+  expectation become `warning: twice\n`; a new `describe` (AC 3);
+- `test/cli/init-command.test.ts` — imports `reportWarning`; a new `describe` (AC 3);
+- `test/cli/mcp-command.test.ts` — a new `describe` (AC 3), its own repository.
+No `.d.cts`: every new export the reds import is in a `.ts` module.
+
+**Fixtures from real output.**
+- The `mcp` and `dna show` warning lines: a scratch repository outside the worktree (`GIT_CONFIG_GLOBAL=/dev/null`,
+  identity `WingFoil Test <wf-test@example.invalid>`), `node dist/cli.js init --template Scrum`, `probe_unknown_key: 1`
+  appended to `.wingfoil/dna.yaml` and committed: `dna show 2>&1 >/dev/null` → `warning: .wingfoil/dna.yaml: unknown
+  field(s) ignored: probe_unknown_key`; `--format json` → `{"warning":".wingfoil/dna.yaml: unknown field(s) ignored:
+  probe_unknown_key"}`; `timeout 10 node dist/cli.js mcp </dev/null 2>&1 >/dev/null` → `Warning: .wingfoil/dna.yaml:
+  unknown field(s) ignored: probe_unknown_key`, exit 0, the same `Warning:` line under `mcp --format json`.
+- The hinted remedy: a second scratch repository, `init --template Scrum`, `memory add --type task --title 'Smoke task'`,
+  `memory submit` (exit 0), then `dna add team.members --value "WingFoil Test" --entry-email wf-test@example.invalid
+  --entry-roles approver` → exit 0, commit `wf(dna): add team.members WingFoil Test`. The approve itself is refused in this
+  shell with `E_AGENT_CONTEXT` (expected, `spec-018` §3.1); its bytes are the existing sc.3 pin plus the hint of `spec-008`
+  §6 and the gate's D1, the identity filled in.
+- The frontier lines: the CLI drops `details.frontier` today (a `--verbose` run of both refusals prints the error line
+  only), so the value is the frontier `spec-017` §10 and `spec-016` §3.7 say it holds — "the frontier's keys in frontier
+  order" — read with `workflow next <instance> --format json` on each test's own fixture (a throwaway probe test, deleted
+  before the commit): `delivery-1` → `next` `loop.implement@task:task-202-explicit-override`, `more`
+  `[loop.implement@task:task-203-sibling]`; `rc-1` → `next` `release-cycle.smoke@release:minor-1`, `more` `[]`.
+- The AC 2 walk, run once through a throwaway probe (deleted): 31 distinct keys, the design's list exactly (`adapter applied
+  argv awaiting candidates cause diagnostics element exit_status file frontier id instance instances issues kinds markers
+  missing name pid record ref referrers rev run_id staged step steps timeout type unreadable`), no unsupported site. The
+  walk looks through parentheses and `as` / `satisfies` / non-null wrappers (they do not change the keys).
+
+**Runs** (each as `npx jest <paths> --maxWorkers=2 --noStackTrace --json --outputFile=<scratch>/r.json`, read through a
+summary of the failures):
+- `test/docs/spec-008-section-6.test.ts test/docs/warning-prefix.test.ts test/core/error-details-keys.test.ts
+  test/core/approval-authority-hint.test.ts test/validation/warning.test.ts` → `Tests: 18 failed, 31 passed, 49 total`
+  (spec-008-section-6 0/13, warning-prefix 1/3, error-details-keys 10/15, approval-authority-hint 3/5, warning 4/13).
+- `test/cli/fresh-init-transitions.test.ts test/cli/program.integration.test.ts
+  test/cli/agent-execute-diagnostics.integration.test.ts test/cli/workflow-finalize.integration.test.ts
+  test/cli/error-details.test.ts test/cli/init-command.test.ts test/cli/mcp-command.test.ts` → `Tests: 11 failed, 134
+  passed, 145 total` (fresh-init 2, program.integration 1, agent-execute-diagnostics 1, workflow-finalize 1,
+  error-details 2, init-command 2, mcp-command 2).
+- `npx tsc --noEmit -p tsconfig.json` → exit 2, only the intended TS2305: `error-details-keys.test.ts(17,10)` `DETAIL_KEYS`,
+  `warning.test.ts(5,3)` `formatWarningLine`, `warning.test.ts(8,3)` `WARNING_PREFIX`.
+- `npx jest test/lint --maxWorkers=2` → `Tests: 1 failed, 164 passed, 165 total`: `typecheck.clean … tsconfig.json
+  typechecks with zero diagnostics`, the same three TS2305 (green clears it). `npx jest test/validation/secret-scan.test.ts
+  --maxWorkers=2` → `0 failed, 85 passed`. `npx eslint` on the 13 files → exit 0.
+
+**Per AC** (first failing assertion of each red test).
+- **AC 1 (red-first).** `test/core/approval-authority-hint.test.ts`: "(a) team.members empty …", "(b) members, none an
+  approver …", "(e) requireApproverAuthority (workflow rekey) …" → `toEqual`: `- "hint": "no team member holds the
+  'approver' role yet: …"`, received without `hint`. Pass (the exclusions): "(c) a member holds approver …", "(d) the
+  working tree grants the asker …". `test/cli/fresh-init-transitions.test.ts` "task-375 AC 1 — a fresh init …":
+  "console: exit 1, the pinned error line, then the hint line …" → `- hint: no team member holds the 'approver' role yet:
+  add one with 'wingfoil dna add team.members --value "WingFoil Test" …'`; "--format json: exactly one line …" → received
+  `{"error":"user not authorized to approve type 'task'"}`; pass today: "the hinted command succeeds, and the approve then
+  succeeds". `test/cli/program.integration.test.ts` sc.3 → `- hint: no team member holds the 'approver' role yet: add
+  approver to the roles of a team.members entry with 'wingfoil dna update', then retry`.
+- **AC 2 (red-first).** `test/core/error-details-keys.test.ts`: "every key a core error sets is declared in DETAIL_KEYS …",
+  "the entry class is exactly …", "the labelled class is exactly …" → `TypeError: Cannot convert undefined or null to
+  object` (`DETAIL_KEYS` undefined under `isolatedModules`; TS2305 under `tsc`); "a cause alone …", "unreadable gives one
+  detail per string …", "a labelled array …", "a labelled string …", "any other labelled value is compact JSON", "an
+  undeclared key …", "entry lines first …" → `toEqual`, received `[]` or only the issue's entry. Pass: "the scan reads
+  every details: site …", "a cause an issue already lists prints once", "an empty labelled array adds nothing", "a stated
+  key adds nothing", "characterization: an error with only issues …". `test/cli/error-details.test.ts` "task-375 AC 2 …":
+  console → received `error: step 'loop.review@task:task-1' is not on the frontier of delivery-1\n` without `  frontier: a,
+  b`; json → received `{"error":"…"}` without `details`. `agent-execute-diagnostics` "AC 1 — a refusal after the deduction
+  …" and `workflow-finalize` "spec-017 §10 — a step not on the frontier …" → `-   frontier: …` missing.
+- **AC 3 (red-first).** `test/validation/warning.test.ts`: "WARNING_PREFIX is 'warning: '" → received `undefined`;
+  "formatWarningLine prefixes …" → `TypeError: (0 , warning_1.formatWarningLine) is not a function`; "reportWarning outside
+  any sink …" and the fallback case → received `Warning: once\n` / `Warning: twice\n`. `test/cli/init-command.test.ts`:
+  console → received `Warning: probe\n` (no `warning: after`); json → received `Warning: probe\n`.
+  `test/cli/mcp-command.test.ts`: console and json → received `Warning: .wingfoil/dna.yaml: unknown field(s) ignored:
+  probe_unknown_key\n`. `test/docs/warning-prefix.test.ts` "no tracked src/**/*.ts line writes the literal `Warning: or
+  'Warning: " → four hits (`Received + 6` lines of the array); the spec cases pass.
+- **AC 4 (characterization)**, `test/docs/spec-008-section-6.test.ts` "task-375 AC 4 …": 3 tests, pass on first run.
+- **AC 5 (characterization)**, same file "task-375 AC 5 …": 10 tests, pass on first run. Unasserted (T1): that the eight
+  listed texts are every warning `src/agent` builds; the list is the design's.
+
+**For the developer.** The source scan of `warning-prefix.test.ts` matches a backtick or a quote followed by `Warning: `
+on any line, so a doc comment that quotes the old prefix in backticks is a hit too. `error-details-keys.test.ts` reads
+`DETAIL_KEYS` as a plain record of `entry` / `labelled` / `stated` and requires the stated class to cover every other
+key the walk finds. `runMcp`'s `start` stub counts calls: the warning must be written before `start` is called once.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
