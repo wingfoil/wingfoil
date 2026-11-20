@@ -533,6 +533,146 @@ failed, 164 passed, 165 total`, the one failure `typecheck.clean`.
 together reach every ungated site. The mapping of each case to a site's file is by elimination, and no assertion
 checks it (stated in the test's module doc).
 
+### green (developer, 2026-11-20)
+
+**Commits.** `21a0b5a3d` (`feat(mcp): task-367 — the production MCP server serves the Memory Tools, every Tool call an
+agent context, bare wire errors (bug-034, bug-530, bug-538)`), then `bd1ceecb5` (refactor, below). Every command ran in
+this worktree with the task's PATH shim first; `git rev-list --count HEAD..main` → `0` at the start, so there was no merge then.
+
+**What changed** (design items 1–8, rulings D1–D9):
+- `src/core/agent-context.ts`: `AgentMarkerId` gains `'mcp'`, the kind union gains `'surface'`, `AGENT_MARKERS` gains a
+  fifth entry, last, `{ id: 'mcp', kind: 'surface', phrase: 'the call came through the MCP server' }`, and
+  `AgentInvocation` gains `surface?: 'mcp'`. `isPresent` answers `invocation.surface === marker.id` for that kind.
+  `hasEnvironmentMarker` is still environment-only, because it filters on `kind === 'environment'`. The module doc
+  says that the MCP Tools registrar sets the surface.
+- `src/mcp/tools.ts` (new) holds `registerCoreTools(server, modules, { resolveRoot, buildParams, env? })`, the Tools half
+  moved out of `registerCoreModules`. A call goes through these steps in order: an unknown name gives `Tool <name> not
+  found`; then `toolArgumentsToParams`; then, when the operation's `agentAttribution !== false`, a non-blank multi-line
+  `WINGFOIL_AGENT_MODEL` in `env` gives `MULTI_LINE_AGENT_MODEL`; then the call runs inside
+  `withAgentInvocation({ env, surface: 'mcp' })` (a new invocation object per call) inside one `withWarningSink` that
+  collects, through `runAsDryRun` when `dry-run` is given. A throw is mapped by `exitCodeForThrow`. A refusal's
+  `structuredContent` is `{error, hint?, details?, warnings?}`, keyed as `src/cli/error.ts` keys it, and is present
+  only when one of those three fields is. `deriveMcpToolName` moved here. `src/mcp/registrar.ts` re-exports it and
+  calls `registerCoreTools`, so the import edge runs one way only (registrar → tools, no cycle). The registrar keeps
+  the Resources half unchanged.
+- `src/mcp/wire-errors.ts` (new) holds `stripMcpErrorPrefix`, which is pure and returns a copy of the message, and
+  `withBareErrorMessages`, which replaces `send` on the transport and returns that same transport.
+- `src/mcp/server.ts`: `registerEmptyToolsChannel` is removed. `createMcpServer` builds a `BareErrorMcpServer`, a
+  subclass whose `connect` wraps the transport with `withBareErrorMessages`, and calls
+  `registerCoreTools(server, CORE_MODULES.filter((module) => module.name === 'memory'), { resolveRoot,
+  buildParams: buildCoreParams, env: options.env ?? process.env })`, the staged module filter of D6.
+  `McpServerOptions` gains `env?`. `startMcpServer` is unchanged.
+- `src/mcp/index.ts` re-exports `registerCoreTools`, `RegisterCoreToolsOptions`, `stripMcpErrorPrefix` and
+  `withBareErrorMessages`.
+- `test/cli/fixtures/cli-harness.cjs` (D8) passes `buildCoreParams`, required from `<distDir>/core/registry.js`.
+- bug-530: `dev-loop.yaml` 2.5 → 2.6 and `wingfoil-cli.md` "1.6" → "1.7" (its `**Date:**` set to 2026-11-20), with the
+  sentences and version clauses of design item 6. The new clause is prepended without a new `(prev `, and
+  `wingfoil-cli.md` names no bug id.
+- BDD `P5.2.3-mcp-tools.feature`: the comment above the Outline now cites `spec-018` §1 row 5 and its phrase. No
+  scenario changed.
+
+**Red → green.** `npx jest test/cli/entrypoint.test.ts test/core/agent-context-propagation.test.ts
+test/core/agent-context.test.ts test/core/dev-loop-v2-6.test.ts test/docs/mcp-surface-parity.test.ts
+test/mcp/mcp-memory-tools.test.ts test/mcp/mcp-tools.feature.test.ts test/mcp/read-only-agent-channel.test.ts
+test/mcp/registrar.test.ts test/mcp/server.test.ts test/mcp/session-context-resource.test.ts test/mcp/wire-errors.test.ts
+test/docs/enumeration-parity.allowlist.test.ts --maxWorkers=2` → `Test Suites: 13 passed, 13 total`, `Tests: 139
+passed, 139 total`. At red these files had failed 24 + 8 + 5 + 4 cases, plus the 1 failing case of the red addition.
+`npx tsc --noEmit -p tsconfig.json` → exit 0. The registrar's existing Tool suites stay green unedited:
+`npx jest test/mcp/error-details.test.ts test/mcp/success-warnings.test.ts test/mcp/tool-arguments.test.ts
+test/core/parity.test.ts test/core/tool-input-schema.test.ts test/core/tool-arguments-params.test.ts
+test/mcp/resource-warnings.test.ts …` (13 suites with the T4 ones) → `100 passed`. The cases of AC 8 pass as
+characterization, as red recorded. Red's AC 8 departure, 17 operation cases instead of 12 call-site cases, was
+accepted by supervision; no red file was edited.
+
+### refactor (developer, 2026-11-20)
+
+**Commits.** `bd1ceecb5` (`refactor(mcp): task-367 — name the launcher variable without spelling it outside
+src/core/agent-context.ts`): the first full suite failed `test/agent/launch-env.test.ts` (task-338 AC 2, "the files of
+src/ whose text matches `\bWINGFOIL_AGENT\b`" received `src/mcp/server.ts` and `src/mcp/tools.ts` beside
+`src/core/agent-context.ts`), because two doc comments of mine spelled the variable; they now say "the launcher
+variable" (`npx jest test/agent/launch-env.test.ts test/lint/agent-markers-scrubbed.test.ts --maxWorkers=2` → `15
+passed`). `bb7e682aa` merges `main` (task-375, `1ceaa6ee2`; `git rev-list --count HEAD..main` → `42`): the one conflict
+was two Revision paragraphs of `spec-008` added at one spot, resolved as their union, task-375's first; no code or test
+conflicted; supervision accepted it as a spec-only union. `0aa9cf3e5` adds `test/mcp/tools-agent-model.test.ts` (3
+cases), for the one branch the coverage run left unreached in `src/mcp/tools.ts` (an `agentAttribution: false`
+operation with a multi-line `WINGFOIL_AGENT_MODEL`).
+
+**Gates** (each heavy run after `waitslot.sh`, `--maxWorkers=2`, in this worktree at `bb7e682aa` with the three bug
+Retrospectives uncommitted, which the approver's `memory amend` records):
+- `npm test -- --maxWorkers=2` → `Test Suites: 1 failed, 708 passed, 709 total`, `Tests: 1 failed, 12971 passed, 12972
+  total`. The one failure is `test/cli/workflow-unbound-none.integration.test.ts` (task-358 AC 1 (e), "workflow next
+  (console): … no \"N diagnostic(s)\" line"), the `bug-534` class: `node dist/cli.js workflow next --format json` lists
+  three `W_UNCOMMITTED_INPUTS` diagnostics, one per uncommitted bug file. It is run again on a clean clone of the
+  final head, after the submit, and that result goes to the coordinator (the `bug-534` ruling).
+- `npm run test:coverage -- --maxWorkers=2` → the same `1 failed, 12971 passed, 12972 total`, the same test; All files
+  statements 13038/13172 (98.98 %), branches 8135/8402 (96.82 %), functions 2566/2601 (98.65 %), lines 10850/10907
+  (99.47 %). Against the baseline of `169ecd71b` (the merge base before the merge of `main`;
+  `sha256sum -c coverage-summary.json.sha256` → `OK`, `b9e4500309376827c3b8b781f44a950899519b5f0417c6ddf81db556145e5f63`):
+  12925/13072, 8051/8333, 2546/2582, 10777/10834 — every total column up. Per changed file (now | base):
+  `src/core/agent-context.ts` 103/104, 65/67, 26/26, 82/82 | 100/102, 61/65, 25/26, 81/81;
+  `src/mcp/registrar.ts` 37/37, 12/12, 8/8, 34/34 | 62/62, 30/30, 15/15, 56/56 (the Tools half moved out);
+  `src/mcp/server.ts` 19/23, 6/6, 3/4, 19/23 | 19/23, 4/4, 4/5, 18/22 — the function column falls from 80 % to 75 %
+  because the removed `registerEmptyToolsChannel` was a covered function; the one uncovered function is
+  `startMcpServer`, the stdio seam it always was (`coverage/lcov.info` `FNDA:0,startMcpServer`);
+  `src/mcp/tools.ts` (new) 55/56, 38/39, 13/13, 47/47 at that run, its one unreached branch (`BRDA:116,10,0,0`, the
+  `agentAttribution: false` return) now reached by `0aa9cf3e5`; `src/mcp/wire-errors.ts` (new) 13/13, 4/4, 3/3, 10/10;
+  `src/cli.ts` 16/16, 11/11, 3/3, 14/14 | 15/16, 9/11, 3/3, 14/14 (the AC 8 entrypoint case). No baseline exists for the
+  merge base after the merge of `main`, so the comparison is against `169ecd71b`'s.
+- `npm run typecheck` (both tsc configs) → exit 0, at `0aa9cf3e5`. `npm run lint` → exit 0; `npm run docs:api` → exit
+  0, no warning line.
+- `docs.parity`: the full suite above holds every `test/docs/` suite; targeted after `0aa9cf3e5`: `npx jest
+  test/docs/mcp-surface-parity.test.ts test/docs/name-resolvability.test.ts test/docs/cli-reference.test.ts
+  --maxWorkers=2` → `3 passed`, `18 passed`. No CLI command, option or help text changed, so `docs/cli-reference.md`
+  is unchanged.
+- The `.wingfoil/` change on the pinned build (`npm run -s wingfoil -- --version` → `0.3.2 (6de2e13c0…)`):
+  `workflow show dev-loop --format json` → phases `start,design,red,green,refactor,review,done`, 0 error diagnostics
+  (stderr only the known `human_only` unknown-field warning); `workflow list --format json` → 11 workflows, `dev-loop`
+  among them, exit 0; `directives list` lists `directives/custom/wingfoil-cli.md`, exit 0; `npm run -s check:mcp` →
+  exit 0: `.mcp.json "wingfoil" runs the pinned wingfoil 0.3.2, advertising [prompts, resources, tools] (prompts: 9,
+  resources: 4, tools: 0)` and `the build under development (dist/cli.js) serves [prompts, resources, tools]
+  (prompts: 9, resources: 4, tools: 7)`.
+
+### self-review (developer, 2026-11-20)
+
+Against `code-review`, every AC with its evidence:
+- AC 1 — `mcp-memory-tools` AC 1 (7 cases), `server.test.ts`, `read-only-agent-channel`, `mcp-surface-parity`,
+  `session-context-resource` pass (the 13-suite run above, and the full suite). The module filter is `module.name ===
+  'memory'`, not a list of operation names (`spec-006` §4.2, D6).
+- AC 2 — AC 2's 7 cases and the four `agent-context.test.ts` cases pass; the order of D2 holds because the registrar
+  runs `toolArgumentsToParams` first and the core's own order after it, unchanged.
+- AC 3 — AC 3's 3 cases pass; `resolveOperationAgentContext` resolves once per invocation, and `tools.ts` builds a new
+  invocation object per call, so a warning is not lost on a second call.
+- AC 4 — `mcp-tools.feature.test.ts` (6 cases) passes against `createMcpServer`.
+- AC 5 — the AC 5 case and the registrar's synthetic-op case pass; the `spec-008` §5 paragraph is in the tree after the
+  merge (`git diff bb7e682aa^2 bb7e682aa -- docs/04_memory/design/specs/spec-008-cli-grammar.md` shows it added).
+- AC 6 — `wire-errors.test.ts` (7 cases) passes; the Prompt suites that pin single-prefix messages
+  (`test/mcp/mcp-prompts.feature.test.ts`, `test/mcp/role-prompt-context.test.ts`) pass unedited in the full suite.
+- AC 7 — `dev-loop-v2-6.test.ts` (8 cases) passes at `HEAD`, and the pinned-build reads above.
+- AC 8 — `agent-context-propagation.test.ts` (20 cases) and the entrypoint case pass; coverage now measures
+  `src/cli.ts` 16/16 statements (base 15/16).
+- AC 9 — the four amends (`f4a0b4acb`, `ffab1d8c7`, `faa50d3ab`, `e9442d562`) and the allowlist line `13a65f52d` are in
+  `git log`; no spec is edited by this phase beyond the merge's union.
+- T4: `git log --first-parent --no-merges --format=%h 546f6bf07..HEAD -- <the 14 red files>` → prints nothing.
+- Same class in the files I touched: `grep -rn "empty Tools\|registers no Tool\|serves no Tool" src/mcp` → no line
+  left (the `src/mcp/prompt.ts` sentence is about that module itself). The same stale sentence outside the files of
+  this task (two comments in `src/core/index.ts`, and three user documents that describe the released build) is
+  reported to the coordinator, not changed here.
+- Invisible characters: the grep of the prompt over every changed file → no hit, before each commit.
+- Agent markers: none unset or overridden; `scripts/e2e-smoke.cjs` not run (the full suite's own tests drive it).
+
+### Pending amendments (approver)
+
+- `bug-034-mcp-error-prefix-doubled` — adds `### Retrospective` (the bug had none) —
+  `--reason "Record the bug's retrospective: task-367 strips the SDK's MCP error prefix from every JSON-RPC error the
+  production server sends, at the transport, and pins it on wingfoil://nope."`
+- `bug-530-dev-loop.yaml-and-the-wingfoil-cli-directive-still-describe-an-agent-running-a-reject-or-an-amend-on-the-approver-s-instruction`
+  — `--reason "Record the bug's retrospective: task-367 rewrites dev-loop.yaml 2.6's header and wingfoil-cli 1.7 §3 so
+  the approver runs reject and amend from their own terminal and an agent never does."`
+- `bug-538-the-agent-context-refusal-propagations-are-covered-only-by-spawned-cli-suites-which-coverage-does-not-instrument`
+  — `--reason "Record the bug's retrospective: task-367 reaches every agent-context refusal in process, one case per
+  attributed operation with a call-site parity, the gated refusal through the MCP Tools and the blank --project
+  through the captured resolveRoot."`
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -540,3 +680,12 @@ checks it (stated in the test's module doc).
      printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
      Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
      here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+
+- Two doc comments of the new Tools code spelled `WINGFOIL_AGENT`, and `test/agent/launch-env.test.ts` (task-338) holds
+  that only `src/core/agent-context.ts` spells it; the full suite caught it, no targeted run did (fixed in `bd1ceecb5`).
+  A design that names a new `src/` module next to the agent markers could list that test among the ones it runs.
+- The heavy-gate slot was the long pole: one full suite waited about 34 min behind another task's coverage run
+  (`ps -eo pid,etime,args` showed the holder at `31:57`), and a merge of `main` mid-refactor (task-375 landed while the
+  gates ran) cost a second full suite.
+- The merge of `main` conflicted only on two Revision paragraphs of `spec-008` added at one spot by two tasks of the
+  wave; the union rule resolved it with no judgement call (`bb7e682aa`).
