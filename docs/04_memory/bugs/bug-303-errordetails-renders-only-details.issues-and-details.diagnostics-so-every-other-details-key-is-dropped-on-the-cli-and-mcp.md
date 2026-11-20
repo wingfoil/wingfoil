@@ -59,4 +59,12 @@ Captured on 2026-10-09 by `bug-ingest-rel-v0.3-w3b3-review-findings-plan`, from 
 
 ### Retrospective
 
-None.
+- The Notes said no `details` key was dropped on `main`; five were: `cause` (a context refusal on the CLI), `frontier`
+  (the four off-frontier refusals), `applied` (a failed bulk adoption), `argv` and `file`. `unreadable` was re-mapped
+  by hand, as the Notes said: it is built only by `src/core/context.ts`'s `NOT_FOUND` refusal, which
+  `src/mcp/prompt.ts` maps itself, and the CLI route `agent execute` cannot reach it. `task-375`'s design found the keys
+  with an AST walk of every `details:` site (31 keys), which `test/core/error-details-keys.test.ts` now runs on every
+  suite; a bug filed as "the absence of a rule" was already live.
+- Fixed by `task-375`: `DETAIL_KEYS` (`src/core/error-details.ts`) declares every key as entry, labelled or stated
+  (`spec-005` §3.1), `errorDetails` renders entry and labelled keys and any undeclared key, and `src/mcp/prompt.ts`'s
+  hand re-mapping of `cause` is gone.
