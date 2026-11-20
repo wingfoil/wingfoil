@@ -1,8 +1,8 @@
 /**
  * task-375 (developer, green): the edges of `errorDetails`' rule for every `details` key (`spec-005` §3.1, `bug-303`)
  * that the red suite `test/core/error-details-keys.test.ts` does not reach — an `unreadable` entry that is issue-shaped
- * or empty, and a labelled (or undeclared) key whose value is `undefined`, an empty string, or an array that is not all
- * strings.
+ * or empty, and a labelled (or undeclared) key whose value is `undefined`, an empty string, an array that is not all
+ * strings, or any other non-string value.
  */
 import { errorDetails } from '../../src/core/error-details';
 import { coreErr } from '../../src/core/types';
@@ -25,6 +25,10 @@ describe('errorDetails — the edges of the details rule (task-375, spec-005 §3
 
   it('an array that is not all strings is compact JSON', () => {
     expect(errorDetails(refusal({ argv: ['claude', 2] }))).toEqual([{ detail: 'argv: ["claude",2]' }]);
+  });
+
+  it('a labelled value that is neither a string nor an array is compact JSON', () => {
+    expect(errorDetails(refusal({ applied: { step: 's', commit: 'abc' } }))).toEqual([{ detail: 'applied: {"step":"s","commit":"abc"}' }]);
   });
 
   it('an error with no details renders nothing', () => {
