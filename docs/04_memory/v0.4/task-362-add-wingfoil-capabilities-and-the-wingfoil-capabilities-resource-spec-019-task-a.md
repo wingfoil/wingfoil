@@ -486,6 +486,159 @@ Runs (the task's PATH shim first; jest in the `--noStackTrace --json` form, read
   the one failure `typecheck.clean`, from those diagnostics; `npx eslint` over the two files → exit `0`; the
   invisible-character grep → no hit.
 
+### green (developer, 2026-11-20)
+
+**Commits.**
+- `be2fc8b62` (`feat(core): task-362 — wingfoil capabilities and the wingfoil://capabilities Resource (bug-513)`) is
+  design items 1–9.
+  - `CoreOperation.readsProject?: false`, and `ParamsContext.root` made optional.
+  - `FILE_KIND_FORMATS` in `src/validation/format.ts`, and `readBuildIdentity` in `src/storage/build-stamp.ts`, which
+    `readBuildStamp` now builds its stamp from. `readBuildIdentity` is re-exported by `src/storage/index.ts` and
+    `src/core/surface-reads.ts`.
+  - The new `src/core/capabilities.ts`, and the `capabilities` module with `capabilitiesFn` in `src/core/index.ts`.
+  - The CLI registrar calls `checkProject` in place of `resolveRoot` for a `readsProject: false` operation. The MCP
+    registrar omits `root` for one.
+  - The blank-`--project` check moved from `src/cli.ts` into `buildProgram`'s `checkProject`.
+  - The new `src/mcp/capabilities-resource.ts`, registered by `createMcpServer` and re-exported by `src/mcp/index.ts`.
+- `007f67a87` (`docs(cli): …`):
+  - the `docs/cli-reference.md` entry and its three cross-references;
+  - AGENTS.md §1: `capabilities` at the top level, 36 commands (design D7);
+  - the stale allowlist rows (below).
+- `44940c82b` is the orchestrator's re-index of `docs/01_vision/00_index.md`, not this phase's. Green had found
+  `test/docs/vision-index.test.ts` failing 4 cases on the `X_cli-cmds.md` 2.6 row (version, date, line count, 15
+  shifted anchors and ranges). The cause was the design-gate commit `42f6fc3be`:
+  `git diff --stat 42f6fc3be HEAD -- docs/01_vision/` at `007f67a87` printed nothing. The file was outside the design's
+  list, so green stopped.
+
+**Red → green.**
+- The first green run stopped on two red cases. A correct implementation could not pass them: Commander wraps `--help`
+  at 80 columns, and a run from `src/` stamps `commit: unknown`. The qa corrected both in `3b7d6b521`. The
+  implementation was kept as a patch outside the worktree and re-applied unchanged (`git apply` → clean).
+- Then, the task's PATH shim first:
+  - `npx jest test/core/capabilities.test.ts test/core/capabilities-format-readers.test.ts test/mcp/capabilities-resource.test.ts test/cli/capabilities.integration.test.ts test/cli/registrar.test.ts test/mcp/registrar.test.ts --maxWorkers=2`
+    → `Tests: 101 passed, 101 total`;
+  - `npx jest test/core/parity.test.ts test/core/production-registry.test.ts test/cli/mcp-registration.test.ts test/docs/x-cli-cmds-citations.test.ts test/cli/project-option.integration.test.ts --maxWorkers=2`
+    → `Tests: 76 passed, 76 total`.
+- `npx tsc --noEmit -p tsconfig.json` → no output; `npx eslint` over the changed files → exit `0`.
+
+**Allowlists.**
+- `test/docs/name-resolvability.test.ts` (warn mode) listed 20 of the `task-362` rows as stale once the names shipped;
+  they are removed.
+- The two `task-362` rows that can never resolve keep their entry with a reason of their own instead of `PLANNED`, so
+  they are not reported as delivered once this task is `done`:
+  - `wingfoil [global-flags] capabilities`, `spec-008` §1's grammar placeholder;
+  - `wingfoil.commit`, a key of the output document.
+- In `test/docs/enumeration-parity.allowlist.ts` the four `task-362` rows no longer match a finding. A temporary
+  in-tree debug test, deleted and never committed, printed them under `stale`. They are removed.
+
+### refactor (developer, 2026-11-20)
+
+**Commit.** `dfc676fc2` (`refactor(core): …`).
+- `buildCapabilitiesDocument` sorts with `Array.prototype.sort()` without a comparator, which orders strings by UTF-16
+  code units, never by locale (`spec-019` §3.2). The hand comparator and its unreachable "equal" branch are gone.
+- `test/core/capabilities-wiring.test.ts` (new, the developer's) covers in-process what only the spawned suites
+  reached:
+  - the `src/core` and `surface-reads` re-exports;
+  - the operation's `renderConsole`;
+  - `buildProgram`'s `checkProject`: a blank `--project` → exit `2` with no root resolved, for `capabilities` and for
+    `paths`; a non-blank one is not checked by `capabilities`.
+- `npx jest test/core/capabilities-wiring.test.ts test/core/capabilities.test.ts test/core/capabilities-format-readers.test.ts --maxWorkers=2`
+  → `Tests: 36 passed, 36 total`.
+
+**Gates** (each heavy one after `waitslot.sh`, through its npm script and the heavy-gate lock, `--maxWorkers=2`; the
+`bug-513` amendment below in the working tree):
+- `npm run test:coverage -- --maxWorkers=2` at `dfc676fc2` → `Test Suites: 1 failed, 703 passed, 704 total`,
+  `Tests: 1 failed, 12899 passed, 12900 total`.
+- `npm test -- --maxWorkers=2` at `dfc676fc2` → the same counts.
+- The one failure in both is `test/cli/workflow-unbound-none.integration.test.ts` › "workflow next (console): … no
+  "N diagnostic(s)" line". It is the `bug-534` class. `node dist/cli.js workflow next --format json` lists one
+  diagnostic, `W_UNCOMMITTED_INPUTS`, on the uncommitted `bug-513` file. It is checked on a clean clone below.
+- Coverage. The four columns are 98.88 / 96.64 / 98.61 / 99.47 (statements, branches, functions, lines). The baseline
+  is `169ecd71b`, whose `coverage-summary.json` passed `sha256sum -c coverage-summary.json.sha256` (`OK`), sha256
+  `b9e4500309376827c3b8b781f44a950899519b5f0417c6ddf81db556145e5f63`. Totals, covered/total, baseline → head:
+
+  | Column | Baseline | Head |
+  |---|---|---|
+  | statements | 12925/13072 | 12991/13137 |
+  | branches | 8051/8333 | 8060/8340 |
+  | functions | 2546/2582 | 2572/2608 |
+  | lines | 10777/10834 | 10836/10893 |
+
+  No column is below the baseline percentage.
+- Changed source files, statements · branches · functions · lines, baseline → head:
+
+  | File | Baseline | Head |
+  |---|---|---|
+  | `src/cli.ts` | 15/16 · 9/11 · 3/3 · 14/14 | 12/12 · 7/7 · 3/3 · 11/11 |
+  | `src/cli/program.ts` | 175/175 · 97/103 · 43/43 · 144/144 | 182/182 · 101/107 · 44/44 · 151/151 |
+  | `src/cli/registrar.ts` | 93/94 · 87/87 · 18/19 · 83/84 | 97/98 · 89/89 · 18/19 · 86/87 (the one gap is the pre-existing output-sink callback) |
+  | `src/core/capabilities.ts` | new | 30/30 · 2/2 · 12/12 · 25/25 |
+  | `src/core/index.ts` | 852/866 · 387/403 · 191/209 · 683/686 | 864/878 · 387/403 · 199/217 · 694/697 |
+  | `src/core/registry.ts` | 104/104 · 86/88 · 24/24 · 88/88 | unchanged |
+  | `src/core/surface-reads.ts` | 13/13 · 0/0 · 10/10 · 10/10 | 14/14 · 0/0 · 11/11 · 11/11 |
+  | `src/mcp/capabilities-resource.ts` | new | 7/7 · 0/0 · 2/2 · 7/7 |
+  | `src/mcp/registrar.ts` | 62/62 · 30/30 · 15/15 · 56/56 | 63/63 · 32/32 · 15/15 · 57/57 |
+  | `src/mcp/server.ts` | 19/23 · 4/4 · 4/5 · 18/22 | 21/25 · 4/4 · 4/5 · 20/24 |
+  | `src/storage/build-stamp.ts` | 16/16 · 7/7 · 3/3 · 16/16 | 19/19 · 8/8 · 4/4 · 19/19 |
+  | `src/validation/format.ts` | 31/31 · 14/14 · 7/7 · 27/27 | 33/33 · 14/14 · 8/8 · 29/29 |
+
+  `src/mcp/index.ts` and `src/storage/index.ts` are not in the report, at base or head.
+- The first coverage run, at `44940c82b` before the refactor, was below the baseline in three columns:
+  - branches 96.60 against 96.61;
+  - functions 98.31 against 98.60;
+  - lines 99.46 against 99.47.
+
+  The cause was the barrel re-export getters, the `renderConsole` closure and `checkProject`'s branches, which no
+  in-process test reached. The wiring test closes that gap.
+- `npm run lint` → exit `0`; `npm run docs:api` → exit `0`.
+- `npm run typecheck` (both tsc configs) → exit `0`, and `npm run build` → exit `0`, before the refactor; both are
+  re-run before the submit (self-review).
+- `docs.parity`: `npx jest test/docs test/cli/help-describes-every-command.test.ts --maxWorkers=2` at `007f67a87` →
+  `Tests: 4 failed, 468 passed, 472 total`, the four being the vision-index cases since fixed by `44940c82b`. Every
+  case of `test/docs/cli-reference.test.ts` and `test/docs/agents-md.test.ts` passed in that run.
+
+### self-review (developer, 2026-11-20)
+
+Against `code-review`, every claim with its command:
+
+| AC | Status | Evidence |
+|----|--------|----------|
+| 1 | met | `capabilities.test.ts` AC 1 cases pass (the 101-test run above). |
+| 2 | met | T-9 and T-14 in `capabilities.integration.test.ts`; the registrar cases of `test/cli/registrar.test.ts` and `test/mcp/registrar.test.ts`; `project-option.integration.test.ts` pins the excluded set to `['capabilities']`. |
+| 3 | met | T-3, T-6 and T-11, in-process and spawned. |
+| 4 | met | T-1 and T-2 (`capabilities-format-readers.test.ts`, 5 cases). |
+| 5 | met | T-4 and T-5. |
+| 6 | met | T-7 and T-8. `governance-check` is not added: D5, `task-365` merges second. |
+| 7 | met | T-10 against the committed fixture. |
+| 8 | met | `capabilities-resource.test.ts` and the parity, production-registry, MCP registrar and `check:mcp` pins. |
+| 9 | met | T-12 and T-13. |
+| 10 | met | `test/docs/cli-reference.test.ts` passes with the entry; the amendments were recorded at the design gate. |
+| 11 | met | See below. |
+
+- "No new code": `grep -rhoE "\b[EW]_[A-Z_]+" src/core/capabilities.ts src/mcp/capabilities-resource.ts` → no output,
+  exit `1`.
+- AC 11. The positive case first: `grep -rnE "X_cli-cmds\.md:[0-9]" docs/04_memory/design docs/02_requirements`
+  prints exactly `dls/dl-042-…md` and `dls/dl-041-…md`, so the grep finds hits; no spec is among them.
+- T4: `git log --first-parent --no-merges --format=%h 3b7d6b521..HEAD -- <the 12 red files>` → no output.
+- Same class, in the files touched:
+  - every registrar path that resolved a root now goes through the `readsProject` test: the CLI `run` and the MCP
+    `callCore`, the only two `resolveRoot()` calls in the two registrars
+    (`grep -n "resolveRoot()" src/cli/registrar.ts src/mcp/registrar.ts`);
+  - `init` and `mcp` keep the blank check through the bound `resolveRoot`, which calls `checkProject` first.
+- Determinism (REQ-SYS-07): the document reads no clock, environment or current directory. T-9 spawns it under
+  another `LANG`, `LC_ALL` and `TZ` from outside every repository and compares the bytes.
+- Never run in this phase:
+  - an agent marker unset or overridden;
+  - `scripts/e2e-smoke.cjs`;
+  - any spec edited.
+- Candidate findings: none.
+
+### Pending amendments (approver)
+
+- `bug-513-spec-006-still-cites-x-cli-cmds.md-by-a-bare-line-range-the-bug-380-class-in-a-spec-task-335-does-not-touch`
+  — its `### Retrospective` items, left uncommitted:
+  `--reason "Record the bug's retrospective: task-362 fixed it through the spec-006 amendment a6fc9e35b, and the citations test now runs its grep over every spec."`
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -493,3 +646,12 @@ Runs (the task's PATH shim first; jest in the `--noStackTrace --json` form, read
      printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
      Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
      here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+
+- Green stopped twice, each time on a check the design had not run against the change:
+  - two red cases (Commander's 80-column help wrap; a `src/` run's `commit: unknown`), corrected in `3b7d6b521`;
+  - the vision index of `X_cli-cmds.md`, re-synced in `44940c82b`.
+
+  Proposal: the design runs `test/docs` once with its non-Memory edits in the tree, and the red runs its spawned cases
+  against a prototype build where one exists.
+- The first coverage run fell below the baseline by hundredths in three columns. Barrel re-exports and closures used
+  only by spawned suites count as uncovered functions in-process (`dfc676fc2` adds the in-process wiring test).
