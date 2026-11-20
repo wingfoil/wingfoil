@@ -720,7 +720,13 @@ commit or stash them first.
 
 - **Errors:** missing `--reason` → exit `2`; blank `--reason` → exit `2`
   (`error: invalid flag value: --reason must not be blank`); not an approver → exit `1`
-  (`error: user not authorized to approve type 'task'`); new in 0.4, run in an agent's session → exit `1`
+  (`error: user not authorized to approve type 'task'`); new in 0.4, when no team member holds the `approver` role
+  yet (a fresh `init`), the refusal adds a `hint:` line saying how to grant it — `hint: no team member holds the
+  'approver' role yet: add one with 'wingfoil dna add team.members --value "<your name>" --entry-email <your email>
+  --entry-roles approver', then retry`, or, when the project has members, `… add approver to the roles of a
+  team.members entry with 'wingfoil dna update', then retry` (the `hint` field under `--format json`), and the same
+  hint follows `reject`, `amend`, an approval `workflow finalize`, `workflow adopt --plan --apply` and
+  `workflow rekey`; new in 0.4, run in an agent's session → exit `1`
   (`error: E_AGENT_CONTEXT: 'memory approve' needs the approver and does not run in an agent's session …`, see
   [Global options](#global-options)); the state is not a gate → exit `1`
   (`error: illegal transition draft -> (none) for type 'task'`; 0.2.x prints `draft -> backlog`, see

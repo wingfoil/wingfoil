@@ -574,7 +574,11 @@ wingfoil memory reject  task-001-my-first-task --reason "Add acceptance criteria
   it.
 - These verbs commit the state change **and nothing else**. If the document has uncommitted edits they
   refuse — commit or stash them first.
-- Without the approver role you get `error: user not authorized to approve type 'task'` (exit `1`).
+- Without the approver role you get `error: user not authorized to approve type 'task'` (exit `1`). New in 0.4:
+  when no team member holds `approver` yet — right after `init` — a `hint:` line follows it with the command that
+  grants it, your own git identity filled in:
+  `hint: no team member holds the 'approver' role yet: add one with 'wingfoil dna add team.members --value "<name>"
+  --entry-email <email> --entry-roles approver', then retry`.
 - Only the approver approves, from a
   terminal of their own. In a session an AI agent started — `WINGFOIL_AGENT`, `CLAUDE_CODE_CHILD_SESSION` or
   `CODEX_SANDBOX` defined, or `--co-author` given — `approve`, `reject` and `amend` refuse with `error: E_AGENT_CONTEXT:

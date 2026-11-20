@@ -41,7 +41,7 @@ import {
   resolveRoleDirectives,
   RevisionError,
 } from '../core';
-import type { CoreError, DirectiveFile, ExecutionContextElement } from '../core';
+import type { DirectiveFile, ExecutionContextElement } from '../core';
 import { errorDetails, type ErrorDetail } from '../core/error-details';
 import { readDocument, splitFrontmatter, WINGFOIL_DIR } from '../core/surface-reads';
 
@@ -116,15 +116,6 @@ const ROLE_PROMPT_ARGUMENTS = [
 const ROLE_PROMPT_ARGUMENT_NAMES: readonly string[] = ROLE_PROMPT_ARGUMENTS.map((argument) => argument.name);
 
 
-/**
- * The details of a context refusal that is a failed read: the issues `errorDetails` selects, then the
- * `details.cause` of an absent pillar file (`assembleExecutionContext`), which no `issues` carries.
- */
-function contextRefusalDetails(error: CoreError): ErrorDetail[] {
-  const cause = error.details?.cause;
-  return [...errorDetails(error), ...(typeof cause === 'string' ? [{ detail: cause }] : [])];
-}
-
 /** The execution context for `(role, element, state)`, as text, with the diagnostics that ride beside it. */
 export interface SessionContext {
   /** `assembleExecutionContext`'s `spec-012` §7 payload, as returned. */
@@ -166,7 +157,7 @@ export function buildSessionContext(root: string, role: string, element: Executi
       const unreadable = error.details?.unreadable;
       throw promptRequestErrorWithDetails(error.message, warningDetails(Array.isArray(unreadable) ? (unreadable as string[]) : []));
     }
-    throw readRefusalError(error.message, contextRefusalDetails(error));
+    throw readRefusalError(error.message, errorDetails(error));
   }
   const { payload, context, notes } = result.value;
   return { text: payload, warnings: [...context.warnings, ...notes, ...(result.warnings ?? [])] };
