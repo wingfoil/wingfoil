@@ -38,11 +38,13 @@ describe('task-358 AC 1 (e) — workflow next and workflow status report no unbo
     expect(unboundIn(run.stdout)).toEqual([]);
   });
 
-  it('workflow next (console): exit 0, no unbound token on either stream and no "N diagnostic(s)" line', () => {
+  it('workflow next (console): exit 0, no unbound token on either stream; stdout holds no W_ code and no diagnostic(s) line', () => {
     const run = runCliEntry(ROOT, ['workflow', 'next']);
     expect(run.status).toBe(0);
     expect(`${run.stdout}${run.stderr}`).not.toContain(UNBOUND);
-    expect(run.stdout).not.toMatch(/^\d+ diagnostic\(s\)/m);
+    // task-373 D7 (dl-176 (a)): diagnostics are stderr warnings, so stdout carries no code and no count of them.
+    expect(run.stdout).not.toMatch(/\bW_[A-Z_]+/);
+    expect(run.stdout).not.toMatch(/diagnostic\(s\)/);
   });
 
   it('workflow status (console): exit 0, no unbound token on either stream', () => {

@@ -7,8 +7,10 @@
  * - BDD P4.5 sc. 3: no open workflow: exit 0, `no open workflows`.
  * - BDD P4.14 sc. 3: an approval routed to nobody is reported, exit 0.
  * - `spec-017` §10: an unknown `<ref>` exits 1; a second positional exits 2.
+ * - task-373 (`dl-176` (a), D4): each open instance only the pre-marker rule keeps is one stderr warning, as
+ *   `--format console`, `json` and `yaml` write a success warning.
  */
-import { load as yamlLoad } from 'js-yaml';
+import { loadAll as yamlLoadAll, load as yamlLoad } from 'js-yaml';
 
 import { commitAll, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
 import { runCliEntry } from './helpers/spawn-cli';
@@ -89,6 +91,13 @@ function writeProject(root: string, open: readonly [string, string][], approver 
   }
 }
 
+/**
+ * task-373 (`dl-176` (a), D4; `spec-017` §3.2, §7.4): the fixture's plans are committed by hand with no start marker, so
+ * `workflow status` reports each open instance with `W_INSTANCE_PRE_MARKER`, one stderr warning each in payload order
+ * (the order and text `--format json`'s `diagnostics` printed on these trees).
+ */
+const preMarkerText = (id: string): string => `W_INSTANCE_PRE_MARKER (docs/plans/${id}.md): instance ${id} is kept by the pre-marker rule: restart it with workflow start`;
+
 describe('task-225 — wingfoil workflow status on the compiled CLI (BDD P4.5)', () => {
   let repo: string;
   beforeAll(() => {
@@ -103,7 +112,7 @@ describe('task-225 — wingfoil workflow status on the compiled CLI (BDD P4.5)',
 
   it('sc. 1 — console: exit 0, both open workflows listed, the active one marked, the 1 pending approval shown', () => {
     const run = runCliEntry(repo, ['workflow', 'status']);
-    expect([run.status, run.stderr]).toEqual([0, '']);
+    expect([run.status, run.stderr]).toEqual([0, `warning: ${preMarkerText('rl-minor-2')}\nwarning: ${preMarkerText('rl-minor-1')}\n`]);
     expect(run.stdout).toContain('* rl-minor-2 (release-line) — active');
     expect(run.stdout).toContain('  rl-minor-1 (release-line)');
     expect(run.stdout).toContain('pending approvals: 1');
@@ -112,7 +121,9 @@ describe('task-225 — wingfoil workflow status on the compiled CLI (BDD P4.5)',
 
   it.each(['json', 'yaml'])('sc. 2 — --format %s prints a valid document with the StatusResult fields', (format) => {
     const run = runCliEntry(repo, ['workflow', 'status', '--format', format]);
-    expect([run.status, run.stderr]).toEqual([0, '']);
+    expect(run.status).toBe(0);
+    const warnings = format === 'json' ? run.stderr.split('\n').filter((line) => line !== '').map((line) => JSON.parse(line) as unknown) : yamlLoadAll(run.stderr);
+    expect(warnings).toEqual([{ warning: preMarkerText('rl-minor-2') }, { warning: preMarkerText('rl-minor-1') }]);
     const value = (format === 'json' ? JSON.parse(run.stdout) : yamlLoad(run.stdout)) as { active: string; open: unknown[]; pendingApprovals: unknown[] };
     expect(value.active).toBe('rl-minor-2');
     expect(value.open).toHaveLength(2);
@@ -149,7 +160,7 @@ describe('task-225 — BDD P4.5 sc. 3 and P4.14 sc. 3 on the compiled CLI', () =
     try {
       writeProject(repo, [['minor-1', 'planning']], 'developer');
       const run = runCliEntry(repo, ['workflow', 'status']);
-      expect([run.status, run.stderr]).toEqual([0, '']);
+      expect([run.status, run.stderr]).toEqual([0, `warning: ${preMarkerText('rl-minor-1')}\n`]);
       expect(run.stdout).toContain("human needed: approve or reject minor-1 — routed to no approver found for role 'approver' in dna.yaml");
     } finally {
       removeTempDir(repo);

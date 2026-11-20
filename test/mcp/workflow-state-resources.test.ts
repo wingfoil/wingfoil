@@ -164,7 +164,13 @@ describe('task-239 — wingfoil://workflows/-/next and -/status on the productio
     [STATUS_URI, 'status'],
   ])('AC 1 — %s returns the JSON `workflow %s --format json` prints at the same commit', async (uri, verb) => {
     const run = runCliEntry(repo, ['workflow', verb, '--format', 'json']);
-    expect([run.status, run.stderr]).toEqual([0, '']);
+    expect(run.status).toBe(0);
+    // task-373 (dl-176 (a), spec-017 §7.3, §7.4): the CLI writes each diagnostic of the payload on stderr as one
+    // `{"warning": …}` line (status: the fixture's two hand-committed plans are W_INSTANCE_PRE_MARKER); the Resource
+    // serves the payload alone.
+    const diagnostics = (JSON.parse(run.stdout) as { diagnostics: readonly { code: string; file: string; message: string }[] }).diagnostics;
+    expect(diagnostics.map((d) => d.code)).toEqual(verb === 'status' ? ['W_INSTANCE_PRE_MARKER', 'W_INSTANCE_PRE_MARKER'] : []);
+    expect(run.stderr).toBe(diagnostics.map((d) => `${JSON.stringify({ warning: `${d.code} (${d.file}): ${d.message}` })}\n`).join(''));
 
     const read = await readText(client, uri);
     expect(read).toEqual({ uri, mimeType: 'application/json', text: run.stdout.replace(/\n$/, ''), extra: [] });

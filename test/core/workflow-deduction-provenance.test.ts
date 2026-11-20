@@ -553,7 +553,7 @@ async function call<T>(operation: typeof nextOp, name: string, root: string): Pr
 const withoutCount = (text: string): string[] => text.split('\n').filter((line) => !/^\d+ diagnostic\(s\): --format json lists them$/.test(line));
 
 describe('task-293 AC 5 (characterization) — `workflow next` / `status` shapes are unchanged apart from the provenance diagnostics', () => {
-  it('an orphan record changes no field but `diagnostics` (and the baseline commit), and no console line but the count', async () => {
+  it('an orphan record changes no field but `diagnostics` (and the baseline commit), and no console line (no count either, task-373)', async () => {
     const repo = makeTempGitRepo();
     try {
       writeProject(repo);
@@ -583,7 +583,9 @@ describe('task-293 AC 5 (characterization) — `workflow next` / `status` shapes
       expect(Object.keys(nextAfter.next!)).toEqual(Object.keys(nextBefore.next!));
       expect(withoutCount(renderNextConsole(nextAfter))).toEqual(withoutCount(renderNextConsole(nextBefore)));
       expect(withoutCount(renderStatusConsole(statusAfter))).toEqual(withoutCount(renderStatusConsole(statusBefore)));
-      if (nextAfter.diagnostics.length > 0) expect(renderNextConsole(nextAfter)).toContain(`${nextAfter.diagnostics.length} diagnostic(s): --format json lists them`);
+      // task-373 (dl-176 (a), spec-017 §7.3, §7.4): no count line any more; the diagnostics are stderr warnings.
+      expect(renderNextConsole(nextAfter)).not.toMatch(/diagnostic\(s\)/);
+      expect(renderStatusConsole(statusAfter)).not.toMatch(/diagnostic\(s\)/);
     } finally {
       removeTempDir(repo);
     }

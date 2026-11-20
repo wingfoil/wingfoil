@@ -1,7 +1,8 @@
 /**
  * task-225 — `workflow status`'s console view and the routing helpers on synthetic values (`spec-017` §5.1, §5.3,
  * §8): every arm of the renderer — phase counts, notes and vacuous completions, the instance flags, a step with no
- * role, a re-entered step, a third party's line, late elements, no approver for an ungated element, diagnostics —
+ * role, a re-entered step, a third party's line, late elements, no approver for an ungated element, no diagnostic
+ * line (task-373) —
  * and the routing arms no fixture repository reaches (a `by_person` naming nobody, which the registry refuses at
  * load, `E_PHASE_APPROVER_UNKNOWN`; a routed member `dna.yaml` does not list).
  */
@@ -86,9 +87,11 @@ describe('task-225 — renderStatusConsole on a synthetic StatusResult', () => {
     expect(text).toContain('    late: bug:bug-9 (open)\n');
   });
 
-  it("an ungated element with no approver in dna.yaml says so; the diagnostics count", () => {
+  it("an ungated element with no approver in dna.yaml says so; no diagnostic and no count of them (task-373, dl-176 (a))", () => {
     expect(text).toContain("human needed: approve or reject task-7 (task, pending; no open workflow carries it) — routed to no approver found for role 'approver' in dna.yaml");
-    expect(text.endsWith('1 diagnostic(s): --format json lists them\n')).toBe(true);
+    // task-373: the diagnostics are stderr warnings of the operation (spec-017 §7.4), never a console line.
+    expect(text).not.toContain('W_X');
+    expect(text).not.toMatch(/diagnostic\(s\)/);
   });
 });
 

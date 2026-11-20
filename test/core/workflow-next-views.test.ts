@@ -277,10 +277,22 @@ describe('task-216 — step views: targets, bindings, executor attributes, messa
     expect(step.checks.post).toEqual([{ token: 'report.ok', binding: { kind: 'run', argv: ['node', 'check.cjs', '{report}'] }, evaluated: false }]);
   });
 
-  it("--assigned-to me through the operation: the fixture's git identity is no member, so no step is kept", async () => {
-    const value = (await op.fn({ root: repo, positional: 'tri-1', options: { 'assigned-to': 'me' } })) as NextResult | CoreResult<NextResult>;
+  it("--assigned-to me through the operation: the fixture's git identity is no member, so no step is kept, and the warning says so", async () => {
+    // task-373 (bug-476 class): the warning this test causes on purpose is captured and asserted, not printed.
+    const chunks: string[] = [];
+    const spy = jest.spyOn(process.stderr, 'write').mockImplementation((chunk: string | Uint8Array) => {
+      chunks.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf-8'));
+      return true;
+    });
+    let value: NextResult | CoreResult<NextResult>;
+    try {
+      value = (await op.fn({ root: repo, positional: 'tri-1', options: { 'assigned-to': 'me' } })) as NextResult | CoreResult<NextResult>;
+    } finally {
+      spy.mockRestore();
+    }
     const result = 'ok' in value ? (value.ok ? value.value : null) : value;
     expect(result).toMatchObject({ next: null, message: "no next step of workflow 'triage' is assigned to 'me'" });
+    expect(chunks).toEqual(["warning: --assigned-to me: the git identity's email 'wf-test@example.invalid' is no team.members[] entry's\n"]);
   });
 
   it("a self-bound instance's later phase moves the elements its creating step linked before the element existed (§3.4, §4.2 run)", async () => {
