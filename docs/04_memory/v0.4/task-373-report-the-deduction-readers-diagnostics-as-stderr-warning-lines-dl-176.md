@@ -406,6 +406,89 @@ test/core/workflow-next.test.ts --maxWorkers=2 2>&1 | grep -c "unknown field(s) 
 **Unasserted (T1).** None of the ACs' clauses is left without an assertion; `docs/cli-reference.md` (AC 4) is green's and is held by
 `test/docs/cli-reference.test.ts`, not by a red test.
 
+### green (developer, 2026-11-20)
+
+**Base.** Head `b49913038` at the start (`git rev-list --count HEAD..main` → `0`; `main` not merged, D8). PATH guard:
+`command -v wingfoil` → the task's PATH shim; `wingfoil --version` and `node dist/cli.js --version` → `0.3.2
+(d130a90835d45b79e7e1862a1bd8f35606917c93)`.
+
+**Green commit `bd06388dd`** (`feat(workflow): task-373 — deduction readers write each diagnostic as a stderr warning
+line (bug-476)`), the design's files only (`git diff --stat 1ceaa6ee2..HEAD -- src docs/cli-reference.md` → `8 files
+changed, 56 insertions(+), 31 deletions(-)`):
+- `src/validation/diagnostic.ts`: `diagnosticWarning` moved here, text unchanged, exported from `src/validation/index.ts`;
+  `src/core/agent-list.ts` imports it from `../validation` and re-exports it; `src/agent/execute.ts` imports it from
+  `../validation` (import only).
+- `src/core/index.ts`: `withDiagnosticWarnings`, used by `workflowNextFn` and `workflowStatusFn` only — on success,
+  `coreOk(value, commit, [...warnings, ...value.diagnostics.map(diagnosticWarning)])`, payload order, no deduplication
+  (D1, D2); a refusal is returned unchanged. The `*AtHead` functions and the MCP Resources are untouched (D3).
+- `src/core/workflow-next.ts`: `renderNextConsole` drops the count line. `src/core/workflow-status.ts`:
+  `renderStatusConsole` drops the count line, and `PRE_MARKER_LINE` and `instanceLines`' `preMarker` parameter are gone
+  (D4); `W_INSTANCE_PRE_MARKER` keeps its code, message and last place in `diagnostics`.
+- `docs/cli-reference.md`: the design's three texts (`workflow next`, `workflow status` with the pre-marker paragraph,
+  `agent list`).
+
+**Red → green.** At red the qa recorded 10 + 5 + 9 failing tests in the red files. After green: `npx jest <the 11 red
+files> test/core/agent-list-gate.test.ts --maxWorkers=2` → `Test Suites: 12 passed, 12 total`, `Tests: 122 passed, 122
+total`. `npx jest test/docs/cli-reference.test.ts test/docs/name-resolvability.test.ts test/core/agent-list-gate.test.ts
+test/core/workflow-status-render.test.ts test/core/workflow-next-render.test.ts test/core/workflow-status.test.ts
+--maxWorkers=2` → `6 passed`, `65 passed`. `npx tsc --noEmit -p tsconfig.json` → exit 0. AC 3: `npx jest <file>
+--maxWorkers=2 2>&1 | grep -c 'warning:'` → `0` for each of `test/core/workflow-next.test.ts`,
+`test/core/workflow-next-views.test.ts`, `test/core/dna-set.test.ts`.
+
+### refactor (developer, 2026-11-20)
+
+No further code change: the green diff is already the design's shape. Gates, in this worktree with the pending amendment
+(`bug-476`) in the tree, each heavy run after the wait for the slot:
+- `npm run build` → exit 0.
+- `npm test -- --maxWorkers=2` (slot granted 21:23:37) → exit 0, `Test Suites: 706 passed, 706 total`, `Tests: 12919
+  passed, 12919 total`. `test/cli/workflow-unbound-none.integration.test.ts` passed in the worktree with the uncommitted
+  bug file (D7: it no longer depends on the count line).
+- `npm run test:coverage -- --maxWorkers=2` (slot granted 22:17:08) → exit 0, same counts; `All files` statements 98.87,
+  branches 96.63, functions 98.61, lines 99.47. Against the baseline of `169ecd71b` (`sha256sum -c` → `coverage-summary.json:
+  OK`; this branch's base `1ceaa6ee2` has none), covered/total: lines 10810/10867 (base 10777/10834), statements
+  12972/13119 (12925/13072), functions 2557/2593 (2546/2582), branches 8089/8371 (8051/8333) — the uncovered count of each
+  column is unchanged (57, 147, 36, 282). Per changed file: `src/validation/diagnostic.ts` lines 12/12, branches 10/10
+  (10/10, 6/6); `src/core/workflow-status.ts` 65/65, 54/54 (69/69, 58/58); `src/core/workflow-next.ts` 245/245, 323/328
+  (246/246, 325/330); `src/core/agent-list.ts` 97/98, 106/110 (98/99, 110/114); `src/core/index.ts` 685/688, 391/407
+  (683/686, 387/403); `src/agent/execute.ts` 278/282, 218/243 (279/283, 218/243). No file covers fewer of its lines or
+  branches than before.
+- `npm run typecheck` (both configs, slot granted 22:38:44) → exit 0. `npm run lint` → exit 0. `npm run docs:api` → exit 0.
+- `docs.parity`: `npm test -- <the 11 suites bindings.yaml names> --maxWorkers=2` → `Test Suites: 11 passed`, `Tests: 81
+  passed` (`test/docs/cli-reference.test.ts` among them).
+
+**AC 3 is not fully met.** The full suite's stderr still carries one WingFoil warning a test causes on purpose: `grep -E
+"^\s*(warning|Warning): " <the suite's stderr> | sort | uniq -c` → `1` `--assigned-to 'developer' names no team.members[]
+entry (name or email) and no team.roles role in dna.yaml` and `5` git `You appear to have cloned an empty repository.`
+(the base had 36 such lines, design notes). Running the candidates alone, `npx jest test/core/workflow-next-render.test.ts
+--maxWorkers=2` prints it once (7 passed): line 125 (`nextWorkflow(INPUTS, deduction, { assignedTo: 'developer' })` with
+a `DnaYaml` that declares no such member or role). The design attributed it to `test/core/workflow-next.test.ts:320`,
+which raises none (red notes). Fixing it means changing `test/core/workflow-next-render.test.ts`, a file outside the
+design's list, so green stopped there and did not submit: decision for the approver below.
+
+### self-review (developer, 2026-11-20)
+
+- AC 1: met — the red integration and unit tests pass (above); `agent list` unchanged (characterization).
+- AC 2: met — `--format json|yaml` stdout keeps `diagnostics`; stderr carries one warning document per entry (the AC 2
+  tests pass).
+- AC 3: **not met** for one source (`test/core/workflow-next-render.test.ts:125`, above); met for the four others.
+- AC 4: `spec-008`/`spec-017` amended at the gate; `docs/cli-reference.md` in `bd06388dd`, `test/docs/cli-reference.test.ts`
+  passes.
+- T4: `git log --first-parent --no-merges --format=%h 5fef777bd..HEAD -- <the 11 red files>` → empty.
+- Same class in the files touched: `grep -rn "diagnostic(s)" src` → no hit; `workflow list` and `workflow show` are left
+  to `task-370` (D3).
+- What `task-370` may rely on: `renderNextConsole` and `renderStatusConsole` print no diagnostic, count or pre-marker line;
+  the two operations return the diagnostics as `CoreResult.warnings`, rendered by the registrar's `emitWarnings`;
+  `diagnosticWarning` lives in `src/validation` (re-exported by `src/core/agent-list.ts`).
+- Submit not run: held on the AC 3 decision.
+
+**Decision for the approver.** Let the qa change `test/core/workflow-next-render.test.ts:125` (a `DnaYaml` that declares
+`developer` as a role or a member, or a captured and asserted warning, as `workflow-next.test.ts` does), or accept AC 3
+with that source left to a follow-up bug. Recommended: the first, a one-test change of the same kind as red's.
+
+### Pending amendments (approver)
+
+- `bug-476-the-workflow-next-test-fixture-declares-an-unknown-phase-field-on-purpose-so-every-run-prints-dozens-of-unknown-field-warnings-on-the-ci-s-stderr` — `--reason "Record task-373's retrospective item for bug-476: the fixture lost the unknown field, the one test relying on it asserts the warning on stderr, and the on-purpose warning sources the design listed are fixed."` (its text is final once the AC 3 decision is applied).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -413,3 +496,7 @@ test/core/workflow-next.test.ts --maxWorkers=2 2>&1 | grep -c "unknown field(s) 
      printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
      Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
      here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+
+- The design located an on-purpose warning by its text in one file, not by running each file alone: green's full suite
+  showed `test/core/workflow-next-render.test.ts:125` as its source (`npx jest <file> --maxWorkers=2 2>&1 | grep -c
+  "names no team.members"` → `1`). Proposal: a design that lists stderr noise runs each candidate file alone.
