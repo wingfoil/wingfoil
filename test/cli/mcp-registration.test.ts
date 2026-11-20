@@ -232,8 +232,9 @@ describe('scripts/check-mcp-registration.cjs — against the real pinned build',
   it('task-239 (bug-292): on this repository it also reads every Resource of the build under development, the two workflow-state Resources included', async () => {
     const result = await checkMcpRegistration(REPO_ROOT);
     expect(result.ok).toBe(true);
-    // `wingfoil://dna`, `wingfoil://workflows`, `wingfoil://workflows/-/next`, `wingfoil://workflows/-/status`.
-    expect(result.message).toMatch(/build under development \(dist\/cli\.js\) .*resources: 4/);
+    // `wingfoil://capabilities` (task-362), `wingfoil://dna`, `wingfoil://workflows`, `wingfoil://workflows/-/next`,
+    // `wingfoil://workflows/-/status`.
+    expect(result.message).toMatch(/build under development \(dist\/cli\.js\) .*resources: 5/);
   }, SERVER_TIMEOUT_MS);
 
   it('exits 0 as `npm run check:mcp` would run it', () => {

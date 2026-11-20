@@ -180,13 +180,21 @@ describe('task-323 AC 2 (characterization, bug-396) — what the shipped server 
   });
 
   // Copied from `node dist/cli.js mcp` fed `initialize`, `resources/list` and `resources/templates/list` over stdio.
-  it('createMcpServer lists the four Resource URIs and five templates `wingfoil mcp` serves, and none of the URIs registerCoreModules derives', async () => {
+  // task-362 (`spec-019` §6, design D6): the production server also hand-registers `wingfoil://capabilities`, which is
+  // the URI the registrar derives for the self-named `capabilities` operation — the one URI the two lists share.
+  it('createMcpServer lists the five Resource URIs and five templates `wingfoil mcp` serves, and of the URIs registerCoreModules derives only wingfoil://capabilities', async () => {
     const server = createMcpServer({ resolveRoot: () => '/fixture-root', roles: ['developer'], name: 'wingfoil', version: '0.0.0-test' });
     const [serverTransport, clientTransport] = InMemoryTransport.createLinkedPair();
     const client = new Client({ name: 'wingfoil-test-client', version: '0.0.0' });
     await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
     const listed = (await client.listResources()).resources.map((resource) => resource.uri).sort();
-    expect(listed).toEqual(['wingfoil://dna', 'wingfoil://workflows', 'wingfoil://workflows/-/next', 'wingfoil://workflows/-/status']);
+    expect(listed).toEqual([
+      'wingfoil://capabilities',
+      'wingfoil://dna',
+      'wingfoil://workflows',
+      'wingfoil://workflows/-/next',
+      'wingfoil://workflows/-/status',
+    ]);
     const templates = (await client.listResourceTemplates()).resourceTemplates.map((template) => template.uriTemplate).sort();
     expect(templates).toEqual([
       'wingfoil://dna/{section}',
@@ -199,6 +207,43 @@ describe('task-323 AC 2 (characterization, bug-396) — what the shipped server 
       .filter(({ operation }) => !operation.mutates)
       .map(({ module, operation }) => deriveMcpResourceUri(module.name, deriveVerb(module.name, operation.name)));
     expect(derived.length).toBeGreaterThan(0);
-    for (const uri of derived) expect([...listed, ...templates]).not.toContain(uri);
+    expect(derived.filter((uri) => [...listed, ...templates].includes(uri))).toEqual(['wingfoil://capabilities']);
+  });
+});
+
+describe('task-362 AC 2 — the test-only registrar resolves no root for a readsProject: false operation (spec-019 §1)', () => {
+  /** A flat module `x` whose self-named read operation declares (or not) `readsProject: false`. */
+  async function readX(readsProject: boolean): Promise<{ resolveRoot: jest.Mock<string, []>; contexts: object[]; text: string }> {
+    const resolveRoot = jest.fn((): string => '/fixture-root');
+    const contexts: object[] = [];
+    const operation = readsProject
+      ? { name: 'x', mutates: false, fn: async () => coreOk({ built: true }) }
+      : { name: 'x', mutates: false, readsProject: false as const, fn: async () => coreOk({ built: true }) };
+    const server = new McpServer({ name: 'wingfoil-test', version: '0.0.0' });
+    registerCoreModules(server, [{ name: 'x', operations: { x: operation } }], {
+      resolveRoot,
+      buildParams: (ctx) => {
+        contexts.push(ctx);
+        return {};
+      },
+    });
+    const [serverTransport, clientTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: 'wingfoil-test-client', version: '0.0.0' });
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    const result = await client.readResource({ uri: 'wingfoil://x' });
+    return { resolveRoot, contexts, text: (result.contents[0] as { text: string }).text };
+  }
+
+  it('reading wingfoil://x never calls resolveRoot, and the params context carries no `root` key', async () => {
+    const { resolveRoot, contexts, text } = await readX(false);
+    expect(resolveRoot).not.toHaveBeenCalled();
+    expect(contexts).toHaveLength(1);
+    expect('root' in contexts[0]!).toBe(false);
+    expect(text).toBe(JSON.stringify({ built: true }));
+  });
+
+  it('the same operation without the field resolves the root once', async () => {
+    const { resolveRoot } = await readX(true);
+    expect(resolveRoot).toHaveBeenCalledTimes(1);
   });
 });
