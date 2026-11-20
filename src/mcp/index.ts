@@ -68,6 +68,10 @@ export type { RegisterRolePromptsOptions } from './prompt';
 export { registerSessionContextResource, SESSION_CONTEXT_URI_TEMPLATE } from './session-resource';
 export type { RegisterSessionContextResourceOptions } from './session-resource';
 
+// task-362 (`spec-019` §6): the capabilities document of the running build, `wingfoil://capabilities`, which reads no
+// project. See `./capabilities-resource.ts`.
+export { registerCapabilitiesResource, CAPABILITIES_URI } from './capabilities-resource';
+
 // task-354 (bug-345): `registerReadOnlyResources` lives in `./read-only-resources.ts`, so `./server.ts` imports it
 // from that leaf rather than from this barrel, which re-exports `./server.ts` (the import cycle Q07 counted).
 export { registerReadOnlyResources } from './read-only-resources';

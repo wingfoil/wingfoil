@@ -24,18 +24,12 @@ import { buildProgram } from './cli/program';
 import { CORE_MODULES } from './core';
 import { buildCoreParams } from './core/registry';
 import { resolveProjectRoot } from './core/surface-reads';
-import { UsageError } from './core/usage-error';
-
-/** The refusal of a blank `--project` (spec-008 §1 and §2, task-350 D5): a usage error, never the current directory. */
-const BLANK_PROJECT = 'invalid flag value: --project must not be blank';
 
 buildProgram(CORE_MODULES, {
   // `project` is the global `--project <dir>` (spec-008 §2, `dl-198` (a)): the named root, or the current
-  // directory without it; the root is never inferred (spec-011). A blank value is refused, not defaulted.
-  resolveRoot: (project) => {
-    if (project !== undefined && project.trim().length === 0) throw new UsageError(BLANK_PROJECT);
-    return resolveProjectRoot(process.cwd(), { project });
-  },
+  // directory without it; the root is never inferred (spec-011). A blank value is refused before this closure runs,
+  // by `buildProgram`'s own check (task-362), so `capabilities`, which resolves no root, refuses it too.
+  resolveRoot: (project) => resolveProjectRoot(process.cwd(), { project }),
   // The one params builder (task-364 design D11, `src/core/registry.ts`): task-026's single bare `positional`,
   // task-025's full `positionals` list, task-028's additive `flags` spread (e.g. `paths`'s `--list` -> `list: true`)
   // and task-020's value-bearing `options` record. The MCP registrar's callers pass the same function.

@@ -51,6 +51,12 @@ export interface BuildCommandsOptions {
   readonly resolveRoot: (project?: string) => string;
   /** Turns a `ParamsContext` into one operation's typed params (`../core/registry.ts`'s {@link ParamsBuilder}). */
   readonly buildParams: ParamsBuilder;
+  /**
+   * The global `--project` check an operation that reads no project runs in place of {@link resolveRoot}
+   * (`spec-019` §1, `spec-008` §1, task-362): it throws the blank-`--project` `UsageError` (exit `2`) and checks
+   * nothing else. `buildProgram` binds it; absent, such an operation runs no check.
+   */
+  readonly checkProject?: () => void;
 }
 
 /**
@@ -185,10 +191,15 @@ export function buildCliCommands(modules: readonly CoreModule[], options: BuildC
           // `StorageError` from resolving the git root outside a WingFoil project — is rendered
           // through the spec-005 §1 single-exit path (emitError + exitWith), never escaping as an
           // uncaught throw that a top-level handler would stack-dump (bug-002-cli-error-stack-dump).
+          // An operation that reads no project (`readsProject: false`, `spec-019` §1) resolves no root: the blank
+          // `--project` refusal still runs, in the root step's place, and its context carries no `root` key.
+          let project: { root?: string } = {};
+          if (operation.readsProject === false) options.checkProject?.();
+          else project = { root: options.resolveRoot() };
           const params = options.buildParams({
             moduleName: module.name,
             operationName: operation.name,
-            root: options.resolveRoot(),
+            ...project,
             // `positional` stays the first positional (single-positional read ops read it); `positionals`
             // is the full list a multi-input op (`dnaSet`) reads (task-025-implement-dna-set).
             positional: positionals?.[0],
