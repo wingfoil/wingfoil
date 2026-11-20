@@ -10,6 +10,7 @@ import { WINGFOIL_ALREADY_INITIALIZED } from '../../src/core/init';
 import { coreErr, coreOk } from '../../src/core/types';
 import type { InitProjectValue } from '../../src/core/init';
 import { TEMPLATE_NAMES } from '../../src/storage';
+import { reportWarning } from '../../src/validation/warning';
 
 describe('runInit — wizard + --template (P5.1.1)', () => {
   let exitSpy: jest.SpyInstance;
@@ -184,5 +185,57 @@ describe('runInit — the missing-template error reads the registry (task-119 AC
       exitSpy.mockRestore();
       stderrSpy.mockRestore();
     }
+  });
+});
+
+/**
+ * task-375 AC 3 (red-first, `bug-304`; `spec-008` §6 "Warnings on a successful command"; approver ruling D3) — `init`
+ * installs the warning sink around its core call and writes the result's warnings, like every registrar command: a
+ * warning raised while `init` runs and one carried by the result both reach stderr through the one renderer, before the
+ * payload, as `warning: <text>` in `console` and one `{"warning": "<text>"}` line each under `--format json`. Expected
+ * red: today the raised warning goes to the fallback (`Warning: probe`) and `result.warnings` is not written.
+ */
+describe('task-375 AC 3 — runInit renders warnings through the one renderer (bug-304)', () => {
+  let exitSpy: jest.SpyInstance;
+  let stdoutSpy: jest.SpyInstance;
+  let stderrSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    exitSpy = jest.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    stdoutSpy = jest.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    stderrSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+  });
+  afterEach(() => {
+    exitSpy.mockRestore();
+    stdoutSpy.mockRestore();
+    stderrSpy.mockRestore();
+  });
+
+  const written = (spy: jest.SpyInstance): string => spy.mock.calls.map((call) => String(call[0])).join('');
+
+  function deps(): InitCliDeps {
+    return {
+      root: '/repo',
+      isTTY: false,
+      prompt: async () => '',
+      init: (root, template) => {
+        reportWarning('probe');
+        return coreOk<InitProjectValue>({ root, template, files: ['.wingfoil/dna.yaml'] }, { sha: 'a'.repeat(40), message: `init ${template}` }, ['after']);
+      },
+    };
+  }
+
+  it('console: the raised warning, then the result warning, as `warning: ` lines on stderr; the payload on stdout; exit 0', async () => {
+    await runInit({ template: 'Kanban', interactive: true, format: 'console' }, deps());
+    expect(written(stderrSpy)).toBe('warning: probe\nwarning: after\n');
+    expect(written(stdoutSpy)).toContain('Kanban');
+    expect(exitSpy).toHaveBeenCalledWith(0);
+  });
+
+  it('--format json: one {"warning"} line each on stderr, stdout still the JSON payload', async () => {
+    await runInit({ template: 'Kanban', interactive: true, format: 'json' }, deps());
+    expect(written(stderrSpy)).toBe('{"warning":"probe"}\n{"warning":"after"}\n');
+    expect((JSON.parse(written(stdoutSpy)) as { template: string }).template).toBe('Kanban');
+    expect(exitSpy).toHaveBeenCalledWith(0);
   });
 });

@@ -67,7 +67,14 @@ describe('task-330 — agent execute reports the deduction’s diagnostics (bug-
   it('AC 1 — a refusal after the deduction: the warning is line 0, the error line 1, nothing spawned, HEAD unchanged', () => {
     const run = cli(['agent', 'execute', '--workflow', 'delivery-1', '--step', `loop.review@task:${TASK_ID}`, '--dry-run']);
     expect(run.status).toBe(1);
-    expect(run.stderr.split('\n')).toEqual([WARNING_LINE, `error: step 'loop.review@task:${TASK_ID}' is not on the frontier of delivery-1`, '']);
+    // task-375 AC 2 (bug-303, spec-005 §3.1): `details.frontier` is a labelled key, one `  frontier: <keys>` line;
+    // the keys in frontier order, as `workflow next delivery-1 --format json` lists them on this tree (`next`, `more`).
+    expect(run.stderr.split('\n')).toEqual([
+      WARNING_LINE,
+      `error: step 'loop.review@task:${TASK_ID}' is not on the frontier of delivery-1`,
+      `  frontier: loop.implement@task:${TASK_ID}, loop.implement@task:${SIBLING_ID}`,
+      '',
+    ]);
     expect(run.stdout).toBe('');
     expect(headOf(repo)).toBe(head);
   });
