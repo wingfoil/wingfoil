@@ -422,6 +422,42 @@ Left uncommitted in this worktree, each to be recorded with `memory amend`:
 - `bug-536-spec-008-section-6-has-no-row-for-e-not-a-member` — `--reason "Record the bug's Retrospective: the E_NOT_A_MEMBER row came with task-375's design-gate amendment of spec-008, with no code change."`
 - `bug-548-spec-008-section-2-says-the-text-of-each-warning-shipped-today-is-pinned-but-its-table-leaves-out-four-families-of-agent-execute-warnings` — `--reason "Record the bug's Retrospective: the four agent execute warning families came with task-375's design-gate amendment of spec-008, with no code change."`
 
+### review fixes (developer, 2026-11-20)
+
+The independent review returned APPROVE WITH FIXES with two text-only findings; neither changes code or tests. Head
+before the fixes `6cec111df` (`git rev-parse HEAD`).
+
+**Fix 1 — bug-548's Expected Behavior was not met in full.** `grep -rn "reportWarning(\|warn(\|warnings.push(" src/agent`
+lists, beside the families `spec-008` §6 already names, `src/agent/execute.ts:726` `if (deduced?.ok === true) for (const
+diagnostic of deduced.value.diagnostics) reportWarning(diagnosticWarning(diagnostic));` (the workflow deduction's
+diagnostics, `W_UNCOMMITTED_INPUTS` among them, `spec-016` line 708) and `src/agent/run-log.ts:43`
+`reportWarning(formatDiagnostic(diagnostic));`, the default sink of `runLogSymlinkDiagnostic` (`W_RUN_LOG_SYMLINK`,
+`spec-016` line 1112): two families neither in the table nor named in the sentence before it. `spec-008` is edited in
+the worktree, left uncommitted: that sentence now names both among the warnings `spec-016` words, and a Revision note
+dated 2026-11-20 records it; nothing else in the spec changes. bug-548's pending Retrospective now says the review-fix
+amendment completes the fix.
+
+**Fix 2 — "six keys dropped on main" was false.** The green and refactor notes above, and the first wording of
+bug-303's Retrospective, said six `details` keys were dropped on `main`. Five were: `cause`, `frontier`, `applied`,
+`argv`, `file`. `unreadable` was not: `git grep -n 'unreadable' 169ecd71b -- 'src/*.ts'` shows `details: { unreadable }`
+built only at `src/core/context.ts:1083` (a `NOT_FOUND`), re-mapped by hand at `src/mcp/prompt.ts:166`
+(`const unreadable = error.details?.unreadable;`), and `src/agent/execute.ts:817` states that `details.unreadable` cannot
+arise on `agent execute`'s CLI route (its own `unreadable` refusal at `:642` carries `issues` beside it). The
+statements above stand corrected by this one; bug-303's pending Retrospective is reworded to five keys, with
+`unreadable` re-mapped by hand as the bug's own Notes said.
+
+**Run with the spec edit in the tree.** `npx jest test/docs --maxWorkers=2 --noStackTrace` → `Test Suites: 40 passed,
+40 total`, `Tests: 473 passed, 473 total` (no vision-index or name-resolvability finding; `spec-008-section-6` still
+finds the sentence before the table within its 12-line window). `scripts/e2e-smoke.cjs` was not run in this round.
+
+### Pending amendments (approver)
+
+Added by the review fixes, left uncommitted, to be recorded with `memory amend`:
+- `spec-008-cli-grammar` — `--reason "Name the workflow deduction's diagnostics and the run log's W_RUN_LOG_SYMLINK among the agent execute warnings section 6 leaves to spec-016, which completes bug-548 as task-375's review found."`
+- `bug-303-errordetails-renders-only-details.issues-and-details.diagnostics-so-every-other-details-key-is-dropped-on-the-cli-and-mcp` — this `--reason` replaces the one listed above: `--reason "Record the bug's Retrospective: five details keys were already dropped on main, unreadable being re-mapped by hand as its notes said, and task-375 fixed it with DETAIL_KEYS."`
+- `bug-548-spec-008-section-2-says-the-text-of-each-warning-shipped-today-is-pinned-but-its-table-leaves-out-four-families-of-agent-execute-warnings` — this `--reason` replaces the one listed above: `--reason "Record the bug's Retrospective: task-375's two amendments of spec-008 put the agent execute warnings in the table or name them outside the claim, with no code change."`
+- bug-304 and bug-536 keep the `--reason` listed above, their Retrospectives unchanged.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
