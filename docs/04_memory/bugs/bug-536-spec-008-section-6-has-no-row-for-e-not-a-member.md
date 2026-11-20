@@ -54,3 +54,7 @@ severity low.
      An item met while fixing goes in the fix task's own subsection; this one holds what belongs to
      the bug itself (its finding, its triage, why it took more than one task). The retrospective's
      `explore` reads this subsection first. -->
+
+- Fixed by `task-375`'s design-gate amendment of `spec-008` §6 (`2dfd6fb91`): the `E_NOT_A_MEMBER` row, its exit `1`
+  and the operations that raise it, pinned byte-equal to `spec-006` §7 by `test/docs/spec-008-section-6.test.ts`.
+  No code change was needed.
