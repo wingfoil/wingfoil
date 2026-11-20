@@ -64,7 +64,7 @@ export interface McpServerOptions {
   /** Server identity `version`; defaults to `0.0.0` (the `wingfoil mcp` command passes the real package version). */
   readonly version?: string;
   /**
-   * The environment a Tool call's agent context reads — the environment markers, `WINGFOIL_AGENT` and
+   * The environment a Tool call's agent context reads — the environment markers, the launcher variable and
    * `WINGFOIL_AGENT_MODEL` (`spec-018` §1.2, §2.3–§2.4); defaults to `process.env`. A test passes its own, so no
    * case depends on the environment it runs in.
    */

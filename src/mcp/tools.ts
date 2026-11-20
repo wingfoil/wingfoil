@@ -46,8 +46,8 @@ export interface RegisterCoreToolsOptions {
   /** Turns a `ParamsContext` into one operation's typed params (`../core/registry.ts`'s {@link ParamsBuilder}). */
   readonly buildParams: ParamsBuilder;
   /**
-   * The server's environment, which a Tool call's agent context reads: the environment markers, `WINGFOIL_AGENT` and
-   * `WINGFOIL_AGENT_MODEL` (`spec-018` §1.2, §2.3–§2.4). Defaults to `process.env`.
+   * The server's environment, which a Tool call's agent context reads: the environment markers, the launcher
+   * variable and `WINGFOIL_AGENT_MODEL` (`spec-018` §1.2, §2.3–§2.4). Defaults to `process.env`.
    */
   readonly env?: Readonly<Record<string, string | undefined>>;
 }
