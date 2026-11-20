@@ -1,6 +1,15 @@
 import { z } from 'zod';
 
-import { emitUnknownFieldWarning, reportNotice, reportWarning, withDistinctWarnings, withNoticeSink, withWarningSink } from '../../src/validation/warning';
+import {
+  emitUnknownFieldWarning,
+  formatWarningLine,
+  reportNotice,
+  reportWarning,
+  WARNING_PREFIX,
+  withDistinctWarnings,
+  withNoticeSink,
+  withWarningSink,
+} from '../../src/validation/warning';
 
 // spec-009 §2 — unknown-field warning policy. The diff MUST be raw-keys vs the schema's declared
 // shape, never raw-vs-parsed: under .passthrough() the parsed object keeps every unknown key, so a
@@ -119,12 +128,13 @@ describe('withDistinctWarnings and the notice sink (task-228)', () => {
     expect(seen).toEqual(['HEAD:x', 'other']);
   });
 
-  it('outside any sink, a distinct warning is written to stderr once as `Warning: <text>`', () => {
+  // task-375 AC 3 (bug-304, spec-008 §6 "One console prefix", spec-009 §2): the fallback writes the one console line.
+  it('outside any sink, a distinct warning is written to stderr once as `warning: <text>`', () => {
     withDistinctWarnings(() => {
       reportWarning('twice');
       reportWarning('twice');
     });
-    expect(stderrSpy.mock.calls.map((call) => call[0])).toEqual(['Warning: twice\n']);
+    expect(stderrSpy.mock.calls.map((call) => call[0])).toEqual(['warning: twice\n']);
   });
 
   it('a notice goes to its sink, or to stderr as a bare line', () => {
@@ -133,5 +143,33 @@ describe('withDistinctWarnings and the notice sink (task-228)', () => {
     expect(seen).toEqual(['banner']);
     reportNotice('bare');
     expect(stderrSpy.mock.calls.map((call) => call[0])).toEqual(['bare\n']);
+  });
+});
+
+/**
+ * task-375 AC 3 (red-first, `bug-304`; `spec-008` §6 "One console prefix", `spec-009` §2; approver ruling D3) — the one
+ * console warning prefix and line are defined once, in `src/validation/warning.ts` (`WARNING_PREFIX`,
+ * `formatWarningLine`), and a warning raised outside any sink is written through them. Expected red: neither export
+ * exists yet (`tsc` TS2305, at run time not a function / `undefined`), and the fallback writes `Warning: `.
+ */
+describe('task-375 AC 3 — one console warning prefix (bug-304)', () => {
+  let stderrSpy: jest.SpyInstance;
+  beforeEach(() => {
+    stderrSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+  });
+  afterEach(() => stderrSpy.mockRestore());
+
+  it("WARNING_PREFIX is 'warning: '", () => {
+    expect(WARNING_PREFIX).toBe('warning: ');
+  });
+
+  it('formatWarningLine prefixes the text, indents each continuation line two spaces, ends with a newline', () => {
+    expect(formatWarningLine('a\nb')).toBe('warning: a\n  b\n');
+    expect(formatWarningLine('one')).toBe('warning: one\n');
+  });
+
+  it("reportWarning outside any sink writes 'warning: <text>'", () => {
+    reportWarning('once');
+    expect(stderrSpy.mock.calls.map((call) => call[0])).toEqual(['warning: once\n']);
   });
 });

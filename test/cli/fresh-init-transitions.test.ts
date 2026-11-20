@@ -229,3 +229,56 @@ describe('a freshly `wingfoil init`-ed project can amend an approved tech-spec (
   }
 });
 
+
+/**
+ * task-375 AC 1 (red-first, `dl-071` option (B), S3; `spec-008` §6 the authority-refusal row; approver ruling D1) — on
+ * a freshly `init`-ed project, whose `team.members` is empty, `memory approve` keeps REQ-SEC-03's pinned refusal and
+ * gains a `hint:` line naming the `dna add` command with the operator's own git identity (`makeTempGitRepo`'s
+ * `WingFoil Test <wf-test@example.invalid>`); under `--format json` the hint is the error object's `hint` field. Running
+ * the hinted command, then the approve again, succeeds. Driven through the real `dist/cli.js` (`runCliEntry` scrubs the
+ * agent markers, `test/agent-markers.cjs`), on the first template of the registry.
+ */
+describe('task-375 AC 1 — a fresh init: the approve refusal says how to grant the approver role (dl-071 (B))', () => {
+  const REASON = "user not authorized to approve type 'task'";
+  const HINT =
+    "no team member holds the 'approver' role yet: add one with 'wingfoil dna add team.members --value \"WingFoil Test\" --entry-email wf-test@example.invalid --entry-roles approver', then retry";
+  const template = TEMPLATES[0]?.name ?? '';
+  let repo: string;
+  let documentId: string;
+  let documentPath: string;
+
+  beforeAll(() => {
+    repo = makeTempGitRepo();
+    expect(wingfoil(repo, 'init', '--template', template).status).toBe(0);
+    const added = wingfoil(repo, 'memory', 'add', '--type', 'task', '--title', 'Smoke task', '--format', 'json');
+    expect([added.status, added.stderr]).toEqual([0, '']);
+    const value = JSON.parse(added.stdout) as { id: string; path: string };
+    documentId = value.id;
+    documentPath = value.path;
+    expect(wingfoil(repo, 'memory', 'submit', documentId).status).toBe(0);
+  });
+
+  afterAll(() => removeTempDir(repo));
+
+  it('console: exit 1, the pinned error line, then the hint line naming dna add with the identity; nothing committed', () => {
+    const before = commitCount(repo);
+    const run = wingfoil(repo, 'memory', 'approve', documentId, '--reason', 'ok');
+    expect([run.status, run.stdout, run.stderr]).toEqual([1, '', `error: ${REASON}\nhint: ${HINT}\n`]);
+    expect(statusOf(repo, documentPath)).toBe('pending');
+    expect(commitCount(repo)).toBe(before);
+  });
+
+  it('--format json: exactly one line, the error object with its hint field', () => {
+    const run = wingfoil(repo, 'memory', 'approve', documentId, '--reason', 'ok', '--format', 'json');
+    expect(run.status).toBe(1);
+    expect(run.stderr).toBe(`${JSON.stringify({ error: REASON, hint: HINT })}\n`);
+  });
+
+  it('the hinted command succeeds, and the approve then succeeds', () => {
+    const granted = wingfoil(repo, 'dna', 'add', 'team.members', '--value', 'WingFoil Test', '--entry-email', 'wf-test@example.invalid', '--entry-roles', 'approver');
+    expect([granted.status, granted.stderr]).toEqual([0, '']);
+    const run = wingfoil(repo, 'memory', 'approve', documentId, '--reason', 'ok');
+    expect([run.status, run.stderr]).toEqual([0, '']);
+    expect(statusOf(repo, documentPath)).toBe('approved');
+  });
+});
