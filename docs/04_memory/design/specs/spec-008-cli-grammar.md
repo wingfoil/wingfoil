@@ -29,17 +29,17 @@ surface:
 
 ```
 wingfoil [global-flags] <noun> <verb> [args] [flags]      # pillar/verb form, e.g. `memory add`
-wingfoil [global-flags] <noun> [args] [flags]              # flat command: `init`, `mcp`, `paths`, `audit`
+wingfoil [global-flags] <noun> [args] [flags]              # flat command: `init`, `mcp`, `paths`, `capabilities`, `audit`
 ```
 
 - `<noun>` is a pillar namespace (`memory`, `dna`, `directive`, `directives`, `workflow`, `agent`) or a
-  flat command (`init`, `mcp`, `paths`, `audit`). `init` and `mcp` are the **bootstrap commands**: they
+  flat command (`init`, `mcp`, `paths`, `capabilities`, `audit`). `init` and `mcp` are the **bootstrap commands**: they
   are not `CORE_MODULES` operations but are wired directly onto the program (`src/cli/program.ts`),
   because `init` runs before a WingFoil configuration exists and `mcp` hosts the MCP surface itself
   (`spec-014-mcp-server-entry-point` §1). Neither is exposed on MCP (REQ-SYS-05's bootstrap exemption,
   `dl-046-bootstrap-commands-in-spec-006-section-3` A(a)), and both obey this grammar: global flags,
-  the at-most-one-positional rule below, and §5's exit codes. `paths` is a self-named `CORE_MODULES`
-  operation, and `audit` is planned as one (BDD `P5.1.3-audit.feature`, `dl-046` B(a)). The DNA pillar's verbs are `show`, `set`, and the three
+  the at-most-one-positional rule below, and §5's exit codes. `paths` and `capabilities` (`spec-019` §1, from
+  `minor-v0.4`) are self-named `CORE_MODULES` operations, and `audit` is planned as one (BDD `P5.1.3-audit.feature`, `dl-046` B(a)). The DNA pillar's verbs are `show`, `set`, and the three
   mutation verbs `add`, `remove` and `update` (§9) — the collection they act on travels in their
   `<path>` argument, not in the verb name, so the verb list does not grow as `spec-002`'s schema does
   (`dl-081-dna-mutation-surface-shape`). The Directives pillar deliberately exposes two nouns —
@@ -82,7 +82,10 @@ wingfoil [global-flags] <noun> [args] [flags]              # flat command: `init
   first, in console text (`spec-005` §2); then the operand count, a surplus before a missing operand;
   then a blank `--project` value (exit `2`, §2); then the project root (`E_NOT_AT_GIT_ROOT`, `E_NO_GIT_ROOT`,
   exit `1`) — the directory `--project` names, or the current directory without it; then the operation's own
-  checks.
+  checks. A command that reads no project — `capabilities` (`spec-019` §1, `spec-006` §2 `readsProject: false`) —
+  keeps every check up to the blank-`--project` refusal and stops there, like `--help` and `--version`: it skips
+  the root step, so a non-blank `--project` is accepted and not checked, whatever directory it names, and the
+  command runs outside every git repository.
 - **One id per call.** The Memory transition verbs (`memory submit`, `approve`, `reject`, `deprecate`),
   `memory amend`, `memory park` and `memory history` act on exactly one document per invocation;
   transitioning several documents takes one invocation, and one commit, each. The multi-id commit subject `wf({type}): {verb} {id1},
@@ -110,7 +113,7 @@ here: it is in §12.
 | `--verbose`       | flag                   | `false`   | Emit diagnostic logs to stderr in plain text, even under `--format json`/`yaml`. Never alters stdout.  |
 | `--color` (negatable) | boolean flag        | `true`    | ANSI colour on stdout. Pass `--no-color` to disable; also disabled automatically when `NO_COLOR` is set to any non-empty string (https://no-color.org/) — an explicitly empty `NO_COLOR=` does **not** disable colour. **Today no output is coloured** (see `--format`), so `--no-color` and `NO_COLOR` are accepted and change nothing; the rule above is the one the colour P5.1.4 adds must honour. Commander itself already honours `NO_COLOR` (it strips colour from its help, which has none) but not `--no-color`, so that rendering must read both. |
 | `--interactive` (negatable) | boolean flag  | `true`    | Whether missing required args may trigger a readline prompt in a TTY (§4). Pass `--no-interactive` to force immediate failure instead. |
-| `--project <dir>` | path                   | the current directory | From `minor-v0.4` (`dl-198` (a)). Names the project root: the command runs on the repository rooted at `<dir>`, resolved against the current directory, instead of on the current directory. `<dir>` must itself be a git root, holding a `.git` entry (a directory in a clone, a file in a worktree); nothing above or below it is examined (`spec-011` § Git-root detection algorithm). Any other directory — a subdirectory of a repository, one outside every repository, a missing path or a file — is refused at §1's root step, so after `--format` and the operand checks and before anything is read or written, at exit `1` with `error: E_NOT_AT_GIT_ROOT: --project is not a git root: <absolute dir>`. A blank value is refused at exit `2` with `error: invalid flag value: --project must not be blank`, just before the root step. Without the flag the root is the current directory, which must be the git root: a subdirectory is still refused with `E_NOT_AT_GIT_ROOT: run wingfoil from the project root`, for read-only commands too, because the root is never resolved upwards (`dl-198` (b) was not taken). The flag changes which repository a command reads and writes, never which baseline it reads there (§11). `init` scaffolds the named repository, `mcp` serves it for the server's whole life, and `agent execute` registers its MCP server with `--project <root>` (`spec-016` §2.5). `--help` and `--version` keep their precedence: with either, the value is not checked. Why the root is named rather than inferred is `spec-011`'s. |
+| `--project <dir>` | path                   | the current directory | From `minor-v0.4` (`dl-198` (a)). Names the project root: the command runs on the repository rooted at `<dir>`, resolved against the current directory, instead of on the current directory. `<dir>` must itself be a git root, holding a `.git` entry (a directory in a clone, a file in a worktree); nothing above or below it is examined (`spec-011` § Git-root detection algorithm). Any other directory — a subdirectory of a repository, one outside every repository, a missing path or a file — is refused at §1's root step, so after `--format` and the operand checks and before anything is read or written, at exit `1` with `error: E_NOT_AT_GIT_ROOT: --project is not a git root: <absolute dir>`. A blank value is refused at exit `2` with `error: invalid flag value: --project must not be blank`, just before the root step. Without the flag the root is the current directory, which must be the git root: a subdirectory is still refused with `E_NOT_AT_GIT_ROOT: run wingfoil from the project root`, for read-only commands too, because the root is never resolved upwards (`dl-198` (b) was not taken). The flag changes which repository a command reads and writes, never which baseline it reads there (§11). `init` scaffolds the named repository, `mcp` serves it for the server's whole life, and `agent execute` registers its MCP server with `--project <root>` (`spec-016` §2.5). `--help` and `--version` keep their precedence: with either, the value is not checked. On `capabilities`, which reads no project (`spec-019` §1), a blank value is still refused at exit `2` and a non-blank one is accepted and not checked. Why the root is named rather than inferred is `spec-011`'s. |
 
 Notes:
 
@@ -759,6 +762,7 @@ CLI reference's *Git side effects* says the same to users.
 | **committed at `HEAD`, declared** (v0.3, as each ships) | `workflow status`, `workflow list`, `workflow show`, `workflow adopt --plan` (`patch-v0.3.1`), `agent list` (its `--active` section excepted: from v0.4 it reads the git-ignored active registry in the working tree, `spec-016` §5.1, §7), `agent show` | approver ruling R15: one deduction, one baseline; a working tree that differs is reported as the warning `W_UNCOMMITTED_INPUTS`, and never decides the answer (`spec-006` §6 item 6, `spec-017` §1.2) |
 | **working tree** | `dna show`, `paths`, `directives list`, `memory search`, `memory history` | a read that gates nothing: a draft you have not committed is what `memory search` exists to find (`spec-006` §6 item 4). `memory history` reads git's log for the entries and the working tree's `memory.yaml` |
 | **filesystem** | the confinement and symlink guards of every command that writes or deletes a file; `directive create`'s and `workflow create`'s check that its target does not exist | the read predicts where a syscall will land, which no commit records (`spec-006` §6 item 5, `dl-086`) |
+| **the build, no project** (from `minor-v0.4`) | `capabilities` | the document is a property of the build: it reads `CORE_MODULES`, the format constants, `package.json` and `dist/build-info.json`, and no project, git or current directory, so it answers the same anywhere (`spec-019` §3.2, `spec-006` §6 item 8) |
 
 `init` and `mcp` read no committed configuration: `init` writes the scaffold, and `mcp` starts the
 server, whose Resources and Prompts follow `spec-006` §6 item 4 — except the two v0.3 workflow
@@ -783,6 +787,7 @@ has no reference entry.
 | Command | Flag | Behaviour |
 |---------|------|-----------|
 | `paths` | `--list` | Accepted for the planned drill-down view; it does not change the output yet. |
+| `capabilities` | — | No flag, no option and no positional (`spec-019` §1, from `minor-v0.4`): an operand is refused at exit `2` (§1), and so is any option §2 does not list for it. |
 | `workflow start` | `--element <type>:<id>\|none`, `--title <t>`, `--set <name>=<value>` | `spec-017` §7.1, §3.4, §3.5: `--element` names the element a workflow that declares `element:` runs on (§7's element-ref; default: the active instance's bound element of that type; `none` is refused, exit `1`, `workflow '<name>' needs a <type> element: give --element <type>:<id>`). On a workflow that declares none it names the plan's context element, of any type, which must exist at `HEAD`, and `--element none` records no context (default: the active instance's bound element when that instance's workflow declares `element:`, else none; from `minor-v0.4`, `bug-413`). `--title` is the plan's title (default `<workflow> — <phase>`). `--set` is repeatable and overrides a derived plan value: only `phase=<v>` and `scope=<v>` are accepted — `phase` whether or not the plan type's patterns hold a `{phase}` token (written as a field when they do not), `scope` only as a token (`spec-017` §7.1, from `minor-v0.4`); any other name is a usage error (exit `2`, `invalid flag value: --set <name>: workflow start sets only phase and scope`), and §10's spelling errors apply unchanged. The `<id>` of `--element` may be a short reference (§7); the plan binds the full id. |
 | `memory add` | `--workflow <ref>` | A value option: links the added document to a step of the open instance `<ref>` names — an instance id, or a workflow name (its most recently started open instance) — through the add commit's trailers `WingFoil-Instance: <instance-id>` and `WingFoil-Step: <key>` (`spec-017` §4.8, §7.10, ruling R16). The step is the one frontier step whose phase declares `memory.add` of the `--type` given; none, or several without `--step`, is refused (`CONFLICT`, exit `1`, `spec-017` §10). Without it, `memory add` links nothing and its commit is unchanged. |
 | `memory add` | `--step <key>` | A value option: the frontier step to link to, by its key (`spec-017` §4.9), when several steps of the instance add the type. Needs `--workflow`: alone it is exit `2`, `missing required argument: --workflow`. A key not on the instance's frontier is refused (`CONFLICT`, exit `1`). A key without its scope names the one frontier step of that workflow and phase; several are refused, listing their keys (`CONFLICT`, exit `1`, `spec-017` §4.9, §10). |
@@ -1567,3 +1572,13 @@ task's version reads: `version_args` is read before the launch and after the run
 its field (`agent_version`, `agent_version_after`). The session lookup's texts are unchanged: no other source supplies
 the session. No exit code or other message changes. Edited in place without a supersede or a state change (`dl-047`),
 pending the approver's `memory amend` at `task-337`'s review fix round 2.
+
+**Revision (2026-11-20, `task-362-add-wingfoil-capabilities-and-the-wingfoil-capabilities-resource-spec-019-task-a`)
+— `capabilities`, the command that reads no project.** `spec-019` (`approved`, "Amendments owed") adds the flat
+command `wingfoil capabilities` (P5.1.5). §1 names it in the grammar comment, the `<noun>` bullet and beside `paths`
+as a self-named operation, and "one order of usage checks" says that a command that reads no project keeps the
+checks up to the blank-`--project` refusal and skips the root step; §2's `--project` row says the same for the
+value; §11 gains the row "the build, no project"; §12 states that `capabilities` declares no flag. No §6 row: the
+command adds no refusal or warning text of its own (`spec-019` §2). The command count is not written here; the
+`user-docs` phase writes it once the release's commands are known. Edited in place without a supersede or a state
+change (`dl-047`), pending the approver's `memory amend`.
