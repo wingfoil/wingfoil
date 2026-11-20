@@ -66,14 +66,13 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 
 import { readBuildStamp, readPathAtRev } from '../storage';
-import { formatDiagnostic, ValidationError, type Diagnostic } from '../validation';
+import { diagnosticWarning, formatDiagnostic, ValidationError, type Diagnostic } from '../validation';
 import { reportWarning, withDistinctWarnings } from '../validation/warning';
 import { ambiguousReferenceError, resolveElementReference } from '../memory/reference';
 import { findMemoryDocumentByTypeAndIdAtRev, loadMemoryDocumentsAtRev } from '../memory/query';
 import { isHumanOnlyRole, isRoleDefined } from '../dna/roles';
 import type { AgentEntry, DnaYaml } from '../dna/schema';
 import type { MemoryYaml } from '../memory/schema';
-import { diagnosticWarning } from '../core/agent-list';
 import { assembleExecutionContext, type ExecutionContextElement } from '../core/context';
 import { requireGitIdentity } from '../core/git-identity';
 import { requireTeamMembership } from '../core/team-membership';

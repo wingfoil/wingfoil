@@ -18,8 +18,12 @@
  * line names the holders of the `approver` role, the one role that may decide it (REQ-SEC-03).
  *
  * **The transitory pre-marker rule made visible** (§2, §3.2, task-345): each reported instance whose start commit
- * carries no start marker gets `W_INSTANCE_PRE_MARKER`, last among the payload's diagnostics, and a console line
- * under its own lines. No other command raises it.
+ * carries no start marker gets `W_INSTANCE_PRE_MARKER`, last among the payload's diagnostics. No other command raises
+ * it.
+ *
+ * **Stdout carries only the answer** (`dl-176` (a), `spec-017` §7.4; task-373): the console rendering prints no
+ * diagnostic, no count line and no pre-marker line; the operation hands each entry of `diagnostics` to the CLI as a
+ * success warning, one stderr `warning:` line each, in every format.
  */
 import type { Diagnostic } from '../validation';
 import { deduceWorkflowState, resolveInstanceRef, type Baseline, type Deduction, type ElementRef, type Instance, type PhaseProgress, type TrailEntry } from '../workflow/deduce';
@@ -96,9 +100,6 @@ export const W_INSTANCE_PRE_MARKER = 'W_INSTANCE_PRE_MARKER';
 function preMarkerMessage(id: string): string {
   return `instance ${id} is kept by the pre-marker rule: restart it with workflow start`;
 }
-
-/** The console line under an instance kept by the pre-marker rule (§3.2). */
-const PRE_MARKER_LINE = '    warning: kept by the pre-marker rule: restart it with workflow start';
 
 /** `<type>:<id>`. */
 function keyOf(element: ElementRef): string {
@@ -184,8 +185,8 @@ function describePhase(progress: PhaseProgress): string {
   return `${progress.phase} ${progress.state}${detail.length === 0 ? '' : ` (${detail.join(', ')})`}`;
 }
 
-/** The console lines of one open instance; `preMarker`: it is kept by the pre-marker rule (§3.2). */
-function instanceLines(entry: StatusEntry, preMarker: boolean): string[] {
+/** The console lines of one open instance. */
+function instanceLines(entry: StatusEntry): string[] {
   const { instance } = entry;
   const flags = [instance.active ? 'active' : null, entry.complete ? 'complete' : null, instance.abandoned ? 'abandoned' : null].filter((flag): flag is string => flag !== null);
   const lines = [`${instance.active ? '*' : ' '} ${instance.id} (${instance.workflow})${flags.length === 0 ? '' : ` — ${flags.join(', ')}`}`];
@@ -201,18 +202,15 @@ function instanceLines(entry: StatusEntry, preMarker: boolean): string[] {
     if (step.awaiting?.kind === 'party') lines.push(`        ${humanNeededLine(step)!}`);
   }
   if (entry.late.length > 0) lines.push(`    late: ${entry.late.map((late) => `${late.type}:${late.id} (${late.status})`).join(', ')}`);
-  if (preMarker) lines.push(PRE_MARKER_LINE);
   return lines;
 }
 
-/** `workflow status`'s `--format console` rendering (`spec-017` §5.3, §8). Pure. */
+/** `workflow status`'s `--format console` rendering (`spec-017` §5.3, §8): the answer only, no diagnostic (§7.4). Pure. */
 export function renderStatusConsole(result: StatusResult): string {
   const lines: string[] = [];
   if (result.message !== undefined) lines.push(result.message);
   else lines.push(`open workflows: ${result.open.length}`); // no message: some instance is open
-  // Derived from the payload's entries, so a hand-built result renders as its diagnostics say.
-  const kept = new Set(result.diagnostics.filter((diagnostic) => diagnostic.code === W_INSTANCE_PRE_MARKER).map((diagnostic) => diagnostic.message));
-  for (const entry of result.open) lines.push(...instanceLines(entry, kept.has(preMarkerMessage(entry.instance.id))));
+  for (const entry of result.open) lines.push(...instanceLines(entry));
   if (result.pendingApprovals.length > 0) {
     lines.push(`pending approvals: ${result.pendingApprovals.length}`);
     for (const approval of result.pendingApprovals) lines.push(`  ${approvalLine(approval.awaiting, approval.step!)} (${approval.instance}, ${approval.step})`);
@@ -224,6 +222,5 @@ export function renderStatusConsole(result: StatusResult): string {
       lines.push(`  human needed: approve or reject ${element.id} (${element.type}, ${element.status}; no open workflow carries it) — routed to ${routed}`);
     }
   }
-  if (result.diagnostics.length > 0) lines.push(`${result.diagnostics.length} diagnostic(s): --format json lists them`);
   return `${lines.join('\n')}\n`;
 }

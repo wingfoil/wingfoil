@@ -1365,6 +1365,10 @@ recurring `cadence` (`lastRun: "not-recorded"`). The console view prints the key
 directive ids, actions with their bindings, the missing evidence and a "waiting for" or "human needed"
 line; `--format json|yaml` prints the full payload,
 `{"baseline": {…}, "instance": {…}, "complete": …, "next": {…}, "more": […], "diagnostics": […]}`.
+Changed in 0.4: each entry of `diagnostics` is also written on stderr, one
+`warning: <code> (<file>): <message>` line each (under `--format json` one `{"warning": …}` document, under `yaml`
+one YAML document), as `agent list` does; the console no longer ends with an `<n> diagnostic(s): --format json lists
+them` line, so stdout carries only the answer.
 
 ```console
 $ wingfoil workflow next
@@ -1485,9 +1489,9 @@ Last, the **ungated elements**: elements sitting in a gate state of their type t
 workflow carries, routed to the holders of the `approver` role.
 
 An instance opened before `workflow start` wrote its `WingFoil-Start:` trailer (see `workflow start`) stays open
-for now, and status warns about it (new in 0.4): the line `    warning: kept by the pre-marker rule: restart it
-with workflow start` under that instance, and a `W_INSTANCE_PRE_MARKER` entry in `diagnostics`, the last ones. End
-it and start it again with `workflow start` to clear the warning.
+for now, and status warns about it (new in 0.4): a `warning: W_INSTANCE_PRE_MARKER (<plan file>): instance <id> is
+kept by the pre-marker rule: restart it with workflow start` line on stderr, the last of its warnings, and the entry
+in `diagnostics`. End it and start it again with `workflow start` to clear the warning.
 
 Each pending approval and ungated element prints a **"human needed"** line naming the action
 (`approve or reject`, or `finalize` for a phase record), the element ids or the step key, and the members it is
@@ -1512,6 +1516,10 @@ pending approvals: 1
 `--format json|yaml` prints the full payload, `{"baseline": {…}, "active": …, "open": [{"instance", "complete",
 "phases", "frontier", "late"}], "pendingApprovals": [{"step", "instance", "trail", "awaiting"}], "ungated": […],
 "ungatedRoutedTo": […], "diagnostics": […]}`.
+Changed in 0.4: each entry of `diagnostics` is also written on stderr, one
+`warning: <code> (<file>): <message>` line each (under `--format json` one `{"warning": …}` document, under `yaml`
+one YAML document), as `agent list` does; the console no longer ends with an `<n> diagnostic(s): --format json lists
+them` line, so stdout carries only the answer.
 
 - **Exit `0`** for every deduced outcome; with no open workflow and nothing waiting at a gate, the message
   `no open workflows`.
@@ -2106,8 +2114,8 @@ those of one phase. A step a colleague, or another worktree, is running is still
 It reads the run log, `dna.yaml` and the workflow state **as committed at `HEAD`**, not the working tree
 (see [Git side effects](#git-side-effects)), so it agrees with `agent show` and with the run ids `agent
 execute` counts. A run log you changed and did not commit is not read: a `warning:` line names it
-(`W_UNCOMMITTED_INPUTS`), one per file. Only the run logs themselves count: another file in that
-directory is neither read nor reported. A run log committed as a symbolic link is not read either: a
+(`W_UNCOMMITTED_INPUTS`), one per file (the form `workflow next` and `workflow status` use for their
+diagnostics). Only the run logs themselves count: another file in that directory is neither read nor reported. A run log committed as a symbolic link is not read either: a
 `warning:` line names it (`W_RUN_LOG_SYMLINK`), and `diagnostics` carries it.
 
 The active section is the one read outside `HEAD`: `.wingfoil/run/` is a git-ignored cache that no commit holds,

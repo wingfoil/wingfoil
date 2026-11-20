@@ -12,7 +12,7 @@ export {
   ValidationError,
 } from './errors';
 export type { ValidationIssue } from './errors';
-export { DiagnosticsError, formatDiagnostic } from './diagnostic';
+export { DiagnosticsError, diagnosticWarning, formatDiagnostic } from './diagnostic';
 export type { Diagnostic, DiagnosticSeverity } from './diagnostic';
 export { toValidationError } from './error-mapper';
 export { emitUnknownFieldWarning, reportWarning, withWarningSink } from './warning';
