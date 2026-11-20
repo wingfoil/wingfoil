@@ -419,6 +419,98 @@ The approver recorded the step in `dd8275851` (`workflow finalize … dev-loop.d
 
 > Approve the design of task-367 as recommended: D1 the MCP Tools channel is spec-018 agent marker row 5, set around every tools/call, with the signing entry and AI-Model from the server's environment and no co-author or ai-model Tool input; D2 the CLI's check order holds, argument check, identity, membership and transition before the agent refusal, and REQ-INT-03 is read as no call succeeding; D3 a Tool refusal's structuredContent is the CLI's json error object with hint, details and warnings; D4 the SDK's MCP error prefix is stripped at the transport; D5 the four amendments of spec-004, spec-008, spec-014 and spec-018 as prepared; D6 the production server serves the memory module only until task-368, a staged module filter stated in spec-014; D7 one warning sink per Tool call and thrown errors mapped to isError results; D8 the harness takes buildCoreParams; D9 bug-538 in full with no new seam for src/cli.ts; D10 docs/agents.md is left to user-docs; D11 AC 7 and AC 8 classified as corrected; D12 no change for the run-id template variable, a decision-log candidate.
 
+### red (qa, 2026-11-20)
+
+**Red commit:** `2d16d95e6` (`test(mcp): task-367 — failing test: …`), test files only, on this branch (`git rev-list --count
+HEAD..main` → `0` before the work, no merge). Every command ran in this worktree with the task's PATH shim first. No file
+under `src/` or `scripts/` was opened (`testing` T3); expected values come from the Acceptance Criteria, the design
+table, the gate rulings D1–D12, the amended `spec-004` §4.3, `spec-018` §1.2/§2.4/§3.2, the BDD file, and real
+command output.
+
+**Files.** New: `test/mcp/mcp-memory-tools.test.ts` (AC 1, 2, 3, 5), `test/mcp/mcp-tools.feature.test.ts` (AC 4),
+`test/mcp/wire-errors.test.ts` (AC 6), `test/core/dev-loop-v2-6.test.ts` (AC 7), `test/core/agent-context-propagation.test.ts`
+(AC 8), `test/mcp/helpers/production-tools.ts` (shared: a `Client` on `createMcpServer({ resolveRoot, roles, env })`, the
+CLI child with no agent marker and no `WINGFOIL_AGENT_MODEL`, the commit views). Edited, as the design says:
+- `test/mcp/server.test.ts`: the scope case's `tools: []` → the seven Memory Tool names, and its title ("and an empty
+  Tools channel" → "and the seven Memory Tools (task-367)"); the `Tool dna.set not found` case unchanged;
+- `test/mcp/read-only-agent-channel.test.ts`: both production `listTools()` checks → the seven names, the case title and
+  the `describe` title ("no Tools" → "the Memory Tools listed (task-367)") and the comment above them (`testing` T1);
+- `test/docs/mcp-surface-parity.test.ts`: `surface.tools` → the seven names, and the case title;
+- `test/docs/enumeration-parity.allowlist.ts`: the seven `memory.*` `TOOLS_V04` entries removed (7 deletions only);
+- `test/core/agent-context.test.ts`: the two `AGENT_MARKERS` cases pin five markers (row 5 `['mcp', 'surface', 'the
+  call came through the MCP server']`), and two new gated-form cases: `{ env: {}, surface: 'mcp' }` → `['mcp']`,
+  `{ env: { CLAUDE_CODE_CHILD_SESSION: '1' }, surface: 'mcp' }` → `['CLAUDE_CODE_CHILD_SESSION', 'mcp']`;
+- `test/mcp/registrar.test.ts`: one new `describe` (AC 5's synthetic op);
+- `test/cli/entrypoint.test.ts`: one new case (AC 8, `src/cli.ts`'s blank `--project`).
+
+**Per AC.**
+
+| AC | Class | Tests | Evidence at red |
+|----|-------|-------|-----------------|
+| 1 | red-first | `mcp-memory-tools` "task-367 AC 1 …" (7 cases); `server.test.ts` scope case; `read-only-agent-channel` production case; `mcp-surface-parity` (2 cases) | `tools/list` → `+ Array []` against the seven names; every call → `"text": "Tool memory.add not found"` (`isError: true`); the parity gate lists the 7 `spec-004 §4.1 tools … surplus memory.*` findings no entry allows |
+| 2 | red-first | `mcp-memory-tools` "task-367 AC 2 …" (7 cases); `agent-context.test.ts` (4 cases) | `Expected: "E_AGENT_CONTEXT: 'memory approve' … (the call came through the MCP server): …"`, `Received: "Tool memory.approve not found"`; `AGENT_MARKERS` lacks `"mcp"`; `{ env: {}, surface: 'mcp' }` → `+ Array []` |
+| 3 | red-first | `mcp-memory-tools` "task-367 AC 3 …" (3 cases) | `"isError": true, "text": "Tool memory.add not found"` against `isError: false`; `Expected: "invalid environment value: WINGFOIL_AGENT_MODEL must be one line"`, `Received: "Tool memory.add not found"` |
+| 4 | red-first | `mcp-tools.feature.test.ts` (6 cases: Submit, illegal transition, the Outline's 3 rows, missing argument) | `"text": "Tool memory.submit not found"` against `illegal transition approved -> (none) for type 'task'`; Outline `Expected: "E_AGENT_CONTEXT: 'memory reject' needs the approver and does not run in an agent's session"`, `Received: "Tool memory.reject not found"` |
+| 5 | red-first | `mcp-memory-tools` "task-367 AC 5 …" (1 case) and AC 1's blank-`reason` case; `registrar.test.ts` "task-367 AC 5 …" (1 case) | `"text": "Tool memory.submit not found"` (the CLI half of the case ran first and passed: exit 1, its `error` the reason, `details` non-empty); synthetic op: `Expected: {"error": "m", "hint": "h", "warnings": ["w1"]}`, `Received: undefined` |
+| 6 | red-first | `wire-errors.test.ts` (7 cases) | suite fails to run: `tsc` → `TS2307: Cannot find module '../../src/mcp/wire-errors'` (jest: "Cannot find module") |
+| 7 | red-first (text); characterization (pinned build, phases) | `dev-loop-v2-6.test.ts` (8 cases) | `Expected: >= 2.6`, `Received: 2.5`; header `Expected substring: "their own terminal"`; `Expected: >= 1.7`, `Received: 1.6`; §3 `Expected substring: "their own terminal"`. The four characterization cases pass on first run |
+| 8 | characterization | `agent-context-propagation.test.ts` (3 parity + 17 operation cases); `entrypoint.test.ts` blank `--project` case | pass on first run |
+| 9 | characterization | none (the reviewer checks the four amends `f4a0b4acb`, `ffab1d8c7`, `faa50d3ab`, `e9442d562` and the allowlist line `13a65f52d`) | — |
+
+**Departures from the design's letter, stated.**
+- AC 1/AC 3 fixture: `buildAttributionRepo` (the L0 repository plus `id_pattern`/`template` and `task-006-submit-me` at
+  `draft`), not bare `buildL0Repo`, whose `task` type has no `id_pattern`, so `memory add --type task` has no id to
+  allocate; the submit case uses `task-006-submit-me` (the design's "if the fixture's required fields let it pass").
+  The refusal cases of AC 2 and AC 5 use `buildL0Repo` as written.
+- AC 1: the CLI twin's environment also drops `WINGFOIL_AGENT_MODEL` (the jest process may carry one; the Tool's
+  server is given `{ WINGFOIL_AGENT: 'Claude' }`, so both commits must say `AI-Model: not-reported`).
+- AC 5: the CLI's `details` are not copied into the test; the case runs `wingfoil memory submit task-001-approve-me
+  --format json` on a twin `buildL0Repo({ agents: false })` and compares the Tool's `structuredContent` with that object
+  plus the `W_NO_AGENT_ENTRY` warning (the same rule AC 4 uses).
+- AC 7: the pinned-build proof is written as two characterization cases (`workflow show dev-loop --format json`,
+  `directives list --format json` on `node_modules/wingfoil-released`); stderr is not pinned, since the pinned build
+  0.3.2 prints a `dna.yaml` unknown-field warning (`human_only`) on stderr.
+- AC 8: **one case per attributed operation, not one per call site.** Naming the operation each of the 12 sites
+  serves needs `src/` read (the design: "read the lines above each site"), which T3 forbids at red. The 17 cases are
+  every registered `mutates: true` operation with `agentAttribution !== false` outside the four always-gated (the
+  `spec-018` §2.1 rule `test/cli/agent-attribution.integration.test.ts` holds), so together they reach every ungated
+  site. The parity is (a) the case list equals that registry set, (b) the lines holding
+  `resolveOperationAgentContext(` per `src/` file (agent-context.ts excepted) equal the design's recorded grep
+  (`index.ts` 5, `memory-transition.ts` 1, `workflow-adopt.ts` 1, `workflow-create-remove.ts` 2, `workflow-finalize.ts`
+  1, `workflow-start-end.ts` 2), (c) each such file is named by at least as many cases as it holds sites. The file a
+  case names is inferred from file names and, for `memory add`, the DNA and directive verbs, by elimination; no
+  assertion executes that attribution (said in the module doc, T1). The params are built as the design says
+  (`buildCoreParams`), from the Tool-argument record through `toolArgumentsToParams`.
+- `tsc`: the design expected TS2305 for `registerCoreTools` too; no red test imports it (every Tool case drives
+  `createMcpServer`, and the AC 5 unit goes through `registerCoreModules`, which calls it after green), so it is not
+  among the errors.
+
+**Not edited, for green:** `test/mcp/session-context-resource.test.ts` lines 166–170 ("tools/list stays empty
+(REQ-SEC-05)") pin `tools: []` on `createMcpServer`; the design does not list it, so it is left to green as a
+contract change (listed in green's notes, `testing` T4). Overlap with `task-362`: no red file pins the production
+Resource count (the existing `test/mcp/registrar.test.ts` task-323 case, unchanged here, pins four URIs).
+
+**Runs** (each `npx jest <paths> --maxWorkers=2 --noStackTrace --json --outputFile=<scratch>/r.json`, read through its
+summary):
+- `test/mcp/mcp-memory-tools.test.ts test/mcp/mcp-tools.feature.test.ts test/mcp/wire-errors.test.ts` → `Tests: 24
+  failed, 0 passed, 24 total` (18 + 6), and `wire-errors.test.ts` fails to run (missing module);
+- `test/core/agent-context-propagation.test.ts test/core/dev-loop-v2-6.test.ts test/cli/entrypoint.test.ts
+  test/core/agent-context.test.ts` → `Tests: 8 failed, 51 passed, 59 total` (the 4 AC 7 text cases, the 4
+  `agent-context` cases; all 20 propagation cases, the entrypoint case and the 4 AC 7 characterization cases pass);
+- `test/mcp/server.test.ts test/mcp/read-only-agent-channel.test.ts test/docs/mcp-surface-parity.test.ts
+  test/mcp/registrar.test.ts` → `Tests: 5 failed, 26 passed, 31 total` (the five edited or new cases above);
+- `test/validation/secret-scan.test.ts test/docs/enumeration-parity.allowlist.test.ts test/core/dev-loop-v2-6.test.ts`
+  → `Tests: 4 failed, 91 passed, 95 total` (the 4 AC 7 text cases only: the secret scan and the allowlist order pass);
+- `npx jest test/lint --maxWorkers=2` → `Tests: 1 failed, 164 passed, 165 total`: `typecheck.clean`, failing on the
+  intended missing interface only (below). A first run also failed `cli-spawn-helper` on two `spawnSync` calls of
+  `dev-loop-v2-6.test.ts`; they now go through `spawnCapture`.
+- `npx tsc --noEmit -p tsconfig.json` → exit 2, two errors, both the intended interface:
+  `test/mcp/helpers/production-tools.ts(29,83): error TS2353: … 'env' does not exist in type 'McpServerOptions'` and
+  `test/mcp/wire-errors.test.ts(25,60): error TS2307: Cannot find module '../../src/mcp/wire-errors' …`. The
+  `surface` option is passed through the existing `as never` helper of `agent-context.test.ts`, so it raises none.
+- No fixture of command output is copied into a test: every CLI output a case compares is produced by the case itself
+  (`spawnCapture` of `dist/cli.js`, or of the pinned build for AC 7).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
