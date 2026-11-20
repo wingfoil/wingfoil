@@ -369,6 +369,12 @@ by `task-362` — `wingfoil capabilities`, `wingfoil capabilities --format json`
 `registerCapabilitiesResource` — and the 0.3.2 baseline fixture by `task-363`), `test/docs/enumeration-parity.allowlist.ts`
 (four `capabilities` surpluses planned by `task-362`). Green removes the rows that go stale once the names ship.
 
+### design gate (approver, 2026-11-20)
+
+The approver recorded the step in `4e368844e` (`workflow finalize … dev-loop.design`), after the spec amendments `4710565e6`, `610b4c93d`, `a6fc9e35b`, `ca4dd2fa7`, `cb6f79471`, `dafd4aa38`. The rulings, as the record states them:
+
+> Approve the design of task-362 as recommended: D1 an optional readsProject false field with ParamsContext root optional, the CLI registrar checking the project instead of resolving a root and the MCP registrar omitting it; D2 the blank project exit 2 moves into program.ts as a checkProject step run first inside the bound resolveRoot; D3 the qa writes the capabilities document fixture at red from the section 3.5 lists; D4 the five specs are amended before red, and the orchestrator commits X_cli-cmds.md and the command-baseline directive in one commit right after, the allowlists already committed; D5 this task merges first and task-365 adds the governance-check capability; D6 the production capabilities Resource is hand-registered through registerCapabilitiesResource and task-367 registers only the derived Tools on production; D7 green updates the command list and count of AGENTS.md section 1, an exception to W1-R10 that the agents-md test requires, and task-365 then writes 37.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
