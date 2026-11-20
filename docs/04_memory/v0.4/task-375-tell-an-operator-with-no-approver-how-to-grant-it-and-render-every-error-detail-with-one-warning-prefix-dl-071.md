@@ -191,6 +191,12 @@ for the names the amended specs give code not written yet: `spec-005` `DETAIL_KE
 them. Until then a full-suite run in this worktree may fail `test/cli/workflow-unbound-none.integration.test.ts` with
 `W_UNCOMMITTED_INPUTS` (`bug-534`).
 
+### design gate (approver, 2026-11-20)
+
+The approver recorded the step in `2393f145a` (`workflow finalize … dev-loop.design`), after the amendments `2dfd6fb91` (`spec-008-cli-grammar`), `f420e0a97` (`spec-005-cli-command-contract`), `bcca2d629` (`spec-006-core-domain-api`), `2b8a78cb4` (`spec-009-validation-strategy`) and `35c433462` (`spec-013-directive-frontmatter-schema`). The allowlist entries the amended specs need are in `ff697b1e5`. The rulings, as the record states them:
+
+> Approve the design of task-375 as recommended: D1 the authority refusal gains a hint on stderr, a console hint line and a json hint field, naming the dna add or dna update command with the asker's own identity, left out when a member holds approver or the working tree grants the asker, and carried by every caller of the shared check; D2 every details key is entry, labelled or stated in one closed table, labelled and undeclared keys render as key and value, and a test fails on an undeclared key; D3 the one warning prefix lives in src/validation/warning.ts and is shared by the CLI renderer, the fallbacks, init and the mcp pre-flight; D4 the printed changes are Warning to warning, the hint, and the detail lines of refusals that carry cause, unreadable, frontier, applied, argv or file, with no error line, exit code or stdout change and the CHANGELOG written at user-docs; D5 the five specs are amended, not only the two the task names; D6 no new BDD scenario, P1.7 scenario 3 stays verbatim.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
