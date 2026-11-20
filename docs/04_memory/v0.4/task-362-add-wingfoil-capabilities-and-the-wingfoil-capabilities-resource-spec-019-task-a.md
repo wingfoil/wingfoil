@@ -639,6 +639,30 @@ Against `code-review`, every claim with its command:
   — its `### Retrospective` items, left uncommitted:
   `--reason "Record the bug's retrospective: task-362 fixed it through the spec-006 amendment a6fc9e35b, and the citations test now runs its grep over every spec."`
 
+### gates on the merge of main (developer, 2026-11-20)
+
+`04ef33c77` merges `main`, which had moved on by `task-375`. The only conflicts were the Revision paragraphs of `spec-005`,
+`spec-006` and `spec-008`, resolved as the union with main's paragraphs first; supervision accepted the resolution.
+
+Heavy gates on `04ef33c77`, each after `waitslot.sh`, `--maxWorkers=2`; the `bug-513` amendment was uncommitted in
+the worktree for all of them:
+- `npm test -- --maxWorkers=2` → `Test Suites: 1 failed, 708 passed, 709 total`, `Tests: 1 failed, 12970 passed,
+  12971 total`.
+- `npm run test:coverage -- --maxWorkers=2` → the same counts.
+- The one failure in both runs is `test/cli/workflow-unbound-none.integration.test.ts` › "workflow next (console): …
+  no "N diagnostic(s)" line", the `bug-534` class: `node dist/cli.js workflow next --format json` lists only
+  `W_UNCOMMITTED_INPUTS` on the `bug-513` file.
+- Clean clone of `04ef33c77`, outside the worktree, `npm ci`, then `npm test -- --maxWorkers=2` → `Test Suites: 709
+  passed, 709 total`, `Tests: 12971 passed, 12971 total`. That test passes there; run alone in the same clone,
+  `npx jest test/cli/workflow-unbound-none.integration.test.ts --maxWorkers=2` → `Tests: 4 passed, 4 total`.
+- Coverage: 98.89 / 96.65 / 98.62 / 99.47, against `169ecd71b`'s 98.87 / 96.61 / 98.60 / 99.47 (`sha256sum -c
+  coverage-summary.json.sha256` → `OK`, sha256 `b9e4500309376827c3b8b781f44a950899519b5f0417c6ddf81db556145e5f63`).
+  - Totals, baseline → head: statements 12925/13072 → 13045/13191, branches 8051/8333 → 8100/8380, functions
+    2546/2582 → 2583/2619, lines 10777/10834 → 10872/10929.
+  - Every changed source file has the same covered/total as in the refactor table above.
+- `npm run typecheck` → `0`; `npm run lint` → `0`; `npm run docs:api` → `0`; `npm run build` → `0`.
+- `git show 04ef33c77:AGENTS.md` §1 still reads "— 36 commands" with `capabilities` at the top level.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
