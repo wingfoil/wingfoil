@@ -375,6 +375,87 @@ The approver recorded the step in `4e368844e` (`workflow finalize … dev-loop.d
 
 > Approve the design of task-362 as recommended: D1 an optional readsProject false field with ParamsContext root optional, the CLI registrar checking the project instead of resolving a root and the MCP registrar omitting it; D2 the blank project exit 2 moves into program.ts as a checkProject step run first inside the bound resolveRoot; D3 the qa writes the capabilities document fixture at red from the section 3.5 lists; D4 the five specs are amended before red, and the orchestrator commits X_cli-cmds.md and the command-baseline directive in one commit right after, the allowlists already committed; D5 this task merges first and task-365 adds the governance-check capability; D6 the production capabilities Resource is hand-registered through registerCapabilitiesResource and task-367 registers only the derived Tools on production; D7 green updates the command list and count of AGENTS.md section 1, an exception to W1-R10 that the agents-md test requires, and task-365 then writes 37.
 
+### red (qa, 2026-11-20)
+
+**Red commit:** `4e9f3a766` (`test(core): task-362 — failing test: wingfoil capabilities, its document and the
+wingfoil://capabilities Resource`), test files and one fixture only; T4 is measured from it. Black box (`testing` T3):
+no file under `src/` or `scripts/` was opened; the expected values come from the ACs, `spec-019`, the design table and
+the gate rulings above, the BDD files, and the existing tests of the module. Every command below ran with the task's
+PATH shim first; `git rev-list --count HEAD..main` → `0`, so no merge of `main`.
+
+**Files.** New: `test/core/capabilities.test.ts`, `test/core/capabilities-format-readers.test.ts`,
+`test/cli/capabilities.integration.test.ts`, `test/mcp/capabilities-resource.test.ts`,
+`test/core/fixtures/capabilities-document.json`. Changed (each change as the design lists it):
+- `test/core/parity.test.ts` — the exact list of derived static Resource URIs gains `wingfoil://capabilities` (T-17).
+- `test/core/production-registry.test.ts` — the registered operations gain `capabilities.capabilities`.
+- `test/mcp/registrar.test.ts` — task-323 AC 2: the production list holds five URIs, `wingfoil://capabilities` added;
+  its "none of the URIs registerCoreModules derives" loop becomes "the derived URIs the server also lists are exactly
+  `['wingfoil://capabilities']`" (design D6: the production server hand-registers the URI the registrar derives, so
+  the old loop could never pass; the title says so). New describe: the test-only registrar on a flat `readsProject:
+  false` operation `x`.
+- `test/cli/mcp-registration.test.ts` — the real-build case's `resources: 4` → `resources: 5`, the comment names the
+  fifth URI. The synthetic `evaluateDevBuild` case (`resources: 4` in a hand-made observation) is unchanged.
+- `test/cli/project-option.integration.test.ts` — both sweeps (AC 1, AC 2 of task-350) leave out the leaves whose
+  operation declares `readsProject: false`, looked up in `CORE_MODULES` through `enumerateOperations`/`deriveVerb`; a
+  new case pins that excluded set to exactly `['capabilities']`, and that `capabilities` is a leaf.
+- `test/cli/registrar.test.ts` — new describe: a flat `readsProject: false` operation through `buildCliCommands`.
+- `test/docs/x-cli-cmds-citations.test.ts` (optional per the design, taken) — `spec-006` joins `SPECS`, and a new case
+  runs `bug-513`'s grep over `docs/04_memory/design` and `docs/02_requirements` and requires no hit under the specs
+  directory (and at least one hit, the decision-logs, so the walk is not vacuous).
+
+**The fixture.** Written from `spec-019` §3.5's JSON example by a throwaway script outside the worktree: the nine kinds
+at `1..1`, the 36 commands and the six capabilities, `wingfoil` left out, §3.2's key order, `JSON.stringify` plus `\n`.
+`wc -c` → `1018`; `sha256sum` → `eba2cb26e41ae6b147efaef871660416aded23c22ab03e77940ba8f81562d794`, the length and digest
+the design records for the prototype's real output. No other fixture of command output is committed: every CLI case
+spawns `dist/cli.js` and compares two real runs.
+
+**Per AC** (classification as the design confirms it; first failing line from each run below):
+
+| AC | Class | Tests | Red evidence |
+|----|-------|-------|--------------|
+| 1 | red-first | `capabilities.test.ts` › "AC 1 — …" (4 cases); `capabilities.integration.test.ts` › "AC 1 — capabilities --help shows …" | suite fails to run (`Cannot find module '../../src/core/capabilities'`, tsc TS2307); `--help` → `Expected substring: "print the file formats this WingFoil reads, …"`, the received text being the top-level help |
+| 2 | red-first | integration › "AC 2 — T-9: The same output outside a git repository …", "AC 2 — T-14: …" (2); `test/cli/registrar.test.ts` › "task-362 AC 2 — …" (4); `test/mcp/registrar.test.ts` › "task-362 AC 2 — …" (2); `project-option.integration.test.ts` › "task-362: the leaves left out …" | T-9: `"status": 2, "stderr": "{\"error\":\"unknown command 'capabilities'\"}"`; T-14 `/nonexistent`: `Expected: 0 Received: 2`; T-14 blank: stderr `error: unknown command 'capabilities'` for `error: invalid flag value: --project must not be blank`; CLI registrar: `expect(jest.fn()).not.toHaveBeenCalled() … Received number of calls: 1` (resolveRoot), `Expected number of calls: 1 Received number of calls: 0` (checkProject), `Expected: "error: invalid flag value: --project must not be blank\n" Number of calls: 0`; MCP registrar: `Received number of calls: 1`; project-option: `- Array [ "capabilities" ] + Array []`. The two "without the field resolves the root once" cases pass (today's behaviour, kept) |
+| 3 | red-first | `capabilities.test.ts` › "AC 3 — T-3, T-6 …" (6), "AC 3 — T-11 …" (2); integration › "AC 3 — Print the capabilities document as JSON …", "The YAML output parses …", "T-11 …", "T-6 …" | suite fails to run (above); integration: `"status": 2 … unknown command 'capabilities'`, `[0, 0]` expected, `[2, 2]` received |
+| 4 | red-first | `capabilities.test.ts` › "AC 4 — T-1 …" (3); `capabilities-format-readers.test.ts` › "AC 4 — T-2 …" (5) | suite fails to run; T-2: `TypeError: Cannot read properties of undefined (reading 'map')`, `TypeError: format_1.FILE_KIND_FORMATS is not iterable` (tsc TS2305) |
+| 5 | red-first | `capabilities.test.ts` › "AC 5 — T-4, T-5 …" (2) | suite fails to run |
+| 6 | red-first | `capabilities.test.ts` › "AC 6 — T-7, T-8 …" (6) | suite fails to run |
+| 7 | red-first | `capabilities.test.ts` › "AC 7 — T-10 …" + the fixture | suite fails to run |
+| 8 | red-first | `capabilities-resource.test.ts` (5); `parity.test.ts`, `test/mcp/registrar.test.ts` (task-323 AC 2), `mcp-registration.test.ts`, `production-registry.test.ts` | `McpError: MCP error -32602: … Resource wingfoil://capabilities not found` (T-15, both cases); T-16 list: `- Array [ Object { "description": "the file formats … (read-only)", "name": "capabilities.read" } ] + Array []`; write intent: `Expected substring: "resources are read-only" Received string: "MCP error -32602: … not found"`; the leaf-module case fails on the `require` (tsc TS2307); parity: `- "wingfoil://capabilities"`; task-323: `- "wingfoil://capabilities"`; check:mcp: `Expected pattern: /… resources: 5/ … resources: 4`; production registry: `- "capabilities.capabilities"` |
+| 9 | red-first | integration › "AC 9 — T-12 …", "AC 9 — T-13 …" (2) | stderr `error: unknown command 'capabilities'` in place of each §2 text. "No new code" stays the design's reviewer grep (no test) |
+| 10 | characterization | none at red (design: `test/docs/cli-reference.test.ts` and `test/cli/help-describes-every-command.test.ts` go red by themselves once the command ships; green writes the entry) | — |
+| 11 | characterization | `x-cli-cmds-citations.test.ts` › the `spec-006` rows of the three `it.each`, "task-362 AC 11 — bug-513's grep names no spec" | passes on first run (the `spec-006` amendment `a6fc9e35b` is in) |
+
+**T-1, read from the spec, not the design's wording.** Every `_FORMAT` constant is `1` today, so "every numeric
+`_FORMAT` export is the `highest` of exactly one entry" cannot be checked by value (each value equals all nine
+`highest`s). The test binds them by name through `spec-019` §3.1's kinds table (kind → constant): the numeric
+`_FORMAT` exports are exactly the table's nine constants, each names exactly one kind, and that kind's entry has the
+constant's value as `highest`. Brought to the reviewer as a reading of T-1, not a change of it.
+
+**Runs** (each `npx jest <paths> --maxWorkers=2 --noStackTrace --json --outputFile=<scratch>/r.json`, read through the
+red summary; targeted, no heavy-gate lock):
+- the four new suites → `Tests: 21 failed, 0 passed, 21 total`, plus `test/core/capabilities.test.ts` failed to run
+  (its 24 cases do not load: the missing module);
+- `test/cli/registrar.test.ts test/mcp/registrar.test.ts test/core/parity.test.ts test/core/production-registry.test.ts
+  test/cli/mcp-registration.test.ts test/docs/x-cli-cmds-citations.test.ts` → `Tests: 8 failed, 107 passed, 115 total`
+  (the eight are the lines above);
+- `test/cli/project-option.integration.test.ts` → `Tests: 1 failed, 16 passed, 17 total`;
+- `test/lint test/validation/secret-scan.test.ts` → `Tests: 1 failed, 249 passed, 250 total`: the one failure is
+  `typecheck.clean`, which a red that imports exports not written yet cannot pass (below). The first run of it also
+  failed `lint.clean` on an unused destructured name in `capabilities.test.ts`, fixed before the commit; `npx eslint`
+  over the eleven test files → exit `0`.
+- `npx tsc --noEmit -p tsconfig.json` → 22 diagnostics, all from the intended missing interface: TS2307 for
+  `src/core/capabilities` (2) and `src/mcp/capabilities-resource` (1); TS2305 for `FILE_KIND_FORMATS` (2),
+  `readBuildIdentity` (1) and `capabilitiesFn` (1); TS2353 for the new fields `readsProject` on `CoreOperation` (2) and
+  `checkProject` on `BuildCommandsOptions` (1) in `test/cli/registrar.test.ts`; and 13 TS7006 (an implicit `any`
+  parameter) in callbacks over the values of the missing module, which type once it exists.
+- the invisible-character grep over the twelve files → no hit.
+
+**For green.** Fixtures in the tests: the `readsProject: false` field is written directly on the operation literals,
+and `checkProject` on the registrar options, as design items 1 and 6 name them. The MCP write-intent case sends
+`_meta: { [WRITE_INTENT_META_KEY]: { text: 'overwrite attempt' } }`, the shape `test/mcp/session-context-resource.test.ts`
+already sends. Two cases load `src/core/capabilities` and `src/mcp/capabilities-resource` lazily (`require` inside the
+test) so the rest of their files fail on behaviour, not on a missing module.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
