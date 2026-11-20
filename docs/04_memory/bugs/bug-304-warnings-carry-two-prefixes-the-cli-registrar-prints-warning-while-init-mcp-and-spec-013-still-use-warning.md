@@ -55,4 +55,7 @@ Captured on 2026-10-09 by `bug-ingest-rel-v0.3-w3b3-review-findings-plan`, from 
 
 ### Retrospective
 
-None.
+- Fixed by `task-375`: `WARNING_PREFIX` and `formatWarningLine` (`src/validation/warning.ts`) are the one console
+  warning line; the CLI renderer, both fallbacks, `init` (which now installs the sink and writes the result's warnings)
+  and the `mcp` pre-flight write it, and `spec-009` §2 and `spec-013` quote `warning: `. A script grepping `^Warning: `
+  changes; the pinned build keeps the old line until the pin advances.
