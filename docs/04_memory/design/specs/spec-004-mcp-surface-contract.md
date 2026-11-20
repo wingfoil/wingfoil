@@ -84,6 +84,14 @@ wingfoil://session/{role}/{element}/{state}   # a role's execution context on an
   `state` is any commit, so it is a template that `resources/list` never lists: a client reads it by the full URI,
   which `agent execute`'s bootstrap gives. Its refusals are §3.4's, with `role` checked first against the same
   start-time set.
+- A Resource derived from a core operation by `registerCoreModules` (`spec-006` §3, `dl-040` option 1) has the URI
+  `wingfoil://{module}/{verb}` (`wingfoil://{module}` for a flat operation), followed by `/{<positional>}` when the
+  operation declares a required positional: then it is a template, which `resources/list` does not list and
+  `resources/templates/list` does (`wingfoil://memory/history/{id}`). Each variable is one segment, percent-decoded
+  before the call, and reaches the operation as its positional, exactly as the CLI operand does; a variable that is
+  not valid percent-encoding is refused as `invalid argument: <name> must be percent-encoded`. These URIs are not in
+  the block above: the production server serves the hand-registered Resources of this section, and which derived
+  ones it serves is decided with the task that serves them.
 
 #### 2.2 Read contract
 
@@ -320,8 +328,28 @@ Resource, and REQ-SYS-05's Fit Criterion exempts both by name
 
 #### 4.3 Input/output shape
 
-Each Tool's input schema mirrors its CLI's required flags one-to-one (e.g. `memory.approve` requires
-`type`, `id`, `reason` — matching REQ-SEC-04's mandatory `--reason`). Each Tool call:
+Each Tool's input schema mirrors its CLI's parameters one-to-one, and is derived from the same
+declaration the CLI registers (`spec-006` §2, `dl-040` option 1), so neither is written by hand:
+
+- one property per parameter, named as the CLI spells it without the dashes (`id`, `reason`,
+  `entry-executes_as`): the positional under its declared name, then each value option, then each
+  flag, in declaration order, then `dry-run` on every Tool (every Tool mutates, `spec-008` §2). A
+  positional and a value option are a `string`, a repeatable option (`memory add --set`) an `array` of
+  `string`s in the order given, a flag a `boolean`. Each property carries the declaration's
+  description. `--co-author` and `--ai-model` are not Tool inputs: the agent identity of a Tool call
+  is the server's (`spec-018` §2);
+- `required` lists the required positional and the required value options, in that order
+  (`memory.approve` requires `id` and `reason`, matching REQ-SEC-04's mandatory `--reason`); the
+  schema admits no other property (`additionalProperties: false`). An operation that declares no
+  parameter has an empty schema.
+
+Before the operation runs, the arguments are checked against the schema, and the first finding is the
+refusal, a usage refusal (exit-equivalent `2`): an argument the schema does not name
+(`unknown argument: <name>`, the first in sorted order), then, in property order, a value of the wrong
+type (`invalid argument: <name> must be a string`, `… must be a boolean`, `… must be an array of
+strings`) or a required argument left out (`missing required argument: <name>`, the wording of
+`P5.2.3-mcp-tools.feature`). The arguments then reach the operation in the shape the CLI gives it
+(`spec-006` §2), so every check the operation runs itself is the CLI's. Each Tool call:
 
 1. Performs the **same validation** as the CLI path (state-machine legality per `memory.yaml`, role
    authority per REQ-SEC-03, mandatory-reason per REQ-SEC-04).
@@ -356,8 +384,8 @@ Each Tool's input schema mirrors its CLI's required flags one-to-one (e.g. `memo
    only `content` sees what it always saw. A success with no warnings carries no `structuredContent`.
    A Resource read and a Prompt carry theirs as a top-level `warnings` array (§2.2, §3.2).
    This is the registrar's rule (`src/mcp/registrar.ts`). The shipped `wingfoil mcp` server registers
-   no Tools until P5.2.3 (v0.4), so no client receives the field yet. When Tools ship, a flag such as
-   `directive assign`'s `--force` must become a Tool input as well.
+   no Tools until P5.2.3 (v0.4), so no client receives the field yet. A flag such as
+   `directive assign`'s `--force` is a Tool input by the derivation above.
 
 **The `[{from} → {to}]` bracket belongs to the verbs of the `spec-003` verb table that carry one**
 (`dl-079` (A); the list and each verb's bracket rule are `spec-008-cli-grammar` §2's). Those are the
@@ -380,7 +408,6 @@ and MCP paths identically, since item 2 makes their commit shape one and the sam
 {
   "name": "memory.approve",
   "arguments": {
-    "type": "task",
     "id": "task-042-foo",
     "reason": "meets acceptance criteria, tests pass"
   }
@@ -624,3 +651,15 @@ a path several types produce is reported to each. The same rule holds for `memor
 at-commit lookup behind `agent execute` and for the read of one type behind the WIP-limit count
 (`loadTypeDocumentCopiesAtRevs`, `requireWipSlot`). Edited in place without a supersede or a state change (`dl-047`), pending
 the approver's `memory amend` at `task-314`'s review.
+
+**Revision (2026-11-19, `task-364-give-coreoperation-parameter-metadata-so-the-registrar-derives-resource-templates-and-tool-input-schemas-dl-040`,
+`bug-272`) — §4.3 derives each Tool's input schema, and §2.1 the URI of a Resource derived from a core operation.**
+`dl-040` (`ready`, option 1) gives the registrar the operations' parameter metadata (`spec-006` §2). §4.3's opening
+states the schema the registrar derives from it (property names, types, `required`, no extra property, `dry-run`;
+`--co-author` and `--ai-model` left to the server's agent identity, `spec-018` §2) and the argument check that runs
+before the operation, with its four refusals (the missing-argument one is `P5.2.3-mcp-tools.feature`'s wording). The
+`memory.approve` example loses its `type` argument and the old opening its `type` requirement: the CLI takes no
+`--type` there, and a schema that mirrors the CLI one-to-one has no such property. Item 5's sentence on `--force` now
+says it is a Tool input. §2.1 gains a bullet on the URIs `registerCoreModules` derives, outside the block, which lists
+what the production server serves. Edited in place without a supersede or a state change (`dl-047`), pending the
+approver's `memory amend`.

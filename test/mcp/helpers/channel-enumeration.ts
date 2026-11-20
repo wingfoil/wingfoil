@@ -18,6 +18,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 
 import type { CoreModule } from '../../../src/core';
+import { buildCoreParams } from '../../../src/core/registry';
 import { registerCoreModules, registerReadOnlyResources } from '../../../src/mcp';
 import { WRITE_INTENT_META_KEY } from '../../../src/mcp/read-only';
 import {
@@ -46,16 +47,19 @@ export async function connectReadOnlyClient(root: string): Promise<ChannelEnumer
  * `registerCoreModules(modules)` — a `mutates: true` op becomes a Tool, a `mutates: false` op a
  * Resource (the structural half of REQ-SEC-05). task-011 established this fixture "to extend to Tools
  * without rework"; this is that extension (task-016-read-only-agent-channel), letting a test enumerate
- * the agent-facing channels over the SDK.
+ * the agent-facing channels over the SDK. The params are built by `buildCoreParams`, the builder the CLI
+ * uses (task-364), so a call over this surface reaches the operation as the same CLI invocation would.
  */
 export async function connectCoreModuleSurface(
   modules: readonly CoreModule[],
   options: { resolveRoot: () => string },
 ): Promise<ChannelEnumerationClient> {
   const server = new McpServer({ name: 'wingfoil-test', version: '0.0.0' });
+  // task-364 (`bug-272` step 3, design D11): the CLI's own params builder, so a Tool call or a Resource read
+  // reaches the operation with the params the CLI registrar builds, not with the root alone.
   registerCoreModules(server, modules, {
     resolveRoot: options.resolveRoot,
-    buildParams: (ctx) => ({ root: ctx.root }),
+    buildParams: buildCoreParams,
   });
   const [serverTransport, clientTransport] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: 'wingfoil-test-client', version: '0.0.0' });

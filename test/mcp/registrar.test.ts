@@ -8,13 +8,14 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { McpError } from '@modelcontextprotocol/sdk/types.js';
 
 import type { CoreModule } from '../../src/core/registry';
 import { coreErr, coreOk } from '../../src/core/types';
 import { CORE_MODULES } from '../../src/core';
 import { enumerateOperations, deriveVerb } from '../../src/core/registry';
 import { createMcpServer, deriveMcpResourceUri, registerCoreModules as registerCoreModulesFromBarrel } from '../../src/mcp';
-import { registerCoreModules } from '../../src/mcp/registrar';
+import { deriveMcpResourceUri as deriveMcpResourceUriFromRegistrar, registerCoreModules } from '../../src/mcp/registrar';
 
 const FIXTURE_MODULES: CoreModule[] = [
   {
@@ -114,6 +115,61 @@ describe('registerCoreModules — Resource dispatch', () => {
     await expect(client.readResource({ uri: 'wingfoil://memory/search' })).rejects.toThrow(
       /element not found: task\/task-999/,
     );
+  });
+});
+
+describe('task-364 AC 2 — a required positional becomes a URI template segment (spec-004 §2.1, spec-006 §3, dl-040 option 1)', () => {
+  it('deriveMcpResourceUri appends /{<name>} for a required positional, and only then', () => {
+    expect(deriveMcpResourceUriFromRegistrar('memory', 'history', { name: 'id', required: true, description: 'd' })).toBe(
+      'wingfoil://memory/history/{id}',
+    );
+    expect(deriveMcpResourceUriFromRegistrar('memory', 'history', { name: 'id', description: 'd' })).toBe('wingfoil://memory/history');
+    expect(deriveMcpResourceUriFromRegistrar('x', '', { name: 'n', required: true, description: 'd' })).toBe('wingfoil://x/{n}');
+    expect(deriveMcpResourceUriFromRegistrar('memory', 'history')).toBe('wingfoil://memory/history');
+  });
+
+  /** Module `x`, read op `xShow` with a required positional `run-id`; its `fn` returns the params it received. */
+  const TEMPLATE_MODULES: CoreModule[] = [
+    {
+      name: 'x',
+      operations: {
+        xShow: {
+          name: 'xShow',
+          mutates: false,
+          positional: { name: 'run-id', required: true, description: 'a run id' },
+          fn: async (params) => coreOk(params),
+        },
+      },
+    },
+  ];
+
+  async function templateClient(): Promise<Client> {
+    const server = new McpServer({ name: 'wingfoil-test', version: '0.0.0' });
+    registerCoreModules(server, TEMPLATE_MODULES, {
+      resolveRoot: () => '/fixture-root',
+      buildParams: (ctx) => ({ positional: ctx.positional, positionals: ctx.positionals }),
+    });
+    const [serverTransport, clientTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: 'wingfoil-test-client', version: '0.0.0' });
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    return client;
+  }
+
+  it('a read of the template percent-decodes the variable and hands it to the operation as its positional', async () => {
+    const client = await templateClient();
+    const result = await client.readResource({ uri: 'wingfoil://x/show/a%2Fb%2F1' });
+    const text = (result.contents[0] as { text: string }).text;
+    expect(JSON.parse(text)).toEqual({ positional: 'a/b/1', positionals: ['a/b/1'] });
+  });
+
+  it('a variable that is not valid percent-encoding is a failed read naming the parameter', async () => {
+    const client = await templateClient();
+    const error: unknown = await client.readResource({ uri: 'wingfoil://x/show/%E0%A4%A' }).then(
+      () => undefined,
+      (caught: unknown) => caught,
+    );
+    expect(error).toBeInstanceOf(McpError);
+    expect((error as McpError).message).toContain('invalid argument: run-id must be percent-encoded');
   });
 });
 
