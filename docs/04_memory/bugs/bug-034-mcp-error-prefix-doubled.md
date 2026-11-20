@@ -2,7 +2,7 @@
 id: "bug-034-mcp-error-prefix-doubled"
 type: bug
 title: "SDK-raised MCP errors carry the `MCP error <code>:` prefix in the wire message, so clients show it twice"
-status: planned
+status: in-progress
 severity: "low"
 release-origin: "v0.2"
 release: "v0.4"
