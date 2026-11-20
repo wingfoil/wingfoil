@@ -57,10 +57,11 @@ async function resolved(root: string, request: Record<string, unknown>): Promise
 }
 
 describe('task-333 AC 1 — AGENT_MARKERS (spec-018 §1)', () => {
-  it('is frozen and lists WINGFOIL_AGENT, --co-author, CLAUDE_CODE_CHILD_SESSION, CODEX_SANDBOX, in §1 order', () => {
+  // task-367 (`spec-018` §1 row 5, §1.2; approver ruling D1): the MCP Tools channel joins as the fifth marker, `mcp`.
+  it('is frozen and lists WINGFOIL_AGENT, --co-author, CLAUDE_CODE_CHILD_SESSION, CODEX_SANDBOX, mcp, in §1 order', () => {
     const markers = AGENT_MARKERS as readonly MarkerView[];
     expect(Object.isFrozen(markers)).toBe(true);
-    expect(markers.map((marker) => marker.id)).toEqual(['WINGFOIL_AGENT', '--co-author', 'CLAUDE_CODE_CHILD_SESSION', 'CODEX_SANDBOX']);
+    expect(markers.map((marker) => marker.id)).toEqual(['WINGFOIL_AGENT', '--co-author', 'CLAUDE_CODE_CHILD_SESSION', 'CODEX_SANDBOX', 'mcp']);
   });
 
   it('gives each marker its kind and the phrase a refusal lists (§3.2)', () => {
@@ -69,6 +70,7 @@ describe('task-333 AC 1 — AGENT_MARKERS (spec-018 §1)', () => {
       ['--co-author', 'option', '--co-author was given'],
       ['CLAUDE_CODE_CHILD_SESSION', 'environment', 'CLAUDE_CODE_CHILD_SESSION is set'],
       ['CODEX_SANDBOX', 'environment', 'CODEX_SANDBOX is set'],
+      ['mcp', 'surface', 'the call came through the MCP server'],
     ]);
   });
 
@@ -110,6 +112,18 @@ describe('task-333 AC 1/AC 3 — resolveAgentContext, gated form (spec-018 §2.6
     const context = await resolved(root, { env, ...(coAuthor === undefined ? {} : { coAuthor }), gated: true });
     expect(ids(context)).toEqual(expected);
     expect(context.attribution).toBeNull();
+  });
+
+  // task-367 (`spec-018` §1 row 5, §1.2, §2.6; approver ruling D1): the MCP registrar's invocation carries the surface.
+  it('task-367: { env: {}, surface: mcp } → markers [mcp], attribution null', async () => {
+    const context = await resolved(root, { env: {}, surface: 'mcp', gated: true });
+    expect(ids(context)).toEqual(['mcp']);
+    expect(context.attribution).toBeNull();
+  });
+
+  it('task-367: { env: { CLAUDE_CODE_CHILD_SESSION }, surface: mcp } → the environment marker, then mcp, in §1 order', async () => {
+    const context = await resolved(root, { env: { CLAUDE_CODE_CHILD_SESSION: '1' }, surface: 'mcp', gated: true });
+    expect(ids(context)).toEqual(['CLAUDE_CODE_CHILD_SESSION', 'mcp']);
   });
 });
 

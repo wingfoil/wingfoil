@@ -156,6 +156,18 @@ describe('src/cli.ts — the `wingfoil` bin entrypoint', () => {
 
     expect(params).toEqual({ root: '/repo', positional: undefined, positionals: undefined, options: undefined });
   });
+
+  // task-367 AC 8 (`bug-538`, approver ruling D9; characterization): the blank `--project` refusal (`spec-008` §1) is
+  // raised inside the `resolveRoot` `src/cli.ts` passes; the spawned `test/cli/project-option.integration.test.ts`
+  // proves it through `dist/`, which coverage does not measure, so the captured closure is called in process here.
+  it('passes a `resolveRoot` that refuses a blank --project value with the usage message (bug-538)', async () => {
+    jest.mocked(buildProgram).mockResolvedValue({ parseAsync: jest.fn(async () => ({}) as Command) } as unknown as Command);
+
+    await runEntrypoint();
+
+    const resolveRoot = optionsPassedToBuildProgram().resolveRoot as (project?: string) => string;
+    expect(() => resolveRoot('  ')).toThrow('invalid flag value: --project must not be blank');
+  });
 });
 
 describe('src/cli.ts — the last-resort error handler (bug-002-cli-error-stack-dump)', () => {

@@ -12,6 +12,7 @@ import { McpError } from '@modelcontextprotocol/sdk/types.js';
 
 import type { CoreModule } from '../../src/core/registry';
 import { coreErr, coreOk } from '../../src/core/types';
+import { reportWarning } from '../../src/validation/warning';
 import { CORE_MODULES } from '../../src/core';
 import { enumerateOperations, deriveVerb } from '../../src/core/registry';
 import { createMcpServer, deriveMcpResourceUri, registerCoreModules as registerCoreModulesFromBarrel } from '../../src/mcp';
@@ -200,5 +201,39 @@ describe('task-323 AC 2 (characterization, bug-396) — what the shipped server 
       .map(({ module, operation }) => deriveMcpResourceUri(module.name, deriveVerb(module.name, operation.name)));
     expect(derived.length).toBeGreaterThan(0);
     for (const uri of derived) expect([...listed, ...templates]).not.toContain(uri);
+  });
+});
+
+/**
+ * task-367 AC 5 (`spec-004` §4.3 items 4–5; approver rulings D3, D7): a Tool refusal keeps the operation's warnings
+ * and its hint. A warning raised while the operation runs is collected for the call (one warning sink per Tool call)
+ * and rides the refusal's `structuredContent` beside the CLI's `--format json` error object `{error, hint?, details?}`.
+ * Red until green: today the hint is dropped, the warning goes to the server's stderr, and with no details there is no
+ * `structuredContent` at all.
+ */
+describe('task-367 AC 5 — a refusal carries {error, hint, warnings} in structuredContent (D3, D7)', () => {
+  it('a synthetic op that reports w1 then refuses with a hint: structuredContent is exactly { error, hint, warnings }', async () => {
+    const modules: CoreModule[] = [
+      {
+        name: 'x',
+        operations: {
+          xWrite: {
+            name: 'xWrite',
+            mutates: true,
+            fn: async () => {
+              reportWarning('w1');
+              return coreErr({ code: 'VALIDATION', message: 'm', hint: 'h' });
+            },
+          },
+        },
+      },
+    ];
+    const { client } = await connectedClient(modules);
+
+    const result = await client.callTool({ name: 'x.write', arguments: {} });
+
+    expect(result.isError).toBe(true);
+    expect(result.content).toEqual([{ type: 'text', text: 'm' }]);
+    expect(result.structuredContent).toEqual({ error: 'm', hint: 'h', warnings: ['w1'] });
   });
 });
