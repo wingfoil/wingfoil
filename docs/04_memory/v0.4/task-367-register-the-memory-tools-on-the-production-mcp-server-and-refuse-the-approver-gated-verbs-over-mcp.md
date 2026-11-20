@@ -59,3 +59,364 @@ covered only by spawned suites that coverage does not instrument.
 ## Execution Notes
 
 <!-- Filled by the dev-loop. -->
+
+### design (architect, 2026-11-20)
+
+**Inputs read.** `depends_on: [task-364]` (`done`, merged at `e204d00dd`): its design, gate rulings D1–D11 (record
+`e527cfab4`), green, refactor and "Downstream" notes (dl-015). Bugs `bug-034`, `bug-530`, `bug-538` (all
+`in-progress`). `spec-004`, `spec-008`, `spec-014`, `spec-018` (each `approved`: `grep -n '^status'`), read at this head
+`c69f931b8` with the amends they carry (`spec-004` `a15c05c15` of `task-364`; `spec-006` `89e20213f`; `spec-016`
+`dafd4aa38`; `spec-018` `70b4c3275`; `spec-014` `b934fd3ef`; `spec-008` `eaf977e5a`). `dl-199` (`ready`, `e2b0701fc`,
+ratifies (b)), `dl-212` (`ready`), `cp-003` (`scheduled`, `50d556c67`) with REQ-INT-03 as restated (`f8bd7fa2b`) and
+`P5.2.3-mcp-tools.feature` (`67d2aa05b`). The dev-loop plan's rulings W1-R2, W1-R3, W1-R4.
+
+**What exists.**
+- The registrar answers `tools/list` and `tools/call` itself (`src/mcp/registrar.ts` lines 203–228): argument check
+  (`toolArgumentsToParams`) before the operation, `dry-run`, derived schemas. It runs no agent invocation: the call
+  reads `currentAgentInvocation()`'s default `{ env: process.env }`, so a Tool call is an agent context only when the
+  server's own environment holds an environment marker (`src/core/agent-context.ts` lines 180–183).
+- Its refusal (lines 224–227) keeps `message` and `details` only: `hint` is dropped, and `structuredContent` is absent
+  when `errorDetails` is empty, which it is for `E_AGENT_CONTEXT` (its `details` are `{markers}`, which
+  `src/core/error-details.ts` ignores). A warning raised during the call goes through `reportWarning` with no sink
+  installed, so to the server's stderr (`src/validation/warning.ts` lines 39–43), never to the client. An operation
+  that throws (a `UsageError`: `requireReason` on a blank `reason`) escapes the handler as a JSON-RPC `-32603` error,
+  not an `isError` result.
+- The production server (`src/mcp/server.ts` lines 61–76, 98) installs `registerEmptyToolsChannel` and never calls the
+  registrar.
+- `bug-034`: the SDK 1.32.0 `McpError` constructor builds `MCP error ${code}: ${message}` into `message`
+  (`node_modules/@modelcontextprotocol/sdk/dist/cjs/types.js` 2067–2073); `Protocol._onrequest` sends `error.message`
+  as is (`shared/protocol.js` 426–433); `McpServer`'s `resources/read` throws `McpError(InvalidParams, "Resource ${uri}
+  not found")` (`server/mcp.js` line 440). WingFoil's own refusals are plain `Error`s (`src/mcp/read-only.ts` 55–67,
+  `src/mcp/prompt.ts` 83), unaffected.
+- Order inside the gated verbs (`src/core/memory-transition.ts` 712–723, `src/core/index.ts` 1571–1583 and
+  1990–2007): identity, membership, the gated agent context, then the transition (legality), then
+  `requireApprovalAuthority`, whose first step is `refuseAgentContext`. `memory amend` refuses before
+  `requireAmendableEdit`, so an amend with no edit still reaches `E_AGENT_CONTEXT`.
+- Agent markers: `AGENT_MARKERS` holds four (`agent-context.ts` 55–60); `spec-018` §1.2 and its Revision triggers
+  say an MCP agent context is "a marker by revision".
+- `bug-538`'s classes: `grep -rn "resolveOperationAgentContext(" src | grep -v src/core/agent-context.ts` → 12 call
+  sites (`src/core/index.ts` 629, 987, 2095, 2199, 2401; `memory-transition.ts` 722; `workflow-adopt.ts` 255;
+  `workflow-create-remove.ts` 179, 253; `workflow-finalize.ts` 162; `workflow-start-end.ts` 287, 375), each followed by
+  `if (!agent.ok) return agent;` (`src/agent/execute.ts` 778 is `selectAgent`, another class). `src/cli.ts` line 36 is
+  the blank `--project` check; `test/cli/entrypoint.test.ts` already captures the `resolveRoot` `src/cli.ts` passes
+  (lines 95–116), so it can be driven in process with no new seam.
+
+#### Design
+
+1. **The MCP Tools channel is agent marker row 5** (D1). `src/core/agent-context.ts`: `AgentMarkerId` gains `'mcp'`;
+   `AGENT_MARKERS` gains, last, `{ id: 'mcp', kind: 'surface', phrase: 'the call came through the MCP server' }` (kind
+   union gains `'surface'`); `AgentInvocation` gains `surface?: 'mcp'`; `isPresent` returns `invocation.surface ===
+   'mcp'` for the surface kind. Nothing else changes in the module: the gated form lists the marker, so
+   `refuseAgentContext` refuses; the ungated form applies `spec-018` §2.3 unchanged (no `coAuthor`; the env's
+   `WINGFOIL_AGENT`, else a vendor marker, else the first entry with the body note and `W_AGENT_ENTRY_GUESSED`, else
+   `W_NO_AGENT_ENTRY`), and `modelOf` reads the env's `WINGFOIL_AGENT_MODEL`, else `not-reported`.
+   `hasEnvironmentMarker` and `test/agent-markers.cjs` stay environment-only.
+2. **`src/mcp/tools.ts` (new): `registerCoreTools(server, modules, options)`**, the Tools half moved out of
+   `registerCoreModules` (which then calls it; its Resources half stays in `src/mcp/registrar.ts`). Options:
+   `resolveRoot`, `buildParams`, `env?: Readonly<Record<string, string | undefined>>` (default `process.env`). Per
+   `tools/call`, in this order (D2): unknown name → `Tool <name> not found`; `toolArgumentsToParams` → its refusal;
+   for an operation with `agentAttribution !== false`, a `WINGFOIL_AGENT_MODEL` in `env` that is non-blank and not one
+   line (`isMultiLineValue`) → `MULTI_LINE_AGENT_MODEL`; then the call, run as
+   `withAgentInvocation({ env, surface: 'mcp' }, …)` inside `withWarningSink(collect, …)`, through `runAsDryRun` when
+   `dry-run`; a throw is mapped by `exitCodeForThrow` to its reason (D7). Results: success → text = payload JSON,
+   `structuredContent: { value, warnings }` when `[...collected, ...result.warnings]` is non-empty; refusal (argument,
+   model, thrown, `CoreResult.error`) → `content: [{ type: 'text', text: reason }]`, `isError: true`, and
+   `structuredContent: { error, hint?, details?, warnings? }` — the CLI's `--format json` error object
+   (`src/cli/error.ts` 28–32, key order `error`, `hint`, `details`) plus `warnings` — present when any of the three
+   is (D3). Only the Tools run the agent invocation; Resources and Prompts do not.
+3. **`src/mcp/wire-errors.ts` (new)** (D4): `stripMcpErrorPrefix(message: JSONRPCMessage): JSONRPCMessage` — a
+   JSON-RPC error response whose `error.message` starts with `` `MCP error ${error.code}: ` `` loses that prefix once;
+   any other message is returned as is (pure); and `withBareErrorMessages(transport)`, which replaces
+   `transport.send` with a function calling the transport's previous `send` with the stripped message.
+4. **`src/mcp/server.ts`**: `registerEmptyToolsChannel` is removed (not kept beside: a second `tools/*` handler set
+   would replace the first); `createMcpServer` calls `registerCoreTools(server, CORE_MODULES.filter((module) =>
+   module.name === 'memory'), { resolveRoot, buildParams: buildCoreParams, env: options.env ?? process.env })` (D6) and
+   returns a server whose `connect(transport)` connects `withBareErrorMessages(transport)` (a subclass of `McpServer`
+   or an instance override, green's choice; `startMcpServer` unchanged). `McpServerOptions` gains `env?`. Capabilities
+   unchanged: `tools: {}` without `listChanged`. Module doc rewritten (no "empty Tools channel").
+5. **`src/mcp/index.ts`**: re-export `registerCoreTools` (and the two wire-error functions) beside
+   `registerCoreModules`, each with a TypeDoc comment (`npm run docs:api`).
+6. **bug-530** (`.wingfoil/`, proved on the pinned build below): `dev-loop.yaml` lines 49–50 read "… (dl-061 C.1):
+   under the no-engine regime the approver, who runs the reject from their own terminal, is the engine; an agent never
+   runs it, and the verb refuses an agent's session (spec-018 §3)."; `wingfoil-cli.md` §3 line 93 reads "filed, or
+   later by a `memory amend` the approver runs from their own terminal: an agent may prepare the edit, never run the
+   verb." Version lines: `dev-loop.yaml` `version: 2.6 # 2.6 task-367: the header's dl-061 C.1 paragraph says the
+   approver runs the reject from their own terminal and an agent never does (spec-018 §3); header comment only, no
+   phase, step or action changes; 2.5 task-358 …` (prepended before the 2.5 clause, no new `(prev `, so the existing
+   newest-clause tests still see `task-348`); `wingfoil-cli.md` `version: "1.7" # 1.7 §3: the tag is added later only
+   by a memory amend the approver runs from their own terminal, never by an agent (spec-018 §3, task-367); 1.6 §2: …`
+   — **no bug id in that file** (`test/directives/wingfoil-cli-dl-205.test.ts` "the directive still names no bug id").
+7. **Closing-ingest item 12**: `test/cli/fixtures/cli-harness.cjs` line 48 passes `buildCoreParams` required from
+   `<distDir>/core/registry.js` instead of its hand copy (green, not a red file; `npx jest
+   test/cli/program.integration.test.ts test/cli/entrypoint.test.ts --maxWorkers=2` stays green). Item 13 (`{run-id}`
+   is not an RFC 6570 varname: `-` is outside `varchar`): awareness only, no change, a decision-log candidate for the
+   coordinator (D12).
+8. **BDD** `P5.2.3-mcp-tools.feature`: the comment above the Scenario Outline cites `spec-018` §1 row 5 and the
+   phrase `the call came through the MCP server` instead of "task-367's amendment"; no scenario changes (D2 keeps the
+   missing-argument scenario as written).
+
+#### Acceptance criteria — classification and what qa pins
+
+| AC | Class | Why |
+|----|-------|-----|
+| 1 | red-first | `tools/list` on `createMcpServer` is `[]` today (`test/mcp/server.test.ts` line 164 pins it) |
+| 2 | red-first | the three Tools are not served; through the registrar their refusal has no marker unless the env has one |
+| 3 | red-first | a Tool commit carries no agent trailer in a marker-free server environment |
+| 4 | red-first | neither scenario can run against the production server, which serves no Tool |
+| 5 | red-first (behaviour); characterization (the `spec-008` sentence) | `hint` and warnings are dropped and a thrown usage error is a JSON-RPC error today; the spec text is an amendment |
+| 6 | red-first | `bug-034` reproduces on `wingfoil://nope` (Steps to Reproduce) |
+| 7 | red-first (corrected from characterization) for the text; characterization for the pinned-build proof | the stale sentences are there today (`sed -n 50p …dev-loop.yaml`, `sed -n 93p …wingfoil-cli.md`), so a text test fails genuinely; the pinned-build reads pass before and after |
+| 8 | characterization (corrected from red-first) | every refusal it reaches exists and behaves; the in-process tests pass on first run — `bug-538` is about coverage, a red would be fabricated |
+| 9 | characterization | spec amendments, prepared below for this gate |
+
+Expected reds of the new exports: `tsc --noEmit -p tsconfig.json` → TS2305 for `registerCoreTools` (from
+`../../src/mcp/tools`), `stripMcpErrorPrefix` / `withBareErrorMessages` (from `../../src/mcp/wire-errors`) and TS2353
+for `env` in `createMcpServer`'s options and `surface` in `withAgentInvocation`'s; jest (no type-check) → "Cannot find
+module" for the two new files, and the `env` / `surface` options ignored (assertion failures). Fixtures: `buildL0Repo`
+(`test/core/helpers/l0-fixture.ts`: identity `WingFoil Test` is a member and approver; agents `Claude` (adapter
+`claude-code`) and `Other`; `task-001-approve-me`, `task-002-reject-me` at `pending`, `task-003-amend-me` at `backlog`,
+`task-004-deprecate-me` at `draft`, `task-005-park-me` at `in-progress`; `{ agents: false }` for `team.agents: []`),
+`agentContextRefusal(command, markers)` for the expected `E_AGENT_CONTEXT` text and hint, `snapshotPersistence` /
+`assertPersistenceUnchanged`, `spawnCapture` with `withoutAgentMarkers(process.env)` for CLI comparisons. The jest
+run carries no environment marker (`test/global-setup.cjs`), so in process the only marker is row 5. Never set a
+marker outside a test.
+
+- **AC 1 — `test/mcp/mcp-memory-tools.test.ts` (new)**, `createMcpServer({ resolveRoot, roles: ['developer'] })` over
+  `InMemoryTransport` with a real `Client`:
+  - `listTools()` names, in order: `memory.add`, `memory.amend`, `memory.approve`, `memory.deprecate`, `memory.park`,
+    `memory.reject`, `memory.submit` (nothing else: no `dna.*`, `directive.*`, `workflow.*`, `agent.*`); each
+    `inputSchema` `toEqual`s `deriveToolInputSchema(<its operation>)` (`src/core/registry.ts`).
+  - For `memory.add {type:'task', title:'t'}`, `memory.submit {id:'task-004-deprecate-me'}` (if the fixture's
+    required fields let it pass; else `memory.deprecate {id:'task-004-deprecate-me', reason:'r'}`), and
+    `memory.park {id:'task-005-park-me', reason:'r'}`: `isError` falsy, exactly one new commit (`git rev-list --count
+    <before>..HEAD` → `1`), only the element's path in it, and the subject, paths and message — the `WingFoil-Version:`
+    line excepted — equal to those of the same command run through `spawnCapture` on a twin `buildL0Repo` with
+    `{ ...withoutAgentMarkers(process.env), WINGFOIL_AGENT: 'Claude' }` (the Tool's server passes
+    `env: { WINGFOIL_AGENT: 'Claude' }`, so both select `Claude` with no note).
+  - Validation as the CLI: `memory.park {id:'task-005-park-me'}` → `missing required argument: reason`;
+    `memory.deprecate {id:'task-004-deprecate-me', reason:'   '}` → `isError: true`, text `invalid flag value:
+    --reason must not be blank` (today: a rejected `callTool` with `MCP error -32603`), nothing persisted.
+  - Edits by qa: `test/mcp/server.test.ts` line 164 (`tools: []` → the seven names; line 173's `Tool dna.set not
+    found` stays true); `test/mcp/read-only-agent-channel.test.ts` lines 267 and 277 (the production `listTools()`);
+    `test/docs/mcp-surface-parity.test.ts` line 92 (`surface.tools` → the seven); remove the seven `memory.*`
+    `TOOLS_V04` entries of `test/docs/enumeration-parity.allowlist.ts` (lines 62–68), now stale.
+- **AC 2 — same file**: on the production server, `memory.approve {id:'task-001-approve-me', reason:'r'}`,
+  `memory.reject {id:'task-002-reject-me', reason:'r'}`, `memory.amend {id:'task-003-amend-me', reason:'r'}` (with
+  and without `prepareAmend`) each → `isError: true`, `content` `[{type:'text', text: agentContextRefusal('memory
+  <verb>', 'the call came through the MCP server').error}]`, `structuredContent` `toEqual` `{ error, hint }` of that
+  helper, `HEAD`, index and tree unchanged. The fixture identity holds `approver`, which is the "whatever identity"
+  case. A server with `env: { CLAUDE_CODE_CHILD_SESSION: '1' }` (test-only, an env passed to the server, the process
+  untouched) lists `CLAUDE_CODE_CHILD_SESSION is set, the call came through the MCP server`, in that order. Order
+  (D2): `memory.approve {id:'task-001-approve-me'}` → `missing required argument: reason`; `memory.approve
+  {id:'task-004-deprecate-me', reason:'r'}` (draft) → `illegal transition draft -> (none) for type 'task'`. Unit:
+  `test/core/agent-context.test.ts` lines 63 and 67 pin five markers (row 5 `['mcp', 'surface', 'the call came
+  through the MCP server']`), and `resolveAgentContext(root, { env: {}, surface: 'mcp', gated: true })` lists `mcp`.
+- **AC 3 — same file**: `memory.add {type:'task', title:'t'}` on a server with `env: {}` → final paragraph
+  `WingFoil-Version: …`, `Co-Authored-By: Claude <noreply@anthropic.com>`, `AI-Model: not-reported`, one paragraph
+  (`git log -1 --format='%(trailers:key=Co-Authored-By,valueonly)'` → `Claude <noreply@anthropic.com>`); the body's
+  first paragraph is `Attributed to the first team.agents entry, Claude: no entry is named for this agent.`, and
+  `structuredContent.warnings` is `['W_AGENT_ENTRY_GUESSED: Attributed to the first team.agents entry, Claude: no entry
+  is named for this agent.']`. With `env: { WINGFOIL_AGENT: 'Other', WINGFOIL_AGENT_MODEL: 'm-1' }` →
+  `Co-Authored-By: Other <0+other@users.noreply.github.com>`, `AI-Model: m-1`, no note, no `structuredContent`. With
+  `env: { WINGFOIL_AGENT_MODEL: 'a\nb' }` → `isError`, `invalid environment value: WINGFOIL_AGENT_MODEL must be one
+  line`, nothing written.
+- **AC 4 — `test/mcp/mcp-tools.feature.test.ts` (new)**, against `createMcpServer`: the missing-argument scenario
+  verbatim (`memory.approve` without `reason` → `missing required argument: reason`); the illegal-transition scenario
+  on a fixture whose `memory.yaml` `task` machine is this repository's (`sequence: [draft, pending, backlog,
+  in-progress, in-review, approved, done]`, `gates` `pending`/`in-review`, `waiting: [backlog, approved]`, copied from
+  `.wingfoil/memory.yaml`), `task-101` at `approved`: `memory.submit {id:'task-101'}` → text `illegal transition
+  approved -> (none) for type 'task'`, `structuredContent` equal to the parsed `--format json` stderr of the same CLI
+  call (`spawnCapture`, `withoutAgentMarkers`), state unchanged; the Outline's three rows as AC 2 with `task-101` at
+  `pending` (`memory.amend` with no edit still refuses `E_AGENT_CONTEXT`).
+- **AC 5 — same file as AC 1**: on `buildL0Repo({ agents: false })`, `memory.submit {id:'task-001-approve-me'}`
+  (`pending`, no `submit` edge) → `isError: true`, text `illegal transition pending -> (none) for type 'task'`,
+  `structuredContent` `{ error, details: [<the CLI's>], warnings: ['W_NO_AGENT_ENTRY: this command runs in an agent's
+  session (the call came through the MCP server) but dna.yaml declares no team.agents entry, so its commit names no AI
+  co-author; declare one (wingfoil dna add team.agents …)'] }`; the `E_AGENT_CONTEXT` case of AC 2 carries `hint`;
+  the blank-`reason` case of AC 1 is an `isError` result (`dl-199` (b)). A registrar unit over a synthetic op whose
+  `fn` calls `reportWarning('w1')` then returns `coreErr({code:'VALIDATION', message:'m', hint:'h'})` →
+  `structuredContent` exactly `{ error: 'm', hint: 'h', warnings: ['w1'] }` (in `test/mcp/registrar.test.ts`). The
+  `spec-008` §5 sentence: no test; the reviewer checks it is in the amend.
+- **AC 6 — `test/mcp/wire-errors.test.ts` (new)**: on `createMcpServer`, wrap `serverTransport.send` with a recorder
+  BEFORE `server.connect(serverTransport)`; `client.readResource({ uri: 'wingfoil://nope' })` rejects with message
+  exactly `MCP error -32602: Resource wingfoil://nope not found`, and the recorded response's `error` is `{ code:
+  -32602, message: 'Resource wingfoil://nope not found' }`. Unit: `stripMcpErrorPrefix` strips only the matching code's
+  prefix, once (`MCP error -32602: MCP error -32602: x` → `MCP error -32602: x`), leaves `MCP error -1: x` with code
+  `-32602`, a result message and a notification unchanged. The single-prefix messages already pinned
+  (`test/mcp/mcp-prompts.feature.test.ts` 181, `test/mcp/role-prompt-context.test.ts` 303/316/361,
+  `test/mcp/session-context-resource.test.ts` 283) must stay green unedited.
+- **AC 7 — `test/core/dev-loop-v2-6.test.ts` (new)**, reading `git show HEAD:<file>` like `dev-loop-v2-4.test.ts`:
+  `dev-loop.yaml` `version:` ≥ 2.6, newest clause (before the first `(prev `) names `task-367`, comment keeps
+  `prev 2.3`; the header holds `their own terminal` and `an agent never` and no longer `the person or agent running
+  the reject`; phase names unchanged, `workflowShowAtHead` no error diagnostic. `wingfoil-cli.md` `version:` ≥ 1.7,
+  newest clause names `task-367`, keeps `prev 1.5`; §3 holds `their own terminal` and no longer `on the approver's
+  instruction`.
+- **AC 8 — `test/core/agent-context-propagation.test.ts` (new)**: one case per call site listed above, each calling
+  the operation's `fn` in process as `withAgentInvocation({ env: {}, coAuthor: 'Nobody' }, () => op.fn(buildCoreParams(ctx)))`
+  on `buildL0Repo` (or a fixture where the pre-flight before that site passes — read the lines above each site),
+  expecting `ok: false`, message `unknown team.agents entry 'Nobody' (from --co-author): the committed dna.yaml declares
+  Claude, Other`, nothing persisted; plus a parity case: the case list equals the `grep` above (a new site without a
+  case fails). The gated class is the MCP refusal of AC 2 (in process). `src/cli.ts`: a case in
+  `test/cli/entrypoint.test.ts` calling the captured `resolveRoot('  ')` → throws `invalid flag value: --project must
+  not be blank`.
+- **AC 9**: no test (the reviewer checks the four amends and the allowlist line).
+
+qa runs `npx tsc --noEmit -p tsconfig.json` and `npx jest test/lint --maxWorkers=2` before the red commit.
+
+#### Files expected to change
+
+- green: `src/core/agent-context.ts`, `src/mcp/tools.ts` (new), `src/mcp/wire-errors.ts` (new), `src/mcp/registrar.ts`,
+  `src/mcp/server.ts`, `src/mcp/index.ts`, `.wingfoil/workflows/custom/dev-loop.yaml`,
+  `.wingfoil/directives/custom/wingfoil-cli.md`, `test/cli/fixtures/cli-harness.cjs`,
+  `docs/02_requirements/02_bdd/features/p5-interaction/P5.2.3-mcp-tools.feature` (comment).
+- red (qa): `test/mcp/mcp-memory-tools.test.ts`, `test/mcp/mcp-tools.feature.test.ts`, `test/mcp/wire-errors.test.ts`,
+  `test/core/dev-loop-v2-6.test.ts`, `test/core/agent-context-propagation.test.ts` (new);
+  `test/mcp/server.test.ts`, `test/mcp/read-only-agent-channel.test.ts`, `test/docs/mcp-surface-parity.test.ts`,
+  `test/docs/enumeration-parity.allowlist.ts`, `test/core/agent-context.test.ts`, `test/mcp/registrar.test.ts`,
+  `test/cli/entrypoint.test.ts`.
+- pending amendments (uncommitted, below): the four specs, and `test/docs/name-resolvability.allowlist.ts` (one line,
+  `spec-014`'s `registerCoreTools`, `PLANNED` by `task-367`) — a test file, committed with red once the approver's
+  amend of `spec-014` is in `git log`.
+- Not touched: `src/mcp/prompt.ts`, `src/cli/mcp-command.ts`, `src/validation/warning.ts`, `src/core/error-details.ts`,
+  `src/core/registry.ts`, `src/core/index.ts`, `docs/cli-reference.md` (no CLI change), `docs/agents.md` (D10),
+  `.mcp.json`.
+
+**Version bumps:** `dev-loop.yaml` 2.5 → 2.6, `wingfoil-cli.md` "1.6" → "1.7" (both equal on `main`: the branch is cut
+at `169ecd71b` and neither file changed since). The specs carry no `version:` (`grep -c '^version'` → 0 on each): each
+amend adds a Revision note. The BDD file carries none.
+
+#### Tests run at design (targeted, `--maxWorkers=2`, the task's PATH shim first, in the worktree)
+
+- Before the amendments: `npx jest test/mcp/registrar.test.ts test/mcp/tool-arguments.test.ts
+  test/mcp/read-only-agent-channel.test.ts test/mcp/error-details.test.ts test/mcp/success-warnings.test.ts
+  test/core/tool-arguments-params.test.ts test/core/parity.test.ts test/mcp/resource-warnings.test.ts
+  test/mcp/server.test.ts test/docs/mcp-surface-parity.test.ts test/mcp/mcp-prompts.feature.test.ts
+  test/cli/mcp-command.test.ts --maxWorkers=2` → `Test Suites: 12 passed`, `Tests: 82 passed, 82 total`;
+  `npx jest test/core/agent-context.test.ts test/lint/agent-markers-scrubbed.test.ts
+  test/cli/agent-context-refusal.integration.test.ts test/cli/agent-attribution.integration.test.ts
+  test/cli/entrypoint.test.ts test/cli/program.integration.test.ts --maxWorkers=2` → `6 passed`, `193 passed`;
+  `npx jest test/directives/wingfoil-cli-dl-205.test.ts test/core/dev-loop-v2-4.test.ts test/core/dev-loop-v2-3.test.ts
+  test/core/workflow-bindings-complete.test.ts test/docs/name-resolvability.test.ts test/docs/l0-traceability.test.ts
+  test/docs/l0-attribution-text.test.ts test/docs/vision-change-w1-rows.test.ts test/docs/command-surface-specs.test.ts
+  test/docs/enumeration-parity.allowlist.test.ts --maxWorkers=2` → `10 passed`, `200 passed`.
+- With the amendments in the tree, first without the allowlist line: `test/docs/name-resolvability.test.ts` failed with
+  one unlisted finding, `spec-014-mcp-server-entry-point.md|symbol|registerCoreTools` (the expected a23c91413 case);
+  after the line, `npx jest test/docs/name-resolvability.test.ts test/docs/mcp-surface-parity.test.ts
+  test/docs/command-surface-specs.test.ts test/docs/enumeration-parity.allowlist.test.ts test/docs/l0-traceability.test.ts
+  test/docs/l0-attribution-text.test.ts test/docs/vision-change-w1-rows.test.ts test/docs/x-cli-cmds.test.ts
+  test/docs/commands-parity.test.ts test/docs/exit-codes-parity.test.ts test/docs/dry-run-documented.test.ts
+  test/docs/x-cli-cmds-citations.test.ts --maxWorkers=2` → `12 passed`, `123 passed`; `npx jest test/lint
+  --maxWorkers=2` → `16 passed`, `165 passed`; `npx jest test/validation/secret-scan.test.ts
+  test/core/agent-context.test.ts --maxWorkers=2` → `2 passed`, `104 passed`. `node scripts/lint-claims.cjs <spec>` →
+  `spec-004` 11, `spec-008` 17, `spec-014` 0, `spec-018` 6 warnings, the counts without the amendments (three
+  "unchanged" sentences of the new Revision notes were reworded after the first run flagged them).
+- **The `.wingfoil/` change, proved on the pinned build** (scratch `git clone --no-local` of this head outside the
+  worktree, `node_modules` and `dist` linked, the item-6 text applied and committed there): `npm run -s wingfoil --
+  --version` → `0.3.2 (6de2e13c0…)`; `workflow list --format json` → 11 workflows, `dev-loop` among them, exit 0;
+  `workflow show dev-loop --format json` → phases `start,design,red,green,refactor,review,done`, no error diagnostic;
+  `directives list` lists `directives/custom/wingfoil-cli.md`, exit 0; `npm run -s check:mcp` → exit 0, both builds
+  `[prompts, resources, tools]` (`tools: 0`). The existing version tests' regular expressions run by hand on those
+  files: `dev-loop` 2.6, newest clause holds `task-348` and `task-358`, `prev 2.3` / `prev 2.2` kept, `task-349`
+  present; `wingfoil-cli` 1.7, newest clause holds `dl-205 Q2 (ii)` and `task-348`, `prev 1.5` kept, no `bug-<n>`.
+  In this worktree, unchanged `.wingfoil/`: `npm run -s check:mcp` → exit 0.
+- `bug-534` class: with the amendments uncommitted, a full suite here fails
+  `test/cli/workflow-unbound-none.integration.test.ts` with `W_UNCOMMITTED_INPUTS`; not run at design.
+- Coverage baseline: `169ecd71b19f1e2321051ee2070c59986de784e0` (`sha256sum -c coverage-summary.json.sha256` →
+  `OK`): all files statements 12925/13072, branches 8051/8333, functions 2546/2582, lines 10777/10834;
+  `src/mcp/registrar.ts` 62/62, 30/30, 15/15, 56/56; `src/mcp/server.ts` 19/23, 4/4, 4/5, 18/22;
+  `src/core/agent-context.ts` 100/102, 61/65, 25/26, 81/81; `src/cli.ts` 15/16, 9/11, 3/3, 14/14.
+
+#### Decisions for the approver (design gate)
+
+- **D1 — how a Tool call becomes an agent context, and where `AI-Model:` comes from (W1-R3).** Recommendation (A):
+  marker row 5 of `spec-018` §1, the MCP Tools channel (`id: mcp`, kind `surface`), carried by every `tools/call`
+  through `withAgentInvocation({ env, surface: 'mcp' })`; the entry that signs from the server's environment by §2.3
+  unchanged (`WINGFOIL_AGENT`, else a vendor marker, else the first entry with the body note); `AI-Model:` from the
+  server's `WINGFOIL_AGENT_MODEL`, else `not-reported`; no `co-author` / `ai-model` Tool input (as `task-364` D6); a
+  multi-line variable refuses the call; an injectable `env` on the server for tests. The refusal's hint (pinned in
+  `spec-018` §3.2, "not through an agent's shell") is kept as is. (B) inject `WINGFOIL_AGENT` into the call's
+  environment: no spec-018 §1 change, but the refusal would print `WINGFOIL_AGENT is set`, which is false. (C) refuse
+  to start the server without an environment marker: stops every MCP client a person starts.
+- **D2 — the order of the argument check and the agent refusal.** Recommendation (a): the CLI's order — argument
+  check, then identity, membership, legality, then the approver check whose first step is the agent refusal
+  (`spec-018` §2.6, §3.1). The BDD missing-argument scenario stands as written. (b) a registrar-level refusal of the
+  gated Tools before everything: needs a declared "gated" flag, which `workflow.finalize` cannot have (it is gated per
+  phase, `workflow-finalize.ts` 155–162), and breaks REQ-INT-03's "illegal transition rejected identically to the CLI
+  path" and `task-364`'s REQ-SEC-05 case on `memory.approve`. **Contradiction to rule:** REQ-INT-03 says the three
+  Tools' "every call is refused with `E_AGENT_CONTEXT`"; under (a) a call with a missing argument, from a non-member
+  identity or on an illegal transition is refused by that reason first (none succeeds, none writes). Recommendation:
+  read the fit criterion as "no call succeeds", with the order stated in the `spec-004` §4.3 amendment; no
+  requirements edit.
+- **D3 — `hint` (closing-ingest item 16).** Recommendation: the refusal's `structuredContent` is the CLI's
+  `--format json` error object `{ error, hint?, details? }` plus `warnings?`, present when any of them is; text
+  unchanged. It reaches the `E_AGENT_CONTEXT` and `E_NOT_A_MEMBER` hints, and `task-375`'s authority hints with no
+  change of its own.
+- **D4 — `bug-034`.** Recommendation (A): strip the SDK's `MCP error <code>: ` prefix from every outgoing JSON-RPC
+  error at the transport, wired in `createMcpServer`'s `connect` (`src/mcp/wire-errors.ts`), so every SDK-raised error
+  is covered and tests see it on the in-memory transport. (B) own `resources/read` handler: re-implements the SDK's
+  URI matching and covers one path. (C) document it as upstream behaviour: leaves the doubled prefix.
+- **D5 — the amendments.** Approve the four prepared below. `spec-014` is not named by AC 9, but its §3 states the
+  empty Tools channel and the server's registrations, which this task changes.
+- **D6 — which Tools the production server serves now.** Recommendation (a): the `memory` module only, by a module
+  filter in `src/mcp/server.ts`, until `task-368` passes `CORE_MODULES` whole. **Contradiction to rule:** `spec-006`
+  §4.2 forbids a hardcoded list of operation names; this is a module filter, staged and stated in the `spec-014`
+  amendment. (b) all of `CORE_MODULES` now: serves `agent.execute` before its "refuses until v1.0" exists (a headless
+  launch exists since `task-335`) and the DNA, directive and workflow Tools before `task-368`'s criteria.
+- **D7 — warnings and thrown errors in a Tool call (AC 5).** Recommendation: a warning sink per call collecting into
+  `structuredContent.warnings` (success and refusal), and a thrown error mapped by `exitCodeForThrow` to an `isError`
+  result, as the CLI renders both.
+- **D8 — closing-ingest item 12.** Recommendation: absorb it in green (one line of the harness).
+- **D9 — `bug-538` in full.** Recommendation: the 12 call sites plus a call-site parity case, the gated refusal through
+  the in-process MCP tests, and `src/cli.ts`'s blank `--project` through `test/cli/entrypoint.test.ts`'s captured
+  `resolveRoot`, with no new seam.
+- **D10 — `docs/agents.md`.** Recommendation: not edited here; it describes the released build by its own version
+  rule, and the W1 rulings give it to `user-docs` (`bug-537`). Its line 94 ("read-only and exposes no Tools") is the
+  sentence to change then.
+- **D11 — classification corrections:** AC 7 red-first for its text (genuine), AC 8 characterization (coverage only).
+- **D12 — closing-ingest item 13**, `{run-id}` against RFC 6570: no change; a decision-log candidate for the coordinator.
+
+#### Downstream — what `task-368` may rely on
+
+`registerCoreTools(server, modules, { resolveRoot, buildParams, env })` serves the Tools of any module list: it passes
+`CORE_MODULES` and drops the module filter of `src/mcp/server.ts`. Every Tool call is an agent context, so
+`workflow.finalize` on an `approval:` phase, `workflow.adopt` with `plan` and `apply`, and `workflow.rekey` refuse
+with no code of their own. `agent.execute` needs its own refusal before it is served.
+
+#### Risks for the other open tasks
+
+- `task-362` (design: `src/core/index.ts`, `src/core/registry.ts`, `src/mcp/registrar.ts`, `src/mcp/server.ts`):
+  shared files `src/mcp/registrar.ts` (the Tools half moves out) and `src/mcp/server.ts` (the channel set and
+  `connect`). If it registers a `wingfoil://capabilities` Resource in `createMcpServer`, it composes; merge order
+  matters for text conflicts only. `src/mcp/tools.ts` and `src/mcp/wire-errors.ts` are new files, chosen to keep the
+  overlap small. A capabilities answer that lists the served Tools changes with this task.
+- `task-375` (green: `src/core/error-details.ts`, `src/validation/warning.ts`, `src/cli/mcp-command.ts`,
+  `src/mcp/prompt.ts`): no file in common. This task reads `src/validation/warning.ts`'s `withWarningSink` and
+  `errorDetails`; if `task-375` changes the rendering of a warning, the strings pinned in AC 3 and AC 5 follow it.
+- `task-368`: depends on this task (above).
+
+### Pending amendments (approver)
+
+- `spec-004-mcp-surface-contract` — `--reason "State that every Tool call runs in an agent context, per cp-003 and
+  spec-018 §1.2 (task-367, bug-034): §4.1 marks memory.approve, reject and amend as listed Tools that always refuse,
+  §4.3 gives the order of the checks, item 2's commit with the agent trailers, item 4's refusal with its hint and
+  warnings and the usage refusal as an isError result, item 5's warnings raised during the call, and §1 says a
+  JSON-RPC error message carries the reason alone."`
+- `spec-008-cli-grammar` — `--reason "Record dl-199 (b) in §5: a refused option value keeps exit 2, the rule for every
+  refused value, since an MCP Tool reports any refusal as an isError result (task-367)."`
+- `spec-014-mcp-server-entry-point` — `--reason "Replace §3's empty Tools channel with the Memory Tools derived from
+  CORE_MODULES, which the server registers without the derived Resources, and state that it strips the SDK's MCP error
+  prefix from the errors it sends (task-367, bug-034)."`
+- `spec-018-approval-binding-l0-agent-markers-attribution-trailers-and-the-approver-verb-refusal` — `--reason "Add the
+  MCP Tools channel as agent marker row 5, the revision §1.2 announced, per cp-003 (task-367): §1.2 states how it
+  qualifies, the order of a refused Tool call and how a Tool commit is attributed, §2.4 a Tool call's model, §2.6 what
+  the registrar passes, §3.2 the marker's phrase and id."`
+- With them, uncommitted: `test/docs/name-resolvability.allowlist.ts`, one line for `spec-014`'s `registerCoreTools`
+  (`PLANNED`, `task-367`), committed by red after the `spec-014` amend.
+
+### Retrospective
+
+<!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
+     reconstructed afterwards. One line per item: what happened, the evidence (a command and what it
+     printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
+     Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
+     here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
