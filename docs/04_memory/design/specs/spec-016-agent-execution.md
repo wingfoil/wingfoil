@@ -1273,9 +1273,10 @@ alive); the rest of this section is fixed here so that v0.3 does not foreclose i
 - **The MCP surface of the `agent` module** (`dl-135` point 4 and release split, plan R5): the
   read-only runs Resource and the `agent.execute` Tool are v0.4, with P5.2.3 and the Resource URI
   unification (`dl-040`, `spec-004` §2.1). `dl-135` names the Resource `wingfoil://agents/runs`;
-  whether it becomes that or `spec-004`'s `wingfoil://agent/…` form is `dl-040`'s. A Resource that
-  addresses one run must either percent-encode the run id (it contains `/`, §4.3) or take it as the
-  three segments `{element-id}/{phase}/{n}`; the v0.4 task chooses. The `agent.execute` Tool refuses
+  `dl-040` option 1 gives it `spec-004`'s `wingfoil://agent/…` form, derived by the registrar (§8). The
+  Resource that addresses one run takes the run id (it contains `/`, §4.3) as one percent-encoded
+  segment, `wingfoil://agent/show/{run-id}`, which the registrar decodes (`task-364`'s design gate,
+  D8). The `agent.execute` Tool refuses
   every call until headless launch exists (v1.0, §3.5), because an MCP caller has no terminal:
   `VALIDATION`, `agent execute over MCP needs a headless launch (v1.0)`.
 
@@ -1284,8 +1285,8 @@ alive); the rest of this section is fixed here so that v0.3 does not foreclose i
 | function | module | mutates | CLI | MCP |
 |---|---|---|---|---|
 | `agentExecute` | `agent` | true | `wingfoil agent execute` | Tool `agent.execute` *(v0.4; refuses until v1.0, §7)* |
-| `agentList` | `agent` | false | `wingfoil agent list` | Resource `wingfoil://agent/list` *(v0.4; URI per `dl-040`)* |
-| `agentShow` | `agent` | false | `wingfoil agent show` | Resource `wingfoil://agent/show/{run-id}` *(v0.4; URI per `dl-040`, encoding per §7)* |
+| `agentList` | `agent` | false | `wingfoil agent list` | Resource `wingfoil://agent/list` *(v0.4)* |
+| `agentShow` | `agent` | false | `wingfoil agent show` | Resource `wingfoil://agent/show/{run-id}` *(v0.4; the run id percent-encoded in one segment)* |
 
 These rows are the ones `spec-006` §3 carries, cell for cell. The production server does not run
 `registerCoreModules` (`src/mcp/server.ts`; `spec-006` §3, "MCP exposure"), so no `agent` operation
@@ -1788,3 +1789,10 @@ The `result` row is unchanged: a work run's `result` is already `n/a` (`dl-181` 
 §3.3 step 16's `agent_version` reference stands, read with §2.6. The manifest `format` stays 1, an additive optional
 field (`dl-149`). Edited in place without a supersede or a state change (`dl-047`), pending the approver's `memory
 amend` at `task-337`'s design gate.
+
+**Revision (2026-11-19, `task-364-give-coreoperation-parameter-metadata-so-the-registrar-derives-resource-templates-and-tool-input-schemas-dl-040`)
+— §7 and §8.** `dl-040` option 1 and `task-364`'s design gate (D7, D8) settle the two open points of the `agent` Resources:
+§7's MCP bullet now states the `wingfoil://agent/…` form the registrar derives, and that a run id travels as one
+percent-encoded segment the registrar decodes, instead of leaving the choice to the v0.4 task; §8's `agentList` and
+`agentShow` MCP cells lose their "URI per `dl-040`" and "encoding per §7" placeholders and read as the amended `spec-006`
+§3 does. Edited in place without a supersede or a state change (`dl-047`), pending the approver's `memory amend`.
