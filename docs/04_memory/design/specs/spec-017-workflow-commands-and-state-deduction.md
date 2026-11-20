@@ -220,11 +220,12 @@ precedes it, moving an instance's plan ends it as an instance.
 the instances opened before the marker existed stay open; it is not part of the instance model. While it lasts:
 
 - **It is made visible.** `workflow status` reports every open instance that only this rule keeps — an open
-  instance whose start commit carries no marker — with the warning `W_INSTANCE_PRE_MARKER` (§2, §7.4): on stdout,
-  as the console line `    warning: kept by the pre-marker rule: restart it with workflow start` under that
-  instance's lines, and in the payload's `diagnostics` (`--format json` and `--format yaml`, and the MCP Resource
-  that serves the same payload, `spec-004`). No other command raises it, and nothing is written on stderr. An
-  instance whose start commit carries the marker never gets it.
+  instance whose start commit carries no marker — with the warning `W_INSTANCE_PRE_MARKER` (§2, §7.4): in the
+  payload's `diagnostics` (`--format json` and `--format yaml`, and the MCP Resource that serves the same payload,
+  `spec-004`), and, as every diagnostic `status` reports, on stderr as one success warning (§7.4, `dl-176` (a)):
+  `warning: W_INSTANCE_PRE_MARKER (<plan file>): instance <id> is kept by the pre-marker rule: restart it with
+  workflow start` under `--format console`. No other command raises it. An instance whose start commit carries the
+  marker never gets it.
 - **Its removal condition** is that no WingFoil repository holds an open unmarked instance, checked by zero
   `W_INSTANCE_PRE_MARKER` in `workflow status --format json` of each. Each such instance is ended (`workflow end`,
   or `memory deprecate` of its plan) and, when its run goes on, restarted with `workflow start`, which writes the
@@ -788,16 +789,20 @@ instance it prints `no open workflows`; with an empty frontier,
 `no next step of workflow '<name>' is assigned to '<who>'`; each has `complete: false`. `me` matches
 emails case-insensitively; a `<who>` that names no member is read as a role name, and one that is neither
 a member's name or email nor a `team.roles` role (or `me` when the identity's email is no member's) is
-reported as a warning.
+reported as a warning. **Diagnostics** (`dl-176` (a)): the payload's `diagnostics`, in §1.3's order, are also
+written on stderr, one success warning each (`spec-008` §6), `<code> (<file>): <message>` — `<code>: <message>` for
+one with no `file` —, the form `agent list` prints for the same deduction (`spec-016` §5); the console text on
+stdout carries no diagnostic and no count of them, so stdout is only the answer.
 
 **7.4 `status`** (P4.5, REQ-INT-05). Every open instance (or the one `<ref>` selects), active first
 and marked, each with its top-level phase progress (`complete` | `current` | `pending` | `skipped`),
 its frontier, its pending approvals and its `late` candidates (§4.7); then the ungated elements
 (§5.1). With no open instance: `no open workflows`, exit `0` (P4.5 sc. 3), the ungated elements listed after it.
-While the transitory pre-marker rule lasts (§3.2), each reported instance that only that rule keeps open carries
-`W_INSTANCE_PRE_MARKER` (§2): the console line `    warning: kept by the pre-marker rule: restart it with workflow
-start` after that instance's lines, counted in the `<n> diagnostic(s)` line, and the diagnostic in the payload; with
-a `<ref>`, only for the instance it selects. Exit `0` as before; stderr carries nothing new.
+Its diagnostics are presented as `next`'s are (§7.3, `dl-176` (a)): in the payload, and on stderr one success
+warning each, with nothing about them on stdout. While the transitory pre-marker rule lasts (§3.2), each reported
+instance that only that rule keeps open carries `W_INSTANCE_PRE_MARKER` (§2), the last of the payload's
+diagnostics, so its stderr line is the last of them; with a `<ref>`, only for the instance it selects. Exit `0` as
+before.
 
 **7.5 `list`** (P4.6). Without `--all`: the startable workflows, plus every includable workflow that
 is the current phase's sub on some open instance's frontier (P4.6 sc. 1–2). With `--all`: every
@@ -1079,7 +1084,8 @@ where the shown workflow, or its includer, binds it; `mode` is the declared mode
 `list` or `show` payload carries the same `diagnostics` the deduction of §4 reports at that commit, since
 both resolve against it (`executableNow`, an instance id as `<ref>`). Console
 rendering is free-form (`spec-005` §2) but always prints, for `next`, the step's key, trail, role,
-scope, the actions with their bindings, the directive ids and any "human needed" line (§5.3);
+scope, the actions with their bindings, the directive ids and any "human needed" line (§5.3), and, for `next`
+and `status`, no diagnostic: those are stderr warnings (§7.3, §7.4);
 `dl-043`'s generic console renderer is v0.4 scope.
 
 ### 9. Core API and MCP exposure
@@ -1913,3 +1919,15 @@ read literally kept a command that `memory deprecate` refuses with `document alr
 quotes what a shell would split: it quotes what a shell would misread, and a declared value spelled like a placeholder
 is a value, so it is quoted. Edited in place without a supersede or a state change (`dl-047`), pending the approver's
 `memory amend`.
+
+**Revision (2026-11-20, `task-373-report-the-deduction-readers-diagnostics-as-stderr-warning-lines-dl-176`)
+— §3.2, §7.3, §7.4 and §8: the deduction readers' diagnostics are stderr warnings.** `dl-176` (a) (`ready`): stdout
+carries only the answer, so `next` and `status` write each entry of the payload's `diagnostics` on stderr as one success
+warning (`spec-008` §6), `<code> (<file>): <message>`, the form `agent list` already prints (`spec-016` §5), and their
+console text drops the `<n> diagnostic(s): --format json lists them` line. `W_INSTANCE_PRE_MARKER` follows the rule:
+§3.2 no longer prints it as a stdout line under its instance, nor says that stderr carries nothing; this reverses the
+stdout half of the approver's ruling at `task-345`'s design gate, `D1` (a), by the approver's ruling `D4` at
+`task-373`'s design gate, and keeps its other half, the rule's transitory nature. Its code, message and place in the
+payload are unchanged. No payload field, diagnostic code, message or exit code changes. Edited in
+place without a supersede or a state change (`dl-047`), pending the approver's `memory amend` at `task-373`'s design
+gate.
