@@ -508,9 +508,10 @@ the protocol, or a library caller — is written as the same console line, `warn
 continuation lines indented; the prefix and that line are defined once, in `src/validation/warning.ts`
 (`WARNING_PREFIX`, `formatWarningLine`), and the CLI's renderer writes its `console` line through them
 (`bug-304`). The text of each warning in this table is pinned; `agent execute`'s other warnings — its
-context and adapter-tree diagnostics, the MCP conflict probe, the launch kind and dry-run terminal
-warnings, the run registry's and `--log`'s, the start-up hint — are worded by `spec-016` and are
-outside this claim (`bug-548`):
+context and adapter-tree diagnostics, the workflow deduction's diagnostics (`W_UNCOMMITTED_INPUTS` among
+them), the run log's symbolic-link warning (`W_RUN_LOG_SYMLINK`), the MCP conflict probe, the launch kind
+and dry-run terminal warnings, the run registry's and `--log`'s, the start-up hint — are worded by
+`spec-016` and are outside this claim (`bug-548`):
 
 | Command | Warning |
 |---------|---------|
@@ -1596,3 +1597,12 @@ above it claimed them all; it gains four rows (the version change, the headless 
 transcript source), and the sentence now names the warnings it leaves to `spec-016`. No exit code changes; no reason
 changes. Edited in place without a supersede or a state change (`dl-047`), pending the approver's `memory amend` at
 `task-375`'s design gate.
+
+**Revision (2026-11-20, `task-375-tell-an-operator-with-no-approver-how-to-grant-it-and-render-every-error-detail-with-one-warning-prefix-dl-071`)
+— §6: two more `agent execute` warning families named outside the claim.** `task-375`'s review found that the sentence
+before the warnings table still left two families of `agent execute` warnings neither pinned nor named (`bug-548`'s
+Expected Behavior): the workflow deduction's diagnostics, written one `warning:` line each (`src/agent/execute.ts`,
+`W_UNCOMMITTED_INPUTS` among them), and the run log's symbolic-link warning (`src/agent/run-log.ts`,
+`W_RUN_LOG_SYMLINK`). The sentence now names both among the warnings `spec-016` words. No table row, exit code or
+reason changes. Edited in place without a supersede or a state change (`dl-047`), pending the approver's `memory
+amend` at `task-375`'s review.
