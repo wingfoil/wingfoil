@@ -51,6 +51,7 @@ const SPEC_008 = 'docs/04_memory/design/specs/spec-008-cli-grammar.md';
 
 /** Every allowed finding, sorted by `enumeration|document|direction|item`. */
 export const PARITY_ALLOWLIST: readonly ParityAllowlistEntry[] = [
+  { enumeration: 'spec-004 §2.1 resources', document: SPEC_004, direction: 'surplus', item: 'wingfoil://capabilities', reason: PLANNED, plannedBy: ['task-362'] },
   { enumeration: 'spec-004 §4.1 tools', document: SPEC_004, direction: 'surplus', item: 'agent.execute', reason: TOOLS_V04 },
   { enumeration: 'spec-004 §4.1 tools', document: SPEC_004, direction: 'surplus', item: 'directive.assign', reason: TOOLS_V04 },
   { enumeration: 'spec-004 §4.1 tools', document: SPEC_004, direction: 'surplus', item: 'directive.create', reason: TOOLS_V04 },
@@ -74,6 +75,9 @@ export const PARITY_ALLOWLIST: readonly ParityAllowlistEntry[] = [
   { enumeration: 'spec-004 §4.1 tools', document: SPEC_004, direction: 'surplus', item: 'workflow.remove', reason: TOOLS_V04 },
   { enumeration: 'spec-004 §4.1 tools', document: SPEC_004, direction: 'surplus', item: 'workflow.start', reason: TOOLS_V04 },
   { enumeration: 'spec-005 Context flat commands', document: SPEC_005, direction: 'surplus', item: 'audit', reason: AUDIT_V04 },
+  { enumeration: 'spec-005 Context flat commands', document: SPEC_005, direction: 'surplus', item: 'capabilities', reason: PLANNED, plannedBy: ['task-362'] },
   { enumeration: 'spec-008 §1 flat commands', document: SPEC_008, direction: 'surplus', item: 'audit', reason: AUDIT_V04 },
+  { enumeration: 'spec-008 §1 flat commands', document: SPEC_008, direction: 'surplus', item: 'capabilities', reason: PLANNED, plannedBy: ['task-362'] },
+  { enumeration: 'spec-008 §11 commands', document: SPEC_008, direction: 'surplus', item: 'capabilities', reason: PLANNED, plannedBy: ['task-362'] },
 ];
 
