@@ -285,6 +285,127 @@ The approver recorded the step in `0567fb155` (`workflow finalize … dev-loop.d
 
 The other amendment of the gate is `3bafa88a1` (`wf(tech-spec): amend spec-017-workflow-commands-and-state-deduction`). The approver ruled D1–D8 as recommended ("tutto come raccomandato"), D4 explicitly included: it reverses the stdout half of `task-345`'s ruling `D1` (a), and the pre-marker rule stays transitory. Merge order (D8, supervision): `task-362`, then `task-367`, then this task takes `main`; a conflict in `src/core/index.ts` stops the line.
 
+### red (qa, 2026-11-20)
+
+**Base.** Head `d130a9083` (`git rev-list --count HEAD..main` → `0`, no merge of `main`). PATH guard: `command -v wingfoil` →
+the task's PATH shim; `wingfoil --version` and `node dist/cli.js --version` → `0.3.2 (da66cced17535a2c96ee1f3f638eec08d324b038)`.
+Black box (T3): no file under `src/` or `scripts/` opened and no such path named in a command before the red commit; the expected
+values come from the ACs, the design and the gate, `spec-017` §3.1–§3.2, §7.3, §7.4, §8 and `spec-008` §2, §6 as amended
+(`3bafa88a1`, `115e5c5eb`), and real command output. **Red commit: `5fef777bd`** (test files only).
+
+**Fixtures from real output.**
+- Pinned build, a scratch project outside the worktree (`git init`, `wingfoil init --template Scrum --no-interactive`, `wingfoil dna
+  add team.members …`, `wingfoil workflow start bug-ingest` on the code build, then the plan `docs/memory/plan/bug-ingest/bug-ingest-1-plan.md`
+  edited and not committed): `node_modules/.bin/wingfoil workflow status|next --format json` (the pinned 0.3.2) → `diagnostics:
+  [{"code":"W_UNCOMMITTED_INPUTS","severity":"warning","file":"<file>","path":"","message":"uncommitted change to a deduction input,
+  not read (the answer is computed from HEAD): <file>"}]`, stderr empty, console stdout ending `1 diagnostic(s): --format json lists
+  them`; `… agent list --waiting` → stderr `warning: W_UNCOMMITTED_INPUTS (<file>): <message>` (console), `{"warning":"W_UNCOMMITTED_INPUTS
+  (<file>): <message>"}` (json), one `---` … `...` document with `warning: >-` (yaml). The code build printed the same.
+- `W_INSTANCE_PRE_MARKER`: a second scratch project with the plan committed by hand and no marked start: `wingfoil workflow status
+  --format json` (code build) → `{"code":"W_INSTANCE_PRE_MARKER","severity":"warning","file":"docs/memory/plan/bug-ingest/bug-ingest-1-plan.md",
+  "path":"","message":"instance bug-ingest-1-plan is kept by the pre-marker rule: restart it with workflow start"}` (the `spec-017` §2
+  message), and the console's `    warning: kept by the pre-marker rule: …` line on stdout, stderr empty. A hand-committed plan
+  AFTER a marked start is no instance at all (§3.2), so this fixture has no marked start.
+- The literal lines of the new tests are the payloads the compiled CLI printed on the test fixtures themselves, read by a throw-away
+  probe test (spawning `dist/cli.js` through `runCliEntry`, deleted before the commit): the step fixture with `delivery-1` and
+  `docs/04_memory/v0.1/task-203-sibling.md` edited — `workflow status|next --format json` `diagnostics` = the one
+  `W_UNCOMMITTED_INPUTS` entry for that file (marked start), and `[W_UNCOMMITTED_INPUTS, W_INSTANCE_PRE_MARKER (docs/05_plans/delivery-1.md)]`
+  for `status` with the hand start; `agent list --waiting` lists two steps and prints the warning line on stderr in each format;
+  `workflow-status.integration`'s fixture → `status` diagnostics `[W_INSTANCE_PRE_MARKER rl-minor-2, W_INSTANCE_PRE_MARKER rl-minor-1]`
+  (`docs/plans/rl-<id>.md`), the P4.14 sc. 3 fixture → the `rl-minor-1` one alone, `next` → `[]`.
+
+**Departure from the design's fixture text, stated.** The design's AC 1 fixture is `seedStep()` + `startInstance(…)`, with "stderr
+exactly one line, the same bytes for the three". `startInstance` commits the plan by hand with no start marker, so `workflow status`
+on that tree also reports `W_INSTANCE_PRE_MARKER` (probe: two diagnostics). To keep the design's observable (one line, the same
+bytes for the three), the AC 1/AC 2 fixture opens `delivery-1` with a commit carrying `WingFoil-Start: delivery` (`spec-017` §3.1),
+as `workflow start` writes it; the hand-started fixture is used for the pre-marker case (D4), as the design asks.
+
+#### Files and per-AC mapping
+
+| AC | Class | File · test | Result at red |
+|---|---|---|---|
+| 1 | red-first (`status`, `next`) | `test/cli/deduction-readers-diagnostics.integration.test.ts` · `AC 1 (workflow status, red-first)`, `AC 1 (workflow next, red-first)`, `AC 1 — the three readers write the same bytes` | fail |
+| 1 | characterization (`agent list`) | same file · `AC 1 (agent list --waiting, characterization)` | passes |
+| 1 | red-first | `test/core/deduction-readers-diagnostics.test.ts` · (a) `workflowNext, one diagnostic`, `workflowStatus, one diagnostic`, `workflowStatus, two diagnostics`; (b) `renderStatusConsole …`, `renderNextConsole …` | fail |
+| 1 | characterization | same file · (a) `workflowNext, no diagnostic`, `workflowStatus, no diagnostic` (no `warnings` key) | passes |
+| 2 | red-first (stderr of `status`, `next`); characterization (payload) | integration file · `AC 2 (workflow status|next, …) — --format json`, `… --format yaml` | fail (on stderr; the payload assertion before it passes) |
+| 2 | characterization (`agent list`) | integration file · `AC 2 (agent list --waiting, …) — --format json`, `… --format yaml` | passes |
+| 1 (D4) | red-first | integration file · `D4 … console: one warning: line per diagnostic …`, `--format json: one {"warning"} line …`, `workflow next raises no W_INSTANCE_PRE_MARKER …` | fail |
+| 1 (D4) | characterization | integration file · `D4 … the payload (characterization)` | passes |
+| 3 | characterization (D6 (a)) | `test/core/workflow-next.test.ts`, `test/core/workflow-next-views.test.ts`, `test/core/dna-set.test.ts` | pass |
+| 4 | characterization | the amendments recorded at the gate (`3bafa88a1`, `115e5c5eb`); `docs/cli-reference.md` is green's | — |
+
+#### Existing tests changed (the design's list, each change stated)
+
+- `test/core/workflow-status-render.test.ts:91` — `text.endsWith('1 diagnostic(s): …')` → the text holds no `W_X` and no
+  `diagnostic(s)`; the test title and module doc say so.
+- `test/core/workflow-start-marker.test.ts` (f) — the payload assertions are unchanged; the console assertions become: both
+  instance headers present, no `PRE_MARKER_LINE`, no `kept by the pre-marker rule`, no `diagnostic(s)` line. (i) — `--format json`
+  stderr is one `{"warning": "<code> (<file>): <message>"}` line per payload diagnostic, console stderr one `warning:` line each, its
+  last line literally `warning: W_INSTANCE_PRE_MARKER (<kept plan file>): instance a-1-plan is kept by the pre-marker rule: restart it
+  with workflow start`, stdout without the old line. `PRE_MARKER_LINE` keeps its value, with a comment that task-373 removed it.
+- `test/core/workflow-deduction-provenance.test.ts:586` — the conditional count assertion → `renderNextConsole(nextAfter)` and
+  `renderStatusConsole(statusAfter)` match no `diagnostic(s)`; title "… and no console line (no count either, task-373)".
+- `test/cli/workflow-status.integration.test.ts:106` (sc. 1), `:115` (sc. 2 json and yaml), `:152` (P4.14 sc. 3) — `stderr ''` → the
+  `W_INSTANCE_PRE_MARKER` warnings of the fixture's hand-committed plans (`rl-minor-2` then `rl-minor-1`; json one line each, yaml
+  parsed with `loadAll`); a `preMarkerText` helper and a module-doc bullet. P4.5 sc. 3 (no open instance) unchanged.
+- `test/mcp/workflow-state-resources.test.ts:167` — `stderr ''` → stderr is one `{"warning"}` line per payload diagnostic, and the
+  codes are `['W_INSTANCE_PRE_MARKER', 'W_INSTANCE_PRE_MARKER']` for `status`, `[]` for `next`; the Resource's read is unchanged.
+- `test/cli/workflow-unbound-none.integration.test.ts:45` (D7) — "no `N diagnostic(s)` line" → stdout matches no `\bW_[A-Z_]+` and
+  no `diagnostic(s)`; title updated. It passes at red on this tree (no uncommitted deduction input).
+- `test/core/agent-list-gate.test.ts` — not changed (the re-export keeps its import working).
+
+**AC 3 (D6 (a)).** `workflow-next.test.ts`: `    directives: [ code-review ]` dropped from `DEV_LOOP`; the AC 5 test commits
+`DEV_LOOP_WITH_PHASE_DIRECTIVES` (the field kept) and wraps its `nextOk` in `captureStderr` (`jest.spyOn(process.stderr, 'write')`,
+restored in `finally`): at least one chunk, every chunk `warning: HEAD:.wingfoil/workflows/custom/dev-loop.yaml: unknown field(s)
+ignored: phases[0].directives\n`. `:332` (the `identityEmail: ''` call) captured and asserted: exactly `["warning: --assigned-to me:
+the git identity's email '' is no team.members[] entry's\n"]`. `workflow-next-views.test.ts:281`: captured, exactly the
+`'wf-test@example.invalid'` line. `dna-set.test.ts:227`: captured, exactly `.wingfoil/dna.yaml: unknown field(s) ignored:
+future_section`. **`:320` raises no warning**: before the change, `npx jest test/core/workflow-next.test.ts --maxWorkers=2 2>&1 |
+grep -E "names no|team.members|console\.(warn|log|error)" | sort | uniq -c` → only `1 warning: --assigned-to me: the git identity's
+email '' is no team.members[] entry's` (the `:332` one), and `… | grep -E "^\s*warning:" | sort | uniq -c` → that line once and the
+`bug-476` line 27 times; `'developer'` is a declared role, so nothing to fix there (the design's `:320` entry does not reproduce).
+Checks after the change, each file run alone: `npx jest <file> --maxWorkers=2 2>&1 | grep -c 'warning:'` → `0` for
+`test/core/workflow-next.test.ts`, `test/core/workflow-next-views.test.ts`, `test/core/dna-set.test.ts`; `npx jest
+test/core/workflow-next.test.ts --maxWorkers=2 2>&1 | grep -c "unknown field(s) ignored"` → `0`; the three files together: `Tests:
+0 failed, 39 passed, 39 total`.
+
+#### Runs (targeted, `--maxWorkers=2`; none took the heavy-gate lock)
+
+- `npx jest test/cli/deduction-readers-diagnostics.integration.test.ts` → 10 failed, 4 passed, 14 total.
+- `npx jest test/core/deduction-readers-diagnostics.test.ts` → 5 failed, 2 passed, 7 total.
+- `npx jest test/core/workflow-status-render.test.ts test/core/workflow-start-marker.test.ts test/core/workflow-deduction-provenance.test.ts
+  test/cli/workflow-status.integration.test.ts test/mcp/workflow-state-resources.test.ts test/cli/workflow-unbound-none.integration.test.ts`
+  → 9 failed, 51 passed, 60 total (the failures are the changed tests listed above, except `workflow-unbound-none`, which passes).
+- `npx tsc --noEmit -p tsconfig.json` → exit 0 (no new export is imported, so no TS2305).
+- `npx jest test/lint` → 0 failed, 165 passed; `npx jest test/validation/secret-scan.test.ts` → 0 failed, 85 passed.
+
+#### First failing assertion of each red test
+
+- integration `AC 1 (workflow status|next, red-first)`: `expect(run.stderr).toBe(…)` — Expected `"warning: W_UNCOMMITTED_INPUTS
+  (docs/04_memory/v0.1/task-203-sibling.md): uncommitted change … HEAD): docs/04_memory/v0.1/task-203-sibling.md\n"`, Received `""`.
+- integration `AC 1 — the three readers write the same bytes`: `toEqual` — Received `["", "", "warning: W_UNCOMMITTED_INPUTS (…)\n"]`.
+- integration `AC 2 (workflow status|next) — --format json`: `expect(run.stderr).toBe(…)` — Expected `{"warning":"W_UNCOMMITTED_INPUTS
+  (…): …"}\n`, Received `""`; `— --format yaml`: `expect(yamlLoadAll(run.stderr)).toEqual([{ warning: … }])` — Received `[]`.
+- integration D4 console: `expect(run.stderr).toBe(…)` — Expected the `W_UNCOMMITTED_INPUTS` line then `warning: W_INSTANCE_PRE_MARKER
+  (docs/05_plans/delivery-1.md): instance delivery-1 is kept by the pre-marker rule: restart it with workflow start`, Received `""`;
+  D4 json: the two `{"warning"}` lines, Received `""`; D4 `workflow next`: the one line, Received `""`.
+- core (a) ×3: `expect(result.ok && result.warnings).toEqual([…])` — Received `undefined`.
+- core (b) status: `expect(text).not.toContain('kept by the pre-marker rule')` — the text holds `    warning: kept by the pre-marker
+  rule: …` and `2 diagnostic(s): --format json lists them`; (b) next: `expect(text).not.toMatch(/diagnostic\(s\)/)` — ends `2
+  diagnostic(s): --format json lists them`.
+- `workflow-status-render` `:91`: `not.toMatch(/diagnostic\(s\)/)` — the text ends `1 diagnostic(s): --format json lists them`.
+- `workflow-start-marker` (f): `expect(lines).not.toContain(PRE_MARKER_LINE)` — the line is there; (i): `expect(jsonRun.stderr).toBe(…)` —
+  Expected the `{"warning":"W_INSTANCE_PRE_MARKER (docs/plans/checklist/a-1-plan.md): …"}` line, Received `""`.
+- `workflow-deduction-provenance` AC 5: `not.toMatch(/diagnostic\(s\)/)` — `renderNextConsole` ends `1 diagnostic(s): …`.
+- `workflow-status.integration` sc. 1 and P4.14 sc. 3: `toEqual([0, "warning: W_INSTANCE_PRE_MARKER (docs/plans/rl-minor-…"])` — Received
+  `[0, ""]`; sc. 2 json and yaml: `toEqual([{ warning: … rl-minor-2 … }, { warning: … rl-minor-1 … }])` — Received `[]`.
+- `workflow-state-resources` status: `expect(run.stderr).toBe(…)` — Expected the two `{"warning":"W_INSTANCE_PRE_MARKER (docs/plans/rl-minor-…"}`
+  lines, Received `""`.
+
+**Unasserted (T1).** None of the ACs' clauses is left without an assertion; `docs/cli-reference.md` (AC 4) is green's and is held by
+`test/docs/cli-reference.test.ts`, not by a red test.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
