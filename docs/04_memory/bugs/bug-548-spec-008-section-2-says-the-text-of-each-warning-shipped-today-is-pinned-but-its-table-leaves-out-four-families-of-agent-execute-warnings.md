@@ -82,4 +82,9 @@ The table pins part of the post-run warnings and the sentence above it says all 
 
 ### Retrospective
 
-None yet.
+- Fixed by two amendments of `spec-008` §6 at `task-375`. The design-gate amendment (`2dfd6fb91`) put the four
+  families of `agent execute` warnings in the table, word for word, and made the sentence before it name those left to
+  `spec-016`; `test/docs/spec-008-section-6.test.ts` pins the eight texts. `task-375`'s review found two families still
+  neither pinned nor named, the workflow deduction's diagnostics (`W_UNCOMMITTED_INPUTS` among them) and the run log's
+  `W_RUN_LOG_SYMLINK`; the review-fix amendment names both in that sentence and completes the fix. No code change was
+  needed.
