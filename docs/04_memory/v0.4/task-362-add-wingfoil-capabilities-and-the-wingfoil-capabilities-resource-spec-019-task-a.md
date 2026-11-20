@@ -663,6 +663,15 @@ the worktree for all of them:
 - `npm run typecheck` → `0`; `npm run lint` → `0`; `npm run docs:api` → `0`; `npm run build` → `0`.
 - `git show 04ef33c77:AGENTS.md` §1 still reads "— 36 commands" with `capabilities` at the top level.
 
+### What task-367 may rely on (orchestrator, review fix, 2026-11-20)
+
+The independent review of `1a3f7b657` asked for this paragraph (should-fix, notes only). At this head: the blank-`--project`
+refusal lives only in `src/cli/program.ts` `checkProject` (`BLANK_PROJECT` is gone from `src/cli.ts`, whose `resolveRoot`
+is a plain `resolveProjectRoot`), so a test of that refusal targets `checkProject` or a derived command, never the
+`resolveRoot` `src/cli.ts` passes; and the MCP registrar's `callCore` builds no `root` for a `readsProject: false` operation
+(`spec-006` §2), so a new Tools path such as a `src/mcp/tools.ts` applies the same rule. The production server registers the
+`wingfoil://capabilities` Resource by hand with no `resolveRoot` (D6), and no derived Tool.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
