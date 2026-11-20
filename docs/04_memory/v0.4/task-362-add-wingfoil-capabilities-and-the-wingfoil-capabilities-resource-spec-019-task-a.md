@@ -456,6 +456,36 @@ and `checkProject` on the registrar options, as design items 1 and 6 name them. 
 already sends. Two cases load `src/core/capabilities` and `src/mcp/capabilities-resource` lazily (`require` inside the
 test) so the rest of their files fail on behaviour, not on a missing module.
 
+### red correction (qa, 2026-11-20)
+
+Green found two red cases that a correct implementation cannot pass; supervision ruled both a red defect, corrected
+here by `3b7d6b521` (`test(cli): task-362 — correct the red: capabilities help wrap and the T-15 build comparison`),
+which changes only `test/cli/capabilities.integration.test.ts` and `test/mcp/capabilities-resource.test.ts`. **The T4
+baseline for green and refactor becomes `3b7d6b521`.**
+
+- `test/cli/capabilities.integration.test.ts` › "AC 1 — capabilities --help shows spec-019 §1's description and
+  example, exit 0". Cause: Commander wraps help text at 80 columns when stdout is not a TTY, so the 89-character
+  description is split across two lines. The case now collapses every whitespace run, newlines included, in the
+  expected strings and in stdout before matching; nothing else in it changed.
+- `test/mcp/capabilities-resource.test.ts` › "… its text is what `wingfoil capabilities --format json` prints from the
+  same build, without the final newline". Cause: it compared an in-process server, running from `src/`, with a spawned
+  `dist/cli.js`; a run from `src/` stamps the commit `unknown` (`dl-111`), dist the build's sha, so `wingfoil.commit`
+  alone would differ. The case now reads the Resource from `node dist/cli.js mcp`, started at the repository root over
+  stdio through the SDK client, so both sides come from one dist build. The describe's first, in-process case is
+  unchanged.
+
+Runs (the task's PATH shim first; jest in the `--noStackTrace --json` form, read through the red summary):
+- `npx jest test/cli/capabilities.integration.test.ts test/mcp/capabilities-resource.test.ts --maxWorkers=2` →
+  `Tests: 16 failed, 0 passed, 16 total`. The two corrected cases still fail for the missing command and Resource: the
+  `--help` case on `Expected substring: "print the file formats this WingFoil reads, its commands and the capabilities
+  it provides"`, the received text being the collapsed top-level help; the dist case on `McpError: MCP error -32602:
+  MCP error -32602: Resource wingfoil://capabilities not found`.
+- `npx tsc --noEmit -p tsconfig.json` → 22 diagnostics, the same set as at red: TS2307 ×3, TS2305 ×4, TS2353 ×3,
+  TS7006 ×12 (the red section's "13 TS7006" miscounts its own list; its total of 22 stands).
+- `npx jest test/lint test/validation/secret-scan.test.ts --maxWorkers=2` → `Tests: 1 failed, 249 passed, 250 total`,
+  the one failure `typecheck.clean`, from those diagnostics; `npx eslint` over the two files → exit `0`; the
+  invisible-character grep → no hit.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
