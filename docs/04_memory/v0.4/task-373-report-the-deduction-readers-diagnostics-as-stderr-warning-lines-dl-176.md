@@ -534,6 +534,38 @@ only, `developer` declared in the fixture's `team.roles`), notes `230ab7451`. Gr
   one proposed above:
   - `bug-476-the-workflow-next-test-fixture-declares-an-unknown-phase-field-on-purpose-so-every-run-prints-dozens-of-unknown-field-warnings-on-the-ci-s-stderr` — `--reason "Record task-373's retrospective item for bug-476: the fixture lost the unknown field, the one test relying on it asserts the warning on stderr, and all five on-purpose warning sources of the suite are fixed, the fifth by the qa's fb37cf7e6."`
 
+### red, send-back 2 (qa, 2026-11-21)
+
+**Scope.** The review of `45976b4cb` (APPROVE WITH FIXES), its one should-fix: since `fb37cf7e6` no test passes
+`nextWorkflow` a dna without `team.roles`, so the `--assigned-to` fallback for a missing dna is unexercised (branch
+coverage down by one against the `169ecd71b` baseline). Head `45976b4cb`; `git rev-list --count HEAD..main` → `34`, so
+`main` was merged first: `3935c8b99` (one conflict, in `spec-008-cli-grammar.md`'s revision notes, resolved by keeping
+both paragraphs, this task's then `task-362`'s). PATH guard: `command -v wingfoil` → the task's PATH shim; `wingfoil
+--version` and `node dist/cli.js --version` → `0.3.2 (e81bbf95b1085e06a38e43b8256999e6c6977583)`. Black box (T3): no
+file under `src/` or `scripts/` opened or named in a command; the built CLI was run as `node dist/cli.js …` only.
+**Test commit: `283d08e94`** (the new file only; no existing test edited).
+
+**The case (characterization: passes on first run).** `test/core/workflow-next-assigned-to-no-dna.test.ts`, "no
+team.roles: the word names nobody, the warning says so on stderr, and the role-less step is still dropped": the render
+test's `INPUTS` (`dnaYaml: null`) and hand-built deduction, `nextWorkflow(INPUTS, deduction, { assignedTo: 'developer'
+})` under a local `captureStderr` (the `test/core/workflow-next.test.ts` helper's shape, `process.stderr.write` restored
+in a `finally`). It asserts the chunks are exactly `["warning: --assigned-to 'developer' names no team.members[] entry
+(name or email) and no team.roles role in dna.yaml\n"]` and the result `{ next: null, message: "no next step of workflow
+'cycle' is assigned to 'developer'" }`.
+
+**The warning text, from a real run.** A scratch project (`git init`, `node dist/cli.js --project <dir> init --template
+Kanban`, the role `developer` renamed in its dna, roles and workflow files and committed, `node dist/cli.js --project
+<dir> workflow start sw-life-cycle`), then `node dist/cli.js --project <dir> workflow next --assigned-to developer` →
+exit `0`, stderr exactly the line above, stdout `workflow: sw-life-cycle (sw-life-cycle-1-plan)` / `no next step of
+workflow 'sw-life-cycle' is assigned to 'developer'`. The same text is the first send-back's "Before" run.
+
+**Runs (targeted, `--maxWorkers=2`; none took the heavy-gate lock).**
+- `npx jest test/core/workflow-next-assigned-to-no-dna.test.ts test/core/workflow-next-render.test.ts --maxWorkers=2`
+  (all output captured to a file) → exit `0`, `Tests: 0 failed, 8 passed, 8 total`; `grep -c 'warning:'` on that output
+  → `0`.
+- `npx tsc --noEmit -p tsconfig.json` → exit `0`. `npx jest test/lint test/validation/secret-scan.test.ts --maxWorkers=2`
+  → `Tests: 0 failed, 250 passed, 250 total`.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
