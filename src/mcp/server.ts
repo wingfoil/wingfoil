@@ -19,7 +19,8 @@
  *
  * Channel scope (spec-014 §3): `createMcpServer` registers the read-only Resources channel
  * (`registerReadOnlyResources` — spec-004 §2, P5.2.1), the read-only role Prompts channel
- * (`registerRolePrompts` — spec-004 §3, P5.2.2, since task-058-mcp-prompts-role-based), and the **Memory
+ * (`registerRolePrompts` — spec-004 §3, P5.2.2, since task-058-mcp-prompts-role-based), the session Resource, the
+ * `wingfoil://capabilities` Resource (`registerCapabilitiesResource` — `spec-019` §6, task-362), and the **Memory
  * Tools** derived from `CORE_MODULES` (`registerCoreTools`, `./tools.ts` — spec-004 §4, P5.2.3, task-367):
  * `memory.add`, `amend`, `approve`, `deprecate`, `park`, `reject` and `submit`. Every Tool call is an agent
  * context (`spec-018` §1.2), so the approver-gated three always refuse with `E_AGENT_CONTEXT` and the others
@@ -39,6 +40,7 @@ import { buildCoreParams } from '../core/registry';
 
 // Leaf modules, not the `./index` barrel: the barrel re-exports this file, so importing it here closed an import
 // cycle (task-354, bug-345).
+import { registerCapabilitiesResource } from './capabilities-resource';
 import { registerRolePrompts } from './prompt';
 import { registerReadOnlyResources } from './read-only-resources';
 import { registerSessionContextResource } from './session-resource';
@@ -80,7 +82,7 @@ class BareErrorMcpServer extends McpServer {
 
 /**
  * Construct the production `McpServer` and register its channel set on it (spec-014 §3): the read-only
- * Resources, the role Prompts over the given role set, and the Memory Tools. Pure and
+ * Resources, the role Prompts over the given role set, the capabilities Resource, and the Memory Tools. Pure and
  * synchronous — no transport, no stdio, no filesystem read, no process side effects (spec-014 §2: "no
  * I/O at construction time beyond wiring handlers"); the role set arrives already read, and every
  * handler resolves the root and reads the project per request. So a test can connect it over the SDK's
@@ -94,6 +96,8 @@ export function createMcpServer(options: McpServerOptions): McpServer {
   registerReadOnlyResources(server, { resolveRoot: options.resolveRoot });
   registerRolePrompts(server, { resolveRoot: options.resolveRoot, roles: options.roles });
   registerSessionContextResource(server, { resolveRoot: options.resolveRoot, roles: options.roles });
+  // task-362 (`spec-019` §6): the capabilities document of this build; it reads no project, so no `resolveRoot`.
+  registerCapabilitiesResource(server);
   // The `memory` module only, until task-368 (approver ruling D6, `spec-014` §3): a staged module filter, not a
   // list of operation names (`spec-006` §4.2).
   registerCoreTools(

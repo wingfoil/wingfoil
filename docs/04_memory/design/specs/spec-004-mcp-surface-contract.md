@@ -35,7 +35,7 @@ state (REQ-SEC-05).
 
 ```
 MCP server surface
-├── Resources   (read-only)   — wingfoil://dna, wingfoil://memory/*, wingfoil://workflows, wingfoil://workflows/-/*
+├── Resources   (read-only)   — wingfoil://dna, wingfoil://memory/*, wingfoil://workflows, wingfoil://workflows/-/*, wingfoil://capabilities
 ├── Prompts     (read-only)   — one per role, e.g. "developer-session", "reviewer-session"
 └── Tools       (mutating)    — memory.*, dna.*, directive.*, workflow.* and agent.* actions, 1:1 with CLI state-mutating verbs
 ```
@@ -58,6 +58,7 @@ wingfoil://workflows/{name}                   # a single workflow definition (ma
 wingfoil://workflows/-/next                   # the active workflow instance's next step (spec-017 §9)
 wingfoil://workflows/-/status                 # every open workflow instance (spec-017 §9)
 wingfoil://session/{role}/{element}/{state}   # a role's execution context on an element at a commit (§3.2)
+wingfoil://capabilities                       # the build's capabilities document (spec-019 §6), from v0.4
 ```
 
 - `{type}` is any type key declared in `memory.yaml` `types:` (`release-line, release, task, adr,
@@ -88,6 +89,14 @@ wingfoil://session/{role}/{element}/{state}   # a role's execution context on an
   `state` is any commit, so it is a template that `resources/list` never lists: a client reads it by the full URI,
   which `agent execute`'s bootstrap gives. Its refusals are §3.4's, with `role` checked first against the same
   start-time set.
+- `wingfoil://capabilities` (v0.4, `spec-019` §6, P5.1.5) returns, as its one `contents` entry
+  (`mimeType: application/json`), the document `wingfoil capabilities --format json` prints from the same build,
+  without the final newline, with no `warnings` field. It is the URI the registrar derives for the self-named read
+  operation `capabilities`, hand-registered on the production server under the name `capabilities.read`. It reads
+  no project: the handler never resolves the project root, and the document depends on the build alone (the
+  server itself still starts only in a project, `spec-014` §1). A read carrying a write intent is refused as every
+  Resource is (§2.3). It is WingFoil's document, unrelated to the `capabilities` an MCP `initialize` exchanges,
+  which are the server's protocol facts.
 - A Resource derived from a core operation by `registerCoreModules` (`spec-006` §3, `dl-040` option 1) has the URI
   `wingfoil://{module}/{verb}` (`wingfoil://{module}` for a flat operation), followed by `/{<positional>}` when the
   operation declares a required positional: then it is a template, which `resources/list` does not list and
@@ -687,6 +696,13 @@ before the operation, with its four refusals (the missing-argument one is `P5.2.
 says it is a Tool input. §2.1 gains a bullet on the URIs `registerCoreModules` derives, outside the block, which lists
 what the production server serves. Edited in place without a supersede or a state change (`dl-047`), pending the
 approver's `memory amend`.
+
+**Revision (2026-11-20, `task-362-add-wingfoil-capabilities-and-the-wingfoil-capabilities-resource-spec-019-task-a`)
+— the capabilities Resource.** `spec-019` (`approved`, "Amendments owed", §6) adds `wingfoil://capabilities` (P5.1.5):
+§1's channel tree and §2.1's URI block list it, and a §2.1 bullet states its content (the CLI's `--format json`
+document without the final newline), that it reads no project, that it is refused for a write intent like every
+Resource, and that it is not MCP's own `initialize` capabilities. No other URI, Prompt or Tool changes. Edited in
+place without a supersede or a state change (`dl-047`), pending the approver's `memory amend`.
 
 **Revision (2026-11-20, `task-367-register-the-memory-tools-on-the-production-mcp-server-and-refuse-the-approver-gated-verbs-over-mcp`,
 `bug-034`) — every Tool call is an agent context, the refusal keeps its hint and warnings, and an error message carries

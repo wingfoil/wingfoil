@@ -108,6 +108,7 @@ export interface CoreOperation {
   readonly positional?: CorePositional;        // the operand it reads (e.g. <id>, [section]) and whether required
   readonly example?: string;                   // one complete invocation shown under "Example:" (spec-008 §8)
   readonly renderConsole?: (value: unknown) => string; // the command's own --format console text, where its spec defines one (spec-008 §2)
+  readonly readsProject?: false;               // false: it reads no project, so no registrar resolves a root for it (spec-019 §1)
 }
 
 export interface CorePositional {
@@ -140,6 +141,12 @@ reaches the operation through the same `ParamsContext` shape whichever surface i
 positional as `positional` and `positionals`, the flags as `flags`, the value options as `options`
 (`src/core/registry.ts`). What the MCP side derives from the declaration is `spec-004`'s: a Tool's
 input schema (`spec-004` §4.3) and a Resource's URI (§3 below, `spec-004` §2.1).
+
+`readsProject: false` declares an operation that reads no project (`spec-019` §1, `capabilities`): neither
+registrar resolves the project root for it, so it runs outside every git repository, and the `ParamsContext`
+it receives has no `root`. Absent — every other operation — the registrars resolve the root before the call, as
+they always have. It is declared on the operation, never by a name in a registrar (§4.2). The CLI keeps every
+usage check of `spec-008` §1 for it, the blank-`--project` refusal included, and skips only the root step.
 
 ### 3. Core functions (surface per `X_cli-cmds.md` and the ratified DLs; release per row)
 
@@ -252,6 +259,7 @@ for cell):
 | `runInit` *(CLI entry, `src/cli/init-command.ts`)* | — *(bootstrap command, not a `CoreModule`: wired directly in `src/cli/program.ts`)* | true    | `wingfoil init`   | — *(bootstrap; not MCP-exposed)* |
 | `runMcp` *(CLI entry, `src/cli/mcp-command.ts`)*   | — *(bootstrap command, not a `CoreModule`: wired directly in `src/cli/program.ts`)* | false   | `wingfoil mcp`    | — *(bootstrap; it hosts the MCP surface, `spec-014` §1)* |
 | `audit`      | `audit` *(planned — self-named flat operation, BDD P5.1.3)*             | false   | `wingfoil audit`  | Resource `wingfoil://audit` |
+| `capabilities` | `capabilities` *(self-named flat operation, P5.1.5, `spec-019`)*      | false   | `wingfoil capabilities` | Resource `wingfoil://capabilities` |
 
 - **The bootstrap commands are not on MCP** (`dl-046-bootstrap-commands-in-spec-006-section-3` A(a)).
   `init` must run before a WingFoil project exists, and `mcp` starts the server an agent is connected
@@ -263,6 +271,11 @@ for cell):
   `wingfoil://audit`, with no registrar change. That is the derivation the registrar applies to `paths`
   (`wingfoil://paths`), which the `paths` row's MCP cell states
   (`dl-040-spec-006-resource-uri-divergence`, ratified with option 1).
+- **`capabilities` is a flat, self-named operation that reads no project** (`spec-019` §1, P5.1.5): module
+  `capabilities`, op `capabilities`, `readsProject: false` (§2). Its value is the build's capabilities document
+  (`spec-019` §3), built by `buildCapabilitiesDocument` (`src/core/capabilities.ts`) from `CORE_MODULES`, which
+  `src/core/index.ts` passes at call time. The production server serves its Resource `wingfoil://capabilities`,
+  hand-registered (`spec-004` §2.1, `spec-019` §6); it is the URI the registrar derives for the operation.
 
 **Agent execution** (P5.3, `src/agent` *(planned module, `spec-016` §1)*, `CoreModule.name` `agent`)
 — the v0.3 surface (`minor-v0.3` `features:` P5.3.1–P5.3.3; run tracking per `dl-135`; normative
@@ -428,6 +441,10 @@ Normatively, for every `CoreOperation`:
    `directiveAssign` (`spec-011`, the one writer of an existing `roles.yaml`), `workflowCreate` and `workflowRemove` (`workflows.yaml`, `spec-017` §7.7–§7.8). A file the operation writes
    whole for the first time (`spec-011`'s missing `roles.yaml`, and `spec-017` §7.7's missing `workflows.yaml`) is written
    with `version: 1.0` and is not raised. No operation writes `memory.yaml`.
+8. **An operation that reads no project reads no baseline** (`spec-019` §1, §3.2). `capabilities` and its
+   Resource `wingfoil://capabilities` read only what the build ships — `CORE_MODULES`, the format constants,
+   `package.json` and `dist/build-info.json` — and no file of a project, no git and no current directory; the
+   operation declares `readsProject: false` (§2). Items 1–7 have nothing to bind there.
 
 Which shipped and v0.3 operation reads which baseline, by the items above (the per-command form for
 users is `spec-008-cli-grammar` §11):
@@ -438,6 +455,7 @@ users is `spec-008-cli-grammar` §11):
 | `HEAD`, declared (item 6) | `workflowStatus`, `workflowList`, `workflowShow`, `agentList`, `agentShow`, the two v0.3 workflow Resources — each from the task that ships it in v0.3 |
 | working tree, gating nothing (item 4) | `dnaShow`, `paths`, `directivesList`, `memorySearch`, `memoryHistory` (its log is git's, its `memory.yaml` the working tree's), the shipped MCP Resources and the role Prompts |
 | filesystem, predicting an effect (item 5) | the confinement and symlink guards of every writing or deleting operation, and `directiveCreate`'s check that its target file does not exist |
+| none: the build only (item 8) | `capabilities` and its Resource `wingfoil://capabilities` (`spec-019` §3.2) |
 
 Symbols in this section read at `9642ab5f`; items 4–6 and the table at `e942e8e9`, except `directiveRemove`'s directive
 read (item 5 and the table's `HEAD`, gating row, `loadDirectiveInventoryAtHead`), read at `77749a0b2` (`task-311`).
@@ -609,7 +627,8 @@ needs none**: it is `directiveAssign` with a comma-separated `--directive` value
 (`wingfoil directive assign --directive testing,code-quality,security --role developer`), not a fourth
 directive verb. The evidence is unanimous across the documents that fix the surface —
 `spec-008-cli-grammar` §1 enumerates the singular noun's verbs as `create`, `assign`, `remove`;
-`docs/01_vision/X_cli-cmds.md:95-98` lists the same three plus `directives list`; and
+the Pillar 3 command table of `docs/01_vision/X_cli-cmds.md` (§ "Pillar 3: Project Directives Commands") lists the
+same three plus `directives list`; and
 `docs/01_vision/06_features.md:67,201` describes P3.7 as a *relationship* ("one role → multiple
 directives"), not a command. Recorded here because the absence of a row is otherwise indistinguishable
 from an omission: a future reader looking for P3.7's operation should find this note instead of adding
@@ -1026,3 +1045,13 @@ without a supersede or a state change (`dl-047`), pending the approver's `memory
 says that the refusal carries a `hint`, worded in `spec-008` §6, when no committed member holds the role; the message
 stays REQ-SEC-03's, word for word (`dl-071` S3). No step moves. Edited in place without a supersede or a state change
 (`dl-047`), pending the approver's `memory amend` at `task-375`'s design gate.
+
+**Revision (2026-11-20, `task-362-add-wingfoil-capabilities-and-the-wingfoil-capabilities-resource-spec-019-task-a`)
+— `capabilities`, the operation that reads no project.** `spec-019` (`approved`, "Amendments owed") adds the flat,
+self-named read operation `capabilities` (P5.1.5). §2 gains the field `readsProject?: false` and a paragraph on what
+both registrars do with it; §3 gains the `capabilities` row under *Project bootstrap & audit* and a bullet on it; §6
+gains item 8, "an operation that reads no project reads no baseline", and the table's row "none: the build only"
+(item 7 keeps its number, which `spec-002`, `spec-011` and the `doc-versioning` directive cite). The 2026-09-21 revision's citation of
+`X_cli-cmds.md` by a line range now names its Pillar 3 command table by section heading (`bug-513`, `dl-075`). No
+other row's function, module or `mutates` changes. Edited in place without a supersede or a state change
+(`dl-047`), pending the approver's `memory amend`.

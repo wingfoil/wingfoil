@@ -152,11 +152,14 @@ export function registerCoreTools(server: McpServer, modules: readonly CoreModul
 
     const collected: string[] = [];
     try {
-      // Inside the try, as on the CLI (bug-002): an ambient failure resolving the root is a refusal, not a crash.
+      // Inside the try, as on the CLI (bug-002): an ambient failure resolving the root is a refusal, not a crash. An
+      // operation that reads no project (`readsProject: false`, `spec-019` §1) resolves no root: no `root` key at all
+      // (`spec-006` §2: declared on the operation, never by a name in a registrar).
+      const project = entry.operation.readsProject === false ? {} : { root: options.resolveRoot() };
       const params = options.buildParams({
         moduleName: entry.moduleName,
         operationName: entry.operation.name,
-        root: options.resolveRoot(),
+        ...project,
         ...mapped.context,
       });
       // A fresh invocation per call: the agent context is resolved once per invocation (`resolveOperationAgentContext`).

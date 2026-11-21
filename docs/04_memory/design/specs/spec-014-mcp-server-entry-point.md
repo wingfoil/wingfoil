@@ -100,9 +100,14 @@ startMcpServer(options): Promise<McpServer>
 ```ts
 registerReadOnlyResources(server, { resolveRoot });          // spec-004 §2 — Memory, DNA, Workflow Resources + write refusal (P5.2.1, v0.1)
 registerRolePrompts(server, { resolveRoot, roles });         // spec-004 §3 — one {role}-session Prompt per role (P5.2.2, v0.2)
+registerCapabilitiesResource(server);                        // spec-004 §2.1, spec-019 §6 — wingfoil://capabilities, no project read (P5.1.5, v0.4)
 registerCoreTools(server, <the memory module of CORE_MODULES>, { resolveRoot, buildParams: buildCoreParams });
                                                              // spec-004 §4 — the Memory Tools, derived (P5.2.3, v0.4)
 ```
+
+The capabilities Resource takes no `resolveRoot`: its document is the build's, not the project's (`spec-019`
+§3.4), so its handler reads nothing under the project root. `wingfoil mcp` still resolves the root and reads the
+role set before the server starts (§1).
 
 The Tools are derived from `CORE_MODULES`, never registered by hand: `registerCoreTools` is the Tools half of the
 registrar (`spec-004` §4.3), so `tools/list` lists one Tool per `mutates: true` operation of the modules it is given —
@@ -167,6 +172,12 @@ only the semver. §3 was titled "v0.1 channel scope — read-only Resources only
 since v0.2; it now lists the Resources, the Prompts and the empty Tools channel. No channel contract
 of `spec-004` changed here. Edited in place without a supersede or a state change, per `dl-047` (no
 `version:` field).
+
+**Revision (2026-11-20, `task-362-add-wingfoil-capabilities-and-the-wingfoil-capabilities-resource-spec-019-task-a`)
+— §3's channel scope gains the capabilities Resource.** `spec-019` (`approved`, "Amendments owed", §6):
+`createMcpServer` registers `wingfoil://capabilities` through `registerCapabilitiesResource`, which takes no
+`resolveRoot` because the document depends on the build alone. Neither the entry point nor another channel
+changes. Edited in place without a supersede or a state change (`dl-047`), pending the approver's `memory amend`.
 
 **Revision (2026-11-20, `task-367-register-the-memory-tools-on-the-production-mcp-server-and-refuse-the-approver-gated-verbs-over-mcp`,
 `bug-034`) — §3: the Memory Tools replace the empty Tools channel.** P5.2.3 ships in v0.4: the server registers the

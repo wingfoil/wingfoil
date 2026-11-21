@@ -152,6 +152,9 @@ export function registerCoreModules(
     moduleName: string,
     context: Omit<ParamsContext, 'moduleName' | 'operationName' | 'root'>,
   ): Promise<CoreResult<unknown>> {
-    return operation.fn(options.buildParams({ moduleName, operationName: operation.name, root: options.resolveRoot(), ...context }));
+    // An operation that reads no project (`readsProject: false`, `spec-019` §1) resolves no root: no `root` key at all
+    // (`spec-006` §2: declared on the operation, never by a name in a registrar).
+    const project = operation.readsProject === false ? {} : { root: options.resolveRoot() };
+    return operation.fn(options.buildParams({ moduleName, operationName: operation.name, ...project, ...context }));
   }
 }
