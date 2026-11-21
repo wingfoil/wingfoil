@@ -41,8 +41,15 @@
 
 ### Step 4 — Check DNA for current state
 
-* **[MVP · v0.1]** US-5-06: As Casey, I want to display DNA with `wingfoil dna show` so that I know team size, tech stack,
-  current phase, and risks. _(ref: P2.2 — home in Journey 3)_
+* **[MVP · v0.1]** US-5-06: As Casey, I want to display DNA with `wingfoil dna show` so that I know who builds the
+  project and with what: team size and stacks. _(ref: P2.2 — home in Journey 3)_
+
+### Step 4.5 — Check release progress (read-only view)
+
+* **[MVP · v0.3]** US-5-11: As Casey, I want a read-only view of the open workflow runs with `wingfoil workflow status`
+  — each run at its current phase, the steps waiting on its frontier and the pending approvals with who they are routed
+  to — so that I follow release progress and see what is pending or blocking without asking the team. _(ref: P4.5 —
+  home in Journey 2)_
 
 ### Step 5 — Review traceability configured in workflow
 

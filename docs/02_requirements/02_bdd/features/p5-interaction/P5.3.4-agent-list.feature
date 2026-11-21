@@ -1,5 +1,5 @@
-Feature: P5.3.4 - wingfoil agent list [--past] [--waiting]
-  As Morgan, I want to list the agent runs recorded on the project and the workflow steps waiting
+Feature: P5.3.4 (US-2-12) - wingfoil agent list [--past] [--waiting]
+  As Sam, I want to list the agent runs recorded on the project and the workflow steps waiting
   for an agent, so I can see what agents have done and what they can take next, without reading
   the run log or the workflow state by hand.
 

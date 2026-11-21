@@ -41,6 +41,9 @@
   standards, and context. _(ref: P5.3.1 — home in Journey 1)_
 * **[MVP · v0.3]** US-2-07: As the system, I want to route the agent to the correct role based on current workflow step
   so that I apply the right directives for review phase. _(feat: P5.3.2)_
+* **[MVP · v0.3]** US-2-12: As Sam, I want to list the recorded agent runs and the workflow steps waiting for an agent
+  with `wingfoil agent list` (`--past`, `--waiting`), read at `HEAD`, so that I see what agents have done and which step
+  an agent can take next before I launch one. _(feat: P5.3.4)_
 
 ### Step 5 — Agent analyzes code/doc against standards
 

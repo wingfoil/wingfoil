@@ -13,7 +13,7 @@ Translates the **[MVP]** user stories from Module 1 into deterministic system be
 and edge cases, expressed in Gherkin (Given-When-Then).
 
 - **Unit:** one `.feature` file per MVP feature (`Px.y` / `X1.y`), grouped by pillar.
-  The 31 additional `[MVP]` user stories in Module 1 that carry no BDD anchor
+  The 32 additional `[MVP]` user stories in Module 1 that carry no BDD anchor
   (`_(ref: Px.y)_` marker) are **ref-marked duplicates**: they share the behavior of their
   feature and are fully covered by that feature's `.feature` file. No extra file is needed.
 - **Coverage rule:** every feature has **≥1 nominal (Happy Path)** scenario and **≥1
@@ -108,8 +108,8 @@ and edge cases, expressed in Gherkin (Given-When-Then).
 | P5.3.1  | US-1-03    | `features/p5-interaction/P5.3.1-agent-execute.feature`             |
 | P5.3.2  | US-2-07    | `features/p5-interaction/P5.3.2-agent-role-selection.feature`      |
 | P5.3.3  | US-1-10    | `features/p5-interaction/P5.3.3-relevance-filtering.feature`       |
-| P5.3.4  | —          | `features/p5-interaction/P5.3.4-agent-list.feature`                |
-| P5.3.5  | —          | `features/p5-interaction/P5.3.5-agent-show.feature`                |
+| P5.3.4  | US-2-12    | `features/p5-interaction/P5.3.4-agent-list.feature`                |
+| P5.3.5  | US-4-15    | `features/p5-interaction/P5.3.5-agent-show.feature`                |
 | P5.4.1  | US-0A-13   | `features/p5-interaction/P5.4.1-agent-role-definition.feature`     |
 | P5.4.2  | US-3-07    | `features/p5-interaction/P5.4.2-role-directives-binding.feature`   |
 | P5.4.3  | US-1-04    | `features/p5-interaction/P5.4.3-context-preloading.feature`        |
