@@ -441,6 +441,13 @@ error message. An **explicit** request for help by name — `wingfoil help`, `wi
 is the opposite case and exits `0` alongside `--help`/`--version`, even though it prints the same
 text.
 
+A third: a **refused option value** — a `--reason` that cannot be recorded (§2's unrecordable-value row), a blank
+`--co-author`, `--ai-model` or `--project`, an `--ai-model` or `WINGFOIL_AGENT_MODEL` that is not one line, a
+malformed `--timeout` (§12) — is exit `2`, the row's **usage error**, like a malformed command line, and never exit `1`
+(`dl-199` (b)). The rule holds for every refused value, present and future: a script tells the two apart by the
+message, not the code. An MCP Tool has no exit code: it reports either as an `isError` result (`spec-004` §4.3 item 4),
+so no client needs the code to change.
+
 ### 6. Error format (REQ-INT-08)
 
 Every user-facing error, on stderr, in `--format console` (default):
@@ -1630,3 +1637,9 @@ value; §11 gains the row "the build, no project"; §12 states that `capabilitie
 command adds no refusal or warning text of its own (`spec-019` §2). The command count is not written here; the
 `user-docs` phase writes it once the release's commands are known. Edited in place without a supersede or a state
 change (`dl-047`), pending the approver's `memory amend`.
+
+**Revision (2026-11-20, `task-367-register-the-memory-tools-on-the-production-mcp-server-and-refuse-the-approver-gated-verbs-over-mcp`)
+— §5: a refused option value keeps exit `2`, per `dl-199` (b).** `dl-199` (`ready`) ratified (b): a refused value stays a
+usage error, documented as the rule for every refused value, because the v0.4 MCP Tools report a refusal as an `isError`
+result. §5 gains the paragraph that states it and lists the refused values of today. No exit code, message or command
+changes. Edited in place without a supersede or a state change (`dl-047`), pending the approver's `memory amend`.

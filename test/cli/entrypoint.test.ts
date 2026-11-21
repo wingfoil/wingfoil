@@ -156,6 +156,9 @@ describe('src/cli.ts — the `wingfoil` bin entrypoint', () => {
 
     expect(params).toEqual({ root: '/repo', positional: undefined, positionals: undefined, options: undefined });
   });
+
+  // task-367 AC 8 (`bug-538`): the blank `--project` refusal is no longer raised by this `resolveRoot` (`task-362`
+  // moved it into `buildProgram`); its in-process proof is `./program-blank-project.test.ts`.
 });
 
 describe('src/cli.ts — the last-resort error handler (bug-002-cli-error-stack-dump)', () => {

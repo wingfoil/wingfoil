@@ -151,7 +151,7 @@ describe('task-030 — production MCP server (createMcpServer), spec-014 §2', (
     expect(String((error as Error).message)).not.toContain(WRITE_REFUSAL_MESSAGE);
   });
 
-  it('scope (spec-014 §3): the server exposes the read-only Resources and Prompts channels and an empty Tools channel', async () => {
+  it('scope (spec-014 §3): the server exposes the read-only Resources and Prompts channels and the seven Memory Tools (task-367)', async () => {
     const caps = client.getServerCapabilities();
     expect(caps?.resources).toBeDefined();
     // task-058-mcp-prompts-role-based (P5.2.2, v0.2): spec-014 §3 "when Prompts ship (P5.2.2, v0.2),
@@ -161,7 +161,18 @@ describe('task-030 — production MCP server (createMcpServer), spec-014 §2', (
     // in particular the task-025 `dna.set` Tool is NOT registered on the read-only server (Tools are
     // P5.2.3/v0.4 scope). A client probing `tools/list` gets an empty list, not a -32601.
     expect(caps?.tools).toEqual({});
-    await expect(client.listTools()).resolves.toEqual({ tools: [] });
+    // task-367 (P5.2.3, spec-014 §3 as amended, ruling D6): the Memory Tools derived from CORE_MODULES are served, and
+    // only they — still no `dna.set` (task-368).
+    const { tools } = await client.listTools();
+    expect(tools.map((tool) => tool.name)).toEqual([
+      'memory.add',
+      'memory.amend',
+      'memory.approve',
+      'memory.deprecate',
+      'memory.park',
+      'memory.reject',
+      'memory.submit',
+    ]);
   });
 
   it('scope (spec-014 §3): a tools/call names a tool that does not exist, and is refused as a Tool refusal (spec-004 §4.3)', async () => {

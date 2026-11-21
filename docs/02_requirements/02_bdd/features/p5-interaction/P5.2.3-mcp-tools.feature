@@ -21,8 +21,8 @@ Feature: P5.2.3 (US-2-11) - MCP Tools (state management)
     And the state is unchanged
 
   # W1-R2, spec-018 §3.2 (cp-003): every MCP call is an agent context, so the approver-gated verbs are listed
-  # Tools whose every call refuses. The marker list the message goes on to name is not pinned here: how an MCP
-  # call is marked is task-367's amendment of spec-018 §1.2.
+  # Tools whose every call refuses. The marker list the message goes on to name is not pinned here: an MCP call is
+  # marked by spec-018 §1 row 5, the MCP Tools channel, whose phrase is "the call came through the MCP server".
   Scenario Outline: Error - an approver-gated Tool refuses in an agent context
     Given "task-101" has "status: pending"
     When the agent invokes the MCP tool "<tool>" for "task-101" with a "reason"

@@ -198,7 +198,7 @@ describe('REQ-SEC-05 — a real CORE_MODULES mutating Tool refused on an illegal
   });
 });
 
-describe('REQ-SEC-05 — the shipped production surface: Prompts advertised, no Tools, nothing persisted (task-058)', () => {
+describe('REQ-SEC-05 — the shipped production surface: Prompts advertised, the Memory Tools listed (task-367), nothing persisted (task-058)', () => {
   const PROMPT_FIXTURE_FILES = [
     '.wingfoil/dna.yaml',
     '.wingfoil/roles.yaml',
@@ -253,7 +253,7 @@ describe('REQ-SEC-05 — the shipped production surface: Prompts advertised, no 
 
   afterAll(() => removeTempDir(root));
 
-  it('advertises Prompts and an empty Tools channel, and a prompts/list + prompts/get round trip leaves every file byte-for-byte unchanged', async () => {
+  it('advertises Prompts and the seven Memory Tools (task-367), and a prompts/list + prompts/get round trip leaves every file byte-for-byte unchanged', async () => {
     const server = createMcpServer({ resolveRoot: () => root, roles: ['developer'] });
     const [serverTransport, clientTransport] = InMemoryTransport.createLinkedPair();
     const client = new Client({ name: 'wingfoil-test-client', version: '0.0.0' });
@@ -261,10 +261,11 @@ describe('REQ-SEC-05 — the shipped production surface: Prompts advertised, no 
 
     const caps = client.getServerCapabilities();
     expect(caps?.prompts).toBeDefined();
-    // task-174 (`bug-151`): the Tools channel is declared and answers with an empty list — still no
-    // write path on the production surface (REQ-SEC-05), now without a -32601 for a routine probe.
+    // task-174 (`bug-151`): the Tools channel is declared without `listChanged`. task-367 (P5.2.3, ruling D6): it
+    // lists the seven Memory Tools — the only write path on the production surface (REQ-SEC-05).
     expect(caps?.tools).toEqual({});
-    await expect(client.listTools()).resolves.toEqual({ tools: [] });
+    const memoryTools = ['memory.add', 'memory.amend', 'memory.approve', 'memory.deprecate', 'memory.park', 'memory.reject', 'memory.submit'];
+    expect((await client.listTools()).tools.map((tool) => tool.name)).toEqual(memoryTools);
 
     const snapshot = snapshotFiles(root, PROMPT_FIXTURE_FILES);
     const { prompts } = await client.listPrompts();
@@ -274,7 +275,7 @@ describe('REQ-SEC-05 — the shipped production surface: Prompts advertised, no 
     // task-195 (AC 5): a call with `element` and `state` builds the context and still writes nothing.
     const withContext = await client.getPrompt({ name: 'developer-session', arguments: { element: 'task:task-001-foo', state: 'HEAD' } });
     expect(JSON.stringify(withContext.messages)).toContain('# WingFoil Agent Context');
-    await expect(client.listTools()).resolves.toEqual({ tools: [] });
+    expect((await client.listTools()).tools.map((tool) => tool.name)).toEqual(memoryTools);
     assertFilesUnchanged(root, snapshot);
   });
 });
