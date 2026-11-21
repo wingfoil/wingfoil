@@ -83,6 +83,9 @@ parity tests green, and this plan `done`.
   `--format json` and `--format console`: the same subject and path) wrote this plan's `add` as `f37f29a3c` and left it
   `draft`, so this body is written before its `submit`.
 
+- Step 8: the approver ruled D9 the alternative, so schedule edited 07_sequencer.md (`41299e056`: the dated Scope
+  changes line naming `cp-004`, 2.2 → 2.3, the vision index re-synced).
+
 ### Retrospective
 
 - `workflow start --dry-run --format console` prints the same JSON object as `--format json`, pretty-printed, not a
