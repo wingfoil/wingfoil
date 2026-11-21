@@ -673,6 +673,39 @@ Against `code-review`, every AC with its evidence:
   attributed operation with a call-site parity, the gated refusal through the MCP Tools and the blank --project
   through the captured resolveRoot."`
 
+### red, send-back F2 (qa, 2026-11-21)
+
+Narrow send-back (approver ruling F2): after the merge of `main` `b3f8a00bc` brought `task-362` in, the AC 8 case of
+`test/cli/entrypoint.test.ts` ("passes a `resolveRoot` that refuses a blank --project value with the usage message
+(bug-538)") failed, because `task-362` moved the blank `--project` refusal out of the bin entry and into
+`buildProgram`'s `checkProject`; the `resolveRoot` the entry passes is now a plain project-root resolver.
+
+- Before, at `a8b16e813`: `npx jest test/cli/entrypoint.test.ts --maxWorkers=2` → `Tests: 1 failed, 10 passed, 11
+  total`; the failure: `Expected substring: "invalid flag value: --project must not be blank"`, received
+  `E_NOT_AT_GIT_ROOT: --project is not a git root: <worktree>/  `.
+- Change, commit `a006ac363` (test files only): the old case is removed from `test/cli/entrypoint.test.ts` (it pins a
+  contract that no longer exists; a comment there points at the new file), and the new
+  `test/cli/program-blank-project.test.ts` drives `buildProgram` in process over a synthetic `memory` module
+  (`memory search`, `memory add`, `fn` mocked): `memory search --project '  '`, `--project '  ' memory search` and
+  `memory add --type task --project '  '` each exit `2` with stderr exactly
+  `error: invalid flag value: --project must not be blank`, empty stdout, and neither the operation, `resolveRoot`
+  nor `buildParams` called; with `--format json` the stderr is `{"error":"invalid flag value: --project must not be
+  blank"}`. Expected lines copied from a real run: `node dist/cli.js memory search --project '  '` → that `error:`
+  line, exit `2`; `node dist/cli.js memory search --project '  ' --format json` → that JSON line, exit `2`.
+- AC 8: **characterization** (the behaviour exists since `task-362`): the new file passes on first run.
+- After: `npx jest test/cli/entrypoint.test.ts test/cli/program-blank-project.test.ts --maxWorkers=2` →
+  `Tests: 0 failed, 14 passed, 14 total` (10 + 4).
+- Before the test commit: `npx tsc --noEmit -p tsconfig.json` exit 0; `npx eslint` on both files exit 0;
+  `npx jest test/lint --maxWorkers=2` → `165 passed`; `npx jest test/validation/secret-scan.test.ts --maxWorkers=2`
+  → `85 passed`; the invisible-character grep → no hit. Black box: no `src/`, `scripts/` or `dist/` path named before
+  the test commit except the task's PATH shim and `node dist/cli.js` runs.
+- `bug-538`'s Retrospective (pending amendment, uncommitted) is reworded: the blank `--project` refusal now lives in
+  `src/cli/program.ts` `checkProject` (`task-362`) and is reached through `buildProgram` in
+  `test/cli/program-blank-project.test.ts`. Its `--reason` replaces the one listed above:
+  `--reason "Record the bug's retrospective: task-367 reaches every agent-context refusal in process, one case per
+  attributed operation with a call-site parity, the gated refusal through the MCP Tools and the blank --project,
+  now refused by buildProgram's checkProject (task-362), through test/cli/program-blank-project.test.ts."`
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
