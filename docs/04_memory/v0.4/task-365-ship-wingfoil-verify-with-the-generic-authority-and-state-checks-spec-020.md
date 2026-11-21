@@ -429,6 +429,31 @@ re-synced; `.wingfoil/directives/custom/command-baseline.md` (2.0: the committed
 new rows and the eight `spec-020` rows set to `PLANNED`, planned by `task-365`); `test/docs/enumeration-parity.allowlist.ts`
 (three `verify` surpluses planned by `task-365`).
 
+### design addendum (2026-11-21)
+
+**Rulings.** D1–D10 (a), ruled by the approver, as recommended in the design above.
+
+**`--color` / `--interactive` (`bug-514`, `task-380`'s design gate D5 (a)).** The program registers only `--no-color` and
+`--no-interactive`; `task-380`'s D1 (b) makes `spec-008` §2 name only those forms and refuse the positive ones as unknown
+options (pending on `task-380`'s branch, not in this worktree). Aligned here, uncommitted:
+- `spec-020` §2.2 named `--color` (negatable) and `--interactive` (negatable) among `verify`'s global flags; it now names
+  `--no-color` and `--no-interactive`, with a Revision paragraph citing `bug-514` and `task-380` D5. Nothing else of the
+  spec changes (its Process Notes keep the review round's record as written).
+- `docs/01_vision/X_cli-cmds.md`'s note *On interactivity* (Pillar 2) said "the negatable global `--interactive`"; it now
+  names the global `--no-interactive`, recorded in the 2.7 history entry (the file is already at 2.7 on this branch, one
+  bump per branch); `docs/01_vision/00_index.md` follows (546 lines, Revision history L402–546).
+- No other pending amendment states a positive global form: `git diff | grep '^+'` for `--color` / `--interactive` finds
+  only the two revision sentences above, which quote the old text. The Global Options table already lists `--no-color`
+  and `--no-interactive`.
+
+Pending amendment added (approver, `memory amend`, before red):
+- `spec-020-the-governance-check-verb-the-authority-and-state-rules-over-a-commit-range` — `--reason "Name the registered negated global flags --no-color and --no-interactive in section 2.2, as bug-514 and task-380's design gate D5 (a) require (task-365)."`
+
+**Check.** `bash waitslot.sh` (the slot), then `npx jest test/docs --maxWorkers=2` with every amendment in the tree →
+`Test Suites: 1 failed, 40 passed, 41 total`, `Tests: 1 failed, 637 passed, 638 total`; the one failure is the expected
+`test/docs/x-cli-cmds.test.ts` › "every row of a command no build ships is marked *Not built*", received
+`["wingfoil verify [--base <rev>] [--introduced-at <rev>]"]` (D8, red until green).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
