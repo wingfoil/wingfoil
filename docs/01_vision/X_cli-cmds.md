@@ -1,7 +1,7 @@
 # CLI Commands Reference — WingFoil
 
-**Version:** 2.5
-**Date:** 2026-11-16  
+**Version:** 2.6
+**Date:** 2026-11-20  
 **Status:** Approved
 
 ---
@@ -213,6 +213,7 @@ needs; `--template` names the methodology without a prompt; the mode inferred fr
 | `wingfoil init [--template <Scrum\|Kanban>]` | Initialize WingFoil on new or existing project | Alex, Morgan | 0a, 0b | Prompts for the template in a terminal; `--template` is required without one or with `--no-interactive`. Generates DNA, installs built-in directives/workflows, creates Memory structure. *Not built*: `--mode infer` (deduce from repo, P5.1.2, v0.4) |
 | `wingfoil audit [--output-type full\|summary]` | Scan project and summarize current state (languages, frameworks, structure) | Morgan, Alex | 0b | *Not built* (P5.1.3, v0.4). Pre-requisite to `init --mode infer`. Shows: repo size, languages, frameworks, module structure, team members (from git history). Helps inform DNA inference |
 | `wingfoil mcp` | Start the WingFoil MCP server over stdio, for an MCP client to launch | Alex | 1 | Bootstrap command, like `init`: not a core operation and not exposed on MCP itself (REQ-SYS-05's exemption, `dl-046-bootstrap-commands-in-spec-006-section-3`). Contract in `spec-014-mcp-server-entry-point` §1 |
+| `wingfoil capabilities` | Print the file formats this build reads, its commands and the capabilities it provides | Alex, Morgan, Agents | 0a, 0b, 1 | P5.1.5, from v0.4 (`spec-019`). Reads no project: it runs anywhere, in or outside a git repository, and prints the same document there; a non-blank `--project` is not checked. Takes no positional and no option. The document lists the format range of each file kind, the commands and the capabilities (`agent-execute`, `directive-verbs`, `dna-verbs`, `mcp-server`, `memory-verbs`, `workflow-tracking`); agents read it as the MCP Resource `wingfoil://capabilities` |
 
 ### Parameters for Pillar 5 Commands
 
@@ -256,7 +257,7 @@ Every command accepts these, except `--dry-run`, which only the commands that ch
 | Option | Format | Description |
 |--------|--------|-------------|
 | `--format` | `json`, `yaml`, `console` (default) | Output format, stated once here for every command. JSON/YAML for scripting/CI. Console prints the JSON payload indented for now, unless the command defines its own text (`spec-008` §2) |
-| `--project <dir>` | path | Run on the project rooted at `<dir>`, resolved against the current directory, instead of on the current directory. `<dir>` must itself be a git root, holding its own `.git` (a worktree included); anything else exits `1` with `E_NOT_AT_GIT_ROOT: --project is not a git root: <absolute dir>`, and a blank value exits `2`. Without it, the current directory must be the git root: WingFoil never infers the project root (`spec-008` §2, `spec-011`, `dl-198` (a)) |
+| `--project <dir>` | path | Run on the project rooted at `<dir>`, resolved against the current directory, instead of on the current directory. `<dir>` must itself be a git root, holding its own `.git` (a worktree included); anything else exits `1` with `E_NOT_AT_GIT_ROOT: --project is not a git root: <absolute dir>`, and a blank value exits `2`. Without it, the current directory must be the git root: WingFoil never infers the project root (`spec-008` §2, `spec-011`, `dl-198` (a)). `capabilities` reads no project: it refuses a blank value and does not check a non-blank one (`spec-019` §1) |
 | `-h`, `--help` | flag | Show command-specific help and examples |
 | `-V`, `--version` | flag | Print the build stamp `<semver> (<sha>)` (top level only) |
 | `--co-author <name>` | `team.agents` entry name | An agent marker (`spec-018` §1): the command runs in an agent's session, as the entry `<name>`. Taken by every command that takes `--dry-run` but `agent execute`, after the verb; a blank `<name>` exits `2`. With it, or with `WINGFOIL_AGENT`, `CLAUDE_CODE_CHILD_SESSION` or `CODEX_SANDBOX` defined, the approver-gated commands (`memory approve`, `reject`, `amend`, `workflow finalize` on an approval phase, `workflow adopt --plan --apply`, `workflow rekey`) refuse with `E_AGENT_CONTEXT`, exit `1` (`dl-212` D1); on the other commands the commit ends with the entry's `Co-Authored-By:` and an `AI-Model:` trailer, after `WingFoil-Version:` (`spec-018` §2) |
@@ -339,7 +340,7 @@ Every command accepts these, except `--dry-run`, which only the commands that ch
 
 - Pillar 1: `memory import`
 - Pillar 2: `dna infer`
-- Pillar 5: `audit`, `init --mode infer`, `init --template`
+- Pillar 5: `audit`, `init --mode infer`, `init --template`, `capabilities`
 
 **v1.0 (Aug 7):**
 
@@ -397,6 +398,11 @@ Every command accepts these, except `--dry-run`, which only the commands that ch
 ---
 
 ## Revision history
+
+**Version 2.6 (2026-11-20) — `wingfoil capabilities`, per `task-362` (`spec-019` §1, P5.1.5).**
+Pillar 5 gains the `capabilities` row: the build's file formats, commands and capabilities, read with no project, the
+same document as the MCP Resource `wingfoil://capabilities`. The `--project` row says that `capabilities` does not
+check a non-blank value, and the v0.4 release timeline names the command.
 
 **Version 2.5 (2026-11-16) — `agent execute --log` and `agent list --active`, per `task-336` (`dl-182`, `dl-181`; `spec-016` §3.1, §5, §7).**
 The `agent execute` row gains `[--log <path>]` and says that a headless run's output is forwarded to stderr, may hold

@@ -24,7 +24,7 @@ export type { BlobAtRev, BlobEntry, RevisionPath } from './commit';
 export type { CommitAttribution, CommitOptions, PathChange } from './commit';
 export { captureDryRun, isDryRunActive, planDiff } from './dry-run';
 export type { DryRunOutcome, DryRunPlan } from './dry-run';
-export { formatVersionTrailer, readBuildStamp, WINGFOIL_VERSION_TRAILER_KEY } from './build-stamp';
+export { formatVersionTrailer, readBuildIdentity, readBuildStamp, WINGFOIL_VERSION_TRAILER_KEY } from './build-stamp';
 export { GIT_READ_MAX_BUFFER, requireCommitName, runGitRead, runGitReadBytes } from './git-read';
 export type { GitReadOptions, GitReadResult } from './git-read';
 export { initStorage, scaffoldFiles, WINGFOIL_DIR, INIT_COMMIT_MESSAGE } from './layout';

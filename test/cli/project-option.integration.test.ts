@@ -16,7 +16,9 @@
  *   `test/cli/agent-execute-config-arg.integration.test.ts` and `test/agent/execute.test.ts`).
  *
  * The command list is the enumeration of `buildProgram(CORE_MODULES, …)`'s leaf commands (as
- * `test/docs/x-cli-cmds.test.ts` enumerates them, Commander's `help` excluded), never a literal count. Every
+ * `test/docs/x-cli-cmds.test.ts` enumerates them, Commander's `help` excluded), never a literal count; the leaves
+ * whose operation declares `readsProject: false` (task-362, `spec-019` §1: `capabilities`) are left out of both
+ * sweeps, since they check neither `--project` nor the current directory. Every
  * child runs with `process.env` minus the agent markers (`test/agent-markers.cjs`). The expected lines were
  * copied from runs of the code build (`node dist/cli.js`, at the design commit) named in the task's notes.
  */
@@ -30,6 +32,7 @@ import type { Command } from 'commander' with { 'resolution-mode': 'import' };
 
 import { buildProgram } from '../../src/cli/program';
 import { CORE_MODULES } from '../../src/core';
+import { deriveVerb, enumerateOperations } from '../../src/core/registry';
 import { withoutAgentMarkers } from '../agent-markers.cjs';
 import { seed, TASK_ID, TASK_REF } from '../agent/helpers/agent-execute-fixture';
 import {
@@ -68,6 +71,25 @@ async function leafCommands(root: string): Promise<Leaf[]> {
   }
   return out;
 }
+
+/**
+ * The leaf commands whose operation declares `readsProject: false` (task-362, `spec-019` §1): they read no project,
+ * so neither `--project` nor the current directory is checked, and both sweeps below leave them out. Looked up in
+ * `CORE_MODULES`, never by a name literal; the set is pinned to `['capabilities']` below so it cannot grow silently.
+ */
+function readsNoProject(): Set<string> {
+  return new Set(
+    enumerateOperations(CORE_MODULES)
+      .filter(({ operation }) => (operation as { readsProject?: unknown }).readsProject === false)
+      .map(({ module, operation }) => {
+        const verb = deriveVerb(module.name, operation.name);
+        return verb === '' ? module.name : `${module.name} ${verb}`;
+      }),
+  );
+}
+
+/** The leaves both sweeps run: every leaf but those of {@link readsNoProject}. */
+const projectReading = (leaves: readonly Leaf[]): Leaf[] => leaves.filter((leaf) => !readsNoProject().has(leaf.path));
 
 /** Run the compiled CLI in `cwd` with `process.env` minus the agent markers, plus `extra`. */
 function wingfoil(cwd: string, args: readonly string[], extra: Record<string, string> = {}): SpawnedRun {
@@ -109,15 +131,21 @@ describe('task-350 AC 1 — every command accepts --project <dir>, which names t
     for (const dir of [root, elsewhere, bounded?.ceiling]) if (dir !== undefined) removeTempDir(dir);
   });
 
+  it('task-362: the leaves left out of both sweeps, those whose operation reads no project, are exactly [\'capabilities\']', () => {
+    expect([...readsNoProject()].sort()).toEqual(['capabilities']);
+    expect(leaves.map((leaf) => leaf.path)).toContain('capabilities');
+  });
+
   it(
-    'every leaf command, run from another repository with --project <a subdirectory of the root>, is refused with E_NOT_AT_GIT_ROOT naming it (never `unknown option`)',
+    'every leaf command that reads a project, run from another repository with --project <a subdirectory of the root>, is refused with E_NOT_AT_GIT_ROOT naming it (never `unknown option`)',
     () => {
-      expect(leaves.length).toBeGreaterThan(0);
-      const results = leaves.map((leaf) => {
+      const swept = projectReading(leaves);
+      expect(swept.length).toBeGreaterThan(0);
+      const results = swept.map((leaf) => {
         const run = wingfoil(elsewhere, ['--project', sub, ...leaf.argv]);
         return [leaf.path, run.status, run.stderr];
       });
-      expect(results).toEqual(leaves.map((leaf) => [leaf.path, 1, notAGitRoot(sub)]));
+      expect(results).toEqual(swept.map((leaf) => [leaf.path, 1, notAGitRoot(sub)]));
     },
     SWEEP_TIMEOUT,
   );
@@ -295,14 +323,15 @@ describe('task-350 AC 2 — without --project, a command run from a subdirectory
   });
 
   it(
-    'every leaf command exits 1 with `error: E_NOT_AT_GIT_ROOT: run wingfoil from the project root`',
+    'every leaf command that reads a project exits 1 with `error: E_NOT_AT_GIT_ROOT: run wingfoil from the project root`',
     () => {
-      expect(leaves.length).toBeGreaterThan(0);
-      const results = leaves.map((leaf) => {
+      const swept = projectReading(leaves);
+      expect(swept.length).toBeGreaterThan(0);
+      const results = swept.map((leaf) => {
         const run = wingfoil(sub, leaf.argv);
         return [leaf.path, run.status, run.stderr];
       });
-      expect(results).toEqual(leaves.map((leaf) => [leaf.path, 1, NOT_AT_ROOT]));
+      expect(results).toEqual(swept.map((leaf) => [leaf.path, 1, NOT_AT_ROOT]));
     },
     SWEEP_TIMEOUT,
   );

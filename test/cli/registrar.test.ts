@@ -13,6 +13,7 @@ import type { CoreModule } from '../../src/core/registry';
 import { coreErr, coreOk } from '../../src/core/types';
 import type { CoreErrorCode, CoreResult } from '../../src/core/types';
 import { buildCliCommands, listRegisteredCliCommands, type CliCommand } from '../../src/cli/registrar';
+import { UsageError } from '../../src/core/usage-error';
 import { StorageError, E_NO_GIT_ROOT } from '../../src/storage/errors';
 import { reportNotice, reportWarning } from '../../src/validation/warning';
 
@@ -557,5 +558,87 @@ describe('a notice, and a success reported on stderr (task-228, spec-016 §3.4) 
     await findCommand(commands, 'demo', 'plan').run('json');
     expect(stdoutSpy.mock.calls.map((call) => call[0])).toEqual([`${JSON.stringify({ dryRun: true })}\n`]);
     expect(stderrSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('task-362 AC 2 — an operation that declares readsProject: false resolves no root (spec-019 §1, spec-006 §2)', () => {
+  // `x` is a flat, self-named read operation; `readsProject: false` is the field `spec-019` §1 adds to `CoreOperation`.
+  const noProject = (): CoreModule[] => [
+    { name: 'x', operations: { x: { name: 'x', mutates: false, readsProject: false, fn: async () => coreOk({ built: true }) } } },
+  ];
+  const readsProject = (): CoreModule[] => [{ name: 'x', operations: { x: { name: 'x', mutates: false, fn: async () => coreOk({ built: true }) } } }];
+  let exitSpy: jest.SpyInstance;
+  let stdoutSpy: jest.SpyInstance;
+  let stderrSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    exitSpy = jest.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    stdoutSpy = jest.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    stderrSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+  });
+  afterEach(() => {
+    exitSpy.mockRestore();
+    stdoutSpy.mockRestore();
+    stderrSpy.mockRestore();
+  });
+
+  it('resolveRoot is never called, and buildParams receives a context with no `root` key; exit 0', async () => {
+    const resolveRoot = jest.fn(() => '/fixture-root');
+    const contexts: object[] = [];
+    const commands = buildCliCommands(noProject(), {
+      resolveRoot,
+      buildParams: (ctx) => {
+        contexts.push(ctx);
+        return {};
+      },
+    });
+    await findCommand(commands, 'x', '').run('json');
+    expect(resolveRoot).not.toHaveBeenCalled();
+    expect(contexts).toHaveLength(1);
+    expect('root' in contexts[0]!).toBe(false);
+    expect(stdoutSpy).toHaveBeenCalledWith(`${JSON.stringify({ built: true })}\n`);
+    expect(exitSpy).toHaveBeenCalledWith(0);
+  });
+
+  it('checkProject runs in place of the root step: called once, and resolveRoot is not', async () => {
+    const resolveRoot = jest.fn(() => '/fixture-root');
+    const checkProject = jest.fn();
+    const commands = buildCliCommands(noProject(), { resolveRoot, buildParams: () => ({}), checkProject });
+    await findCommand(commands, 'x', '').run('json');
+    expect(checkProject).toHaveBeenCalledTimes(1);
+    expect(resolveRoot).not.toHaveBeenCalled();
+    expect(exitSpy).toHaveBeenCalledWith(0);
+  });
+
+  it('a UsageError from checkProject (the blank --project refusal) exits 2 with its line, and the operation does not run', async () => {
+    const fn = jest.fn(async () => coreOk({ built: true }));
+    const commands = buildCliCommands([{ name: 'x', operations: { x: { name: 'x', mutates: false, readsProject: false, fn } } }], {
+      resolveRoot: () => '/fixture-root',
+      buildParams: () => ({}),
+      checkProject: () => {
+        throw new UsageError('invalid flag value: --project must not be blank');
+      },
+    });
+    await findCommand(commands, 'x', '').run('console');
+    expect(stderrSpy).toHaveBeenCalledWith('error: invalid flag value: --project must not be blank\n');
+    expect(exitSpy).toHaveBeenCalledWith(2);
+    expect(fn).not.toHaveBeenCalled();
+    expect(stdoutSpy).not.toHaveBeenCalled();
+  });
+
+  it('the same operation without the field resolves the root once (every other operation is unchanged)', async () => {
+    const resolveRoot = jest.fn(() => '/fixture-root');
+    const contexts: { root?: string }[] = [];
+    const commands = buildCliCommands(readsProject(), {
+      resolveRoot,
+      buildParams: (ctx) => {
+        contexts.push(ctx);
+        return {};
+      },
+    });
+    await findCommand(commands, 'x', '').run('json');
+    expect(resolveRoot).toHaveBeenCalledTimes(1);
+    expect(contexts.map((ctx) => ctx.root)).toEqual(['/fixture-root']);
+    expect(exitSpy).toHaveBeenCalledWith(0);
   });
 });

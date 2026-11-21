@@ -10,6 +10,7 @@
 export { resolveProjectRoot } from '../storage/git-root';
 export {
   DEFAULT_TEMPLATE,
+  readBuildIdentity,
   readBuildStamp,
   readDocument,
   resolveTemplate,

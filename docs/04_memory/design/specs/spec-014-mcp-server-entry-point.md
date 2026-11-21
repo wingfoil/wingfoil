@@ -100,10 +100,15 @@ startMcpServer(options): Promise<McpServer>
 ```ts
 registerReadOnlyResources(server, { resolveRoot });          // spec-004 §2 — Memory, DNA, Workflow Resources + write refusal (P5.2.1, v0.1)
 registerRolePrompts(server, { resolveRoot, roles });         // spec-004 §3 — one {role}-session Prompt per role (P5.2.2, v0.2)
+registerCapabilitiesResource(server);                        // spec-004 §2.1, spec-019 §6 — wingfoil://capabilities, no project read (P5.1.5, v0.4)
 // the Tools channel, empty until P5.2.3 (v0.4):
 //   initialize advertises `tools: {}`; tools/list → { tools: [] };
 //   tools/call → an isError result "Tool <name> not found" (a Tool refusal, spec-004 §4.3 item 4)
 ```
+
+The capabilities Resource takes no `resolveRoot`: its document is the build's, not the project's (`spec-019`
+§3.4), so its handler reads nothing under the project root. `wingfoil mcp` still resolves the root and reads the
+role set before the server starts (§1).
 
 Neither the Prompts nor the Tools capability declares `listChanged`: the role set is fixed at start
 (§1), and the Tools list is empty. A client probing `tools/list` gets an empty list rather than a
@@ -165,3 +170,9 @@ only the semver. §3 was titled "v0.1 channel scope — read-only Resources only
 since v0.2; it now lists the Resources, the Prompts and the empty Tools channel. No channel contract
 of `spec-004` changed here. Edited in place without a supersede or a state change, per `dl-047` (no
 `version:` field).
+
+**Revision (2026-11-20, `task-362-add-wingfoil-capabilities-and-the-wingfoil-capabilities-resource-spec-019-task-a`)
+— §3's channel scope gains the capabilities Resource.** `spec-019` (`approved`, "Amendments owed", §6):
+`createMcpServer` registers `wingfoil://capabilities` through `registerCapabilitiesResource`, which takes no
+`resolveRoot` because the document depends on the build alone. Neither the entry point nor another channel
+changes. Edited in place without a supersede or a state change (`dl-047`), pending the approver's `memory amend`.

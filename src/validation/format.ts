@@ -42,6 +42,43 @@ export const BINDINGS_YAML_FORMAT = 1 as const;
  */
 export const ADAPTER_MANIFEST_FORMAT = 1 as const;
 
+/**
+ * One file kind's format range (`spec-019` §3.1): the kind's stable kebab-case name, and the formats a build reads
+ * for it, `lowest..highest`, both inclusive.
+ */
+export interface FileKindFormat {
+  /** The kind's name in the capabilities document (`spec-019` §3.1's kinds table), e.g. `dna`, `agent-adapter`. */
+  readonly kind: string;
+  /** The lowest format the kind's reader accepts. */
+  readonly lowest: number;
+  /** The highest format the kind's reader accepts: the kind's `_FORMAT` constant above. */
+  readonly highest: number;
+}
+
+/** One frozen {@link FileKindFormat}. */
+function fileKind(kind: string, lowest: number, highest: number): FileKindFormat {
+  return Object.freeze({ kind, lowest, highest });
+}
+
+/**
+ * Every file kind a build reads and its format range (`spec-019` §3.1, task-362): one entry per kind, in ascending
+ * code-unit order of `kind`, each `highest` the kind's constant above. `lowest` is that same constant for
+ * `agent-adapter`, whose schema reads the key as a literal (`src/agent/schema.ts`), and `1` for the eight kinds read
+ * through {@link formatField}, standing for its `.positive()` bound: no kind has a lower bound yet
+ * ({@link newerFormatIssue}). The capabilities document's `formats` is built from this table only.
+ */
+export const FILE_KIND_FORMATS: readonly FileKindFormat[] = Object.freeze([
+  fileKind('agent-adapter', ADAPTER_MANIFEST_FORMAT, ADAPTER_MANIFEST_FORMAT),
+  fileKind('bindings', 1, BINDINGS_YAML_FORMAT),
+  fileKind('directive', 1, DIRECTIVE_FORMAT),
+  fileKind('dna', 1, DNA_YAML_FORMAT),
+  fileKind('memory', 1, MEMORY_YAML_FORMAT),
+  fileKind('memory-template', 1, MEMORY_TEMPLATE_FORMAT),
+  fileKind('roles', 1, ROLES_YAML_FORMAT),
+  fileKind('workflow', 1, WORKFLOW_FORMAT),
+  fileKind('workflows', 1, WORKFLOWS_YAML_FORMAT),
+]);
+
 /** `spec-009` §3's field-level code for a file written in a format this build does not read. */
 export const E_INVALID_FORMAT = 'E_INVALID_FORMAT';
 
