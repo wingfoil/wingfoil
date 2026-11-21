@@ -66,3 +66,7 @@ WingFoil-authored errors are not affected when thrown as plain `Error` objects w
 - capture: raised during the implementation of `task-058-mcp-prompts-role-based` (Wave 2, 2026-09-17)
   and reproduced on `main` without that branch's code; filed under
   `bug-ingest-rel-v0.2-wave2-review-findings-plan`. Severity `low`: message text only; codes are correct.
+
+### Retrospective
+
+- Closed by task-367 with option (2) widened to every path (approver ruling D4 (A)): the production server strips the SDK's `MCP error <code>: ` prefix from every JSON-RPC error it sends, at the transport (`withBareErrorMessages`, `src/mcp/wire-errors.ts`, wired in `createMcpServer`'s `connect`), so the SDK-raised not-found errors are covered with no handler of WingFoil's own. `test/mcp/wire-errors.test.ts` pins it on `wingfoil://nope`: the wire carries `{ code: -32602, message: 'Resource wingfoil://nope not found' }` and the SDK client renders one prefix; the single-prefix messages already pinned by the Prompt suites stay green unedited.
