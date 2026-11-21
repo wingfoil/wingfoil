@@ -359,6 +359,14 @@ command, not a test, and exits `1` (`<path>: release is empty`) until the stamp;
   Recommended: `schedule` leaves `07_sequencer.md` untouched (no bump, no index row change). Alternative: a dated line
   under its "Scope changes" naming `cp-004`, with the bump and its `00_index.md` row.
 
+### design gate (approver, 2026-11-21)
+
+The approver recorded the step in `2036926a9` (`workflow finalize … dev-loop.design`), after the amendment `c3c32083c` (`wf(change-proposal): approve cp-004-write-the-stories-p5.3.4-and-p5.3.5-lack-give-journey-5-step-4.5-its-story-and-align-the-vision-s-reader-commands`). The rulings, as the record states them:
+
+> Approve the design of task-381 with these rulings: D1 a change-proposal is required, so the task runs as the vision-change run of cp-004; D2 US-2-12 for P5.3.4 in Journey 2 step 4 as Sam and US-4-15 for P5.3.5 in Journey 4 step 5 as Morgan, both MVP v0.3; D3 US-5-06 says team size and stacks; D4 a Step 4.5 heading with US-5-11 ref P4.5 and the step outcome reworded; D5 the journeys name workflow show release-cycle, workflow show with its workflow argument and workflow status, and the features bullet names the ref argument; D6 BDD changes two Feature lines, a persona, two index cells and one count, with no impact on the SARD and the README; D7 no other pinning test changes beyond the vision index; D8 no coverage run; D9 the alternative, schedule adds a dated Scope changes line naming cp-004 to the sequencer, with its version bump and its vision-index row.
+
+The approver ruled D1 against the recommendation: a change-proposal is required, so this task runs as the vision-change run `vision-change-rel-v0.4-w1-story-map-plan` of `cp-004` (accepted in the amendment-position commit above, `c3c32083c`, as the run's impact-analysis). D9 also against the recommendation: at schedule the sequencer gains a dated Scope changes line naming `cp-004`, with its version bump and its vision-index row. D2–D8 as recommended.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
