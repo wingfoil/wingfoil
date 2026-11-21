@@ -90,7 +90,7 @@ commit-message contract `spec-008` §2 and `git-conventions` §7 must quote, not
 One module, `src/core/agent-context.ts`, declares the set as an exported, frozen, ordered constant
 `AGENT_MARKERS`. Nothing else in `src/` names a marker variable; the CLI, `agent execute` and the check import it.
 The set is the one `dl-212` D1 ratified — WingFoil's launcher variable, `--co-author`, the known vendor variables —
-and nothing more (§1.2).
+plus the MCP Tools channel, which P5.2.3 adds by this spec's revision (`cp-003`; §1.2), and nothing more.
 
 | # | Marker | Kind | Present when | Set by |
 |---|--------|------|--------------|--------|
@@ -98,6 +98,7 @@ and nothing more (§1.2).
 | 2 | `--co-author <name>` | option | the option is given on the invocation | the agent, on the command line (§2.3) |
 | 3 | `CLAUDE_CODE_CHILD_SESSION` | environment | defined, whatever its value | Claude Code, in the subprocesses it spawns (v2.1.172 and later; `dl-212` Context) |
 | 4 | `CODEX_SANDBOX` | environment | defined, whatever its value | Codex CLI, in the commands it runs sandboxed (`dl-212` Context) |
+| 5 | the MCP Tools channel (id `mcp`) | surface | the operation runs inside a `tools/call` of a WingFoil MCP server | the MCP registrar, around every Tool call (§1.2) |
 
 "Defined, whatever its value" is fail-closed: a variable set to the empty string still marks the session, as a set
 but blank `GIT_AUTHOR_*` variable still decides git's identity (`src/core/git-identity.ts:117-121`). The table order is
@@ -126,16 +127,33 @@ agent trailer whatever its environment — a launch from a Claude Code shell (`C
 — and it takes neither `--co-author` nor `--ai-model` (§2.4). It is not approver-gated, so §3 does not refuse it
 either; it already refuses the `approver` role for the agent it launches (`src/agent/execute.ts:585`).
 
-#### 1.2 The MCP surface is not a marker
+#### 1.2 The MCP Tools channel is a marker
 
-The MCP Tools channel is not in the set. `dl-212` D1 ratified the three marker kinds above and said nothing of MCP;
-the vision lists "Submit, approve, record memory" among P5.2.3's MCP Tools (`docs/01_vision/06_features.md:285`), and
-`spec-004` §4.3 gives a successful `memory.approve` Tool call as its example. Whether `approve` becomes an MCP Tool,
-and whether an MCP call then counts as an agent context, is decided by P5.2.3's work in v0.4's wave w1, through an
-amendment of `spec-004` (and a `vision-change` if `06_features.md:285` must change). Until then this spec reads no
-surface: `resolveAgentContext` (§2.6) takes no surface parameter, and the shipped server registers no Tool for it to
-judge (Context). The environment markers are facts of a process, so they hold in whatever process runs the core,
-whatever surface invoked it; how a Tool call carries `--co-author` or `--ai-model` is likewise left to that amendment.
+Every call of a WingFoil MCP Tool runs in an agent context (`cp-003`, restating P5.2.3 and REQ-INT-03): the MCP server
+is the agent's surface (P5.2), and a person who approves uses the CLI from their own terminal. So the Tools channel is
+row 5 of §1's table, a marker of its own kind, `surface`. The MCP registrar (`spec-004` §4.3) runs every `tools/call` as
+an invocation that carries it, beside the server's own environment (`process.env` of the `wingfoil mcp` process); the
+CLI never carries it, and no Resource read or Prompt does, since neither writes. It qualifies under §1.3 as row 1 does:
+WingFoil's own code sets it (criterion (i)); a Tool call is made by an MCP client, never typed into a terminal
+(criterion (ii)); its presence is the signal, and it has no value (criterion (iii)).
+
+What follows from it, with no code of the approver check's own:
+
+- **The approver-gated operations refuse every Tool call** that reaches the approver check: `memory.approve`,
+  `memory.reject` and `memory.amend` are listed Tools (`spec-004` §4.1, §4.2's bijection holds) whose every such call is
+  `E_AGENT_CONTEXT` (§3.2), whatever git identity the server runs as. The order is the CLI's (§3.1, `spec-006` §7): the
+  Tool's argument check first, a usage refusal (`spec-004` §4.3), then the operation's pre-flight — identity,
+  membership, transition legality — then the refusal. All of them refuse and write nothing.
+- **Every other Tool commit carries the agent trailers** (§2.1). A Tool takes neither `--co-author` nor `--ai-model`
+  (`spec-004` §4.3): the entry that signs is selected by §2.3 from the server's environment — `WINGFOIL_AGENT` names
+  it, else a vendor marker selects it, else rule 4 attributes it to the first entry and says so — and `AI-Model:` is the
+  server's `WINGFOIL_AGENT_MODEL`, else `not-reported` (§2.4). An operator who wants a named entry sets
+  `WINGFOIL_AGENT` (and `WINGFOIL_AGENT_MODEL`) in the environment their MCP client starts `wingfoil mcp` with. The
+  warnings (`W_AGENT_ENTRY_GUESSED`, `W_NO_AGENT_ENTRY`) ride the Tool result's `structuredContent` (`spec-004` §4.3
+  item 5).
+
+The environment markers are facts of a process, so they hold in the server's process too: a server an agent started
+with `CLAUDE_CODE_CHILD_SESSION` set lists both, in §1's order.
 
 #### 1.3 How the list grows
 
@@ -230,6 +248,10 @@ or a session an agent started)`, so a model is never recorded without a co-autho
 settings where its vendor lets them declare environment variables. WingFoil sets it nowhere in v0.4: `agent execute`
 learns the model only after the run (`spec-016` §2.6), too late for the spawned environment.
 
+A Tool call takes no `--ai-model` (§1.2): its model is the `WINGFOIL_AGENT_MODEL` of the server's environment, else
+`not-reported`. A value that is not one line refuses the call before the operation runs, with the CLI's text
+(`invalid environment value: WINGFOIL_AGENT_MODEL must be one line`), as an `isError` result (`spec-004` §4.3).
+
 #### 2.5 Refusals of the trailer half
 
 All exit `1`, `VALIDATION`, except the blank-value usage check (exit `2`, last bullet), before anything is read past the pre-flight and before anything is written:
@@ -246,7 +268,8 @@ All exit `1`, `VALIDATION`, except the blank-value usage check (exit `2`, last b
 pre-flight right after `requireGitIdentity` (`spec-006` §7 step 2), once per operation, and returns
 `{ markers: readonly Marker[], attribution: Attribution | null }`, `markers` in §1's order. Its result is handed on,
 never re-read (`dl-064` B.1): to the approver check (§3) and to the commit primitive as `CommitOptions.attribution`.
-It reads `env` as a parameter (the CLI passes `process.env`), so it is a pure function of its inputs and of `HEAD`.
+It reads `env` as a parameter (the CLI passes `process.env`, the MCP registrar the server's environment and the Tools
+channel of row 5, §1.2), so it is a pure function of its inputs and of `HEAD`.
 
 `gated` is `true` for an approver-gated operation (§0), declared by the operation, not inferred. There it computes
 `markers` only: `attribution` is `null`, `team.agents` is not read, no §2.5 refusal fires and no §2.3 warning is
@@ -298,8 +321,9 @@ hint: run '<command>' yourself, from a terminal no agent started — not through
   `workflow finalize`, `workflow adopt --plan --apply`, `workflow rekey`. The approver check takes it from its caller,
   beside the existing `refusal` text.
 - `<markers>` lists each present marker in §1's order, `, `-joined: `WINGFOIL_AGENT is set`, `--co-author was given`,
-  `CLAUDE_CODE_CHILD_SESSION is set`, `CODEX_SANDBOX is set`. A variable's value is never printed.
-- `details` carries `{ markers: [<marker ids>] }`, the ids being the variable names and `--co-author`.
+  `CLAUDE_CODE_CHILD_SESSION is set`, `CODEX_SANDBOX is set`, `the call came through the MCP server`. A variable's value
+  is never printed.
+- `details` carries `{ markers: [<marker ids>] }`, the ids being the variable names, `--co-author` and `mcp`.
 
 The approver's own refusal (`user not authorized …`) is not reached: the session is refused before its identity is
 judged, so an agent learns nothing about whose identity it holds.
@@ -495,3 +519,13 @@ imports, which moved two cited ranges: the approver-role refusal is at `src/agen
 "role === APPROVER_ROLE" src/agent/execute.ts` → 585) and the empty Tools channel at `src/mcp/server.ts:61-76` (was
 57-72, the same text four lines lower). No rule changes. Edited in place without a supersede or a state change (`dl-047`),
 pending the approver's `memory amend`.
+
+**Revision (2026-11-20, `task-367-register-the-memory-tools-on-the-production-mcp-server-and-refuse-the-approver-gated-verbs-over-mcp`)
+— the MCP Tools channel becomes marker row 5.** `cp-003` restates P5.2.3 and REQ-INT-03: `approve`, `reject` and `amend`
+are listed Tools whose every call refuses, because every MCP call is an agent context. This is the revision §1.2 and
+the Revision triggers announced. §1 gains row 5 (kind `surface`, id `mcp`), set by the MCP registrar around every Tool
+call; §1.2 says how it qualifies, the order of a refused Tool call (the CLI's: argument check, pre-flight, refusal) and
+how a Tool commit is attributed (the server's environment, no `--co-author` or `--ai-model` input); §2.4 states a Tool
+call's model; §2.6 names what the registrar passes; §3.2 gains the row's phrase and id. No rule of the four existing markers,
+of the refusal's text and hint or of the CLI is amended; the Context and the Process Notes keep the state they
+recorded. Edited in place without a supersede or a state change (`dl-047`), pending the approver's `memory amend`.

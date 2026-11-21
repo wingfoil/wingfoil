@@ -163,10 +163,12 @@ describe('S1 — the session Resource is a listed template, never a listed resou
     expect(resources.filter((resource) => resource.uri.startsWith('wingfoil://session/'))).toEqual([]);
   });
 
-  it('tools/list stays empty (REQ-SEC-05)', async () => {
+  it('tools/list holds only the memory module\'s Tools, none for wingfoil://session (REQ-SEC-05: the only Tools are the memory module\'s; task-367 D6)', async () => {
     const client = await connect(root);
     const { tools } = await client.listTools();
-    expect(tools).toEqual([]);
+    const names = tools.map((tool) => tool.name);
+    expect(names).toEqual(['memory.add', 'memory.amend', 'memory.approve', 'memory.deprecate', 'memory.park', 'memory.reject', 'memory.submit']);
+    expect(names.filter((name) => name.includes('session'))).toEqual([]);
   });
 });
 

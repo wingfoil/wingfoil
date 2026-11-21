@@ -40,6 +40,10 @@ MCP server surface
 └── Tools       (mutating)    — memory.*, dna.*, directive.*, workflow.* and agent.* actions, 1:1 with CLI state-mutating verbs
 ```
 
+A JSON-RPC error the server sends carries the reason alone in `error.message` and its code in `error.code`: the
+`MCP error <code>: ` prefix the SDK's `McpError` builds into its message (an unknown Resource URI, an unknown Prompt
+name) is removed before the response is sent (`bug-034`), so a client that renders the code renders it once.
+
 ### 2. Resources (REQ-INT-01, REQ-SEC-05)
 
 #### 2.1 URI scheme
@@ -281,10 +285,10 @@ form, so the mapping is mechanical and auditable:
 CLI command                    → MCP Tool name
 wingfoil memory add             → memory.add
 wingfoil memory submit          → memory.submit
-wingfoil memory approve         → memory.approve
-wingfoil memory reject          → memory.reject
+wingfoil memory approve         → memory.approve       (listed; every call refuses, E_AGENT_CONTEXT, §4.3; cp-003)
+wingfoil memory reject          → memory.reject        (listed; every call refuses, E_AGENT_CONTEXT, §4.3; cp-003)
 wingfoil memory deprecate       → memory.deprecate
-wingfoil memory amend           → memory.amend         (v0.4, P5.2.3; dl-108)
+wingfoil memory amend           → memory.amend         (v0.4, P5.2.3; dl-108; listed; every call refuses, E_AGENT_CONTEXT, §4.3; cp-003)
 wingfoil memory park            → memory.park          (v0.4, P5.2.3; dl-110)
 wingfoil dna set                → dna.set              (v0.4, P5.2.3)
 wingfoil dna add                → dna.add              (v0.4, P5.2.3; dl-081)
@@ -358,24 +362,35 @@ refusal, a usage refusal (exit-equivalent `2`): an argument the schema does not 
 type (`invalid argument: <name> must be a string`, `… must be a boolean`, `… must be an array of
 strings`) or a required argument left out (`missing required argument: <name>`, the wording of
 `P5.2.3-mcp-tools.feature`). The arguments then reach the operation in the shape the CLI gives it
-(`spec-006` §2), so every check the operation runs itself is the CLI's. Each Tool call:
+(`spec-006` §2), so every check the operation runs itself is the CLI's.
+
+**Every Tool call runs in an agent context** (`spec-018` §1 row 5, §1.2; `cp-003`): the registrar runs it as an
+invocation that carries the MCP Tools channel, beside the server's environment. So an approver-gated operation
+(`memory.approve`, `memory.reject`, `memory.amend`, and `workflow.finalize` on a phase that declares `approval:`,
+`workflow.adopt` with `plan` and `apply`, `workflow.rekey`) refuses with `E_AGENT_CONTEXT` (`spec-018` §3.2), whatever
+git identity the server runs as, and every other Tool's commit carries the agent trailers (`spec-018` §2), signed by
+the entry the server's environment selects and with the model of its `WINGFOIL_AGENT_MODEL`, else `not-reported`. The
+checks run in the CLI's order: the argument check above, then the operation's own pre-flight (identity, membership,
+transition legality, `spec-006` §7), then the approver check, whose first step is the agent refusal. So
+`memory.approve` without `reason` is told `missing required argument: reason`; on an element in a gate state, with its
+arguments, `E_AGENT_CONTEXT`; on an element whose state has no `approve` edge, the illegal transition (item 3). Each
+refuses and writes nothing. Each Tool call:
 
 1. Performs the **same validation** as the CLI path (state-machine legality per `memory.yaml`, role
    authority per REQ-SEC-03, mandatory-reason per REQ-SEC-04).
-2. On success, produces **exactly one git commit** (two when `memory.approve` fires the `supersedes:`
-   trigger: the approve, then a `finalize` of the superseded element, `spec-008` §2) in the `wf({type}): {verb} {id}` format, authored
-   as the invoking agent's configured git identity (REQ-SEC-01/02) — identical commit shape to the CLI
-   path, so `memory history` and audit tooling cannot distinguish CLI-originated from MCP-originated
-   transitions except by author. The message ends, as every commit WingFoil writes does, with a
-   trailer paragraph of its own naming the build that wrote it (`dl-111`; `spec-008` §2):
+2. On success, produces **exactly one git commit** in the `wf({type}): {verb} {id}` format, authored
+   as the server's git identity (REQ-SEC-01/02; the agent appears only as a co-author, `spec-018` §2.1) —
+   the commit the CLI writes for the same arguments in an agent's session, so `memory history` and audit
+   tooling read it as they read the CLI's. The message ends, as every commit WingFoil writes does, with a
+   trailer paragraph of its own naming the build that wrote it (`dl-111`; `spec-008` §2), followed by the
+   agent trailers (`spec-018` §2.2):
 
    ```
-   wf(task): approve task-042-foo [in-review → approved]
+   wf(task): submit task-042-foo
 
-   Approver: Ada Lovelace <ada@example.com> (approver)
-   Reason: meets acceptance criteria, tests pass
-
-   WingFoil-Version: 0.3.0 (<sha>)
+   WingFoil-Version: 0.4.0 (<sha>)
+   Co-Authored-By: Claude <noreply@anthropic.com>
+   AI-Model: not-reported
    ```
 3. On an illegal transition, is **rejected identically to the CLI path** (REQ-INT-03 fit criterion):
    same error message, same exit-equivalent status, no partial write.
@@ -384,16 +399,22 @@ strings`) or a required argument left out (`missing required argument: <name>`, 
    `src/core/error-details.ts`, which leaves out a file the reason already names). A tool refusal is an `isError: true` result rather than a JSON-RPC
    error, so it has no `error.data`: its text content stays the bare reason (item 3), and the details
    ride as `structuredContent: {"error": "<reason>", "details": [...]}` — the CLI's `--format json`
-   error object. A failed Resource read *is* a JSON-RPC error, and carries them as
-   `error.data.details`. A refusal with no details carries neither field.
-5. On success, carries the operation's warnings (`CoreResult.warnings`, `spec-006` §2), which the CLI
-   prints on stderr (`spec-008` §6). A Tool has no stderr, so they ride as
+   error object, `{"error": "<reason>", "hint": "<text>", "details": [...]}`, each of `hint` and `details`
+   present when the refusal has one (the `hint` the CLI prints as its `hint:` line, `spec-005` §3.1: the
+   `E_AGENT_CONTEXT` and `E_NOT_A_MEMBER` refusals carry one), plus `warnings` when warnings were raised
+   before the refusal (item 5). Every refusal is such a result: the argument check's, a usage refusal the
+   operation raises (exit-equivalent `2`, `spec-008` §5, `dl-199` (b)), and a `CoreResult.error`
+   (exit-equivalent `1`). A failed Resource read *is* a JSON-RPC error, and carries the details as
+   `error.data.details`. A refusal with no hint, details or warnings carries no `structuredContent`.
+5. On success, carries the operation's warnings, which the CLI prints on stderr (`spec-008` §6): those raised
+   while the operation runs (a loader's, `spec-018` §2.3's), in the order raised, then `CoreResult.warnings`
+   (`spec-006` §2). A Tool has no stderr, so they ride as
    `structuredContent: {"value": <payload>, "warnings": ["<text>", …]}`, the success counterpart of
-   item 4's `{error, details}`. The text content stays the payload's JSON, so a client that reads
+   item 4's `{error, details}`; a refusal keeps the ones raised before it (item 4). The text content stays the payload's JSON, so a client that reads
    only `content` sees what it always saw. A success with no warnings carries no `structuredContent`.
    A Resource read and a Prompt carry theirs as a top-level `warnings` array (§2.2, §3.2).
-   This is the registrar's rule (`src/mcp/registrar.ts`). The shipped `wingfoil mcp` server registers
-   no Tools until P5.2.3 (v0.4), so no client receives the field yet. A flag such as
+   This is the registrar's rule (`src/mcp/registrar.ts`). The shipped `wingfoil mcp` server serves the
+   Memory Tools from v0.4 (`spec-014` §3). A flag such as
    `directive assign`'s `--force` is a Tool input by the derivation above.
 
 **The `[{from} → {to}]` bracket belongs to the verbs of the `spec-003` verb table that carry one**
@@ -421,7 +442,10 @@ and MCP paths identically, since item 2 makes their commit shape one and the sam
     "reason": "meets acceptance criteria, tests pass"
   }
 }
-// → success: { "committed": true, "commit": "<sha>", "old_state": "in-review", "new_state": "approved" }
+// → on a `task` in `in-review`: MCP tool-error, every call (an agent context, spec-018 §1.2):
+//   "E_AGENT_CONTEXT: 'memory approve' needs the approver and does not run in an agent's session
+//   (the call came through the MCP server): an approval is recorded only from the approver's own
+//   session, never from an agent's (dl-212)", with the hint in structuredContent (item 4)
 // → illegal transition (the same call on a `task` in `draft`): MCP tool-error, message identical
 //   to the CLI's — REQ-STATE-01's pinned string, `dl-032` option (c):
 //   "illegal transition draft -> (none) for type 'task'"
@@ -679,3 +703,16 @@ approver's `memory amend`.
 document without the final newline), that it reads no project, that it is refused for a write intent like every
 Resource, and that it is not MCP's own `initialize` capabilities. No other URI, Prompt or Tool changes. Edited in
 place without a supersede or a state change (`dl-047`), pending the approver's `memory amend`.
+
+**Revision (2026-11-20, `task-367-register-the-memory-tools-on-the-production-mcp-server-and-refuse-the-approver-gated-verbs-over-mcp`,
+`bug-034`) — every Tool call is an agent context, the refusal keeps its hint and warnings, and an error message carries
+no `MCP error` prefix.** `cp-003` restates P5.2.3 and REQ-INT-03: `memory.approve`, `memory.reject` and `memory.amend`
+are listed Tools whose every call refuses, because every MCP call is an agent context (`spec-018` §1.2, revised the same
+day). §4.1 marks the three rows; §4.3 states the agent context, the order of the checks against the agent refusal (the
+CLI's: argument check, pre-flight, refusal), item 2's commit with the agent trailers in place of the `memory.approve`
+example, item 4's `structuredContent` as the CLI's `--format json` error object with its `hint` and the warnings raised
+before the refusal, and that a usage refusal the operation raises is an `isError` result too (`dl-199` (b)); item 5's
+warnings include those raised while the operation runs; the `memory.approve` example's success line becomes the
+refusal. §1 states that a JSON-RPC error's message is the reason alone (`bug-034`). No rule of the Resources, the
+Prompts or the argument check is amended. Edited in place without a supersede or a state change (`dl-047`), pending the approver's
+`memory amend`.

@@ -87,9 +87,9 @@ beforeAll(async () => {
 });
 
 describe('MCP-surface parity — the engine, on a fixture', () => {
-  it('reads the server side: the registered Resources, the empty production Tools channel, the derived Tools', () => {
+  it('reads the server side: the registered Resources, the production Memory Tools (task-367), the derived Tools', () => {
     expect(surface.resources).toEqual(expect.arrayContaining(['wingfoil://dna', 'wingfoil://memory/{type}/{id}']));
-    expect(surface.tools).toEqual([]);
+    expect(surface.tools).toEqual(['memory.add', 'memory.amend', 'memory.approve', 'memory.deprecate', 'memory.park', 'memory.reject', 'memory.submit']);
     expect(surface.coreModuleTools).toEqual(expect.arrayContaining(['memory.add', 'memory.approve']));
   });
 
