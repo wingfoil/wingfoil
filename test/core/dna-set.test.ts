@@ -226,8 +226,20 @@ describe('CORE_MODULES dna.dnaSet — bug-084: an unschema\'d path is refused, n
   it('reading a document that carries unknown keys still works — pass-through on READ is unchanged', async () => {
     writeFixtureFile(repo, '.wingfoil/dna.yaml', `${DNA_FIXTURE}future_section:\n  anything: true\n`);
     commitAll(repo, 'add an unknown section');
-    const dna = loadDnaYaml(repo) as Record<string, unknown>;
+    // task-373 (bug-476 class): the loader's unknown-field warning, which this test causes on purpose, is captured and asserted.
+    const chunks: string[] = [];
+    const spy = jest.spyOn(process.stderr, 'write').mockImplementation((chunk: string | Uint8Array) => {
+      chunks.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf-8'));
+      return true;
+    });
+    let dna: Record<string, unknown>;
+    try {
+      dna = loadDnaYaml(repo) as Record<string, unknown>;
+    } finally {
+      spy.mockRestore();
+    }
     expect(dna.future_section).toEqual({ anything: true });
+    expect(chunks).toEqual(['warning: .wingfoil/dna.yaml: unknown field(s) ignored: future_section\n']);
   });
 });
 

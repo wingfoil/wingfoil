@@ -808,13 +808,15 @@ export function stepLines(step: Step, heading: string): string[] {
   return lines;
 }
 
-/** `workflow next`'s `--format console` rendering (`spec-017` §8). Pure. */
+/**
+ * `workflow next`'s `--format console` rendering (`spec-017` §8): the answer only — no diagnostic and no count line; the
+ * operation hands each entry of `diagnostics` to the CLI as a stderr warning line (`dl-176` (a), §7.3; task-373). Pure.
+ */
 export function renderNextConsole(result: NextResult): string {
   const lines: string[] = [];
   if (result.instance !== null) lines.push(`workflow: ${result.instance.workflow} (${result.instance.id})`);
   if (result.message !== undefined) lines.push(result.message);
   if (result.next !== null) lines.push(...stepLines(result.next, 'next step'));
   for (const step of result.more) lines.push(...stepLines(step, 'also ready'));
-  if (result.diagnostics.length > 0) lines.push(`${result.diagnostics.length} diagnostic(s): --format json lists them`);
   return `${lines.join('\n')}\n`;
 }
