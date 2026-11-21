@@ -706,6 +706,81 @@ Narrow send-back (approver ruling F2): after the merge of `main` `b3f8a00bc` bro
   attributed operation with a call-site parity, the gated refusal through the MCP Tools and the blank --project,
   now refused by buildProgram's checkProject (task-362), through test/cli/program-blank-project.test.ts."`
 
+### merge of main (task-362) and gates (developer, 2026-11-21)
+
+**Merge.** `b3f8a00bc` merges `main` at `8e41189a3`, which brings in task-362, the capabilities query. Before
+resolving anything I wrote a resolution note, and the approver ruled on it: F1 (b) yes, F2 is a qa send-back, F3 yes.
+`git merge --no-edit main` stopped with conflicts in the same five files the note analysed: `src/mcp/registrar.ts`,
+`src/mcp/server.ts`, `spec-004`, `spec-008` and `spec-014`. The mcp/spec part of main was the one analysed:
+`git diff 04ef33c77 8e41189a3` touches only two Memory files outside them.
+- `src/mcp/registrar.ts`: I kept task-367's Tools half, which `registerCoreTools` handles. `callResource` now applies
+  task-362's rule `operation.readsProject === false ? {} : { root: options.resolveRoot() }`.
+- **F1 (b): conformance to `spec-006` §2**, which says that an operation that reads no project declares it, that
+  neither registrar resolves the project root for it, and that this is never decided by a name in a registrar.
+  task-362 had put the rule in the registrar's shared `callCore`, which task-367 had split. So `src/mcp/tools.ts`
+  `tools/call` applies the same rule. No conflict was textual there. `a8b16e813` pins it with a new test file,
+  `test/mcp/tools-reads-project.test.ts`: a synthetic `mutates: true, readsProject: false` operation never calls
+  `resolveRoot`, and its params context has no `root` key. Without the field, the root is resolved once.
+- `src/mcp/server.ts`: `registerCapabilitiesResource(server)` comes before `registerCoreTools`. The module and
+  function docs name both. `registerEmptyToolsChannel` stays removed.
+- `spec-004` and `spec-008`: both Revision paragraphs are kept, task-362's first.
+- **F3**, `spec-014` §3: the code block lists `registerCapabilitiesResource` and `registerCoreTools`. The "takes no
+  `resolveRoot`" paragraph of task-362 is kept. Its sentences about an empty Tools list are dropped, since this
+  task's amendment replaces them. Both Revision paragraphs are kept.
+- Conflict-marker grep over the merge tree: `git grep -nE '^(<<<<<<<|>>>>>>>)( |$)|^=======$' b3f8a00bc` printed
+  nothing (exit 1). `git diff --stat b3f8a00bc^1 b3f8a00bc` gives `41 files changed, 2329 insertions(+), 85
+  deletions(-)`; against `^2` it gives `34 files changed, 2345 insertions(+), 266 deletions(-)`. The merge message
+  carries the trailer pair and no `# Conflicts:` block.
+- F2: the qa send-back `a006ac363` replaces the obsolete AC 8 case of `test/cli/entrypoint.test.ts`; see the
+  qa's subsection above.
+
+**Gates at `94747e539`.** Every heavy run went after `waitslot.sh`, with `--maxWorkers=2`:
+- `npm test` in this worktree, with the three bug Retrospectives uncommitted: `Test Suites: 1 failed, 716 passed, 717
+  total`, `Tests: 1 failed, 13067 passed, 13068 total`. The one failure is
+  `test/cli/workflow-unbound-none.integration.test.ts`, which is the `bug-534` class (`W_UNCOMMITTED_INPUTS`, one
+  per uncommitted bug file).
+- `npm test` on a clean clone of `94747e539` (`git clone --no-local`, `node_modules` linked, `npm run build` exit 0):
+  `Test Suites: 717 passed, 717 total`, `Tests: 13068 passed, 13068 total`. That test passes there.
+- `npm run test:coverage` in this worktree shows the same one failure. Totals are statements 13105/13238 (98.99 %),
+  branches 8145/8411 (96.83 %), functions 2592/2627 (98.66 %) and lines 10910/10967 (99.48 %).
+  - Against the reviewer's measurement of `1ceaa6ee2` (12979/13126, 8091/8373, 2557/2593, 10813/10870), every
+    column is up. That measurement has no per-file figures, and I did not measure `main` `8e41189a3` itself.
+  - Against the `169ecd71b` baseline (`sha256sum -c` → `OK`, `b9e4500309376827c3b8b781f44a950899519b5f0417c6ddf81db556145e5f63`;
+    12925/13072, 8051/8333, 2546/2582, 10777/10834), every column is up too.
+  - Per file, now against `169ecd71b`:
+
+    | File | Statements | Branches | Functions | Lines | Note |
+    |---|---|---|---|---|---|
+    | `src/mcp/server.ts` | 21/25 (was 19/23) | 6/6 (was 4/4) | 3/4 (was 4/5) | 21/25 (was 18/22) | the one uncovered function is still `startMcpServer`, the stdio seam |
+    | `src/mcp/tools.ts` (new) | 57/57 | 41/41 | 13/13 | 48/48 | |
+    | `src/mcp/registrar.ts` | 38/38 | 14/14 | 8/8 | 35/35 | 100 % |
+    | `src/mcp/wire-errors.ts` (new) | 13/13 | 4/4 | 3/3 | 10/10 | |
+    | `src/mcp/capabilities-resource.ts` (task-362) | 7/7 | 0/0 | 2/2 | 7/7 | |
+    | `src/core/agent-context.ts` | 103/104 (was 100/102) | 65/67 (was 61/65) | 26/26 (was 25/26) | 82/82 (was 81/81) | |
+    | `src/cli.ts` | 12/12 | 7/7 | 3/3 | 11/11 | 100 %, the blank check having moved out |
+    | `src/cli/program.ts` | 182/182 (was 175/175) | 101/107 (was 97/103) | 44/44 (was 43/43) | 151/151 (was 144/144) | `checkProject` is reached in process |
+- `npm run typecheck` (both tsc configs): exit 0.
+- `npm run lint`: exit 0. `npm run docs:api`: exit 0, with no warning line.
+- `docs.parity`: every `test/docs/` suite is part of both full runs. Targeted, `npx jest
+  test/docs/mcp-surface-parity.test.ts test/docs/name-resolvability.test.ts test/docs/cli-reference.test.ts
+  --maxWorkers=2` gives `3 passed`, `18 passed`.
+- `npm run -s check:mcp`: exit 0. The pinned build reports `(prompts: 9, resources: 4, tools: 0)` and the build
+  under development reports `(prompts: 9, resources: 5, tools: 7)`, with every listed Resource read and Prompt get
+  answered.
+
+**Pending amendments (approver), final `--reason`s.** These replace the list in `### Pending amendments (approver)`
+above. bug-538's follows the qa's F2 subsection.
+- `bug-034-mcp-error-prefix-doubled` (gains `### Retrospective`): `--reason "Record the bug's retrospective: task-367
+  strips the SDK's MCP error prefix from every JSON-RPC error the production server sends, at the transport, and pins
+  it on wingfoil://nope."`
+- `bug-530-dev-loop.yaml-and-the-wingfoil-cli-directive-still-describe-an-agent-running-a-reject-or-an-amend-on-the-approver-s-instruction`:
+  `--reason "Record the bug's retrospective: task-367 rewrites dev-loop.yaml 2.6's header and wingfoil-cli 1.7 §3 so
+  the approver runs reject and amend from their own terminal and an agent never does."`
+- `bug-538-the-agent-context-refusal-propagations-are-covered-only-by-spawned-cli-suites-which-coverage-does-not-instrument`:
+  `--reason "Record the bug's retrospective: task-367 reaches every agent-context refusal in process, one case per
+  attributed operation with a call-site parity, the gated refusal through the MCP Tools and the blank --project, now
+  refused by buildProgram's checkProject (task-362), through test/cli/program-blank-project.test.ts."`
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
