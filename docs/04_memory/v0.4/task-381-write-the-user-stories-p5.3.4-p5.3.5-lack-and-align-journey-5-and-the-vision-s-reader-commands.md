@@ -294,6 +294,71 @@ non-Memory documents the task commits. One later item for `green`: `bug-289` has
   (warning lines); US-5-11 and US-2-12 describe stdout's content only, so no story is invalidated.
 - Any task that later edits `05_journeys.md` or `06_features.md` re-syncs the vision index after this one merges.
 
+### design addendum (architect, 2026-11-21): the vision-change run
+
+**D1 as ruled.** The approver ruled D1 against the recommendation: the edits run through a change-proposal; D2–D8 as
+recommended. This task now runs one `vision-change`, mapped onto the dev-loop as `task-360`'s was.
+
+**Commits of this addendum** (code build, `WINGFOIL="node $(pwd)/dist/cli.js"`, the task's PATH shim, the model
+exported as `WINGFOIL_AGENT_MODEL`; each verb commit carries one attribution pair, `git log -1 --format=%B | grep -c
+'^Co-Authored-By:'` → 1, no amend):
+
+- `f37f29a3c` `wf(plan): add vision-change-rel-v0.4-w1-story-map-plan` — `workflow start vision-change --element
+  task:task-381-… --title "…" --set scope=rl-v1/rel-v0.4 --set phase=rel-v0.4-w1-story-map`, after a `--dry-run` under
+  `--format json` and `--format console` (both exit 0, the same subject and path); trailers `WingFoil-Start:
+  vision-change`, `WingFoil-Version:`, the pair. It printed `started vision-change as
+  vision-change-rel-v0.4-w1-story-map-plan (active)` and `next step: vision-change.capture`.
+- `60ff0db9e` `wf(plan): submit vision-change-rel-v0.4-w1-story-map-plan` — `Carries content: frontmatter field
+  'release', frontmatter field 'version', the body`, `draft → active`. The plan's `## Phases / Steps` holds the mapping
+  below, coherent with `vision-change.yaml` 1.3 (`npm run -s wingfoil -- workflow show vision-change --format json`,
+  pinned: the seven phases, their roles, actions, `approval:` and checks).
+- `01c09aede` `wf(change-proposal): add cp-004-…` — `memory add --type change-proposal --title "…" --workflow
+  vision-change-rel-v0.4-w1-story-map-plan --step vision-change.capture`, after a `--dry-run` (`--format json`);
+  trailers `WingFoil-Instance:`, `WingFoil-Step: vision-change.capture`, `WingFoil-Version:`, the pair.
+- `f91152797` `wf(change-proposal): submit cp-004-…` — after both dry-runs; `draft → in-analysis`, `Carries content:
+  frontmatter field 'kind', frontmatter field 'target_release', the body`; one file. `kind: vision`, `feature: ""` (no
+  feature id is added or edited), `target_release: v0.4`. Its impact analysis names the layers touched (journeys and
+  the features bullet; the user story map; BDD) and records "no impact" for SARD, for the other vision documents and
+  for the delivered elements' follow-ups; its `## Notes` hold the reverse walk with its commands.
+- After it: `npm run -s wingfoil -- workflow next vision-change-rel-v0.4-w1-story-map-plan` (pinned) → `next step:
+  vision-change.impact-analysis@change-proposal:cp-004-…` (`in-analysis`), `evidence missing: state`, `human needed:
+  approve or reject cp-004-… — routed to Roberto Pompermaier`; `workflow status vision-change-rel-v0.4-w1-story-map-plan`
+  → `capture complete, impact-analysis current, update-vision pending, …`.
+- Between the add and the submit, `npx jest test/docs/name-resolvability.test.ts
+  test/release-health/p02-plan-retrospective.test.ts test/core/change-proposal-type.test.ts --maxWorkers=2` → `Test
+  Suites: 3 passed`, `Tests: 22 passed` (the suites that read plans or change-proposals); its global setup rebuilt
+  `dist/` with the change-proposal edit uncommitted and no `src/` change, so the submit's `WingFoil-Version:` names
+  `01c09aede`.
+
+**The vision-change phases on the dev-loop.** Unlike `task-360`, whose BDD files had to exist before other tasks' red,
+the documents are written after the red commit, so the qa's red stays genuine:
+
+| Vision-change step | Dev-loop phase (agent) | What |
+|--------------------|------------------------|------|
+| `capture` | `design` (architect) | `cp-004`, above |
+| `impact-analysis` | the design gate (approver) | accept `cp-004` (`in-analysis → accepted`); the `design` record in the same queue entry |
+| — | `red` (qa) | `test/docs/story-map-coverage.test.ts`, as the design notes above specify |
+| `update-vision` | `green` (developer) | change items 4, 5 and 7 of the design (`05_journeys.md`, `06_features.md`, `00_index.md`), one commit (`vision-index.current`) |
+| `downcast-stories` | `green` | change items 1–3; the post-check `downcast.in-scope(layer: stories)` stated in the notes: every story id on a changed line is in `cp-004`'s user-story subsection |
+| `downcast-scenarios` | `green` | change item 6, held to `cp-004`'s BDD subsection (`downcast.in-scope(layer: scenarios)`); no scenario added |
+| `downcast-requirements` | `green`: skipped | "no impact" (`cp-004`'s SARD subsection), recorded with its `grep` |
+| `schedule` | `refactor` (developer) | hand `wf(change-proposal): assign release v0.4 to cp-004-…`, then `wf(change-proposal): finalize cp-004-… [accepted → scheduled]`, as `cp-003`'s; `node scripts/check-release-exit.cjs <cp path>` exits 0; then the refactor gates |
+| — | `review` (reviewer) | the chain re-walked; then `workflow end` of the instance (after `node scripts/check-retrospective.cjs <plan>` exits 0) before the task's close |
+
+The step records are the orchestrator's and the approver's, in this order; no agent writes one.
+
+**The AC classification.** Unchanged by the run: ACs 1–3 stay red-first (the documents change at `green`, after the
+red commit), AC 4 characterization; the qa's pins are those above. AC 2's "BDD and SARD layers are checked for the
+same delta" is now met by `cp-004`'s impact analysis (BDD impact, SARD "no impact"), not by these notes alone. The
+qa's suite reads no change-proposal (`downcast.in-scope` is bound `manual: true`). One addition: `schedule`'s exit is a
+command, not a test, and exits `1` (`<path>: release is empty`) until the stamp; nothing for the qa to pin.
+
+- **D9 — the sequencer at `schedule`** (new, for the approver at the same gate). `cp-004` carries no feature id, so no
+  row of `07_sequencer.md` moves and `scripts/check-release-exit.cjs` checks only the stamp and the release element
+  (its header: "An empty `feature` (a `kind: vision` change) checks only the stamp and the release element").
+  Recommended: `schedule` leaves `07_sequencer.md` untouched (no bump, no index row change). Alternative: a dated line
+  under its "Scope changes" naming `cp-004`, with the bump and its `00_index.md` row.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
