@@ -58,3 +58,5 @@ Found by the reviews of `task-334` (finding 4) and `task-350` (finding 5). No be
      An item met while fixing goes in the fix task's own subsection; this one holds what belongs to
      the bug itself (its finding, its triage, why it took more than one task). The retrospective's
      `explore` reads this subsection first. -->
+
+- Closed by task-367: `test/core/agent-context-propagation.test.ts` reaches the ungated agent-context refusal in process for every attributed mutating operation (17 cases, with a parity on the call sites of `resolveOperationAgentContext(`), the gated refusal is reached in process through the MCP Tools of `test/mcp/mcp-memory-tools.test.ts` and `test/mcp/mcp-tools.feature.test.ts`, and the blank `--project` refusal, which `task-362` moved from `src/cli.ts` into `src/cli/program.ts` `checkProject`, through `buildProgram` in `test/cli/program-blank-project.test.ts`, with no new seam. One case per operation rather than per call site, accepted at red: naming a site's operation needs `src/` read, which red does not do.
