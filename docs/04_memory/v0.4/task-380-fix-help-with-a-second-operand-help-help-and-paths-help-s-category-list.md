@@ -243,6 +243,83 @@ Prepared in this worktree, left uncommitted (`dl-047`); recorded with `memory am
   at the level the help command's path has reached in section 3.1 and name wingfoil help memory add among section 1's
   explicit requests for help, as spec-008 section 8 now walks the help command's path for bug-452."`
 
+### red (qa, 2026-11-21)
+
+**Base and guard.** Head before red `c68083566` (the design gate); `git rev-list --count HEAD..main` → `0`, no merge.
+PATH guard: `command -v wingfoil` → the task's PATH shim; `wingfoil --version` and `node dist/cli.js --version` →
+`0.3.2 (b1f8bb602773239871a4baed742064898610f369)`. Contract: the design notes above, the amends `a7ff8c07c` (`spec-008`)
+and `8e6fa4725` (`spec-005`), and the gate record `c68083566` (D1 (b), D2 (a), D3 (a), D4 (a), D5 (a)). Black box (T3): no
+file under `src/` or `scripts/` was opened and no command named one; the only `src/` names are the import paths of the
+test files.
+
+**Red commit:** `7dba7574591b1583a18d91e6a44bbaace14e5e8e`. Files:
+- `test/cli/help-command-path.integration.test.ts` (new; AC 1, AC 2, the CLI half of AC 3);
+- `test/core/paths-help-categories.test.ts` (new; AC 3, imports `Paths` from `src/dna/schema` as the design names);
+- `test/docs/spec-008-negatable-globals.test.ts` (new; AC 4);
+- `test/cli/program.test.ts` (seven in-process cases appended to "the exit callback's own behaviour");
+- `test/cli/operand-error-shape.integration.test.ts` (the flip, D2 (a): the `['help', 'help', 'help']` row at exit `0`
+  of task-315's `it.each` is removed, a comment says where it went; it is now a refusal row of the new file);
+- `docs/02_requirements/02_bdd/features/p5-interaction/P5.1.4-cli-ux.feature` (three scenarios: "Help - the help command
+  takes a command path", "Error - a help path operand that names no command is refused", "Help - the help command's own
+  help names its path").
+
+No new export is imported, so no `.d.cts` is owed.
+
+**Expected bytes and where they came from** (real runs of the built CLI from a scratch git repository, `node dist/cli.js …`):
+- `memory addd` → exit `2`, stdout empty, stderr `error: unknown command 'addd'` / `hint: did you mean "add"?`;
+  `--format json memory addd` → the one object `{"error":"unknown command 'addd'","hint":"did you mean \"add\"?"}`.
+  The tests compare `help memory addd` with the direct run side by side, and pin the bytes too.
+- `--interactive capabilities` → exit `2`, `error: unknown option '--interactive'` / `hint: did you mean
+  "--no-interactive"?`; `--color capabilities` → the `--color` / `--no-color` pair.
+- `help help`, `memory help help` → today `Usage: help [command]`, blank line, `display help for command` (exit `0`);
+  the expected usage lines are `spec-008` §8's (`Usage: wingfoil help [command]`, `Usage: wingfoil <noun> help [command]`).
+- `paths --help` → today `category sources, tests, docs, config, governance, runs or health (omit it for the whole map)`;
+  the expected wording is D4's. `paths --format json` on a scratch project after `init --template scrum` printed six keys
+  (no `health`, not declared), so the seven names come from the schema import and the current help text.
+- Help texts read alone are compared whitespace-collapsed; two outputs of the same build byte for byte.
+
+**Per AC.**
+
+| AC | Class | Tests | Result on this head |
+|---|---|---|---|
+| 1 help path | red-first | `help-command-path`: "AC 1 — `help <noun> <verb>` …" (`memory add`, `dna set`, `workflow start`, `help memory help`), "AC 1 — a help path operand that names no command is refused" (`help memory addd`, its `--format json` form, `help memory add extra`, `help memory addd extra`, `help help help`); `program.test.ts`: "task-380 AC 1 — `help dna set` …", "… `help dna sett` …", "the renamed built-in walks the same path" ×2 | fail on assertions; the two one-operand rows (`help memory`, `help paths`) pass, as the design keeps them |
+| 2 `help help` usage | red-first | `help-command-path`: "`wingfoil help help` prints …", "`wingfoil %s help help` and `wingfoil help <noun> help` …" over the six nouns with verbs read from `enumerateOperations(CORE_MODULES)` (the guard row passes); `program.test.ts`: "task-380 AC 2 — `%j` …" ×3 (`help help`, `dna help help`, `assist assist`) | fail on assertions |
+| 3 `paths --help` | red-first | `paths-help-categories`: "names the schema's categories …" (fails); the schema guard and the x-cli-cmds parse pass; `help-command-path`: "AC 3 — the category argument names …" (fails) | fail on assertions |
+| 4 negatable globals | characterization (D1 (b)) | `spec-008-negatable-globals`: §2 table guard, registered long options ⊆ §2 row flags, no `--color`/`--interactive` row, CLI refusal ×2 | pass on first run |
+
+**First failing assertion of each red** (`npx jest <file> --maxWorkers=2 --noStackTrace --json`, read through a summary):
+- `help memory add` / `dna set` / `workflow start`: `expect(received).toEqual(expected)`, received stdout `Usage: wingfoil
+  <noun> [options] [command]` (the noun's help) where the verb's help is expected.
+- `help memory help`: `toEqual`, received the `memory` help where `memory help help`'s is expected.
+- `help memory addd` (and its JSON form): `toEqual`, expected `status: 2` and the refusal, received `status: 0`, stderr
+  `''` and `memory`'s help on stdout.
+- `help memory add extra`, `help memory addd extra`: `toEqual`, received `status: 0` and `memory`'s help.
+- `help help help`: `toEqual`, expected `status: 2`, `error: unknown command 'help'`, received `status: 0`, stdout
+  `Usage: help [command]` ….
+- `help help` and the six `<noun> help help` / `help <noun> help` rows: `toEqual`, stdout `Usage: help [command]` where
+  `Usage: wingfoil help [command]` / `Usage: wingfoil <noun> help [command]` is expected.
+- `paths --help`: `toContain`, the collapsed help holds `… runs or health (omit it for the whole map)`.
+- `paths-help-categories`: `toBe`, received `sources, tests, docs, config, governance, runs or health (omit it for the
+  whole map)`.
+- `program.test.ts` `help dna set`: `toMatch(/^Usage: wingfoil dna set /)`, received `Usage: wingfoil dna [options]
+  [command]`; `help dna sett`, `assist dna sett`, `assist assist assist`: `toBe`, stderr expected the refusal, received
+  `''`; the three AC 2 rows: `toBe`, received `Usage: help [command]` / `Usage: assist [command]`.
+
+**Runs and counts** (each `npx jest <file> --maxWorkers=2 --noStackTrace --json --outputFile=<scratch>/r.json`):
+- `test/cli/help-command-path.integration.test.ts` → 17 failed, 3 passed, 20 total;
+- `test/core/paths-help-categories.test.ts` → 1 failed, 2 passed, 3 total;
+- `test/docs/spec-008-negatable-globals.test.ts` → 0 failed, 5 passed, 5 total;
+- `test/cli/program.test.ts` → 7 failed, 47 passed, 54 total;
+- `test/cli/operand-error-shape.integration.test.ts` → 0 failed, 42 passed, 42 total (one row fewer).
+- `npx tsc --noEmit -p tsconfig.json` → exit `0` (a first draft's TS2532 in the new docs test was fixed before the commit);
+  `npx jest test/lint --maxWorkers=2` → 165 passed; `npx jest test/docs/name-resolvability.test.ts
+  test/docs/story-map-coverage.test.ts test/docs/l0-traceability.test.ts test/validation/secret-scan.test.ts
+  --maxWorkers=2` → 273 passed.
+
+**For green.** The refusal of a path of two or more operands is pinned byte for byte under `console` (stderr only the
+`error:`/`hint:` lines, as `memory addd` prints them), unlike task-315's one-operand `help memroy`, which still prints the
+root help on stderr before them; the in-process `help dna sett` row is pinned under `console` the same way.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
