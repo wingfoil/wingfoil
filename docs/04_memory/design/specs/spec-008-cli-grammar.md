@@ -1620,14 +1620,6 @@ Expected Behavior): the workflow deduction's diagnostics, written one `warning:`
 reason changes. Edited in place without a supersede or a state change (`dl-047`), pending the approver's `memory
 amend` at `task-375`'s review.
 
-**Revision (2026-11-20, `task-373-report-the-deduction-readers-diagnostics-as-stderr-warning-lines-dl-176`)
-— §2 and §6: the deduction readers' diagnostics.** `dl-176` (a) (`ready`): the `--format` row says that `workflow
-next`, `workflow status` and `agent list` keep stdout to the answer, and §6's warnings table gains the row of their
-diagnostics, one success warning per entry of the payload's `diagnostics`, `<code> (<file>): <message>`, the form
-`agent list` and `agent execute` already print (`spec-016` §3.3, §5). This builds on the one console prefix of
-`task-375`'s revision (`2f30562d6`). No exit code, payload or reason changes. Edited in place without a supersede or a
-state change (`dl-047`), pending the approver's `memory amend` at `task-373`'s design gate.
-
 **Revision (2026-11-20, `task-362-add-wingfoil-capabilities-and-the-wingfoil-capabilities-resource-spec-019-task-a`)
 — `capabilities`, the command that reads no project.** `spec-019` (`approved`, "Amendments owed") adds the flat
 command `wingfoil capabilities` (P5.1.5). §1 names it in the grammar comment, the `<noun>` bullet and beside `paths`
@@ -1643,3 +1635,11 @@ change (`dl-047`), pending the approver's `memory amend`.
 usage error, documented as the rule for every refused value, because the v0.4 MCP Tools report a refusal as an `isError`
 result. §5 gains the paragraph that states it and lists the refused values of today. No exit code, message or command
 changes. Edited in place without a supersede or a state change (`dl-047`), pending the approver's `memory amend`.
+
+**Revision (2026-11-20, `task-373-report-the-deduction-readers-diagnostics-as-stderr-warning-lines-dl-176`)
+— §2 and §6: the deduction readers' diagnostics.** `dl-176` (a) (`ready`): the `--format` row says that `workflow
+next`, `workflow status` and `agent list` keep stdout to the answer, and §6's warnings table gains the row of their
+diagnostics, one success warning per entry of the payload's `diagnostics`, `<code> (<file>): <message>`, the form
+`agent list` and `agent execute` already print (`spec-016` §3.3, §5). This builds on the one console prefix of
+`task-375`'s revision (`2f30562d6`). No exit code, payload or reason changes. Edited in place without a supersede or a
+state change (`dl-047`), pending the approver's `memory amend` at `task-373`'s design gate.
