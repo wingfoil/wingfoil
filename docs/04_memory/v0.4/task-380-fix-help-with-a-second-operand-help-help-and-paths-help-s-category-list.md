@@ -41,3 +41,212 @@ registered.
 ## Execution Notes
 
 <!-- Filled by the dev-loop. -->
+
+### design (architect, 2026-11-21)
+
+**Inputs read.** Base: `main` `c0d36b74b`, then the orchestrator's `wf(task): start` (`af7c685e5`) and the four bug
+syncs `[planned → in-progress]` (`1967c2a79`, `3a93157f3`, `7eb802ab6`, `b1f8bb602`, the head). PATH guard: `command -v
+wingfoil` → the task's PATH shim; `wingfoil --version` and `node dist/cli.js --version` → `0.3.2
+(c0d36b74b12d16cb9010e08418688cc0409c0adc)`. `depends_on: [task-362]` (merged `8e41189a3`): its notes (§ "What task-367 may
+rely on", D2) put the blank-`--project` check in `src/cli/program.ts` `checkProject`, which this task does not touch; its
+retrospective says Commander wraps help at 80 columns when stdout is not a TTY, so every help assertion below collapses
+whitespace runs, and that a design runs `test/docs` with its edits in the tree (done, below). `spec-005`, `spec-008` and
+`spec-019` are `approved`, `dl-199` is `ready` (`sed -n 5p`). The prior amends this design builds on: `task-315`'s
+revision of `spec-008` §5 and `spec-005` §3.1 (the help command's unknown command, `help help` at exit `0`), `task-335`'s
+revision of `spec-008` §2/§12 (`agent execute --interactive`, a command flag distinct from the global), and the three
+amends `3bafa88a1` (`spec-017`), `115e5c5eb` and `7fd4b4407` (`spec-008`, `task-373`'s paragraph moved last): this task's
+Revision paragraphs are appended after it. No `.wingfoil/` file changes (`git diff --stat -- .wingfoil` → empty), so no
+`check:mcp` or workflow read is owed, and no test pinning a phase or step list is affected.
+
+**The defects, reproduced on this base** (`node dist/cli.js …`, run from the scratch directory, outside any repository):
+- `bug-452`: `help memory add` → exit `0`, stdout line 1 `Usage: wingfoil memory [options] [command]`; `help memory addd`
+  and `help memory add extra` → the same, exit `0`; `help --format json memory addd` → the same. Cause: Commander's
+  `_dispatchHelpCommand(operands[1])` (commander@15.0.0, `lib/command.js:1392`, called from `:1577`) takes one operand
+  and calls `memory.help()`. The one-operand refusals already work: `help memroy add` → exit `2`, stderr ends `error:
+  unknown command 'memroy'` / `hint: did you mean "memory"?`; `memory help addd` → exit `2`, `error: unknown command
+  'addd'` / `hint: did you mean "add"?`.
+- `bug-456`: `help help`, `memory help help`, `help help help` and `help help memory` → exit `0`, stdout exactly `Usage:
+  help [command]`, a blank line, `display help for command` (`od -c`). The built-in help command has no parent.
+- `bug-471`: `paths --help` → `category    sources, tests, docs, config, governance, runs or health (omit it for the
+  whole map)`, from `src/core/index.ts:3077`.
+- `bug-514`: `--interactive agent list` → exit `2`, `error: unknown option '--interactive'`, `hint: did you mean
+  "--no-interactive"?`. Same class, same table: `--color capabilities` → exit `2`, `error: unknown option '--color'`,
+  `hint: did you mean "--no-color"?`; `spec-008` §2 names the row `--color` (negatable) as well, so it is fixed with
+  `bug-514` (W0-R10, a same-class instance in a file this task changes).
+
+**Why the program does not register `--interactive` globally (D1).** A scratch Commander probe (commander@15.0.0 of
+this worktree, the program's shape: a root `--no-interactive`, `agent execute` with its own `--interactive`): with only
+`--no-interactive` at the root, `agent execute --interactive` reaches the command (`cmd: true`) and `--interactive
+agent execute` is an unknown option; with `--interactive` added at the root, `agent execute --interactive` sets the
+root's value and the command's flag is `undefined` (the root program takes a known option wherever it stands, which is
+how §2's "any position" works), and with neither form given the root's `interactive` is `undefined`, not `true`. So
+(a) would break `agent execute --interactive` (`test/cli/agent-execute-launch-kind.integration.test.ts:133-141`, "AC 2
+(d)") and `test/cli/program.test.ts:257` (`opts()` equal to `{format, color: true, interactive: true}`).
+
+**How the help command's path is answered (mechanism, for green).** Commander's built-in help command stays (no
+registered `help` command): registering one would put `help` in `program.commands`, which six suites walk at the top
+level without filtering it (`test/docs/cli-reference.test.ts:31`, `agents-md.test.ts:50`, `commands-parity.test.ts:58`,
+`x-cli-cmds.test.ts:50`, `command-surface-specs.test.ts:37`, `test/core/capabilities.test.ts:128` and its T-5, the
+command count). Instead `src/cli/program.ts` extends `task-315`'s interception: `HelpCommandRequest` carries every
+operand after the help command; a walk from `level` descends through the commands of each level reached (name or alias;
+the level's built-ins, found through `builtinCommands`, count, and have nothing below them); `configureOutput` gains a
+`writeOut` that withholds the help Commander prints for a request of two or more operands or about a built-in, as
+`writeErr` already does; the exit callback then answers: the command reached prints its help through `outputHelp()`
+(not `helpInformation()`, which leaves out the `addHelpText` example and exit-code footer) at exit `0`, a built-in its
+own help with the usage line naming its path (a scratch probe: `configureHelp({ commandUsage })` on the built-in prints
+`Usage: wingfoil memory help [command]`), and a refused operand `emitError("unknown command '<operand>'", hint)` at exit
+`2`, the hint from `closestCommand` (`src/cli/suggest.ts`, unchanged) over the names and aliases of
+`createHelp().visibleCommands(<level reached>)`. The one-operand paths `task-315` shipped keep their output. The paths
+description (`bug-471`) is built in `src/core/index.ts` from `Object.keys(Paths.shape)` (`src/dna/schema.ts`, already
+imported there as a type; the value import is new), joined `a, b, …, f or g` (D4).
+
+**AC classification and what qa pins.** Red runs `npx tsc --noEmit -p tsconfig.json` and `npx jest test/lint
+--maxWorkers=2` before its commit. No new export is needed by the tests. CLI cases spawn `dist/cli.js` with `runCliEntry`
+(`test/cli/helpers/spawn-cli.ts`) in a `makeTempGitRepo()` directory (no project needed for help); in-process cases use
+`test/cli/program.test.ts`'s `buildFixtureProgramWithRealExitCallback()` / `parseIgnoringFallout()` / `written()`.
+Every help-text comparison collapses whitespace runs (`/\s+/g` → one space) unless it compares two outputs of the same
+build byte for byte.
+
+| AC | Class | Why |
+|---|---|---|
+| 1 help path | red-first | `help memory add` prints `memory`'s help and `help memory addd` exits `0` (above) |
+| 2 `help help` usage | red-first | the usage line is `Usage: help [command]` at every level (above) |
+| 3 `paths --help` | red-first | the description names only the seven (above) |
+| 4 `--interactive` | characterization under D1 (b); red-first only under D1 (a) | with (b) the fix is the `spec-008` amendment, recorded by the approver before red, so the test pins an agreement that already holds |
+
+- **AC 1** — new file `test/cli/help-command-path.integration.test.ts`, header citing `BDD: P5.1.4-cli-ux.feature` and the
+  scenarios qa adds to that feature file in the red commit: "Help - the help command takes a command path" (`wingfoil
+  help memory add` prints what `wingfoil memory add --help` prints, exit `0`) and "Error - a help path operand that names
+  no command is refused" (`wingfoil help memory addd` exits `2`, the message includes `unknown command 'addd'` and
+  suggests `add`). Pins: (a) `help memory add`, `help dna set`, `help workflow start` → exit `0`, stderr `''`, stdout byte
+  for byte equal to `<noun> <verb> --help`'s stdout (which carries `Example:` and `Exit codes:`); (b) `help memory` and
+  `help paths` unchanged: equal to `memory --help` / `paths --help`; (c) `help memory addd` → exit `2`, stdout `''`,
+  stderr exactly `error: unknown command 'addd'\nhint: did you mean "add"?\n`, byte for byte the stderr of `memory addd`;
+  with `--format json` before `help` → stderr exactly `{"error":"unknown command 'addd'","hint":"did you mean \"add\"?"}\n`,
+  stdout `''`; (d) three operands (D2 (a)): `help memory add extra` → exit `2`, stdout `''`, stderr exactly `error: unknown
+  command 'extra'\n` (no `hint:`; the stderr of `memory add extra` is the surplus refusal and is not the comparison);
+  `help memory addd extra` → `error: unknown command 'addd'` + the `add` hint (the first refused operand decides);
+  `help help help` → exit `2`, stderr exactly `error: unknown command 'help'\n`; (e) the positive cases of the walk's
+  alias and built-in steps: `help memory help` → exit `0`, stdout equal to `memory help help`'s. In-process, in
+  `test/cli/program.test.ts`: (f) with the fixture program, `help dna sett` → `written(stderrSpy)` `error: unknown command
+  'sett'\nhint: did you mean "set"?\n`, `exitSpy` called with `2`, `written(stdoutSpy)` `''`; (g) the renamed built-in of
+  `program.helpCommand('assist [command]')`: `assist dna sett` → the same refusal, `assist assist assist` → `error: unknown
+  command 'assist'`. **Existing pin that changes:** `test/cli/operand-error-shape.integration.test.ts:190`, `[['help',
+  'help', 'help'], …]` at exit `0`: qa moves that row into (d) in the red commit (the other two rows of that `it.each`
+  stay).
+- **AC 2** — same new file, header citing the scenario "Help - the help command's own help names its path" qa adds:
+  `help help` → stdout exactly `Usage: wingfoil help [command]\n\ndisplay help for command\n`, exit `0`, stderr `''`; for
+  each noun with verbs (`agent`, `directive`, `directives`, `dna`, `memory`, `workflow`, read from
+  `enumerateOperations(CORE_MODULES)` as `operand-error-shape` does, never a hand list) `<noun> help help` and `help <noun>
+  help` → stdout exactly `Usage: wingfoil <noun> help [command]\n\ndisplay help for command\n`. In-process:
+  `test/cli/program.test.ts:636-638`'s rows stay green (their regex admits the prefix); qa adds `assist assist` →
+  `Usage: wingfoil assist [command]` as the first stdout line (the prefix required, not optional).
+- **AC 3** — new file `test/core/paths-help-categories.test.ts` (unit): the `paths` operation of `CORE_MODULES`
+  (`module.name === 'paths'`, operation `paths`) has `positional.description` equal to `${names} (a category of your own,
+  declared in dna.yaml paths:, is answered too; omit it for the whole map)`, where `names` is `Object.keys(Paths.shape)`
+  (`src/dna/schema.ts`) joined with `, ` and its last two with ` or ` — the test that keeps the list in step with the
+  schema (D4); and the list read from the description by `test/docs/x-cli-cmds.test.ts:244-245`'s parse
+  (`replace(/\s*\(.*\)\s*$/, '')`, split on `,\s*|\s+or\s+`) is exactly the seven keys. CLI, in the AC 1 file: `paths
+  --help` → exit `0`, collapsed stdout contains that whole description. Expected red: the unit `toEqual` fails on the
+  missing parenthetical.
+- **AC 4** — new file `test/docs/spec-008-negatable-globals.test.ts`: (a) every long option the root program registers
+  (`buildProgram(CORE_MODULES, { resolveRoot: () => '/unused', buildParams: () => ({}) })`, `program.options.map((o) =>
+  o.long)`) is the first backticked flag of a row of `spec-008` §2's table (the lines between `### 2. Global flags` and
+  `Notes:`), and no row's first flag is `--color` or `--interactive`; (b) CLI: `--interactive capabilities` and
+  `--color capabilities` → exit `2`, stderr exactly `error: unknown option '--interactive'\nhint: did you mean
+  "--no-interactive"?\n` / the `--color` pair. `test/cli/agent-execute-launch-kind.integration.test.ts:133-141` already
+  pins that `agent execute`'s own `--interactive` is not taken by the global and stays green.
+
+**Files to touch.** Code: `src/cli/program.ts` (the walk, `writeOut`, the built-in usage line), `src/core/index.ts`
+(the `paths` positional description, the `Paths` value import). `src/cli/suggest.ts`: expected unchanged (reused).
+Tests: the three new files above, `test/cli/program.test.ts`, `test/cli/operand-error-shape.integration.test.ts:190`
+(red). BDD: `docs/02_requirements/02_bdd/features/p5-interaction/P5.1.4-cli-ux.feature`, three scenarios (red). Docs
+(green): `docs/cli-reference.md` (the "Exit codes" paragraph, lines 107-109: a "New in 0.4" sentence for the help path,
+the refusal and the usage line of `help help`); `docs/01_vision/X_cli-cmds.md` lines 84-85, "the negatable global
+`--interactive`" → the global `--no-interactive` (same class as `bug-514`), its `**Version:**` 2.6 → 2.7 and date. The
+spec amendments below. **Version bumps:** `X_cli-cmds.md` 2.6 → 2.7 only; the specs, the feature file and
+`cli-reference.md` declare none, and no `.wingfoil/*.yaml` changes.
+
+**Downstream.** `docs/cli-reference.md` mirrors none of the changed help text literally: its `paths` entry already says
+a category of your own is answered (0.3.2), and `test/docs/cli-reference.test.ts` checks that each command has an entry,
+not argument descriptions or the help command's text (it skips `help`, line 32). The help paragraph is updated by hand.
+
+**Tests run** (this worktree, amendments in the tree):
+- `npx jest test/cli/program.test.ts test/cli/operand-error-shape.integration.test.ts
+  test/cli/help-describes-every-command.test.ts test/cli/suggest.test.ts --maxWorkers=2` → 4 suites, 113 tests passed.
+- `npx jest test/cli/commander-parse-exit-codes.integration.test.ts test/cli/missing-verb-exit-code.integration.test.ts
+  test/cli/parse-error-format.integration.test.ts test/cli/agent-execute-launch-kind.integration.test.ts --maxWorkers=2`
+  → 4 suites, 104 passed.
+- `npx jest test/cli/init-command.test.ts test/core/paths-extra-category.test.ts test/core/paths-health.test.ts
+  test/docs/x-cli-cmds.test.ts --maxWorkers=2` → 4 suites, 43 passed.
+- `npx jest test/cli/program.integration.test.ts test/cli/extra-operand-refusal.integration.test.ts --maxWorkers=2` → 2
+  suites, 117 passed.
+- `test/docs` with the amendments (the dl-170 slot, then `npm test -- test/docs --maxWorkers=2`): first run 1 failed of
+  638, `name-resolvability.test.ts`: two `command` spans of the draft, `wingfoil <noun> help [<verb>]` and `wingfoil <noun>
+  help help`, which the checker reads as a noun followed by a non-verb; reworded as "`help [<verb>]` after a noun" (no
+  allowlist entry: the amendments name no code not written); second run 41 suites, 638 passed.
+- `npx jest test/cli/workflow-unbound-none.integration.test.ts --maxWorkers=2` with the amendments uncommitted → 4
+  passed (the specs are no deduction input, so `bug-534` does not fire here).
+- Tests that pin the behaviour that changes: `grep -rn "help help\|'help', 'help'" test` → `operand-error-shape:189-191`
+  (row 190 flips, AC 1), `program.test.ts:633-650` (stay green); `x-cli-cmds.test.ts:242-252` parses the `paths`
+  description (stays green with the wording of AC 3: the added text is inside the stripped parenthetical); `program.test.ts:257`
+  and `agent-execute-launch-kind:133-141` (stay green under D1 (b)).
+
+**Coverage baseline.** The merge base `c0d36b74b` has no stored baseline; the comparison base is `169ecd71b` (an ancestor
+of the head, `git merge-base --is-ancestor` → true), its `coverage-summary.json` checked with `sha256sum -c` → `OK`.
+Totals: statements 12925/13072, branches 8051/8333, functions 2546/2582, lines 10777/10834; `src/cli/program.ts`
+175/175, 97/103, 43/43, 144/144; `src/core/index.ts` 852/866, 387/403, 191/209, 683/686.
+
+**Overlaps.** `task-365` (`wingfoil verify`, design running) lists `src/core/index.ts`, `src/cli/registrar.ts`,
+`docs/cli-reference.md` and specs 005, 008 and 020: shared with this task are `src/core/index.ts` (distinct regions: the
+`paths` operation against a new one), `docs/cli-reference.md` (the "Exit codes" paragraph against a new entry), the
+Revision paragraphs of `spec-005` and `spec-008` (the standing union rule), and `spec-020` §2.2 (line 197), which names
+`--color` (negatable) and `--interactive` (negatable) among the global flags `verify` takes (D5). `src/cli/program.ts` is
+not on its list. **Never together with `task-370`** (W1-11): this task pins help output (console text) byte for byte.
+
+**Decisions for the approver.**
+- **D1 — `bug-514`, which side changes.** (a) Register `--interactive` (and `--color`) on the root program as well; (b)
+  §2 declares only the registered `--no-color` and `--no-interactive`, the positive forms refused as unknown options.
+  Recommendation **(b)**: (a) makes the root program take `agent execute --interactive` and loses the `true` default
+  (probe above), and the program already follows §3's pattern; `--color` follows as the same defect. AC 4 is then
+  characterization.
+- **D2 — `bug-452`, the refusal and three or more operands.** (a) The operands are a command path walked level by
+  level; the first operand naming no command of the level reached → `error: unknown command '<operand>'`, exit `2`,
+  nothing on stdout, the `hint:` from `closestCommand` over that level's commands; a command with nothing below it (the
+  help command included) ends the walk, so `help memory add extra` and `help help help` are refused with no hint; (b) as
+  (a), but operands after a leaf are ignored, keeping `help help help` at exit `0`; (c) a surplus-operand message of its
+  own (`wingfoil help … takes …`). Recommendation **(a)**: one rule and one message shape a script greps, the one
+  `bug-452` asks for; it flips the `help help help` row `task-315` pinned, which recorded Commander's dropping of the
+  surplus.
+- **D3 — `bug-456`, the usage line.** (a) `Usage: wingfoil help [command]` at the root and `Usage: wingfoil <noun> help
+  [command]` under each noun, then `display help for command`, the listing term `help [command]` unchanged; (b) the
+  usage shows the path, `[command...]`. Recommendation **(a)**: AC 2's text, and the listing already says `[command]`.
+- **D4 — `bug-471`, the wording and its source.** Wording: `sources, tests, docs, config, governance, runs or health (a
+  category of your own, declared in dna.yaml paths:, is answered too; omit it for the whole map)`, matching
+  `docs/cli-reference.md`'s "a category of your own … is answered too". Source: (a) derived from `Object.keys(Paths.shape)`;
+  (b) written by hand. The unit test of AC 3 compares the list with the schema's keys either way. Recommendation **(a)**:
+  an eighth category reaches the help without an edit.
+- **D5 — `spec-020` §2.2, line 197** (same class as `bug-514`, a spec `task-365` is amending). (a) Leave it to `task-365`'s
+  design, told through the orchestrator; (b) amend it here. Recommendation **(a)**: two branches amending `spec-020` at
+  once invite a conflict, and the line describes `verify`'s flags.
+
+### Pending amendments (approver)
+
+Prepared in this worktree, left uncommitted (`dl-047`); recorded with `memory amend` at the design gate, before red.
+
+- `spec-008-cli-grammar` (§1, §2, §4, §5, §8, a Revision paragraph after `task-373`'s): `--reason "Record the help
+  command's operands as a command path walked level by level in section 8, with the unknown-command refusal and the
+  help command's own usage line at each level, and name the registered negatable globals --no-color and
+  --no-interactive in sections 2 and 4 with their positive forms refused, as task-380's design gate ruled for bug-452,
+  bug-456 and bug-514."`
+- `spec-005-cli-command-contract` (§1, §3.1, a Revision paragraph after `task-362`'s): `--reason "Match a help operand
+  at the level the help command's path has reached in section 3.1 and name wingfoil help memory add among section 1's
+  explicit requests for help, as spec-008 section 8 now walks the help command's path for bug-452."`
+
+### Retrospective
+
+<!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
+     reconstructed afterwards. One line per item: what happened, the evidence (a command and what it
+     printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
+     Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
+     here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
