@@ -196,6 +196,9 @@ describe('REQ-SYS-05 parity — production registry (src/core/index.ts CORE_MODU
       // for it here. The production server does not run `registerCoreModules`, so it does not serve it
       // before v0.4 (spec-016 §7, §8).
       'wingfoil://agent/list',
+      // task-362's `capabilities.capabilities` is `mutates: false` and self-named: the registrar derives the static
+      // `wingfoil://capabilities` (`spec-019` §6, T-17), the URI the production server hand-registers too.
+      'wingfoil://capabilities',
       'wingfoil://directives/list',
       'wingfoil://dna/show',
       'wingfoil://memory/search',

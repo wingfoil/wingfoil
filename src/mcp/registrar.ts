@@ -154,7 +154,9 @@ export function registerCoreModules(
     context: Omit<ParamsContext, 'moduleName' | 'operationName' | 'root'>,
     dryRun: boolean,
   ): Promise<CoreOutcome> => {
-    const params = options.buildParams({ moduleName, operationName: operation.name, root: options.resolveRoot(), ...context });
+    // An operation that reads no project (`readsProject: false`, `spec-019` §1) resolves no root: no `root` key at all.
+    const project = operation.readsProject === false ? {} : { root: options.resolveRoot() };
+    const params = options.buildParams({ moduleName, operationName: operation.name, ...project, ...context });
     const call = (): Promise<CoreResult<unknown>> => operation.fn(params);
     return outcomeOf(await (dryRun ? runAsDryRun(call) : call()));
   };

@@ -44,8 +44,10 @@ function recordedCommit(path: string): string | null {
 }
 
 /**
- * The running build's stamp, `<semver> (<sha>)` — `<semver>` from `package.json`, `<sha>` from the
- * build record, or `unknown`.
+ * The running build's identity, `{ version, commit }` — the one reader of the two files the build ships
+ * (`spec-019` §3.1, task-362): `version` from `package.json`, `commit` from the build record, or `unknown`.
+ * {@link readBuildStamp} and the capabilities document both read it, so the document's `wingfoil` and
+ * `--version` cannot disagree.
  *
  * Both files are located from `moduleDir`, the directory of a module one level below the compiled
  * root: `build-info.json` one level up (`dist/build-info.json` from `dist/storage/`), `package.json`
@@ -55,9 +57,19 @@ function recordedCommit(path: string): string | null {
  *
  * @param moduleDir - Defaults to this module's own directory; a test passes a fixture's.
  */
-export function readBuildStamp(moduleDir: string = __dirname): string {
+export function readBuildIdentity(moduleDir: string = __dirname): { version: string; commit: string } {
   const { version } = JSON.parse(readFileSync(join(moduleDir, '..', '..', 'package.json'), 'utf-8')) as { version: string };
   const commit = recordedCommit(join(moduleDir, '..', 'build-info.json')) ?? UNKNOWN_COMMIT;
+  return { version, commit };
+}
+
+/**
+ * The running build's stamp, `<semver> (<sha>)`: {@link readBuildIdentity}'s two halves.
+ *
+ * @param moduleDir - Defaults to this module's own directory; a test passes a fixture's.
+ */
+export function readBuildStamp(moduleDir: string = __dirname): string {
+  const { version, commit } = readBuildIdentity(moduleDir);
   return `${version} (${commit})`;
 }
 

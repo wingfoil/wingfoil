@@ -213,6 +213,14 @@ export interface CoreOperation<P = unknown, R = unknown> {
    * here, never by an operation name in the registrar (`spec-006` §4.2).
    */
   readonly agentAttribution?: false;
+  /**
+   * `false` for an operation that reads no project (`spec-019` §1: `capabilities`, whose document is a property of the
+   * build). Absent — every other operation — the registrars resolve the project root before the call. Declared, the
+   * CLI registrar runs `checkProject` (the blank `--project` refusal) in place of `resolveRoot`, the MCP registrar
+   * resolves nothing, and the {@link ParamsContext} they build carries no `root`. Declared here, never by an operation
+   * name in a registrar (`spec-006` §4.2).
+   */
+  readonly readsProject?: false;
 }
 
 /** A success report written on stderr instead of a stdout payload ({@link CoreOperation.renderToStderr}). */
@@ -307,7 +315,11 @@ export function deriveVerb(moduleName: string, operationName: string): string {
 export interface ParamsContext {
   readonly moduleName: string;
   readonly operationName: string;
-  readonly root: string;
+  /**
+   * The project root the call reads: present for every operation that reads a project, absent for one that declares
+   * {@link CoreOperation.readsProject} `false` (`spec-019` §1, task-362), which no registrar resolves a root for.
+   */
+  readonly root?: string;
   /**
    * The bare CLI positional argument following `<noun> <verb>` (or `<noun>` for a flat command),
    * if the invocation supplied one (e.g. `wingfoil dna show tech_stack` -> `"tech_stack"`,

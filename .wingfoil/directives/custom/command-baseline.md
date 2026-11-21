@@ -6,12 +6,12 @@ kind: custom
 title: "Which baseline a command reads and writes"
 tags: [custom, determinism, git, baseline]
 ref: [REQ-SEC-02, REQ-STATE-02, REQ-SYS-07]
-version: "1.8"
+version: "1.9"
 ---
 
 # Directive — Which baseline a command reads and writes
 
-**Date:** 2026-10-29
+**Date:** 2026-11-20
 
 Custom WingFoil rule. Applies to anyone adding or changing a command, a `src/core` operation, or an
 MCP Tool — every surface, because both surfaces run the same core function (REQ-SYS-05,
@@ -191,6 +191,20 @@ reissue `1`). The same holds for the WIP count, whose empty answer would admit a
 read the refs through the one listing, `refBaselineCommits`, so they cannot disagree about which refs
 exist. The write half is unchanged: `requireAbsentTarget` still refuses an occupied target.
 
+## No baseline — an operation that reads no project, by name
+
+An operation whose answer is a property of the build, not of a project, reads no baseline at all: no `HEAD`, no
+working tree, no filesystem under the project root, no git. It declares `readsProject: false` (`spec-006` §2), so
+neither registrar resolves a root for it, and only this section names one. It mirrors `spec-006` §6's row "none: the
+build only".
+
+| Read | Declared baseline | Why no project | Source |
+|------|-------------------|----------------|--------|
+| `capabilities` and its Resource `wingfoil://capabilities` | none: the build only — `CORE_MODULES`, the format constants, `package.json` and `dist/build-info.json` | the document must be the same in every directory, before a project exists (a pack resolver asks it before `init`), so nothing a project holds may change it | `spec-019` §1, §3.2, §3.4; `spec-006` §6 item 8 |
+
+Such an operation still keeps the CLI's usage checks (`spec-008` §1): only the root step is skipped. An operation that
+reads a single file of the project is not in this section; it reads a baseline, and the rest of this directive applies.
+
 ## Reach for the primitive — there is no third mechanism to write
 
 Read at `9642ab5f` (`main`):
@@ -270,3 +284,7 @@ needs no declared exception. The rule text is unchanged.
 *Where the shipped code still deviates* no longer lists `directive remove`: its step 3 resolves the directive
 at `HEAD`, and the working tree only words its refusal (`bug-108`). The `dl-086` bullet and *Why this is written
 here at all* say so. The rule text is unchanged.
+
+**Revision 1.9 (2026-11-20, `task-362-add-wingfoil-capabilities-and-the-wingfoil-capabilities-resource-spec-019-task-a`).**
+*No baseline — an operation that reads no project, by name* is new, with its one entry, `capabilities` and its
+Resource (`spec-019`), mirroring `spec-006` §6's row "none: the build only" and its item 8. The rule text does not change.

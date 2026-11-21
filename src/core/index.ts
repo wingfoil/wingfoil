@@ -34,7 +34,7 @@ import {
   renderCustomDirective,
 } from '../directives/create';
 import { parseDirectiveIds, withAssignedDirectives } from '../directives/roles-edit';
-import { commitFailureSummary, documentExists, pathPorcelainStatus, readDocument, readPathAtRev, resolveRealPathInRoot, storesAsBlob, StorageError, writeAndCommit, writeDocument } from '../storage';
+import { commitFailureSummary, documentExists, pathPorcelainStatus, readBuildIdentity, readDocument, readPathAtRev, resolveRealPathInRoot, storesAsBlob, StorageError, writeAndCommit, writeDocument } from '../storage';
 // Not re-exported by the `../storage` barrel, imported directly per that module's own convention
 // (same as `src/memory/entry.ts`): `memory add` needs the CONFINED target path before it writes, to
 // run task-092's absence guard on it.
@@ -133,6 +133,7 @@ import { AGENT_EXECUTE_LOG_OPTION, agentExecuteFn, renderAgentExecuteStderr } fr
 import { agentListFn, renderAgentListConsole } from './agent-list';
 import { agentShowFn, renderAgentShowConsole } from './agent-show';
 import { UsageError } from './usage-error';
+import { buildCapabilitiesDocument, renderCapabilitiesConsole, type CapabilitiesDocument } from './capabilities';
 import type { CoreFlag, CoreFn, CoreModule, CoreOption } from './registry';
 import { missingOperandReason } from './registry';
 import { coreErr, coreOk } from './types';
@@ -207,6 +208,16 @@ export type { CreateResult, RemoveResult, WorkflowCreateParams, WorkflowRemovePa
 // task-225: `workflow status` at `HEAD` (`spec-017` §5.1–§5.4, §7.4, §8 `StatusResult`); approval detection and
 // routing live in the step builder above, so `next` reports them too. The operation is `CORE_MODULES`' `workflowStatus`.
 export { approvalDiagnostics, routeApproval, W_APPROVAL_ROLE_WITHOUT_AUTHORITY } from './workflow-next';
+// task-362: the capabilities query (`spec-019`); the operation is `CORE_MODULES`' `capabilities` ({@link capabilitiesFn}).
+export {
+  BOOTSTRAP_COMMANDS,
+  buildCapabilitiesDocument,
+  CAPABILITIES,
+  CAPABILITIES_DOCUMENT_FORMAT,
+  renderCapabilitiesConsole,
+  RESERVED_CAPABILITY_NAMES,
+} from './capabilities';
+export type { BuildIdentity, CapabilitiesDocument, CapabilityEntry } from './capabilities';
 export { renderStatusConsole, statusWorkflow, workflowStatusAtHead } from './workflow-status';
 export type { PendingApproval, StatusEntry, StatusResult } from './workflow-status';
 export { W_WORKFLOW_CHECKS_NOT_RUN, workflowCoreDiagnostics } from './workflow-core-checks';
@@ -2673,6 +2684,15 @@ const workflowStatusFn: CoreFn<unknown, StatusResult> = async (params) => {
   return result.ok ? withDiagnosticWarnings(result.value) : result;
 };
 /**
+ * `wingfoil capabilities` (`spec-019` §1, task-362): the capabilities document of this build — `CORE_MODULES`, read
+ * at call time, and the build identity `--version` reads. It takes no parameter and reads no project (the operation
+ * declares `readsProject: false`), so the CLI command and the `wingfoil://capabilities` Resource
+ * (`src/mcp/capabilities-resource.ts`) call this same function with `{}`.
+ */
+export const capabilitiesFn: CoreFn<unknown, CapabilitiesDocument> = async () =>
+  coreOk(buildCapabilitiesDocument(CORE_MODULES, readBuildIdentity()));
+
+/**
  * The production `CoreModule` registry (spec-006 §2, §4). `src/cli`'s command registrar and
  * `src/mcp`'s Tool/Resource registrar both import this exact array — see spec-006 §4.1: "no
  * duplicated or hand-copied operation list in either surface module".
@@ -3024,6 +3044,23 @@ export const CORE_MODULES: readonly CoreModule[] = [
         options: [{ name: 'role', valueName: 'role', description: 'keep only the directives that apply to this role, globals included' }],
         example: 'wingfoil directives list --role developer',
         fn: directivesListFn,
+      },
+    },
+  },
+  // task-362 (`spec-019` §1): the flat, self-named `wingfoil capabilities`, the one operation that reads no project
+  // (`readsProject: false`): its document is a property of the build. Its console text is its own (§3.5), so
+  // `dl-043`'s generic renderer does not apply to it.
+  {
+    name: 'capabilities',
+    operations: {
+      capabilities: {
+        name: 'capabilities',
+        mutates: false,
+        readsProject: false,
+        description: 'print the file formats this WingFoil reads, its commands and the capabilities it provides',
+        example: 'wingfoil capabilities --format json',
+        renderConsole: (value) => renderCapabilitiesConsole(value as CapabilitiesDocument),
+        fn: capabilitiesFn,
       },
     },
   },

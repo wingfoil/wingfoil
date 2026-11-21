@@ -44,6 +44,7 @@ import { extraOperandsReason, missingOperandReason, type CoreModule, type CorePo
 // other two exit-code mappings (task-101; keeps this file out of the barrel's merge surface).
 import { classifyParseOutcome, exitCodeForThrow } from '../core/exit-code';
 import { readBuildStamp, TEMPLATE_NAMES } from '../core/surface-reads';
+import { UsageError } from '../core/usage-error';
 
 import { buildCliCommands, type BuildCommandsOptions, type CliCommand } from './registrar';
 import { runInit, createReadlinePrompt } from './init-command';
@@ -52,6 +53,9 @@ import { emitError } from './error';
 import { DeferredExit, exitWith } from './exit';
 import { invalidFormatReason, isValidFormat, type OutputFormat } from './output';
 import { closestCommand, unknownCommandHint } from './suggest';
+
+/** The refusal of a blank `--project` (spec-008 §1 and §2, task-350 D5): a usage error, never the current directory. */
+const BLANK_PROJECT = 'invalid flag value: --project must not be blank';
 
 /**
  * The CLI version, read from `package.json` deterministically (REQ-SYS-07 — no wall-clock, no
@@ -172,9 +176,18 @@ export async function buildProgram(modules: readonly CoreModule[], options: Buil
     .option('--no-color', 'disable ANSI colors (accepted; no output is colored yet)')
     .option('--no-interactive', 'fail on missing args instead of prompting');
 
+  // The blank-`--project` refusal (spec-008 §1–§2, task-350 D5), a step of its own since task-362 (`spec-019` §1): run
+  // first by the bound resolver below, and alone, in the root step's place, by a command that reads no project.
+  const checkProject = (): void => {
+    const project = program.opts<{ project?: string }>().project;
+    if (project !== undefined && project.trim().length === 0) throw new UsageError(BLANK_PROJECT);
+  };
   // The resolver every command calls, bound once to the global `--project` value (task-350, spec-008 §2): the
   // derived commands, `init` and `mcp` all resolve the root through it, after their usage checks.
-  const resolveRoot = (): string => options.resolveRoot(program.opts<{ project?: string }>().project);
+  const resolveRoot = (): string => {
+    checkProject();
+    return options.resolveRoot(program.opts<{ project?: string }>().project);
+  };
 
   // `wingfoil init` is a SPECIAL bootstrap command (task-029, P5.1.1): it runs BEFORE config exists,
   // so it is NOT a `CORE_MODULES` noun-verb op — it is wired directly here and drives `runInit`
@@ -229,7 +242,7 @@ export async function buildProgram(modules: readonly CoreModule[], options: Buil
     });
 
   const nounCommands = new Map<string, Command>();
-  for (const command of buildCliCommands(modules, { ...options, resolveRoot })) {
+  for (const command of buildCliCommands(modules, { ...options, resolveRoot, checkProject })) {
     const target = resolveCommandTarget(program, nounCommands, command);
 
     // A flat command IS its noun (`paths`), so only a nested verb's noun takes the module's own line.

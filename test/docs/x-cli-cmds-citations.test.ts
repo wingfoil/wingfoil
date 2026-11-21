@@ -10,11 +10,20 @@
  * nothing. The interior citation `` (`:169`) `` that
  * neither grep matches is checked by name. Not vacuous: each spec still cites `X_cli-cmds.md` (by section).
  * The whole file is read, its Revision notes included, as the AC's grep reads it.
+ *
+ * task-362 AC 11 (characterization at red; `bug-513`): `spec-006` joins the list. Its Pillar 3 citation, a bare line
+ * range before the design gate's amendment (`a6fc9e35b`), names the table by section heading after it; the bug's
+ * own grep (`grep -rnE "X_cli-cmds\.md:[0-9]" docs/04_memory/design docs/02_requirements`) then prints only the two
+ * decision-logs `dl-041` and `dl-042`, records kept as written.
  */
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { readdirSync, readFileSync } from 'node:fs';
+import { join, relative } from 'node:path';
 
-const SPECS = ['docs/04_memory/design/specs/spec-016-agent-execution.md', 'docs/04_memory/design/specs/spec-017-workflow-commands-and-state-deduction.md'];
+const SPECS = [
+  'docs/04_memory/design/specs/spec-016-agent-execution.md',
+  'docs/04_memory/design/specs/spec-017-workflow-commands-and-state-deduction.md',
+  'docs/04_memory/design/specs/spec-006-core-domain-api.md',
+];
 
 /** The AC's grep. */
 const AC_PATTERN = /X_cli-cmds\.md:[0-9]/;
@@ -28,7 +37,7 @@ function specBody(path: string): { line: number; text: string }[] {
     .map((text, index) => ({ line: index + 1, text }));
 }
 
-describe('task-335 AC 8 — spec-016 and spec-017 cite X_cli-cmds.md by section, not by line (bug-380)', () => {
+describe('task-335 AC 8, task-362 AC 11 — spec-016, spec-017 and spec-006 cite X_cli-cmds.md by section, not by line (bug-380, bug-513)', () => {
   it.each(SPECS)('%s: no line matches the AC grep or the bug pattern', (path) => {
     expect(specBody(path).filter(({ text }) => AC_PATTERN.test(text) || BUG_PATTERN.test(text))).toEqual([]);
   });
@@ -39,5 +48,26 @@ describe('task-335 AC 8 — spec-016 and spec-017 cite X_cli-cmds.md by section,
 
   it.each(SPECS)('%s still cites X_cli-cmds.md (the check is not vacuous)', (path) => {
     expect(specBody(path).some(({ text }) => text.includes('X_cli-cmds.md'))).toBe(true);
+  });
+});
+
+describe('task-362 AC 11 — bug-513\'s grep names no spec', () => {
+  const ROOT = join(__dirname, '..', '..');
+
+  /** Every file under `dir`, repository-relative, in code-unit order. */
+  function filesUnder(dir: string): string[] {
+    return readdirSync(join(ROOT, dir), { withFileTypes: true, recursive: true })
+      .filter((entry) => entry.isFile())
+      .map((entry) => relative(ROOT, join(entry.parentPath, entry.name)))
+      .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  }
+
+  it('`grep -rnE "X_cli-cmds\\.md:[0-9]" docs/04_memory/design docs/02_requirements` matches no file under the specs directory', () => {
+    const hits = [...filesUnder('docs/04_memory/design'), ...filesUnder('docs/02_requirements')].filter((path) =>
+      readFileSync(join(ROOT, path), 'utf-8').split('\n').some((text) => AC_PATTERN.test(text)),
+    );
+    // Not vacuous: the walk finds the decision-logs' citations, which are records and stay as written.
+    expect(hits.length).toBeGreaterThan(0);
+    expect(hits.filter((path) => path.startsWith('docs/04_memory/design/specs/'))).toEqual([]);
   });
 });
