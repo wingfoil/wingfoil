@@ -367,6 +367,86 @@ The approver recorded the step in `2036926a9` (`workflow finalize … dev-loop.d
 
 The approver ruled D1 against the recommendation: a change-proposal is required, so this task runs as the vision-change run `vision-change-rel-v0.4-w1-story-map-plan` of `cp-004` (accepted in the amendment-position commit above, `c3c32083c`, as the run's impact-analysis). D9 also against the recommendation: at schedule the sequencer gains a dated Scope changes line naming `cp-004`, with its version bump and its vision-index row. D2–D8 as recommended.
 
+### red (qa, 2026-11-21)
+
+**Red commit `93efca5be`** (`git log --oneline -1` → `93efca5be test(docs): task-381 — failing test: story-map coverage
+of P5.3.4/P5.3.5, …`), one file: `test/docs/story-map-coverage.test.ts` (new). It reads the real documents with
+`readFileSync` (`node:fs`, `node:path` only), imports nothing from `src/`, uses no fixture, git or clock; `flat`,
+`between` and `rowOf` are copied from `test/docs/vision-change-w1-rows.test.ts`. No `.d.cts` (no new export). Base
+unchanged: `git rev-list --count HEAD..main` → `0`, no merge. Builds: the task's PATH shim resolves `wingfoil`;
+`wingfoil --version` and `node dist/cli.js --version` both print `0.3.2 (01c09aede…)`.
+
+**Run.** `npx jest test/docs/story-map-coverage.test.ts --maxWorkers=2` → `Tests: 28 failed, 134 passed, 162 total`
+(one suite). The 134 passing cases are the 66 already-mapped ids under each of the two per-id checks, the 68-id parse
+guard and the Journey 5 step 4.5 command case (below). `npx tsc --noEmit -p tsconfig.json` → exit 0 (no missing export
+is involved). `npx jest test/lint --maxWorkers=2` → `Tests: 165 passed, 165 total`; `npx jest
+test/validation/secret-scan.test.ts --maxWorkers=2` → `Tests: 85 passed, 85 total`; `npx eslint
+test/docs/story-map-coverage.test.ts` → clean; both with the file in place.
+
+**Per AC** (the first failing assertion of each red case):
+
+- **AC 1 (red-first)**, `describe` "task-381 AC 1 — every MVP feature has a story and an index row, …":
+  - "P5.3.4 is named by the feat marker of an [MVP] story", "P5.3.5 …" → `Expected: true`, `Received: false`; the other
+    66 ids pass.
+  - "P5.3.4 has a row in the story map index's pillar tables", "P5.3.5 …" → `toBeDefined()`, `Received: undefined`; the
+    other 66 pass.
+  - "the index's "Features mapped under [MVP]" figure equals the count of pillar-table ids" → `Expected: 68`,
+    `Received: 66`.
+  - "the index says "Unmapped MVP features:" 0" → received the line `- **Unmapped MVP features:** 2 — P5.3.4 …`.
+  - "the index states the MVP coverage as the count over the count" → expected `**MVP coverage:** **68/68**`, received
+    `- **MVP coverage:** **66/68**` (the expected string is built from the computed count).
+  - "the per-pillar verification ends with the count over the count" (design change item 3) → expected `→ **68/68**`,
+    received the paragraph ending `P5 = 16/18 (…), X1 = 2/2 → **66/68**.`
+  - pass: "06_features.md's pillar tables hold 68 ids (the parse this suite counts with)".
+- **AC 1/2 (red-first)**, the new stories (D2): "03_review-workflow.md has US-2-12 marked _(feat: P5.3.4)_ and naming
+  `wingfoil agent list`" and "05_conventions.md has US-4-15 marked _(feat: P5.3.5)_ and naming `wingfoil agent show
+  <run-id>`" → `Error: not found: US-2-12:` / `not found: US-4-15:` (the `between` helper's own message: the story is
+  absent).
+- **AC 2 (red-first)** (D3, D4, D6):
+  - "US-5-06 names `wingfoil dna show`, team size and stacks, …" → expected substring `stacks`, received the story
+    `… team size, tech stack, current phase, and risks. …`.
+  - "06_decisions.md has the heading "### Step 4.5 — Check release progress (read-only view)" after Step 4 and before
+    Step 5" → `Expected: > -1`, `Received: -1`.
+  - "US-5-11 sits under step 4.5, names `wingfoil workflow status`, carries _(ref: P4.5 and no feat marker" → the
+    heading's presence: `Expected: true`, `Received: false`.
+  - "P5.3.4-agent-list.feature opens with "Feature: P5.3.4 (US-2-12) - …"" → received `Feature: P5.3.4 - wingfoil agent
+    list [--past] [--waiting]`; "P5.3.5-agent-show.feature opens with "Feature: P5.3.5 (US-4-15) - …"" → received
+    `Feature: P5.3.5 - wingfoil agent show <run-id>`.
+  - "P5.3.4-agent-list.feature's narrative follows its home story: its second line starts "  As Sam,"" → received
+    `  As Morgan, I want to list the agent runs …`.
+  - "the BDD index's P5.3.4 row names its story", "… P5.3.5 …" → received `| P5.3.4  | —          | …` and
+    `| P5.3.5  | —          | …`.
+  - "the BDD index's "The N additional" figure equals the [MVP] stories with a ref marker and no feat marker" → the
+    figure equals the count at red (31 both sides, as the design measured), then the case's second assertion, that
+    the counted stories include US-5-11 (the design: "32 at green, US-5-11 is one more ref-marked story"), fails:
+    `Expected: true`, `Received: false`.
+- **AC 3 (red-first)** (D5, D4):
+  - "05_journeys.md no longer contains "workflow show --name"" → received the three rows of Journey 2 step 3, Journey 3
+    step 2, Journey 6 step 1; "… "(P4.5, planned)"" and "… "until it ships"" → received the Journey 5 step 4.5 row.
+  - "Journey 2 step 3 names `wingfoil workflow show release-cycle`", "Journey 3 step 2 …" → received the rows with
+    `wingfoil workflow show --name release-cycle`; "Journey 6 step 1 names `wingfoil workflow show <workflow>`" →
+    received `… wingfoil workflow show --name [workflow] …`.
+  - "Journey 5 step 4.5 states what `wingfoil workflow status` prints, not a state per release (D4)" → expected
+    `cp-004`'s Outcome "The open runs, each at its current phase, and what is pending or blocking", received the row
+    with "Each release's state (current phase), …". This case follows the gate's D4 ("the step outcome reworded") and
+    `cp-004`'s item 2, not the design's list of pins, which names only the command cell.
+  - "the active-context bullet of 06_features.md names the [ref] argument, not --name" → received the bullet with
+    `… subsequent commands target it unless `--name` is given. …`.
+  - pass at red: "Journey 5 step 4.5 names `wingfoil workflow status`": the row already holds that command, followed by
+    the "planned" stand-in; the stand-in's removal is pinned by the two "no longer contains" cases above.
+- **D9 (red-first, written at `schedule`)**: "a bullet of "Scope changes" names cp-004 and a date" → `Expected length:
+  not 0`, `Received array: []`. Only the id and an ISO date in the same bullet of the section are pinned; the wording,
+  the sequencer's bump and its vision-index row are left to the developer (`vision-index.test.ts` holds the row).
+- **AC 4 (characterization)**: no case; `npx jest test/docs --maxWorkers=2` and `npx jest
+  test/docs/vision-index.test.ts --maxWorkers=2` are its evidence at green and refactor.
+
+**For the developer.** A story is the text from a line starting `* **[MVP` to the next line starting `* ` or `#`,
+whitespace collapsed; a `feat` id is any entry of a `_(feat: …)_` list. The index figures are read from the lines
+starting `- **Features mapped under [MVP]` (the first number after `:**`), `- **Unmapped MVP features:**` (`0` right
+after the label) and `- **MVP coverage:**`, and from the paragraph starting `Coverage verification per pillar` (it must
+end with `→ **68/68**`). The `cp-004` bullet goes in `07_sequencer.md`'s `### Scope changes …` section, before its
+closing `---`, as a `- ` bullet naming `cp-004` and a `YYYY-MM-DD` date.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
