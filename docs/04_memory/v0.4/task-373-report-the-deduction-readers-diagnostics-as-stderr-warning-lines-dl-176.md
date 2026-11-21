@@ -489,6 +489,34 @@ with that source left to a follow-up bug. Recommended: the first, a one-test cha
 
 - `bug-476-the-workflow-next-test-fixture-declares-an-unknown-phase-field-on-purpose-so-every-run-prints-dozens-of-unknown-field-warnings-on-the-ci-s-stderr` — `--reason "Record task-373's retrospective item for bug-476: the fixture lost the unknown field, the one test relying on it asserts the warning on stderr, and the on-purpose warning sources the design listed are fixed."` (its text is final once the AC 3 decision is applied).
 
+### red, send-back (qa, 2026-11-21)
+
+**Scope.** The approver's ruling of 2026-11-21 (D6 (a)): the qa fixes the last on-purpose warning source of AC 3 (`bug-476`).
+Head `f9401bdb6` (`git rev-list --count HEAD..main` → `0`, no merge of `main`). PATH guard: `command -v wingfoil` → the task's
+PATH shim; `wingfoil --version` and `node dist/cli.js --version` → `0.3.2 (f9401bdb6ac51ee4a00eebb7433f0a5670b7c307)`. Black box
+(T3): no file under `src/` or `scripts/` opened or named in a command. **Test commit: `fb37cf7e6`** (the test file only).
+
+**Correction of the red's AC 3 notes.** The red recorded that `test/core/workflow-next.test.ts:320` raises no warning and
+concluded that the design's fifth entry did not reproduce, so it fixed four sources. There were five on-purpose sources after
+all: the fifth is `test/core/workflow-next-render.test.ts:125`, not `workflow-next.test.ts:320` as the design said. The design
+had the right warning text and the wrong file; green found it by running the candidate files alone.
+
+**The change (characterization, D6 (a)).** `test/core/workflow-next-render.test.ts`, the case "a step with no role is dropped
+by any --assigned-to filter": `nextWorkflow` now gets `{ ...INPUTS, dnaYaml }` with `dnaYaml = { team: { roles: [{ name:
+'developer' }] } }` (the `team.roles` shape of `.wingfoil/dna.yaml` and of `test/core/workflow-next-review-fixes.test.ts:54`).
+Chosen over capturing the warning because the case's subject is that a role-less step is dropped by any filter, not the
+warning: asserting the warning would change what the case tests. With `developer` declared, the filter names a known role
+and the case's assertion (`next: null`, "no next step of workflow 'cycle' is assigned to 'developer'") is unchanged. It passes
+before and after; no red is fabricated.
+
+**Runs (targeted, `--maxWorkers=2`; none took the heavy-gate lock).**
+- Before: `npx jest test/core/workflow-next-render.test.ts --maxWorkers=2 2>&1 | grep 'warning:'` → `warning: --assigned-to
+  'developer' names no team.members[] entry (name or email) and no team.roles role in dna.yaml`; `… | grep -c 'warning:'` → `1`;
+  `Tests: 0 failed, 7 passed, 7 total`.
+- After: `… | grep -c 'warning:'` → `0`; `Tests: 0 failed, 7 passed, 7 total`.
+- `npx tsc --noEmit -p tsconfig.json` → exit 0. `npx jest test/lint test/validation/secret-scan.test.ts --maxWorkers=2` → `Tests:
+  0 failed, 250 passed, 250 total`.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
