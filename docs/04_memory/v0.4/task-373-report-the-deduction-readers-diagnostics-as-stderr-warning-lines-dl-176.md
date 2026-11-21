@@ -566,6 +566,37 @@ workflow 'sw-life-cycle' is assigned to 'developer'`. The same text is the first
 - `npx tsc --noEmit -p tsconfig.json` → exit `0`. `npx jest test/lint test/validation/secret-scan.test.ts --maxWorkers=2`
   → `Tests: 0 failed, 250 passed, 250 total`.
 
+### coverage after the merge of main (developer, 2026-11-21)
+
+**Merge.** `eef9178f3` merges `main` at `6fe45397d` (`task-367` in) into `de6be3baa`, with no conflict; the trailer pair is
+in its message. Left uncommitted on purpose: `spec-008-cli-grammar`, a pure move of this task's Revision paragraph to
+after `task-362`'s and `task-367`'s (`diff <(git show HEAD:<spec> | sort) <(sort <spec>)` → no output), and `bug-476`'s
+`### Retrospective`.
+
+**Coverage at `eef9178f3`.** `npm run build` (exit 0), then `npm run test:coverage -- --maxWorkers=2` in this worktree
+with both pending amendments in the tree (slot granted 13:13:41) → exit 0, `Test Suites: 722 passed, 722 total`, `Tests:
+13107 passed, 13107 total` (`test/cli/workflow-unbound-none.integration.test.ts` passed); `All files` statements 99.02,
+branches 96.83, functions 98.7, lines 99.51. Against the baseline of `169ecd71b` (`sha256sum -c` → `coverage-summary.json:
+OK`), covered/total, uncovered in brackets (baseline after the slash): lines 10911/10964 (53/57), statements 13102/13231
+(129/147), functions 2593/2627 (34/36), branches 8143/8409 (266/282). Per changed file, head then baseline:
+- `src/core/workflow-next.ts` lines 245/245 · 246/246, statements 325/325 · 327/327, functions 95/95 · 95/95, branches
+  323/328 · 325/330 (5 uncovered each). The `--assigned-to` fallback for a dna with no `team.roles` (line 597,
+  `dnaYaml?.team?.roles ?? []`) is taken: `BRDA:597,98,1,1` in `coverage/lcov.info`, the one hit of `283d08e94`'s test.
+  `BRDA:334,28,1,0` is line 334's `null` arm of the sync subject's target state (`const to = …`), not this fallback.
+- `src/core/workflow-status.ts` 65/65, 82/82, 21/21, 54/54 · 69/69, 90/90, 23/23, 58/58.
+- `src/core/index.ts` 696/699, 872/881, 200/218, 396/407 · 683/686, 852/866, 191/209, 387/403.
+- `src/core/agent-list.ts` 97/98, 119/122, 18/19, 106/110 · 98/99, 120/123, 18/19, 110/114.
+- `src/agent/execute.ts` 278/282, 343/356, 54/56, 218/243 · 279/283, 344/357, 54/56, 218/243.
+- `src/validation/diagnostic.ts` 12/12, 13/13, 4/4, 10/10 · 10/10, 11/11, 3/3, 6/6.
+
+**Correction.** The refactor section's claim "the uncovered count of each column is unchanged (57, 147, 36, 282)" was
+stale: it was measured at `bd06388dd`, before `fb37cf7e6`, and did not hold for `45976b4cb`, where the review found the
+`--assigned-to` fallback unexercised (branch coverage down by one). `283d08e94` corrects it; the figures above are the
+ones that hold now: no column has more uncovered entries than the baseline, branches 266 against 282.
+
+**Pending amendments, now two** (with the `bug-476` reason above):
+- `spec-008-cli-grammar` — `--reason "Order the Revision paragraphs by merge order: task-373's paragraph moves after task-362's and task-367's, with no text changed, as the approver ruled on task-373's early merge of main."`
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
