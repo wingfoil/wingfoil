@@ -866,6 +866,28 @@ follow-up, which the coordinator logs for the closing ingest. The three fixes:
   `--reason "Record the bug's retrospective: task-367 rewrites dev-loop.yaml 2.6's header and wingfoil-cli 1.7 §2
   and §3 so the approver runs approve, reject and amend from their own terminal and an agent never does."`
 
+### targeted re-review (2026-11-21) and fixes (developer)
+
+The targeted re-review of `4422ae6d1..c02cf924c` gave APPROVE, with two should-fix findings that touch only text and
+comments, and no re-review afterwards (W0-R9).
+
+- **A correction to item 3 of the subsection above (the `spec-008` bullet).** The predicted Revision-only conflict
+  does not happen. `task-373`'s branch already holds `main` with `task-362`, so `git merge-tree --write-tree
+  --name-only HEAD task/task-373-report-the-deduction-readers-diagnostics-as-stderr-warning-lines-dl-176` prints
+  only the tree id `b46600cd7` and lists no conflicted file. In the merged `spec-008` the Revision paragraphs run
+  `task-375`, `task-375`, `task-373`, `task-362`, `task-367` (`git show <tree>:…spec-008-cli-grammar.md | grep -n
+  '^\*\*Revision (2026-11-'`). Whether that order stands is a question for `task-373`, on which supervision is
+  ruling.
+- **`src/mcp/server.ts` comments** (`b7a76a20e`). The module doc and `startMcpServer`'s
+  doc no longer call the stdio seam "un-testable", "verified by hand / at runtime" or "the only part … not covered".
+  They now say that `test/mcp/start-mcp-server.test.ts` covers it over a jest mock of the SDK's stdio transport,
+  with no real stdio channel opened. Only comments change: the diff has no non-comment line. Checks:
+  - `npx tsc --noEmit -p tsconfig.json` → exit 0;
+  - `npm run lint` → exit 0;
+  - `npm run docs:api` → exit 0, no warning line;
+  - `npx jest test/mcp/start-mcp-server.test.ts test/mcp/server.test.ts test/agent/launch-env.test.ts --maxWorkers=2`
+    → `3 passed`, `20 passed`.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
