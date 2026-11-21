@@ -1,6 +1,6 @@
 # WingFoil — Product Vision (docs/vision)
 
-**Last indexed:** 2026-11-20
+**Last indexed:** 2026-11-21
 
 This folder holds the **product-vision specification** for WingFoil, produced through a Lean Inception workshop (see
 [`X_lean-inception-plan.md`](X_lean-inception-plan.md)). This README is a **navigation index**: it tells you which
@@ -41,8 +41,8 @@ line count (`awk 'END{print NR}'`).
 | [`02_product-vision.md`](02_product-vision.md)         | 1.3 | 2026-10-06 | Approved | 103   | Vision statement, key decisions, and the reference-workflow/methodology-template model                                  |
 | [`03_is-isnot.md`](03_is-isnot.md)                     | 1.4 | 2026-10-06 | Approved | 59    | Scope boundaries: what WingFoil IS / IS NOT / DOES / DOES NOT                                                           |
 | [`04_personas.md`](04_personas.md)                     | 1.2 | 2026-10-07 | Approved | 149   | The primary persona (Morgan) and the 7 personas (Alex, Sam, Jordan, Morgan, Casey, Taylor, the maintainer)              |
-| [`05_journeys.md`](05_journeys.md)                     | 1.6 | 2026-10-10 | Approved | 287   | 8 end-to-end user journeys (0a, 0b, 1–6): steps, obstacles, success                                                     |
-| [`06_features.md`](06_features.md)                     | 1.18 | 2026-11-19 | Approved | 554   | 68 features (by pillar + by release) and the data-model / implementation notes                                          |
+| [`05_journeys.md`](05_journeys.md)                     | 1.7 | 2026-11-21 | Approved | 287   | 8 end-to-end user journeys (0a, 0b, 1–6): steps, obstacles, success                                                     |
+| [`06_features.md`](06_features.md)                     | 1.19 | 2026-11-21 | Approved | 554   | 68 features (by pillar + by release) and the data-model / implementation notes                                          |
 | [`07_sequencer.md`](07_sequencer.md)                   | 2.2 | 2026-11-19 | Approved | 489   | Active-day budgets, actuals and calendar forecast; the original 5-week plan; per-release Definition of Done, risks      |
 | [`08_mvp-canvas.md`](08_mvp-canvas.md)                 | 1.14 | 2026-11-19 | Approved | 222   | MVP canvas: problem/solution/value, target users, metrics, success criteria                                             |
 | [`X_cli-cmds.md`](X_cli-cmds.md)                       | 2.6 | 2026-11-20 | Approved | 538   | CLI command reference: signatures, parameters, release timeline, per-persona usage                                      |

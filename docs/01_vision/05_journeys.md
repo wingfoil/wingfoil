@@ -1,7 +1,7 @@
 # User Journeys — WingFoil
 
-**Version:** 1.6
-**Date:** 2026-10-10
+**Version:** 1.7
+**Date:** 2026-11-21
 **Status:** Approved
 
 ---
@@ -116,7 +116,7 @@ output, and submits review decision.
 |------|---------------------------------------------------|-------------------------------------------------------------------|-----------------------------------------------------------------------|
 | 1    | Check pending review submissions in workflow      | CLI: `wingfoil workflow status --format json/yaml`                | Sam sees all open workflows and pending approvals                     |
 | 2    | Select a submission to review                     | CLI workflow interface or dashboard                               | Sam picks a specific task from the list                               |
-| 3    | Review submission details and assigned directives | CLI: `wingfoil workflow show --name release-cycle`                | Sam sees task context, submission, team conventions to verify         |
+| 3    | Review submission details and assigned directives | CLI: `wingfoil workflow show release-cycle`                       | Sam sees task context, submission, team conventions to verify         |
 | 4    | Launch review agent with team directives          | CLI: `wingfoil agent execute --role reviewer --element task:{id}` | Agent initializes with: review directives, quality standards, context |
 | 5    | Agent analyzes code/docs against standards        | MCP Resources: fetch code diffs, relevant Memory + Directives     | Agent checks against team conventions and quality standards           |
 | 6    | Sam reviews agent output and provides feedback    | CLI output + human inspection of agent analysis                   | Sam validates agent analysis, spots missed issues, verifies quality   |
@@ -149,7 +149,7 @@ Morgan's approval.
 | Step | Action                                              | Tool / Interaction                                    | Outcome                                                             |
 |------|-----------------------------------------------------|-------------------------------------------------------|---------------------------------------------------------------------|
 | 1    | Check assigned tasks in team workflow               | CLI: `wingfoil workflow next --assigned-to me`        | Jordan sees tasks assigned to him by Morgan                         |
-| 2    | Select a task and review directives + context       | CLI: `wingfoil workflow show --name release-cycle`    | Jordan sees task description, assigned directives, team conventions |
+| 2    | Select a task and review directives + context       | CLI: `wingfoil workflow show release-cycle`           | Jordan sees task description, assigned directives, team conventions |
 | 3    | Review team context (DNA and relevant decisions)    | CLI: `wingfoil dna show` + `wingfoil memory search`   | Jordan understands team architecture and relevant decisions         |
 | 4    | Launch agent to execute task with team rules        | CLI: `wingfoil agent execute --element task:{id}`     | Agent initializes with task, role directives, team context          |
 | 5    | Agent executes task respecting team conventions     | MCP auto-loads directives for Jordan's developer role | Agent knows: code standards, testing requirements, review gates     |
@@ -221,7 +221,7 @@ tests/releases, and reviews an audit trail showing who decided and when.
 | 2    | Search or browse decisions by topic             | CLI: `wingfoil memory search api-design`                                                                                   | Casey finds the API design decision quickly                                     |
 | 3    | Read the decision document (ADR, RFC)           | Memory file                                                                                                                | Casey understands what, why, and who decided                                    |
 | 4    | Check who builds the project and with what      | CLI: `wingfoil dna show`                                                                                                   | Casey knows: team size, stacks                                                  |
-| 4.5  | Check release progress (read-only view)         | CLI: `wingfoil workflow status` (P4.5, planned); until it ships, `wingfoil memory search --type release`                   | Each release's state (current phase), what is pending or blocking               |
+| 4.5  | Check release progress (read-only view)         | CLI: `wingfoil workflow status`                         | The open runs, each at its current phase, and what is pending or blocking       |
 | 5    | Review traceability configured in workflow      | Configured in workflow + Memory metadata                                                                                   | Traceability shows req→test→release links (defined at setup, not auto-inferred) |
 | 6    | Query audit trail for decisions and changes     | CLI: `wingfoil memory history [document-id]`                                                                               | Casey sees who decided what, when, why, and what changed                        |
 | 7    | Agent or developer triggers "human needed" flag | Notification system (CLI hooks, email)                                                                                     | Casey is notified: specific action needed (e.g., "Approve database migration")  |
@@ -253,7 +253,7 @@ and roll it out. In-flight tasks are unaffected; new tasks pick up the new workf
 
 | Step | Action                                    | Tool / Interaction                                                      | Outcome                                                     |
 |------|-------------------------------------------|-------------------------------------------------------------------------|-------------------------------------------------------------|
-| 1    | Review current workflow and identify gaps | CLI: `wingfoil workflow show --name [workflow]`                         | Morgan sees current workflow structure and gaps             |
+| 1    | Review current workflow and identify gaps | CLI: `wingfoil workflow show <workflow>`                                | Morgan sees current workflow structure and gaps             |
 | 2    | Define new workflow phase/step            | CLI: `wingfoil workflow create` + `wingfoil dna set` (roles, approvers) | New workflow phase is defined with approvers and directives |
 | 3    | Bind directives to roles for new step     | CLI: `wingfoil directive assign --directive ... --role ...`             | Directives auto-load when agents/users execute new step     |
 | 4    | Test workflow with agent (dry-run)        | CLI: `wingfoil agent execute --dry-run`                                 | Morgan validates workflow logic without blocking team       |
