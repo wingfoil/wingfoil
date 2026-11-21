@@ -5,7 +5,7 @@
  * (task-006's `registerCoreModules`, task-011's `registerReadOnlyResources`) only ever ran against the
  * SDK's in-memory transport inside tests.
  *
- * The module is split into a testable constructor and a thin, un-testable transport seam — the same
+ * The module is split into a testable constructor and a thin transport seam — the same
  * pattern `src/cli/program.ts`'s `commander` wiring and `src/cli/init-command.ts`'s `createReadlinePrompt`
  * already use, and for the same reason:
  *
@@ -13,9 +13,10 @@
  *    and performs NO transport / stdio / process I/O, so it is exercised end-to-end over the SDK's
  *    in-memory transport + a real `Client` in `test/mcp/server.test.ts` (the three P5.2.1 acceptance
  *    criteria + the read-only-only scope assertion).
- *  - {@link startMcpServer} adds the single line that cannot be unit-tested without opening a real
- *    stdio channel: `server.connect(new StdioServerTransport())`. It is verified by hand / at runtime,
- *    never by an automated test (a test must never open a real stdio server against a repo).
+ *  - {@link startMcpServer} adds the single line that would open a real stdio channel:
+ *    `server.connect(new StdioServerTransport())`. `test/mcp/start-mcp-server.test.ts` covers it over a jest
+ *    mock of the SDK's stdio transport, so no real stdio channel is opened (a test must never open a real
+ *    stdio server against a repo).
  *
  * Channel scope (spec-014 §3): `createMcpServer` registers the read-only Resources channel
  * (`registerReadOnlyResources` — spec-004 §2, P5.2.1), the read-only role Prompts channel
@@ -111,8 +112,9 @@ export function createMcpServer(options: McpServerOptions): McpServer {
 /**
  * Construct the server via {@link createMcpServer} and connect it over a real `StdioServerTransport`.
  * Resolves once the transport is connected; the process then stays alive serving requests until the
- * transport closes (client disconnect / stdin EOF). The `server.connect(...)` line is the only part of
- * this module not covered by an automated test (the thin stdio seam — see the module doc).
+ * transport closes (client disconnect / stdin EOF). The thin stdio seam is covered by
+ * `test/mcp/start-mcp-server.test.ts` over a jest mock of the SDK's stdio transport, so no real stdio channel is
+ * opened (see the module doc).
  */
 export async function startMcpServer(options: McpServerOptions): Promise<McpServer> {
   const server = createMcpServer(options);
