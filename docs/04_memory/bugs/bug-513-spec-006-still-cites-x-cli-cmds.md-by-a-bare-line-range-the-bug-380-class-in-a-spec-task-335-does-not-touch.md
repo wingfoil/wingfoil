@@ -52,3 +52,9 @@ whenever `X_cli-cmds.md` changes; `dl-075` asks for section or row citations ins
      An item met while fixing goes in the fix task's own subsection; this one holds what belongs to
      the bug itself (its finding, its triage, why it took more than one task). The retrospective's
      `explore` reads this subsection first. -->
+
+- Fixed by `task-362` through the `spec-006` amendment `a6fc9e35b` (the Pillar 3 table of `X_cli-cmds.md` cited by
+  section heading). Steps to Reproduce's grep, re-run at `task-362`'s green, prints only `dl-041` and `dl-042`, which
+  are records and stay as written; `test/docs/x-cli-cmds-citations.test.ts` now holds `spec-006` to the rule and runs
+  the grep over the specs. Why it took a second task: `task-335` fixed the class in the specs it touched only; a gate
+  over every spec (the citations test, now covering `spec-006`) is what closes the class.
