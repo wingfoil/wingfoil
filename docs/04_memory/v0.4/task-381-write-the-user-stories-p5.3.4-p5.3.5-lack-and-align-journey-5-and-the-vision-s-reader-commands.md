@@ -447,6 +447,128 @@ after the label) and `- **MVP coverage:**`, and from the paragraph starting `Cov
 end with `→ **68/68**`). The `cp-004` bullet goes in `07_sequencer.md`'s `### Scope changes …` section, before its
 closing `---`, as a `- ` bullet naming `cp-004` and a `YYYY-MM-DD` date.
 
+### green (developer, 2026-11-21)
+
+Role: developer, with `code-quality`, `testing`, `determinism`, `command-baseline` and the global directives. Steps
+`dev-loop.green@task:task-381-…` of `sw-life-cycle-1-plan` and, inside it, the `vision-change` steps of
+`vision-change-rel-v0.4-w1-story-map-plan` (the plan's Steps 4–7). Worktree base unchanged: `git rev-list --count
+HEAD..main` → `0` at the start and at the end of refactor, no merge.
+
+**Builds.** The task's PATH shim resolves `wingfoil` (`command -v wingfoil`); `wingfoil --version` and `node
+dist/cli.js --version` printed `0.3.2 (80bb971d4…)` at the start; the code build was rebuilt (`waitslot.sh`, then
+`npm run -s build` → exit 0) on a clean tree at `6dc004245` before the finalize below, and printed `0.3.2
+(6dc004245…)`. `WINGFOIL_AGENT_MODEL` exported with the shim; the branch holds `11f1736de` (`git merge-base
+--is-ancestor 11f1736de HEAD` → true), so the verb commit carries its own pair.
+
+**update-vision** (change items 4, 5, 7) — `b702cbd4a` `docs(vision): cp-004 — reader commands in the journeys and the
+features bullet, Journey 5 step 4.5's Outcome (task-381; bug-397, bug-289)`:
+- `05_journeys.md` 1.6 → 1.7, Date 2026-11-21: J2 step 3 and J3 step 2 `CLI: \`wingfoil workflow show
+  release-cycle\``, J6 step 1 `CLI: \`wingfoil workflow show <workflow>\``, J5 step 4.5 `CLI: \`wingfoil workflow
+  status\`` with the Outcome "The open runs, each at its current phase, and what is pending or blocking" (D4, D5).
+- `06_features.md` 1.18 → 1.19, Date 2026-11-21: the active-context bullet "subsequent commands target it unless a
+  workflow is named by its `[ref]` argument", rewrapped within its three lines (the second line 114 columns, `sed -n
+  434p | wc -c` → 115 with the newline).
+- `docs/01_vision/00_index.md`: Last indexed 2026-11-21, the two document-map rows (1.7 and 1.19, 2026-11-21).
+  `wc -l` → 287 and 554, unchanged, so no section range moves.
+- Post-check before the commit: `npx jest test/docs/vision-index.test.ts --maxWorkers=2` → `Tests: 13 passed, 13
+  total`.
+- The step recorded: `e19fca8af` `workflow: finalize vision-change-rel-v0.4-w1-story-map-plan
+  vision-change.update-vision@change-proposal:cp-004-…` (code build, a non-approval finalize), after a `--dry-run`
+  under `--format json` and `--format console` (both exit 0, the same subject, `paths: []`); its `Reason:` names
+  `b702cbd4a` and the post-check; one attribution pair (`git log -1 --format=%B | grep -c '^Co-Authored-By:'` → 1, no
+  amend). After it, `npm run -s wingfoil -- workflow status vision-change-rel-v0.4-w1-story-map-plan` (pinned) →
+  `update-vision complete, downcast-stories complete, downcast-scenarios complete, downcast-requirements complete,
+  schedule current`.
+
+**downcast-stories** (change items 1–3) — `69b211f00` `docs(usm): cp-004 — US-2-12 (P5.3.4), US-4-15 (P5.3.5),
+US-5-06 restated, step 4.5 and US-5-11, coverage 68/68 (task-381; bug-399, bug-289)`: US-2-12 in
+`03_review-workflow.md` Step 4 after US-2-07; US-4-15 in `05_conventions.md` Step 5 after US-4-14; US-5-06 restated
+(D3); the heading `### Step 4.5 — Check release progress (read-only view)` with US-5-11 between Steps 4 and 5 of
+`06_decisions.md`; the index's Pillar 5 rows P5.3.4 (home 2) and P5.3.5 (home 4) after P5.3.3, mapped 68, unmapped 0,
+coverage 68/68, per pillar P5 = 18/18 (5.3×5) → 68/68, re-measured 2026-11-21 (`grep -c '^| [PX][0-9]'
+00_index.md` → 68). The texts are `cp-004`'s, word for word. **In scope** (`downcast.in-scope(layer: stories)`, bound
+`manual: true`): `git diff 93efca5be..HEAD -U0 -- docs/02_requirements/01_user_story_map | grep '^[+-][^+-]' | grep
+-oE 'US-[0-9A-Z]+-[0-9]+' | sort -u` → `US-2-12 US-4-15 US-5-06 US-5-11`, the four ids of `cp-004`'s user-story
+subsection; no other story line changed.
+
+**downcast-scenarios** (change item 6) — `6dc004245` `docs(bdd): cp-004 — P5.3.4 and P5.3.5 Feature lines name
+US-2-12 and US-4-15, P5.3.4 narrative as Sam, index cells and the 32 ref-marked stories (task-381; bug-399)`. **In
+scope** (`downcast.in-scope(layer: scenarios)`): the same diff over `docs/02_requirements/02_bdd` names `US-2-12
+US-4-15` and no `Scenario` line; the two `Feature:` lines, the narrative "As Sam,", the two index cells and "The 32
+additional", as `cp-004`'s BDD subsection lists; no scenario added or changed.
+
+**downcast-requirements: no impact, skipped** (`cp-004`'s SARD subsection). `grep -rnE "US-5-06|US-5-11|US-2-12|US-4-15|
+P5\.3\.4|P5\.3\.5|agent (list|show)|workflow show --name|--name" docs/02_requirements/03_sard/ | wc -l` → `0`. (The
+design's pattern `US-5-0[6-9]\|US-5-1` matches two lines naming `US-5-08`, P1.10's story, in `02_performance-nfr.md:40`
+and `05_security-compliance.md:28`: unrelated to this change, so its "→ nothing" holds for the ids in scope.) The engine
+deduced the step complete with the two downcasts above.
+
+**Red → green.** `npx jest test/docs/story-map-coverage.test.ts --maxWorkers=2`: at red `Tests: 28 failed, 134 passed,
+162 total` (the qa's notes); after the three commits above `Tests: 1 failed, 161 passed, 162 total`, the one failure
+the D9 case, written at `schedule` (below).
+
+### refactor (developer, 2026-11-21)
+
+**schedule** (the plan's Step 8, D9 as ruled):
+- `41299e056` `docs(vision): cp-004 — sequencer 2.3: a dated Scope changes line naming cp-004 (task-381)`:
+  `07_sequencer.md` 2.2 → 2.3, Date 2026-11-21, one two-line bullet under `### Scope changes since the original plan`
+  naming `cp-004` and 2026-11-21 (489 → 491 lines); `00_index.md` in the same commit: its document-map row (2.3,
+  2026-11-21, 491) and every `07_sequencer` range after line 145 moved by 2 (the section map, the three Quick-lookup
+  rows, the glossary's `L9–153`). `npx jest test/docs/vision-index.test.ts test/docs/story-map-coverage.test.ts
+  --maxWorkers=2` → `Tests: 175 passed, 175 total`.
+- `target_release` stays `v0.4`. `node scripts/check-release-exit.cjs docs/04_memory/change-proposals/cp-004-….md`
+  before the stamp → `…: release is empty`, exit 1.
+- `fcce7d6f2` `wf(change-proposal): assign release v0.4 to cp-004-…` (by hand, the `release:` line only) and
+  `a6161aed3` `wf(change-proposal): finalize cp-004-… [accepted → scheduled]` (by hand, the `status:` line only), each
+  the change-proposal file alone (`git show --stat` → 1 file, 1 insertion, 1 deletion), `--cleanup=whitespace`, one
+  attribution pair each.
+- After them `node scripts/check-release-exit.cjs docs/04_memory/change-proposals/cp-004-….md` → exit 0, and `npm run
+  -s wingfoil -- workflow status vision-change-rel-v0.4-w1-story-map-plan` → `active, complete`, element `(scheduled)`,
+  every phase `complete`. The instance's `workflow end` stays for after the review (plan Step 9).
+
+**Gates** (with the pending amendment below in the working tree; after `waitslot.sh`, which printed nothing and
+returned at once):
+- `npm test -- --maxWorkers=2` → `Test Suites: 1 failed, 719 passed, 720 total`, `Tests: 1 failed, 13240 passed,
+  13241 total`, exit 1. The one failure is `test/cli/workflow-unbound-none.integration.test.ts` ("workflow next
+  (console): … no "N diagnostic(s)" line", received `1 diagnostic(s): --format json lists them`); `node dist/cli.js
+  workflow next --format json` lists it as `W_UNCOMMITTED_INPUTS` on the uncommitted `bug-289` file: the `bug-534`
+  class. On a clean clone of `a6161aed3` (`git clone --no-local`, the worktree's `node_modules` linked), `npx jest
+  test/cli/workflow-unbound-none.integration.test.ts test/docs/story-map-coverage.test.ts --maxWorkers=2` → `Test
+  Suites: 2 passed`, `Tests: 166 passed, 166 total`. Every `test/docs` suite ran in the full suite and passed (AC 4).
+- `npm run lint` → exit 0; `npm run docs:api` → exit 0; `npm run typecheck` (both tsc configs) → exit 0.
+- **Coverage: not run**, per the gate's D8 (no `src/` change, the only test change a `test/docs` suite importing no
+  `src/` module: `git diff --name-only main...HEAD -- src` → nothing).
+- `test/docs/cli-reference.test.ts`: no CLI or help change, so no `docs/cli-reference.md` change; it ran in the full
+  suite and passed.
+
+### self-review (developer, 2026-11-21)
+
+Against `code-review`, `traceability` and `claim-evidence`:
+- **AC 1** met: `story-map-coverage.test.ts`'s 68 + 68 per-id cases, the three figure cases and the D2 cases pass;
+  `grep -c '^| [PX][0-9]' docs/02_requirements/01_user_story_map/00_index.md` → 68.
+- **AC 2** met: the US-5-06, Step 4.5 and US-5-11 cases and the BDD cases (two `Feature:` lines, "As Sam,", the two
+  index cells, the ref-marked figure 32) pass; BDD impact and SARD "no impact" recorded above and in `cp-004`.
+- **AC 3** met: the four journey rows, the "no longer contains" cases and the features-bullet case pass; `grep -rn
+  "\-\-name\|planned)\|until it ships" docs/01_vision/05_journeys.md docs/01_vision/06_features.md` → nothing.
+- **AC 4** met: each touched vision file bumped once against `main` (`05_journeys.md` 1.7, `06_features.md` 1.19,
+  `07_sequencer.md` 2.3, each with Date 2026-11-21); no story-map or BDD file declares a version; `test/docs` green in
+  the full suite.
+- **T4**: `git log --first-parent --no-merges --format=%h 93efca5be..HEAD -- test/docs/story-map-coverage.test.ts` →
+  empty.
+- **Scope**: `git diff --name-only 7994fe446..HEAD` lists only the design's files plus `07_sequencer.md` (D9) and the
+  change-proposal; no `src/`, no `.wingfoil/`, no test file.
+- **Invisible characters**: the `grep -nP` of the prompt's class over every changed file before each commit → nothing.
+- Same class in the files touched: `grep -n "workflow show --name\|unless \`--name\`" docs/01_vision/*.md
+  docs/02_requirements -r` → nothing.
+
+### Pending amendments (approver)
+
+- `bug-289-us-5-06-still-promises-the-current-phase-and-the-risks-from-dna-show-and-journey-5-step-4.5-has-no-user-story`:
+  a `### Retrospective` subsection appended at the end (the template's comment and two items), uncommitted. `--reason
+  "Add the Retrospective subsection a closed bug needs (dl-115 Q2 (a)), prepared by task-381's green: why the story
+  layer under the journey edit waited for a vision-change run, and the class of a story promising what its command
+  does not return."`
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -454,3 +576,15 @@ closing `---`, as a `- ` bullet naming `cp-004` and a `YYYY-MM-DD` date.
      printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
      Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
      here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+
+- The design's SARD "no impact" grep (`US-5-0[6-9]\|US-5-1…`) matches two lines naming `US-5-08`, a story outside the
+  change, while the notes said "→ nothing"; the green re-ran it with the exact ids (`… | wc -l` → 0). Proposal: a "no
+  impact" grep names the ids in scope, never a range.
+- D9's two-line sequencer bullet moved every `07_sequencer` range after line 145 of `docs/01_vision/00_index.md` by 2
+  (`41299e056`), while `file:line` citations of `07_sequencer.md` in other elements (`grep -rnoE
+  "07_sequencer\.md:[0-9]+" docs/04_memory/design` → `adr-012` `:117`, `dl-131` `:423`, `dl-136` `:371`, `:413`) were
+  not re-pointed: they had already drifted with `cp-003`'s eight lines. Proposal: a vision-change that adds lines to a
+  vision file lists those citations in its impact analysis.
+- The pending `bug-289` amendment turned the worktree's full suite red through `bug-534`
+  (`test/cli/workflow-unbound-none.integration.test.ts`, `W_UNCOMMITTED_INPUTS`); a clean clone of `a6161aed3` passed
+  it (`Tests: 166 passed`). The cost is one extra clone and run per task with a pending amendment.
