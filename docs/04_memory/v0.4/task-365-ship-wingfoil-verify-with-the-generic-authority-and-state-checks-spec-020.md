@@ -63,3 +63,376 @@ the extension of the verb.
 ## Execution Notes
 
 <!-- Filled by the dev-loop. -->
+
+### design (architect, 2026-11-21)
+
+**Base and inputs.** Branch `task/task-365-…` at `2715cd273` (the orchestrator's merge of `main` `a6c4f03c0` on top of the
+start `e9cd9dfff`). PATH guard: `command -v wingfoil` → the task's PATH shim; `wingfoil --version` and `node dist/cli.js
+--version` → `0.3.2 (2715cd27355957aca1e5760149188589dba160a6)`. The red to come is real: `node dist/cli.js verify` →
+`error: unknown command 'verify'`, exit `2`. Contract read at this head (`grep -m1 '^status:'` on each): `spec-020`,
+`spec-004`, `-005`, `-006`, `-008`, `-015`, `-017`, `-018`, `-019` `approved`; `dl-222`, `dl-212`, `dl-190`, `dl-103`,
+`dl-199` `ready`. `spec-020`'s approve `69b25574d` rules OQ-1 to OQ-7 as recommended (`git log -1 --format=%B 69b25574d`);
+the spec has no amend since (`git log --oneline -- <spec-020>` → add, submit, approve). The amendments below build on the
+specs' text at this head, which carries `task-362`'s `cb6f79471` (`spec-004`), `ca4dd2fa7` (`spec-005`), `a6fc9e35b`
+(`spec-006`), `610b4c93d` (`spec-008`), `4710565e6` (`spec-014`); `task-367`'s `f4a0b4acb` (`spec-004`), `ffab1d8c7`
+(`spec-008` §5, `dl-199` (b)), `faa50d3ab` (`spec-014`), `e9442d562` (`spec-018`); `task-375`'s `2f30562d6` (`spec-008`);
+`task-373`'s `3bafa88a1` (`spec-017`), `115e5c5eb` (`spec-008`) and the approver's reorder `7fd4b4407` (`spec-008`, the last
+amend of that spec: `git log -1 -- <spec-008>`). `spec-019` was never amended (`4b6b9bb9f` is its last commit).
+
+**dl-015 — what the merged tasks let this one rely on.**
+- `task-360` (`done`): the BDD file `docs/02_requirements/02_bdd/features/p1-memory/P1.14-verify.feature` (six scenarios:
+  T-8, T-9, T-17, T-24, T-28, T-1), the P1.14 row, US-4-14, and REQ-SEC-02/03's fit sentence naming `wingfoil verify`
+  (`test/docs/vision-change-w1-rows.test.ts` pins all of it). AC-13's vision-change is therefore done; nothing of it is owed
+  here.
+- `task-364` (`done`), "Downstream": declare `--base` and `--introduced-at` as `CoreOption` entries, nothing else for the
+  CLI; "a `mutates: false` operation is derived into a Resource (`wingfoil://verify`) … its design must decide one" — D5.
+- `task-362` (`done`, merged `8e41189a3`), item 11 / D5 and "What task-367 may rely on": `task-365` adds the
+  `governance-check` entry to `CAPABILITIES` (`requires: ['verify']`), the `spec-019` §4.2 row and the fixture's names; the
+  tests compare against `CAPABILITIES`' names except T-8's literal list. D7 of its gate: the task that adds a command
+  updates AGENTS.md §1's list and count in its green (`task-365` writes 37, the W1-R10 amendment of 2026-11-20).
+- `task-367` (`done`, merged `6fe45397d`): the production server derives only the Tools (`registerCoreTools`, every
+  `mutates: true` operation) and hand-registers its Resources; it never calls `registerCoreModules`
+  (`src/mcp/server.ts:30`). A `mutates: false` operation gets no production Tool or Resource unless hand-registered.
+  `readsProject` is absent for `verify` (it reads a git root), so both registrars resolve the root as for every other
+  command.
+- `task-373` (`done`): a command's warnings go to stderr through the warning sink or `CoreResult.warnings`, one
+  `warning:` line each under `console`, one `{"warning": …}` document under `json` (`spec-008` §6, `dl-176`); a reader
+  writes no prefix of its own (`formatWarningLine`, `src/validation/warning.ts`).
+
+**What the code does at this head** (read in the worktree; the script at this head equals `spec-020`'s `fa9d5d6e2` reading:
+`git diff --stat fa9d5d6e2 HEAD -- scripts/check-governance.cjs src/memory/audit.ts src/core/revision.ts` prints nothing).
+- The two patterns of `approval-agent-trailer` are defined three times: `src/storage/commit.ts:153` (`APPROVER_LINE_RE =
+  /^approver:/im`) and `:156` (`AGENT_TRAILER_LINE_RE = /^(co-authored-by|ai-model):/im`), both module-private;
+  `src/memory/commit-message.ts:62` (`AGENT_TRAILER_LINE_RE = /^(?:Co-Authored-By|AI-Model):/i`, the `--reason` defect); the
+  script's `APPROVAL_LINE_RE` / `AGENT_TRAILER_RE` (`:153`, `:155`). `src/memory/commit-message.ts:98` (`APPROVER_KEY_RE =
+  /^Approver:/`, case-sensitive, the first-body-line reader) and `src/memory/audit.ts:148` (the `Approver:` grammar) are
+  other patterns, not definitions of the pair.
+- `exitCodeForResult` (`src/core/exit-code.ts:52-54`) maps every success to `0`; the CLI registrar
+  (`src/cli/registrar.ts`) prints a success's payload, then `exitWith(exitCodeForResult(result))`, and prints an error's
+  line only for `ok: false`.
+- `DETAIL_KEYS` (`src/core/error-details.ts:35`) declares `rev` (`stated`) and no `flag`; `test/core/error-details-keys.test.ts`
+  fails on an undeclared key wherever a core error is built and pins the labelled class to `applied, argv, file, frontier`.
+- No `git log` reader in `src/memory` omits `--no-show-signature` (`grep -rn "no-show-signature" src` → `git-log.ts:107`,
+  `history.ts:146`, `:237` among 13 lines), so the walks `HistoryReader` wraps are already pinned for T-27.
+
+#### Design (green)
+
+1. **`src/core/governance-check.ts` (new)** — the rule module of `spec-020` §4.13, every export with TSDoc. Types:
+   `HistoryCommit` `{ sha, parents, authorName, authorEmail, subject, body }` (body with its trailing whitespace trimmed,
+   as the script reads `%b`); `ConfigRead<T>` `{ ok: true, value } | { ok: false, error }`; `FileChange` `{ from, to }`;
+   `HistoryReader` (below); `CheckContext` `{ gated: boolean }`; `CheckFinding` `{ rule, check, message }`;
+   `CheckOutcome` `{ findings, stateUnchecked: string[] }`; `GovernanceFinding` `{ sha, subject, rule, check, message,
+   gated }`; `GovernanceReport` (§7's keys, in that order). Constants: `GOVERNANCE_CHECKS` — frozen, §7's eleven
+   `{ check, rule, since: '0.4.0' }` in §4's order; `VERIFY_WHOLE_HISTORY` (the §8.2 warning text, code included).
+   Functions, each `(commit, reader, context) => CheckOutcome`, judging only the commits its section names and
+   returning nothing for the others: `checkSubject`, `checkBracket`, `checkBody`, `checkAuthority`, `checkState`,
+   `checkVerbEdge`, `checkStatusOutsideWf`, `checkSupersedesPair`, `checkApprovalAgentTrailer`,
+   `checkWorkflowRecordAuthority`, `checkTrailerParagraph`. `createGitHistoryReader(root, { head, base })` — the one
+   function of the module that calls git (batched `git log`, `git cat-file --batch`, `rev-list`, and the two `src/memory`
+   walks), memoizing per blob and per document; `governanceCheck(root, { base?, introducedAt? }): GovernanceReport`
+   (resolves `HEAD`, `--base`, `--introduced-at` with `resolveRevision`, builds the reader, runs every check on every
+   commit, gates per §5.1, sorts and de-duplicates per §3); `renderVerifyConsole(report): string` (§7's console form);
+   `verifyFindingsMessage(report): string` (the `E_VERIFY_FINDINGS:` reason). The `HistoryReader`:
+   ```ts
+   interface HistoryReader {
+     readonly head: string;                                   // full sha of HEAD
+     commits(): readonly HistoryCommit[];                     // the range, git log --reverse order
+     touchedPaths(sha: string): readonly string[];            // --no-renames --name-only
+     fileChanges(sha: string): readonly FileChange[];         // non-merge, -M, from null = added, to null = deleted
+     pathAtHead(path: string): string;                        // renames inside the range followed forward
+     existsAtHead(path: string): boolean;
+     blob(rev: string, path: string): string | null;          // <rev>:<path>, null when absent
+     memoryYamlAt(rev: string | null): ConfigRead<MemoryYaml> | null;  // schema only, silent (§4.1); null = absent
+     dnaYamlAt(rev: string | null): ConfigRead<DnaYaml> | null;        // the same for dna.yaml
+     transitionFindings(path: string, machine: StateMachine): readonly TransitionFinding[]; // throws ValidationError
+     transitions(path: string): readonly MemoryTransition[];  // reconstructMemoryTransitions(…, { strict: true })
+     isRejectCommit(token: string): boolean;                  // the sync citation (§4.6 row 5)
+     headDocumentStatus(id: string): string | null | undefined; // supersedes-pair: undefined = no such id at HEAD
+   }
+   ```
+   Behaviour the checks keep from the script, beyond §4's tables: `memory.yaml` and `dna.yaml` are read at the first
+   parent (`parents[0]`, `null` for a root commit) for every check (§4.1, OQ-3 (a)); a commit's `stateUnchecked`
+   entries come in the order the script records them — first those decided from the subject and paths (no machine, no
+   named document, a document gone at `HEAD`), then those of an unreadable revision, by document path in byte order;
+   `isNamed` is the script's (`:827-833`); de-duplication is by `(sha, rule, message)`, at the first position, as the
+   script's `Map` does.
+2. **`src/storage/commit.ts`** — export the pair unchanged, `APPROVER_LINE_RE = /^approver:/im` and
+   `AGENT_TRAILER_LINE_RE = /^(co-authored-by|ai-model):/im` (no `g` flag, so `test` keeps no state; with `m` the same
+   object serves a whole message and a single line); `src/storage/index.ts` re-exports both. TSDoc names the three
+   readers (D2).
+3. **`src/memory/commit-message.ts`** — its own `AGENT_TRAILER_LINE_RE` removed; it imports the storage one from
+   `'../storage'`, as it already imports `WINGFOIL_VERSION_TRAILER_KEY`. `reasonDefect`'s behaviour is unchanged.
+4. **`src/core/types.ts`** — the success branch of `CoreResult` gains `readonly failed?: { readonly message: string }`;
+   new builder `coreFailed(value, message, warnings?)`. `coreOk` is unchanged and never writes the key.
+5. **`src/core/exit-code.ts`** — `exitCodeForResult`: `result.ok ? (result.failed === undefined ? 0 : 1) :
+   exitCodeForError(result.error)`.
+6. **`src/cli/registrar.ts`** — on a success that carries `failed`: the warnings, then the payload as today, then
+   `emitError(result.failed.message, { format })`, then `exitWith(exitCodeForResult(result))`. No operation name
+   appears (`spec-006` §4.2). `src/mcp/*` is not changed (D5).
+7. **`src/core/error-details.ts`** — `DETAIL_KEYS` gains `flag: 'labelled'` (D9).
+8. **`src/core/index.ts`** — module `{ name: 'verify', operations: { verify: { name: 'verify', mutates: false,
+   description: 'check a commit range against the Memory and approval contracts', example: 'wingfoil verify --base
+   origin/main', options: [{ name: 'base', valueName: 'rev', description: … }, { name: 'introduced-at', valueName:
+   'rev', description: … }], renderConsole: renderVerifyConsole, fn: verifyFn } } }`, no module `description` (the
+   `paths` / `capabilities` precedent), no `positional`, no `readsProject`. `verifyFn` checks a blank value of either
+   option first (`UsageError('invalid flag value: --base must not be blank')`, exit `2` through `exitCodeForThrow`),
+   then calls `governanceCheck`, turning a `RevisionError` into `coreErr({ code, message, details: { rev, flag } })`
+   (`flag` absent for `HEAD`) and a gated finding into `coreFailed(report, verifyFindingsMessage(report))`; with neither
+   option it raises `VERIFY_WHOLE_HISTORY` through `reportWarning` once `HEAD` is resolved and before the range is read
+   (D4). The barrel re-exports the module's public names.
+9. **`src/core/capabilities.ts`** — `CAPABILITIES` gains `{ name: 'governance-check', requires: ['verify'] }` between
+   `dna-verbs` and `mcp-server` (code-unit order) (D6).
+10. **`docs/cli-reference.md`** — a ``### `wingfoil verify` `` entry (first sentence = the `--help` description, the
+    options, the report, the three formats, exit codes, the CI snippet with `fetch-depth: 0`, the `adr-006` limit), and
+    the `capabilities` entry's list of names gains `governance-check`.
+11. **`AGENTS.md` §1** — `verify` in the top-level list, `— 37 commands` (the W1-R10 amendment; `test/docs/agents-md.test.ts`).
+12. The allowlist rows this design adds (`test/docs/name-resolvability.allowlist.ts`, `test/docs/enumeration-parity.allowlist.ts`)
+    go stale once the names ship; green removes each stale row the two tests report.
+
+Not changed: `src/core/registry.ts` (the options are declared the existing way; the task file lists it, no edit is
+needed), `src/mcp/*`, `scripts/check-governance.cjs`, `.github/`, `.githooks/` (all `task-366`'s), `spec-020` itself.
+
+#### Acceptance criteria — classification and what qa pins
+
+All eleven are confirmed as the task file classifies them; no red is fabricated (the command does not exist, above; none
+of `governanceCheck`, `HistoryReader`, `coreFailed`, `GOVERNANCE_CHECKS` exists: `grep -rn
+"governanceCheck\|HistoryReader\|coreFailed\|GOVERNANCE_CHECKS" src` prints nothing). Expected reds of the new exports:
+`npx tsc --noEmit -p tsconfig.json` → TS2307 (`src/core/governance-check` not found) and TS2305 (`APPROVER_LINE_RE`,
+`AGENT_TRAILER_LINE_RE` not exported by `src/storage`; `coreFailed` by `src/core/types`); jest → `Cannot find module` for
+the new module, `undefined` / `TypeError: … is not a function` for the new exports of existing modules. Import from the
+leaf modules (`../../src/core/governance-check`, `../../src/storage/commit`, `../../src/core/types`), not the barrels.
+Spawned cases run `dist/cli.js` through `test/cli/helpers/spawn-cli.ts` with `withoutAgentMarkers(process.env)`
+(`test/agent-markers.cjs`). Fixtures: throwaway repositories (`test/storage/helpers/git-fixture.ts`), fixed dates,
+identities per commit; the `MEMORY_YAML`, `DNA` (one approver, one developer), `taskDoc` and `env` of
+`test/cli/check-governance-parent-state.test.ts` copied, not imported (`task-366` moves those suites). Expected messages
+are `spec-020` §4's tables word for word; where a fixture reaches a message the script also prints, qa may take the text
+from `node scripts/check-governance.cjs --root <fixture> --json` on that fixture (a real run), naming the command in the
+red notes — except the §4.1 departures (parent `memory.yaml`), whose expected text is the spec's.
+
+| AC | Class | Test file (qa) | What it pins |
+|----|-------|----------------|--------------|
+| 1 | red-first | `test/core/verify-registration.test.ts` (new); `test/cli/verify.integration.test.ts` (new); `test/core/parity.test.ts`, `test/core/production-registry.test.ts`, `test/mcp/verify-not-served.test.ts` (new) | `CORE_MODULES` has module `verify` whose only operation `verify` has `mutates: false`, no `readsProject`, no `positional`, no `flags`, options named exactly `base`, `introduced-at` (in that order, each `valueName: 'rev'`), `description` and `example` as in Design item 8; `deriveVerb('verify', 'verify') === ''`. Spawned: `wingfoil --help` lists `verify`; `verify --help` exits `0` and contains `--base <rev>` and `--introduced-at <rev>` (no width-dependent wrap asserted). T-35: `parity.test.ts`'s derived static URIs gain `wingfoil://verify` (the test-only registrar, as `wingfoil://agent/list`), `production-registry.test.ts` gains `verify.verify`; the production server (`createMcpServer` over the in-memory transport) lists no Resource, template or Tool whose URI or name contains `verify`. The `docs/cli-reference.md` entry is green's: `test/docs/cli-reference.test.ts` and `test/cli/help-describes-every-command.test.ts` go red by themselves when the command ships without it |
+| 2 | red-first | `test/core/governance-check.test.ts` (new) + `test/core/helpers/in-memory-history-reader.ts` (new); `test/cli/verify.integration.test.ts` | Unit, per exported check, with the in-memory reader: every row of `spec-020` §4.2–§4.11 reached once, the exact message, `rule` and `check` (`check` equal to `rule` for the five base checks, `verb-edge` / `status-outside-wf` / `supersedes-pair` / `approval-agent-trailer` / `workflow-record-authority` / `trailer-paragraph` otherwise), and the commits each check does not judge (a merge for the non-merge checks; a `wf(dna):` commit for `subject`; a non-`workflow:` commit for `workflow-record-authority`) → no finding. Spawned over fixtures: T-2 to T-21 as the spec words them (T-4, T-5, T-14 one finding per listed case), exit `1` where gated |
+| 3 | red-first | `test/cli/verify.integration.test.ts` | T-7 (approver added in the approving commit → `authority` no-role finding), T-22 (`submitted` state added and used in one commit → `state` finding, the parent's machine). Uncommitted: the same fixture run twice, the second time with a task's `status:` edited in the working tree and another file staged → stdout byte-identical, same exit |
+| 4 | red-first | `test/core/approval-patterns.test.ts` (new) | `APPROVER_LINE_RE` and `AGENT_TRAILER_LINE_RE` imported from `src/storage/commit` (and the same objects from `src/storage`): `RegExp`, `source` `^approver:` and `^(co-authored-by|ai-model):`, flags containing `i` and `m`, not `g`. Structural, over every `src/**/*.ts` with the TypeScript scanner (regular-expression literal tokens, comments ignored): a literal whose pattern, lower-cased and with `(?:` read as `(`, equals one of the two sources and whose flags contain `i` occurs exactly once per source, in `src/storage/commit.ts`; no `new RegExp(` builds either. Today it finds `src/memory/commit-message.ts:62` too (the red). `APPROVER_KEY_RE = /^Approver:/` (no `i`) is out by that rule, and qa says so in the test |
+| 5 | red-first | `test/cli/verify.integration.test.ts` | T-23 (bad commit before `--base` → no finding, exit `0`), T-24 (`--introduced-at <bad>^` gated exit `1`; `--introduced-at <bad>` history exit `0`), T-25 (no flag: stderr's first line is the full `W_VERIFY_WHOLE_HISTORY` warning of §8.2, every finding `gated: true`), T-26 (with and without the flag). `--base` alone and `--introduced-at` alone print no warning |
+| 6 | red-first | `test/cli/verify.integration.test.ts`; `test/core/governance-check.test.ts` | T-27: two `--format json` runs byte-identical, and the same bytes under `LC_ALL=C` and with `GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=log.showSignature GIT_CONFIG_VALUE_0=true`. T-28: `Object.keys` of the report `['head','base','introducedAt','checks','commits','findings','stateUnchecked','verdict']`, of `commits` `['range','memory','other','gated']`, of each finding `['sha','subject','rule','check','message','gated']`; `checks` deep-equals §7's list; the yaml report parses (js-yaml `load`) to the json one. Findings order (§3): a fixture commit with findings of several categories and two `trailer-paragraph` keys. Console: `renderVerifyConsole` of a hand-written report equals §7's layout (header, `checks:` line, the `FAIL — gated:` and `history` blocks, the three summary lines, blocks and an empty count list omitted), and the spawned `--format console` equals `renderVerifyConsole(JSON.parse(<json stdout>))` |
+| 7 | red-first | `test/core/exit-code.test.ts`; `test/cli/registrar.test.ts`; `test/cli/verify.integration.test.ts`; `test/core/error-details-keys.test.ts` | `coreFailed(v, 'm')` deep-equals `{ ok: true, value: v, failed: { message: 'm' } }`; `exitCodeForResult` of it `1`, of `coreOk(v)` `0`; `coreOk` has no `failed` key. Registrar, a synthetic `mutates: false` op returning `coreFailed`: stdout the payload, stderr `error: m\n` after it, exit `1`; under `json` stderr `{"error":"m"}`. Spawned T-28's stderr order (warning document, then `{"error": "E_VERIFY_FINDINGS: …"}`; yaml as two `---`/`...` documents) and exit `1`; T-29 each exit and message, no stdout payload. `flag` joins the labelled class (`applied, argv, file, flag, frontier`) in `error-details-keys.test.ts`; spawned console shows the line `  flag: --base` under the revision error, and the in-process `verifyFn` error's `details` deep-equals `{ rev: 'nosuchrev', flag: '--base' }` |
+| 8 | red-first | `test/core/governance-check.test.ts`; `test/core/governance-check-structure.test.ts` (new) | Every check driven with the in-memory reader, no repository at all (the reader's methods throw on an unexpected call). Structural, with the TypeScript AST of `src/core/governance-check.ts`: every call of `execFileSync`, `spawnSync`, `runGitRead`, `runGitReadBytes`, `readBlobs`, `readRevisionPaths`, `resolveCommitAtRev`, `verifyTransitionConsistency`, `reconstructMemoryTransitions`, `loadMemoryDocumentsAtRev` and `getMemoryHistory` lies inside `createGitHistoryReader`'s body. TSDoc: `test/docs/api-docs.test.ts` (green) |
+| 9 | characterization | — | T-30 and T-31 at refactor, on the merge candidate (the commands and the preview below) |
+| 10 | characterization | `test/cli/verify.integration.test.ts` | The six scenarios of `P1.14-verify.feature`, each a test titled with the scenario's name; they are T-8, T-9, T-17, T-24, T-28 and T-1 above (T-1: `memory add`, `submit`, `approve`, `reject`, `park`, `amend`, `deprecate` and an approval-phase `workflow finalize`, run with the markers scrubbed, then `verify --base BASE` → no finding, exit `0`) |
+| 11 | characterization | — | The pending amendments below; their docs tests were run here |
+
+qa runs `npx tsc --noEmit -p tsconfig.json` and `npx jest test/lint --maxWorkers=2` before the red commit.
+
+#### Existing tests that pin what changes
+
+- `test/core/parity.test.ts` (derived static URIs), `test/core/production-registry.test.ts` (registered operations) — red, qa.
+- `test/core/capabilities.test.ts` (T-8's literal six names → seven) and `test/core/fixtures/capabilities-document.json`
+  (`commands` gains `verify` after `paths`; `capabilities` gains `governance-check` after `dna-verbs`) — red, qa.
+- `test/core/error-details-keys.test.ts` (the labelled class) — qa (AC 7).
+- `test/docs/agents-md.test.ts` (`/— 36 commands/` today), `test/docs/cli-reference.test.ts`,
+  `test/cli/help-describes-every-command.test.ts`, `test/docs/api-docs.test.ts` — follow green's text and TSDoc.
+- `test/docs/x-cli-cmds.test.ts` › "every row of a command no build ships is marked *Not built*" — red from the moment the
+  `verify` row is committed until green ships the command (D8), as `task-362`'s was.
+- `test/cli/project-option.integration.test.ts` sweeps every leaf command; `verify` reads a project, so it exits `1` with
+  `E_NOT_AT_GIT_ROOT` / `E_NO_GIT_ROOT` like the others and needs no edit.
+- Unchanged and run here: `test/storage/commit*.test.ts`, `test/memory/commit-message.test.ts`, `reason-trailer.test.ts`
+  (the pattern move is behaviour-neutral), `test/cli/registrar.test.ts`, `test/mcp/registrar.test.ts` (production URIs).
+- `test/cli/check-governance*.test.ts` and `governance-workflow.test.ts` are the script's: not touched here (`task-366`).
+
+#### Files expected to change, and versions
+
+- green: `src/core/governance-check.ts` (new), `src/core/index.ts`, `src/core/types.ts`, `src/core/exit-code.ts`,
+  `src/core/error-details.ts`, `src/core/capabilities.ts`, `src/storage/commit.ts`, `src/storage/index.ts`,
+  `src/memory/commit-message.ts`, `src/cli/registrar.ts`, `docs/cli-reference.md`, `AGENTS.md`, the stale allowlist rows.
+- red (qa): the new suites and helper above; `test/core/parity.test.ts`, `production-registry.test.ts`,
+  `capabilities.test.ts`, `fixtures/capabilities-document.json`, `error-details-keys.test.ts`, `exit-code.test.ts`,
+  `test/cli/registrar.test.ts`.
+- design (this phase, uncommitted, approved at the gate): eight Memory amendments (below); the non-Memory files of D8.
+- **Version bumps** (first edit on this branch, against `main`): `.wingfoil/directives/custom/command-baseline.md`
+  `1.9 → 2.0`, `.wingfoil/directives/custom/wingfoil-cli.md` `1.7 → 1.8` (its version comment keeps the newest clauses
+  before `(prev 1.5`, which `test/directives/wingfoil-cli-dl-205.test.ts` reads), `docs/01_vision/X_cli-cmds.md` `2.6 → 2.7`
+  with its `**Version 2.7 (2026-11-21)**` entry, `docs/01_vision/00_index.md` re-synced (`Last indexed`, the row, the
+  eleven ranges). The specs and the DL carry no `version:`; each gains a Revision note (the DL an Amendment). None of the
+  four configuration files of `test/lint/version-bump.test.ts` changes; no workflow file changes, so no phase or step list
+  is pinned by this task.
+
+**`.wingfoil/` read on the pinned build** (two directives change): `npm run -s check:mcp` → exit `0` (`.mcp.json
+"wingfoil" runs the pinned wingfoil 0.3.2 … (prompts: 9, resources: 4, tools: 0)`; the build under development `(prompts:
+9, resources: 5, tools: 7)`); `npm run -s wingfoil -- directives list --format json` → exit `0`, stderr empty,
+`command-baseline` at `"version":"2.0"`, `wingfoil-cli` at `"version":"1.8"`; `npm run -s wingfoil -- workflow list` and
+`workflow show dev-loop` → exit `0`, stderr the one pre-existing line `warning: 2715cd27…:.wingfoil/dna.yaml: unknown
+field(s) ignored: team.roles[4].human_only, …` (the pinned 0.3.2 reading `HEAD`'s `dna.yaml`, not a change of this task).
+
+#### Tests run at design (targeted, `--maxWorkers=2`, the task's PATH shim first, in the worktree, amendments in the tree)
+
+- `npx jest test/storage/commit.test.ts test/storage/commit-attribution.test.ts test/memory/commit-message.test.ts
+  test/memory/reason-trailer.test.ts test/core/exit-code.test.ts test/core/exit-code-throw.test.ts test/cli/registrar.test.ts
+  --maxWorkers=2` → `Test Suites: 7 passed`, `Tests: 169 passed, 169 total`.
+- `npx jest test/core/capabilities.test.ts test/core/capabilities-wiring.test.ts test/cli/capabilities.integration.test.ts
+  test/core/parity.test.ts test/core/production-registry.test.ts test/mcp/registrar.test.ts
+  test/cli/help-describes-every-command.test.ts --maxWorkers=2` → `7 passed`, `91 passed`.
+- `npx jest test/docs/cli-reference.test.ts test/docs/commands-parity.test.ts test/docs/command-surface-specs.test.ts
+  test/docs/mcp-surface-parity.test.ts test/docs/x-cli-cmds.test.ts test/docs/x-cli-cmds-citations.test.ts
+  test/docs/vision-index.test.ts --maxWorkers=2` → first `2 failed, 51 passed`: `commands-parity` listed three `verify`
+  surpluses (`spec-008 §1 flat commands`, `spec-008 §11 commands`, `spec-005 Context flat commands`), now allowlisted as
+  planned by `task-365`; and the expected `x-cli-cmds` › "marked *Not built*" (D8). After the allowlist rows: `npx jest
+  test/docs/name-resolvability.test.ts test/docs/commands-parity.test.ts test/docs/enumeration-parity.allowlist.test.ts
+  --maxWorkers=2` → `3 passed`, `18 passed` (`name-resolvability` had listed 13 unlisted `wingfoil verify`,
+  `E_VERIFY_FINDINGS`, `W_VERIFY_WHOLE_HISTORY`, `governanceCheck`, `src/core/governance-check.ts` names in the amended
+  specs, now `PLANNED` by `task-365`, and the eight `spec-020` rows whose reason asked the first w1 task to set it).
+- `npx jest test/docs/commands-parity.test.ts test/docs/name-resolvability.test.ts test/docs/enumeration-parity.allowlist.test.ts
+  test/docs/spec-008-section-6.test.ts test/docs/agents-md.test.ts test/docs/project-option-docs.test.ts
+  test/docs/dl-086-citations.test.ts --maxWorkers=2`, run after the `enumeration-parity` rows and before the
+  `name-resolvability` rows → `1 failed, 6 passed` suites, `1 failed, 52 passed` tests, the one failure
+  `name-resolvability`'s unlisted names (fixed as the bullet above says).
+- `npx jest test/directives test/lint test/docs/vision-index.test.ts test/docs/x-cli-cmds.test.ts --maxWorkers=2` → first
+  `2 failed, 437 passed`: `wingfoil-cli-dl-205` (my first version comment put `(prev` before the 1.7 clause; rewritten as
+  above) and the expected `x-cli-cmds` case. Then `npx jest test/directives --maxWorkers=2` → `16 passed`, `245 passed`.
+- `node scripts/lint-claims.cjs <the 12 amended files>` → `90 warnings`, the same as without the amendments (`git stash`,
+  re-run, `git stash pop`), after one sentence of the `spec-019` revision note was reworded (it added a `state-claim`).
+- `bug-534`: with the amendments uncommitted, a full suite in this worktree is expected to fail
+  `test/cli/workflow-unbound-none.integration.test.ts` alone (not run here: no full suite at design).
+
+#### Parity preview (T-30, T-31) for green
+
+- `node scripts/check-governance.cjs --base origin/main --json` (`origin/main` = `1ceaa6ee2`, 156 commits behind this head)
+  → exit `0`, 68 `wf()` commits, 78 other commits, 0 findings, 0 `stateUnchecked` (1 min 6 s, `nice -n 10`).
+- `node scripts/check-governance.cjs --json` (whole history, the script's introduction `fcd435695`; 42 min 50 s under
+  `nice -n 10`) → exit `1`: 7652 `wf()` commits, 3649 other commits, 4420 findings (`co-author-identity` 2666,
+  `approval-agent-trailer` 915, `authority` 466, `bracket` 250, `plan-retrospective` 50, `subject` 49, `state` 23, `body`
+  1), 1212 `stateUnchecked` entries; the 2 gated findings are the non-canonical `wf(bug): assign` subjects of `9cdea2e3b`
+  and `8d6c005f6` (2026-10-28, on `origin/main`), already named in `task-358`'s candidate findings. Green's T-30 compares
+  the verb's `findings` and `stateUnchecked` with this report, its own three extension checks excluded (they stay in the
+  script), and the gating re-decided by the script's introductions (`spec-020` §6.1 step 3).
+- T-31's commits: `git log --format=%H -- .wingfoil/memory.yaml` → 36 commits, every one an other commit or a merge — no
+  Memory `wf()` commit has ever changed `memory.yaml` (the "one operation, one commit" rule held). So §4.1's parent
+  reading can differ from the script's only on `status-outside-wf` for the non-merge ones among them that also change a
+  Markdown document (each listed with `git show --name-only`; `16fd0f021`, `task-111`'s move to the root, has no
+  `.wingfoil/memory.yaml` at its parent, so its statuses are not judged under the parent reading). Green records each
+  difference with its explanation; the script's own report stays as it is (`task-366`).
+
+#### Decisions for the approver (design gate)
+
+- **D1 — the module and the `HistoryReader` seam (AC-8).** (a) One module, `src/core/governance-check.ts`, as `spec-020`
+  §4.13 words it: the checks, `governanceCheck` and the git reader `createGitHistoryReader` together, the reader's
+  "only part that calls git" proved by an AST test over the module (AC 8 row) and by the checks running on an in-memory
+  reader with no repository. (b) The git reader in its own file (`src/core/governance-history.ts`), proved by an import
+  test: simpler to check, but a `spec-020` §4.13 amendment ("one module") and a file the task does not list.
+  **Recommend (a).** The interface is the one of Design item 1; `memory history`'s mark (`task-378`) calls the same
+  checks through the same reader.
+- **D2 — the exported pattern pair (AC-4).** (a) Export the two existing literals of `src/storage/commit.ts` unchanged
+  (`/im`), re-export them from `src/storage`, delete `src/memory/commit-message.ts:62` and import the storage one there;
+  the structural test counts case-insensitive literals of the two sources in `src/`. (b) A new module
+  (`src/storage/approval-lines.ts`): one more file for two constants. (c) Keep the literals and test equality of their
+  sources: two definitions remain, against AC-4. **Recommend (a)**; the script's twin stays until `task-366` (AC-9).
+- **D3 — `check` and `rule` (§7).** The five base checks report `check` equal to `rule`; the §4.5 rows are check
+  `state`; the `checks` entry of `workflow-record-authority` is `rule: body`, its findings `body` or `authority`.
+  **Recommend as stated** (`spec-020` §7, written out so the red pins it).
+- **D4 — the starting mode and `W_VERIFY_WHOLE_HISTORY` (AC-5).** (a) Gated iff `--introduced-at` is absent or the commit
+  is not in `git rev-list <introduced-at>` (§5.1); the warning raised through the warning sink (`reportWarning`) when
+  neither flag is given, once `HEAD` is resolved and before the range is read, so it precedes the report even on a long
+  run and an unborn `HEAD` is refused without it. (b) The warning in `CoreResult.warnings` (`task-373`'s channel): the
+  same stderr bytes, but written after the run, against §7's "before the report's run begins". **Recommend (a).**
+- **D5 — CLI only, and the derived Resource (AC-1, T-35).** (a) No new field: `verify` is `mutates: false` like
+  `agent list`; the test-only registrar derives `wingfoil://verify` as it derives `wingfoil://agent/list`, and the
+  production server registers nothing for it (it derives only Tools since `task-367`), pinned by a test of the
+  production server (a characterization within AC 1: it passes before green too, and guards the route). (b) A declarative opt-out (`surfaces: 'cli'` or `mcp: false` on `CoreOperation`): exact today, and
+  safe if a later task derives production Resources too, but a new field of `spec-006` §2 that no other operation needs.
+  **Recommend (a)**, with (b) as the move of the task that first derives Resources in production. `readsProject`: absent.
+- **D6 — `governance-check` (`spec-019` OQ-4 (a)).** `task-362` merged first, so this task adds the `CAPABILITIES` entry
+  `{ name: 'governance-check', requires: ['verify'] }`, the fixture's two names and T-8's seventh, and the `spec-019`
+  amendment below. **Recommend as stated.**
+- **D7 — a malformed revision's exit code: `spec-020` §8.2 against `spec-008` §5.** `spec-020` (approved `2026-11-17`)
+  pins exit `1` (`VALIDATION`, `resolveRevision`'s message) for `--base -x`, `'a b'`, `HEAD:x`, `a..b` (T-29); `spec-008`
+  §5's paragraph from `ffab1d8c7` (`dl-199` (b), `2026-11-20`) says a refused option value is exit `2` "for every refused
+  value, present and future". (a) Keep `spec-020`: the value is read as a revision, `resolveRevision` decides it as for
+  every revision reader (the MCP rows of `spec-004` §3.4 pin the same message), and a blank value stays exit `2`; the
+  `spec-008` §5 amendment below states it. (b) Exit `2` for a malformed revision, `1` only for one that names nothing:
+  `dl-199` (b) literally, at the cost of a `spec-020` amendment (§8.2, T-29). **Recommend (a).**
+- **D8 — the non-Memory amendments, and when they are committed.** `docs/01_vision/X_cli-cmds.md` (2.7, with
+  `00_index.md`), the `command-baseline` (2.0) and `wingfoil-cli` (1.8) directives, and the two allowlists are not Memory
+  elements. (a) The orchestrator commits them, as approved here, in one commit right after the approver's amends and
+  before red; `test/docs/x-cli-cmds.test.ts` › "marked *Not built*" is then red until green, an expected red
+  (`task-362` D4 (a)). (b) Green commits them with the code. **Recommend (a).**
+- **D9 — `details.flag` (§8.2).** `test/core/error-details-keys.test.ts` fails on an undeclared `details` key. (a) Declare
+  `flag` as **labelled**: the reason does not state which option carried the revision, so the CLI prints `  flag: --base`
+  under the error line and the `json` details carry it; qa adds it to the pinned labelled class. (b) `stated`: no line,
+  against `spec-005` §3.1's rule (the value is not in the reason). **Recommend (a)**; `spec-005` names no class list, so
+  it needs no amendment.
+- **D10 — the `failed` field on MCP (AC-7).** (a) No MCP change: production serves `verify` on neither channel and the
+  test-only Resource returns the value; the `spec-006` §2 amendment says a later revision that serves such an operation
+  states how its channel flags the verdict. (b) Map `failed` to `isError` in `src/mcp` now: code with no production
+  caller. **Recommend (a).**
+
+#### What `task-366` (W1-07) may rely on, and the checkpoint
+
+- The command `node <checkout>/dist/cli.js verify --format json --project <root> [--base <rev>] [--introduced-at <rev>]`:
+  stdout is §7's report in every verdict (keys in order, `check` on every finding, `gated` decided by the verb's §5.1
+  population, `checks` the eleven of `GOVERNANCE_CHECKS`), exit `0` pass / `1` with a report (`verdict: fail`) / `1`
+  without one (a refusal) / `2` usage; stderr one JSON document per line, `{"warning": "W_VERIFY_WHOLE_HISTORY: …"}` and
+  `{"error": "E_VERIFY_FINDINGS: …"}` by those prefixes, any other document a real warning or error (§6.1 step 1).
+- `verify` writes nothing, needs no git identity, and runs in an agent's session.
+- The script keeps its own `CHECKS` markers, introductions, three extension checks and report; it imports nothing of
+  `src/core/governance-check.ts` (§6.1, §6.2). After `task-365` the script's own `APPROVAL_LINE_RE` / `AGENT_TRAILER_RE`
+  (`:153`, `:155`) are its last copies of the pair; `task-366` removes them with the moved predicates (AC-4 scans `src/`
+  only).
+- `bug-438` (a clean gate reads "0 findings on 0 commits") is `task-366`'s: `spec-020` §7 pins the verb's console summary
+  in the script's words, so a rewording there changes both and amends `spec-020` §7 at `task-366`'s gate.
+- `task-366`'s merge is a checkpoint: the wave pauses before the next task starts. Nothing to do here; `task-363`
+  (`release-publishing.yaml`) is never at once with `task-366`.
+
+#### Risks for the other open tasks (overlaps in the files above)
+
+- `task-363` (`backlog`): reads `test/core/fixtures/capabilities-document.json` and the `CHANGELOG` capabilities line; after
+  this merge the 0.4.0 line names `governance-check` (`spec-019` §5 as amended).
+- `task-366` (`backlog`, after this task): `scripts/check-governance.cjs`, its tests, `git-conventions` §9; it also amends
+  `dl-103` (§1 (B), its AC 5) — after this task's Actions-2 amendment, so it builds on it.
+- `task-370` (console renderer, `dl-043`): must keep `verify`'s own `renderConsole` (`spec-020` §7).
+- `task-371`, `task-372` (`src/core/index.ts`, `src/core/registry.ts`, new commands): each new command edits the
+  capabilities fixture, AGENTS.md's count and the `commands-parity` allowlist; whichever merges after this one rebases on
+  37.
+- `task-377` (W1-18, after `task-366`): edits `src/core/governance-check.ts` and revises `spec-020` per check; it relies on
+  the per-check functions of Design item 1.
+- `task-378` (W1-19, after this task): calls the same checks through `HistoryReader` for `memory history`'s mark (T-34);
+  `src/memory/commit-message.ts` is in both tasks (here only the import).
+- `task-380` (branch exists, `wf(task): start` committed, `bug-452`, `bug-456`, `bug-471`, `bug-514`): `help` and the global
+  `--interactive` (`src/cli/program.ts`); not in this task's files. Its help changes may reach `verify --help`'s text, which
+  the tests here pin only by substring.
+
+#### Candidate findings (not fixed, not filed)
+
+- None outside the task. (The pinned build's `human_only` unknown-field warning on `workflow list` is the base's, already
+  recorded in `task-359`'s and `task-367`'s notes: the pinned 0.3.2 predates the field, added to `dna.yaml` on 2026-11-14
+  by `f6ac7bec4` and its two siblings.)
+
+### Pending amendments (approver)
+
+Prepared in the worktree, left uncommitted (`git diff --stat` lists them), each to be recorded with `memory amend` at this
+design gate, before red:
+
+- `dl-103-governance-enforced-outside-the-agent` — `--reason "Amend Actions 2 as dl-222 (a) and its Action 2 require: the generic rules of the governance check ship as the read-only command wingfoil verify (spec-020), and the script stays out of the package as this repository's extension of it."`
+- `spec-015-packaging-publishing` — `--reason "Record that the governance check ships inside dist as the command wingfoil verify and that scripts stays out of the package because the script is this repository's extension, as dl-222 Action 2 and spec-020 require (task-365)."`
+- `spec-006-core-domain-api` — `--reason "Add the verify operation as the Amendments owed of spec-020 require (task-365): section 2 gains the failed field of a success and its exit mapping, section 3 the verify row, CLI only, and section 6 item 9 and the committed history row."`
+- `spec-008-cli-grammar` — `--reason "Add the verify command as the Amendments owed of spec-020 require (task-365): section 1 names it, section 5 states that a completed check whose verdict fails exits 1 after its report and that its revision values are resolveRevision's, section 6 gains its refusals, its whole-history warning and the silence of historical configuration reads, section 11 the committed history row and section 12 its two options."`
+- `spec-005-cli-command-contract` — `--reason "Name verify among the flat commands and state in section 1 that a completed check whose verdict fails prints its payload, then its error line, and exits 1, as the Amendments owed of spec-020 require (task-365)."`
+- `spec-004-mcp-surface-contract` — `--reason "Name wingfoil verify in section 4.1 among the read-only queries that have no Tool, and say why it is no Resource, as spec-020 section 1 requires (task-365)."`
+- `spec-018-approval-binding-l0-agent-markers-attribution-trailers-and-the-approver-verb-refusal` — `--reason "Point section 4 to wingfoil verify and spec-020 section 4.9, and state that the verb gates the invocation's range while this repository's script keeps the per-check introduction, as the Amendments owed of spec-020 require (task-365)."`
+- `spec-017-workflow-commands-and-state-deduction` — `--reason "Record in sections 7.9, 7.11 and 7.12 that the Approver line of a workflow record is judged by the workflow-record-authority check of wingfoil verify, as spec-020 section 4.10 requires (task-365)."`
+- `spec-019-the-capabilities-query-the-formats-a-build-reads-and-the-capabilities-it-provides` — `--reason "Add the governance-check capability that requires verify, as open question OQ-4 was ruled (a), with the seventh entry counted under section 4.2, in T-7 and in the 0.4.0 Capabilities line (task-365)."`
+
+Approved at this gate, committed per D8 (not Memory elements, no `memory amend`): `docs/01_vision/X_cli-cmds.md` (2.7: the
+Pillar 1 `verify` row, its parameters row, the v0.4 timeline, the history entry) with `docs/01_vision/00_index.md`
+re-synced; `.wingfoil/directives/custom/command-baseline.md` (2.0: the committed-history row of *Declared baselines*);
+`.wingfoil/directives/custom/wingfoil-cli.md` (1.8: §1's `verify` bullet); `test/docs/name-resolvability.allowlist.ts` (13
+new rows and the eight `spec-020` rows set to `PLANNED`, planned by `task-365`); `test/docs/enumeration-parity.allowlist.ts`
+(three `verify` surpluses planned by `task-365`).
+
+### Retrospective
+
+<!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
+     reconstructed afterwards. One line per item: what happened, the evidence (a command and what it
+     printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
+     Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
+     here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
