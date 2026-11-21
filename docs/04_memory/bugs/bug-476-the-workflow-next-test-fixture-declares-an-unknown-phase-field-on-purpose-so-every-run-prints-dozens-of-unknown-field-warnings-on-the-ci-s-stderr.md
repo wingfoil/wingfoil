@@ -52,4 +52,10 @@ The suite's stderr carries no warning a test causes on purpose: the test that re
 
 ### Retrospective
 
-- None.
+- Closed by `task-373` (red `5fef777bd`, green `bd06388dd`, the qa's `fb37cf7e6`): the fixture's `DEV_LOOP` lost the
+  field, and the one test that relies on it commits its own variant and asserts the warning by capturing stderr. The
+  suite printed five WingFoil warning sources on purpose, and all five are fixed: the `bug-476` field and the
+  `identityEmail: ''` call in `test/core/workflow-next.test.ts`, `test/core/workflow-next-views.test.ts`,
+  `test/core/dna-set.test.ts`, and `test/core/workflow-next-render.test.ts:125`, which the design had placed at
+  `workflow-next.test.ts:320` and the qa fixed in `fb37cf7e6` by declaring the role. After it the full suite's stderr held
+  no `warning:` line but git's `You appear to have cloned an empty repository.`
