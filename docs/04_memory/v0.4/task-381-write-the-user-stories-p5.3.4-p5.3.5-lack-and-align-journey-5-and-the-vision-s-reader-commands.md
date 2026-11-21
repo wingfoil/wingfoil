@@ -42,3 +42,262 @@ map's index declares full coverage. `bug-289`: US-5-06 still promises what `dna 
 ## Execution Notes
 
 <!-- Filled by the dev-loop. -->
+
+### design (architect, 2026-11-21)
+
+Role: architect, with the architect's directives plus `traceability` (the story map is a traceability layer). Step
+`dev-loop.design@task:task-381-…` of `sw-life-cycle-1-plan`; the record is the approver's.
+
+**Builds.** The task's PATH shim resolves `wingfoil`; `wingfoil --version` and `node dist/cli.js --version` both print
+`0.3.2 (6fe45397d684065e255b9df5c12af9335d2a9a7f)`. The branch holds `main` at `6fe45397d` (`git merge-base
+--is-ancestor 11f1736de HEAD` → true), so a verb commit carries its own attribution pair.
+
+**Inputs read.** The three bugs (`bug-289`, `bug-397`, `bug-399`); `docs/01_vision/05_journeys.md` 1.6,
+`06_features.md` 1.18, `00_index.md` (Last indexed 2026-11-20); the story map (`00_index.md`, `03_review-workflow.md`,
+`05_conventions.md`, `06_decisions.md`, and the `workflow show` stories of `04_team-task.md`, `07_workflow-config.md`);
+the BDD index and `P5.3.4-agent-list.feature`, `P5.3.5-agent-show.feature`, `P4.5-workflow-status.feature`; the SARD
+files; `dl-132` (`ready`: Decision elements 1–5, Q1 (a), Q2 (ii)); the `change-proposal` template;
+`vision-change.yaml`; plan rulings W1-R1…W1-R14. **`depends_on`: `task-360` (`done`)** — its Execution Notes
+(design D1–D9, update-vision, downcast-stories, review fixes) state that `cp-003` left P5.3.4 and P5.3.5 unmapped for
+this task, with the index at 66/68 (P5 = 16/18), and fixed the id rule this design follows: the next unused number of
+the journey over every story-map file, never renumbering or reusing.
+
+**What the commands print, read before writing a story about them** (`claim-evidence`; the class of `bug-289` is a
+story promising what a command does not return):
+
+- `npm run -s wingfoil -- dna show --format json` (pinned): top-level keys `version, project, modules, stacks, team,
+  paths`; `team` = `members, agents, roles`; `stacks` = `technologies, methodologies`. No current phase and no risks
+  (the only `phase` keys are the methodologies' own).
+- `npm run -s wingfoil -- workflow status --format console` (pinned): `open workflows: 2`; per run its element and
+  state, `phases: … release-line-cycle current …`, the `frontier:` steps with role and what is missing, `late:`, then
+  `pending approvals: 1` with `human needed: approve or reject … — routed to …`, and `ungated elements: 8`. It does
+  not list each release with its state.
+- `workflow show --name sw-life-cycle` exits `2` with `error: unknown option '--name'` on both builds; `workflow show
+  sw-life-cycle` exits `0`; `workflow show --help` → `Usage: wingfoil workflow show [options] <ref>`; `workflow next`,
+  `status`, `end` take `[ref]` ("a workflow name or an open workflow instance id").
+- `node dist/cli.js agent list --help` (code build, `bug-549`): `--past`, `--waiting`, `--active`; `agent show --help`:
+  `<run-id>` "the run id, <element-id>/<phase>/<n>".
+
+**Measured state of the map** (from `docs/`):
+
+- Pillar-table ids of `06_features.md` (up to `## Features by Release`, `grep -oE "^\| (P|X)[0-9][0-9.]*"`): 68.
+  Ids named by a `_(feat: …)_` marker of an `[MVP]` story (a perl scan of `01_user_story_map/0*.md`, story text up to
+  the next bullet or heading, whitespace collapsed): 66; `comm -3` of the two sets → `P5.3.4`, `P5.3.5` only.
+  Index pillar-table rows: 66.
+- `[MVP]` stories carrying `_(ref: …)_` and no `feat` marker, by the same scan: 31 — the BDD index's "The 31
+  additional `[MVP]` user stories … (`_(ref: Px.y)_` marker)". `US-6-12` (`_(req: REQ-STATE-10; ref: …)_`) is the one
+  story with neither form.
+- Free ids (`grep -rohE "\bUS-<J>-[0-9]+\b" docs/`, highest per journey): `US-2-11`, `US-4-14`, `US-5-10`; `grep -rn
+  "US-2-12\|US-4-15\|US-5-11" docs/ test/` → nothing.
+- Feature files whose first non-comment line lacks `(US-…)`: `P4.21-element-provenance.feature`,
+  `P5.3.4-agent-list.feature`, `P5.3.5-agent-show.feature`; the BDD index's US column reads `—` for P5.3.4 and P5.3.5.
+  The two narratives say "As Morgan".
+- Vision lines of `bug-397`: `05_journeys.md:119`, `:152` (`workflow show --name release-cycle`), `:224` (`(P4.5,
+  planned); until it ships, …`), `:256` (`workflow show --name [workflow]`), `06_features.md:434` (`unless --name is
+  given`). `grep -rn "\-\-name\|planned)\|until it ships" docs/01_vision/` finds no other instance of the class
+  (`X_cli-cmds.md`'s hits are `directive create --name`, a real option, and a removal note). BDD and SARD:
+  `grep -rn "workflow show --name\|unless .--name" docs/02_requirements/` → nothing.
+
+#### The change (as recommended in D1–D8; the developer writes it at `green`)
+
+1. `06_decisions.md`: US-5-06 restated (D3); a new heading `### Step 4.5 — Check release progress (read-only view)`
+   between Steps 4 and 5, holding US-5-11 (D4).
+2. `03_review-workflow.md` Step 4: US-2-12 (P5.3.4); `05_conventions.md` Step 5: US-4-15 (P5.3.5) (D2).
+3. Story-map `00_index.md`: Pillar 5 rows `| P5.3.4 | \`agent list\` | v0.3 | MVP | 2 |` and `| P5.3.5 | \`agent
+   show\` | v0.3 | MVP | 4 |` after P5.3.3 (release from `06_features.md`'s v0.3 table, lines 252–253); the
+   validation block: mapped 68, unmapped 0 (the sentence naming the two goes), coverage **68/68**, per pillar
+   `P5 = 18/18 (5.1×5, 5.2×3, 5.3×5, 5.4×5)` → **68/68**, re-measured on the date of the green commit (`bug-399`).
+4. `05_journeys.md`: rows J2-3 and J3-2 → `CLI: \`wingfoil workflow show release-cycle\``, J6-1 → `CLI: \`wingfoil
+   workflow show <workflow>\``, J5-4.5 → `CLI: \`wingfoil workflow status\`` with its Outcome restated (D5, D4). One
+   line each: the file stays 287 lines, so no range of the vision index moves.
+5. `06_features.md` line 434–436, the active-context bullet: "subsequent commands target it unless a workflow is named
+   by its `[ref]` argument." — rewrapped within the same three lines (the second line stays under 120 columns), so
+   the file stays 554 lines.
+6. BDD (D6): `P5.3.4-agent-list.feature` line 1 → `Feature: P5.3.4 (US-2-12) - wingfoil agent list [--past]
+   [--waiting]` and its narrative "As Morgan" → "As Sam"; `P5.3.5-agent-show.feature` line 1 → `Feature: P5.3.5
+   (US-4-15) - wingfoil agent show <run-id>`; BDD `00_index.md`: the two US cells, and "The 31 additional" → "The 32
+   additional" (US-5-11 is one more ref-marked story).
+7. `docs/01_vision/00_index.md`: `**Last indexed:**`, and the document-map rows of `05_journeys.md` (1.7, the date, 287)
+   and `06_features.md` (1.19, the date, 554).
+
+#### Per-criterion classification (corrected) and what the qa pins
+
+The task file marks all four ACs characterization. ACs 1–3 are **red-first**: the text they ask for is written at
+`green`, after the red commit, so a test reading the real files fails on it at red for the right reason (the text is
+absent), as `task-360`'s design classified its AC 5. Nothing is fabricated: each red is a `toContain` / `toBe` on a
+document the task has not changed yet. AC 4 is characterization (`test/docs` is green before and must stay green).
+
+| AC | Class | Red at the red commit, for this reason | Green after |
+|----|-------|----------------------------------------|-------------|
+| 1 | red-first | P5.3.4, P5.3.5 named by no `feat` marker and absent from the index; the figures read 66 | all 68 mapped, 68/68 |
+| 2 | red-first | US-5-06 holds "current phase, and risks"; no `US-5-11`, no Step 4.5 heading; the BDD cells/lines lack the ids, "31" | the D3/D4/D6 text |
+| 3 | red-first | the four `--name`/`planned` lines and `unless \`--name\` is given` are present | the shipped forms |
+| 4 | characterization | — (`test/docs` green at the red commit) | green, with the vision index re-synced |
+
+**New suite** `test/docs/story-map-coverage.test.ts`: reads the real files with `readFileSync` (no fixture, no git, no
+clock, `node:fs`/`node:path` only, no `src/` import); copy `flat`, `between` and `rowOf` from
+`test/docs/vision-change-w1-rows.test.ts` rather than importing them. A story is the text from `* **[MVP` up to the
+next line starting `* ` or `#` (whitespace collapsed); its `feat` ids are the comma-separated list of every
+`_(feat: …)_` in it.
+
+- AC 1 (general, so the gap `bug-399`'s retrospective names cannot reopen): for every id of `06_features.md`'s pillar
+  tables (lines matching `^\| (P|X)[0-9]` before `## Features by Release`), (a) some `[MVP]` story in
+  `01_user_story_map/0[1-7]_*.md` names it in a `feat` marker, (b) the story-map index has a row starting `| <id> `;
+  the index line starting `- **Features mapped under [MVP]` ends its figure with the count, `- **Unmapped MVP
+  features:** 0`, and the index contains `**MVP coverage:** **68/68**` where 68 is the computed count (build the
+  expected string from the count, do not hard-code it twice). Expected red: (a) and (b) fail for P5.3.4 and P5.3.5
+  only, the figure lines fail; every other id passes.
+- AC 1/2, the new stories: `US-2-12:` in `03_review-workflow.md` contains `_(feat: P5.3.4)_` and `` `wingfoil agent
+  list` ``; `US-4-15:` in `05_conventions.md` contains `_(feat: P5.3.5)_` and `` `wingfoil agent show <run-id>` ``.
+- AC 2: `US-5-06:` in `06_decisions.md` contains `` `wingfoil dna show` ``, `team size` and `stacks`, and contains
+  neither `current phase` nor `risks`; the file has the heading line `### Step 4.5 — Check release progress
+  (read-only view)`, after `### Step 4 ` and before `### Step 5 `; the story `US-5-11:` sits between that heading and
+  `### Step 5 `, contains `` `wingfoil workflow status` `` and `_(ref: P4.5`, and no `feat` marker. BDD:
+  `P5.3.4-agent-list.feature`'s first line starts `Feature: P5.3.4 (US-2-12) - ` and its second line starts `  As Sam,`;
+  `P5.3.5-agent-show.feature`'s starts `Feature: P5.3.5 (US-4-15) - `; the BDD index rows `| P5.3.4  | US-2-12 ` and
+  `| P5.3.5  | US-4-15 ` (match with `/^\| P5\.3\.4\s+\| US-2-12\s+\|/m`); the BDD index's "The N additional" figure
+  equals the count of `[MVP]` stories carrying `_(ref:` (optional spaces after `_(`) and no `_(feat:` — 31 at red,
+  32 at green.
+- AC 3: `05_journeys.md` contains none of `workflow show --name`, `(P4.5, planned)`, `until it ships`; the Journey 5
+  row starting `| 4.5 ` contains `` `wingfoil workflow status` ``; the Journey 6 row starting `| 1 ` (inside
+  `between(journeys, '## Journey 6', /^## /m)`) contains `` `wingfoil workflow show <workflow>` ``; the Journey 2 row
+  `| 3 ` and the Journey 3 row `| 2 ` contain `` `wingfoil workflow show release-cycle` ``. `06_features.md`, flattened,
+  contains `subsequent commands target it unless a workflow is named by its \`[ref]\` argument` and not `unless
+  \`--name\` is given`.
+- AC 4: no new case; `npx jest test/docs --maxWorkers=2` (under the slot) and `npx jest test/docs/vision-index.test.ts
+  --maxWorkers=2` are the evidence.
+- Before the red commit: `npx tsc --noEmit -p tsconfig.json` and `npx jest test/lint --maxWorkers=2` (W0-R11).
+
+#### Tests that pin what changes
+
+- `test/docs/vision-index.test.ts` (with `test/docs/support/vision-index.ts`): every document-map row's `Ver`, `Date`,
+  `Lines` against the file header and line count, every section range. The bumps of `05_journeys.md` and
+  `06_features.md` turn it red until `00_index.md` is re-synced in the same commit; the line counts must stay 287 and
+  554 (above), or every later range of that file's section map moves. `INDEX_ANCHORS` (`06_features.md:L103–105`) is
+  above line 434: unchanged.
+- `test/docs/vision-change-w1-rows.test.ts`: "Total MVP features" figure = 68 pillar-table rows, and `US-4-14`'s marker
+  (`between(…, 'US-4-14:', /^\* |^#/m)`): inserting US-4-15 after US-4-14 keeps that story's text bounded. Unchanged
+  by this task; must stay green.
+- `test/docs/vision-default-machine-text.test.ts` (`06_features.md` ≥ 1.15) and `vision-revision-history.test.ts`
+  (neither file keeps a `## Revision history`, so neither is judged): green at 1.19 / 1.7.
+- `grep -rn "US-5-\|US-2-1[0-9]\|US-4-1[0-9]\|66/68\|16/18\|31 additional\|workflow show --name\|(P4.5, planned)" test/`
+  → only `vision-change-w1-rows.test.ts` (`US-4-14`) and comment headers of `test/core/memory-*.test.ts`,
+  `test/mcp/mcp-tools.feature.test.ts`; no test reads the two agent feature files' first lines or the BDD index's US
+  column (`grep -rln "agent-list.feature\|agent-show.feature" test/` → comment headers only). No workflow phase or step
+  list changes; no `.wingfoil/` file changes, so `npm run check:mcp` and `workflow show` have nothing to prove.
+
+#### Files to touch and version bumps
+
+| File | Bump (against `main`) |
+|------|-----------------------|
+| `docs/01_vision/05_journeys.md` | 1.6 → 1.7, `**Date:**` the green date |
+| `docs/01_vision/06_features.md` | 1.18 → 1.19, `**Date:**` the green date |
+| `docs/01_vision/00_index.md` | no version: `**Last indexed:**` and the two document-map rows |
+| `docs/02_requirements/01_user_story_map/00_index.md`, `03_review-workflow.md`, `05_conventions.md`, `06_decisions.md` | none: no story-map file declares a version (`grep -n "Version" docs/02_requirements/01_user_story_map/*.md` → only a table cell) |
+| `docs/02_requirements/02_bdd/00_index.md`, `features/p5-interaction/P5.3.4-agent-list.feature`, `P5.3.5-agent-show.feature` | none (no BDD file declares one) |
+| `test/docs/story-map-coverage.test.ts` (new, qa) | — |
+| the bugs (status syncs; `bug-289`'s missing `### Retrospective`, below) | — |
+
+No `src/`, no `.wingfoil/`, no SARD file, no `README.md` (its rows count 68 features, 7 · 15 story files and edge
+stories, 68 / 325 BDD files and scenarios: none moves). **Coverage:** the only test change is a suite that imports no
+`src/` module, so no `src/` figure can move; a coverage run is not needed (D8).
+
+#### Tests run (this phase)
+
+- `npx jest test/docs/vision-index.test.ts test/docs/vision-change-w1-rows.test.ts --maxWorkers=2` → `Test Suites: 2
+  passed, 2 total`, `Tests: 52 passed, 52 total`.
+- After the heavy-gate slot wait (`waitslot.sh`, queued behind another worktree's coverage run, about 36 minutes),
+  `npm test -- test/docs --maxWorkers=2` (a filtered run, no gate) → `Test Suites: 40 passed, 40 total`, `Tests: 476
+  passed, 476 total`, exit 0: AC 4's characterization baseline at `0bff0b0c2`, with these notes uncommitted.
+
+#### Decisions for the approver
+
+- **D1 — no change-proposal: these are corrections that keep the features unchanged** (recommended), versus (b) one
+  `vision-change` run with a `kind: vision` change-proposal. `dl-132`'s Decision defines a vision change as a new
+  feature row and "possibly a journey, a persona or a sequencer entry", with a mandatory exit into a release's
+  `features:`. Here no feature id, persona, journey step or sequencer entry is added, moved or removed: the story layer
+  is filled in for two features already in `06_features.md` and `minor-v0.3`'s scope, one story follows a journey step
+  `task-261` already wrote, and five vision lines are aligned with commands that ship. The mandatory exit has nothing to
+  carry (P5.3.4, P5.3.5 and P4.5 are released features). The task and its three bugs are the record; the reverse walk
+  `dl-132` Q2 (ii) asks for is in this subsection and D6, with "no impact" stated per layer. Against it: the
+  `change-proposal` template's `kind` comment says `vision` covers "any other change to docs/01_vision/", read
+  literally (b). If the approver rules (b), this task stops and is re-planned as a `vision-change` run like `task-360`.
+- **D2 — the two new stories and where they sit.** Recommended: **US-2-12** (P5.3.4) in `03_review-workflow.md`, Step 4
+  (Launch review agent), after US-2-07: "As Sam, I want to list the recorded agent runs and the workflow steps waiting
+  for an agent with `wingfoil agent list` (`--past`, `--waiting`), read at `HEAD`, so that I see what agents have done
+  and which step an agent can take next before I launch one. _(feat: P5.3.4)_", tag `[MVP · v0.3]`; **US-4-15**
+  (P5.3.5) in `05_conventions.md`, Step 5 (Review deliverable against directives), after US-4-14: "As Morgan, I want to
+  print one recorded agent run with `wingfoil agent show <run-id>` — its role, agent, exit status, duration and token
+  counts — and the commit that added it, so that I see what an agent did on a deliverable's step before I approve it.
+  _(feat: P5.3.5)_", `[MVP · v0.3]`. Index home journeys 2 and 4. This follows `bug-399`'s fix note (one story each, in
+  journeys 2 and 4, Sam and Morgan) and the feature rows (journeys `2, 4`, users `Sam, Morgan`). `--active` is left
+  out: the row gives it to v0.4 and the story is tagged v0.3. Alternative: both in Journey 2 (US-2-12 at Step 4,
+  US-2-13 at Step 6, "Sam reviews agent output"), home journey 2 for both, no Journey 4 story.
+- **D3 — US-5-06 restated** to what `dna show` returns, the journey's step 4 wording: "As Casey, I want to display DNA
+  with `wingfoil dna show` so that I know who builds the project and with what: team size and stacks. _(ref: P2.2 —
+  home in Journey 3)_". Recommended as written.
+- **D4 — Step 4.5's story, and its journey Outcome.** **US-5-11**, under `### Step 4.5 — Check release progress
+  (read-only view)`: "As Casey, I want a read-only view of the open workflow runs with `wingfoil workflow status` —
+  each run at its current phase, the steps waiting on its frontier and the pending approvals with who they are routed
+  to — so that I follow release progress and see what is pending or blocking without asking the team. _(ref: P4.5 —
+  home in Journey 2)_", `[MVP · v0.3]`. `ref`, not `feat`: P4.5's home story is US-2-01, so the index and its counts
+  are unchanged by it. The journey row's Outcome "Each release's state (current phase), what is pending or blocking"
+  promises a per-release state that `workflow status` does not print (above): recommended, restate it in the same row
+  as "The open runs, each at its current phase, and what is pending or blocking" — the line the task already edits,
+  the class of `bug-289`. Alternative: keep the Outcome and the `memory search --type release` complement, which
+  `bug-397`'s expected behaviour removes.
+- **D5 — the journey wording of the reader commands.** Recommended: J2 step 3 and J3 step 2 `wingfoil workflow show
+  release-cycle` (the form US-2-05 and US-3-02 already use), J6 step 1 `wingfoil workflow show <workflow>` (AC 3's
+  form; US-6-01 keeps the CLI's `<ref>`, untouched), J5 step 4.5 `wingfoil workflow status` alone; the features bullet
+  as change item 5. The Outcomes of J2-3 and J3-2 ("task context, submission" / "task description") describe more than
+  `workflow show` prints (a workflow resolved, P4.7 "phases, steps, directives, Memory structure"), as US-2-05 and
+  US-3-02 do: recommended, left as they are and reported as a candidate finding, since restating them changes what
+  two journeys do (a `kind: vision` question, D1) and reaches four lines no bug of this task names.
+- **D6 — the BDD and SARD "same delta", with "no impact" recorded.** BDD: impact, change item 6 (two `Feature:` lines,
+  one narrative persona so P5.3.4's narrative follows its home story as `P4.5-workflow-status.feature` follows US-2-01,
+  the two index cells, 31 → 32). No scenario changes: US-5-11 is a ref-marked duplicate covered by
+  `P4.5-workflow-status.feature` ("Show status of all open workflows"); US-5-06's feature P2.2 has its home in US-3-03;
+  the journey and features edits name forms the BDD files already use (`grep` above → nothing). **SARD: no impact** —
+  `grep -rn "US-5-0[6-9]\|US-5-1\|P5\.3\.4\|P5\.3\.5\|agent list\|agent show" docs/02_requirements/03_sard/` → nothing;
+  REQ-PERF-02 traces P2.2 through US-3-03 and REQ-INT-05 traces P4.5 through US-2-01, both home stories unchanged; no
+  REQ-* text names `workflow show --name` or the active-context option. `README.md`: no impact (counts above).
+  Recommended as stated.
+- **D7 — tests that pin a `ref:` or a count.** None changes: the only story-map count a test reads is the "Total MVP
+  features" figure (68, unchanged, `vision-change-w1-rows.test.ts`); `vision-index.test.ts` pins the two bumped rows,
+  re-synced in the same commit. The new suite (above) pins the coverage generally. Recommended as stated.
+- **D8 — no coverage run.** The only test change is a new `test/docs` suite importing no `src/` module. If the approver
+  wants one, the reviewer compares against the `169ecd71b` baseline.
+
+#### Pending amendments (approver)
+
+None at this gate: the ACs name no tech-spec or decision-log amendment, and the story-map, BDD and vision files are
+non-Memory documents the task commits. One later item for `green`: `bug-289` has no `### Retrospective` subsection
+(`grep -c '### Retrospective' docs/04_memory/bugs/bug-289-*.md` → 0) while a closed bug needs one (`dl-115` Q2 (a));
+`bug-397` and `bug-399` have theirs. The developer prepares that addition uncommitted, with its `--reason`.
+
+#### Candidate findings (not filed)
+
+- `docs/02_requirements/02_bdd/features/p4-workflow/P4.21-element-provenance.feature`: its first line, `Feature:
+  P4.21 - Element provenance (workflow adopt, rekey, transfer)`, lacks its home story (`US-0B-07`, the BDD index's
+  row), unlike the 65 other files (loop over `features/*/*.feature`, `grep -m1 -v '^\s*\(#\|@\|$\)'`). Expected:
+  `Feature: P4.21 (US-0B-07) - …`. Low.
+- `docs/01_vision/05_journeys.md` J2 step 3 and J3 step 2 Outcomes, and US-2-05 / US-3-02, promise task context and
+  the submission from `wingfoil workflow show release-cycle`, which prints the workflow definition (`workflow show
+  --help`: "print one workflow resolved, its included workflows nested under their phases"). Expected: the step names
+  the command that shows the task (`workflow next`, `memory search`) or the Outcome says what `show` prints. Low (D5).
+
+#### Risks for the open tasks
+
+- `task-365` (`main...` holds only its task file) and `task-373` (`src/`, `test/`, `spec-008`, `spec-017`,
+  `docs/cli-reference.md`, `bug-476`): `git diff --name-only main...<branch>` shows no file this task touches; `grep`
+  of their task files names none either. `task-373` changes what `workflow status` and `agent list` print on stderr
+  (warning lines); US-5-11 and US-2-12 describe stdout's content only, so no story is invalidated.
+- Any task that later edits `05_journeys.md` or `06_features.md` re-syncs the vision index after this one merges.
+
+### Retrospective
+
+<!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
+     reconstructed afterwards. One line per item: what happened, the evidence (a command and what it
+     printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
+     Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
+     here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
