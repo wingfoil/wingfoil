@@ -781,6 +781,91 @@ above. bug-538's follows the qa's F2 subsection.
   attributed operation with a call-site parity, the gated refusal through the MCP Tools and the blank --project, now
   refused by buildProgram's checkProject (task-362), through test/cli/program-blank-project.test.ts."`
 
+### independent review (2026-11-21) and fixes (developer)
+
+The independent review of `4422ae6d1` gave APPROVE WITH FIXES: no blocker, three should-fix findings, and one
+follow-up, which the coordinator logs for the closing ingest. The three fixes:
+
+1. **`wingfoil-cli` §2, the bug-530 class** (`1b2168b1b`). The hand-procedure bullet said "approvals and rejections
+   only on the approver's instruction". It now says that approvals, rejections and amendments are the approver's own,
+   run from their own terminal, and that an agent never writes one, by verb or by hand (spec-018 §3). The version
+   stays 1.7, already bumped on this branch; its clause now names §2 too.
+   - Same-class check: `grep -n "instruction"` over the directive and `dev-loop.yaml` leaves no hit that has an agent
+     run approve, reject or amend. The remaining hits are `dev-loop.yaml`'s "design's instruction (2)" and "the four
+     instructions above", which are about the design agent's own instructions.
+   - `grep -n -i "approver's instruction"` over `.wingfoil/` → no hit.
+   - `npx jest test/core/dev-loop-v2-6.test.ts test/directives/wingfoil-cli-dl-205.test.ts
+     test/core/dev-loop-v2-4.test.ts …` passes (below).
+   - `npm run -s wingfoil -- directives list` (the pinned build) still lists `directives/custom/wingfoil-cli.md`,
+     exit 0.
+   - `bug-530`'s Retrospective, a pending amendment that stays uncommitted, gains a line for this fix.
+2. **AC 1's `memory.deprecate` success path** (`c3f83bce2`, a new file, `test/mcp/mcp-deprecate-tool.test.ts`). This
+   is a **characterization**: the behaviour exists since green `21a0b5a3d`, and the case passed on its first run.
+   Over the production server, `memory.deprecate {id: 'task-004-deprecate-me', reason: 'replaced by task-007'}` writes
+   one commit with:
+   - the subject `wf(task): deprecate task-004-deprecate-me [draft → deprecated]`;
+   - the line `Reason: replaced by task-007`;
+   - a final paragraph of `WingFoil-Version: …`, `Co-Authored-By: Claude <noreply@anthropic.com>` and
+     `AI-Model: not-reported`, with exactly one `Co-Authored-By:` and one `AI-Model:`;
+   - the element's path only.
+
+   Its subject, paths and message, `WingFoil-Version:` excepted, equal those of `wingfoil memory deprecate` on a twin
+   fixture under `WINGFOIL_AGENT=Claude`. `npx jest test/mcp/mcp-deprecate-tool.test.ts --maxWorkers=2` →
+   `1 passed`. No red file is edited.
+3. **Downstream — what `task-373` meets when it merges `main` after this task.**
+   - *`spec-008`*:
+     - This task adds the §5 paragraph "A third: a **refused option value** … (`dl-199` (b))".
+     - Its Revision paragraph comes last, after `task-375`'s two and `task-362`'s.
+     - `task-373` edits §2 and the §6 warnings paragraph, and inserts its own Revision paragraph right after
+       `task-375`'s, in its branch at the spot where `task-362`'s and this task's now stand. Expect a Revision-only
+       conflict there, resolved as the union, earlier-merged first.
+   - *Warnings in a Tool call*:
+     - `src/mcp/tools.ts` installs one warning sink per Tool call, and a Tool result carries every warning raised
+       during the call (through `reportWarning`) and every warning the operation returns (`CoreResult.warnings`) as
+       `structuredContent.warnings`, after the warnings collected during the call.
+     - `task-373` carries the deduction diagnostics of `workflow next`, `workflow status` and `agent list` as success
+       warnings (`withDiagnosticWarnings` in `src/core/index.ts` on its branch, `CoreResult.warnings`).
+     - Those are read operations, served as Resources, not Tools, so no Memory Tool of this task returns them today.
+     - When `task-368` serves the other modules' Tools, any `diagnosticWarning` line that a mutating operation reports
+       or returns reaches that Tool's `structuredContent.warnings` through this sink, with no change in `tools.ts`.
+     - `task-373`'s change to a warning's text then shows there word for word.
+     - The `W_AGENT_ENTRY_GUESSED` and `W_NO_AGENT_ENTRY` texts pinned in this task's AC 3 and AC 5 tests are not
+       deduction diagnostics, so they are unaffected.
+
+**Gates after the fixes** (worktree at `c3f83bce2`, the three bug Retrospectives uncommitted):
+- `npx tsc --noEmit -p tsconfig.json` → exit 0. `npm run lint` → exit 0.
+- `npx jest test/core/dev-loop-v2-6.test.ts test/directives/wingfoil-cli-dl-205.test.ts test/core/dev-loop-v2-4.test.ts
+  <the 28 test/mcp/*.test.ts> --maxWorkers=2` → `Test Suites: 30 passed, 30 total`, `Tests: 269 passed, 269 total`.
+- `npm run test:coverage -- --maxWorkers=2`, after `waitslot.sh`: a first run at `c3f83bce2` gave
+  `1 failed, 13071 passed, 13072 total`. Its totals were 13105/13238, 8145/8411, 2592/2627 and 10910/10967, but
+  `src/mcp/server.ts`'s function column was 3/4 (75 %) against 4/5 (80 %) at `169ecd71b`. The function lost was the
+  removed `registerEmptyToolsChannel`, which was covered; the uncovered one is `startMcpServer`.
+  - `981b0b62e` adds the new file `test/mcp/start-mcp-server.test.ts`. It drives `startMcpServer` in process over a
+    jest module mock of the SDK's stdio transport, so no real stdio channel is opened, and asserts that the transport
+    starts once and that an error it sends loses the `MCP error <code>: ` prefix (`bug-034`).
+  - `npx jest test/mcp/start-mcp-server.test.ts --maxWorkers=2` → `1 passed`. `npx jest test/lint --maxWorkers=2`
+    → `165 passed`.
+  - The second coverage run at `981b0b62e` gave `Test Suites: 1 failed, 718 passed, 719 total`, `Tests: 1 failed,
+    13075 passed, 13076 total`. The one failure is `test/cli/workflow-unbound-none.integration.test.ts`, the
+    `bug-534` class caused by the uncommitted bug files.
+  - Totals were statements 13109/13238 (99.02 %), branches 8145/8411 (96.83 %), functions 2593/2627 (98.7 %) and
+    lines 10914/10967 (99.51 %). Against `169ecd71b` (12925/13072, 8051/8333, 2546/2582, 10777/10834, checksum
+    `OK`), no column loses ground, in the totals or in any changed file:
+
+    | File | Statements | Branches | Functions | Lines |
+    |---|---|---|---|---|
+    | `src/mcp/server.ts` | 25/25 | 6/6 | 4/4 | 25/25 |
+    | `src/mcp/tools.ts` | 57/57 | 41/41 | 13/13 | 48/48 |
+    | `src/mcp/registrar.ts` | 38/38 | 14/14 | 8/8 | 35/35 |
+    | `src/mcp/wire-errors.ts` | 13/13 | 4/4 | 3/3 | 10/10 |
+    | `src/core/agent-context.ts` | 103/104 | 65/67 | 26/26 | 82/82 |
+    | `src/cli.ts` | 12/12 | 7/7 | 3/3 | 11/11 |
+
+- Pending amendments, final: `bug-034` and `bug-538` as listed in the merge subsection above. `bug-530` gains one
+  Retrospective line for fix 1, so its reason becomes
+  `--reason "Record the bug's retrospective: task-367 rewrites dev-loop.yaml 2.6's header and wingfoil-cli 1.7 §2
+  and §3 so the approver runs approve, reject and amend from their own terminal and an agent never does."`
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
