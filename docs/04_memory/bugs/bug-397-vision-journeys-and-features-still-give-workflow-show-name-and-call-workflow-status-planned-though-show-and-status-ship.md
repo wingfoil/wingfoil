@@ -69,3 +69,8 @@ follow-up registry, item 11: found in `task-252`'s design), checked on `main` at
      An item met while fixing goes in the fix task's own subsection; this one holds what belongs to
      the bug itself (its finding, its triage, why it took more than one task). The retrospective's
      `explore` reads this subsection first. -->
+
+- The vision kept `workflow status` "(P4.5, planned)" with a `memory search` stand-in, and `workflow show --name`, after
+  both commands shipped in v0.3: nothing re-reads the vision when a feature ships, so the lines waited for v0.3's
+  `user-docs` to find them and for v0.4's `cp-004` (`task-381`, `b702cbd4a`) to fix them. Proposal: when a release
+  ships a feature, `grep -rn "<feature id>, planned\|until it ships" docs/01_vision/` is part of its user-docs check.
