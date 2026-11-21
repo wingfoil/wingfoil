@@ -517,6 +517,23 @@ before and after; no red is fabricated.
 - `npx tsc --noEmit -p tsconfig.json` → exit 0. `npx jest test/lint test/validation/secret-scan.test.ts --maxWorkers=2` → `Tests:
   0 failed, 250 passed, 250 total`.
 
+### refactor, after the qa send-back (developer, 2026-11-21)
+
+The approver ruled that the qa fixes the fifth source: test commit `fb37cf7e6` (`test/core/workflow-next-render.test.ts`
+only, `developer` declared in the fixture's `team.roles`), notes `230ab7451`. Green made no further change.
+- `npm test -- --maxWorkers=2` on `230ab7451` with the `bug-476` amendment in the tree (slot granted 08:17:20) → exit 0,
+  `Test Suites: 706 passed, 706 total`, `Tests: 12919 passed, 12919 total`; `test/cli/workflow-unbound-none.integration.test.ts`
+  passed in the worktree. On the suite's captured stderr: `grep -ciE 'warning:'` → `5`, `grep -cE '^\s*(warning|Warning):'`
+  → `5`, `grep -c 'You appear to have cloned an empty repository.'` → `5`; `grep -iE 'warning:' | sort | uniq -c` → only
+  `5 warning: You appear to have cloned an empty repository.` AC 3 is met: no WingFoil warning a test causes on purpose
+  is left on the suite's stderr.
+- AC 3 in the self-review above now reads met: all five sources are fixed, the fifth by `fb37cf7e6`.
+- T4: `git log --first-parent --no-merges --format=%h 5fef777bd..HEAD -- <the 11 red files>` → empty; `fb37cf7e6` touches
+  only `test/core/workflow-next-render.test.ts`, a qa commit after the send-back.
+- `bug-476`'s `### Retrospective` is final: five sources, all fixed, the fifth by `fb37cf7e6`. Its `--reason` replaces the
+  one proposed above:
+  - `bug-476-the-workflow-next-test-fixture-declares-an-unknown-phase-field-on-purpose-so-every-run-prints-dozens-of-unknown-field-warnings-on-the-ci-s-stderr` — `--reason "Record task-373's retrospective item for bug-476: the fixture lost the unknown field, the one test relying on it asserts the warning on stderr, and all five on-purpose warning sources of the suite are fixed, the fifth by the qa's fb37cf7e6."`
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
