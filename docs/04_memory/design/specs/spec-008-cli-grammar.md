@@ -73,7 +73,8 @@ wingfoil [global-flags] <noun> [args] [flags]              # flat command: `init
   verbs included: `dna set ..language python` is refused for its surplus, and §5 writes the
   malformed-path case with `--value`. Their surplus message adds the migration hint
   `the value travels in --value`, which each of them declares (`CorePositional.surplusHint`,
-  `spec-006-core-domain-api` §2).
+  `spec-006-core-domain-api` §2). The argument parser's built-in `help` command is not a command this rule
+  counts operands of: its operands are a command path, walked as §8 states.
 - **A missing required operand** is refused at exit `2` in one form for every command:
   `missing required argument: <name>`, with the command's usage on `spec-005` §3.1's `hint:` line
   (§4). It is enforced where commands are registered too, right after the surplus check.
@@ -111,8 +112,8 @@ here: it is in §12.
 | `--co-author <name>` | value option | — | From `minor-v0.4` (`spec-018` §1 row 2, §2.3). Taken by every command `--dry-run`'s row lists **but `agent execute`** (`spec-018` §1.1), placed after the verb; on any other command, `init` and `mcp` included, it is an unknown option (exit `2`, §5). It is an agent marker: with it, or with `WINGFOIL_AGENT`, `CLAUDE_CODE_CHILD_SESSION` or `CODEX_SANDBOX` defined in the environment (whatever the value, the empty one included; `CLAUDECODE` is not a marker), the command runs in an agent's session. An approver-gated command (`memory approve`, `reject`, `amend`, `workflow finalize` on an `approval:` phase, `workflow adopt --plan --apply`, `workflow rekey`) then refuses with §6's `E_AGENT_CONTEXT` row, exit `1`, before anything is written. Every other command writes the agent's attribution trailers (the build-signature note below), signed by the `team.agents` entry `spec-018` §2.3 selects: the entry whose `name` is `<name>`, exactly, whatever the environment says. A blank `<name>` → `error: invalid flag value: --co-author must not be blank`, exit `2`, before anything is read. |
 | `--ai-model <id>` | value option | — | From `minor-v0.4` (`spec-018` §2.4). Taken by the commands that take `--co-author`, after the verb. The model identifier the agent's `AI-Model:` trailer records; without it the `WINGFOIL_AGENT_MODEL` environment variable's value, and without either the literal `not-reported`. It is not a marker. Usage checks, exit `2`, before anything is read, in this order: a blank or whitespace-only value → `error: invalid flag value: --ai-model must not be blank`; a value holding a line break or another control character (C0 including tab, DEL, C1, `U+2028`, `U+2029`) → `error: invalid flag value: --ai-model must be one line`; given in a session no agent marker marks → `error: invalid flag combination: --ai-model needs an agent context (--co-author, or a session an agent started)`. `WINGFOIL_AGENT_MODEL`, when it is the value used, follows the same one-line rule (`error: invalid environment value: WINGFOIL_AGENT_MODEL must be one line`, exit `2`); a blank one counts as unset. The value is written with its leading and trailing whitespace trimmed. |
 | `--verbose`       | flag                   | `false`   | Emit diagnostic logs to stderr in plain text, even under `--format json`/`yaml`. Never alters stdout.  |
-| `--color` (negatable) | boolean flag        | `true`    | ANSI colour on stdout. Pass `--no-color` to disable; also disabled automatically when `NO_COLOR` is set to any non-empty string (https://no-color.org/) — an explicitly empty `NO_COLOR=` does **not** disable colour. **Today no output is coloured** (see `--format`), so `--no-color` and `NO_COLOR` are accepted and change nothing; the rule above is the one the colour P5.1.4 adds must honour. Commander itself already honours `NO_COLOR` (it strips colour from its help, which has none) but not `--no-color`, so that rendering must read both. |
-| `--interactive` (negatable) | boolean flag  | `true`    | Whether missing required args may trigger a readline prompt in a TTY (§4). Pass `--no-interactive` to force immediate failure instead. |
+| `--no-color` (negatable) | boolean flag     | `true`    | ANSI colour on stdout, on unless `--no-color` is passed; also disabled automatically when `NO_COLOR` is set to any non-empty string (https://no-color.org/) — an explicitly empty `NO_COLOR=` does **not** disable colour. **Today no output is coloured** (see `--format`), so `--no-color` and `NO_COLOR` are accepted and change nothing; the rule above is the one the colour P5.1.4 adds must honour. Commander itself already honours `NO_COLOR` (it strips colour from its help, which has none) but not `--no-color`, so that rendering must read both. The positive form `--color` is not registered: it is an unknown option (exit `2`, with `hint: did you mean "--no-color"?`). |
+| `--no-interactive` (negatable) | boolean flag | `true` | Whether missing required args may trigger a readline prompt in a TTY (§4): they may unless `--no-interactive` is passed, which forces immediate failure instead. The positive form `--interactive` is not a global flag: it is an unknown option (exit `2`, with `hint: did you mean "--no-interactive"?`), and on `agent execute` it is that command's own flag (§12), a different option. |
 | `--project <dir>` | path                   | the current directory | From `minor-v0.4` (`dl-198` (a)). Names the project root: the command runs on the repository rooted at `<dir>`, resolved against the current directory, instead of on the current directory. `<dir>` must itself be a git root, holding a `.git` entry (a directory in a clone, a file in a worktree); nothing above or below it is examined (`spec-011` § Git-root detection algorithm). Any other directory — a subdirectory of a repository, one outside every repository, a missing path or a file — is refused at §1's root step, so after `--format` and the operand checks and before anything is read or written, at exit `1` with `error: E_NOT_AT_GIT_ROOT: --project is not a git root: <absolute dir>`. A blank value is refused at exit `2` with `error: invalid flag value: --project must not be blank`, just before the root step. Without the flag the root is the current directory, which must be the git root: a subdirectory is still refused with `E_NOT_AT_GIT_ROOT: run wingfoil from the project root`, for read-only commands too, because the root is never resolved upwards (`dl-198` (b) was not taken). The flag changes which repository a command reads and writes, never which baseline it reads there (§11). `init` scaffolds the named repository, `mcp` serves it for the server's whole life, and `agent execute` registers its MCP server with `--project <root>` (`spec-016` §2.5). `--help` and `--version` keep their precedence: with either, the value is not checked. On `capabilities`, which reads no project (`spec-019` §1), a blank value is still refused at exit `2` and a non-blank one is accepted and not checked. Why the root is named rather than inferred is `spec-011`'s. |
 
 Notes:
@@ -120,8 +121,12 @@ Notes:
 - `--format` values are `console`/`json`/`yaml`; the fit criterion in REQ-INT-05 calls these out
   explicitly for `wingfoil paths` and `wingfoil workflow status`, but the flag is registered globally so
   every command honours it uniformly (REQ-SYS-05).
-- `--color`/`--interactive` are **negatable booleans**, not independent `--no-*` flags with their own
-  default — see §3 for why this distinction matters and how Commander.js models it.
+- `--no-color`/`--no-interactive` are **negatable booleans**, not independent `--no-*` flags with their own
+  default — see §3 for why this distinction matters and how Commander.js models it. Each sets a positive
+  property, `color` or `interactive`, `true` unless the flag is passed. Only the negated form is registered,
+  so the positive form is refused (`bug-514`): a global `--interactive` would also be taken by the root
+  program wherever it stands on the command line (the any-position rule above), so `agent execute`'s own
+  `--interactive` would never reach that command.
 - **`--reason`'s declared normal form** (`dl-067-reason-trailer-contract`, ratified), in two parts:
   - **What git already does, and would do whether or not this row existed** — per-line trailing
     whitespace stripped, runs of blank lines collapsed to one, leading and trailing blank lines
@@ -393,7 +398,7 @@ rendering.
 | Condition                                                        | Behaviour                                                          |
 |--------------------------------------------------------------------|------------------------------------------------------------------------|
 | All required args present (flags or positionals)                 | Direct execution; no prompt                                          |
-| Required arg missing, stdout is a TTY, `--interactive` (default)  | Readline prompt for each missing arg, one at a time                  |
+| Required arg missing, stdout is a TTY, no `--no-interactive` (the default) | Readline prompt for each missing arg, one at a time                  |
 | Required arg missing, stdout is **not** a TTY (CI/pipe/non-interactive) | Fail immediately: exit `2`, `error: missing required argument: --<name>`; where the argument takes one of a closed set of values, the line ends with ` (one of: <v1>, <v2>, …)`, read from the same registry the command validates against (e.g. `init`: `missing required argument: --template (one of: Scrum, Kanban)`) |
 | `--no-interactive` passed (any TTY state)                         | Fail immediately, same as the non-TTY case — no prompt is attempted  |
 
@@ -432,13 +437,15 @@ of failure, not its severity.
 A second case the table decides once it is read the same way: a **noun invoked without its verb**
 (`wingfoil dna`) and `wingfoil` invoked with no command at all are **"missing required argument"** in
 the exit-`2` row — the case already enumerated there, not a fourth one; `wingfoil help <unknown>` is the
-row's **unknown command**, with the closest-command `hint:` line of §1 (`spec-005` §3.1).
+row's **unknown command**, with the closest-command `hint:` line of §1 (`spec-005` §3.1), and so is any
+operand of a help command path that names no command of the level the path has reached (§8,
+`wingfoil help memory addd`).
 §1's grammar makes the verb a required argument of the noun, so an invocation that stops at the
 noun is malformed, and it exits `2` with an `error: ` line naming what was missing (`spec-005` §1's
 rule that a non-zero exit always carries an error message admits no exception for it). An argument
 parser that answers such an invocation by printing the command's usage has not thereby emitted the
-error message. An **explicit** request for help by name — `wingfoil help`, `wingfoil help <known>` —
-is the opposite case and exits `0` alongside `--help`/`--version`, even though it prints the same
+error message. An **explicit** request for help by name — `wingfoil help`, `wingfoil help <known>`,
+`wingfoil help <noun> <verb>` — is the opposite case and exits `0` alongside `--help`/`--version`, even though it prints the same
 text.
 
 A third: a **refused option value** — a `--reason` that cannot be recorded (§2's unrecordable-value row), a blank
@@ -612,9 +619,22 @@ prefix either, and only drops a step's scope by `spec-017` §4.9's rule for an u
 | `wingfoil --help`               | Binary synopsis, noun list (pillars + flat commands), global flags table |
 | `wingfoil <noun> --help`        | Noun synopsis, list of verbs with one-line descriptions               |
 | `wingfoil <noun> <verb> --help` | Synopsis, argument table, flags table, exit codes, one example        |
+| `wingfoil help [<noun> [<verb>]]`, or `help [<verb>]` after a noun | The help `--help` prints for the command the path names: `wingfoil help memory add` prints what `wingfoil memory add --help` prints |
+| `wingfoil help help`, or `help help` after a noun | The help command's own help, its usage line naming the path that answered — `Usage: wingfoil help [command]`, `Usage: wingfoil memory help [command]` — then `display help for command` |
 
-Help output always renders as `--format console` regardless of the ambient `--format` flag, and always
-exits `0`.
+**The help command's operands are a command path.** They are walked from the level the help command was
+typed at: each operand names a command of the level the walk has reached — by name or alias, the level's
+own help command included — and the walk descends into it. The help of the command reached is printed. A
+command with nothing below it, the help command included, ends the walk. The first operand that names no
+command of the level reached is refused as §5's unknown command, at exit `2`, with nothing on stdout:
+`error: unknown command '<operand>'`, and §1's closest-command `hint:` line matched against the commands of
+that level. A command with nothing below it offers no candidate, so an operand after it gets no `hint:`
+line. `wingfoil help memory addd` → `error: unknown command 'addd'`, `hint: did you mean "add"?`;
+`wingfoil help memory add extra` and `wingfoil help help help` → `error: unknown command 'extra'`,
+`error: unknown command 'help'`.
+
+Help output always renders as `--format console` regardless of the ambient `--format` flag, and every help
+request answered exits `0`; a refused help path is the refusal above, rendered in the active `--format`.
 
 ### 9. DNA field paths (`<path>` / `--value`)
 
@@ -1643,3 +1663,20 @@ diagnostics, one success warning per entry of the payload's `diagnostics`, `<cod
 `agent list` and `agent execute` already print (`spec-016` §3.3, §5). This builds on the one console prefix of
 `task-375`'s revision (`2f30562d6`). No exit code, payload or reason changes. Edited in place without a supersede or a
 state change (`dl-047`), pending the approver's `memory amend` at `task-373`'s design gate.
+
+**Revision (2026-11-21, `task-380-fix-help-with-a-second-operand-help-help-and-paths-help-s-category-list`)
+— §1, §2, §4, §5 and §8: the help command's path, and the negatable globals as registered.** `bug-452`: the help
+command took one operand and dropped the rest, so `wingfoil help memory add` printed `memory`'s help and
+`wingfoil help memory addd` exited `0`; §8 now states that its operands are a command path, walked level by level,
+the first operand naming no command of the level reached being §5's unknown command with §1's `hint:` line, and §1
+says that the at-most-one-positional rule does not count them. `bug-456`: §8 gives the usage line of the help
+command's own help at each level. `bug-514`: §2 named the globals `--color` and `--interactive` and called their
+positive forms legal, while the program registers only `--no-color` and `--no-interactive` (§3's pattern), so the
+positive forms exit `2` as unknown options; §2's two rows and its Note now name the registered forms, say the
+positive form is refused, and say why `--interactive` is not registered globally: it would take `agent execute`'s
+own `--interactive` (`task-335`'s revision). `--color` is the same defect as `bug-514`, fixed with it. §4's TTY row
+names the default without the positive form. This builds on `task-315`'s revision of §5 (the help command's unknown
+command and `help help` at exit `0`). The exit codes of §5 do not change; what changes is which invocations
+reach the exit-`2` row: a help path with an operand naming no command, `wingfoil help memory addd` and
+`wingfoil help help help` (which printed a help at exit `0`) among them. Edited in place without a supersede or a
+state change (`dl-047`), pending the approver's `memory amend` at `task-380`'s design gate.
