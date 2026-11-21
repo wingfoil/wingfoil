@@ -58,8 +58,9 @@ Rules:
   by printing the command's usage. Printing that usage is not itself the error message.
 - `--help` and `--version` always exit `0`, even if other arguments on the same invocation are invalid
   (they take precedence and short-circuit the rest of parsing). So does an explicit request for help
-  by name (`wingfoil help`, `wingfoil help <known-command>`): a request the CLI satisfied is a success,
-  and it is distinct from the incomplete invocation above even when the two print the same text.
+  by name (`wingfoil help`, `wingfoil help <known-command>`, `wingfoil help memory add`): a request the
+  CLI satisfied is a success, and it is distinct from the incomplete invocation above even when the two
+  print the same text.
 - Read-only commands (`memory search`, `dna show`, `workflow status`, `paths`, …) can only exit `0`
   (found/empty result) or `1` (e.g. malformed query); they never exit `2` once argument parsing has
   succeeded.
@@ -195,8 +196,9 @@ error: <reason>
   writes it through §3.2's `emitError`; the argument parser's own suggestion text is not shown. An
   unknown **option** keeps the parser's closest match, re-worded into the same `hint:` line. A token
   that reaches the CLI through the help command (`wingfoil help memroy`, and a verb after a noun's
-  `help`) is refused the same way, `hint:` line included, matched at the level the help command was
-  typed at (`bug-115`). Asking the help command about itself (`wingfoil help help`) is a request for help by
+  `help`) is refused the same way, `hint:` line included, matched at the level the help command's path
+  has reached (`bug-115`; `spec-008-cli-grammar` §8, `bug-452`): `wingfoil help memory addd` is matched
+  against `memory`'s verbs. Asking the help command about itself (`wingfoil help help`) is a request for help by
   name, answered with the help command's own help at exit `0` (§1, `bug-116`).
 - **Missing operand:** a command invoked without the positional it requires is refused at exit `2`
   with `missing required argument: <name>` — the placeholder `--help` shows for it — and the
@@ -507,3 +509,12 @@ change (`dl-047`), pending the approver's `memory amend` at `task-375`'s design 
 `wingfoil capabilities` (P5.1.5); Context's list of flat commands names it. Its exit codes and texts are this spec's
 (`spec-019` §2); nothing else changes. Edited in place without a supersede or a state change (`dl-047`), pending the
 approver's `memory amend`.
+
+**Revision (2026-11-21, `task-380-fix-help-with-a-second-operand-help-help-and-paths-help-s-category-list`)
+— §1 and §3.1: a help command path, per `bug-452`.** The help command took one operand and dropped the rest, so
+`wingfoil help memory addd` printed `memory`'s help at exit `0`. `spec-008-cli-grammar` §8 (the same task) now walks
+the help command's operands as a command path; §1's explicit request for help by name names `wingfoil help memory
+add`, and §3.1 matches a help operand at the level the path has reached rather than the level the help command was
+typed at, which is the same level for a single operand. This builds on `task-315`'s revision of §3.1. §1's exit-code
+table, the error format and every other rule are unchanged. Edited in place without a supersede or a state change
+(`dl-047`), pending the approver's `memory amend` at `task-380`'s design gate.
