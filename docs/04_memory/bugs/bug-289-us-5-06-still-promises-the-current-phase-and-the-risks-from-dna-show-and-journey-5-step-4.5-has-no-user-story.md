@@ -59,3 +59,20 @@ the BDD files is broken at its first link.
 
 Captured on 2026-10-07 by `bug-ingest-rel-v0.3-w3b2-review-findings-plan`, from `task-261`'s review (W3 B2,
 `dev-loop-rel-v0.3-plan`), checked against `main` at `c485e433`.
+
+### Retrospective
+
+<!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
+     reconstructed afterwards. One line per item: what happened, the evidence (a command and what it
+     printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
+     An item met while fixing goes in the fix task's own subsection; this one holds what belongs to
+     the bug itself (its finding, its triage, why it took more than one task). The retrospective's
+     `explore` reads this subsection first. -->
+
+- Found at `task-261`'s review (v0.3 W3 B2) and fixed only in v0.4 by `task-381`: `task-261` wrote Journey 5 step 4.5
+  but its acceptance criteria named no story-map file (the bug's Notes), so the story layer under a journey edit had
+  no owner until a vision-change run (`cp-004`) walked every layer. Proposal: a journey edit runs through
+  `vision-change`, whose `downcast-stories` step owns the story layer.
+- The class is a story promising what its command does not return (US-5-06 and `dna show`; step 4.5's Outcome and
+  `workflow status`): `task-381` read each command's output before writing the story (`dna show --format json`,
+  `workflow status --format console`, its design notes), the check that would have caught it at capture.
