@@ -569,6 +569,37 @@ Against `code-review`, `traceability` and `claim-evidence`:
   layer under the journey edit waited for a vision-change run, and the class of a story promising what its command
   does not return."`
 
+### independent review (2026-11-21) and fixes (developer)
+
+The review of `348dd6fef` returned approve with fixes: no blocker, three should-fix, no re-review. Fixes, on the task
+branch (`git branch --show-current` checked before each commit; `git rev-list --count HEAD..main` → `0`, no merge):
+
+1. `bug-397`'s `### Retrospective` held only the template comment. One item added (the vision kept a "planned" command
+   after it shipped; a proposal for the user-docs check), uncommitted. `node scripts/check-retrospective.cjs <file>` →
+   exit 0 for `bug-289`, `bug-397` and `bug-399`.
+2. `cp-004`'s Impact analysis said "No impact on … `07_sequencer.md`" and that no section range of the vision index
+   moves, which D9's `41299e056` made false. A dated Revision note appended to its `## Notes` (the original analysis
+   kept), uncommitted. The plan's Execution Notes gained the line on Step 8 (`653ca1b91`, append-only: `git diff` → 0
+   removed lines).
+3. `05_journeys.md`'s Journey 5 step 4.5 row was 198 columns against 265 for the other Journey 5 rows; its Tool and
+   Outcome cells re-padded to the row above's widths (`8daabf888`, `git diff -w` → empty, `awk '{print length}'` →
+   265; 287 lines, version and date unchanged, so the vision index stays). `npx jest test/docs/vision-index.test.ts
+   test/docs/story-map-coverage.test.ts --maxWorkers=2` → `Tests: 175 passed, 175 total`.
+
+**Pending amendments (approver), final reasons** (each uncommitted in the worktree):
+
+- `bug-289-us-5-06-still-promises-the-current-phase-and-the-risks-from-dna-show-and-journey-5-step-4.5-has-no-user-story`:
+  `--reason "Add the Retrospective subsection a closed bug needs (dl-115 Q2 (a)), prepared by task-381's green: why the
+  story layer under the journey edit waited for a vision-change run, and the class of a story promising what its
+  command does not return."`
+- `bug-397-vision-journeys-and-features-still-give-workflow-show-name-and-call-workflow-status-planned-though-show-and-status-ship`:
+  `--reason "Add the Retrospective item a closed bug needs (dl-115 Q2 (a)), from task-381's review: the vision kept a
+  planned command after it shipped because nothing re-reads the vision when a feature ships."`
+- `cp-004-write-the-stories-p5.3.4-and-p5.3.5-lack-give-journey-5-step-4.5-its-story-and-align-the-vision-s-reader-commands`:
+  `--reason "Append a Revision note recording that schedule edited 07_sequencer.md under the approver's D9 ruling (the
+  dated Scope changes line, the bump to 2.3 and the moved vision-index ranges), so the impact analysis is no longer
+  read as no impact on the sequencer."`
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
