@@ -58,3 +58,6 @@ misleading, and the code refuses the action anyway.
      An item met while fixing goes in the fix task's own subsection; this one holds what belongs to
      the bug itself (its finding, its triage, why it took more than one task). The retrospective's
      `explore` reads this subsection first. -->
+
+- Closed by task-367: `dev-loop.yaml` 2.6's header says the approver runs the reject from their own terminal and an agent never does (spec-018 §3), and the `wingfoil-cli` directive 1.7 §3 says the `pinned-build` tag is added later only by a `memory amend` the approver runs from their own terminal. Pinned by `test/core/dev-loop-v2-6.test.ts`, which also proves on the pinned build that both files are still read (`workflow show dev-loop`, `directives list`).
+- The independent review of task-367 found the same class in `wingfoil-cli` §2's hand-procedure bullet ("approvals and rejections only on the approver's instruction"); `1b2168b1b` rewords it, in the same version 1.7: approvals, rejections and amendments are the approver's own, run from their own terminal, and an agent never writes one (spec-018 §3). `grep -n "instruction"` over both files then finds no such line.
