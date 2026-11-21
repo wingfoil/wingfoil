@@ -179,6 +179,8 @@ journeys). Table ordered by pillar.
 | P5.3.1  | `agent execute [--next]`            | v0.3      | MVP | 1            |
 | P5.3.2  | Agent Role Selection per Step       | v0.3      | MVP | 2            |
 | P5.3.3  | Relevance Filtering                 | v0.3      | MVP | 1            |
+| P5.3.4  | `agent list`                        | v0.3      | MVP | 2            |
+| P5.3.5  | `agent show`                        | v0.3      | MVP | 4            |
 | P5.4.1  | Agent Role Definition               | v0.3      | MVP | 0a           |
 | P5.4.2  | Agent Role → Directives Binding     | v0.3      | MVP | 3            |
 | P5.4.3  | Agent Context Pre-Loading           | v0.3      | MVP | 1            |
@@ -224,14 +226,14 @@ enforcement*, the Post-MVP Opportunity column of `05_journeys.md` → Journey 4)
 > **Rule:** 100% of features in `08_mvp-canvas.md` must be mapped under **[MVP]**.
 
 - **Total MVP features (`06_features.md` → "Total Features (MVP): 68"):** 68
-- **Features mapped under [MVP] in this story map:** 66 (the 66 rows in Pillar tables 1–5 + X1 above)
-- **Unmapped MVP features:** 2 — P5.3.4 `agent list` and P5.3.5 `agent show`, added to `06_features.md` without a
-  user story (re-measured 2026-11-19, `cp-003`; `bug-399`)
-- **MVP coverage:** **66/68**
+- **Features mapped under [MVP] in this story map:** 68 (the 68 rows in Pillar tables 1–5 + X1 above)
+- **Unmapped MVP features:** 0 (re-measured 2026-11-21, `cp-004`: US-2-12 maps P5.3.4 and US-4-15 maps P5.3.5;
+  `bug-399`)
+- **MVP coverage:** **68/68**
 
-Coverage verification per pillar (re-measured 2026-11-19 against `06_features.md`'s pillar tables, after `cp-003` added
-P1.14 and P5.1.5): P1 = 14/14, P2 = 5/5, P3 = 8/8, P4 = 21/21, P5 = 16/18 (5.1×5, 5.2×3, 5.3×3 of 5, 5.4×5), X1 = 2/2
-→ **66/68**.
+Coverage verification per pillar (re-measured 2026-11-21 against `06_features.md`'s pillar tables, after `cp-004` added
+the stories of P5.3.4 and P5.3.5): P1 = 14/14, P2 = 5/5, P3 = 8/8, P4 = 21/21, P5 = 18/18 (5.1×5, 5.2×3, 5.3×5,
+5.4×5), X1 = 2/2 → **68/68**.
 
 ### Edge-case coverage (Stop-Check — second clause)
 

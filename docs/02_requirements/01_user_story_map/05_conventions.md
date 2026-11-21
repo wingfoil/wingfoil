@@ -52,6 +52,9 @@
 * **[MVP · v0.4]** US-4-14: As Morgan, I want CI to check every pushed commit range with `wingfoil verify --base <rev>`
   so that a forged approval, an approval without authority or a status changed outside a Memory operation fails the
   build (exit `1`) instead of reaching the audit trail unnoticed. _(feat: P1.14)_
+* **[MVP · v0.3]** US-4-15: As Morgan, I want to print one recorded agent run with `wingfoil agent show <run-id>` — its
+  role, agent, exit status, duration and token counts — and the commit that added it, so that I see what an agent did on
+  a deliverable's step before I approve it. _(feat: P5.3.5)_
 
 #### Edge cases (interruption / exception handling)
 

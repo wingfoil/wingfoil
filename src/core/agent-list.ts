@@ -24,7 +24,7 @@
 import { readActiveRuns, type ActiveRunEntry } from '../agent/active-runs';
 import { readRunLogsAt, type RunRecord } from '../agent/run-log';
 import type { DnaYaml } from '../dna/schema';
-import { DiagnosticsError, ValidationError, type Diagnostic } from '../validation';
+import { DiagnosticsError, diagnosticWarning, ValidationError, type Diagnostic } from '../validation';
 import { deduceWorkflowState, uncommittedInputDiagnostic, type Baseline } from '../workflow/deduce';
 import type { PhaseMode } from '../workflow/schema';
 import { parseElementRef } from './element-ref';
@@ -86,10 +86,8 @@ function single(value: string | readonly string[] | undefined): string | undefin
   return typeof value === 'string' ? value : value?.[value.length - 1];
 }
 
-/** A diagnostic as the console's `warning:` line: `<code> (<file>): <message>` (`spec-008` §6's form). */
-export function diagnosticWarning(diagnostic: Diagnostic): string {
-  return diagnostic.file === undefined || diagnostic.file === '' ? `${diagnostic.code}: ${diagnostic.message}` : `${diagnostic.code} (${diagnostic.file}): ${diagnostic.message}`;
-}
+/** A diagnostic as the console's `warning:` line, re-exported from `src/validation` (task-373 moved it there). */
+export { diagnosticWarning };
 
 /** The agents of `dna.yaml`, in declared order, that execute `role` and declare an adapter (§5). */
 function agentsFor(dnaYaml: DnaYaml | null, role: string): string[] {

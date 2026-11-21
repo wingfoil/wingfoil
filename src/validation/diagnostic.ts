@@ -34,6 +34,16 @@ export function formatDiagnostic(diagnostic: Diagnostic): string {
 }
 
 /**
+ * One diagnostic as a warning line's text: `<code> (<file>): <message>`, or `<code>: <message>` when `file` is empty
+ * (`spec-008` §6's form, `spec-016` §3.3 and §5). The one form of a diagnostic reported as a success warning: `agent
+ * list`, `agent execute`, `workflow next` and `workflow status` write each entry of their `diagnostics` with it (`dl-176`
+ * (a), task-373).
+ */
+export function diagnosticWarning(diagnostic: Diagnostic): string {
+  return diagnostic.file === undefined || diagnostic.file === '' ? `${diagnostic.code}: ${diagnostic.message}` : `${diagnostic.code} (${diagnostic.file}): ${diagnostic.message}`;
+}
+
+/**
  * The failure of a load whose {@link diagnostics} hold at least one error (spec-003 § "Diagnostics"):
  * `VALIDATION`, exit `1` ({@link EXIT_VALIDATION}). Its `message` — the reason the operation reports —
  * is the **first error** in {@link formatDiagnostic}'s form, and {@link diagnostics} is the whole

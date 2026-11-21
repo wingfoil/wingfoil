@@ -122,7 +122,10 @@ describe('task-216 — nextWorkflow on a hand-built deduction (spec-017 §7.3)',
   const deduction: Deduction = { baseline: { rev: 'HEAD', commit: 'abc' }, active: 'rc-1', instances: [instance([step])], diagnostics: [], gated: [] };
 
   it('a step with no role is dropped by any --assigned-to filter', () => {
-    const result = nextWorkflow(INPUTS, deduction, { assignedTo: 'developer' });
+    // The dna declares the role the filter names, so `--assigned-to 'developer'` resolves to a known role and the
+    // case prints no "names no team.members[] entry" warning on the suite's stderr (bug-476, task-373 D6 (a)).
+    const dnaYaml = { team: { roles: [{ name: 'developer' }] } } as unknown as DnaYaml;
+    const result = nextWorkflow({ ...INPUTS, dnaYaml }, deduction, { assignedTo: 'developer' });
     expect(result.ok && result.value).toMatchObject({ next: null, message: "no next step of workflow 'cycle' is assigned to 'developer'" });
   });
 });

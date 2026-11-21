@@ -1,4 +1,4 @@
-Feature: P5.3.5 - wingfoil agent show <run-id>
+Feature: P5.3.5 (US-4-15) - wingfoil agent show <run-id>
   As Morgan, I want to print one recorded agent run and the commit that added it, so I can see
   what an agent did on a step — its role, agent, exit status, duration and token counts — and
   trace the record back to its commit.

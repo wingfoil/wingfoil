@@ -1,7 +1,7 @@
 # Sequencer — WingFoil MVP (v0.1 → v1.0)
 
-**Version:** 2.2
-**Date:** 2026-11-19
+**Version:** 2.3
+**Date:** 2026-11-21
 **Status:** Approved
 
 ---
@@ -142,6 +142,8 @@ approver during v0.3's `release-planning` (`release-planning-rel-v0.3-plan`, rul
   `cp-003` through `vision-change`, `spec-019`, `spec-020`); P5.2.3's MCP Tools no longer approve: `approve`,
   `reject` and `amend` are listed and refuse in an agent's session (`spec-018` §3.2). v0.4's row counts the 7
   features of its `define-scope` plus these two.
+- **The stories of P5.3.4 and P5.3.5, Journey 5 step 4.5's story and the reader commands, in v0.4** (v2.3, 2026-11-21,
+  `cp-004` through `vision-change`, a `kind: vision` change): no feature and no row of the week tables moves.
 
 ---
 

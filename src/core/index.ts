@@ -15,7 +15,7 @@ import { join, relative, sep } from 'path';
 
 import { dump } from 'js-yaml';
 
-import { type Diagnostic, DiagnosticsError, formatDiagnostic, generateId, isNewerFormatError, parseYaml, patternTokens, raiseConfigVersion, toValidationError, ValidationError } from '../validation';
+import { type Diagnostic, DiagnosticsError, diagnosticWarning, formatDiagnostic, generateId, isNewerFormatError, parseYaml, patternTokens, raiseConfigVersion, toValidationError, ValidationError } from '../validation';
 import type { Paths } from '../dna/schema';
 import { DnaYaml } from '../dna/schema';
 import { applyDnaEditInText } from '../dna/edit';
@@ -2524,6 +2524,17 @@ const workflowShowFn: CoreFn<unknown, ShowResult> = async (params) => {
 };
 
 
+/**
+ * A deduction reader's success with each entry of its payload's `diagnostics` also carried as a success warning, in
+ * payload order and with no deduplication, after any warning the result already holds (`dl-176` (a), `spec-008` §2 and
+ * §6, `spec-017` §7.3–§7.4; task-373): the registrar writes them on stderr in every format, so stdout carries only the
+ * answer. The payload itself is unchanged. A refusal is returned as it is.
+ */
+function withDiagnosticWarnings<T extends { readonly diagnostics: readonly Diagnostic[] }>(result: CoreResult<T>): CoreResult<T> {
+  if (!result.ok) return result;
+  return coreOk(result.value, result.commit, [...(result.warnings ?? []), ...result.value.diagnostics.map(diagnosticWarning)]);
+}
+
 /** `wingfoil workflow next [<ref>] [--assigned-to <who>]` params (task-216): the `<ref>` rides the bare positional. */
 export interface WorkflowNextParams {
   readonly root: string;
@@ -2539,7 +2550,7 @@ export interface WorkflowNextParams {
 const workflowNextFn: CoreFn<unknown, NextResult> = async (params) => {
   const { root, positional, options } = params as WorkflowNextParams;
   const result = loadOrError(() => workflowNextAtHead(root, positional, options?.['assigned-to']));
-  return result.ok ? result.value : result;
+  return result.ok ? withDiagnosticWarnings(result.value) : result;
 };
 
 /** `wingfoil workflow finalize [<ref>] [--step <key>] [--reason <text>]` params (task-226): `<ref>` rides the bare positional. */
@@ -2670,7 +2681,7 @@ export interface WorkflowStatusParams {
 const workflowStatusFn: CoreFn<unknown, StatusResult> = async (params) => {
   const { root, positional } = params as WorkflowStatusParams;
   const result = loadOrError(() => workflowStatusAtHead(root, positional));
-  return result.ok ? result.value : result;
+  return result.ok ? withDiagnosticWarnings(result.value) : result;
 };
 /**
  * `wingfoil capabilities` (`spec-019` §1, task-362): the capabilities document of this build — `CORE_MODULES`, read

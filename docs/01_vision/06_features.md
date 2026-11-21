@@ -1,7 +1,7 @@
 # Features — WingFoil
 
-**Version:** 1.18
-**Date:** 2026-11-19  
+**Version:** 1.19
+**Date:** 2026-11-21  
 **Status:** Approved
 
 ---
@@ -431,8 +431,8 @@ approving it after review → `approved`), avoiding the "approved twice" ambigui
   `dev-loop`), or both. `kind: main` (startable only) and `kind: sub` (includable only) stay as aliases. A workflow that
   is only includable is never started with `workflow start`.
 - **Active context:** `wingfoil workflow start <name>` sets the **active workflow**; subsequent commands target it
-  unless `--name` is given. Multiple startable workflows can be open at once (e.g. start `report-bug` during a
-  `release-cycle` phase); commands reference the **last** started.
+  unless a workflow is named by its `[ref]` argument. Multiple startable workflows can be open at once (e.g. start
+  `report-bug` during a `release-cycle` phase); commands reference the **last** started.
 - **Context-aware `list`:** `workflow list` shows only what is **executable now** — startable workflows plus an includable one when it
   is the next step. `--all` lists every defined workflow.
 - **Composition with iteration:** an `include()` runs once, or **once per element** via `iterate_over: <type>` with

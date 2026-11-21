@@ -124,7 +124,6 @@ element: task
 phases:
   - name: start
     role: developer
-    directives: [ code-review ]
     actions:
       - 'git.create_branch(task: "{task.id}")'
       - element.set_state(in-progress)
@@ -150,6 +149,29 @@ phases:
       - element.set_state(done)
       - 'bug.sync_state(for_each: task.bug)'
 `;
+
+/**
+ * `DEV_LOOP` with the phase-level `directives:` field `dl-066` option 1 leaves unread, for the one test that relies on
+ * it (AC 5). The shared fixture no longer declares it, so no other test makes the loader warn (task-373, `bug-476`).
+ */
+const DEV_LOOP_WITH_PHASE_DIRECTIVES = DEV_LOOP.replace('  - name: start\n    role: developer\n', '  - name: start\n    role: developer\n    directives: [ code-review ]\n');
+
+/** The warning the loader writes for that field, the one line `npx jest test/core/workflow-next.test.ts` printed 27 times before task-373. */
+const UNKNOWN_DIRECTIVES_WARNING = 'warning: HEAD:.wingfoil/workflows/custom/dev-loop.yaml: unknown field(s) ignored: phases[0].directives\n';
+
+/** Run `fn` with `process.stderr.write` captured (and silenced); answer its value and every chunk written. */
+async function captureStderr<T>(fn: () => T | Promise<T>): Promise<{ value: T; chunks: string[] }> {
+  const chunks: string[] = [];
+  const spy = jest.spyOn(process.stderr, 'write').mockImplementation((chunk: string | Uint8Array) => {
+    chunks.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf-8'));
+    return true;
+  });
+  try {
+    return { value: await fn(), chunks };
+  } finally {
+    spy.mockRestore();
+  }
+}
 
 /** `release-planning.commit-backlog`'s shape (AC 2): a typed `set_state` under `approval:`. */
 const PLANNING = `name: planning
@@ -322,15 +344,17 @@ describe('task-216 AC 1 — BDD P4.4 on a release-cycle instance (spec-017 §7.3
     expect(none).toMatchObject({ next: null, more: [], complete: false, message: "no next step of workflow 'release-cycle' is assigned to 'Morgan'" });
   });
 
-  it("sc. 2 — 'me' is the git identity's email matched against team.members[]", () => {
+  it("sc. 2 — 'me' is the git identity's email matched against team.members[]", async () => {
     const inputs = pureInputs(repo);
     const deduction = deductionAt(repo);
     const mine = nextWorkflow(inputs, deduction, { assignedTo: 'me', identityEmail: 'ALEX@example.invalid' });
     expect(mine.ok && mine.value.next?.key).toBe('dev-loop.start@task:task-1');
     const theirs = nextWorkflow(inputs, deduction, { assignedTo: 'me', identityEmail: 'morgan@example.invalid' });
     expect(theirs.ok && theirs.value.next).toBeNull();
-    const nobody = nextWorkflow(inputs, deduction, { assignedTo: 'me', identityEmail: '' });
+    // task-373 (bug-476 class): the empty identity is no member's, and the warning saying so is asserted, not printed.
+    const { value: nobody, chunks } = await captureStderr(() => nextWorkflow(inputs, deduction, { assignedTo: 'me', identityEmail: '' }));
     expect(nobody.ok && nobody.value.next).toBeNull();
+    expect(chunks).toEqual(["warning: --assigned-to me: the git identity's email '' is no team.members[] entry's\n"]);
   });
 
   it('a <ref> naming no loaded workflow and no open instance is NOT_FOUND "unknown workflow: <ref>" (spec-017 §10)', async () => {
@@ -588,9 +612,13 @@ describe('task-216 AC 5 (characterization) — no directive content inlined; no 
     const repo = makeTempGitRepo();
     try {
       writeProject(repo);
+      commit(repo, { '.wingfoil/workflows/custom/dev-loop.yaml': DEV_LOOP_WITH_PHASE_DIRECTIVES }, 'a phase-level directives field');
       commit(repo, { 'docs/releases/minor-1.md': element('release', 'minor-1', 'in-development'), 'docs/tasks/task-1.md': element('task', 'task-1', 'backlog') }, 'seed');
       commit(repo, { 'docs/plans/rc-1.md': plan('rc-1', 'release-cycle', 'minor-1') }, 'wf(plan): add rc-1');
-      const value = await nextOk(repo);
+      // task-373 (bug-476): the field is reported, on stderr, as an unknown field the loader ignores.
+      const { value, chunks } = await captureStderr(() => nextOk(repo));
+      expect(chunks.length).toBeGreaterThan(0);
+      expect(chunks.every((chunk) => chunk === UNKNOWN_DIRECTIVES_WARNING)).toBe(true);
       expect(JSON.stringify(value)).not.toContain('DIRECTIVE-BODY-SENTINEL');
       expect(value.next!.directives.map((entry) => entry.id)).toEqual(['security', 'testing']); // the role's, never code-review
     } finally {

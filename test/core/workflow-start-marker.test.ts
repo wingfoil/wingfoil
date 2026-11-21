@@ -212,6 +212,7 @@ const instanceIds = (root: string): string[] => deduceWorkflowStateAtHead(root).
 const startTrailerOf = (root: string, commit: string): string => out(root, ['log', '-1', '--format=%(trailers:key=WingFoil-Start,valueonly)', commit]);
 
 const PRE_MARKER = 'W_INSTANCE_PRE_MARKER';
+/** The stdout line task-345 printed under a kept instance; task-373 D4 removed it (the rule is a stderr warning). */
 const PRE_MARKER_LINE = '    warning: kept by the pre-marker rule: restart it with workflow start';
 const preMarker = (diagnostics: readonly Diagnostic[]): Diagnostic[] => diagnostics.filter((entry) => entry.code === PRE_MARKER);
 const preMarkerEntry = (id: string, file: string): Diagnostic => ({
@@ -350,24 +351,22 @@ describe('task-345 AC 1 — the transitory pre-marker rule is reported by workfl
   });
   afterEach(() => removeTempDir(repo));
 
-  it('(f) the kept instance gets W_INSTANCE_PRE_MARKER, last in diagnostics, and a console line under its own lines; the marked one gets neither', async () => {
+  it('(f) the kept instance gets W_INSTANCE_PRE_MARKER, last in diagnostics, and no console line (task-373 D4); the marked one gets neither', async () => {
     const result = await status(repo);
     expect(result.open.map((entry) => entry.instance.id)).toEqual(['report-bug-1-plan', 'a-1-plan']);
     const diagnostics = result.diagnostics as readonly Diagnostic[];
     expect(preMarker(diagnostics)).toEqual([preMarkerEntry('a-1-plan', keptPath)]);
     expect(diagnostics[diagnostics.length - 1]).toEqual(preMarkerEntry('a-1-plan', keptPath));
 
+    // task-373 D4 (spec-017 §3.2 as amended): the rule is a stderr warning of the operation, never a stdout line.
     const lines = renderStatusConsole(result).split('\n');
     const marked = lines.indexOf('* report-bug-1-plan (report-bug) — active, complete');
     const kept = lines.indexOf('  a-1-plan (checklist)');
-    const warning = lines.indexOf(PRE_MARKER_LINE);
     expect(marked).toBeGreaterThanOrEqual(0);
     expect(kept).toBeGreaterThan(marked);
-    expect(lines.filter((line) => line === PRE_MARKER_LINE)).toHaveLength(1);
-    // After a-1-plan's header, among its own (indented) lines: not under report-bug-1-plan.
-    expect(warning).toBeGreaterThan(kept);
-    expect(lines.slice(kept + 1, warning).every((line) => line.startsWith('    '))).toBe(true);
-    expect(lines).toContain(`${diagnostics.length} diagnostic(s): --format json lists them`);
+    expect(lines).not.toContain(PRE_MARKER_LINE);
+    expect(lines.some((line) => line.includes('kept by the pre-marker rule'))).toBe(false);
+    expect(lines.some((line) => /diagnostic\(s\)/.test(line))).toBe(false);
   });
 
   it('(g) with a <ref>: the kept instance carries the entry, the marked one none', async () => {
@@ -380,15 +379,21 @@ describe('task-345 AC 1 — the transitory pre-marker rule is reported by workfl
     expect(preMarker(next.diagnostics)).toEqual([]);
   });
 
-  it('(i) on the CLI: workflow status exits 0 with no stderr, the console line on stdout, the entry in --format json', () => {
-    const consoleRun = runCliEntry(repo, ['workflow', 'status']);
-    expect([consoleRun.status, consoleRun.stderr]).toEqual([0, '']);
-    expect(consoleRun.stdout.split('\n')).toContain(PRE_MARKER_LINE);
-
+  it('(i) on the CLI: workflow status exits 0, the warning on stderr as its last line, none on stdout, the entry in --format json (task-373 D4)', () => {
     const jsonRun = runCliEntry(repo, ['workflow', 'status', '--format', 'json']);
-    expect([jsonRun.status, jsonRun.stderr]).toEqual([0, '']);
+    expect(jsonRun.status).toBe(0);
     const payload = JSON.parse(jsonRun.stdout) as { diagnostics: readonly Diagnostic[] };
     expect(preMarker(payload.diagnostics)).toEqual([preMarkerEntry('a-1-plan', keptPath)]);
+    const texts = payload.diagnostics.map((d) => `${d.code} (${d.file}): ${d.message}`);
+    // One `{"warning": …}` line per diagnostic, in payload order (spec-008 §6, spec-017 §7.4).
+    expect(jsonRun.stderr).toBe(texts.map((text) => `${JSON.stringify({ warning: text })}\n`).join(''));
+
+    const consoleRun = runCliEntry(repo, ['workflow', 'status']);
+    expect(consoleRun.status).toBe(0);
+    expect(consoleRun.stderr).toBe(texts.map((text) => `warning: ${text}\n`).join(''));
+    expect(consoleRun.stderr.trimEnd().split('\n').pop()).toBe(`warning: W_INSTANCE_PRE_MARKER (${keptPath}): instance a-1-plan is kept by the pre-marker rule: restart it with workflow start`);
+    expect(consoleRun.stdout.split('\n')).not.toContain(PRE_MARKER_LINE);
+    expect(consoleRun.stdout).not.toContain('kept by the pre-marker rule');
   });
 });
 
