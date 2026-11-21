@@ -158,3 +158,9 @@ and the release element for an empty `feature`.
   `Feature:` line lacks `US-0B-07`; Journey 2 step 3 and Journey 3 step 2 (and US-2-05, US-3-02) promise task context
   from `workflow show release-cycle`, which prints a workflow definition.
 - The decisions for the approver are in `task-381`'s design notes (D1 as ruled, D2–D8, and the addendum's D9).
+- **Revision note, 2026-11-21 (`schedule`, D9).** The approver ruled D9 the alternative at `task-381`'s design gate, so
+  the Impact analysis's "No impact on … `07_sequencer.md`" and "no range of `docs/01_vision/00_index.md`'s section maps
+  moves" no longer hold: `41299e056` adds a dated line naming `cp-004` under `07_sequencer.md`'s "Scope changes since
+  the original plan", bumps it 2.2 → 2.3 (489 → 491 lines), and moves every `07_sequencer` range of `00_index.md` after
+  line 145 by 2 (its section map, three Quick-lookup rows and the `L9–153` reference), in the same commit. No feature
+  and no row of the week tables moves; the analysis above is kept as it was accepted.
