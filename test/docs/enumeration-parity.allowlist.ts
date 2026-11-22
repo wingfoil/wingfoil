@@ -67,6 +67,9 @@ export const PARITY_ALLOWLIST: readonly ParityAllowlistEntry[] = [
   { enumeration: 'spec-004 §4.1 tools', document: SPEC_004, direction: 'surplus', item: 'workflow.remove', reason: TOOLS_V04 },
   { enumeration: 'spec-004 §4.1 tools', document: SPEC_004, direction: 'surplus', item: 'workflow.start', reason: TOOLS_V04 },
   { enumeration: 'spec-005 Context flat commands', document: SPEC_005, direction: 'surplus', item: 'audit', reason: AUDIT_V04 },
+  { enumeration: 'spec-005 Context flat commands', document: SPEC_005, direction: 'surplus', item: 'verify', reason: PLANNED, plannedBy: ['task-365'] },
   { enumeration: 'spec-008 §1 flat commands', document: SPEC_008, direction: 'surplus', item: 'audit', reason: AUDIT_V04 },
+  { enumeration: 'spec-008 §1 flat commands', document: SPEC_008, direction: 'surplus', item: 'verify', reason: PLANNED, plannedBy: ['task-365'] },
+  { enumeration: 'spec-008 §11 commands', document: SPEC_008, direction: 'surplus', item: 'verify', reason: PLANNED, plannedBy: ['task-365'] },
 ];
 
