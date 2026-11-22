@@ -363,8 +363,8 @@ bump — and older builds refuse files that use it, that feature is a capability
 binding is the precedent, accepted by the bindings schema (`src/workflow/bindings.ts:53`) with `BINDINGS_YAML_FORMAT`
 still `1`, and refused by 0.3.0 (`bug-414`). No such entry is in the initial list: every build that has the query, and so
 every build a resolver can meet, reads `manual: true`, so the name would distinguish nothing.
-Whether `spec-020`'s governance check command gets a capability of its own is open question OQ-4; its command is in
-`commands` either way, because §3.3 derives that list from `CORE_MODULES` with no exception.
+`spec-020`'s governance check command, `verify`, gets a capability of its own, `governance-check` (§4.2; OQ-4, ruled
+(a)); its command is in `commands` in any case, because §3.3 derives that list from `CORE_MODULES` with no exception.
 
 Names are kebab-case (`^[a-z][a-z0-9]*(-[a-z0-9]+)*$`), English, and owned by WingFoil. The vocabulary is closed: it is
 this section, and `CAPABILITIES` in `src/core/capabilities.ts` is its only code form. A pack, a project or a third-party
@@ -382,11 +382,12 @@ capability that requires it (§9 T-7).
 | `agent-execute` | `agent execute` | A workflow step can be handed to an agent through an adapter (`spec-016`, P5.3.1). |
 | `directive-verbs` | `directive create`, `directive assign`, `directive remove`, `directives list` | Directives can be created, bound to roles, removed and listed through the CLI (P3.1–P3.4). |
 | `dna-verbs` | `dna show`, `dna set`, `dna add`, `dna update`, `dna remove` | `dna.yaml` can be read and changed through the CLI (P2.1, `dl-081`). |
+| `governance-check` | `verify` | A project's CI or hook can check a commit range against the Memory and approval contracts with `wingfoil verify` (`spec-020`, P1.14). |
 | `mcp-server` | `mcp` | The build serves the MCP Resources and role Prompts (`spec-014`, P5.2.1–P5.2.2). |
 | `memory-verbs` | `memory add`, `memory submit`, `memory approve`, `memory reject`, `memory deprecate`, `memory amend`, `memory park`, `memory history`, `memory search` | Memory elements can be created, moved through their state machine, amended, parked and read through the CLI (P1.3, P1.5–P1.10; P1.4, import, is not shipped). |
 | `workflow-tracking` | `workflow list`, `workflow show`, `workflow start`, `workflow next`, `workflow status`, `workflow finalize`, `workflow end`, `workflow adopt`, `workflow rekey`, `workflow create`, `workflow remove` | Workflows a pack ships can be started, tracked by deduction, finalized and ended (`spec-017`, P4.2–P4.6, P4.13, P4.21). **No step is executed and no check is evaluated** (P4.10/P4.12, v1.0). |
 
-Today every build that has the query provides all six. Their value is against a later removal (§5) and for the readers
+Today every build that has the query provides all seven: `governance-check` ships with this query, in 0.4.0. Their value is against a later removal (§5) and for the readers
 other than the resolver: the template repository's compatibility table and an agent reading the Resource.
 
 #### 4.3 The template repository's names
@@ -506,7 +507,7 @@ two lines say, computed from two documents, **previous** and **current**.
   whenever the previous release's tag holds no §5 fixture: the nine kinds at `1..1` (`git show v0.3.2:src/validation/format.ts | grep "_FORMAT = "` lists
   the same nine constants, each `1`, and `E_INVALID_FORMAT`), the 35 commands of 0.3.2, and no capability. Against it,
   0.4.0's lines read `Formats read: unchanged`, unless a v0.4 task bumps a kind, and `Capabilities: agent-execute,
-  directive-verbs, dna-verbs, mcp-server, memory-verbs, workflow-tracking`.
+  directive-verbs, dna-verbs, governance-check, mcp-server, memory-verbs, workflow-tracking`.
 - **A patch on a line without the command** (a `release/0.3` patch: that line has no `capabilities` command and no
   fixture) runs no query. Its section reads `Formats read: unchanged` and `Capabilities: none new`, taken from the
   baseline on both sides, provided `git diff v<previous> -- src/validation/format.ts` is empty on that line; when it is
@@ -529,7 +530,7 @@ integration suites do.
 | T-4 | the document's `commands` against `enumerateOperations(CORE_MODULES)` and `BOOTSTRAP_COMMANDS` | the union of §3.3, in code-unit order, no duplicate; contains `capabilities`, `paths`, `init`, `mcp` |
 | T-5 | `commands` against the leaf commands of `buildProgram(CORE_MODULES, …)` (the walk of `test/docs/cli-reference.test.ts`) | equal sets |
 | T-6 | `wingfoil` against `wingfoil --version` of the same build | `` `${version} (${commit})` `` equals the `--version` line; with no `dist/build-info.json` (a fixture), `commit` is `unknown` |
-| T-7 | `buildCapabilitiesDocument` over `CORE_MODULES` with one required command removed, for each command each capability requires | exactly the capabilities requiring that command are absent; with the full list, all six are present |
+| T-7 | `buildCapabilitiesDocument` over `CORE_MODULES` with one required command removed, for each command each capability requires | exactly the capabilities requiring that command are absent; with the full list, every capability of §4.2 is present |
 | T-8 | `CAPABILITIES` and `RESERVED_CAPABILITY_NAMES` | names kebab-case and unique; no reserved name in `CAPABILITIES`; every `requires` entry names a command of the current surface |
 | T-9 | `wingfoil capabilities --format json` run twice: from the repository root, and with `cwd` a fresh temporary directory outside every git repository and `LANG`, `LC_ALL` and `TZ` changed | exit `0` both; stdout byte-identical; stderr empty |
 | T-10 | the document without `wingfoil` against `test/core/fixtures/capabilities-document.json` | byte-equal to the fixture (JSON plus `\n`) |
@@ -709,7 +710,8 @@ Task B — `dl-213`'s CHANGELOG lines (the task `dl-213` Action 2 asks for), for
     decides "my files still read" from one line; under (b) the same fact is split between a fixed line and prose under
     a heading, which is what `dl-213` set out to make mechanical. `N→M` stays the form of the common case, so (a)
     changes nothing until a lower bound exists.
-- **OQ-4 — a capability for the governance check command (`spec-020`, `dl-222` (a)).** Its command enters
+- **OQ-4 — a capability for the governance check command (`spec-020`, `dl-222` (a)).** *Ruled (a) at approval,
+  realized by `task-365` (§4.2's `governance-check` row).* Its command enters
   `CORE_MODULES`, so §3.3 lists it in `commands` whatever is ruled here; the question is only whether `CAPABILITIES`
   gains an entry for it.
   - (a) Add `governance-check`, `requires` the command `spec-020` names (its OQ-1; `verify` as drafted), in §4.2's
@@ -760,3 +762,12 @@ four nits):
 - N4 — a finding on `spec-020` (its AGENTS.md amendment still wrote "35 → 36"), carried to that spec's own review.
 - Cross-spec, from `spec-020`'s round-2 review (its N6: neither spec said whether the governance check command gets a
   capability): made open question OQ-4, for the approver, with recommendation (a); §4.1 points to it.
+
+**Revision (2026-11-21, `task-365-ship-wingfoil-verify-with-the-generic-authority-and-state-checks-spec-020`)
+— §4.2 gains `governance-check`, as OQ-4 (a) rules.** OQ-4 was ruled (a) at this spec's approval: the task that merges
+second of `task-362` and `task-365` adds the capability, and `task-362` merged first. §4.2's table gains the row
+`governance-check`, `requires` `verify` (`spec-020`'s OQ-1 (a)); §4.1's sentence and OQ-4 say it is ruled; the sentence
+under the table counts seven; T-7 reads "every capability of §4.2" instead of a count; §5's 0.4.0 `Capabilities:`
+line names it. §3.5's examples keep their surface "without any other w1 command", which they state, so their counts
+stay. The amendment touches neither the derivation nor §4.3's names nor any format. Edited in place without a supersede or a state
+change (`dl-047`), pending the approver's `memory amend`.
