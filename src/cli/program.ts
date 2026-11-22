@@ -105,19 +105,39 @@ export async function buildProgram(modules: readonly CoreModule[], options: Buil
   // the invocation's operands there (`Command#_parseCommand`'s `this.args = operands.concat(unknown)`,
   // set before it dispatches) with the global options removed.
   //
-  // ONE INCOMPLETE INVOCATION IS A HELP REQUEST TO ANSWER (task-315, `bug-116`): asking the built-in
-  // help command for its own help (`wingfoil help help`, `wingfoil memory help help`). Commander finds
-  // no registered command of that name and takes the incomplete-invocation path; the request is answered
-  // instead — the help command's own help on stdout, the help Commander printed to stderr withheld by
-  // `writeErr` below — and the outcome is re-classified as the help display it is
-  // (`commander.helpDisplayed` at `0`), so `classifyParseOutcome` still chooses the code.
+  // SOME HELP REQUESTS ARE ANSWERED HERE (task-315, `bug-116`; task-380, `bug-452`, `bug-456`): Commander's built-in
+  // help command reads one operand, so a help request it would answer wrongly is answered instead — asking the help
+  // command for its own help (`wingfoil help help`, `wingfoil memory help help`), and a help command path of two or
+  // more operands (`wingfoil help memory add`, `spec-008` §8, walked by `helpPathAnswer`). The help Commander printed
+  // is withheld by `writeOut`/`writeErr` below; the command reached prints its own help on stdout at `0`
+  // (`commander.helpDisplayed`), and an operand that names no command is the unknown-command refusal at `2`
+  // (`commander.unknownCommand`), so `classifyParseOutcome` still chooses the code. One-operand paths keep
+  // Commander's answer (`wingfoil help memory`, and `wingfoil help memroy`, refused below).
+  let answering = false;
   program.exitOverride((error) => {
-    const parsed = classifyParseOutcome(error);
     const request = helpCommandRequest(program);
-    const answer = parsed.needsErrorLine ? builtinHelpSubject(request) : undefined;
-    const termination =
-      answer === undefined ? parsed : classifyParseOutcome({ code: 'commander.helpDisplayed', exitCode: 0 });
-    answer?.outputHelp();
+    const answer = helpPathAnswer(request);
+    if (answer?.kind === 'help') {
+      if (answer.builtinOwner !== undefined) nameBuiltinPath(answer.command, answer.builtinOwner);
+      answering = true;
+      try {
+        answer.command.outputHelp();
+      } finally {
+        answering = false;
+      }
+    } else if (answer?.kind === 'refusal') {
+      emitError(`unknown command '${answer.operand}'`, {
+        format: activeFormat(program),
+        ...(answer.hint !== undefined ? { hint: unknownCommandHint(answer.hint) } : {}),
+      });
+    }
+    const termination = classifyParseOutcome(
+      answer === undefined
+        ? error
+        : answer.kind === 'help'
+          ? { code: 'commander.helpDisplayed', exitCode: 0 }
+          : { code: 'commander.unknownCommand', exitCode: 1 },
+    );
     if (termination.needsErrorLine) {
       const { reason, hint } = incompleteInvocationReason(program, request);
       emitError(reason, { format: activeFormat(program), ...(hint !== undefined ? { hint } : {}) });
@@ -140,11 +160,15 @@ export async function buildProgram(modules: readonly CoreModule[], options: Buil
   // `--format` is read when the error fires; Commander has parsed the root program's options by then,
   // wherever on the command line they stand. Installed before the first `.command()`, like the callback
   // above, because `copyInheritedSettings` copies the output configuration at registration time.
-  // The help Commander prints before a request for the built-in help command's own help is withheld, in
-  // every format: the callback above answers that request on stdout (task-315, `bug-116`).
+  // The help Commander prints before a help request the callback above answers itself is withheld, on both
+  // streams and in every format (task-315, `bug-116`; task-380, `bug-452`): the callback's own answer is the only
+  // help written (`answering`).
   program.configureOutput({
+    writeOut: (text) => {
+      if (answering || helpPathAnswer(helpCommandRequest(program)) === undefined) process.stdout.write(text);
+    },
     writeErr: (text) => {
-      if (activeFormat(program) === 'console' && builtinHelpSubject(helpCommandRequest(program)) === undefined) {
+      if (activeFormat(program) === 'console' && helpPathAnswer(helpCommandRequest(program)) === undefined) {
         process.stderr.write(text);
       }
     },
@@ -446,10 +470,7 @@ function deepestCommand(program: Command): { level: Command; stop: number } {
  * (`Help#visibleCommands`, its built-in `help` included).
  */
 function commandsBeside(program: Command): string[] {
-  return program
-    .createHelp()
-    .visibleCommands(deepestCommand(program).level)
-    .flatMap((command) => [command.name(), ...command.aliases()]);
+  return commandNamesAt(deepestCommand(program).level);
 }
 
 /**
@@ -469,33 +490,99 @@ function builtinCommands(level: Command): Command[] {
 interface HelpCommandRequest {
   /** The command the help command was typed under: the root program, or a noun. */
   readonly level: Command;
-  /** The operand after the help command — the command whose help is asked for — when there is one. */
-  readonly subject: string | undefined;
+  /** The operands after the help command — the command path whose help is asked for (`spec-008` §8). */
+  readonly operands: readonly string[];
 }
 
 /**
  * The help request the invocation makes, if any (task-315): the operand {@link deepestCommand} stops at
  * names one of that level's {@link builtinCommands} — matched by name, as `Command#_parseCommand`
- * matches its help command — and the operand after it is the subject. Any operand after the subject is
- * ignored, as Commander ignores it.
+ * matches its help command — and the operands after it are the path asked about (task-380, `bug-452`), up to the
+ * first token that is an option: Commander leaves an option it does not know in `program.args` with everything after
+ * it, and `wingfoil help memory add --bogus` is no unknown command `--bogus` (the path ends at `add`, the option is
+ * ignored, as Commander ignores it on a one-operand path).
  */
 function helpCommandRequest(program: Command): HelpCommandRequest | undefined {
   const { level, stop } = deepestCommand(program);
   const operand = program.args[stop];
   if (operand === undefined) return undefined;
   if (!builtinCommands(level).some((command) => command.name() === operand)) return undefined;
-  return { level, subject: program.args[stop + 1] };
+  const after = program.args.slice(stop + 1);
+  const optionAt = after.findIndex((token) => token.startsWith('-'));
+  return { level, operands: optionAt === -1 ? after : after.slice(0, optionAt) };
 }
 
 /**
- * The built-in command a help request asks about, when it asks about one — `wingfoil help help`,
- * `wingfoil memory help help` (task-315, `bug-116`, design gate D1 (b)): the help command's own help
- * is the answer. Commander's `_findCommand` does not see a built-in, so it would refuse the request.
+ * How the exit callback answers a help request itself: the help of the command the path reached, or the refusal of
+ * the first operand that names no command (with the closest command of that level, when one is near enough).
  */
-function builtinHelpSubject(request: HelpCommandRequest | undefined): Command | undefined {
-  if (request?.subject === undefined) return undefined;
-  const { level, subject } = request;
-  return builtinCommands(level).find((command) => command.name() === subject);
+type HelpPathAnswer =
+  | { readonly kind: 'help'; readonly command: Command; readonly builtinOwner?: Command }
+  | { readonly kind: 'refusal'; readonly operand: string; readonly hint: string | undefined };
+
+/**
+ * The answer a help request is owed when Commander's own is not it (`spec-008` §8; task-380, `bug-452`, `bug-456`,
+ * design gate D2 (a) and D3 (a)): the operands are walked as a command path from the level the help command was typed
+ * at, descending through each level's commands (by name or alias, as {@link deepestCommand}) and its
+ * {@link builtinCommands} (by name; a built-in has nothing below it).
+ *
+ * - The first operand that names no command of the level reached is refused, with the hint from that level's
+ *   commands (`wingfoil help memory addd` → `addd`, hint `add`; `wingfoil help memory add extra` → `extra`, no hint;
+ *   `wingfoil help help help` → the second `help`, no hint).
+ * - A path that ends on a built-in help command is answered with that command's own help, its usage line naming the
+ *   path that answered (`Usage: wingfoil memory help [command]`): Commander creates the built-in without a parent,
+ *   so its own usage line would read `Usage: help [command]`.
+ * - Any other path of two or more operands is answered with the help of the command it reached.
+ *
+ * A path of one operand that names a registered command, or none, is Commander's to answer, as task-315 shipped it:
+ * `undefined`.
+ */
+function helpPathAnswer(request: HelpCommandRequest | undefined): HelpPathAnswer | undefined {
+  if (request === undefined) return undefined;
+  const { operands } = request;
+  let level = request.level;
+  let builtinOwner: Command | undefined;
+  for (const operand of operands) {
+    const registered = level.commands.find(
+      (command) => command.name() === operand || command.aliases().includes(operand),
+    );
+    const builtin = registered === undefined ? builtinCommands(level).find((command) => command.name() === operand) : undefined;
+    const next = registered ?? builtin;
+    if (next === undefined) {
+      if (operands.length < 2) return undefined;
+      return { kind: 'refusal', operand, hint: closestCommand(operand, commandNamesAt(level)) };
+    }
+    builtinOwner = builtin === undefined ? undefined : level;
+    level = next;
+  }
+  if (builtinOwner !== undefined) return { kind: 'help', command: level, builtinOwner };
+  return operands.length < 2 ? undefined : { kind: 'help', command: level };
+}
+
+/** The names (and aliases) of the commands Commander lists at a level (`Help#visibleCommands`, built-ins included). */
+function commandNamesAt(level: Command): string[] {
+  return level
+    .createHelp()
+    .visibleCommands(level)
+    .flatMap((command) => [command.name(), ...command.aliases()]);
+}
+
+/**
+ * Make a built-in help command's usage line name the path that reached it (`spec-008` §8, design gate D3 (a)):
+ * `Usage: wingfoil memory help [command]`, where Commander, which creates the built-in without a parent, prints
+ * `Usage: help [command]`. Set at the moment of the answer, from the level it was reached under, so a built-in a
+ * level inherited still names the level that answered.
+ */
+function nameBuiltinPath(builtin: Command, owner: Command): void {
+  const path = commandPath(owner);
+  builtin.configureHelp({ ...builtin.configureHelp(), commandUsage: (command) => `${path} ${command.name()} ${command.usage()}` });
+}
+
+/** The words that invoke a command from the root: `wingfoil`, `wingfoil memory`, … */
+function commandPath(command: Command): string {
+  const names: string[] = [];
+  for (let current: Command | null = command; current !== null; current = current.parent) names.unshift(current.name());
+  return names.join(' ');
 }
 
 /**
@@ -530,10 +617,11 @@ function incompleteInvocationReason(
   // A help request reaches the incomplete-invocation path only when its subject matched no command —
   // `Command#_dispatchHelpCommand` falls through to `_dispatchSubcommand`, whose `if (!subCommand)`
   // raises it. A bare `help` and `help <known-command>` exit 0 and never arrive here.
-  if (request?.subject !== undefined) {
-    const suggested = closestCommand(request.subject, commandsBeside(program));
+  const subject = request?.operands[0];
+  if (subject !== undefined) {
+    const suggested = closestCommand(subject, commandsBeside(program));
     return {
-      reason: `unknown command '${request.subject}'`,
+      reason: `unknown command '${subject}'`,
       ...(suggested !== undefined ? { hint: unknownCommandHint(suggested) } : {}),
     };
   }
