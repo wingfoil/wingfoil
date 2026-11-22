@@ -11,7 +11,7 @@ tmpl_version: 260703
 ## Context
 
 Every `wingfoil` command — regardless of pillar (`memory`, `dna`, `directive`, `directives`, `workflow`, `agent`) or
-flat command (`init`, `mcp`, `paths`, `capabilities`, `audit`; `init` and `mcp` are the bootstrap commands,
+flat command (`init`, `mcp`, `paths`, `capabilities`, `verify`, `audit`; `init` and `mcp` are the bootstrap commands,
 `spec-008-cli-grammar` §1) — is consumed by two audiences that need a **stable, predictable
 contract** independent of the specific command's arguments: (1) humans reading console output, and
 (2) scripts, CI pipelines, and other tools parsing exit codes and structured output.
@@ -49,6 +49,11 @@ Rules:
   mapping above cannot be bypassed by an uncaught code path.
 - A non-zero exit code (`1` or `2`) is **always** accompanied by an error message on stderr in the
   format defined in §3 below — a bare non-zero exit with no message is a contract violation.
+- **A completed check whose verdict fails exits `1` after its payload.** `wingfoil verify` (`spec-020` §8.1) prints its
+  report on stdout in every verdict; when a finding is gated it then writes its `error:` line on stderr (§3, the
+  `E_VERIFY_FINDINGS` reason of `spec-008` §6) and exits `1`. The rule above holds: the exit carries its message. It is
+  the one success that exits non-zero (`spec-006` §2's `failed`); stdout tells it from a refusal, which prints no
+  payload.
 - A **noun invoked without its verb** (`wingfoil dna`) and `wingfoil` invoked with no command at all
   are **"missing required argument"** in the row above — the third case already enumerated there, not
   a fourth one; `wingfoil help <unknown>` is the row's **unknown command**, refused as §3.1 states.
@@ -60,9 +65,10 @@ Rules:
   (they take precedence and short-circuit the rest of parsing). So does an explicit request for help
   by name (`wingfoil help`, `wingfoil help <known-command>`): a request the CLI satisfied is a success,
   and it is distinct from the incomplete invocation above even when the two print the same text.
-- Read-only commands (`memory search`, `dna show`, `workflow status`, `paths`, …) can only exit `0`
-  (found/empty result) or `1` (e.g. malformed query); they never exit `2` once argument parsing has
-  succeeded.
+- Read-only commands (`memory search`, `dna show`, `workflow status`, `paths`, `verify`, …) can only exit `0`
+  (found/empty result) or `1` (e.g. malformed query, or `verify`'s failing verdict); they never exit `2` once argument
+  parsing has succeeded, except for a refused option value (`spec-008` §5: a blank `--project`, or `verify`'s blank
+  `--base` or `--introduced-at`).
 - This is a **three-code** contract: `0`/`1`/`2` only. There is no dedicated dry-run or interrupt exit
   code reserved by this spec — a command that adds a `--dry-run` mode or handles `SIGINT` still reports
   through `0`/`1`/`2` per the rules above, and defines the exact mapping for its own case in that
@@ -507,3 +513,11 @@ change (`dl-047`), pending the approver's `memory amend` at `task-375`'s design 
 `wingfoil capabilities` (P5.1.5); Context's list of flat commands names it. Its exit codes and texts are this spec's
 (`spec-019` §2); nothing else changes. Edited in place without a supersede or a state change (`dl-047`), pending the
 approver's `memory amend`.
+
+**Revision (2026-11-21, `task-365-ship-wingfoil-verify-with-the-generic-authority-and-state-checks-spec-020`)
+— `verify`: a flat command, and a completed run that exits `1` after its payload.** `spec-020` (`approved`, OQ-2 (a),
+"Amendments owed") adds the flat command `wingfoil verify` (P1.14); Context's list of flat commands names it. §1 gains
+the rule that a completed check whose verdict fails prints its payload, then its `error:` line, and exits `1`
+(`spec-006` §2's `failed`), and the read-only bullet names `verify` and the refused option values `spec-008` §5 already
+makes exit `2`. No other exit code or format changes. Edited in place without a supersede or a state change
+(`dl-047`), pending the approver's `memory amend`.
