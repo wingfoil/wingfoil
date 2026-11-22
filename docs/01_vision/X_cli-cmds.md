@@ -1,7 +1,7 @@
 # CLI Commands Reference — WingFoil
 
-**Version:** 2.6
-**Date:** 2026-11-20  
+**Version:** 2.7
+**Date:** 2026-11-22  
 **Status:** Approved
 
 ---
@@ -81,8 +81,8 @@ decomposition, and `dl-082` fixed the spelling.
 | `wingfoil dna infer [--confirm]` | Auto-scan codebase and propose DNA structure | Morgan, Alex | 0b | *Not built* (`spec-006`: planned). Infers modules from directory structure, languages/frameworks from files. Requires human review/approval before updating DNA |
 | `wingfoil paths [<category>] [--list]` | Query project resource paths by category | All | 0a, 0b, 5 | Reads from DNA `paths:` section. Categories: sources, tests, docs, config, governance, runs, health — `runs` is the agent run log's one directory (`spec-016` §4.1, `task-138`). `--list` is accepted for the planned drill-down view and does not change the output yet |
 
-> **On interactivity.** No DNA command prompts. `init` is the only command with a prompt layer — the negatable global
-> `--interactive` is read only by it — and every other command fails immediately on a missing required argument, at exit
+> **On interactivity.** No DNA command prompts. `init` is the only command with a prompt layer — the global
+> `--no-interactive` is read only by it — and every other command fails immediately on a missing required argument, at exit
 > `2`: `wingfoil dna set` → `error: missing required argument: <path>` (then `hint: usage: wingfoil dna set <path> --value <value>`),
 > `wingfoil dna set project.license` → `error: missing required argument: --value`. The prompt layer is not abandoned
 > scope: it stays specified for all commands in `spec-008-cli-grammar` §4 ("Interactive-prompt rules"), which is where a
@@ -398,6 +398,10 @@ Every command accepts these, except `--dry-run`, which only the commands that ch
 ---
 
 ## Revision history
+
+**Version 2.7 (2026-11-22) — the global `--no-interactive`, per `task-380` (`bug-514`, `spec-008` §2).**
+The note on interactivity names the global the program registers, `--no-interactive`, where it said "the negatable
+global `--interactive`": the positive form is refused as an unknown option, as `spec-008` §2 now states.
 
 **Version 2.6 (2026-11-20) — `wingfoil capabilities`, per `task-362` (`spec-019` §1, P5.1.5).**
 Pillar 5 gains the `capabilities` row: the build's file formats, commands and capabilities, read with no project, the
