@@ -454,6 +454,14 @@ Pending amendment added (approver, `memory amend`, before red):
 `test/docs/x-cli-cmds.test.ts` › "every row of a command no build ships is marked *Not built*", received
 `["wingfoil verify [--base <rev>] [--introduced-at <rev>]"]` (D8, red until green).
 
+### design gate (approver, 2026-11-22)
+
+The approver recorded the step in `4c71aee39` (`workflow finalize … dev-loop.design`), after the amendments `e0b3a03da` (`wf(decision-log): amend dl-103-governance-enforced-outside-the-agent`), `6995bc894` (`wf(tech-spec): amend spec-004-mcp-surface-contract`), `761e7fd2e` (`wf(tech-spec): amend spec-005-cli-command-contract`), `6123db694` (`wf(tech-spec): amend spec-006-core-domain-api`), `2ac78f947` (`wf(tech-spec): amend spec-008-cli-grammar`), `81d3415f4` (`wf(tech-spec): amend spec-015-packaging-publishing`), `1598e88f7` (`wf(tech-spec): amend spec-017-workflow-commands-and-state-deduction`), `37c14a9bc` (`wf(tech-spec): amend spec-018-approval-binding-l0-agent-markers-attribution-trailers-and-the-approver-verb-refusal`), `5b3a085b5` (`wf(tech-spec): amend spec-019-the-capabilities-query-the-formats-a-build-reads-and-the-capabilities-it-provides`), `7b9862b27` (`wf(tech-spec): amend spec-020-the-governance-check-verb-the-authority-and-state-rules-over-a-commit-range`). The rulings, as the record states them:
+
+> Approve the design of task-365 with these rulings, all as recommended: D1 (a) one module src/core/governance-check.ts, with an AST test that only createGitHistoryReader calls git; D2 (a) the Approver and agent-trailer line patterns are exported from src/storage/commit.ts and src/memory/commit-message.ts imports them; D3 (a) the five base checks report check equal to rule, and workflow-record-authority is listed under rule body; D4 (a) W_VERIFY_WHOLE_HISTORY goes through the live warning sink, raised after HEAD is resolved and before the range is read; D5 (a) verify is CLI only with no new field, the production MCP server serving it on no channel; D6 (a) the governance-check capability requiring verify, as spec-019 OQ-4 (a) ruled; D7 (a) spec-020 keeps exit 1 for a malformed --base or --introduced-at, and the spec-008 section 5 amendment states the revision case; D8 (a) the orchestrator commits the non-Memory files after these amends and before red, in three commits by kind, and the X_cli-cmds edit needs no change-proposal, as the approver ruled; D9 (a) flag is a labelled details key; D10 (a) no MCP change. The spec-020 section 2.2 amendment names the registered --no-color and --no-interactive, as task-380's design gate D5 (a) ruled.
+
+This note follows the three D8 commits by kind, made after the record as ruled: `8f926a056` (the two directives), `3c3cf8f39` (`X_cli-cmds` and the vision index, with no change-proposal by the approver's ruling) and `6250a5a93` (the two allowlists).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
