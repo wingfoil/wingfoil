@@ -1,7 +1,7 @@
 # CLI Commands Reference — WingFoil
 
-**Version:** 2.6
-**Date:** 2026-11-20  
+**Version:** 2.7
+**Date:** 2026-11-21  
 **Status:** Approved
 
 ---
@@ -36,6 +36,7 @@ level.
 | `wingfoil memory park <id> --reason <text>` | Return a started document to an earlier state along its type's declared `returns` edge | Morgan, Alex, Jordan | 2, 4 | For a task, in-progress → backlog (`dl-110`). The reason is recorded in the commit (`task-180`) |
 | `wingfoil memory amend <id> --reason <text>` | Record an uncommitted correction to a document as an amendment, leaving its state unchanged | Morgan | 2, 4 | For types `memory.yaml` declares `amendable`. Needs the approver role; the reason is recorded in the commit (`task-127`) |
 | `wingfoil memory history <id>` | View audit trail of Memory document (commits, approvals, state changes) | Morgan, Casey | 2, 3, 5 | Shows full git history + state transitions from frontmatter |
+| `wingfoil verify [--base <rev>] [--introduced-at <rev>]` | Check a commit range against the Memory and approval contracts | Morgan, Casey | 4, 5 | P1.14, from v0.4 (`spec-020`). A flat command that only reads committed history, never the working tree: every commit of `<rev>..HEAD` (without `--base`, every commit reachable from `HEAD`) is judged against the `dna.yaml` and `memory.yaml` committed before it — the subject and bracket grammar, the `Approver:` / `Reason:` body, approver authority, the state machine, a status changed outside a Memory operation, an approval carrying an agent trailer. Exits `1` on a gated finding, with the report still printed; `--introduced-at <rev>` reports `<rev>` and its older history without failing. CLI only: no MCP Tool or Resource |
 
 ### Parameters for Pillar 1 Commands
 
@@ -52,6 +53,7 @@ level.
 | `[<path>]` | string (path) | Positional source path on `memory import` (*Not built*) | Provided in command | Path to existing doc(s) to scan/import | N/A (input to import; imported doc saved at its type's `path` in `.wingfoil/memory.yaml`) |
 | `--action` | enum | Import action on `memory import` (*Not built*): copy, move, link | User input (flag or interactive prompt) | copy (new file), move (original deleted), link (symlink) | N/A (affects how imported file is placed) |
 | `--reason` | string | Reason on `memory approve`/`reject`/`deprecate`/`park`/`amend` (required except on `deprecate`) | User input (flag) | Recorded with the transition as the commit's `Reason:` block (`dl-067`) | Git commit message (and `rejection_reason` on reject) |
+| `--base`, `--introduced-at` | string (revision) | On `verify`: the commit whose descendants up to `HEAD` are judged, and the commit at and before which findings are history | User input (flag) | Each resolved as one revision (a sha, a branch, a tag); a blank value exits `2` | N/A (query parameters only) |
 | `status` | enum | Document state (type-dependent per `.wingfoil/memory.yaml`; default: draft, pending, approved, plus `deprecated` from any state) — type-specific states (e.g., `backlog`, `in-review`) also exist per `.wingfoil/memory.yaml` | Auto-tracked in frontmatter | Per-type state machine transitions (submit, approve, reject, deprecate, park) | Frontmatter `status:` field, tracked via git commits |
 
 ---
@@ -81,8 +83,8 @@ decomposition, and `dl-082` fixed the spelling.
 | `wingfoil dna infer [--confirm]` | Auto-scan codebase and propose DNA structure | Morgan, Alex | 0b | *Not built* (`spec-006`: planned). Infers modules from directory structure, languages/frameworks from files. Requires human review/approval before updating DNA |
 | `wingfoil paths [<category>] [--list]` | Query project resource paths by category | All | 0a, 0b, 5 | Reads from DNA `paths:` section. Categories: sources, tests, docs, config, governance, runs, health — `runs` is the agent run log's one directory (`spec-016` §4.1, `task-138`). `--list` is accepted for the planned drill-down view and does not change the output yet |
 
-> **On interactivity.** No DNA command prompts. `init` is the only command with a prompt layer — the negatable global
-> `--interactive` is read only by it — and every other command fails immediately on a missing required argument, at exit
+> **On interactivity.** No DNA command prompts. `init` is the only command with a prompt layer — the global
+> `--no-interactive` is read only by it — and every other command fails immediately on a missing required argument, at exit
 > `2`: `wingfoil dna set` → `error: missing required argument: <path>` (then `hint: usage: wingfoil dna set <path> --value <value>`),
 > `wingfoil dna set project.license` → `error: missing required argument: --value`. The prompt layer is not abandoned
 > scope: it stays specified for all commands in `spec-008-cli-grammar` §4 ("Interactive-prompt rules"), which is where a
@@ -338,7 +340,7 @@ Every command accepts these, except `--dry-run`, which only the commands that ch
 
 **v0.4 (Jul 31):**
 
-- Pillar 1: `memory import`
+- Pillar 1: `memory import`, `verify`
 - Pillar 2: `dna infer`
 - Pillar 5: `audit`, `init --mode infer`, `init --template`, `capabilities`
 
@@ -398,6 +400,12 @@ Every command accepts these, except `--dry-run`, which only the commands that ch
 ---
 
 ## Revision history
+
+**Version 2.7 (2026-11-21) — `wingfoil verify`, per `task-365` (`spec-020` §2, P1.14).**
+Pillar 1 gains the `verify` row: the check of a commit range against the Memory and approval contracts, read from
+committed history only, CLI only; its parameters table gains `--base` and `--introduced-at`, and the v0.4 release
+timeline names the command. The note *On interactivity* names the registered global `--no-interactive` instead of a
+negatable `--interactive`, whose positive form is refused (`bug-514`, `task-380` D5).
 
 **Version 2.6 (2026-11-20) — `wingfoil capabilities`, per `task-362` (`spec-019` §1, P5.1.5).**
 Pillar 5 gains the `capabilities` row: the build's file formats, commands and capabilities, read with no project, the
