@@ -320,6 +320,14 @@ No new export is imported, so no `.d.cts` is owed.
 `error:`/`hint:` lines, as `memory addd` prints them), unlike task-315's one-operand `help memroy`, which still prints the
 root help on stderr before them; the in-process `help dna sett` row is pinned under `console` the same way.
 
+### design gate (approver, 2026-11-22)
+
+The approver recorded the step in `c68083566` (`workflow finalize … dev-loop.design`), after the amendments `a7ff8c07c` (`wf(tech-spec): amend spec-008-cli-grammar`), `8e6fa4725` (`wf(tech-spec): amend spec-005-cli-command-contract`). The rulings, as the record states them:
+
+> Approve the design of task-380 with these rulings: D1 (b) spec-008 section 2 names only the registered --no-color and --no-interactive and their positive forms are refused as unknown options, since a root --interactive would take agent execute --interactive away from the command; D2 (a) the help operands are walked as a command path, and the first operand that names no command at the level reached is refused at exit 2 with the unknown-command line and a hint from that level, so help memory add extra and help help help are refused; D3 (a) the help command's usage names its path, Usage: wingfoil help [command] at the root and Usage: wingfoil <noun> help [command] under each noun; D4 (a) the paths description derives the category list from the Paths schema keys and says that a category declared in dna.yaml paths: is answered too; D5 (a) the same negatable-globals defect in spec-020 section 2.2 is left to task-365's design.
+
+This note is written late, after the red record `5d2d71fcb`: the orchestrator did not write it after the gate, and the red's qa read the rulings from the record's Reason. The rulings above are the record's own words; nothing is added to them.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
