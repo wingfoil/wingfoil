@@ -57,6 +57,10 @@ Required additions (values are the contract; exact URLs confirmed at implementat
 - `files` review: stays `["dist", "README.md"]`; add `LICENSE` and (if present) `COLLABORATION.md`
   only if intended in the tarball. **No `.npmignore`** — `files` is the allowlist (single source;
   avoids the `files`/`.npmignore` double-negative).
+- The governance check ships as the command `wingfoil verify`, compiled into `dist/` like every command, so it needs
+  no `files` entry (`dl-222` (a), `spec-020` §1). `scripts/` stays out of the tarball: `scripts/check-governance.cjs`
+  is this repository's extension of that command, carrying the checks that encode this repository's own conventions
+  (`spec-020` §4.12, §6), not a part of the product.
 
 - `bin.wingfoil`: **`dist/cli.js`** — no leading `./`. npm rejects a `./`-prefixed `bin` target,
   rewrites the manifest at publish and warns `"bin[wingfoil]" script name dist/cli.js was invalid and
@@ -904,3 +908,11 @@ the latency pass. What those suites assert besides the time runs in the parallel
 `test:report` measure the same code as before; their scripts, `prepublishOnly` and the stage-1 steps of §3 are
 unchanged. The pins are `test/core/latency-budget-placement.test.ts` and `test/cli/run-tests.test.ts`. Edited in
 place: no supersede, no state change, no `version:` bump (`dl-047`), as in the revisions above.
+
+**Revision (2026-11-21, `task-365-ship-wingfoil-verify-with-the-generic-authority-and-state-checks-spec-020`) — §1: the
+governance check ships as a command, its script stays out.** `dl-222` (`ready`, option (a), Action 2) and `spec-020`
+(`approved`) ship the generic authority and state rules of the governance check as the read-only command
+`wingfoil verify`, inside `dist/`; `dl-103`'s Action 2 had said the script should not ship. The `files` bullet gains the
+sentence that the command needs no `files` entry and that `scripts/` stays out because `scripts/check-governance.cjs`
+is this repository's extension, not because the check is unshipped. `files`, the stages and every other rule are
+unchanged. Edited in place: no supersede, no state change, no `version:` bump (`dl-047`), as in the revisions above.
