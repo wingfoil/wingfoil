@@ -328,6 +328,143 @@ The approver recorded the step in `c68083566` (`workflow finalize … dev-loop.d
 
 This note is written late, after the red record `5d2d71fcb`: the orchestrator did not write it after the gate, and the red's qa read the rulings from the record's Reason. The rulings above are the record's own words; nothing is added to them.
 
+### green (developer, 2026-11-22)
+
+**Base and guard.** Head before green `d6c346e3a`; `git rev-list --count HEAD..main` → `0` at the start, no merge.
+PATH guard: `command -v wingfoil` → the task's PATH shim; `wingfoil --version` and `node dist/cli.js --version` →
+`0.3.2 (c6808356640493777c1431cb60625839e7a0a959)`. Contract: the design, the amends `a7ff8c07c` (`spec-008`) and
+`8e6fa4725` (`spec-005`), the gate `c68083566` (D1 (b), D2 (a), D3 (a), D4 (a), D5 (a)) and the red `7dba75745`.
+
+**Commit** `d536b8a73` (`fix(cli): …`), files `src/cli/program.ts`, `src/core/index.ts` and a test file of my own,
+`test/cli/help-path-option-token.integration.test.ts`. `src/cli/suggest.ts` is unchanged (`git diff --stat
+d6c346e3a HEAD -- src/cli/suggest.ts` → empty).
+
+- `src/cli/program.ts`: `HelpCommandRequest` carries every operand after the help command (`operands`, replacing
+  `subject`); `helpPathAnswer` walks them from the level the help command was typed at, through each level's
+  registered commands (name or alias) and its `builtinCommands` (by name), and returns the help of the command reached,
+  the refusal of the first operand that names no command (hint from `closestCommand` over that level's
+  `visibleCommands`), or `undefined` for a one-operand path Commander answers (`help memory`, `help memroy`, as
+  `task-315` shipped them). A path ending on a built-in is answered with the built-in's help, its usage line naming the
+  path (`nameBuiltinPath`, a `configureHelp({ commandUsage })` set at the moment of the answer). The exit callback
+  prints the answer through `outputHelp()` (the `Example:` / `Exit codes:` footer included) and re-classifies the outcome
+  as `commander.helpDisplayed` (`0`) or `commander.unknownCommand` (`2`), so `classifyParseOutcome` still chooses the
+  code; a new `writeOut` hook withholds the help Commander printed for a request the callback answers, as `writeErr`
+  already did. `builtinHelpSubject` is gone (folded into the walk); `commandsBeside` reuses the new `commandNamesAt`.
+- `src/core/index.ts`: `Paths` imported as a value; `PATHS_CATEGORY_DESCRIPTION` built from `Object.keys(Paths.shape)`,
+  joined `a, b, …, f or g`, with D4's parenthetical.
+- **A defect the walk would have introduced, fixed in the task:** Commander keeps an option it does not know in
+  `program.args` with every token after it, so a first draft refused `help memory add --bogus` as `error: unknown
+  command '--bogus'` (`node dist/cli.js help memory add --bogus` → exit `2`, that line). The path now ends at the first
+  token that starts with `-`; the new test pins `help memory --bogus`, `help memory add --bogus` and `help memory
+  --bogus add` equal to `memory --help`, `memory add --help` and `memory --help` (exit `0`, stderr empty). On the base
+  the second printed `memory`'s help (Commander answered the first operand), so the row was red there too. The test file
+  is mine, not a red file; the orchestrator kept the fix, and the reviewer judges it.
+
+**Red → green.** `npx jest test/cli/help-command-path.integration.test.ts test/core/paths-help-categories.test.ts
+test/docs/spec-008-negatable-globals.test.ts test/cli/program.test.ts test/cli/operand-error-shape.integration.test.ts
+--maxWorkers=2` → 5 suites, 124 passed (red: 25 failed of 124, per the red notes). The design's neighbour suites
+(`help-describes-every-command`, `suggest`, `commander-parse-exit-codes`, `missing-verb-exit-code`,
+`parse-error-format`, `agent-execute-launch-kind`, `init-command`, `paths-extra-category`, `paths-health`, `x-cli-cmds`,
+`program.integration`, `extra-operand-refusal`) → 12 suites, 287 passed. `npx tsc --noEmit -p tsconfig.json` → exit `0`;
+`npx eslint src/cli/program.ts src/core/index.ts` → no output.
+
+**Open point from the red (one-operand refusals print help on stderr).** Left as it is: `node dist/cli.js help memroy`
+→ exit `2`, stderr the root help, then `error: unknown command 'memroy'` / `hint: did you mean "memory"?`. The design
+keeps the one-operand rows unchanged and no red pin asks otherwise; `bug-452`'s Expected Behavior is about the second
+operand (its Steps and Summary), so it does not cover this. Left unchanged by the orchestrator's ruling; a candidate finding for the wave-close ingest, not filed (self-review).
+- **Same-class instance fixed in the task (the orchestrator's ruling):** `spec-008` §12, the `agent execute
+  --headless`, `--interactive` row, said that the command's flag "is not the positive form of §2's negatable global
+  `--interactive`", which the amended §2 contradicts. It now says that §2's global `--no-interactive` has no positive
+  form; the rest of the row is unchanged (`git diff -- docs/04_memory/design/specs/spec-008-cli-grammar.md` → one line
+  changed). It is a pending amendment (below).
+
+### refactor (developer, 2026-11-22)
+
+**Commits.** `20f723bf2` (`docs: …`): `docs/cli-reference.md` "Exit codes", a "New in 0.4" sentence for the help
+command's path, its refusal and the usage line of `help help`; `docs/01_vision/X_cli-cmds.md` 2.6 → 2.7 (date
+2026-11-22, a revision entry), the note on interactivity names the global `--no-interactive`. `docs/cli-reference.md`
+declares no version (`head -12 docs/cli-reference.md | grep -i version` → empty). `37e6fabbb` (`docs(vision): …`):
+`docs/01_vision/00_index.md` re-synced for X_cli-cmds 2.7 (row 2.7 | 2026-11-22 | 542 lines, Revision history
+L400–542, `Last indexed:` 2026-11-22). The design did not list that file: the first full suite failed on it (below),
+I stopped, and the orchestrator ruled it in as the mechanical consequence of the 2.7 bump (precedent `44940c82b`).
+`npx jest test/docs/vision-index.test.ts --maxWorkers=2` → 1 suite, 13 passed. `e5653c21c` (`test(cli): …`): a test
+file of my own, `test/cli/help-path-option-token.test.ts`. The first coverage run showed one more uncovered branch in
+`src/cli/program.ts` than the baseline: the option-token slice of `helpCommandRequest`, which only a spawned CLI
+reached (`BRDA:512,49,1,0` in `coverage/lcov.info`). The new in-process test covers it.
+
+**Gates** (each heavy one after `waitslot.sh`, `--maxWorkers=2`, in this worktree, with the two pending amendments in
+the tree):
+- `npm test -- --maxWorkers=2`, first run → exit 1, `Test Suites: 1 failed, 726 passed, 727 total`, `Tests: 4
+  failed, 13317 passed, 13321 total`. The only failing suite was `test/docs/vision-index.test.ts`: the index still
+  listed X_cli-cmds at 2.6, 2026-11-20, 538 lines. Fixed by `37e6fabbb`. Second run → exit 0, `Test Suites: 727
+  passed, 727 total`, `Tests: 13321 passed, 13321 total`. `test/cli/workflow-unbound-none.integration.test.ts`
+  passed (`bug-534` did not fire).
+- `npm run test:coverage -- --maxWorkers=2` (after `e5653c21c`) → exit 0, `Test Suites: 728 passed, 728 total`,
+  `Tests: 13325 passed, 13325 total`; `All files | 99.02 | 96.84 | 98.7 | 99.51`. By covered/total against the
+  `169ecd71b` baseline (`sha256sum -c` → `OK`), uncovered never grows:
+
+  | scope | statements | branches | functions | lines |
+  |---|---|---|---|---|
+  | totals, baseline | 12925/13072 | 8051/8333 | 2546/2582 | 10777/10834 |
+  | totals, head | 13141/13270 | 8173/8439 | 2600/2634 | 10942/10995 |
+  | `src/cli/program.ts`, baseline | 175/175 | 97/103 | 43/43 | 144/144 |
+  | `src/cli/program.ts`, head | 219/219 | 131/137 | 51/51 | 180/180 |
+  | `src/core/index.ts`, baseline | 852/866 | 387/403 | 191/209 | 683/686 |
+  | `src/core/index.ts`, head | 874/883 | 396/407 | 200/218 | 698/701 |
+- `npm run lint` → exit 0; `npm run docs:api` → exit 0; `npm run typecheck` (both tsc configs) → exit 0.
+- `docs.parity` and `test/docs/cli-reference.test.ts` ran inside both full runs (all `test/docs` suites passed in the
+  second run and the coverage run). Earlier, `npx jest test/docs/cli-reference.test.ts
+  test/docs/vision-revision-history.test.ts test/docs/name-resolvability.test.ts test/docs/x-cli-cmds.test.ts test/lint
+  --maxWorkers=2` → 20 suites, 206 passed.
+
+**T4.** `git log --first-parent --no-merges --format=%h 7dba75745..HEAD -- <the six red files>` → empty. `git rev-list
+--count HEAD..main` → `0` at the end of refactor, so no merge.
+
+### self-review (developer, 2026-11-22)
+
+- AC 1, met. `help memory add`, `help dna set`, `help workflow start` print byte for byte what `--help` prints for
+  them. `help memory addd` → exit 2 with the `memory addd` refusal, in console and in json. `help memory add extra`,
+  `help memory addd extra` and `help help help` are refused, with the first refused operand deciding. The renamed
+  built-in walks the same path. Evidence: the red suites pass (green run above).
+- AC 2, met. `help help` → `Usage: wingfoil help [command]`. For the six nouns with verbs, `<noun> help help` and
+  `help <noun> help` → `Usage: wingfoil <noun> help [command]`.
+- AC 3, met. `paths --help` names the seven categories and the declared-by-hand case; the list is derived from
+  `Paths.shape` (`test/core/paths-help-categories.test.ts`).
+- AC 4, met as a characterization (D1 (b)). `spec-008-negatable-globals` passes. `node dist/cli.js --interactive
+  capabilities` is still exit 2 as an unknown option.
+- `src/cli/suggest.ts` is unchanged (`git diff --stat d6c346e3a HEAD -- src/cli/suggest.ts` → empty). `task-365`'s
+  regions are untouched: no `verify` text was edited (`git diff d6c346e3a HEAD | grep -ci verify` → `0`).
+- Absence claims with their positive case. "No stale negatable `--interactive` left in the files I touched":
+  `grep -rn "global \`--interactive\`" src docs/*.md docs/01_vision docs/02_requirements` → only
+  `src/cli/init-command.ts:36` and my own revision entry quoting the old wording. The same grep found that comment, so
+  it does match. `src/cli/init-command.ts` is not a file this task changes, so the comment stays a candidate finding.
+- `--bogus` defect (recorded at green). The new help path would have read an unknown option as an unknown command. The
+  fix ends the path at the first option token. It is pinned by `test/cli/help-path-option-token.integration.test.ts`
+  (compiled CLI, 3 rows) and `test/cli/help-path-option-token.test.ts` (in process, 1 row). Both files are mine, not
+  red files. The reviewer judges the fix.
+- Candidate findings (not filed, for the wave-close ingest):
+  - The one-operand help refusals still print help on stderr before the `error:` line: `node dist/cli.js help memroy`
+    → exit 2, stderr the root help, then `error: unknown command 'memroy'` / `hint: did you mean "memory"?`. The
+    paths of two or more operands do not. Suggested severity: low.
+  - `src/cli/init-command.ts:36`, the comment "The negatable global `--interactive`". Suggested severity: low.
+  - `spec-020` §2.2 (line 197) names `--color` (negatable) and `--interactive` (negatable) among `verify`'s globals.
+    It is `task-365`'s (D5 (a)).
+
+### Pending amendments (approver)
+
+Prepared in this worktree and left uncommitted; the approver records each one with `memory amend`.
+
+- `bug-514-spec-008-section-2-declares-the-global-interactive-a-negatable-boolean-whose-positive-form-is-legal-but-only-no-interactive-is-registered-so-interactive-exits-2-as-an-unknown-option`
+  (`### Retrospective`, one item appended): `--reason "Record bug-514's retrospective item: the fix is task-380's
+  design-gate ruling D1 (b), applied by the spec-008 amendment a7ff8c07c, with --color fixed in the same amend and
+  spec-020 left to task-365."`
+- `spec-008-cli-grammar` (§12, the `agent execute` `--headless`, `--interactive` row, one sentence): `--reason "Reword
+  section 12's agent execute --interactive row to say that section 2's global --no-interactive has no positive form,
+  as section 2 now states, fixing in task-380 the same-class instance of bug-514 its design gate amendment left in
+  that row."`
+
+`bug-452`, `bug-456` and `bug-471` already have a `### Retrospective` (`- None.`), so they need no amendment.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -335,3 +472,10 @@ This note is written late, after the red record `5d2d71fcb`: the orchestrator di
      printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
      Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
      here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+
+- The design's "Files to touch" missed `docs/01_vision/00_index.md`, which `test/docs/vision-index.test.ts` re-checks
+  whenever a vision file's version, date or line count changes. The first full suite failed on it (4 tests), the phase
+  stopped, and the orchestrator ruled it in (`37e6fabbb`). Proposal: a design that bumps a `docs/01_vision/` file lists
+  `00_index.md` with it.
+- The coverage run counts no spawned CLI. A branch pinned only by an integration test showed up as one uncovered
+  branch more than the baseline (`BRDA:512,49,1,0`), and an in-process test was added (`e5653c21c`).
