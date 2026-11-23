@@ -49,6 +49,8 @@ operations run on the code build of `main` (the `wingfoil-cli` directive); the p
 - A first start of this plan on the same branch wrote it under `docs/05_plans/bug-ingest/` (no `--set scope`); that
   branch, never merged or pushed, was deleted and recut from `fb24de83a` before any triage.
 
+- triage: the approver ran `memory approve` on `bug-552` (`open → triaged`, `6111a1bdf`), from their own terminal.
+
 ### Retrospective
 
 - `workflow start` places a plan under `docs/05_plans/<workflow name>/` unless `--set scope=` names the release's
