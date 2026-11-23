@@ -423,6 +423,37 @@ start would deduce`, `heldBy`, `ungatedByType`, `workflowTree`; `test/docs/enume
   comment). Expected: the sentence names the Tools served. Severity: low (stale prose in an approved spec; `dl-075`
   class).
 
+### design gate rulings (architect, 2026-11-23)
+
+**The rulings** (approver, as relayed by the orchestrator, 2026-11-23): D1 (a), the split; D2 to D10 as recommended
+(D2 `workflow tree`; D3 the shapes as written; D4 the console summary with `--full`, json unchanged plus
+`ungatedByType`; D5 half 1 ruled out as characterization, half 2 the held rule with `heldBy`; D6 `show` takes any
+instance plan's id with `instance`; D7 the MCP alignment as written; D8 the six BDD scenarios; D9 `task-365` merges
+first and this branch takes `main` before red, on the orchestrator's word; D10 the vision rows at green, no
+change-proposal). No merge of `main` was made at this gate.
+
+**The split (D1 (a)).** Part B of the design — the `workflow tree` read: AC 2, 3, 4 and the tree half of AC 8, with
+`bug-485` — is `task-383` (`depends_on: [task-374]`), added by the orchestrator on a branch of its own. This task keeps
+AC 1, 5, 6, 7 and the status half of AC 8, with `bug-341`, `bug-359` and `bug-487`. The remaining criteria **keep
+their numbers** (1, 5, 6, 7, 8), so the design notes above still name them correctly; the part B pins in them are
+`task-383`'s input. The edits to this file's `## Acceptance Criteria`, `bug:` and `## Implementation Notes` are a
+pending amendment (below), left uncommitted. `spec-017` keeps both revisions (part B's text is approved now, for
+`task-383`), and §9's stale sentence on the Tools the production server serves — wrong since `task-367` — is fixed in
+the same amendment (W0-R10). The allowlist entries keep `plannedBy: ['task-374']`: `task-383` is not on this branch,
+and `name-resolvability.test.ts` checks every cited task against the task files it finds (`plans.unknownTasks`); the
+orchestrator moves them to `task-383` once both are on `main`.
+
+### Pending amendments (approver)
+
+Left uncommitted in this worktree, each to be recorded with `memory amend` at this design gate (final reasons):
+- `task-374-read-a-workflow-run-closed-runs-an-instance-s-phase-tree-what-a-start-would-deduce-bug-485-bug-487-w1-r12` — `--reason "Narrow task-374 to its status and show half after the design gate's split, D1 (a): remove criteria 2, 3 and 4 and the tree half of criterion 8, which task-383 takes with bug-485, drop bug-485 from the bug list, and record the split in the Implementation Notes; the remaining criteria keep their numbers."`
+- `spec-017-workflow-commands-and-state-deduction` — `--reason "Record task-374's design in §5.1, §5.3, §7, §7.4, §7.6, §7.13 and §8 to §11: an ungated element held by an open run and the ungated elements counted per type with --full for the list (bug-487, bug-341), show taking any instance plan's id (bug-359), and the workflow tree read of closed, open and previewed runs (bug-485, built by task-383); and correct §9's stale sentence that the production server serves no Tool, wrong since task-367 registered the Memory Tools."`
+- `spec-008-cli-grammar` — `--reason "Record workflow tree in §1 and §11 and the rows of workflow status --full and workflow tree --preview and --element in §12, as spec-017 §7.4 and §7.13 state them at task-374's design gate."`
+- `spec-006-core-domain-api` — `--reason "Record the console-only flags argument of renderConsole in §2 and the read operation workflowTree in §3 and among §6 item 6's declared HEAD reads, as spec-017 §7.4 and §7.13 state them at task-374's design gate."`
+
+The two allowlist files (`test/docs/name-resolvability.allowlist.ts`, `test/docs/enumeration-parity.allowlist.ts`) stay
+uncommitted with them and are committed once the amendments are, before red.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
