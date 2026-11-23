@@ -650,6 +650,57 @@ describe("buildProgram — the exit callback's own behaviour (task-103, `bug-103
     },
   );
 
+  // task-380 AC 1 (`bug-452`, design gate D2 (a), spec-008 §8): the help command's operands are a command path, walked
+  // level by level; the first operand naming no command of the level reached is the unknown-command refusal, with the
+  // closest-command hint from that level, at exit 2 and nothing on stdout.
+  it('task-380 AC 1 — `help dna set` prints `dna set`\'s help at exit 0, not `dna`\'s', async () => {
+    const program = await buildFixtureProgramWithRealExitCallback();
+    await parseIgnoringFallout(program, 'help', 'dna', 'set');
+    expect(exitSpy).toHaveBeenCalledWith(0);
+    expect(written(stderrSpy)).toBe('');
+    expect(written(stdoutSpy).split('\n')[0]).toMatch(/^Usage: wingfoil dna set /);
+  });
+
+  it('task-380 AC 1 — `help dna sett` is refused as the unknown command `sett`, with the `set` hint, at exit 2', async () => {
+    const program = await buildFixtureProgramWithRealExitCallback();
+    await parseIgnoringFallout(program, 'help', 'dna', 'sett');
+    expect(written(stderrSpy)).toBe(`error: unknown command 'sett'\nhint: did you mean "set"?\n`);
+    expect(exitSpy).toHaveBeenCalledWith(2);
+    expect(written(stdoutSpy)).toBe('');
+  });
+
+  it.each([
+    [['assist', 'dna', 'sett'], `error: unknown command 'sett'\nhint: did you mean "set"?\n`],
+    [['assist', 'assist', 'assist'], "error: unknown command 'assist'\n"],
+  ] as const)(
+    'task-380 AC 1 — the renamed built-in walks the same path: `%j` is refused at exit 2',
+    async (argv, stderr) => {
+      const program = await buildFixtureProgramWithRealExitCallback();
+      program.helpCommand('assist [command]');
+      await parseIgnoringFallout(program, ...argv);
+      expect(written(stderrSpy)).toBe(stderr);
+      expect(exitSpy).toHaveBeenCalledWith(2);
+      expect(written(stdoutSpy)).toBe('');
+    },
+  );
+
+  // task-380 AC 2 (`bug-456`, design gate D3 (a), spec-008 §8): the help command's own help names its path — the
+  // `wingfoil …` prefix required, no longer only admitted.
+  it.each([
+    [['help', 'help'], 'help', 'Usage: wingfoil help [command]'],
+    [['dna', 'help', 'help'], 'help', 'Usage: wingfoil dna help [command]'],
+    [['assist', 'assist'], 'assist', 'Usage: wingfoil assist [command]'],
+  ] as const)(
+    'task-380 AC 2 — `%j`: the built-in `%s` command\'s usage line names the path that answered',
+    async (argv, helpName, usage) => {
+      const program = await buildFixtureProgramWithRealExitCallback();
+      if (helpName !== 'help') program.helpCommand(`${helpName} [command]`);
+      await parseIgnoringFallout(program, ...argv);
+      expect(written(stdoutSpy).split('\n')[0]).toBe(usage);
+      expect(exitSpy).toHaveBeenCalledWith(0);
+    },
+  );
+
   it("a commander refusal under `--format json` is WingFoil's `{error}` object (task-130, `bug-114`)", async () => {
     const program = await buildFixtureProgramWithRealExitCallback();
     await parseIgnoringFallout(program, '--format', 'json', 'dna', 'show', '--bogus');

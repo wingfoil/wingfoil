@@ -1,7 +1,7 @@
 # CLI Commands Reference — WingFoil
 
-**Version:** 2.6
-**Date:** 2026-11-20  
+**Version:** 2.7
+**Date:** 2026-11-22  
 **Status:** Approved
 
 ---
@@ -79,10 +79,10 @@ decomposition, and `dl-082` fixed the spelling.
 | `wingfoil dna remove <path> [--value <value>] [--force]` | Remove an entry from a DNA collection, or a value from a list | All | 0a, 6 | `<path>` names the entry (`<collection>.<name>`), or the list `--value`'s values are removed from — `dna remove paths.docs --value README.md`. Refused when `<path>` or the named entry does not resolve |
 | `wingfoil dna show [<section>]` | Query and display project DNA | Casey, All | 3, 5 | Show the full DNA, or one **top-level** section as a positional: `project`, `modules`, `stacks`, `team`, `paths`. Not a dotted path — `dna show stacks.technologies` is refused (exit `1`) |
 | `wingfoil dna infer [--confirm]` | Auto-scan codebase and propose DNA structure | Morgan, Alex | 0b | *Not built* (`spec-006`: planned). Infers modules from directory structure, languages/frameworks from files. Requires human review/approval before updating DNA |
-| `wingfoil paths [<category>] [--list]` | Query project resource paths by category | All | 0a, 0b, 5 | Reads from DNA `paths:` section. Categories: sources, tests, docs, config, governance, runs, health — `runs` is the agent run log's one directory (`spec-016` §4.1, `task-138`). `--list` is accepted for the planned drill-down view and does not change the output yet |
+| `wingfoil paths [<category>] [--list]` | Query project resource paths by category | All | 0a, 0b, 5 | Reads from DNA `paths:` section. Categories: sources, tests, docs, config, governance, runs, health, and a category of your own declared in DNA `paths:` is answered too (`task-312`) — `runs` is the agent run log's one directory (`spec-016` §4.1, `task-138`). `--list` is accepted for the planned drill-down view and does not change the output yet |
 
-> **On interactivity.** No DNA command prompts. `init` is the only command with a prompt layer — the negatable global
-> `--interactive` is read only by it — and every other command fails immediately on a missing required argument, at exit
+> **On interactivity.** No DNA command prompts. `init` is the only command with a prompt layer — the global
+> `--no-interactive` is read only by it — and every other command fails immediately on a missing required argument, at exit
 > `2`: `wingfoil dna set` → `error: missing required argument: <path>` (then `hint: usage: wingfoil dna set <path> --value <value>`),
 > `wingfoil dna set project.license` → `error: missing required argument: --value`. The prompt layer is not abandoned
 > scope: it stays specified for all commands in `spec-008-cli-grammar` §4 ("Interactive-prompt rules"), which is where a
@@ -97,7 +97,7 @@ decomposition, and `dl-082` fixed the spelling.
 | `--entry-<field>` | string/array | One option per field the entry schema declares — `--entry-description`, `--entry-path`, `--entry-category`, `--entry-version`, `--entry-notes`, `--entry-phase`, `--entry-email`, `--entry-roles`, `--entry-executes_as`, `--entry-approval_authority`, `--entry-adapter`, `--entry-human_only`. Accepted by `add` and `update` | User input (flag) | The `entry-` prefix is required; it keeps this derived namespace disjoint from the global flags (`spec-008` §9). `--entry-adapter` names a `team.agents` entry's adapter (`task-138`) | `.wingfoil/dna.yaml` entry fields |
 | `--force` | flag | On `set`, `add`, `update`, `remove`: authorizes rewriting the whole `dna.yaml` when the in-place edit cannot express the change | User specifies via flag | Without it that case is refused; with it the success carries a warning (`spec-008` §12) | `.wingfoil/dna.yaml` |
 | `[<section>]` | enum | **Positional** on `dna show`: one top-level DNA key — `project`, `modules`, `stacks`, `team`, `paths` | User specifies, or omits to show all | Matches top-level keys in YAML; a dotted path is refused | `.wingfoil/dna.yaml` |
-| `category` | enum | Positional `[<category>]`: resource path category on `paths`: sources, tests, docs, config, governance, runs, health | User specifies, or omits for the whole map | Defined in DNA `paths:` section; `runs` holds exactly one directory | `.wingfoil/dna.yaml` under `paths:` |
+| `category` | enum | Positional `[<category>]`: resource path category on `paths`: sources, tests, docs, config, governance, runs, health, or a category of your own declared in DNA `paths:` (`task-312`) | User specifies, or omits for the whole map | Defined in DNA `paths:` section; `runs` holds exactly one directory | `.wingfoil/dna.yaml` under `paths:` |
 | `--confirm` | flag | On `dna infer` (*Not built*); skip confirmation and accept proposed DNA | User specifies via flag | If set, auto-confirms inferred values without prompting | N/A (affects execution flow) |
 | `--list` | flag | Drill-down on `paths` (e.g., `paths sources --list`) | User specifies via flag | Accepted; the expanded view is planned and does not change the output yet | N/A (affects query output only) |
 
@@ -398,6 +398,10 @@ Every command accepts these, except `--dry-run`, which only the commands that ch
 ---
 
 ## Revision history
+
+**Version 2.7 (2026-11-22) — the global `--no-interactive`, per `task-380` (`bug-514`, `spec-008` §2).**
+The note on interactivity names the global the program registers, `--no-interactive`, where it said "the negatable
+global `--interactive`": the positive form is refused as an unknown option, as `spec-008` §2 now states. The `paths` row and the `category` parameter row say that a category of your own declared in DNA `paths:` is answered too (`bug-471`), as `paths --help` does.
 
 **Version 2.6 (2026-11-20) — `wingfoil capabilities`, per `task-362` (`spec-019` §1, P5.1.5).**
 Pillar 5 gains the `capabilities` row: the build's file formats, commands and capabilities, read with no project, the
