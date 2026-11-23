@@ -6,7 +6,7 @@
  * but since task-101-route-commander-parse-errors-through-the-exit-code-contract (`bug-098`) their code
  * is chosen here too, by `exitCodeForParseOutcome` — covered at the bottom of this file.
  */
-import { coreErr, coreOk } from '../../src/core/types';
+import { coreErr, coreFailed, coreOk } from '../../src/core/types';
 import type { CoreErrorCode } from '../../src/core/types';
 import { classifyParseOutcome, exitCodeForError, exitCodeForParseOutcome, exitCodeForResult } from '../../src/core/exit-code';
 
@@ -25,6 +25,29 @@ describe('exitCodeForResult — CoreResult → exit code', () => {
 
   it.each(ALL_CODES)('maps a %s failure result to 1', (code) => {
     expect(exitCodeForResult(coreErr({ code, message: 'boom' }))).toBe(1);
+  });
+});
+
+/**
+ * task-365 AC 7 (red-first; `spec-020` §8.1, `spec-006` §2 as amended; design items 4 and 5): a completed run whose
+ * verdict fails is a success that carries `failed: { message }`, and `exitCodeForResult` maps it to 1 in `src/core`, so
+ * both surfaces share the mapping. Expected red: `coreFailed` is not exported by `src/core/types` (`tsc` TS2305; jest
+ * `TypeError: … is not a function`).
+ */
+describe('task-365 AC 7 — coreFailed and its exit code (spec-020 §8.1)', () => {
+  it('coreFailed(value, message) is a success carrying the value and `failed: { message }`', () => {
+    const value = { verdict: 'fail' };
+    expect(coreFailed(value, 'E_VERIFY_FINDINGS: m')).toEqual({ ok: true, value, failed: { message: 'E_VERIFY_FINDINGS: m' } });
+  });
+
+  it('exitCodeForResult maps a success carrying `failed` to 1', () => {
+    expect(exitCodeForResult(coreFailed({ verdict: 'fail' }, 'm'))).toBe(1);
+  });
+
+  it('coreOk never writes the `failed` key, and its exit code stays 0', () => {
+    const result = coreOk({ verdict: 'pass' });
+    expect('failed' in result).toBe(false);
+    expect(exitCodeForResult(result)).toBe(0);
   });
 });
 

@@ -10,7 +10,7 @@
  */
 import { AI_MODEL_OPTION, CO_AUTHOR_OPTION } from '../../src/core/agent-context';
 import type { CoreModule } from '../../src/core/registry';
-import { coreErr, coreOk } from '../../src/core/types';
+import { coreErr, coreFailed, coreOk } from '../../src/core/types';
 import type { CoreErrorCode, CoreResult } from '../../src/core/types';
 import { buildCliCommands, listRegisteredCliCommands, type CliCommand } from '../../src/cli/registrar';
 import { UsageError } from '../../src/core/usage-error';
@@ -640,5 +640,65 @@ describe('task-362 AC 2 — an operation that declares readsProject: false resol
     expect(resolveRoot).toHaveBeenCalledTimes(1);
     expect(contexts.map((ctx) => ctx.root)).toEqual(['/fixture-root']);
     expect(exitSpy).toHaveBeenCalledWith(0);
+  });
+});
+
+/**
+ * task-365 AC 7 (red-first; `spec-020` §8.1, `spec-005` §1 and `spec-006` §2 as amended; design item 6): a success that
+ * carries `failed` prints its payload on stdout as any success does, then the `failed` message as the error line on
+ * stderr, and exits 1. No operation name is printed (`spec-006` §4.2). Expected red: `coreFailed` is not exported by
+ * `src/core/types` (`tsc` TS2305; jest `TypeError: … is not a function`).
+ */
+describe('task-365 AC 7 — a success that carries `failed`: payload, then the error line, exit 1 (spec-020 §8.1)', () => {
+  const FAILING: CoreModule[] = [
+    {
+      name: 'x',
+      operations: {
+        x: { name: 'x', mutates: false, fn: async () => coreFailed({ verdict: 'fail' }, 'm') },
+      },
+    },
+  ];
+  let exitSpy: jest.SpyInstance;
+  let stdoutSpy: jest.SpyInstance;
+  let stderrSpy: jest.SpyInstance;
+  beforeEach(() => {
+    exitSpy = jest.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    stdoutSpy = jest.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    stderrSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+  });
+  afterEach(() => {
+    exitSpy.mockRestore();
+    stdoutSpy.mockRestore();
+    stderrSpy.mockRestore();
+  });
+
+  const command = (): CliCommand => findCommand(buildCliCommands(FAILING, { resolveRoot: () => '/fixture-root', buildParams: () => ({}) }), 'x', '');
+
+  it('console: stdout the payload, stderr `error: m`, exit 1', async () => {
+    await command().run('console');
+    expect(stdoutSpy.mock.calls.map((call) => call[0])).toEqual([`${JSON.stringify({ verdict: 'fail' }, null, 2)}\n`]);
+    expect(stderrSpy.mock.calls.map((call) => call[0])).toEqual(['error: m\n']);
+    expect(exitSpy).toHaveBeenCalledWith(1);
+  });
+
+  it('json: stdout the compact payload, stderr the one {"error":"m"} document, exit 1', async () => {
+    await command().run('json');
+    expect(stdoutSpy.mock.calls.map((call) => call[0])).toEqual([`${JSON.stringify({ verdict: 'fail' })}\n`]);
+    expect(stderrSpy.mock.calls.map((call) => call[0])).toEqual([`${JSON.stringify({ error: 'm' })}\n`]);
+    expect(exitSpy).toHaveBeenCalledWith(1);
+  });
+
+  it('the payload is written before the error line', async () => {
+    const order: string[] = [];
+    stdoutSpy.mockImplementation(() => {
+      order.push('stdout');
+      return true;
+    });
+    stderrSpy.mockImplementation(() => {
+      order.push('stderr');
+      return true;
+    });
+    await command().run('json');
+    expect(order).toEqual(['stdout', 'stderr']);
   });
 });

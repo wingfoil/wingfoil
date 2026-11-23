@@ -5,7 +5,8 @@
  * 1. **Enumeration.** `scanDetailKeys` (`./helpers/details-keys`) reads every `details:` site of the sources that build
  *    core errors; every key it finds must be declared in `DETAIL_KEYS` (`src/core/error-details.ts`), a closed table of
  *    `entry` / `labelled` / `stated` keys. The entry class is exactly `cause, diagnostics, issues, unreadable` and the
- *    labelled class exactly `applied, argv, file, frontier`.
+ *    labelled class exactly `applied, argv, file, flag, frontier` (task-365 D9 (a): `flag`, the option that carried a
+ *    refused revision, `spec-020` §8.2).
  * 2. **Rendering.** `errorDetails` (the selection the CLI and MCP share): entry keys by their own rule —
  *    `diagnostics` or `issues`, then `unreadable`, then `cause` — then labelled and undeclared keys as `<key>: <value>`
  *    lines in ascending key order; an entry already listed is not repeated; a stated key adds nothing; an empty string
@@ -54,8 +55,10 @@ describe('task-375 AC 2 — every details key core errors use is declared (bug-3
     expect(classOf('entry')).toEqual(['cause', 'diagnostics', 'issues', 'unreadable']);
   });
 
-  it('the labelled class is exactly applied, argv, file, frontier', () => {
-    expect(classOf('labelled')).toEqual(['applied', 'argv', 'file', 'frontier']);
+  // task-365 AC 7 (red-first; design D9 (a), `spec-020` §8.2): `flag` names the option that carried a refused revision;
+  // the reason does not state it, so it is labelled (`  flag: --base` under the error line).
+  it('the labelled class is exactly applied, argv, file, flag, frontier', () => {
+    expect(classOf('labelled')).toEqual(['applied', 'argv', 'file', 'flag', 'frontier']);
   });
 });
 
