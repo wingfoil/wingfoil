@@ -404,8 +404,7 @@ Every command accepts these, except `--dry-run`, which only the commands that ch
 **Version 2.8 (2026-11-23) — `wingfoil verify`, per `task-365` (`spec-020` §2, P1.14).**
 Pillar 1 gains the `verify` row: the check of a commit range against the Memory and approval contracts, read from
 committed history only, CLI only; its parameters table gains `--base` and `--introduced-at`, and the v0.4 release
-timeline names the command. The note *On interactivity* names the registered global `--no-interactive` instead of a
-negatable `--interactive`, whose positive form is refused (`bug-514`, `task-380` D5).
+timeline names the command.
 
 **Version 2.7 (2026-11-22) — the global `--no-interactive`, per `task-380` (`bug-514`, `spec-008` §2).**
 The note on interactivity names the global the program registers, `--no-interactive`, where it said "the negatable
