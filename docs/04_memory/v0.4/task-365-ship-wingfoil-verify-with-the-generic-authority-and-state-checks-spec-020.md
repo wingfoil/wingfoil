@@ -462,6 +462,87 @@ The approver recorded the step in `4c71aee39` (`workflow finalize … dev-loop.d
 
 This note follows the three D8 commits by kind, made after the record as ruled: `8f926a056` (the two directives), `3c3cf8f39` (`X_cli-cmds` and the vision index, with no change-proposal by the approver's ruling) and `6250a5a93` (the two allowlists).
 
+### red (qa, 2026-11-23)
+
+**Base.** Branch at `1e7756c84`; `git rev-list --count HEAD..main` → `1` (`c0d36b74b`, a plan file only), not merged, as
+the orchestrator ruled. PATH guard: `command -v wingfoil` → the task's PATH shim; `wingfoil --version` and `node dist/cli.js
+--version` → `0.3.2 (1e7756c8444fb95edaec9425d7842ae6befab8f6)`. Red commit: `3e266e81e` (test files only). Black box: no
+`src/` or `scripts/` file was opened; `scripts/check-governance.cjs` was only run, on fixtures of mine (below).
+
+**Files.** New: `test/core/helpers/in-memory-history-reader.ts`, `test/core/governance-check.test.ts`,
+`test/core/governance-check-structure.test.ts`, `test/core/approval-patterns.test.ts`, `test/core/verify-registration.test.ts`,
+`test/cli/verify.integration.test.ts`, `test/mcp/verify-not-served.test.ts`. Edited: `test/core/parity.test.ts`
+(`wingfoil://verify`), `test/core/production-registry.test.ts` (`verify.verify`), `test/core/capabilities.test.ts` (the seventh
+capability `governance-check`), `test/core/fixtures/capabilities-document.json` (`verify` after `paths`, `governance-check`
+after `dna-verbs`), `test/core/error-details-keys.test.ts` (labelled class gains `flag`), `test/core/exit-code.test.ts`
+(`coreFailed`), `test/cli/registrar.test.ts` (a success carrying `failed`).
+
+**Fixture.** The `MEMORY_YAML`, `DNA`, `taskDoc` and `env` of `test/cli/check-governance-parent-state.test.ts` copied (the
+first three into the helper, `env` into the integration suite); the `task` machine gains `returns: { in-progress: backlog }`
+(T-12 names it) and an `adr` machine with `waiting: [accepted]` is added (T-16: the script reports no supersedes-pair finding
+without the `waiting` state, as `test/cli/check-governance-enforcement.test.ts`'s `ADR_MACHINE` declares it). The T-1 scenario
+uses `test/core/helpers/l0-fixture.ts`, with an `id_pattern` and a template added to its `task` type in a commit before BASE
+(`memory add` otherwise exits 1: `error: memory type 'task' has no id_pattern/template in memory.yaml`).
+
+**The oracle runs** (supervision's ruling): `node scripts/check-governance.cjs --root <fixture> --json [--base <rev>]
+[--introduced-at <rev>]`, and once without `--json` for the console form, on scratch repositories built by the same fixture
+code: one repository per case T-2, T-3, T-4, T-5, T-6, T-7, T-8, T-9, T-10, T-11, T-12, T-13, T-14, T-15, T-16 (half-done and
+completed), T-17, T-18/T-19, T-20, T-21, T-22, T-24 (`--introduced-at <bad>^` and `<bad>`), T-26 (whole and `--introduced-at`),
+the governed base over its whole history (0 findings), the subject rows (`submit t-1 t-2`, `wf(task) submit t-1`,
+`assign t-1`), the state rows (`assign`, `submit` off-edge, single-hop off-edge, unparseable, not named, `add` non-initial),
+a document gone at HEAD, a missing supersedes target, an added document in an other commit, a deletion, an unvalidating
+`dna.yaml` / `memory.yaml` at the parent, the `workflow:` record rows, and the findings-order commit. Taken from those runs:
+every interpolated value of the messages (the `MEMORY_OPERATIONS` list `add, submit, approve, reject, deprecate, start,
+finalize, sync, amend, park, assign`; the dl-067 refusals `must not be blank`, `must not contain a line starting with …`, `must
+not end in a paragraph of "Key: value" lines …`; the zod first issues `Invalid input: expected array, received undefined` and
+`Invalid input: expected record, received number`), the `stateUnchecked` reasons (`no document it touches is named by its
+subject`; `no machine for '<type>' in the .wingfoil/memory.yaml at this commit: transitions not judged`; `no
+.wingfoil/memory.yaml is committed at this commit: transitions not judged`), §3's order on one commit (bracket, body by
+message, trailer-paragraph in written order, authority), and the console conventions (full shas; `1 commits`; `gated: 0
+findings on 0 commits` with no list; the `state not checked` line printed at 0). Not from the oracle: T-22 (§4.1's departure;
+the script reports no `state` finding there), whose text is `spec-020` §4.5's `submit` row. The extension checks the script
+adds (`config-version`, `co-author-identity`) are not expected of the verb.
+
+**Per AC.**
+
+| AC | Class | Tests | Fails today on |
+|----|-------|-------|----------------|
+| 1 | red-first | `verify-registration` › "a module `verify` …", "the options …", "its description and example …", "deriveVerb …" (passes: `deriveVerb` already gives `''` for a self-named pair), "the Commander program …"; `verify.integration` › AC 1 (2); `parity` (Resources); `production-registry` (sorted list); `verify-not-served` (3) | `expect(received).toBeDefined()` `Received: undefined`; `Error: no operation verify.verify in CORE_MODULES`; `--help` output without `verify`; parity diff `- "wingfoil://verify"`; registry diff `- "verify.verify"`. `verify-not-served` is D5 (a)'s characterization: passes on first run (3/3) |
+| 2 | red-first | `governance-check.test.ts` (every row of §4.2–§4.11 once, plus the commits each check does not judge); `verify.integration` › T-2 … T-21 | unit: suite cannot run, `src/core/governance-check` missing (`tsc` TS2307); spawned: `expect(received).toBe(expected)` `Expected: 1` `Received: 2` (`error: unknown command 'verify'`) |
+| 3 | red-first | unit "AC 3 — …" (type, role, machine, content roots at the first parent); spawned T-7, T-22, the uncommitted case | as AC 2 |
+| 4 | red-first | `approval-patterns.test.ts` (5 exported-pair cases, 3 structural) | `Received value: undefined` for both constants (`tsc` TS2459: declared locally, not exported); structural: `Expected length: 1` `Received length: 2` for the agent-trailer pattern (the second definition, established only from this output) |
+| 5 | red-first | spawned T-23, T-25 (2), T-26 | `Expected: 0` / `Expected: 1`, `Received: 2`. "--base alone and --introduced-at alone print no warning" passes today (no warning is printed by an unknown command) |
+| 6 | red-first | unit `GOVERNANCE_CHECKS`, `VERIFY_WHOLE_HISTORY`, `renderVerifyConsole` (2); spawned T-27, T-28, §3 order, console | unit: suite cannot run (TS2307); T-27 `Expected: not ""`; others `Received: 2` |
+| 7 | red-first | `exit-code` (3), `registrar` (3), `error-details-keys` (labelled class), `verify-registration` in-process (5), spawned T-28 (2), T-29 (12) | `TypeError: (0 , types_1.coreFailed) is not a function` (`tsc` TS2305); registrar: stdout `Array []` (the TypeError is caught as a crash); labelled class `- "flag"`; spawned stderr `error: unknown command 'verify'` |
+| 8 | red-first | `governance-check.test.ts` (no repository; the reader throws on a call it cannot answer); `governance-check-structure.test.ts` (4) | `the module exists`: `Expected: true` `Received: false`; `declares createGitHistoryReader …`: `Received: undefined`; `calls git at all`: `Received: 0`; "every git-running call lies inside …" passes vacuously on the empty source |
+| 10 | characterization of the feature file | `verify.integration` › the six scenarios, titled with their names | `Error: no report on stdout (exit 2): {"error":"unknown command 'verify'"}`; T-1's eight verb steps all exit 0 first. The feature file is unchanged; the tests run the command, so they are red until green |
+
+AC 9 and AC 11 are not qa's.
+
+**Runs** (targeted, the task's PATH shim first, `--maxWorkers=2 --noStackTrace --json`, read through a summary that prints no
+code frame):
+- the 13 files above with `test/docs/x-cli-cmds.test.ts` → `Tests: 75 failed, 159 passed, 234 total`; per file: integration 48
+  failed / 1 passed, `verify-registration` 9/1, `approval-patterns` 4/4, `governance-check-structure` 3/1, `registrar` 3/42,
+  `exit-code` 2/36, `capabilities` 2/22, `parity` 1/6, `production-registry` 1/14, `error-details-keys` 1/14,
+  `verify-not-served` 0/3, `x-cli-cmds` 1/15, `governance-check` suite failed to run (missing module);
+- the one `x-cli-cmds` failure is the expected D8 red, "every row of a command no build ships is marked *Not built*";
+- `npx tsc --noEmit -p tsconfig.json` → 8 errors, all intended: TS2307 `../../src/core/governance-check` (governance-check,
+  verify-registration, verify.integration, the helper), TS2305 `coreFailed` (exit-code, registrar), TS2459 `APPROVER_LINE_RE`,
+  `AGENT_TRAILER_LINE_RE` (approval-patterns: the constants exist unexported, so tsc says TS2459, not the design's TS2305);
+- `npx jest test/lint test/validation/secret-scan.test.ts --maxWorkers=2` → `1 failed, 249 passed`: `typecheck.clean` ›
+  "tsconfig.json typechecks with zero diagnostics", which reports exactly the 8 intended diagnostics above; it goes green
+  with green's exports. Secret scan passes. `npx eslint` on the 14 files prints nothing;
+- the invisible-character grep on the 14 files → no hit.
+
+**Interpretations to confirm at green (not departures from the design).**
+- `ConfigRead`'s `error` is taken as a string, the first issue's message §4.4 / §4.5 interpolate; the helper builds it from
+  `MemoryYaml` / `DnaYaml` `safeParse`.
+- The in-memory `transitions(path)` carries the fields the pinned `reconstructMemoryTransitions` tests read (`sha`, `subject`,
+  `operation`, `fromState`, `toState`, `reason`, `approval`); `transitionFindings` is canned per case, `[]` for any other
+  Markdown path.
+- `renderVerifyConsole` is compared without one trailing newline; the header prints the report's full shas, as the script does.
+- The `stateUnchecked` reasons are the script's words (§4.5 leaves them unpinned; T-30 compares them).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
