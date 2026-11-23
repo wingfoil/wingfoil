@@ -543,6 +543,212 @@ code frame):
 - `renderVerifyConsole` is compared without one trailing newline; the header prints the report's full shas, as the script does.
 - The `stateUnchecked` reasons are the script's words (§4.5 leaves them unpinned; T-30 compares them).
 
+### green (developer, 2026-11-23)
+
+**Base.** Branch at `a41f80052`; `git rev-list --count HEAD..main` → `48`. As ruled, `main` (`e26925858`, task-380 and the
+bug-550/551 ingest) was merged first: `git merge --no-ff main` conflicted in exactly `spec-005`, `spec-008`,
+`docs/01_vision/X_cli-cmds.md` and `docs/01_vision/00_index.md`, resolved as ruled (task-380's side first in each union,
+this branch's history entry renumbered 2.8 above task-380's 2.7), merge `3b608b57c`, checked by supervision hunk by hunk.
+Then, by ruling, `a989c7727` drops the 2.8 entry's interactivity sentence (task-380's 2.7 entry covers it) and re-syncs the
+vision index (549 lines). PATH guard: `command -v wingfoil` → the task's PATH shim; `wingfoil --version` and
+`node dist/cli.js --version` → `0.3.2 (219d207be8ce8cd9331c555b1b8a16e59a2cab72)`.
+
+**Commits.**
+- `dcf960a3e` feat(core): the verb. `src/core/governance-check.ts` (new): the types of design item 1, `GOVERNANCE_CHECKS`,
+  `VERIFY_WHOLE_HISTORY`, the eleven checks (`checkSubject` … `checkTrailerParagraph`, each `(commit, reader, { gated })
+  → { findings, stateUnchecked }`), `createGitHistoryReader` (the only git caller), `buildGovernanceReport` (sort,
+  de-duplication, counts, verdict), `governanceCheck`, `verifyFindingsMessage`, `renderVerifyConsole`.
+  `src/storage/commit.ts` exports the pair `APPROVER_LINE_RE` / `AGENT_TRAILER_LINE_RE` unchanged, `src/storage/index.ts`
+  re-exports it, `src/memory/commit-message.ts` imports it (its own literal removed). `src/core/types.ts`: `failed?` and
+  `coreFailed`; `src/core/exit-code.ts`: a success with `failed` exits `1`; `src/core/error-details.ts`: `flag:
+  'labelled'`; `src/core/capabilities.ts`: `governance-check` (`requires: ['verify']`) between `dna-verbs` and
+  `mcp-server`; `src/core/index.ts`: `VERIFY_OPTIONS`, `verifyFn`, the module `verify` after `paths`, the barrel
+  re-exports (task-380's `paths` description and `Paths` import untouched); `src/cli/registrar.ts`: the failed line.
+  `docs/cli-reference.md`: the ``### `wingfoil verify` `` entry (a new "Governance" section before "Agent"), the
+  `capabilities` entry's names and counts (37 commands, 7 capabilities), one "Exit codes" sentence (task-380's help
+  sentence untouched). `AGENTS.md` §1: `verify` at the top level, `— 37 commands` (W1-R10 as amended).
+- `e3112fa85` test(lint): `test/lint/git-log-readers.test.ts`'s roster ("the scan is not vacuous") names
+  `src/core/governance-check.ts` — a file the design does not list; the roster is extended by each task that adds a `git log` reader (`task-231` `4681e9ee7`, `task-344` `2d1e7904e`), and it is listed for the approver below.
+- `78b2ecbb2` test(docs): the allowlist rows the shipped command resolves (below).
+
+**Departures from the design's letter, each within its files.**
+- Design item 6 wrote `emitError(result.failed.message, …)`. Under `yaml`, `emitError` writes the error object with no
+  `---`/`...` markers (`src/cli/error.ts:36`), while `spec-020` §7 pins "each as one YAML document opened by `---` and
+  closed by `...`" and T-28's test counts two of each. The registrar writes the failed line through
+  `emitStderrDocument({ error }, 'error: <m>', …)` (`src/cli/warning.ts`): the same bytes as `emitError` under `console`
+  and `json` (`test/cli/registrar.test.ts` › task-365 AC 7, 3/3), self-delimiting under `yaml`. Every other error keeps
+  `emitError`.
+- `renderConsole` is `renderVerifyConsole` itself (`verify-registration` › "renders the console with
+  renderVerifyConsole" compares by identity), cast to the registry's `(value: unknown) => string`.
+- The red notes' interpretations are confirmed: `ConfigRead.error` is the first issue's message string; `transitions`
+  returns `MemoryTransition[]`; `renderVerifyConsole` ends with one newline; the `stateUnchecked` reasons are the
+  script's words.
+
+**Red → green** (targeted, the task's PATH shim first, `--maxWorkers=2`):
+- `npx jest test/core/governance-check.test.ts test/core/governance-check-structure.test.ts test/core/approval-patterns.test.ts
+  test/core/exit-code.test.ts test/core/error-details-keys.test.ts test/core/capabilities.test.ts test/cli/registrar.test.ts
+  test/core/parity.test.ts test/core/production-registry.test.ts test/core/verify-registration.test.ts
+  test/mcp/verify-not-served.test.ts --maxWorkers=2` → first `1 failed, 264 passed` (the `renderConsole` identity), then
+  `Tests: 265 passed` after the fix;
+- `npx jest test/cli/verify.integration.test.ts test/cli/registrar.test.ts --maxWorkers=2` → first `2 failed, 47 passed`
+  (the yaml markers, above), then `Test Suites: 2 passed`, `Tests: 94 passed, 94 total`;
+- `npx jest test/docs/vision-index.test.ts test/docs/vision-revision-history.test.ts test/docs/x-cli-cmds.test.ts --maxWorkers=2`
+  → at the merge `1 failed, 38 passed` (the D8 "*Not built*" case, expected), after green `5 passed` suites with
+  `cli-reference`, `agents-md`, `help-describes-every-command`, `api-docs` (`49 passed`);
+- the neighbours: `npx jest test/storage/commit.test.ts test/storage/commit-attribution.test.ts test/memory/commit-message.test.ts
+  test/memory/reason-trailer.test.ts test/core/exit-code-throw.test.ts test/mcp/registrar.test.ts test/core/capabilities-wiring.test.ts
+  test/cli/capabilities.integration.test.ts test/cli/project-option.integration.test.ts --maxWorkers=2` → `9 passed`, `142 passed`;
+- `npx jest test/lint test/validation/secret-scan.test.ts --maxWorkers=2` → `1 failed, 249 passed`: the git-log-readers roster
+  (above), then `3 passed` for that file after `e3112fa85`. `npx tsc --noEmit -p tsconfig.json` → no output.
+
+**Allowlists** (`78b2ecbb2`). `name-resolvability` reads tracked files only, so its stale list was read after
+`dcf960a3e` (a copy of the test writing its warn-mode report to a scratch file, removed after the run): 20 of the 22
+rows planned by task-365 were stale and go; `commits.gated` and `details.flag` (`spec-020`) never resolve as
+configuration keys (they are report and error-details keys), so they keep their rows with a written reason. The three
+`enumeration-parity` `verify` surpluses go. `npx jest test/docs/name-resolvability.test.ts test/docs/commands-parity.test.ts
+test/docs/enumeration-parity.allowlist.test.ts test/docs/command-surface-specs.test.ts --maxWorkers=2` → `23 passed`.
+
+**Per AC** (the test that establishes it; all green at refactor's full run):
+
+| AC | Status | Evidence |
+|----|--------|----------|
+| 1 | met | `verify-registration` (10/10), `verify.integration` › AC 1 (2), `parity` (`wingfoil://verify`), `production-registry` (`verify.verify`), `verify-not-served` (3), `cli-reference` |
+| 2 | met | `governance-check.test.ts` (every §4.2–§4.11 row), `verify.integration` T-2 … T-21 |
+| 3 | met | unit "AC 3" cases; spawned T-7, T-22 and the uncommitted case |
+| 4 | met | `approval-patterns.test.ts` (8/8): one definition of each pattern, in `src/storage/commit.ts` |
+| 5 | met | spawned T-23, T-25 (2), T-26; in-process `verifyFn` warning cases (`governance-check-git-reader.test.ts`) |
+| 6 | met | unit `GOVERNANCE_CHECKS`, console layout; spawned T-27, T-28, §3 order, console |
+| 7 | met | `exit-code` (3), `registrar` (3), `error-details-keys`, `verify-registration` in-process (5), spawned T-28, T-29 |
+| 8 | met | `governance-check.test.ts` (no repository), `governance-check-structure.test.ts` (4/4) |
+| 9 | met | refactor, "Parity" below |
+| 10 | met | `verify.integration` › the six scenarios of `P1.14-verify.feature`, titled with their names |
+| 11 | met | the design's amendments, recorded by the approver at the design gate; none is owed by green |
+
+### refactor (developer, 2026-11-23)
+
+**Commits.**
+- `8f12c3afc`, `ab276646e` refactor(core): one content-roots predicate (`contentRootTest`); and the defensive fallbacks
+  that no input reaches go, each replaced by the invariant it guarded (a canonical `assign` always has its ids, a named
+  document always its written path, a machine always a first parent, a rename line both paths, a batch-check one line per
+  request, a failed schema parse at least one issue, git's exit `128` the only answer for a token naming no commit). The
+  script's copy branch (`C`) is not carried over: `git log -M` reports no copy, `diff.renames=copies` included (a scratch
+  repository: `git log -M --name-status` printed `M a.md` / `A b.md` with and without `GIT_CONFIG_KEY_0=diff.renames
+  GIT_CONFIG_VALUE_0=copies`; only `-C --find-copies-harder` printed `C100`).
+- `933e0b475`, `99149beaa` test(core): `test/core/governance-check-git-reader.test.ts` (new, the developer's; 33 cases) —
+  the reader over throwaway repositories (commits, renames, file changes, blobs, silent configuration reads, the history
+  set, memoized walks, the sync citation, documents at `HEAD`), what the checks list as state not checked, `verifyFn`'s
+  order of refusals and the warning, and in-memory cases for the branches only an unusual history reaches, the report's
+  de-duplication and trailer ordering, the barrel's re-exports and `coreFailed`'s warnings. Without it the new module
+  left 15 statements and 50 branches uncovered (first coverage run, below).
+
+**Gates** (heavy ones after `bash waitslot.sh`, `--maxWorkers=2`):
+- `npm test -- --maxWorkers=2` at `933e0b475` → exit `0`, `Test Suites: 735 passed, 735 total`, `Tests: 13547 passed, 13547 total`
+  (no pending amendment in the tree, so `bug-534`'s `workflow-unbound-none` did not trip).
+- `npm run test:coverage -- --maxWorkers=2` at `933e0b475` → exit `0`, `735 passed`, `13547 passed`; at `99149beaa` →
+  exit `0`, `Test Suites: 735 passed, 735 total`, `Tests: 13560 passed, 13560 total`, `All files | 99.07 | 97.02 | 98.77 | 99.54`
+  (statements, branches, functions, lines).
+- Coverage against the baseline `169ecd71b19f1e2321051ee2070c59986de784e0` (`sha256sum -c coverage-summary.json.sha256`
+  → `coverage-summary.json: OK`; its node `v22.21.0`, this run's `v22.21.0`), covered/total (uncovered base → head), at
+  `99149beaa`:
+  - totals: lines 11518/11571 (57 → 53), statements 13877/14007 (147 → 130), functions 2735/2769 (36 → 34), branches
+    8768/9037 (282 → 269);
+  - `src/core/governance-check.ts` (new, counted whole): lines 528/528, statements 679/680, functions 113/113, branches
+    552/555 — the three arms left are `machine.returns ?? {}` on a machine that declares `returns` (`:408`), `park` on a
+    machine with no `returns` (`:585`), and two equal messages in the sort comparator (`:1149`), which the
+    de-duplication by `(sha, rule, message)` before it makes unreachable;
+  - `src/core/index.ts` functions 221/239 (18 → 18; at the first run 36: the barrel's 18 re-export getters, covered since
+    `99149beaa`), lines 743/746 (3 → 3), statements 926/935 (14 → 9), branches 431/442 (16 → 11); `src/core/types.ts`
+    10/10 branches (0 → 0); `exit-code.ts` 21/22 branches (1 → 1); `error-details.ts` all covered; `capabilities.ts`
+    (not in the baseline) all covered; `src/storage/commit.ts` unchanged (3 statements, 5 branches); `src/memory/commit-message.ts`
+    all covered; `src/cli/registrar.ts` 1 line, 1 statement, 1 function (1 → 1 each); `src/storage/index.ts` holds only
+    re-exports and is not instrumented. Uncovered grows nowhere. The baseline is older than this task's merge base
+    (`e26925858`), so other tasks' changes are in the difference too.
+- `npm run -s lint` → exit `0`; `npm run -s docs:api` → exit `0`, no warning in its output; `npm run -s typecheck` at
+  `99149beaa` → exit `0` (both tsc configurations), no output.
+- `docs.parity` and `test/docs/cli-reference.test.ts`: in both full runs (every `test/docs` suite passed).
+
+**Parity (AC 9, `spec-020` T-30, T-31).** Comparison script (scratch, not committed): the script's findings minus its
+three extension checks against the verb's, keyed `(sha, rule, message)`, the verb's `gated` re-decided with the
+script's `checkIntroductions` (§6.1 step 3), and `stateUnchecked` keyed `(sha, reason)`.
+- Range: `node scripts/check-governance.cjs --base origin/main --json` and `node dist/cli.js verify --base origin/main --format json`
+  at `78b2ecbb2` (`origin/main` = `1ceaa6ee2`) → both exit `0`, 42 s each; script `checked 108`, `otherCommits 108`, 0 findings,
+  0 `stateUnchecked`; verb `commits {range 229, memory 108, other 108, gated 229}`, 0 findings, 0 `stateUnchecked`,
+  `verdict: pass`. Identical.
+- Whole history, the script: `node scripts/check-governance.cjs --json` at `78b2ecbb2` → exit `1`, 105 min under `nice -n 10`
+  and load; `checked 7692`, `otherCommits 3679`, 4420 findings (`co-author-identity` 2666, `approval-agent-trailer` 915,
+  `authority` 466, `bracket` 250, `plan-retrospective` 50, `subject` 49, `state` 23, `body` 1), 1212 `stateUnchecked`, the 2
+  gated findings `9cdea2e3b` and `8d6c005f6` (`subject`, the non-canonical `assign`), introduction `fcd435695`.
+- Whole history, the verb, no option: `node dist/cli.js verify --format json` (started at `933e0b475`, two other commits
+  later) → exit `1`, 44 min; `commits {range 12200, memory 7692, other 3681, gated 12200}`, 2907 findings, 9
+  `stateUnchecked`; stderr the `W_VERIFY_WHOLE_HISTORY` document and `E_VERIFY_FINDINGS: 2907 findings on 1631 commits …`.
+  Against the script: 0 findings only in the script, 0 gating differences, and 1203 only in the verb — every one `no
+  .wingfoil/memory.yaml is committed at this commit: its state cannot be checked`, on exactly the 1203 commits the script
+  lists as `… transitions not judged`: §5.1's fail-closed whole-history mode (T-26), since no `--introduced-at` was given.
+- Whole history, the verb, `--introduced-at fcd435695` (the script's introduction, as T-30 states), run on a clone of the
+  branch pinned at `99149beaa` with the worktree's build (`node dist/cli.js --version` → `0.3.2 (99149beaab7f…)`),
+  `node dist/cli.js verify --project <clone> --introduced-at fcd435695e14b5629fa58a69eb6ac91f37408857 --format json` → exit
+  `1`, 81 min; `commits {range 12202, memory 7692, other 3683, gated 8657}` (the clone holds the six commits after
+  `78b2ecbb2`, all other commits with no finding), 1704 findings, 1212 `stateUnchecked`. Against the script: the same
+  1704 findings in the same order, the same 1212 `stateUnchecked` entries, 0 gating differences once re-decided by the
+  script's introductions. The verb's own gating (one introduction for every check, §5.1) gates 781 of them (`subject`
+  2, `body` 779): the `approval-agent-trailer` findings after the script's introduction and before that check's own marker
+  introduction, which the script reports as history. That is §5.1 against §6.1 step 3, by design: task-366's script
+  re-decides them.
+- T-31: `git log --format=%H -- .wingfoil/memory.yaml` → 36 commits, 5 of them merges, no Memory `wf()` commit; none is in
+  the `origin/main..HEAD` range. Under both readings no generic check reports anything on any of the 36 (each carries
+  only the extension's `co-author-identity` finding, excluded). The three non-merge ones that also change a Memory
+  document: `ee0c47008` (1 document) and `8c0858c82` (3) keep each status, so `status-outside-wf` has nothing to report
+  under either `memory.yaml`; `16fd0f021` (`task-111`'s move, 444 documents) has no `.wingfoil/memory.yaml` at its parent,
+  so under §4.1 it is not judged, and under the script's reading its renames keep every status. §4.1's parent reading
+  changes nothing on this repository's history.
+
+**Sync.** At the end of refactor `git rev-list --count HEAD..main` → `4` (task-383's filing, `fb24de83a`): `git merge
+--no-edit main` → merge `ed70c8c88`, one Memory file added, no conflict, no code; the gates above stand for it.
+
+**T4.** `git log --first-parent --no-merges --format=%h 3e266e81e..HEAD -- <the 14 red files>` at `ed70c8c88` → empty.
+
+### self-review (developer, 2026-11-23)
+
+Against `code-review`, `testing`, `determinism`, `command-baseline`:
+- Every AC row above names its test; every number in these notes is from a run quoted here. The claims of absence carry
+  their positive case: "uncovered grows nowhere" lists each file's figures; "no generic finding on the 36 commits" was
+  read from both reports by sha.
+- Determinism: no clock or randomness in `src/core/governance-check.ts` (`grep -n "Date\|Math.random" src/core/governance-check.ts`
+  → nothing); every `git log` passes `--no-show-signature` (`test/lint/git-log-readers.test.ts`, 3/3); T-27's
+  byte-identical runs pass.
+- Baseline: the verb reads committed history only; the AC 3 case with an uncommitted status edit and a staged file passes (byte-identical stdout). It writes nothing.
+- AC-4: the scan finds one definition of each pattern (`approval-patterns.test.ts`); the script keeps its twin until
+  task-366, as ruled.
+- Same-class: the `failed` line is the only error the registrar prints after a payload; `renderToStderr` (`agent execute`)
+  never returns `failed`, so it needs no twin branch.
+- Files outside the design's list: `test/lint/git-log-readers.test.ts` (one roster line, `e3112fa85`) and the developer's
+  new `test/core/governance-check-git-reader.test.ts`; for the approver.
+- Not done here, on purpose: `scripts/check-governance.cjs` and its suites (task-366), `src/mcp/*` (D5, D10).
+
+**What task-366 (W1-07) may rely on** (as built, at the head below):
+- The command `node <checkout>/dist/cli.js verify --format json --project <root> [--base <rev>] [--introduced-at <rev>]`:
+  stdout is the report in every completed run, keys `head, base, introducedAt, checks, commits, findings, stateUnchecked,
+  verdict`; every finding `{sha, subject, rule, check, message, gated}`, `check` always present; `checks` is
+  `GOVERNANCE_CHECKS`' eleven. Exit `0` pass, `1` with a report (`verdict: fail`), `1` without one (a refusal), `2` usage.
+  Under `json`, stderr is one document per line: `{"warning":"W_VERIFY_WHOLE_HISTORY: …"}` (only with neither option),
+  `{"error":"E_VERIFY_FINDINGS: …"}` after the report, and a refusal's `{"error": …, "details": [{"detail": "flag: --base"}]}`.
+- Parity measured above: over the whole history with `--introduced-at fcd435695` the verb's findings and
+  `stateUnchecked` are the script's minus its three extension checks.
+- Exported from `src/core/governance-check.ts` (and the `src/core` barrel): the eleven check functions
+  (`GovernanceCheckFn`), `HistoryReader`, `HistoryCommit`, `createGitHistoryReader` (returns a `GitHistoryReader`: plus
+  `history` and `prefetch`), `buildGovernanceReport`, `governanceCheck`, `GovernanceReport` and its parts,
+  `verifyFindingsMessage`, `renderVerifyConsole`, `VERIFY_WHOLE_HISTORY`, `GOVERNANCE_CHECKS`.
+- The pattern pair: `APPROVER_LINE_RE` and `AGENT_TRAILER_LINE_RE`, exported by `src/storage/commit.ts` and the
+  `src/storage` barrel (`/im`, no `g`).
+- `coreFailed(value, message, warnings?)` in `src/core/types.ts`; `exitCodeForResult` maps it to `1`.
+- The script's own `APPROVAL_LINE_RE` / `AGENT_TRAILER_RE` are now the last copies of the pair (AC-4 scans `src/` only).
+  Its `readFileChanges` keeps a `C` branch that `-M` never reaches (above).
+
+### Pending amendments (approver)
+
+None. Green and refactor changed no element past its first state; the spec amendments the design prepared were recorded
+at the design gate.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -550,3 +756,16 @@ code frame):
      printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
      Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
      here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+
+- The design's list of tests that pin what changes missed `test/lint/git-log-readers.test.ts`, whose roster names every file
+  with a `git log` reader; green extended it (`e3112fa85`). Proposal: a design that adds a git reader in a new file greps
+  `test/lint` for rosters.
+- A new module's coverage is counted whole, and spawned CLI runs count for none: the red suites left 15 statements and 50
+  branches of `src/core/governance-check.ts` uncovered (first coverage run at `933e0b475`); 33 developer cases closed them.
+  Proposal: a design for a git-reading module plans its in-process reader tests.
+- Design item 6's `emitError` cannot write `spec-020` §7's self-delimiting yaml error; the registrar uses
+  `emitStderrDocument` instead. The design and the spec disagreed silently until T-28's yaml test.
+- The whole-history parity costs hours: the script 105 min and the verb 44 + 81 min under load. Running the verb without
+  `--introduced-at` first was a wasted run, since T-30 asks for the script's introduction; and a long run in the
+  worktree saw `HEAD` move under it (two commits), so the second run used a clone pinned at a sha. `waitslot.sh`'s
+  `busy()` sees only jest and tsc, so a running `check-governance.cjs` is no holder for the next waiter (reported as a candidate finding of this phase).
