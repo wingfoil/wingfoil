@@ -509,10 +509,11 @@ two lines say, computed from two documents, **previous** and **current**.
   0.4.0's lines read `Formats read: unchanged`, unless a v0.4 task bumps a kind, and `Capabilities: agent-execute,
   directive-verbs, dna-verbs, governance-check, mcp-server, memory-verbs, workflow-tracking`.
 - **A patch on a line without the command** (a `release/0.3` patch: that line has no `capabilities` command and no
-  fixture) runs no query. Its section reads `Formats read: unchanged` and `Capabilities: none new`, taken from the
-  baseline on both sides, provided `git diff v<previous> -- src/validation/format.ts` is empty on that line; when it is
-  not, the script fails and the task writes the `Formats read:` line from the constants by hand. Where the baseline file
-  and the script are present on such a line is `dl-213`'s task's (`git-conventions` §1's merge forward and its
+  fixture) runs no query, and the script computes nothing there: `--lines` and `--check` fail, naming the baseline or
+  the build they cannot read. The two lines are written by hand (`dl-213` as amended, the `release-commit` phase):
+  `Capabilities: none new`, and `Formats read: unchanged` when `git diff v<previous> -- src/validation/format.ts` is
+  empty on that line, otherwise the items of this section's grammar, written from the constants. Where the baseline
+  file and the script are present on such a line is `dl-213`'s task's (`git-conventions` §1's merge forward and its
   per-line content rules apply).
 - **The script reads the current document from the build** (`node dist/cli.js capabilities --format json`), so the
   CHANGELOG cannot state what the tool does not report (`dl-177` Q4).
@@ -762,6 +763,15 @@ four nits):
 - N4 — a finding on `spec-020` (its AGENTS.md amendment still wrote "35 → 36"), carried to that spec's own review.
 - Cross-spec, from `spec-020`'s round-2 review (its N6: neither spec said whether the governance check command gets a
   capability): made open question OQ-4, for the approver, with recommendation (a); §4.1 points to it.
+
+**Revision (2026-11-23, `task-363-write-the-formats-read-and-capabilities-lines-into-every-changelog-release-section-spec-019-task-b`)
+— §8's patch bullet states the hand route the script implements.** The bullet said the patch lines are taken from the
+baseline on both sides and that the script fails when `src/validation/format.ts` moved; `task-363`'s script has no
+such mode (its review, finding 2): on a line without the `capabilities` command `--lines` and `--check` fail because the
+baseline or the build is missing, and `dl-213`'s amendment and the `release-commit` phase have the task write both
+lines by hand. The bullet now says that, with the same condition on `src/validation/format.ts`. Nothing else changes:
+no format, no capability, no test case. Edited in place without a supersede or a state change (`dl-047`), pending the
+approver's `memory amend`.
 
 **Revision (2026-11-21, `task-365-ship-wingfoil-verify-with-the-generic-authority-and-state-checks-spec-020`)
 — §4.2 gains `governance-check`, as OQ-4 (a) rules.** OQ-4 was ruled (a) at this spec's approval: the task that merges
