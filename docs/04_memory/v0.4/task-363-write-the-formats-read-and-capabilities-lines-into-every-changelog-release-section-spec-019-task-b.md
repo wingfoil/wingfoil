@@ -321,6 +321,105 @@ The approver recorded the step in `c449e6bd6` (`workflow finalize … dev-loop.d
 
 > Approve the design of task-363 with every ruling as recommended: D1 (a) the Formats read and Capabilities lines are the first two paragraphs of a release section, one line each in spec-019 section 8's grammar, then a patch's Feature in a patch lines, then prose, and the seven earlier sections are grandfathered; D2 (a) one error line per file kind or capability removed without a capabilities document format bump, then a hint line, exit 1; D3 (a) the script prints and the check requires the Breaking items for removals and the format's rise, everything else is written by hand and form-checked, and a Feature in a patch line ends with its task and appears only in a patch; D4 (a) the 0.3.2 baseline fixture holds format 1, the nine file kinds at 1..1, the 35 commands and no capability; D5 (a) release-commit changes its description only, release-publishing goes to 2.4 and no checks token is added; D6 the tests derive the 0.4.0 line from the committed fixture, so they do not depend on task-365's merge; D7 no spec-019 amendment; D8 the CHANGELOG header gains one sentence; D9 no BDD scenario; D10 dl-213 is amended as prepared.
 
+### red (qa, 2026-11-23)
+
+**Red commit `07214526d`** (`git log --oneline -1` → `07214526d test(changelog): task-363 — failing test: …`), test files
+and the fixture only: `test/cli/changelog-lines.test.ts`, `test/docs/changelog-lines.test.ts`,
+`test/core/capabilities-baseline.test.ts`, `test/core/release-publishing-changelog-lines.test.ts` (new),
+`test/core/fixtures/capabilities-document-baseline-0.3.2.json` (new), `test/docs/name-resolvability.allowlist.ts` (the one
+`PLANNED` entry for the baseline path, `plannedBy: ['task-363']`, removed). No `.d.cts` is written: the design gives
+`scripts/changelog-section.d.cts` to green, so the missing exports are the TS2305 red. `test/cli/changelog-section.test.ts`
+and `test/cli/publish-release-scripts-edges.test.ts` are untouched. Base unchanged: `git rev-list --count HEAD..main` →
+`0`, no merge. Black box: before the red commit no command named a `src/` or `scripts/` path; the script was only RUN, in
+its default mode and with `--lines`, through the task's PATH shim: `node scripts/changelog-section.cjs 0.3.2 --lines` →
+exit `2`, `error: unknown option --lines` and `hint: usage: node scripts/changelog-section.cjs <X.Y.Z> [--changelog
+<path>]`; `node scripts/changelog-section.cjs 0.3.2` → exit `0`, the 0.3.2 notes. `node dist/cli.js capabilities --format
+json` was run once, to see the document's shape (exit `0`).
+
+**The baseline fixture.** Written from the design's content (D4 (a)): the committed §5 fixture with the command
+`capabilities` and its six capability names removed, `JSON.stringify` plus `\n`. `sha256sum` →
+`9f91ddddee5f85f6045a43cab016344d9abb766152a540d8615c34155152e27f`, `wc -c` → `910`: both the design's values. Its 35
+commands cross-checked against black-box sources only: `git show v0.3.2:docs/cli-reference.md | grep '^### \`wingfoil '`
+(the command names, options stripped, sorted) → 35 lines, `diff` against the fixture's `commands` → identical; the pinned
+build (`npm run -s wingfoil -- --version` → `0.3.2 (6de2e13c0…)`), `--help` and each noun's `--help` (`dna`, `memory`,
+`directive`, `directives`, `workflow`, `agent`) → 5 + 9 + 3 + 1 + 11 + 3 verbs plus `init`, `mcp`, `paths` = 35.
+
+**Run.** `npx jest test/cli/changelog-lines.test.ts test/docs/changelog-lines.test.ts test/core/capabilities-baseline.test.ts
+test/core/release-publishing-changelog-lines.test.ts --maxWorkers=2` → `Tests: 64 failed, 5 passed, 69 total`
+(`test/cli/changelog-lines.test.ts` 25 failed / 25; `test/docs/changelog-lines.test.ts` 28 / 28;
+`test/core/capabilities-baseline.test.ts` 1 / 4; `test/core/release-publishing-changelog-lines.test.ts` 10 / 12).
+`npx tsc --noEmit -p tsconfig.json` → exit `2`, only the six intended lines: `test/cli/changelog-lines.test.ts(23,10)`,
+`(23,23)`, `(23,43)` TS2305 `formatRange`, `previousReleaseTag`, `releaseLines`; `test/core/capabilities-baseline.test.ts(17,10)`
+TS2305 `releaseLines`; `test/docs/changelog-lines.test.ts(22,28)`, `(22,49)` TS2305 `checkReleaseSection`,
+`LINES_GRANDFATHERED`. `npx jest test/lint --maxWorkers=2` → `Tests: 1 failed, 164 passed, 165 total`: the one failure is
+`typecheck.clean` reporting exactly those six TS2305 lines (the expected red; green's `.d.cts` clears it).
+`npx jest test/validation/secret-scan.test.ts --maxWorkers=2` → `85 passed`. `npx jest test/cli/changelog-section.test.ts
+test/cli/publish-release-scripts-edges.test.ts test/docs/name-resolvability.test.ts --maxWorkers=2` with the files staged →
+`31 passed` (the name-resolvability suite resolves the baseline path from the index: with the file untracked it reported
+it as unresolved, `1 failed`, and passed once it was staged). `npx eslint` on the four test files → exit `0`. The
+invisible-character grep on the six files → no hit.
+
+**Per AC** (first failing assertion of each test):
+- **AC 1 (red-first)**, `test/cli/changelog-lines.test.ts`:
+  - `formatRange` (1 test), `releaseLines (T-19)` (8: equal documents; `commands`, `wingfoil` and an unknown key ignored;
+    `dna 1→2`; `dna 1→1..2`; `bindings none→1`; `dna 1..2→2..3`; `agent-adapter 1→2, dna 1→2` from reversed key order; new
+    names only, sorted), `previousReleaseTag` (5: `0.4.0` → `v0.3.2`; `0.3.3` with `v0.4.0` → `v0.3.2`; `v0.4.0-rc.1` and
+    `release-0.3` ignored; `v0.2.10` above `v0.2.9`; `0.1.0` → `undefined`) → `TypeError: (0 , changelog_section_cjs_1.<name>)
+    is not a function`, the runtime face of TS2305 (`isolatedModules: true`).
+  - `--lines` with files: "--previous <baseline> --current <the §5 fixture> …" → `expect(result.stderr).toBe('')`, received
+    `error: unknown option --lines` + the usage hint; "a previous file that is not a capabilities document …" → exit `1`
+    expected, received `2`. The expected stdout is derived from the fixture's own `capabilities` (D6).
+  - usage: "a usage error exits 2 with the usage hint naming the new options" (`--lines --check`; `--previous` without a
+    value; `--previous`, `--current`, `--repo` without a mode) → exit `2` already today; the first failure is the hint
+    line, `expect(usage).toContain('--lines')`, received `hint: usage: node scripts/changelog-section.cjs <X.Y.Z>
+    [--changelog <path>]`.
+  - default sources, a temporary repository (`--repo`; `git init`, the baseline committed and tagged `v0.3.2`, the §5 path
+    committed and tagged `v0.4.0` holding the baseline with `dna` at `1..2` and `agent-execute`, an untracked stub
+    `dist/cli.js` printing that document plus `mcp-server` with a `wingfoil` key): `0.4.1` → expects
+    `Formats read: unchanged` / `Capabilities: mcp-server` (the tag's fixture); `0.4.0` → `Formats read: dna 1→1..2` /
+    `Capabilities: agent-execute, mcp-server` (the baseline fallback); both fail on `stderr` `''` expected, received the
+    unknown-option error. `0.3.2` → `error: no release tag below v0.3.2` and the stub removed → `error: cannot read the
+    current capabilities document: `: both fail on exit `1` expected, received `2`.
+- **AC 2 (red-first)**, same file: `releaseLines` at an equal format → `ok: false` with the two problems, kinds first
+  (`roles`, then `mcp-server`); with `format: 2` → `ok: true`, `Formats read: roles 1→none`, `Capabilities: none new`, the
+  three Breaking items in the design's order → both `TypeError … releaseLines is not a function`. CLI: the removal at an
+  equal format → exit `1` expected, received `2` (the exact stderr: the two `error:` lines and `hint: previous document:
+  <the --previous path>`); with `format: 2` → `stderr` `''` expected, received the unknown-option error (the exact stdout:
+  the two lines and the `### Breaking` block).
+- **AC 3 (red-first)**, `test/docs/changelog-lines.test.ts`:
+  - `checkReleaseSection`: a well-formed minor (`0.4.0`, Breaking first, a Deprecated item) and a well-formed patch
+    (`0.3.3`, `Feature in a patch: short element references (task-332)`) → `{ ok: true }`; 18 problem cases, each the
+    design's exact text taken with `toContain` from `problems` (the first paragraph twice, the second paragraph, the item
+    `dna 1→1` and `dna 1-2`, kind order and repeat, `Agent_Execute`, name order and repeat, a feature line in `0.4.0`,
+    one without its task, one after the prose, Breaking after `### Added`, an empty Deprecated, an empty Breaking,
+    Breaking and Deprecated twice) → all `TypeError: (0 , changelog_section_cjs_1.checkReleaseSection) is not a function`.
+  - `--check` on a temporary CHANGELOG with `--previous`/`--current`: the silent exit-0 case and the Breaking-present case →
+    `stderr` `''` expected, received `error: unknown option --check` + the usage hint; the two "differs" cases → exit `1`
+    expected, received `2`; the "lacks the computed item" case → the exact two `error:` lines expected, received the
+    unknown-option error.
+  - the repository: "LINES_GRANDFATHERED is the seven sections …" → `toEqual([...])`, received `undefined`; "every other
+    release section passes" → `TypeError: Cannot read properties of undefined (reading 'includes')` (the missing
+    `LINES_GRANDFATHERED`); "the check bites on real data: the 0.3.2 section …" → `checkReleaseSection is not a function`.
+- **AC 4 (characterization)**, `test/core/capabilities-baseline.test.ts`: passes on first run — the bytes (`JSON.stringify`
+  plus `\n`, 910 bytes, the sha256), the content (format 1, the nine kinds at `1..1` with `lowest` before `highest`, the
+  35 commands as a literal, no capability), and the equality with the §5 fixture minus the `capabilities` command and its
+  capabilities. Red until AC 1: "against the baseline, the §5 fixture gives `Formats read: unchanged` …" →
+  `TypeError: (0 , changelog_section_cjs_1.releaseLines) is not a function`.
+- **AC 5 (red-first)**, `test/core/release-publishing-changelog-lines.test.ts` (the file read from the working tree, parsed
+  once): passes — the phase list, `release-commit`'s one `git.commit` action and no `checks`, the F5 asset URL; fails —
+  the nine substrings of the flattened description (`expect(received).toContain(expected)`, e.g. expected substring
+  `"Formats read:"`, received today's description) and "`version:` is 2.4 or later …" → `Expected: >= 2.4`,
+  `Received: 2.3`.
+- **AC 6**: no test (the approver's amend `df2b362d4`).
+
+**For the developer.** The `--check` "differs" messages are pinned by their prefix, `error: "Formats read:" line differs
+from the computed one: ` and the same for `Capabilities:`, the rest being either the computed line or the section's: the
+design does not say which one `<line>` is. The `Feature in a patch:` problem's `"<line>"` is pinned as the whole line,
+`Feature in a patch: …` included. Breaking items, in the `--lines` stdout and in the "lacks" messages, are pinned with
+their leading `- `, as the design writes them. The usage hint must name `--lines`, `--check`, `--previous`, `--current`
+and `--repo`. The temporary repository's commits name their identity through `GIT_AUTHOR_*`/`GIT_COMMITTER_*` (the run's
+git isolation has `useConfigOnly`).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
