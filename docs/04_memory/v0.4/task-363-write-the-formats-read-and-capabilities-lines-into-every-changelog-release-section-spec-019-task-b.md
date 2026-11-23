@@ -315,6 +315,12 @@ reviewer checks the list against the code.
   (edited in the worktree, uncommitted: option (a)'s parenthesis points to the amendment; a new `## Amendments` section):
   `--reason "Amend option (a) for spec-019 section 8: the Formats read line takes the widened grammar of ranges and none in code-unit order, and the layout left to this decision's task is fixed: the two lines open each release section, Breaking comes first, removals without a format bump fail the script, the seven earlier sections are grandfathered, and a release/0.3 patch writes the lines by hand (task-363)."`
 
+### design gate (approver, 2026-11-23)
+
+The approver recorded the step in `c449e6bd6` (`workflow finalize … dev-loop.design`), after the amendment `df2b362d4` (`wf(decision-log): amend dl-213-every-release-section-of-the-changelog-states-the-formats-wingfoil-reads-and-the-capabilities-it-provides-in-fixed-lines-a-script-can-read`). The rulings, as the record states them:
+
+> Approve the design of task-363 with every ruling as recommended: D1 (a) the Formats read and Capabilities lines are the first two paragraphs of a release section, one line each in spec-019 section 8's grammar, then a patch's Feature in a patch lines, then prose, and the seven earlier sections are grandfathered; D2 (a) one error line per file kind or capability removed without a capabilities document format bump, then a hint line, exit 1; D3 (a) the script prints and the check requires the Breaking items for removals and the format's rise, everything else is written by hand and form-checked, and a Feature in a patch line ends with its task and appears only in a patch; D4 (a) the 0.3.2 baseline fixture holds format 1, the nine file kinds at 1..1, the 35 commands and no capability; D5 (a) release-commit changes its description only, release-publishing goes to 2.4 and no checks token is added; D6 the tests derive the 0.4.0 line from the committed fixture, so they do not depend on task-365's merge; D7 no spec-019 amendment; D8 the CHANGELOG header gains one sentence; D9 no BDD scenario; D10 dl-213 is amended as prepared.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
