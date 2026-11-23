@@ -600,6 +600,29 @@ ticket behind another waiter, pid `792505` at `11:02` elapsed, with `/proc/loada
 None: `dl-213` was amended by the approver (`df2b362d4`) before red, and this phase edited no other element
 (`git status --short` → empty).
 
+
+### review fixes (orchestrator, 2026-11-23)
+
+The independent review of `86818badd` returned APPROVE WITH FIXES (0 blockers, 1 should-fix, 3 follow-ups). Its
+should-fix corrects two claims of these notes; the lines above stay as written:
+
+- **Refactor, "Not reached by a test":** the branch `cannot read <tag>:<FIXTURE_PATH>` after `git cat-file -e` succeeded
+  is not "a race only". A fixture blob over 1 MiB at the tag exceeds `execFileSync`'s default `maxBuffer` and reaches
+  it deterministically (the reviewer's scratch repo, a 1.1 MB fixture tagged `v0.3.4`: `node
+  scripts/changelog-section.cjs 0.3.5 --lines --repo . --current <the §5 fixture>` → exit 1, `error: cannot read
+  v0.3.4:test/core/fixtures/capabilities-document.json`). The second branch, the baseline missing from `--repo`, is
+  reachable on a release/0.3-shaped repository and untested: on a scratch repository with only a `v0.3.2` tag,
+  `node scripts/changelog-section.cjs 0.3.3 --lines --repo .` and `… --check --repo . --changelog CHANGELOG.md` → exit
+  1, `error: cannot read test/core/fixtures/capabilities-document-baseline-0.3.2.json: ENOENT`.
+- **Design:** `git tag --list 'v*'` prints `v0.2.0` to `v0.3.2`; there is no `v0.1.0` tag. Behaviour is unaffected.
+
+The approver's rulings on the review: the three developer decisions are accepted (the default mode's `hint: usage:`
+line names the new options, everything publish.yml reads staying byte-identical; `--check`'s "differs" error prints the
+computed line; a `Breaking`/`Deprecated` item is any non-blank line up to the next heading). Follow-up 2 (`spec-019` §8's
+patch bullet against `dl-213`'s hand route) is a pending amendment of `spec-019`. Follow-ups 3 and 4 (`--lines`
+ignoring `--changelog`, `--check --repo` reading the script's own `CHANGELOG.md`, a `#` line in a fence or a sub-heading
+ending a `Breaking`/`Deprecated` block) are filed as one bug for v0.4.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
