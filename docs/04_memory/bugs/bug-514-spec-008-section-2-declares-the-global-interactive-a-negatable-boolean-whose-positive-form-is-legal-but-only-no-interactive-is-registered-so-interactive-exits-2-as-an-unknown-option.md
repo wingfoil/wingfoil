@@ -56,3 +56,9 @@ The positive global form exits `2` as an unknown option.
      An item met while fixing goes in the fix task's own subsection; this one holds what belongs to
      the bug itself (its finding, its triage, why it took more than one task). The retrospective's
      `explore` reads this subsection first. -->
+
+- The fix is a spec change, not code: `task-380`'s design gate ruled D1 (b) (`c68083566`) and the approver's amend
+  `a7ff8c07c` makes `spec-008` §2 name only the registered `--no-color` and `--no-interactive`, the positive forms
+  refused as unknown options; a scratch Commander probe at that design showed that a root `--interactive` would take
+  `agent execute --interactive` away from the command. `--color`, the same defect in the same table, was fixed in that
+  amend; `spec-020` §2.2 still names both positive forms and is left to `task-365` (D5 (a)).
