@@ -464,6 +464,142 @@ The case no longer reads the §5 fixture. Every other case is unchanged, and the
 **Follow-up (red finding 2).** `test/docs/name-resolvability.test.ts` resolves a path only once it is tracked or staged.
 A red that creates a path and removes its PLANNED row must therefore stage both first.
 
+### green (developer, 2026-11-23)
+
+**Base.** `git rev-list --count HEAD..main` → `4` at the start (`fb24de83a` and the three `task-383` Memory commits), so
+`git merge --no-edit main` → "Merge made by the 'ort' strategy", one file added (the `task-383` task file), no conflict;
+the merge was amended with the two trailers at once: `d9777503c`. All commands ran through the task's PATH shim
+(`command -v wingfoil` → the shim; `wingfoil --version` and `node dist/cli.js --version` → `0.3.2 (fa6ded19d…)`).
+
+**Commit `bfc974705`** (`feat(release): task-363 — the Formats read and Capabilities lines of a CHANGELOG release section
+(--lines, --check)`), the four files the design names, nothing under `src/`:
+- `scripts/changelog-section.cjs`: design item 1 — `formatRange`, `releaseLines`, `previousReleaseTag`,
+  `checkReleaseSection`, `LINES_GRANDFATHERED` (frozen), `FIXTURE_PATH`, `BASELINE_PATH`, the `--lines` and `--check`
+  modes and their usage refusals; the default mode's code path is the old one. The `Capabilities:` line is derived from
+  the two documents, never from a literal (D6): `node scripts/changelog-section.cjs 0.4.0 --lines` in the worktree →
+  exit `0`, `Formats read: unchanged` / `Capabilities: agent-execute, directive-verbs, dna-verbs, mcp-server,
+  memory-verbs, workflow-tracking` (previous: the baseline, since `v0.3.2` holds no fixture; current: the worktree's
+  build), so once `task-365` merges the same command adds `governance-check` with no change here.
+- `scripts/changelog-section.d.cts`: the types of every new export.
+- `.wingfoil/workflows/custom/release-publishing.yaml` `2.3 → 2.4`: the design's paragraph after the F5 sentence of
+  `release-commit`'s description, and the `2.4 task-363 …` history segment, word for word; phases, actions, `checks`
+  untouched; `bindings.yaml` untouched.
+- `CHANGELOG.md`: one header paragraph (D8) after "Every entry ends with …": from 0.4.0 on every release section opens
+  with the two lines, computed by `node scripts/changelog-section.cjs <X.Y.Z> --lines`. No 0.4.0 section (design item 4).
+
+**The default mode, compared with the previous script** (`git show HEAD:scripts/changelog-section.cjs` copied to the
+scratch dir, both run on a copy of `CHANGELOG.md`, stdout+stderr+exit compared): identical for `0.1.0` … `0.3.2`,
+`9.9.9` (no section), `--changelog /nonexistent`; the only difference, on the usage refusals (`v1`, no argument,
+`1.0.0 2.0.0`, `1.0.0 --changelog`), is the `hint: usage:` line, which now names the new options, as design item 1
+requires and the red test "a usage error exits 2 with the usage hint naming the new options" pins. The `error:` line,
+the exit code and every success output are unchanged.
+
+**Interpretations of the red notes' "For the developer" points.** (1) The `--check` "differs" messages print the
+**computed** line (what the section must say); the section's own line is visible in the file. (2) The `Feature in a
+patch:` problem quotes the whole line. (3) Breaking items carry their leading `- `, in `--lines` and in the "lacks"
+messages. Also: `--check` prints a "differs" error only for a paragraph that is a one-line `Formats read:` /
+`Capabilities:` line, so a paragraph already reported out of form is not reported twice; a removal without a bump in
+`--check` prints the same `error:` lines and `hint: previous document: …` as `--lines`; a `### Breaking`/`### Deprecated`
+item is any non-blank line under the heading up to the next heading of any level; a patch is `Z ≠ 0`.
+
+**Red → green.** `npx jest test/cli/changelog-lines.test.ts test/docs/changelog-lines.test.ts
+test/core/capabilities-baseline.test.ts test/cli/changelog-section.test.ts test/cli/publish-release-scripts-edges.test.ts
+--maxWorkers=2` → `Test Suites: 5 passed, 5 total`, `Tests: 77 passed, 77 total` (red: 64 failed of the 69 red tests);
+`npx jest test/core/release-publishing-changelog-lines.test.ts test/cli/staging-rehearsal.test.ts
+test/core/workflow-integration-branch.test.ts test/docs/community-health.test.ts
+test/core/workflow-repository-conformance.test.ts test/core/release-publishing-merge-forward.test.ts --maxWorkers=2` →
+`6 passed`, `Tests: 135 passed, 135 total`; `npx jest test/cli/service-verify-sweep.test.ts
+test/cli/evidence-only-tag.test.ts test/cli/publish-pipeline.test.ts test/core/workflow-status.test.ts
+test/lint/version-bump.test.ts test/docs/workflow-md.test.ts test/docs/workflow-rekey-docs.test.ts
+test/lint/git-log-readers.test.ts test/docs/name-resolvability.test.ts --maxWorkers=2` → `9 passed`, `Tests: 200 passed,
+200 total`. `npx tsc --noEmit -p tsconfig.json` → exit `0` (the six TS2305 gone; a first `.d.cts` with an index
+signature gave TS2345 on `test/core/capabilities-baseline.test.ts(90,59)`, removed before the commit).
+
+**The workflow edit on the pinned build**, after the commit (it reads `HEAD`): `npm run -s check:mcp` → exit `0`, "runs
+the pinned wingfoil 0.3.2, advertising [prompts, resources, tools] (prompts: 9, resources: 4, tools: 0)" and "the build
+under development (dist/cli.js) serves [prompts, resources, tools] (prompts: 9, resources: 5, tools: 7)"; `npm run -s
+wingfoil -- workflow show release-publishing --format json` → exit `0`, `baseline` `{"rev":"HEAD","commit":"bfc974705…"}`,
+phases `release-commit,staging-rehearsal,tag,publish,mark-released,merge-forward`, `--check` in the output, stderr only
+the `human_only` unknown-field warning; `npm run -s wingfoil -- workflow list` → exit `0`, the same warning only.
+
+**Commit `abccf8d85`** (`test(changelog): task-363 — the exit paths of --lines and --check the red suites do not
+reach`): a new file of mine, `test/cli/changelog-lines-edges.test.ts`; `npx jest test/cli/changelog-lines-edges.test.ts
+--maxWorkers=2` → `Tests: 18 passed, 18 total`.
+
+**Before each commit** the invisible-character grep on the changed files → no hit (exit `1`); `npx eslint` on the
+script and the new test → exit `0`.
+
+### refactor (developer, 2026-11-23)
+
+No code change after green. Gates, each heavy one after the heavy-gate slot wait (its wait: `ps -eo pid,etime,args` showed my
+ticket behind another waiter, pid `792505` at `11:02` elapsed, with `/proc/loadavg` `41.14`, no gate running):
+- `npm run -s build` → exit `0`; `npm test -- --maxWorkers=2` → exit `0`, `Test Suites: 733 passed, 733 total`, `Tests:
+  13427 passed, 13427 total` (no pending amendment in the tree, so no `workflow-unbound-none` failure: `git status
+  --short` → empty).
+- `npm run -s test:coverage -- --maxWorkers=2` → exit `0`, `All files | 99.02 | 96.84 | 98.7 | 99.51`, from
+  `coverage/coverage-summary.json`: statements 13141/13270, branches 8173/8439, functions 2600/2634, lines 10942/10995 —
+  uncovered 129 / 266 / 34 / 53. The baseline of `169ecd71b` (`sha256sum -c coverage-summary.json.sha256` in its
+  directory → `OK`): 12925/13072, 8051/8333, 2546/2582, 10777/10834 — uncovered 147 / 282 / 36 / 57. Every column is
+  equal or better. `git diff --stat main...HEAD -- src/` → empty: the totals move only with `main`'s own `src/`
+  (`git diff --stat 169ecd71b fb24de83a -- src/` → 30 files), not with this task.
+- `npm run -s lint` → exit `0`, no output; `npm run -s docs:api` → exit `0`, no output; `npm run -s typecheck` → exit
+  `0` (both tsc configs).
+- `docs.parity`: inside the full suite (`test/docs/*`, `test/docs/name-resolvability.test.ts` among them). No CLI
+  command or help changes, so `docs/cli-reference.md` is untouched (`test/docs/cli-reference.test.ts` passes in the
+  suite).
+- `git rev-list --count HEAD..main` at the end → `0`: no second merge.
+
+**The script, measured by its cases** (`scripts/` is outside `collectCoverageFrom`):
+- `formatRange`: `none` / `N` / `L..H` → `changelog-lines.test.ts` "writes `none` …".
+- `releaseLines`: equal documents; unknown keys ignored; `dna 1→2`; `dna 1→1..2`; `bindings none→1`; `1..2→2..3`;
+  two items reordered; new names sorted; removal at equal format (both problems, kinds first); with `format: 2` (the
+  three Breaking items) → `changelog-lines.test.ts`; the 0.4.0 case → `capabilities-baseline.test.ts`.
+- `previousReleaseTag`: the five cases of `changelog-lines.test.ts`; a version not `X.Y.Z` → `changelog-lines-edges`.
+- `checkReleaseSection`: each of the 18 problem texts and the two well-formed sections → `test/docs/changelog-lines.test.ts`;
+  several feature paragraphs in place and a `####` heading closing a block → `changelog-lines-edges`; the repository's
+  sections → the docs test's repository block.
+- `--lines` exits: `0` with and without `### Breaking`, `1` removal + hint, `1` not a document (`{}`) →
+  `changelog-lines.test.ts`; `1` for not JSON, a list, `formats` a list, a range of `0`, capabilities not names, an
+  unreadable `--current`, a directory without git, a build exiting non-zero, a build printing no JSON →
+  `changelog-lines-edges`; previous from the tag's fixture, from the baseline fallback, `no release tag below`, no
+  `dist/cli.js` → `changelog-lines.test.ts`'s temporary repository.
+- `--check` exits: `0` silent (twice), `1` each differs, `1` lacks → `test/docs/changelog-lines.test.ts`; `1` removal +
+  hint, `1` form and differs together, `1` no section → `changelog-lines-edges`.
+- Usage `2`: the five argument lists of `changelog-lines.test.ts`; by message (`--lines --check`, `--repo` without a
+  value, `--current` without a mode) and `--lines` twice (exit `0`) → `changelog-lines-edges`; the default mode's
+  refusals → `test/cli/changelog-section.test.ts`, the edges file.
+- Not reached by a test: `cannot read <tag>:<FIXTURE_PATH>` after `git cat-file -e` succeeded (a race only), and a
+  baseline file missing from `--repo` (the `cannot read` branch of `readDocument`, reached through `--current`).
+
+### self-review (developer, 2026-11-23)
+
+- **AC 1** met: `releaseLines`, `formatRange`, `previousReleaseTag` and `--lines` (green's red → green run above).
+  **AC 2** met: the removal problems and Breaking items, same run. **AC 3** met: `checkReleaseSection`,
+  `LINES_GRANDFATHERED`, `--check`, and the repository test (the real 0.3.2 section fails the check; no non-grandfathered
+  section exists yet). **AC 4** met: `test/core/capabilities-baseline.test.ts` 4/4 in the full suite. **AC 5** met:
+  `test/core/release-publishing-changelog-lines.test.ts` 12/12, and the pinned-build proof above. **AC 6**: the approver's
+  amend `df2b362d4`; no edit here (`git status --short` → empty).
+- **T4:** `git log --first-parent --no-merges --format=%h 07214526d..HEAD -- test/cli/changelog-lines.test.ts
+  test/docs/changelog-lines.test.ts test/core/capabilities-baseline.test.ts
+  test/core/release-publishing-changelog-lines.test.ts test/core/fixtures/capabilities-document-baseline-0.3.2.json
+  test/docs/name-resolvability.allowlist.ts` → `c77de9edb` only: the qa's send-back commit, not mine.
+- **Scope:** `git diff --stat main...HEAD` → the design's four green files, my new test file, the red's six, the task
+  file and the approver's `dl-213` amend (`df2b362d4`); nothing under `src/`, no `bindings.yaml`,
+  `publish.yml`, `dna.yaml`, `memory.yaml`, `workflows.yaml` or `roles.yaml` change. `release-publishing.yaml` is the one
+  `version:` bump, once on this branch (`test/lint/version-bump.test.ts` passes).
+- **Determinism:** every order is code-unit (`byCodeUnit`, no `localeCompare`); no clock or randomness; the current
+  document is the build's own output, the previous one a tag's blob or the committed baseline.
+- **Same-class:** the script's only other `error:` writers are the default mode's, unchanged; the git calls follow
+  `test/lint/git-log-readers.test.ts` (`'show'` followed by `` `${tag}:${FIXTURE_PATH}` ``, no `'log'`), which passes.
+- **Absence with its positive:** "no 0.4.0 section in `CHANGELOG.md`" → `node scripts/changelog-section.cjs 0.4.0
+  --check` → exit `1`, `error: no section `## [0.4.0]` in the changelog`, beside `node scripts/changelog-section.cjs 0.3.2`
+  → exit `0`, its notes.
+
+### Pending amendments (approver)
+
+None: `dl-213` was amended by the approver (`df2b362d4`) before red, and this phase edited no other element
+(`git status --short` → empty).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -475,3 +611,7 @@ A red that creates a path and removes its PLANNED row must therefore stage both 
 - The pinned build's workflow reads look at `HEAD`, so a modified `.wingfoil/` is proved on the pinned build only from a
   commit: the design used a scratch clone with the edit committed (`b7b6096ce`, `baseline.commit` in `workflow show`'s
   output). Proposal: the dev-loop's design note on the `.wingfoil/` proof says so.
+- The default mode's usage hint now names `--lines`, `--check`, `--repo`, `--previous` and `--current` (one usage line
+  for every mode, as the design asks): the "byte-for-byte" promise for the default mode holds for its notes, exit codes
+  and `error:` lines, not for the hint; evidence in green above. Proposal: a design that adds options to a script says
+  which outputs of the old mode change.
