@@ -54,6 +54,13 @@ export type CoreResult<T> =
        */
       readonly commit?: { readonly sha: string; readonly message: string };
       readonly warnings?: readonly string[];
+      /**
+       * A completed run whose verdict fails (task-365, `spec-020` §8.1, `spec-006` §2): the operation returns its
+       * report as `value`, and `message` is the error the surface prints after it. `exitCodeForResult` maps it to
+       * `1`, so both surfaces share the mapping. Absent on every other success — {@link coreOk} never writes the key;
+       * {@link coreFailed} builds it.
+       */
+      readonly failed?: { readonly message: string };
     }
   | { readonly ok: false; readonly error: CoreError };
 
@@ -72,6 +79,19 @@ export function coreOk<T>(
     value,
     ...(commit ? { commit } : {}),
     ...(warnings !== undefined && warnings.length > 0 ? { warnings: [...warnings] } : {}),
+  };
+}
+
+/**
+ * Build a success {@link CoreResult} whose verdict fails (task-365, `spec-020` §8.1): `value` is the payload the
+ * surface prints, `message` the error line it prints after it, and the run exits `1` (`exitCodeForResult`).
+ */
+export function coreFailed<T>(value: T, message: string, warnings?: readonly string[]): CoreResult<T> {
+  return {
+    ok: true,
+    value,
+    ...(warnings !== undefined && warnings.length > 0 ? { warnings: [...warnings] } : {}),
+    failed: { message },
   };
 }
 

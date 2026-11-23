@@ -48,9 +48,13 @@ export function exitCodeForError(error: CoreError): ExitCode {
   return EXIT_CODE_BY_ERROR[error.code];
 }
 
-/** The exit code for a whole {@link CoreResult}: `0` on success, else the error's mapped code. */
+/**
+ * The exit code for a whole {@link CoreResult}: `0` on success, `1` on a success that carries `failed` (a completed
+ * run whose verdict fails, task-365, `spec-020` §8.1), else the error's mapped code.
+ */
 export function exitCodeForResult(result: CoreResult<unknown>): ExitCode {
-  return result.ok ? 0 : exitCodeForError(result.error);
+  if (!result.ok) return exitCodeForError(result.error);
+  return result.failed === undefined ? 0 : 1;
 }
 
 /**

@@ -49,6 +49,8 @@ export const CAPABILITIES: readonly CapabilityEntry[] = Object.freeze([
   capability('agent-execute', ['agent execute']),
   capability('directive-verbs', ['directive create', 'directive assign', 'directive remove', 'directives list']),
   capability('dna-verbs', ['dna show', 'dna set', 'dna add', 'dna update', 'dna remove']),
+  // task-365 (`spec-019` OQ-4 (a), §4.2 as amended): the governance check of committed history, `wingfoil verify`.
+  capability('governance-check', ['verify']),
   capability('mcp-server', ['mcp']),
   capability('memory-verbs', [
     'memory add',

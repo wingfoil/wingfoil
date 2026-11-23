@@ -263,6 +263,10 @@ export function buildCliCommands(modules: readonly CoreModule[], options: BuildC
               ? operation.renderConsole(result.value)
               : renderSuccess(result.value, format),
           );
+          // A completed run whose verdict fails (task-365, `spec-020` §8.1, `spec-005` §1): the payload above, then its
+          // error line — `{"error": …}` under `json`, one `---`/`...` YAML document under `yaml`, so it is told apart from
+          // the warning documents before it (§7) — and `exitCodeForResult` maps it to `1`.
+          if (result.failed !== undefined) emitStderrDocument({ error: result.failed.message }, `error: ${result.failed.message}`, { format });
         } else {
           // `details` too (task-130, `dl-055` option 1): the file and the explanation core recorded;
           // and the `hint:` line core suggested, if any (task-220, spec-005 §3.1).
