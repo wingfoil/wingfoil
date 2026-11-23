@@ -461,6 +461,12 @@ function readMemoryCommit(commit: HistoryCommit, reader: HistoryReader): MemoryR
   return { op, type, memoryYaml, machine, bracketed, hops, documents };
 }
 
+/** Whether a path is a Markdown file under the content roots of `memoryYaml` (§4.1, `computeMemoryContentRoots`). */
+function contentRootTest(memoryYaml: MemoryYamlValue): (path: string | null) => boolean {
+  const roots = computeMemoryContentRoots(memoryYaml);
+  return (path) => path !== null && path.endsWith('.md') && roots.some((root) => path.startsWith(`${root}/`));
+}
+
 /** The one-line form of a consistency-walk finding (§4.5). */
 function describeTransitionFinding(finding: TransitionFinding, path: string, type: string): string {
   switch (finding.kind) {
@@ -717,9 +723,8 @@ export const checkStatusOutsideWf: GovernanceCheckFn = (commit, reader) => {
   const parent = firstParent(commit);
   const memoryYaml = reader.memoryYamlAt(parent);
   if (memoryYaml === null || !memoryYaml.ok) return EMPTY;
-  const roots = computeMemoryContentRoots(memoryYaml.value);
+  const inRoots = contentRootTest(memoryYaml.value);
   const types = memoryYaml.value.types;
-  const inRoots = (path: string | null): boolean => path !== null && path.endsWith('.md') && roots.some((root) => path.startsWith(`${root}/`));
   const isMemory = (fields: FrontmatterFields | null): boolean => fields !== null && fields.type !== null && hasOwn(types, fields.type);
   const findings: CheckFinding[] = [];
   for (const change of reader.fileChanges(commit.sha)) {
@@ -947,9 +952,9 @@ export function createGitHistoryReader(root: string, range: GitHistoryRange): Gi
           list = [];
           changes.set(requireCommitName(line.slice(1), 'git log --name-status'), list);
         } else if (line !== '' && list !== null) {
+          // `-M` detects renames only: git reports no copy (`C`) here, `diff.renames=copies` included.
           const [status, first, second] = line.split('\t') as [string, string, string | undefined];
           if (status.startsWith('R')) list.push({ from: first, to: second ?? null });
-          else if (status.startsWith('C')) list.push({ from: null, to: second ?? null });
           else if (status === 'A') list.push({ from: null, to: first });
           else if (status === 'D') list.push({ from: first, to: null });
           else list.push({ from: first, to: first });
@@ -1096,8 +1101,7 @@ function statusOutsideWfRequests(reader: HistoryReader, commits: readonly Histor
     if (!isOtherCommit(commit) || parent === null) continue;
     const memoryYaml = reader.memoryYamlAt(parent);
     if (memoryYaml === null || !memoryYaml.ok) continue;
-    const roots = computeMemoryContentRoots(memoryYaml.value);
-    const inRoots = (path: string | null): boolean => path !== null && path.endsWith('.md') && roots.some((root) => path.startsWith(`${root}/`));
+    const inRoots = contentRootTest(memoryYaml.value);
     for (const change of reader.fileChanges(commit.sha)) {
       if (change.to === null || !(inRoots(change.from) || inRoots(change.to))) continue;
       if (change.from !== null) requests.push({ rev: parent, path: change.from });
