@@ -55,3 +55,378 @@ reported to offer approvals no open run's frontier reaches. `bug-341`: it lists 
 ## Execution Notes
 
 <!-- Filled by the dev-loop. -->
+
+### design (architect, 2026-11-23)
+
+**Base and inputs.** Branch cut from `main` `e26925858`; head `163543da5` (the `wf(task): start` and the four bug syncs
+`[planned → in-progress]`, `git log --oneline -5`). PATH guard: `command -v wingfoil` → the task's PATH shim; `wingfoil
+--version` and `node dist/cli.js --version` → `0.3.2 (e26925858dc4012881ea7be7473bd6ed6840752d)`. `depends_on:
+[task-373]` (`done`, merged `ed2bcec81`): its notes say a deduction reader hands each payload diagnostic to the CLI as a
+success warning (`withDiagnosticWarnings`, `src/core/index.ts`), stdout carries only the answer, and `workflow list` /
+`show` are left to `task-370`. The new read of this design, `workflow tree`, follows that rule (§7.13 "presented as
+`status`'s"). Contracts read at this head: `spec-017` (`approved`, with every Revision paragraph to `task-373`'s),
+`spec-008`, `spec-006` (`approved`); BDD `P4.5-workflow-status.feature`, `P4.7-workflow-show.feature`,
+`P5.1.4-cli-ux.feature`; plan rulings W1-R10 (amended), W1-R11, W1-R12.
+
+#### AC 1 — `bug-487` reproduced before the design (W1-R12)
+
+**How the scratch project is built today.** The Scrum packs are `w3`'s, so the project is the built-in scaffold
+shaped by hand to the reported run, outside the worktree: `git init`; `wingfoil init --template Scrum
+--no-interactive` (code build of this head); then, in one commit, a `team.members` entry holding `approver`,
+`product-owner`, `tech-lead`, `developer`, `reviewer`; the machines `release-line` `[draft, planning, active, done]`
+(gate `planning`), `release` `[draft, planning, in-development, releasing, released]` (gates `planning`, `releasing`),
+`bug` `[draft, open, triaged, planned, in-progress, resolved, closed]` (gates `open`, `triaged`, no `waiting`); and
+three workflows replacing `scrum-delivery`:
+- `sw-life-cycle` (main): `inception` (`produces: [docs/vision.md]`), `specification` (`produces: [docs/stories.md]`),
+  `delivery` (`include: release-line-cycle`, `iterate_over: release-line`, `where: { status: [planning, active] }`),
+  `sunset`;
+- `release-line-cycle` (`element: release-line`): `approve` (`memory.approve`, `approval: { by_role: approver }`),
+  `releases` (`include: sprint`, `iterate_over: release`, `where: { release-line: "{release-line.id}", status:
+  [planning, in-development] }`), `close` (`element.set_state(done)`);
+- `sprint` (`element: release`): `sprint-planning` (`memory.approve`, approval), `sprint-execution`
+  (`element.set_state(releasing)`), `sprint-review` (`memory.approve`, approval).
+
+Then `wingfoil workflow start sw-life-cycle` (code build; the plan `sw-life-cycle-1-plan`, marked), and one commit of
+Memory written by hand: `docs/vision.md`, `docs/stories.md`, `rl-1` `active`, `rl-2` `planning`, `release-1`
+`planning` and `release-2` `releasing` (both `release-line: "rl-1"`), `bug-1-crash` `triaged` with `release:
+"release-1"`. No `workflow finalize` was run.
+
+**Output** (`node <worktree>/dist/cli.js workflow status`, exit 0, stderr empty):
+
+```console
+open workflows: 1
+* sw-life-cycle-1-plan (sw-life-cycle) — active
+    element: (none)
+    phases: inception complete, specification complete, delivery current (eligible 1, entered 1), sunset pending
+    frontier:
+      - sprint.sprint-planning@release:release-1 (product-owner; missing: state)
+      - sprint.sprint-review@release:release-2 (approver; missing: state)
+      - release-line-cycle.approve@release-line:rl-2 (tech-lead; missing: state)
+pending approvals: 3
+  human needed: approve or reject release-1 — routed to Roberto Pompermaier <…> (sw-life-cycle-1-plan, sprint.sprint-planning@release:release-1)
+  human needed: approve or reject release-2 — routed to Roberto Pompermaier <…> (sw-life-cycle-1-plan, sprint.sprint-review@release:release-2)
+  human needed: approve or reject rl-2 — routed to Roberto Pompermaier <…> (sw-life-cycle-1-plan, release-line-cycle.approve@release-line:rl-2)
+ungated elements: 1
+  human needed: approve or reject bug-1-crash (bug, triaged; no open workflow carries it) — routed to Roberto Pompermaier <…>
+```
+
+(the member's email elided here). `--format json`: `pendingApprovals` holds the three frontier keys above; `ungated`
+is `[{"type":"bug","id":"bug-1-crash","status":"triaged"}]`; `diagnostics` `[]`.
+
+**It reproduces, and the two halves differ.**
+- *Half 1* is what the reporter saw, but every listed approval **is** a frontier step: `statusWorkflow` builds
+  `pendingApprovals` from `open.flatMap(entry => entry.frontier)` only (`src/core/workflow-status.ts`, the
+  `pendingApprovals` constant). The run "stands at" `sprint-planning` for `release-1` while `release-2`'s
+  `sprint-review` and `rl-2`'s `approve` are steps of other iteration candidates, which `Deducer.iterate` puts on the
+  frontier together (`src/workflow/deduce.ts`, `frontier.push(...result.frontier)` per open candidate; `spec-017` §4.6).
+  Whether iterations should be ordered is `bug-483` (`triaged`, `v0.4`). Nothing reports an approval off the frontier.
+- *Half 2* is a defect against the bug's Expected Behavior: `bug-1-crash`'s `release` names `release-1`, the element
+  of an open iteration on the frontier, and the line says "no open workflow carries it". On this repository the same
+  rule reads `dl-169`'s `release: "v0.4"` against `minor-v0.4` (`version: "v0.4"`), scope of every `w1` frontier step:
+  `node dist/cli.js workflow status --format json` → `ungated` 8, all `decision-log`, open
+  `sw-life-cycle-1-plan` and `service-ingest-rel-v0.3-listings-plan`.
+- A first attempt with `draft` in `releases`' entry filter gave `W_PHASE_EXIT_STATE_UNDETERMINED (workflows/custom/sprint.yaml)`
+  (`memory.approve` from `draft`) and dropped `release-1`'s approval: a configuration slip of the scratch, corrected
+  as above; not a finding.
+
+So AC 5 stays, as D5 states it.
+
+#### The other three bugs at this head (code build of this head, this worktree)
+
+- `bug-359`: `node dist/cli.js workflow show bug-ingest-rel-v0.3-w3b6-review-findings-plan` → `error: unknown workflow:
+  bug-ingest-rel-v0.3-w3b6-review-findings-plan`, exit 1; `workflow next <same>` → `error: workflow is not open: <same>`,
+  exit 1. `showWorkflow` (`src/core/workflow-list-show.ts`) resolves an id only among `deduction.instances` (open).
+- `bug-485` step 1: `node dist/cli.js workflow status release-health-rel-v0.3.2-plan --format json` → `{"error":"unknown
+  workflow: release-health-rel-v0.3.2-plan"}`, exit 1 (a phase plan); step 2: `status --format json`'s first instance
+  has six phases, `release-line-cycle` `current` with `iterations {eligible 0, entered 1, complete 0, late 0}` and
+  nothing below; step 3: in a scratch `git init` + `init --template Kanban --no-interactive`, `workflow start
+  sw-life-cycle --dry-run --format json` → keys `dryRun, subject, message, paths, diff`, exit 0, no commit added.
+- `bug-341`: the same `status --format json` → 8 ungated entries; `workflow status --help` lists no flag.
+
+#### The change (for green)
+
+**Part A — `status` and `show` (bugs `bug-341`, `bug-359`, `bug-487`).**
+1. `src/workflow/deduce.ts` `deduceWorkflowState`: after the instances, mark each `gated` element **held**
+   (`spec-017` §5.1 as amended): one of its frontmatter fields is named after the type of an element `S` scoping an
+   entry of the `trail` of a frontier step of an open instance, with a value equal to `S`'s id or to `S`'s
+   frontmatter `version`; the first match in instance, frontier and trail order. `Deduction.gated` becomes
+   `GatedElement[]` (`ElementRef` plus optional `heldBy: { instance, element }`).
+2. `src/core/workflow-status.ts`: `ungated` keeps every element, with `heldBy`; add `ungatedByType` (ascending type,
+   byte order). `renderStatusConsole(result, call?)`: by default one summary line `ungated elements: <n> (<type>
+   <count>, …) — routed to <members>; --full lists them`; with `call.flags.full`, `ungated elements: <n>` then one line
+   each, a held one reading `(<type>, <status>; held by <instance>'s <S type> <S id>, no step of it approves it now)`.
+   Pending approvals are unchanged (half 1 is characterization).
+3. `src/core/registry.ts` `CoreOperation.renderConsole?: (value: R, call?: { flags }) => string` and
+   `src/cli/registrar.ts` passing the parsed flags (one call site, `operation.renderConsole(result.value)`): a
+   console-only flag needs the flags at render time; every other renderer ignores the argument (`spec-006` §2 amended).
+4. `src/core/index.ts`: `workflowStatus` declares `flags: [{ name: 'full', … }]`; `workflowShow`'s positional
+   description names any instance plan's id.
+5. `src/core/workflow-list-show.ts` `showWorkflow` / `workflowShowAtHead`: an id among `instancePlanIds(snapshot.documents)`
+   (any status, `src/core/workflow-deduction.ts`) stands for its plan's `workflow`; the payload gains `instance: { id,
+   workflow, open }`; a phase plan's id stays `unknown workflow: <ref>`.
+
+**Part B — the run reader `workflow tree` (bug `bug-485`).** A new read operation `workflowTree` (`mutates: false`,
+new file `src/core/workflow-tree.ts`, registered under `workflow` in `CORE_MODULES`), `spec-017` §7.13:
+1. `src/workflow/deduce.ts`: `Deducer.run` / `evaluate` / `iterate` keep, besides today's `PhaseProgress`, a
+   `PhaseNode` per evaluated phase (leaf evidence, a plain include's sub tree, an iteration's entries with their sub
+   trees); `InstanceDeduction` gains `tree: RunTree`. `hasRecord` returns the record commit (or a sibling
+   `recordCommit`), `stateCommit` is exposed to the node; nothing else of the deduction changes, so `next` / `status`
+   answers stay byte-identical.
+2. `src/core/workflow-deduction.ts`: `readDeductionSnapshotAtHead` becomes a call of `readDeductionSnapshotAtCommit(root,
+   sha, label)` (the same body, the sha and the file label as parameters), so a closed run is deduced at its end
+   commit's first parent; the end commit is found with one `git log` over the plan's path (§7.13).
+3. Preview: the deduction on a snapshot to which a synthetic instance plan is added — the id `planTokens` derives
+   (`src/core/workflow-start-end.ts`, export it), the element `resolveStartElement` resolves, a `marked` start whose
+   commit is a sentinel that no walk holds (not `HEAD`'s sha: an instance started at `HEAD` would share its walk),
+   position before every other start so it is active. `adoptions` reuse `StepAddition.candidates`, as `adopt --plan`
+   does. No identity check, no write guard: it is a read.
+4. Console: `renderTreeConsole` (one line per node, indented by depth; a complete iteration entry on one line; then
+   `frontier:` and `adoptions:`).
+
+**Size.** Part A is M (four files of `src/`, one renderer seam). Part B is L on its own: a tree through the three
+evaluators, a second snapshot commit, a synthetic instance, a command with its docs (AGENTS.md count, X_cli-cmds,
+cli-reference, capabilities fixture, parity lists). Together they exceed one dev-loop: D1.
+
+#### Acceptance criteria: classification and what qa pins
+
+| AC | Class | Part | Observable |
+|---|---|---|---|
+| 1 | characterization | — | done above (no test) |
+| 2 | red-first | B | `workflow tree <closed instance id>` |
+| 3 | red-first | B | `workflow tree <open ref>` |
+| 4 | red-first | B | `workflow tree <name> --preview` |
+| 5 | half 1 characterization, half 2 red-first | A | `pendingApprovals`, `ungated[].heldBy`, the `--full` line |
+| 6 | red-first | A | `ungatedByType`, the default summary line, `--full` |
+| 7 | red-first | A | `show <instance plan id>`'s `instance` |
+| 8 | characterization (the Resource code does not change), plus the amendments | A + B | Resource = CLI json |
+
+**Fixture for AC 5, 6, 8 and AC 3 (qa, red).** New helper `test/core/helpers/held-ungated-fixture.ts` writing the
+scratch project above verbatim (machines, the three workflows, the Memory documents; field values as listed), plus
+`bug-2-other` `triaged` with `release: "release-9"` (no such element: never held) and a variant where `release-1`
+has `version: "v0.1"` and `bug-1-crash` has `release: "v0.1"` (held through `version`). The instance plan is committed
+with the start marker (`WingFoil-Start: sw-life-cycle` in the final trailer paragraph of its add commit, as
+`test/core/workflow-start-marker.test.ts` writes a marked start), so no `W_INSTANCE_PRE_MARKER` enters `diagnostics`.
+Fixture outputs are copied from a real run of the code build on it, the command in the notes.
+
+**AC 5.** `test/core/workflow-status-held.test.ts`, through `CORE_MODULES` `workflow.workflowStatus` `op.fn({ root })`
+(as `test/core/workflow-status.test.ts` calls it):
+- characterization: `pendingApprovals.map(a => a.step)` equals `['sprint.sprint-planning@release:release-1',
+  'sprint.sprint-review@release:release-2', 'release-line-cycle.approve@release-line:rl-2']`, and every entry's `step`
+  is a key of `open[0].frontier` (passes today);
+- red-first: `ungated` equals `[{ type: 'bug', id: 'bug-1-crash', status: 'triaged', heldBy: { instance:
+  'sw-life-cycle-1-plan', element: { type: 'release', id: 'release-1', status: 'planning' } } }, { type: 'bug', id:
+  'bug-2-other', status: 'triaged' }]` (no `heldBy` key on the second); the `version` variant gives the same
+  `heldBy`; `renderStatusConsole(value, { flags: { full: true } })` contains `human needed: approve or reject
+  bug-1-crash (bug, triaged; held by sw-life-cycle-1-plan's release release-1, no step of it approves it now) — routed
+  to <member>` and no line with `bug-1-crash (bug, triaged; no open workflow carries it)`, and keeps `bug-2-other`'s
+  line as today. Expected red: assertion failures (`heldBy` absent); the two-argument call is TS2554 under
+  `tsc --noEmit` and a runtime no-op under jest (`isolatedModules`) — both expected until green.
+
+**AC 6.** Same file and `test/cli/workflow-status-full.integration.test.ts` (spawn `dist/cli.js`,
+`test/cli/helpers/spawn-cli.ts`):
+- `value.ungatedByType` equals `[{ type: 'bug', count: 2 }]` on the fixture, `[]` with nothing ungated;
+- console default: stdout has the line `ungated elements: 2 (bug 2) — routed to <member>; --full lists them` and no
+  line starting `  human needed: approve or reject bug-`; `--full`: `ungated elements: 2` and the two element lines;
+  the `pending approvals:` block is identical in both;
+- `--format json` stdout is byte-identical with and without `--full`, and `ungated` keeps both entries;
+- `wingfoil workflow status --help` lists `--full`; `workflow next --full` exits 2 (unknown option).
+
+**AC 7.** `test/core/workflow-show-instance.test.ts` on `writeRefProject` (`test/core/helpers/ref-not-open-fixture.ts`):
+`workflow.workflowShow` `op.fn({ root, positional: 'old-1-plan' })` → ok, `workflow.name === 'release-cycle'`,
+`instance` equals `{ id: 'old-1-plan', workflow: 'release-cycle', open: false }`; `positional: 'release-cycle'` → no
+`instance` key; `positional: 'phase-1-plan'` → `NOT_FOUND`, `unknown workflow: phase-1-plan` (unchanged). On
+`test/core/workflow-list-show.test.ts`'s open `rc-plan`: `instance` `{ id: 'rc-plan', workflow: 'release-cycle', open:
+true }`. CLI: `workflow show old-1-plan --format json` exit 0, `.instance` as above.
+
+**AC 8.** `test/mcp/workflow-state-resources.test.ts` already pins Resource = CLI json; add a case on the held fixture:
+the `wingfoil://workflows/-/status` read parses to the `workflow status --format json` stdout and holds
+`ungatedByType` and `bug-1-crash`'s `heldBy`. The amendments are below; `docs/cli-reference.md` is green's.
+
+**AC 2–4 (part B).** Through `CORE_MODULES` `workflow.workflowTree` `op.fn({ root, positional, flags, options })`
+(looked up with `enumerateOperations`, so the red is a runtime "is not registered" and no TS2305), and the CLI:
+- AC 3 on the held fixture: `run` `{ open: true, endCommit: null, deducedAt: <HEAD sha> }`; `tree.phases` states
+  `complete, complete, current, pending`; `delivery.iterations.entries` scopes `rl-1` (entered) and `rl-2` (eligible),
+  `rl-1`'s tree has `approve` complete with `evidence.state.element.id === 'rl-1'`, and its `releases` entries
+  `release-1` (eligible) and `release-2` (entered: `sprint-planning`, `sprint-execution` complete, `sprint-review`
+  current with `evidence.missing === ['state']`); `frontier` keys as AC 5; `adoptions` `[]`.
+- AC 2 on a fixture whose self-creating main adds and submits one element and is then ended with `workflow end`
+  (`workflowEnd` op; markers scrubbed through `test/agent-markers.cjs` where a gated verb is driven): `run.open` false,
+  `endCommit` the sha of `wf(plan): finalize <id> [active → done]`, `deducedAt` its first parent, `startCommit` the add
+  commit, every phase `complete` with `evidence.created` the element; refusals on `writeRefProject`: `old-1-plan` →
+  `workflow run never opened: old-1-plan`, `phase-1-plan` → `phase-1-plan is a phase plan of release-cycle.ship, not a
+  workflow run`, `release-cycle` → `workflow is not open: release-cycle` with the hint, `ghost` → `unknown workflow:
+  ghost`, all `NOT_FOUND`, exit 1 on the CLI; `--element` without `--preview` exit 2.
+- AC 4 on the held fixture before its start commit, and on a variant whose main has a `memory.add(type:
+  release-line)` phase with `rl-1` unlinked: `preview: true`, `run.instance.id` `sw-life-cycle-1-plan`, `startCommit`
+  `null`; `adoptions` `[{ step: <that phase's key>, type: 'release-line', candidates: [rl-1, …] }]`; `snapshotPersistence`
+  / `assertPersistenceUnchanged` (`test/storage/helpers/persistence-snapshot.ts`) around the call; every format also
+  run with `--format console`.
+
+BDD: qa adds to `P4.5-workflow-status.feature` the scenarios "the ungated elements are counted by type, --full lists
+them", "an element whose release is an open run's iteration is held, not uncarried", and (part B) "read a closed run",
+"read an open run's tree", "preview a start"; to `P4.7-workflow-show.feature` "show names the workflow of an instance
+plan's id"; each with its test, in the red commit.
+
+#### Tests that pin behaviour this task changes (qa updates them in red)
+
+- `test/core/workflow-status.test.ts:375-376`, `:413` (the per-element ungated lines now under `--full`) and `:381`
+  (`StatusResult`'s exact keys: gains `ungatedByType`); `:351`, `:359`, `:410`, `:424` compare `ungated` with
+  `toEqual` and hold (no `heldBy` there).
+- `test/core/workflow-status-render.test.ts:91` (the ungated line, now `--full`), `:125` (the exact empty value: gains
+  `ungatedByType: []`).
+- `test/core/workflow-list-show.test.ts:422` (open id resolves: gains `instance`, still passes with `toBe` on the name).
+- Part B: `test/core/parity.test.ts` (the derived Resource templates gain `wingfoil://workflow/tree/{ref}`),
+  `test/core/capabilities.test.ts`
+  and `test/core/fixtures/capabilities-document.json` (`commands` gains `workflow tree`), `test/docs/agents-md.test.ts`
+  (AGENTS.md §1's count and list), `test/docs/x-cli-cmds.test.ts` and `test/docs/cli-reference.test.ts` (rows and
+  entries, green's docs).
+- Not affected: `test/mcp/read-only-agent-channel.test.ts` (it lists the Tools only); `scripts/e2e-smoke.cjs` counts `ungated` in the json (`count('ungated')`), which keeps every element;
+  `test/fixtures/workflow-reads/scrum-status.json` lacks `ungatedByType` and still parses (refresh optional).
+
+#### Files to touch, versions
+
+Part A: `src/workflow/deduce.ts`, `src/core/workflow-status.ts`, `src/core/workflow-list-show.ts`, `src/core/registry.ts`,
+`src/cli/registrar.ts`, `src/core/index.ts`; `docs/cli-reference.md` (`workflow status` `--full`, the summary, the held
+line; `workflow show`'s instance id); `docs/01_vision/X_cli-cmds.md` (the `workflow status` row gains `[--full]`) with
+`docs/01_vision/00_index.md` re-synced; `docs/02_requirements/02_bdd/features/p4-workflow/P4.5-workflow-status.feature`,
+`P4.7-workflow-show.feature`; tests above. Part B adds `src/core/workflow-tree.ts`, `src/core/workflow-deduction.ts`,
+`src/core/workflow-start-end.ts` (export `planTokens` / `resolveStartElement`), the `workflow tree` row of
+`X_cli-cmds.md`, its `cli-reference.md` entry, AGENTS.md §1 (36 today, 37 with `task-365`, 38 with `tree`: W1-R10 as
+amended), the capabilities fixture. Not touched: `src/mcp/workflow-resource.ts` (the Resource serves
+`workflowStatusAtHead(root)`'s value as it is), `.wingfoil/` (so no `version:` bump, no `npm run check:mcp`; `git status
+--short` lists none). Bumps: `X_cli-cmds.md` once on this branch (2.7 on `main`; `task-365` takes it to 2.8, so 2.9
+after its merge) and its `00_index.md` row; the specs and `cli-reference.md` carry no `version:`.
+
+#### Tests run (this worktree, targeted, no heavy gate)
+
+- `npx jest test/core/workflow-status.test.ts test/core/workflow-status-render.test.ts test/core/workflow-list-show.test.ts
+  test/cli/workflow-list-show.integration.test.ts test/core/workflow-ref-not-open.test.ts
+  test/cli/workflow-ref-not-open.integration.test.ts test/cli/workflow-status.integration.test.ts
+  test/mcp/workflow-state-resources.test.ts test/mcp/workflow-state-resources-review-fixes.test.ts --maxWorkers=2` →
+  `Test Suites: 9 passed`, `Tests: 111 passed`.
+- `npx jest test/core/workflow-start-end.test.ts test/core/workflow-start-end-arms.test.ts
+  test/core/workflow-start-end-coverage.test.ts test/cli/workflow-start-end.integration.test.ts
+  test/core/workflow-deduction.test.ts test/cli/e2e-smoke-workflow-reads.test.ts
+  test/cli/e2e-smoke-workflow-reads-edges.test.ts test/core/workflow-start-marker.test.ts --maxWorkers=2` → `8 passed`,
+  `Tests: 152 passed` (both before the amendments).
+- With the amendments in the tree: `npx jest test/docs/name-resolvability.test.ts test/docs/commands-parity.test.ts
+  test/docs/command-surface-specs.test.ts test/docs/enumeration-parity.allowlist.test.ts test/docs/mcp-surface-parity.test.ts
+  test/docs/exit-codes-parity.test.ts test/docs/spec-008-section-6.test.ts --maxWorkers=2` first → 2 failed
+  (`commands-parity`: `spec-008 §11 commands … surplus|workflow tree`; `name-resolvability`: seven names, listed under
+  the allowlist change below), then, with the allowlist entries, the same run plus `dry-run-documented` and
+  `x-cli-cmds-citations` → `Tests: 52 passed`; `npx jest test/cli/workflow-unbound-none.integration.test.ts
+  test/docs/vision-index.test.ts test/docs/x-cli-cmds.test.ts test/docs/cli-reference.test.ts test/docs/agents-md.test.ts
+  --maxWorkers=2` → `Tests: 53 passed` (`bug-534` does not show here since `task-373`'s D7).
+
+**Coverage baseline.** `e26925858` has no stored baseline; until one is produced, compare with `169ecd71b`'s
+(`sha256sum -c` → `coverage-summary.json: OK`): total lines 10777/10834, statements 12925/13072, functions 2546/2582,
+branches 8051/8333; lines · statements · functions · branches: `src/core/workflow-status.ts` 69/69 · 90/90 · 23/23 ·
+58/58, `src/core/workflow-list-show.ts` 121/121 · 158/158 · 45/45 · 167/169, `src/workflow/deduce.ts` 582/583 ·
+726/727 · 165/166 · 577/580, `src/core/workflow-deduction.ts` 226/226 · 286/287 · 74/75 · 124/127,
+`src/core/workflow-start-end.ts` 162/162 · 201/204 · 19/19 · 150/155, `src/core/index.ts` 683/686 · 852/866 · 191/209
+· 387/403, `src/mcp/workflow-resource.ts` 37/37 · 39/39 · 14/14 · 3/6.
+
+#### Overlap with the other open tasks
+
+- **`task-365`** (green running; `git diff --name-only main...task/task-365-…` at `a989c7727`, src not written yet):
+  shared with this design — `src/core/index.ts` (its `verify` registration in `CORE_MODULES` and its fn; this task's
+  `workflowStatus` flag, `workflowTree` registration and fn, all inside the `workflow` module or beside
+  `workflowStatusFn`), `src/cli/registrar.ts` (this task: the one `renderConsole` call), `docs/cli-reference.md`
+  (separate entries), AGENTS.md §1 (its 37; part B's 38 is written after it), `spec-008` (its §1 line 86, §5–§6, §11
+  line 806, §12 and its tail revision; this task's §1 verb sentence, §11 row 806, §12 rows after `workflow list`, tail),
+  `spec-006` (its §2 `CoreResult.failed`, §3 rows, §6 rows and tail; this task's §2 `renderConsole` line, §3 row, §6
+  item 6 and its table row, tail),
+  `spec-017` (its §7.9, §7.11, §7.12 and a tail revision; this task's §5, §7, §7.4, §7.6, §7.13, §8–§11 and tail),
+  `X_cli-cmds.md` + `00_index.md` (its 2.8), `test/core/parity.test.ts`, `test/core/capabilities.test.ts` and its
+  fixture, `test/docs/*allowlist.ts`. Not shared: `src/core/types.ts`, `exit-code.ts`, `error-details.ts`,
+  `capabilities.ts` (the document reads `CORE_MODULES` at call time), specs 004/005/015/018/019/020. Every overlap is
+  additive (rows, entries, tail paragraphs, one JSON list); a merge of `main` after `task-365` resolves each by keeping
+  both, the version lines taking the higher number plus one bump. D9.
+- **`task-363`** (`scripts/changelog-section.cjs`, `release-publishing.yaml`): no file in common (its branch changes
+  only its task file today); none expected.
+- **`task-370`** (console renderer, `backlog`): it will need to know that `renderConsole` takes the invocation's flags
+  (`status --full` is console-only), that status's ungated block has two forms, and that `workflow tree` prints an
+  indented tree whose text this task's tests pin; `workflow list` / `show` stay JSON on the console.
+
+#### Decisions for the approver (each with a recommendation)
+
+- **D1 — split.** (a) Split: this task keeps AC 1, 5, 6, 7 and AC 8's status half, with `bug-341`, `bug-359`,
+  `bug-487`; a new `w1` feature task (W1-15b, id from the orchestrator, `depends_on: [task-374]`, `wave: w1` per
+  W1-R11) takes AC 2, 3, 4 and AC 8's tree half, with `bug-485`. The amendments below may still be approved now, both
+  parts, so the new task starts from an approved `§7.13`. (b) One task, L+. *Recommended:* (a); the new task is one
+  more `w1` feature (the fix share falls, the growth counts one task, W0-R10).
+- **D2 — the command surface of the run reader.** (a) One new read, `workflow tree <ref>` with `--preview` and
+  `--element` (`spec-017` §7.13): a closed run by its plan id, an open run by name or id, a start's preview by
+  workflow name. (b) Options on existing commands: `status <closed id>` and `status --tree`, and `start --dry-run`
+  printing the deduction — `status` would answer a closed id that `next` calls not open (`bug-359`'s one-answer rule),
+  and a dry run ends by a throw at the commit primitive (`stopWithPlan`, `src/storage/dry-run.ts`), so `start` cannot
+  add a preview to its plan without changing the primitive every mutating verb shares; it would also need the git
+  identity and membership of a write. (c) Two reads, `workflow history` and `workflow deduce`: two commands. Name
+  alternatives for (a): `history`, `trace`. *Recommended:* (a) `tree` (`CORE_MODULES` registration under `workflow`,
+  `positional: { name: 'ref', required: true }`, `flags: [preview]`, `options: [element]`, `mutates: false`; task-364's
+  metadata derives its test-only Resource template and needs nothing more). The count becomes 38 after `task-365`.
+- **D3 — the shapes.** `TreeResult`, `RunTree`, `PhaseNode`, `PhaseEvidence` as `spec-017` §8 (amended); console as
+  §8's `tree` sentence; json/yaml the payload. A closed run is deduced at its end commit's first parent (what `end`
+  judged complete), not at `HEAD` (where later states would re-deduce it). The "parent step" of `bug-485`'s Expected
+  Behavior is not recorded for an instance: the run reports its `context` (§3.5). A pending phase carries no evidence
+  (deduction does not evaluate it). *Recommended:* as written.
+- **D4 — `bug-341`'s forms.** (a) Console summary by default, `--full` (the spelling `dl-215` gives listings) for one
+  line each; `json`/`yaml` keep the whole `ungated` and add `ungatedByType`, the same with or without `--full`, so the
+  MCP Resource and `scripts/e2e-smoke.cjs`'s `count('ungated')` stay valid; needs the `renderConsole` flags argument
+  (`spec-006` §2). (b) Compact json too, as `dl-215` does for listings: breaks the Resource's consumers and the smoke.
+  (c) `--type` / `--release` filters (the bug's alternative). *Recommended:* (a).
+- **D5 — `bug-487`.** Half 1: characterization, no code change; §5.1 says every pending approval is a frontier step
+  and why an iteration offers several; ordering stays `bug-483`'s. Half 2: (a) the held rule — a field named after
+  the type of an element scoping a frontier step, value its id or its `version` — the element stays ungated with
+  `heldBy`; (b) id only (the AC's words: this repository's `release: "v0.4"` would never match); (c) drop held
+  elements from `ungated` (hides a decision the approver still owes). *Recommended:* (a). The bug closes with half 1
+  ruled out explicitly at this gate.
+- **D6 — `bug-359`'s wording.** (a) `show` takes any instance plan's id, open or not, and says so in `instance: { id,
+  workflow, open }`; a phase plan stays `unknown workflow`. (b) `show` refuses a closed id with `<id> is an instance
+  of workflow '<name>': give its name`. *Recommended:* (a): an open id already stands for its workflow, `show` reads
+  no instance state, and the answer is useful.
+- **D7 — MCP alignment (AC 8).** The status Resource serves the no-flag payload, so it carries `ungatedByType` and
+  `heldBy` by construction; `--full` has no Resource. `workflowTree` reads a project (no `readsProject: false`), is not
+  a Tool (task-367's rule: Tools are `mutates: true`), and its derived `wingfoil://workflow/tree/{ref}` is not served
+  until `dl-040` (`spec-017` §9 amended). *Recommended:* as written.
+- **D8 — BDD.** The six scenarios above, added by qa in red to P4.5 and P4.7. *Recommended:* yes.
+- **D9 — merge order.** `task-365` merges first; this branch takes `main` before red and before the amendments are
+  recorded, so they are re-applied on its text of `spec-006`, `spec-008`, `spec-017` (tails and §11/§12 rows only);
+  or the approver records them now and the merge resolves the tails. *Recommended:* take `main` first.
+- **D10 — vision rows.** `X_cli-cmds.md`'s `workflow status` (and part B's `workflow tree`) rows are committed at green
+  with `00_index.md`, with no change-proposal, as `task-365`'s design gate ruled for `verify`. *Recommended:* yes.
+
+### Pending amendments (approver)
+
+Left uncommitted in this worktree, each to be recorded with `memory amend` at this design gate:
+- `spec-017-workflow-commands-and-state-deduction` — `--reason "Record task-374's design in §5.1, §5.3, §7, §7.4, §7.6, §7.13 and §8 to §11: an ungated element held by an open run and the ungated elements counted per type with --full for the list (bug-487, bug-341), show taking any instance plan's id (bug-359), and the workflow tree read of closed, open and previewed runs (bug-485)."`
+- `spec-008-cli-grammar` — `--reason "Record workflow tree in §1 and §11 and the rows of workflow status --full and workflow tree --preview and --element in §12, as spec-017 §7.4 and §7.13 state them at task-374's design gate."`
+- `spec-006-core-domain-api` — `--reason "Record the console-only flags argument of renderConsole in §2 and the read operation workflowTree in §3 and among §6 item 6's declared HEAD reads, as spec-017 §7.4 and §7.13 state them at task-374's design gate."`
+
+With them, uncommitted, the allowlist entries the amended specs need (names not written yet), each `PLANNED`,
+`plannedBy: ['task-374']`: `test/docs/name-resolvability.allowlist.ts` — `spec-006` `wingfoil workflow tree`,
+`workflowTree`; `spec-017` `wingfoil workflow tree`, the hint text `wingfoil workflow tree <ref> --preview shows what a
+start would deduce`, `heldBy`, `ungatedByType`, `workflowTree`; `test/docs/enumeration-parity.allowlist.ts` — `spec-008
+§11 commands` surplus `workflow tree`. They are committed once the amendments are, before red, as `task-365` did
+(`test(docs): … allowlist …`). If D1 moves part B to a new task, its entries name that task instead.
+
+#### For other tasks
+
+- **W1-15b** (if D1 (a)): start from §7.13 and the part B plan above; `readDeductionSnapshotAtCommit` is its seam.
+- **`task-370`**: see "Overlap". **`task-371`** (`--full` on listings): this task introduces `--full` on `status`
+  with `dl-215`'s meaning; keep the spelling.
+
+#### Candidate findings (not fixed, not filed)
+
+- `spec-017` §9, the paragraph "The two shipped Resources are unchanged in v0.3" ends "the production server serves no
+  Tool today"; `src/mcp/server.ts` registers the Memory Tools since `task-367` (`registerCoreTools`, its header
+  comment). Expected: the sentence names the Tools served. Severity: low (stale prose in an approved spec; `dl-075`
+  class).
+
+### Retrospective
+
+<!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
+     reconstructed afterwards. One line per item: what happened, the evidence (a command and what it
+     printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
+     Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
+     here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
