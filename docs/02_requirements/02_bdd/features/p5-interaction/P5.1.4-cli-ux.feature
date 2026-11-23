@@ -10,6 +10,24 @@ Feature: P5.1.4 (US-0A-14) - CLI UX Improvements
     Then usage, options, and at least one example are printed
     And the command exits with code 0
 
+  # task-380 (spec-008 §8, design gate D2 (a) and D3 (a)): the help command's operands are a command path.
+  Scenario: Help - the help command takes a command path
+    When I run "wingfoil help memory add"
+    Then the output is what "wingfoil memory add --help" prints
+    And the command exits with code 0
+
+  Scenario: Error - a help path operand that names no command is refused
+    When I run "wingfoil help memory addd"
+    Then the CLI exits with code 2
+    And the message includes "unknown command 'addd'" and suggests "add"
+    And nothing is written to stdout
+
+  Scenario: Help - the help command's own help names its path
+    When I run "wingfoil help help"
+    Then the usage line is "Usage: wingfoil help [command]"
+    And under a noun, "wingfoil memory help help" prints the usage line "Usage: wingfoil memory help [command]"
+    And the command exits with code 0
+
   Scenario: Error - unknown command yields an actionable error
     When I run "wingfoil memroy add"
     Then the CLI exits with code 2

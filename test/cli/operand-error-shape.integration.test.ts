@@ -181,13 +181,14 @@ describe('task-179 — one shape for missing-operand and unknown-command refusal
       expect(far.stderr).not.toContain('missing required argument');
     });
 
+    // task-380 (design gate D2 (a), spec-008 §8): `help help help` left this table — the help command's operands are a
+    // command path, so the third operand is refused (`help-command-path.integration.test.ts`).
     // Design gate D1 (b): asking for the help command's help is answered with it, at exit 0. The text is
     // Commander's help of its built-in `help [command]` command (usage + description, measured on the
     // code build through `Command#_getHelpCommand().helpInformation()`); the `wingfoil …` prefix of the
     // usage line is admitted, not required.
     it.each([
       [['help', 'help'], /^Usage: (wingfoil )?help \[command\]$/],
-      [['help', 'help', 'help'], /^Usage: (wingfoil )?help \[command\]$/],
       [['memory', 'help', 'help'], /^Usage: (wingfoil memory )?help \[command\]$/],
     ] as const)('`wingfoil %j` prints the help command\'s own help at exit 0 (bug-116, AC 2)', (args, usage) => {
       const result = runCliEntry(repo, [...args]);

@@ -16,8 +16,7 @@ import { join, relative, sep } from 'path';
 import { dump } from 'js-yaml';
 
 import { type Diagnostic, DiagnosticsError, diagnosticWarning, formatDiagnostic, generateId, isNewerFormatError, parseYaml, patternTokens, raiseConfigVersion, toValidationError, ValidationError } from '../validation';
-import type { Paths } from '../dna/schema';
-import { DnaYaml } from '../dna/schema';
+import { DnaYaml, Paths } from '../dna/schema';
 import { applyDnaEditInText } from '../dna/edit';
 import { applyDnaMutation, type DnaMutationRequest, type DnaMutationVerb } from '../dna/mutate';
 import {
@@ -465,6 +464,17 @@ export interface PathsShowResult {
   readonly category: string;
   readonly paths: readonly string[];
 }
+
+/**
+ * The `paths` category argument's description (task-380, `bug-471`, design gate D4 (a)): the categories of the
+ * `dna.yaml` `paths:` schema (`Paths.shape`, spec-002), joined `a, b, …, f or g`, so an eighth category reaches
+ * `paths --help` without an edit, and the reminder that a category declared there by hand is answered too
+ * (task-312), so the list no longer reads as closed.
+ */
+const PATHS_CATEGORIES = Object.keys(Paths.shape);
+const PATHS_CATEGORY_DESCRIPTION =
+  `${PATHS_CATEGORIES.slice(0, -1).join(', ')} or ${PATHS_CATEGORIES[PATHS_CATEGORIES.length - 1]}` +
+  ' (a category of your own, declared in dna.yaml paths:, is answered too; omit it for the whole map)';
 
 /**
  * `paths` `CoreOperation.fn` (P2.5, spec-002-dna-yaml-schema's `Paths` node) —
@@ -3074,7 +3084,7 @@ export const CORE_MODULES: readonly CoreModule[] = [
         name: 'paths',
         mutates: false,
         description: 'print the resource paths declared in dna.yaml paths:',
-        positional: { name: 'category', description: 'sources, tests, docs, config, governance, runs or health (omit it for the whole map)' },
+        positional: { name: 'category', description: PATHS_CATEGORY_DESCRIPTION },
         flags: [{ name: 'list', description: 'accepted for the planned drill-down view; it does not change the output yet' }],
         example: 'wingfoil paths sources',
         fn: pathsFn,
