@@ -420,6 +420,50 @@ their leading `- `, as the design writes them. The usage hint must name `--lines
 and `--repo`. The temporary repository's commits name their identity through `GIT_AUTHOR_*`/`GIT_COMMITTER_*` (the run's
 git isolation has `useConfigOnly`).
 
+### red, send-back (qa, 2026-11-23)
+
+**Why.** The AC 4 case "equals the §5 fixture minus the `capabilities` command and minus every name in the fixture's
+capabilities" read the live `test/core/fixtures/capabilities-document.json`. `task-365` adds `verify` and
+`governance-check` to that fixture, so once both tasks are on `main` the case would fail. The approver's ruling D6 (a)
+says the tests derive the 0.4.0 line from the committed fixture, so they do not depend on `task-365`'s merge. This
+send-back makes that ruling hold for AC 4's baseline case too.
+
+**Branch state.** Run from head `fa6ded19d`. `git rev-list --count HEAD..main` printed `4`: `fb24de83a` and the three
+`task-383` Memory commits under it, none of which touch this task's files. The orchestrator ruled to go ahead without
+merging `main`, and this phase did not merge it.
+
+**The change** (commit `c77de9edb`). Only `test/core/capabilities-baseline.test.ts` changed, and in it only that case
+(plus its line in the header comment). The case is now "equals the document built from §8's 0.3.2 statement and the
+literal 0.3.2 command list, not the live §5 fixture":
+- it builds `{ format: 1, formats: the nine kinds at { lowest: 1, highest: 1 }, commands: the 35-command literal,
+  capabilities: [] }`;
+- it compares `JSON.stringify` of that document, plus `\n`, to the baseline file's bytes.
+
+The case no longer reads the §5 fixture. Every other case is unchanged, and the 0.4.0 `releaseLines` case still reads the
+§5 fixture, as D6 (a) allows.
+- **Formats and file kinds** come from `spec-019` §8, read at this head: "the nine kinds at `1..1`", "the 35 commands
+  of 0.3.2, and no capability".
+- **The command list** was re-derived from two sources, which agree with each other and with the literal
+  `COMMANDS_0_3_2`, sorted as the baseline holds it:
+  - `git show v0.3.2:docs/cli-reference.md` gives 35 `wingfoil <command>` headings;
+  - the pinned 0.3.2 build's help gives 35 entries: `npm run -s wingfoil -- --help`, then
+    `npm run -s wingfoil -- <noun> --help` for `agent`, `directive`, `directives`, `dna`, `memory` and `workflow`,
+    without `help`, plus the top-level `init`, `mcp` and `paths`.
+
+**Runs.**
+- `npx jest test/core/capabilities-baseline.test.ts --maxWorkers=2`: 3 passed, 1 failed, 4 total.
+  - The edited case passes on first run (characterization).
+  - The 0.4.0 case stays red: `TypeError: (0 , changelog_section_cjs_1.releaseLines) is not a function`.
+- `npx tsc --noEmit -p tsconfig.json`: the same six TS2305 as the red, and no other diagnostic.
+- `npx jest test/lint --maxWorkers=2`: 164 passed, 1 failed, 165 total. The failure is `typecheck.clean`, on those six
+  TS2305 only.
+- `npx jest test/validation/secret-scan.test.ts --maxWorkers=2`: 85 passed.
+- `npx eslint test/core/capabilities-baseline.test.ts`: exit 0.
+- The invisible-character grep found no hit.
+
+**Follow-up (red finding 2).** `test/docs/name-resolvability.test.ts` resolves a path only once it is tracked or staged.
+A red that creates a path and removes its PLANNED row must therefore stage both first.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
