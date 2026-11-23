@@ -49,6 +49,8 @@ directive); the pinned build is `npm run -s wingfoil -- --version` → `0.3.2`.
   reproduction of `bug-550` ran both builds on a scratch repository: `main`'s (`c0d36b74b`) and the review's clean clone of
   `task-380` (`25d4ff775`).
 
+- triage (approver, 2026-11-23): `bug-550` approve `2413a875b` and `bug-551` approve `b4151f7d7`, both `open → triaged`.
+
 ### Retrospective
 
 - None.
