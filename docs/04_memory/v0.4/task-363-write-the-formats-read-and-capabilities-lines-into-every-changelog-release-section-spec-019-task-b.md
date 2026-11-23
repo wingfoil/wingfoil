@@ -49,3 +49,280 @@ Feature **P5.1.4** (release notes). `dl-213` (a) (`ready`, `e24f1ee47`) and `spe
 ## Execution Notes
 
 <!-- Filled by the dev-loop. -->
+
+### design (architect, 2026-11-23)
+
+**Inputs read.** dl-015: `depends_on: [task-362]` (`done`, merged `8e41189a3`); its notes say what this task may rely on:
+`node dist/cli.js capabilities --format json` prints one line, `JSON.stringify` of the document plus `\n`, keys in
+`spec-019` §3.1's order, no project read, stderr empty on exit `0`; `test/core/fixtures/capabilities-document.json` holds
+the document without `wingfoil` (1018 bytes, `sha256sum` → `eba2cb26…562d794` at this head, the value task-362's design
+recorded), and its D5 leaves `governance-check` to `task-365`. Contract: `spec-019` (`approved`, `4b6b9bb9f`; `git log
+--oneline -- <spec-019>` at this head → its add, submit and approve only, so no Revision paragraph is in force here) §5, §8,
+§9 T-19, §12 AC 11–12; `dl-213` (`ready`, `e24f1ee47`, option (a)); feature P5.1.4 and
+`docs/02_requirements/02_bdd/features/p5-interaction/P5.1.4-cli-ux.feature` (`grep -n -i changelog` on it → nothing:
+no scenario names the release notes, D9). Rulings W0-R1…W0-R12, W1-R1…W1-R14.
+
+**What exists at this head** (`e93fbae58`, read in the worktree):
+- `scripts/changelog-section.cjs` (task-229, `spec-015` §3) prints one version's section for `publish.yml`'s `release`
+  job: `node scripts/changelog-section.cjs <X.Y.Z> [--changelog <path>]`, exit `0` / `1` / `2`; it exports
+  `changelogSection(text, version)`, typed in `scripts/changelog-section.d.cts`. Its tests are
+  `test/cli/changelog-section.test.ts` and `test/cli/publish-release-scripts-edges.test.ts` (the second refuses a second
+  positional with `error: unexpected argument …`, exit `2`); `test/cli/publish-pipeline.test.ts` pins the `release` job's
+  `node scripts/changelog-section.cjs "${GITHUB_REF_NAME#v}"` step. This task keeps all of that byte for byte and adds two
+  modes.
+- `CHANGELOG.md` has seven release sections (`grep -n "^## \[" CHANGELOG.md` → 0.3.2, 0.3.1, 0.3.0, 0.2.2, 0.2.1, 0.2.0,
+  0.1.0), none with the two lines, no `[Unreleased]` section and no 0.4.0 section; `### Deprecated` and `### Breaking`
+  appear in none (`grep -c "^### Deprecated\|^### Breaking" CHANGELOG.md` → `0`).
+- The 0.3.2 surface, from three sources that agree: the pinned build's `CORE_MODULES` (`node_modules/wingfoil-released`,
+  `dist/build-info.json` commit `6de2e13c0…` = `git rev-parse v0.3.2^{commit}`) enumerated as `buildCapabilitiesDocument`
+  does, plus `init` and `mcp` → 35 commands; `git show v0.3.2:docs/cli-reference.md | grep -c '^### \`wingfoil '` → `35`;
+  `git show v0.3.2:src/validation/format.ts | grep "_FORMAT = "` → the nine constants, each `1`. The baseline these
+  give, written `JSON.stringify` + `\n` in §3.2's order, is 910 bytes, sha256
+  `9f91ddddee5f85f6045a43cab016344d9abb766152a540d8615c34155152e27f`: it equals the committed §5 fixture with the
+  command `capabilities` and the six capability names removed.
+- `git tag --list 'v*'` → `v0.1.0` … `v0.3.2`; none holds `test/core/fixtures/capabilities-document.json`, so 0.4.0's
+  previous document is the baseline (§8).
+- `.wingfoil/workflows/custom/release-publishing.yaml` is `version: 2.3` on `main` and here; `release-commit` has one
+  action, `git.commit(message: "release {release.version}")`, no `checks`.
+
+**A throwaway prototype** (scratch, outside the worktree, never pushed): §8's computation as a pure function over two
+documents. Against the baseline, the worktree's own `node dist/cli.js capabilities --format json` → `Formats read:
+unchanged` and `Capabilities: agent-execute, directive-verbs, dna-verbs, mcp-server, memory-verbs, workflow-tracking`;
+against `task-365`'s branch fixture (`git show task/task-365-…:test/core/fixtures/capabilities-document.json`) →
+the same `Formats read:` line and `Capabilities: agent-execute, directive-verbs, dna-verbs, governance-check, mcp-server,
+memory-verbs, workflow-tracking`. T-19's cases on the baseline: `dna` at `2..2` → `dna 1→2`; `dna` at `1..2` → `dna
+1→1..2`; `bindings` absent on the previous side → `bindings none→1`; a capability or `roles` dropped at equal `format` →
+fails naming it; with `format: 2` → passes and reports the removal.
+
+#### Design
+
+1. **`scripts/changelog-section.cjs` keeps its default mode** (no `--lines`, no `--check`: the section's notes, exit codes
+   and messages unchanged) and gains two modes and these exports, all pure except the CLI's sources:
+   - `formatRange(range)` → `'none'` for `undefined`, `` `${lowest}` `` when `lowest === highest`, `` `${lowest}..${highest}` ``
+     otherwise.
+   - `releaseLines(previous, current)` over two capabilities documents (`{ format, formats, capabilities }`; `commands`,
+     `wingfoil` and unknown keys ignored, §5) →
+     `{ ok: true, formatsRead, capabilities, breaking }` or `{ ok: false, problems }`, where `formatsRead` and
+     `capabilities` are the two full lines (§8's grammar; items `, `-joined, kinds and names in code-unit order `a < b`,
+     never `localeCompare`; `→` U+2192), and `breaking` the `### Breaking` items, in this order: the format's rise, then
+     each removed kind, then each removed capability, each group in code-unit order. Exact texts (D3):
+     - `` - The capabilities document's `format` rises from <p> to <c> (spec-019 §5). `` — when `current.format > previous.format`;
+     - `` - Files of kind `<kind>` are no longer read: formats <range>→none. ``
+     - `` - The capability `<name>` is no longer provided. ``
+     A removal while `current.format <= previous.format` gives `ok: false` with one problem per removal, kinds first (D2):
+     - `` file kind `<kind>` removed without a capabilities document format bump (format <p>→<c>, spec-019 §5) ``
+     - `` capability `<name>` removed without a capabilities document format bump (format <p>→<c>, spec-019 §5) ``
+   - `previousReleaseTag(version, tags)` → the highest tag matching `^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$` whose
+     version is below `version` (numeric semver order), or `undefined`; other tags ignored.
+   - `checkReleaseSection(notes, version)` → `{ ok: true }` or `{ ok: false, problems }`, the form rules of D1 over the
+     notes `changelogSection` returns (paragraphs split on blank lines). Exact problem texts:
+     `the first paragraph is not one "Formats read: …" line`;
+     `the second paragraph is not one "Capabilities: …" line`;
+     `"Formats read:" item "<item>" is not "<kind> <range>→<range>" with two different ranges`;
+     `"Formats read:" items are not in code-unit order of the kind, or repeat a kind`;
+     `"Capabilities:" name "<name>" is not a kebab-case capability name`;
+     `"Capabilities:" names are not in code-unit order, or repeat a name`;
+     `"Feature in a patch:" in the section of <X.Y.Z>, which is not a patch`;
+     `"Feature in a patch:" line does not end with its task, "(task-<n>)": "<line>"`;
+     `"Feature in a patch:" line outside the paragraphs right after "Capabilities:"`;
+     `"### Breaking" is not the first "###" heading`;
+     `"### <Breaking|Deprecated>" has no item`; `"### <Breaking|Deprecated>" appears <n> times`.
+   - `LINES_GRANDFATHERED` — frozen `['0.1.0', '0.2.0', '0.2.1', '0.2.2', '0.3.0', '0.3.1', '0.3.2']`, the sections written
+     before `dl-213` (D1); `FIXTURE_PATH` = `test/core/fixtures/capabilities-document.json`; `BASELINE_PATH` =
+     `test/core/fixtures/capabilities-document-baseline-0.3.2.json`.
+   - **`--lines`**: `node scripts/changelog-section.cjs <X.Y.Z> --lines [--repo <dir>] [--previous <file>] [--current <file>]`.
+     Previous: `--previous <file>`, else the fixture at `previousReleaseTag(X.Y.Z, git tag --list)` read with
+     `git show` of `` `${tag}:${FIXTURE_PATH}` `` when `git cat-file -e` finds it, else `<repo>/BASELINE_PATH`. Current:
+     `--current <file>`, else `node <repo>/dist/cli.js capabilities --format json` run in `<repo>`, `wingfoil` dropped.
+     `<repo>` defaults to `join(__dirname, '..')`. Prints `<formatsRead>\n\n<capabilities>\n`, followed by
+     `\n### Breaking\n\n<item>\n…` when `breaking` is not empty; stderr empty. Exit `1`, with one `error: <problem>` line
+     per problem and `hint: previous document: <source>` (`<tag>:<FIXTURE_PATH>`, `BASELINE_PATH`, or the `--previous`
+     path), on a removal without a bump; exit `1` with `error: no release tag below v<X.Y.Z>`, with `error: cannot read the
+     current capabilities document: …` (the build missing or refusing), or with `error: <source> is not a capabilities
+     document: <why>` (shape checked: positive integer `format`, `formats` a mapping of `{lowest, highest}` positive
+     integers, `capabilities` a string list).
+   - **`--check`**: `node scripts/changelog-section.cjs <X.Y.Z> --check [--changelog <path>] [--repo …] [--previous …]
+     [--current …]`: the section (as the default mode finds it; its refusals unchanged), `checkReleaseSection`, then the
+     same computation as `--lines`, requiring the two lines equal and every computed `breaking` item under `### Breaking`:
+     `"Formats read:" line differs from the computed one: <line>`, `"Capabilities:" line differs from the computed one:
+     <line>`, `"### Breaking" lacks the computed item: <item>`. Exit `0` with no output, `1` with one `error:` line per
+     problem.
+   - Usage (exit `2`, the existing `error: …` + `hint: usage: …` shape, the usage line naming the new options):
+     `--lines` with `--check`; `--previous`, `--current` or `--repo` without a value or without `--lines`/`--check`.
+   - The git calls pass the lint of `test/lint/git-log-readers.test.ts`: a `'show'` argument must be followed by a
+     `` `${a}:${b}` `` blob (two plain identifiers, e.g. `` `${tag}:${FIXTURE_PATH}` ``), no `'log'` is used.
+   - `scripts/changelog-section.d.cts` gains the types and declarations of every new export.
+2. **`.wingfoil/workflows/custom/release-publishing.yaml` 2.3 → 2.4** (D5): `release-commit`'s description gains the
+   paragraph prototyped below; its `actions`, every other phase, and every `checks` list are unchanged; no new token, so
+   `bindings.yaml` is untouched.
+3. **`test/core/fixtures/capabilities-document-baseline-0.3.2.json`** (D4), committed by qa at red with its test, and the
+   `PLANNED` entry for that path in `test/docs/name-resolvability.allowlist.ts` (`plannedBy: ['task-363']`) removed in the
+   same commit, since the path then resolves.
+4. **`CHANGELOG.md`** header: one sentence after "Every entry ends with …": from 0.4.0 on, every release section opens with
+   the `Formats read:` and `Capabilities:` lines (`dl-213`), computed by `scripts/changelog-section.cjs --lines` (D8). No
+   0.4.0 section is written here: that is `user-docs`' `align-user-docs` (`spec-019` Amendments owed), and the
+   repository test then holds it to the form.
+5. **No `src/` change**, no `publish.yml` change (the `release` job's step and its pins stay), no `bindings.yaml` change.
+
+#### Acceptance criteria — classification and what qa pins
+
+| AC | Class | Why | qa pins (observable · interface · fixtures · file) |
+|----|-------|-----|----------------------------------------------------|
+| 1 | red-first | `releaseLines` and `--lines` do not exist | T-19 equal/`unchanged`/`none new`, `dna 1→2`, `dna 1→1..2`, `bindings none→1`, a range `L..H` on both sides, two items in code-unit order (`agent-adapter` before `dna`), new capability names sorted · `releaseLines`, `formatRange`, `previousReleaseTag` (`[v0.1.0…v0.3.2]` + `0.4.0` → `v0.3.2`; `0.3.3` with `v0.4.0` tagged → `v0.3.2`; `v0.4.0-rc.1` ignored; `0.1.0` → `undefined`) · documents derived from the baseline file (AC 4) by editing a deep copy · CLI: `--lines --previous <baseline> --current <the §5 fixture>` → the exact stdout of design item 1, stderr `''`, exit `0`; default sources in a temporary git repository (`test/git-isolation.cjs`) holding `BASELINE_PATH`, a stub `dist/cli.js` that prints a document, a tag with the fixture and one without: `--repo <tmp>` reads the tag's fixture, falls back to the baseline, `error: no release tag below v…` exit `1`, and without `dist/cli.js` `error: cannot read the current capabilities document` exit `1` · new file `test/cli/changelog-lines.test.ts` |
+| 2 | red-first | no removal guard exists | a capability and a kind removed at equal `format` → `ok: false` with the two exact problems, kinds first; CLI exit `1`, `error:` lines + `hint: previous document: <path>`, stdout `''`; with `format: 2` → `ok: true`, the `breaking` items exactly (format rise, kind, capability), the kind on `Formats read:` as `<kind> 1→none`, the capability on neither line; CLI prints the `### Breaking` block · same file |
+| 3 | red-first | `checkReleaseSection`, `LINES_GRANDFATHERED` and `--check` do not exist | each problem text of design item 1 on a fixture section; a well-formed minor and a well-formed patch with `Feature in a patch: … (task-332)` pass; `--check` on a temporary CHANGELOG with `--previous`/`--current` files: exit `0` silent, then the three differ/lack messages exit `1`; the repository test: every `## [X.Y.Z]` of `CHANGELOG.md` not in `LINES_GRANDFATHERED` passes `checkReleaseSection`, `LINES_GRANDFATHERED` equals the seven literal versions and each has a section, and the real 0.3.2 section fails with `the first paragraph is not one "Formats read: …" line` (the check bites on real data) · new file `test/docs/changelog-lines.test.ts`; the frozen `test/cli/changelog-section.test.ts` and the edges file stay as they are and must still pass |
+| 4 | characterization (the fixture) | the file is data qa writes at red, copied from the real output (producing commands above); its 0.4.0 case is red until AC 1's function exists | the baseline bytes: `format: 1`, the nine kinds at `1..1`, the 35 commands as a literal (never read from `node_modules/wingfoil-released`, whose pin moves), `capabilities: []`, `JSON.stringify` + `\n`; the baseline equals the §5 fixture minus `capabilities` (the command) and minus every name in its `capabilities`; 0.4.0 against the baseline with the §5 fixture as current → `Formats read: unchanged` and `Capabilities: ` + the fixture's own `capabilities` joined, which contains the six names of `spec-019` §8 at this head (never a literal count, D6) · `test/core/capabilities-baseline.test.ts` |
+| 5 | red-first (not characterization) | the wording does not exist; a test of new text fails until it is written | `release-publishing`'s phases still `['release-commit', 'staging-rehearsal', 'tag', 'publish', 'mark-released', 'merge-forward']`, `release-commit`'s actions still the one `git.commit`, no `checks` on it; its whitespace-flattened description contains `Formats read:`, `Capabilities:`, `Feature in a patch:`, `### Breaking`, `### Deprecated`, `node scripts/changelog-section.cjs {release.version} --lines`, `node scripts/changelog-section.cjs {release.version} --check`, `spec-019 §8`, `dl-213 (a)`, and still the F5 sentence's asset URL (the positive beside the new text); `version` ≥ 2.4 with a 2.4 history segment naming `task-363` (the `workflow-integration-branch.test.ts` helper pattern, bug-314) · `test/core/release-publishing-changelog-lines.test.ts` |
+| 6 | no test | a Memory amendment, verified by its `memory amend` commit | nothing; the approver's `wingfoil memory history dl-213-…` shows an `amend` entry |
+
+Expected reds at the red commit: `npx tsc --noEmit -p tsconfig.json` → `TS2305` (no exported member `releaseLines`, …,
+from `scripts/changelog-section.cjs`, whose `.d.cts` is green's) and jest → `TypeError: (0 , …).releaseLines is not a
+function` (`isolatedModules: true`, `tsconfig.json:13`), plus the AC 5 assertions; the AC 4 fixture case passes. qa runs
+`npx tsc --noEmit -p tsconfig.json` and `npx jest test/lint --maxWorkers=2` before the commit and names the TS2305 lines as
+the expected red.
+
+#### Tests that pin what changes (run here, all green)
+
+- `release-publishing`'s phase list / step list / version: `test/cli/staging-rehearsal.test.ts` (phases, `release-commit`
+  and `tag` actions, `version > 1.3`), `test/core/workflow-integration-branch.test.ts` (phases, `tag` pre-checks and action,
+  version history), `test/docs/community-health.test.ts` (`release-commit` names SECURITY.md),
+  `test/core/workflow-repository-conformance.test.ts`, `test/core/release-publishing-merge-forward.test.ts`,
+  `test/cli/service-verify-sweep.test.ts`, `test/cli/evidence-only-tag.test.ts`, `test/core/workflow-status.test.ts`
+  (`release-publishing.publish`, `.merge-forward`), `test/docs/workflow-md.test.ts`; the full name list is `grep -rln
+  "release-publishing" test/` (19 files) — only the first eight read the file's phases or text.
+- The script: `test/cli/changelog-section.test.ts`, `test/cli/publish-release-scripts-edges.test.ts`,
+  `test/cli/publish-pipeline.test.ts`; `test/lint/git-log-readers.test.ts` scans `scripts/*.cjs`.
+- Commands, in the worktree, the task's PATH shim first: `npx jest test/cli/changelog-section.test.ts
+  test/cli/publish-release-scripts-edges.test.ts test/cli/staging-rehearsal.test.ts test/docs/community-health.test.ts
+  test/core/capabilities.test.ts --maxWorkers=2` → `Test Suites: 5 passed, 5 total`, `Tests: 106 passed, 106 total`;
+  `npx jest test/cli/publish-pipeline.test.ts test/core/workflow-integration-branch.test.ts
+  test/core/workflow-repository-conformance.test.ts test/core/release-publishing-merge-forward.test.ts
+  test/cli/service-verify-sweep.test.ts test/cli/evidence-only-tag.test.ts --maxWorkers=2` → `Test Suites: 6 passed, 6
+  total`, `Tests: 175 passed, 175 total`.
+- **The workflow edit, proved** in a scratch clone of this head with item 2's text committed there (`b7b6096ce`, never
+  pushed), `node_modules` linked and `dist/` copied from the worktree: `npm run -s wingfoil -- workflow show
+  release-publishing --format json` → exit `0`, baseline commit `b7b6096ce…`, phases `release-commit, staging-rehearsal,
+  tag, publish, mark-released, merge-forward`, `release-commit`'s steps the one `git.commit` token (binding `manual`), the
+  new paragraph in its description; stderr only the `human_only` unknown-field warning the same command prints at this
+  head; `npm run -s wingfoil -- workflow list` → exit `0`, the same warning; `npm run -s check:mcp` → exit `0`, "runs the
+  pinned wingfoil 0.3.2, advertising [prompts, resources, tools] (prompts: 9, resources: 4, tools: 0)" and "the build
+  under development … (prompts: 9, resources: 5, tools: 7)". In that clone `npx jest test/cli/staging-rehearsal.test.ts
+  test/core/workflow-integration-branch.test.ts test/docs/community-health.test.ts
+  test/core/workflow-repository-conformance.test.ts test/core/release-publishing-merge-forward.test.ts --maxWorkers=2` →
+  `Tests: 123 passed`; `npx jest test/cli/service-verify-sweep.test.ts test/cli/evidence-only-tag.test.ts
+  test/cli/publish-pipeline.test.ts test/core/workflow-status.test.ts test/lint/version-bump.test.ts --maxWorkers=2` →
+  `Tests: 177 passed`; `npx jest test/docs/workflow-md.test.ts test/docs/workflow-rekey-docs.test.ts --maxWorkers=2` →
+  `Tests: 9 passed`. The pinned build reads `HEAD`, so green re-runs these three commands after its commit.
+
+The prototyped paragraph (green writes it after the F5 sentence of `release-commit`; D5):
+
+> The section opens with the two lines of dl-213 (a), each a paragraph of its own, in this order: `Formats read:`
+> (`unchanged`, or one `<kind> <previous range>→<current range>` per file kind whose range moved) and `Capabilities:`
+> (`none new`, or the new capability names), as `node scripts/changelog-section.cjs {release.version} --lines` prints them
+> from the previous release's capabilities fixture, or the 0.3.2 baseline, and the document of the build being released
+> (spec-019 §8); a patch that adds a feature follows them with one `Feature in a patch:` line per feature, ending with its
+> task. `### Breaking` and `### Deprecated` are used whenever they have content, `### Breaking` first, holding the items
+> the script prints. After the version bump and `npm run build`, `node scripts/changelog-section.cjs {release.version}
+> --check` passes before the commit: the lines are present, well formed and equal to the computed ones. The script fails,
+> naming it, on a capability or a file kind removed while the capabilities document's `format` has not risen. On a line
+> whose build has no `capabilities` command (a release/0.3 patch) the two lines read `Formats read: unchanged` and
+> `Capabilities: none new`, provided `git diff v<previous> -- src/validation/format.ts` is empty.
+
+History entry appended to the `version:` comment: `2.4 task-363 (dl-213 (a), spec-019 §8): release-commit's description
+names the Formats read and Capabilities lines that open the version's CHANGELOG section, the Feature in a patch line, the
+Breaking and Deprecated headings, and the --lines and --check modes of scripts/changelog-section.cjs; no phase, step or
+action changes`.
+
+#### Files expected to change
+
+- red (qa): `test/cli/changelog-lines.test.ts`, `test/docs/changelog-lines.test.ts`, `test/core/capabilities-baseline.test.ts`,
+  `test/core/release-publishing-changelog-lines.test.ts` (new); `test/core/fixtures/capabilities-document-baseline-0.3.2.json`
+  (new); `test/docs/name-resolvability.allowlist.ts` (one entry removed).
+- green (developer): `scripts/changelog-section.cjs`, `scripts/changelog-section.d.cts`,
+  `.wingfoil/workflows/custom/release-publishing.yaml` (`version:` 2.3 → 2.4, the one bump on this branch),
+  `CHANGELOG.md` (header sentence); the task file's notes.
+- Uncommitted, for the approver: `docs/04_memory/design/dls/dl-213-…md` (AC 6).
+- No `src/`, `dna.yaml`, `memory.yaml`, `workflows.yaml`, `roles.yaml` or `bindings.yaml` change, so no other `version:` bump.
+
+#### Coverage
+
+`scripts/` is outside jest's coverage (`collectCoverageFrom` covers `src/`), and nothing under `src/` changes, so the totals
+are the merge base's (`169ecd71b`'s baseline applies unchanged; review confirms with `git diff main...HEAD --stat -- src/`
+→ empty). The script is measured by its cases instead: green lists, per exported function and per CLI exit path, the case
+that reaches it (every problem text, every exit `0`/`1`/`2` path, both previous sources, the build-missing path), and the
+reviewer checks the list against the code.
+
+#### Decisions for the approver (design gate)
+
+- **D1 — the lines' grammar and place.** (a) The first two paragraphs of a section, each one line: `Formats read:
+  unchanged` or `, `-joined `<kind> <range>→<range>` items (`N`, `L..H`, `none`; kinds in code-unit order; the two ranges
+  differ), then `Capabilities: none new` or `, `-joined kebab-case names in code-unit order; then a patch's `Feature in a
+  patch:` paragraphs; prose and headings after. The seven sections written before `dl-213` (0.1.0–0.3.2) are listed in
+  `LINES_GRANDFATHERED` and never backfilled; every other section, a later `release/0.3` patch included, is held to the
+  form. (b) After the intro prose, before the first `###` heading: a script must find the end of the prose. (c) Backfill the
+  seven old sections: their `Capabilities:` would state a vocabulary that did not exist. **Recommend (a)**: a fixed place
+  a consumer's script reads without parsing prose, and the first thing in the GitHub Release notes.
+- **D2 — the removal failure.** (a) One `error:` line per removal, kinds first, each `` <file kind|capability> `<name>`
+  removed without a capabilities document format bump (format <p>→<c>, spec-019 §5) ``, then `hint: previous document:
+  <source>`, exit `1`, stdout empty. (b) One summary line. **Recommend (a)**: it names each removal, as AC 2 asks.
+- **D3 — how `Deprecated`, `Breaking` and `Feature in a patch:` are produced and tested.** `### Breaking` items for
+  removals and the format's rise are printed by `--lines` in design item 1's wording and required by `--check`; other
+  breaking or deprecated entries and every `Feature in a patch: <feature> (task-<n>)` line are written by hand and held
+  to the form (non-empty heading, at most once, Breaking first; the feature line only in a patch, ending with its task).
+  (b) Derive `Feature in a patch:` from the patch's `kind: feature` tasks: `docs/04_memory/v0.3.1/` holds 11 such tasks,
+  most of them process work no user would call a feature, while 0.3.2's one (`task-332`) is the case `dl-213` cites.
+  **Recommend (a).**
+- **D4 — the baseline's content.** (a) The bytes above (910, sha256 `9f91dddd…152e27f`): `format: 1`, the nine kinds at
+  `1..1`, the 35 commands of 0.3.2, no capability — the §5 fixture's shape, no `wingfoil`. (b) Also record `wingfoil:
+  {version: "0.3.2", commit: …}`: the §5 fixture omits it, and the script ignores it. **Recommend (a).**
+- **D5 — `release-commit`'s wording and the version.** (a) The paragraph above in the description, `version` 2.4 with the
+  history entry, no `checks` token: no runner evaluates a check (P4.10/P4.12, v1.0), and a token would need a
+  `bindings.yaml` binding in the file `task-366`'s tag pre-check also edits. (b) Add a `checks.post` token bound to
+  `--check`. **Recommend (a)**; a bound check is a later element once checks run.
+- **D6 — the 0.4.0 lines and `task-365`.** The 0.4.0 `Capabilities:` line is computed from the build, so it depends on
+  `task-365` only in content, not in the test: AC 4's case derives the expected line from the committed §5 fixture (six
+  names before `task-365` merges, seven after), and checks it contains `spec-019` §8's six. Neither merge order needs an
+  edit of this task's tests. **Recommend as stated.**
+- **D7 — no `spec-019` amendment.** §8 leaves the layout, headings, the Breaking wording, the script and its test to this
+  task, which records them in `dl-213` (AC 6); `task-365` already holds an approved `spec-019` amendment on its branch
+  (`5b3a085b5`), so a second one here would also be a merge conflict at the end of the spec. `spec-015` §3 names only the
+  default mode, which does not change. **Recommend: none owed.**
+- **D8 — the CHANGELOG header sentence.** (a) Green adds one sentence to the header saying where the lines are. (b) None:
+  the lines explain themselves. **Recommend (a)**: a consumer learns the contract from the file it reads.
+- **D9 — BDD.** P5.1.4's feature file covers the CLI's help and errors; the script is repository tooling, not a command,
+  and `dl-213` asks for "a test". (a) No scenario; the jest suites of AC 1–3 are the acceptance contract. (b) A scenario in
+  `P5.1.4-cli-ux.feature`. **Recommend (a).**
+- **D10 — the `dl-213` amendment (AC 6)**, prepared uncommitted below with D1–D3's recommendations; if a ruling differs,
+  the text changes before the amend.
+
+#### Risks and overlaps
+
+- **`task-366`** (waits for this merge; `release-publishing.yaml`): it may rely on `version: 2.4` with this history entry
+  as the line's last segment (it appends `; 2.5 task-366 …` and bumps to 2.5), on the phase list and every `checks` list
+  being unchanged, on `tag` untouched (its pre-checks, action and description as on `main`), and on `bindings.yaml`
+  untouched by this task. Only `release-commit`'s description gains text.
+- **`task-365`** (green): it edits `test/core/fixtures/capabilities-document.json` and `test/core/capabilities.test.ts`,
+  which this task only reads (D6), and adds `spec-019` entries to `test/docs/name-resolvability.allowlist.ts` (the
+  `command` class, several lines above the `path` entry this task removes, so no adjacent-line conflict is expected).
+- **`task-374`** (`src/core/workflow-*.ts`): no file in common; none of this task's files is under `src/`.
+- **`bug-534`**: the uncommitted `dl-213` edit makes `test/cli/workflow-unbound-none.integration.test.ts` fail in this
+  worktree with `W_UNCOMMITTED_INPUTS` until the approver's amend; per the w1 ruling it is accepted only when the same test
+  passes on a clean clone of the head.
+
+### Pending amendments (approver)
+
+- `dl-213-every-release-section-of-the-changelog-states-the-formats-wingfoil-reads-and-the-capabilities-it-provides-in-fixed-lines-a-script-can-read`
+  (edited in the worktree, uncommitted: option (a)'s parenthesis points to the amendment; a new `## Amendments` section):
+  `--reason "Amend option (a) for spec-019 section 8: the Formats read line takes the widened grammar of ranges and none in code-unit order, and the layout left to this decision's task is fixed: the two lines open each release section, Breaking comes first, removals without a format bump fail the script, the seven earlier sections are grandfathered, and a release/0.3 patch writes the lines by hand (task-363)."`
+
+### Retrospective
+
+<!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
+     reconstructed afterwards. One line per item: what happened, the evidence (a command and what it
+     printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
+     Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
+     here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+
+- The pinned build's workflow reads look at `HEAD`, so a modified `.wingfoil/` is proved on the pinned build only from a
+  commit: the design used a scratch clone with the edit committed (`b7b6096ce`, `baseline.commit` in `workflow show`'s
+  output). Proposal: the dev-loop's design note on the `.wingfoil/` proof says so.
