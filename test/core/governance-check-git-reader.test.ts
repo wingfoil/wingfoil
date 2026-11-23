@@ -10,13 +10,30 @@
  */
 import { execFileSync } from 'node:child_process';
 
-import { createGitHistoryReader, governanceCheck, VERIFY_WHOLE_HISTORY } from '../../src/core/governance-check';
+import * as core from '../../src/core';
 import { CORE_MODULES } from '../../src/core';
-import type { CoreResult } from '../../src/core/types';
+import * as leaf from '../../src/core/governance-check';
+import {
+  buildGovernanceReport,
+  checkAuthority,
+  checkBody,
+  checkState,
+  checkStatusOutsideWf,
+  checkSupersedesPair,
+  checkVerbEdge,
+  checkWorkflowRecordAuthority,
+  createGitHistoryReader,
+  governanceCheck,
+  VERIFY_WHOLE_HISTORY,
+  type HistoryCommit,
+  type HistoryReader,
+} from '../../src/core/governance-check';
+import { coreFailed, type CoreResult } from '../../src/core/types';
+import { ValidationError } from '../../src/validation';
 import { UsageError } from '../../src/core/usage-error';
 import { withWarningSink } from '../../src/validation/warning';
 import { git, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
-import { ADR, APPROVER, DEVELOPER, DNA, INVALID_MEMORY_YAML, MEMORY_YAML, TASK, adrDoc, approvalBody, taskDoc, type Person } from './helpers/in-memory-history-reader';
+import { ADR, APPROVER, DEVELOPER, DNA, HistoryModel, INVALID_MEMORY_YAML, MEMORY_YAML, TASK, adrDoc, approvalBody, approverLine, governedModel, taskDoc, type Person } from './helpers/in-memory-history-reader';
 
 const roots: string[] = [];
 afterAll(() => roots.forEach(removeTempDir));
@@ -277,5 +294,149 @@ describe('task-365 — verifyFn, in-process: the order of refusals and the whole
     const introduced = await withWarningSink((text) => quiet.push(text), () => run({ root: repo.root, options: { 'introduced-at': base } }));
     expect(quiet).toEqual([]);
     expect(introduced.ok && (introduced.value as { introducedAt: string }).introducedAt).toBe(base);
+  });
+});
+
+describe('task-365 — the branches only an unusual history reaches, on the in-memory reader (spec-020 §4.4–§4.8, §3)', () => {
+  const DOC = TASK('t-1');
+  const state = (commit: HistoryCommit, reader: HistoryReader): string[] => checkState(commit, reader, { gated: true }).findings.map((finding) => finding.message);
+
+  it('a memory commit outside the wf() head is judged by subject only: body, authority, state and verb-edge return nothing', () => {
+    const model = governedModel();
+    const commit = model.commit({ subject: 'wf(task) approve t-1', body: approvalBody(), author: DEVELOPER });
+    const reader = model.reader();
+    for (const check of [checkBody, checkAuthority, checkState, checkVerbEdge, checkSupersedesPair]) expect(check(commit, reader, { gated: true })).toEqual({ findings: [], stateUnchecked: [] });
+  });
+
+  it('state: a legal park, an assign that keeps the status, a named unbracketed approve, a walk finding of another commit', () => {
+    const model = governedModel();
+    model.commit({ subject: 'docs: set', files: { [DOC]: taskDoc('in-progress') } });
+    const park = model.commit({ subject: 'wf(task): park t-1 [in-progress → backlog]', body: 'Reason: Later.', files: { [DOC]: taskDoc('backlog') } });
+    const assign = model.commit({ subject: 'wf(task): assign release v1 to t-1', files: { [DOC]: taskDoc('backlog', 'v1') } });
+    const bare = model.commit({ subject: 'wf(task): approve t-1', body: approvalBody(), author: APPROVER, files: { [DOC]: taskDoc('backlog', 'v2') } });
+    const reader = model.reader({ transitionFindings: { [DOC]: [{ kind: 'unparseable', sha: assign.sha, subject: assign.subject }] as never } });
+    expect([state(park, reader), state(assign, reader), state(bare, reader)]).toEqual([[], [], []]);
+  });
+
+  it('state: a walk that throws anything but a ValidationError is not swallowed; an unnamed document\'s unreadable walk is not listed', () => {
+    const model = governedModel();
+    model.commit({ subject: 'wf(task): add t-2', files: { [TASK('t-2')]: taskDoc('draft', '', 't-2') } });
+    const named = model.commit({ subject: 'wf(task): approve t-1 [pending → backlog]', body: approvalBody(), author: APPROVER, files: { [DOC]: taskDoc('backlog'), [TASK('t-2')]: taskDoc('pending', '', 't-2') } });
+    const base = model.reader();
+    const throwing = (error: Error, which: 'transitions' | 'transitionFindings'): HistoryReader => ({ ...base, [which]: () => { throw error; } });
+    expect(() => checkState(named, throwing(new Error('boom'), 'transitionFindings'), { gated: true })).toThrow('boom');
+    expect(() => checkState(named, throwing(new Error('boom'), 'transitions'), { gated: true })).toThrow('boom');
+    const unreadable = new ValidationError([{ code: 'E_YAML_PARSE_ERROR', path: '', file: DOC, message: 'bad yaml' }]);
+    expect(checkState(named, throwing(unreadable, 'transitions'), { gated: true })).toEqual({ findings: [], stateUnchecked: [] });
+  });
+
+  it('verb-edge: a paired verb on a non-edge is left to state; a hop into deprecated is no reject crossing; a gone document whose bracket agrees, or created or deleted in the commit', () => {
+    const model = governedModel();
+    model.commit({ subject: 'docs: set', files: { [DOC]: taskDoc('done') } });
+    const nonEdge = model.commit({ subject: 'wf(task): approve t-1 [done → pending]', body: approvalBody(), author: APPROVER, files: { [DOC]: taskDoc('pending') } });
+    const deprecated = model.commit({ subject: 'wf(task): sync t-1 [pending → deprecated]', files: { [DOC]: taskDoc('deprecated') } });
+    model.commit({ subject: 'wf(task): add t-4', files: { [TASK('t-4')]: taskDoc('draft', '', 't-4') } });
+    const agrees = model.commit({ subject: 'wf(task): sync t-4 [draft → pending]', files: { [TASK('t-4')]: taskDoc('pending', '', 't-4') } });
+    const created = model.commit({ subject: 'wf(task): sync t-8 [draft → pending]', files: { [TASK('t-8')]: taskDoc('pending', '', 't-8') } });
+    model.commit({ subject: 'wf(task): add t-9', files: { [TASK('t-9')]: taskDoc('draft', '', 't-9') } });
+    const removed = model.commit({ subject: 'wf(task): sync t-9 [draft → pending]', files: { [TASK('t-9')]: null } });
+    model.commit({ subject: 'chore: drop', files: { [TASK('t-4')]: null, [TASK('t-8')]: null } });
+    const reader = model.reader();
+    const verbEdge = (commit: HistoryCommit): string[] => checkVerbEdge(commit, reader, { gated: true }).findings.map((finding) => finding.message);
+    expect(verbEdge(nonEdge)).toEqual([]);
+    expect(verbEdge(deprecated)).toEqual([]);
+    expect(verbEdge(agrees)).toEqual([]);
+    expect(verbEdge(created)).toEqual([`${TASK('t-8')} (gone at HEAD): the bracket declares draft → pending, the frontmatter went null → pending`]);
+    expect(verbEdge(removed)).toEqual([`${TASK('t-9')} (gone at HEAD): the bracket declares draft → pending, the frontmatter went draft → null`]);
+  });
+
+  it('a rename in a named commit keeps the written path; a machine with no gates or returns reads no such edge', () => {
+    const MACHINE_ONLY = `${MEMORY_YAML}  note:\n    path: "docs/memory/note/{id}.md"\n    states:\n      sequence: [draft, done]\n`;
+    const model = governedModel({ memoryYaml: MACHINE_ONLY });
+    model.commit({ subject: 'wf(note): add n-1', files: { 'docs/memory/note/n-1.md': '---\nid: "n-1"\ntype: note\nstatus: draft\n---\n' } });
+    const reject = model.commit({ subject: 'wf(note): reject n-1 [draft → done]', body: approvalBody(), author: APPROVER, files: { 'docs/memory/note/n-1.md': '---\nid: "n-1"\ntype: note\nstatus: done\n---\n' } });
+    const moved = model.commit({ subject: 'wf(task): sync t-1 [pending → backlog]', renames: { [DOC]: 'docs/memory/task/t-1z.md' }, files: { 'docs/memory/task/t-1z.md': taskDoc('backlog') } });
+    model.commit({ subject: 'chore: drop', files: { 'docs/memory/task/t-1z.md': null } });
+    const reader = model.reader();
+    expect(checkVerbEdge(reject, reader, { gated: true }).findings.map((finding) => finding.message)).toEqual(["'reject' moves along a gates reject edge; draft → done is a forward edge of the 'note' machine"]);
+    expect(checkVerbEdge(moved, reader, { gated: true }).findings.map((finding) => finding.message)).toEqual([
+      `${DOC} (gone at HEAD): the bracket declares pending → backlog, the frontmatter went pending → null`,
+    ]);
+  });
+
+  it('status-outside-wf: no frontmatter, a frontmatter that is no mapping, a status removed, and nothing when the parent\'s memory.yaml does not validate', () => {
+    const model = governedModel();
+    const plain = model.commit({ subject: 'docs: plain', files: { 'docs/memory/task/readme.md': 'No frontmatter.\n', 'docs/memory/task/scalar.md': '---\njust text\n---\n' } });
+    const unstatused = model.commit({ subject: 'docs: drop the status', files: { [DOC]: '---\nid: "t-1"\ntype: task\n---\n' } });
+    model.commit({ subject: 'chore: break memory', files: { '.wingfoil/memory.yaml': INVALID_MEMORY_YAML } });
+    const after = model.commit({ subject: 'docs: tidy', files: { [DOC]: taskDoc('done') } });
+    const reader = model.reader();
+    const outside = (commit: HistoryCommit): string[] => checkStatusOutsideWf(commit, reader, { gated: true }).findings.map((finding) => finding.message);
+    expect(outside(plain)).toEqual([]);
+    expect(outside(unstatused)).toEqual([`${DOC}: its status went pending → (none) in a commit that is not a wf() Memory operation (dl-139)`]);
+    expect(outside(after)).toEqual([]);
+  });
+
+  it('supersedes-pair: an unnamed touched document is skipped; an approved document with no id is named by its file', () => {
+    const model = governedModel();
+    model.commit({ subject: 'wf(adr): add a-1', files: { [ADR('a-1')]: '---\ntype: adr\nstatus: pending\nsupersedes: a-0\n---\n', [ADR('x-1')]: adrDoc('x-1', 'pending', 'a-0') } });
+    const approve = model.commit({ subject: 'wf(adr): approve a-1 [pending → accepted]', body: approvalBody(), author: APPROVER, files: { [ADR('a-1')]: '---\ntype: adr\nstatus: accepted\nsupersedes: a-0\n---\n', [ADR('x-1')]: adrDoc('x-1', 'accepted', 'a-0') } });
+    expect(checkSupersedesPair(approve, model.reader(), { gated: true }).findings.map((finding) => finding.message)).toEqual([
+      `${ADR('a-1')}: approved into 'accepted' with supersedes: a-0, but a-0 is missing at HEAD, not 'superseded': complete the pair with \`wf(adr): finalize a-0 [accepted → superseded]\`, Reason: superseded by a-1 (its supersedes: field), approved in ${approve.sha}.`,
+    ]);
+  });
+
+  it('workflow-record-authority: a record with no parent has no dna.yaml to grant the role', () => {
+    const model = new HistoryModel();
+    const record = model.commit({ subject: 'workflow: finalize p-1 a.b', body: approverLine(APPROVER), author: APPROVER });
+    expect(checkWorkflowRecordAuthority(record, model.reader(), { gated: true }).findings.map((finding) => finding.message)).toEqual([
+      'no .wingfoil/dna.yaml is committed before this commit, so no approval authority can be established',
+    ]);
+  });
+
+  it('the report keeps one of two equal findings, and orders a commit\'s trailer-paragraph findings after its other body findings', () => {
+    const model = governedModel();
+    const subject = 'wf(task): sync t-1 [pending → draft → pending → draft]';
+    const commit = model.commit({ subject, body: 'Reason: a.\nreason: b.\n\nWingFoil-Step: s.b\nWingFoil-Instance: p-1\n\nWingFoil-Version: 0.4.0', files: { [DOC]: taskDoc('draft') } });
+    const hop = { kind: 'illegal-hop', sha: commit.sha, subject, hop: { from: 'draft', to: 'pending' } };
+    const report = buildGovernanceReport(model.reader({ transitionFindings: { [DOC]: [hop, hop] as never } }), { base: null, introducedAt: null }, new Set());
+    const checks = report.findings.map((finding) => `${finding.rule}/${finding.check}`);
+    const body = report.findings.filter((finding) => finding.check === 'body').map((finding) => finding.message);
+    expect(body.length).toBeGreaterThan(1);
+    expect(body).toEqual([...body].sort());
+    expect(checks).toEqual([...body.map(() => 'body/body'), 'body/trailer-paragraph', 'body/trailer-paragraph', 'state/state', 'state/verb-edge']);
+    expect(report.findings.filter((finding) => finding.check === 'trailer-paragraph').map((finding) => finding.message.split(':')[0])).toEqual(['a WingFoil-Step', 'a WingFoil-Instance']);
+    expect(report.findings.filter((finding) => finding.check === 'state').map((finding) => finding.message)).toEqual([`${DOC}: the hop draft → pending is not an edge of the 'task' machine at this commit`]);
+  });
+});
+
+describe('task-365 — the barrel, coreFailed\'s warnings and the default options', () => {
+  it('src/core re-exports every value of the rule module as the same object', () => {
+    const barrel = core as unknown as Record<string, unknown>;
+    for (const [name, value] of Object.entries(leaf)) expect([name, barrel[name]]).toEqual([name, value]);
+  });
+
+  it('coreFailed carries warnings when there are some, and no key for none', () => {
+    expect(coreFailed(1, 'm', ['w'])).toEqual({ ok: true, value: 1, warnings: ['w'], failed: { message: 'm' } });
+    expect('warnings' in coreFailed(1, 'm', [])).toBe(false);
+  });
+
+  it('governanceCheck with no options judges the whole history; prefetch skips an other commit after a broken memory.yaml', () => {
+    const { repo } = governed();
+    repo.commit('docs: seed t-3', { [TASK('t-3')]: taskDoc('draft', '', 't-3') });
+    repo.commit('chore: break memory', { '.wingfoil/memory.yaml': INVALID_MEMORY_YAML });
+    repo.commit('docs: tidy', { [TASK('t-3')]: taskDoc('done', '', 't-3') });
+    const report = governanceCheck(repo.root);
+    expect(report.base).toBeNull();
+    expect(report.findings.filter((finding) => finding.check === 'status-outside-wf').map((finding) => finding.message)).toEqual([
+      `${TASK('t-3')}: its status went (none) → draft in a commit that is not a wf() Memory operation (dl-139)`,
+    ]);
+  });
+
+  it('headDocumentStatus keeps the first of two documents with one id, in path order, and skips one with no id', () => {
+    const { repo } = governed();
+    repo.commit('wf(adr): add a-0', { [ADR('a-0')]: adrDoc('a-0', 'accepted'), [ADR('a-0-copy')]: adrDoc('a-0', 'pending'), [ADR('anon')]: '---\ntype: adr\nstatus: draft\n---\n' });
+    // `a-0-copy.md` sorts before `a-0.md` ('-' before '.'), so its status is the one kept.
+    expect(createGitHistoryReader(repo.root, { head: repo.head() }).headDocumentStatus('a-0')).toBe('pending');
   });
 });
