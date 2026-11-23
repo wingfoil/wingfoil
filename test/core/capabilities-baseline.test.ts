@@ -5,8 +5,9 @@
  *
  * - characterization (passes on first run): the baseline's bytes — `format: 1`, the nine file kinds at `1..1`, the
  *   35 commands of 0.3.2 as a literal (never read from the pinned build, whose pin moves), no capability, written
- *   `JSON.stringify` plus one `\n` in §3.2's order; it equals the §5 fixture minus the `capabilities` command and
- *   minus every name in the fixture's `capabilities`;
+ *   `JSON.stringify` plus one `\n` in §3.2's order; it equals the document built from literals alone — §8's
+ *   "the nine kinds at `1..1`", the 35 commands of 0.3.2, no capability — never from the live §5 fixture, which
+ *   grows with every capability a later task adds (D6 (a));
  * - red until AC 1's function exists: `releaseLines(baseline, §5 fixture)` gives `Formats read: unchanged` and
  *   `Capabilities: ` followed by the fixture's own capabilities, which contain §8's six names (D6: never a count).
  */
@@ -71,15 +72,15 @@ describe('task-363 AC 4 — the 0.3.2 baseline capabilities document (characteri
     expect(doc.capabilities).toEqual([]);
   });
 
-  it('equals the §5 fixture minus the `capabilities` command and minus every name in the fixture\'s capabilities', () => {
-    const fixture = JSON.parse(fixtureText) as Doc;
-    const derived = {
-      format: fixture.format,
-      formats: fixture.formats,
-      commands: fixture.commands.filter((command) => command !== 'capabilities'),
-      capabilities: fixture.capabilities.filter((name) => !fixture.capabilities.includes(name)),
+  it('equals the document built from §8\'s 0.3.2 statement and the literal 0.3.2 command list, not the live §5 fixture', () => {
+    // `spec-019` §8: "the nine kinds at `1..1` …, the 35 commands of 0.3.2, and no capability".
+    const expected: Doc = {
+      format: 1,
+      formats: Object.fromEntries(KINDS.map((kind) => [kind, { lowest: 1, highest: 1 }])),
+      commands: [...COMMANDS_0_3_2],
+      capabilities: [],
     };
-    expect(`${JSON.stringify(derived)}\n`).toBe(baselineText);
+    expect(`${JSON.stringify(expected)}\n`).toBe(baselineText);
   });
 });
 
