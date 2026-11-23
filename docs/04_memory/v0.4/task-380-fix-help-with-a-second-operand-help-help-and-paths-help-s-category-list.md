@@ -465,6 +465,35 @@ Prepared in this worktree and left uncommitted; the approver records each one wi
 
 `bug-452`, `bug-456` and `bug-471` already have a `### Retrospective` (`- None.`), so they need no amendment.
 
+### review fixes (developer, 2026-11-23)
+
+The independent review of `25d4ff775` returned approve with fixes; the approver ruled the two should-fix findings, and
+only those are done here.
+
+- **SF1, docs (`4953da676`).** `docs/01_vision/X_cli-cmds.md`'s `paths` row and its `category` parameter row now say
+  that a category of your own declared in DNA `paths:` is answered too (`task-312`, the `bug-471` class), inside the
+  2.7 revision: no new version, one sentence appended to the 2.7 revision paragraph, no line added (`wc -l
+  docs/01_vision/X_cli-cmds.md` → `542`, so `00_index.md` needs no edit). `npx jest test/docs/x-cli-cmds.test.ts
+  test/docs/vision-index.test.ts test/docs/vision-revision-history.test.ts --maxWorkers=2` → 3 suites, 39 passed.
+- **SF2, `spec-008` §8 (pending amendment, uncommitted).** The approver keeps the option-token rule; §8 now states it
+  in one sentence after the walk paragraph: the path ends at the first option token, an option there is ignored, since
+  an explicit request for help takes precedence (`spec-005` §1), so the help path `memory --bogus add` shows `memory`'s
+  help (pinned by `test/cli/help-path-option-token.integration.test.ts`'s third row). One sentence is appended to
+  `task-380`'s Revision paragraph naming the §8 sentence and the §12 reword; nothing else of it changes. A first
+  wording that named the whole invocation as a `wingfoil …` span failed `npx jest test/docs/name-resolvability.test.ts
+  --maxWorkers=2` (one finding, the span `wingfoil help memory --bogus add` read as a command); reworded, `npx jest
+  test/docs/name-resolvability.test.ts test/validation/secret-scan.test.ts
+  test/cli/workflow-unbound-none.integration.test.ts --maxWorkers=2` → 3 suites, 100 passed (`bug-534` did not fire
+  with the two amendments in the tree).
+- **The `spec-008` `--reason` that replaces the one under `### Pending amendments (approver)` above** (the approver
+  runs one `memory amend spec-008-cli-grammar` for both changes; the bug-514 entry above is unchanged): `--reason
+  "Record the help command's path ending at the first option token in section 8, the option ignored since an explicit
+  request for help takes precedence, and reword section 12's agent execute --interactive row to say that section 2's
+  global --no-interactive has no positive form, as task-380's review ruled for bug-452 and bug-514."`
+- FU3 (the one-operand help refusals print help on stderr before the `error:` line) and FU4 (the comment at
+  `src/cli/init-command.ts:36`): filed as bugs by the orchestrator at the approver's ruling.
+- No full suite is re-run (a docs-only change, as ruled); governance at the end of the round.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
