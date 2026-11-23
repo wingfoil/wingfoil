@@ -31,8 +31,8 @@ whether WingFoil reports, through a capabilities query, the formats it reads and
 
 Options:
 - **(a) Two fixed lines per release, plus the conventional headings.** Every release section carries
-  `Formats read: unchanged` (or one `<kind> N→M` per format that moved) and `Capabilities: none new` (or the new
-  names, once `dl-177` fixes the vocabulary); `Deprecated` and `Breaking` headings are used whenever there is
+  `Formats read: unchanged` (or one `<kind> N→M` per format that moved, in the widened grammar of the Amendment
+  below) and `Capabilities: none new` (or the new names, once `dl-177` fixes the vocabulary); `Deprecated` and `Breaking` headings are used whenever there is
   something to put there; a patch that adds a feature marks it in a fixed way (a `Feature in a patch:` line naming
   it). A test keeps the lines present and well formed.
 - **(b) A machine-readable file beside the CHANGELOG** (for example `docs/releases.json`), one entry per release with
@@ -60,3 +60,32 @@ invisible to anyone who has not installed the release.
 ## Relations
 
 - **Related:** `dl-149` (`format:`), `dl-177` (capabilities query), `dl-092` (patch releases), `task-332`.
+
+## Amendments
+
+**Amendment (2026-11-23, `task-363-write-the-formats-read-and-capabilities-lines-into-every-changelog-release-section-spec-019-task-b`)
+— the widened `Formats read:` grammar, and the layout this decision left to its task.** `spec-019` (`approved`) §8 fixes
+what the two lines say and widens option (a)'s `<kind> N→M`, as its OQ-3 (a) was ruled at approval: each item is
+`<kind> <previous range>→<current range>`, a range written `N` when its lowest and highest format are equal, `L..H`
+otherwise, and `none` for a kind absent on that side (`dna 1→2`, `dna 1→1..2`, `bindings none→1`); the items are
+`, `-joined in code-unit order of the kind, and `→` is U+2192. The capability names come from `spec-019` §4.2, which
+answers Action 3, also in code-unit order. The layout, which `spec-019` §8 leaves to this decision's task:
+
+- **Place.** The two lines are the first two paragraphs of a release section, right under its `## [X.Y.Z]` heading,
+  each one line, `Formats read:` first; a patch's `Feature in a patch: <the feature> (task-<n>)` lines, one paragraph
+  each, follow them; the section's prose and headings come after.
+- **Headings.** `### Breaking`, when it has content, is the section's first `###` heading; `### Deprecated` is used
+  whenever something is deprecated; neither appears empty or twice.
+- **Removals.** `scripts/changelog-section.cjs` fails, naming it, on a capability or a file kind removed while the
+  capabilities document's `format` has not risen (`spec-019` §5); with a higher `format` it writes one `### Breaking`
+  item per removal and one for the format's rise.
+- **The script and its test.** `scripts/changelog-section.cjs` gains `--lines`, which prints the two lines computed
+  from the previous release's fixture (or the 0.3.2 baseline) and the current build's `wingfoil capabilities --format
+  json`, and `--check`, which checks a section's lines against the form above and against that computation. A
+  repository test keeps every section well formed except the seven written before this decision, 0.1.0 to 0.3.2,
+  which are listed by name and never backfilled.
+- **A line without the command.** The script and the baseline are on `main`; a `release/0.3` patch, whose build has no
+  `capabilities` command, writes `Formats read: unchanged` and `Capabilities: none new` by hand, as `spec-019` §8
+  allows when `git diff v<previous> -- src/validation/format.ts` is empty on that line.
+
+Option (a), the Rationale and the Actions are otherwise unchanged.
