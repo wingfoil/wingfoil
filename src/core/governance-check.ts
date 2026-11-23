@@ -268,10 +268,8 @@ const hasOwn = (record: object, key: string): boolean => Object.prototype.hasOwn
 
 /** The ids a subject names: after the verb (without the bracket), or after `to` for `assign`; `null` when unlisted. */
 function subjectIds(subject: string, verb: string): string[] | null {
-  if (verb === 'assign') {
-    const match = ASSIGN_IDS_RE.exec(subject);
-    return match ? (match[1] as string).split(', ') : [];
-  }
+  // `parseMemoryOperation` reads `assign` only in its canonical form, which always has ` to {ids}`.
+  if (verb === 'assign') return ((ASSIGN_IDS_RE.exec(subject) as RegExpExecArray)[1] as string).split(', ');
   const rest = subject.replace(WF_HEAD_RE, '').replace(/\s*\[[^\]]*\]\s*$/, '').trim();
   return ID_LIST_RE.test(rest) ? rest.split(', ') : null;
 }
@@ -303,12 +301,13 @@ function readSubject(commit: HistoryCommit, memoryYaml: ConfigRead<MemoryYamlVal
   if (memoryYaml !== null && memoryYaml.ok && !hasOwn(memoryYaml.value.types, scope)) {
     add('subject', `'${scope}' is not a type of the memory.yaml committed at this commit`);
   }
-  const ids = subjectIds(subject, op);
-  if (ids === null || ids.length === 0) add('subject', "the ids after the verb must be a list separated by ', '");
+  const parsedIds = subjectIds(subject, op);
+  if (parsedIds === null || parsedIds.length === 0) add('subject', "the ids after the verb must be a list separated by ', '");
+  const ids = parsedIds ?? [];
 
   if (BRACKETLESS_VERBS.has(op)) {
     if (ANY_BRACKET_RE.test(subject.slice(head[0].length))) add('bracket', `'${op}' carries no bracket`);
-    return { findings, op, ids: ids ?? [] };
+    return { findings, op, ids };
   }
   const bracket = CANONICAL_BRACKET_RE.exec(subject);
   if (!bracket) {
@@ -318,14 +317,14 @@ function readSubject(commit: HistoryCommit, memoryYaml: ConfigRead<MemoryYamlVal
         ? 'the bracket is not canonical: [from → to], with the U+2192 arrow and single spaces, closing the subject'
         : `'${op}' needs a [from → to] bracket`,
     );
-    return { findings, op, ids: ids ?? [] };
+    return { findings, op, ids };
   }
   const states = (bracket[1] as string).split(' → ');
   if (states.length > 2 && op !== 'sync') add('bracket', `only 'sync' may chain states; '${op}' brackets one hop`);
   if (op === 'deprecate' && states[states.length - 1] !== DEPRECATED_STATE) add('bracket', "'deprecate' ends in 'deprecated'");
   if (op === 'amend' && (states.length !== 2 || states[0] !== states[1])) add('bracket', "'amend' brackets the unchanged state, [s → s]");
   if (op === 'park' && (states.length !== 2 || states[0] === states[1])) add('bracket', "'park' brackets one hop between two different states, [from → to]");
-  return { findings, op, ids: ids ?? [] };
+  return { findings, op, ids };
 }
 
 /** The lines of `body` that start `Approver:`, any letter case. */
@@ -397,7 +396,7 @@ function readFrontmatterFields(text: string | null, label: string): FrontmatterF
 
 /** The first line of an error's message. */
 function firstLine(error: unknown): string {
-  return (error instanceof Error ? error.message : String(error)).split('\n')[0] as string;
+  return (error as Error).message.split('\n')[0] as string;
 }
 
 /** The kinds of edge `from → to` is in `machine`: `forward`, `reject`, `returns`, `deprecate`. */
@@ -415,7 +414,7 @@ function edgeKinds(machine: StateMachine, from: string, to: string): string[] {
 interface TouchedDocument {
   /** Whether the subject names it (§4.5's `isNamed`). */
   readonly named: boolean;
-  /** The path the commit wrote it at, when the subject names it there. */
+  /** The path the commit wrote it at under the name the subject gives it: present exactly when `named`. */
   readonly writtenAt?: string;
 }
 
@@ -452,11 +451,8 @@ function readMemoryCommit(commit: HistoryCommit, reader: HistoryReader): MemoryR
   for (const path of reader.touchedPaths(commit.sha).filter((candidate) => candidate.endsWith('.md'))) {
     const atHead = reader.pathAtHead(path);
     const previous = documents.get(atHead);
-    const namedHere = isNamed(path);
-    documents.set(atHead, {
-      named: previous?.named === true || namedHere,
-      ...(namedHere ? { writtenAt: path } : previous?.writtenAt !== undefined ? { writtenAt: previous.writtenAt } : {}),
-    });
+    const writtenAt = isNamed(path) ? path : previous?.writtenAt;
+    documents.set(atHead, writtenAt === undefined ? { named: false } : { named: true, writtenAt });
   }
   return { op, type, memoryYaml, machine, bracketed, hops, documents };
 }
@@ -691,9 +687,10 @@ export const checkVerbEdge: GovernanceCheckFn = (commit, reader) => {
   if (op !== EDGE_EXEMPT_VERB) {
     for (const [atHeadPath, document] of documents) {
       if (!document.named || reader.existsAtHead(atHeadPath)) continue;
-      const path = document.writtenAt ?? atHeadPath;
-      const parent = firstParent(commit);
-      const before = readFrontmatterFields(parent === null ? null : reader.blob(parent, path), `${path}@${parent}`);
+      const path = document.writtenAt as string;
+      // A machine came from the first parent's memory.yaml, so the commit has a first parent.
+      const parent = firstParent(commit) as string;
+      const before = readFrontmatterFields(reader.blob(parent, path), `${path}@${parent}`);
       const after = readFrontmatterFields(reader.blob(commit.sha, path), `${path}@${commit.sha}`);
       if (before?.unreadable !== undefined || after?.unreadable !== undefined) {
         const newer = [before, after].find((fields) => fields?.newer === true);
@@ -755,9 +752,9 @@ export const checkSupersedesPair: GovernanceCheckFn = (commit, reader) => {
   if (reading === null || reading.op !== 'approve' || reading.machine === undefined) return EMPTY;
   const { machine, type, documents } = reading;
   const findings: CheckFinding[] = [];
-  for (const [atHeadPath, document] of documents) {
+  for (const document of documents.values()) {
     if (!document.named) continue;
-    const path = document.writtenAt ?? atHeadPath;
+    const path = document.writtenAt as string;
     const approved = readFrontmatterFields(reader.blob(commit.sha, path), `${path}@${commit.sha}`);
     if (approved === null || approved.unreadable !== undefined || approved.status === null) continue;
     if (!supersedesEdgeFrom(machine, approved.status)) continue;
@@ -954,7 +951,7 @@ export function createGitHistoryReader(root: string, range: GitHistoryRange): Gi
         } else if (line !== '' && list !== null) {
           // `-M` detects renames only: git reports no copy (`C`) here, `diff.renames=copies` included.
           const [status, first, second] = line.split('\t') as [string, string, string | undefined];
-          if (status.startsWith('R')) list.push({ from: first, to: second ?? null });
+          if (status.startsWith('R')) list.push({ from: first, to: second as string });
           else if (status === 'A') list.push({ from: null, to: first });
           else if (status === 'D') list.push({ from: first, to: null });
           else list.push({ from: first, to: first });
@@ -989,8 +986,8 @@ export function createGitHistoryReader(root: string, range: GitHistoryRange): Gi
     const answer = git(['cat-file', '--batch-check=%(objectname) %(objecttype)'], `${missing.map(({ rev, path }) => `${rev}:${path}`).join('\n')}\n`);
     const lines = answer.split('\n');
     missing.forEach(({ rev, path }, index) => {
-      const [oid, type] = (lines[index] ?? '').split(' ');
-      objectIds.set(blobKey(rev, path), type === 'blob' && oid !== undefined ? oid : null);
+      const [oid, type] = (lines[index] as string).split(' ');
+      objectIds.set(blobKey(rev, path), type === 'blob' ? (oid as string) : null);
     });
   };
   const parents = [...new Set(commits.map((commit) => commit.parents[0]).filter((parent): parent is string => parent !== undefined))];
@@ -1005,9 +1002,9 @@ export function createGitHistoryReader(root: string, range: GitHistoryRange): Gi
     if (!configs.has(key)) {
       let read: ConfigRead<T>;
       try {
-        const text = readBlobs(root, [oid]).get(oid) ?? '';
-        const result = schema.safeParse(parseYaml(text, oid));
-        read = result.success ? { ok: true, value: result.data } : { ok: false, error: result.error.issues[0]?.message ?? 'invalid' };
+        const result = schema.safeParse(parseYaml(readBlobs(root, [oid]).get(oid) as string, oid));
+        // A failed parse carries at least one issue.
+        read = result.success ? { ok: true, value: result.data } : { ok: false, error: (result.error.issues[0] as { message: string }).message };
       } catch (error) {
         read = { ok: false, error: firstLine(error) };
       }
@@ -1058,12 +1055,9 @@ export function createGitHistoryReader(root: string, range: GitHistoryRange): Gi
     isRejectCommit: (token) => {
       let cited = rejectCommits.get(token);
       if (cited === undefined) {
-        try {
-          const run = runGitRead(root, ['log', '--no-show-signature', '-1', '--format=%s', `${token}^{commit}`, '--'], { accepted: [0, 128] });
-          cited = run.status === 0 && parseMemoryOperation(run.stdout.trim()) === 'reject';
-        } catch {
-          cited = false;
-        }
+        // A token that names no commit (or an ambiguous one) is git's exit 128: no citation.
+        const run = runGitRead(root, ['log', '--no-show-signature', '-1', '--format=%s', `${token}^{commit}`, '--'], { accepted: [0, 128] });
+        cited = run.status === 0 && parseMemoryOperation(run.stdout.trim()) === 'reject';
         rejectCommits.set(token, cited);
       }
       return cited;
