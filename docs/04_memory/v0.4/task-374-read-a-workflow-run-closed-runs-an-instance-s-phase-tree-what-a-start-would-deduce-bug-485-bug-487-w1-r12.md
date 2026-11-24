@@ -453,6 +453,26 @@ Left uncommitted in this worktree, each to be recorded with `memory amend` at th
 The two allowlist files (`test/docs/name-resolvability.allowlist.ts`, `test/docs/enumeration-parity.allowlist.ts`) stay
 uncommitted with them and are committed once the amendments are, before red.
 
+
+### take-main (orchestrator, 2026-11-24)
+
+- The branch took `main` at `2fbc5afab` (with `task-365`, `task-363` and `task-381`) in the merge `dc7ebcb0f`, after
+  the design gate and before red, as D9 rules. The merge was clean; the pending amendments were re-applied on top of it
+  unchanged in wording (only stray blank lines that split a table or a paragraph were removed) and committed by the
+  approver's amends `0e259033c` (spec-017), `823acd3f6` (spec-008), `48e7fd4a9` (spec-006) and `455702c76` (this
+  task), then the design record `dda200dfa`. `bug-485` returned to `planned` in `6750bc0ca`, since `task-383` takes it.
+- The allowlist rows were committed in `df168f86e`. The rows of the tree half (spec-006 and spec-017
+  `wingfoil workflow tree` and `workflowTree`, spec-017's `--preview` hint text, spec-008 §11's surplus
+  `workflow tree`) name `task-383`, as the gate rulings provide once part B moves; `heldBy` and `ungatedByType` name
+  this task.
+- Two statements of the design notes above no longer hold at this head:
+  - "Files to touch" counts the commands as 36 today and 37 with `task-365`: `AGENTS.md` §1 now says 37, and the 38th
+    (`workflow tree`) is `task-383`'s since the split.
+  - "Overlap with the other open tasks" describes `task-365` as not yet written: its code is merged
+    (`src/cli/registrar.ts`, `src/core/capabilities.ts`, `error-details.ts`, `exit-code.ts`, `index.ts`, `types.ts`).
+    `registrar.ts` still has the single `operation.renderConsole(result.value)` call site, now followed by a
+    `result.failed` line, and `verify`'s console renderer takes one argument, so the planned second (flags) argument
+    does not break it. The line offsets the design cites in `spec-008` (§1, §11) moved with the merge.
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
