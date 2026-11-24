@@ -6,12 +6,12 @@ kind: custom
 title: "Which baseline a command reads and writes"
 tags: [custom, determinism, git, baseline]
 ref: [REQ-SEC-02, REQ-STATE-02, REQ-SYS-07]
-version: "2.0"
+version: "2.1"
 ---
 
 # Directive — Which baseline a command reads and writes
 
-**Date:** 2026-11-21
+**Date:** 2026-11-24
 
 Custom WingFoil rule. Applies to anyone adding or changing a command, a `src/core` operation, or an
 MCP Tool — every surface, because both surfaces run the same core function (REQ-SYS-05,
@@ -184,7 +184,7 @@ reads and why the wider read cannot be reached by an uncommitted state to the op
 |------|-------------------|----------------------------|--------|
 | `memory add`'s `{n}` sequence counter (`nextSequenceNumber`, `src/memory/add.ts`) | the trees of every local branch (`refs/heads/*`), every remote-tracking ref (`refs/remotes/*`) and `HEAD`, plus the working tree as git sees it (the index and the untracked, non-ignored files), over every folder the type's `path` can resolve to; no network | a number is taken wherever any of those holds it; the read takes the **highest** number and adds one, so a wider baseline can only raise the id, never lower it onto an occupied one or change whether the command refuses | `dl-101` §2 (a); `task-128` (`bug-087`, `bug-162`) |
 | The WIP-limit holder count (`requireWipSlot`, `src/core/memory-transition.ts`), on every verb that keeps the check (`memory add` for the initial state, `submit`, `approve`, the `supersedes:` trigger) | the commit the transition is decided at, plus the tips of the refs the counter reads (`refBaselineCommits`, `src/memory/add.ts`: every local branch, every remote-tracking ref, `HEAD`) and each tip's merge-base with the decided commit (`mergeBasesWith`, `src/storage/commit.ts`); never the working tree; no network | with one branch per task (`git-conventions` §1) a holder started on another branch is invisible at `HEAD`, so a limit counted there refuses nothing; the read uses only commits, each element counts once — in the state a ref records only when that ref changed its `status` since the merge-base, otherwise in the decided commit's (approver ruling 2026-10-11 at `task-274`'s review) — and the refusal says the count depends on which refs were fetched. It **can** refuse the command — the one declared baseline that does — which `dl-156` ratified knowing it | `dl-156` Q1 (a); `task-274` |
-| `verify`'s checks (`governanceCheck`, `src/core/governance-check.ts`) | **committed history**: the commit objects of the range and, per commit, the blobs committed at it, at its first parent (`dna.yaml`, `memory.yaml`) and at `HEAD` (the documents a check reads there); never the working tree or the index | each commit is judged against the configuration in force when it was written, which `HEAD` no longer holds; the read touches only commit objects and committed blobs, so no uncommitted state can cause a finding or hide one, and it decides a read's exit code and gates no write | `spec-020` §2.3, §4.1; `spec-006` §6 item 9 |
+| `verify`'s checks (`governanceCheck`, `src/core/governance-check.ts`), and the same checks behind `memory history`'s unverified mark and `memory search --verify` (`unverifiedFindings`, `spec-020` §4.13) | **committed history**: the commit objects of the range and, per commit, the blobs committed at it, at its first parent (`dna.yaml`, `memory.yaml`) and at `HEAD` (the documents a check reads there); never the working tree or the index | each commit is judged against the configuration in force when it was written, which `HEAD` no longer holds; the read touches only commit objects and committed blobs, so no uncommitted state can cause a finding or hide one, and it decides a read's exit code and gates no write | `spec-020` §2.3, §4.1; `spec-006` §6 item 9 |
 
 The counter's read still gates what the command writes, so it follows the rest of this directive: a
 git read that fails is an error of the operation, never an empty answer (an empty answer would
@@ -297,3 +297,8 @@ Resource (`spec-019`), mirroring `spec-006` §6's row "none: the build only" and
 **Revision 2.0 (2026-11-21, `task-365-ship-wingfoil-verify-with-the-generic-authority-and-state-checks-spec-020`).**
 *Declared baselines* gains its third entry, `verify`'s committed-history read (`spec-020` §2.3), mirroring `spec-006`
 §6's row "committed history" and its item 9. The rule text does not change.
+
+**Revision 2.1 (2026-11-24, `task-378-mark-the-memory-history-entries-no-check-verified-and-check-carries-content`).**
+*Declared baselines*' committed-history entry also names `memory history`'s unverified mark and `memory search
+--verify`, which run `verify`'s checks over the commits a history lists (`spec-020` §4.13, `bug-496`), mirroring
+`spec-006` §6's row "committed history". The rule text does not change.
