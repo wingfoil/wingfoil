@@ -1050,8 +1050,9 @@ verb.
 
 New in 0.4: every entry also carries `carries`, after `reason`: the items the commit's `Carries content:` line
 declares (see [`memory submit`](#wingfoil-memory-submit)), such as `["frontmatter field 'severity'", "the body"]`, read
-back as `memory submit` wrote them, or `null` when the commit has no such line — a pure transition, every other verb,
-and a submit written before the line existed.
+back as `memory submit` wrote them, or `null` when the commit has no such line outside its `Reason:` block — a pure
+transition, every other verb, and a submit written before the line existed. A `Carries content:` line inside a
+`Reason:` block (an approval's reason that happens to hold one) is text of the reason, never a declaration.
 
 New in 0.4: an entry whose commit `wingfoil verify` would flag carries one more key, `unverified`, after `wingfoil`:
 the findings of the governance checks on that commit for this document, each `{rule, check, message}`, in the order
@@ -2002,8 +2003,9 @@ changes no Memory document's status), `supersedes-pair` (an approve that superse
 the other's `finalize`), `approval-agent-trailer` (an approval carries no `Co-Authored-By:` or `AI-Model:` line),
 `workflow-record-authority` (an `Approver:` line on a `workflow:` record is held to the same grammar and authority),
 `trailer-paragraph` (every `WingFoil-*` line sits in the body's final paragraph) and `carries-content` (a
-submit's `Carries content:` line is written once, by a submit only, names only the items `memory submit` declares and
-equals what the commit carries; once an ancestor carries such a line, a submit that carries content declares it). A
+submit's `Carries content:` line, read outside the `Reason:` block, is written once, by a submit only, spelled
+`Carries content: ` with one space, names only the items `memory submit` declares and equals what the commit carries;
+once an ancestor carries such a line, a submit that carries content declares it). A
 commit the shipped verbs write passes every one of them; a finding is a commit written by hand, or by a tool, against a contract it breaks.
 
 `--format json` prints the report on one line, whatever the verdict: `head`, `base` and `introducedAt` (full shas, or
