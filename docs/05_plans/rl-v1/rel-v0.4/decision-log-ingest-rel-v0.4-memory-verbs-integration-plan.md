@@ -56,6 +56,12 @@ implements it makes it.
 - `memory add --type plan` refused the three `--set` values first with `E_MISSING_PATH_VALUE: path pattern
   "docs/05_plans/{scope}/{id}.md" is missing value(s) for: scope`; a fourth, `--set scope=rl-v1/rel-v0.4`, gave the
   expected id `decision-log-ingest-rel-v0.4-memory-verbs-integration-plan`.
+- The plan was made with `memory add`, not `workflow start`, so it carries no `WingFoil-Start:` trailer and is not an open
+  instance: `memory add --type decision-log --workflow decision-log-ingest-rel-v0.4-memory-verbs-integration-plan --step
+  decision-log-ingest.capture` was refused with `workflow is not open`, and `workflow start --dry-run` with the same values
+  with `plan id already exists`. The decision-log was therefore added without `--workflow`/`--step`: its add commit
+  `c5a223279` carries no `WingFoil-Instance:`/`WingFoil-Step:` trailer. The capture is recorded by this plan and by the
+  decision-log's own commits, and the plan is closed by hand (`wf(plan): finalize`) once the decision-log is `ready`.
 
 ### Retrospective
 
