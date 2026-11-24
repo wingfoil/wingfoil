@@ -646,6 +646,206 @@ asked about, as the API does (see Ambiguities).
 
 **Candidate findings.** None.
 
+### green (developer, 2026-11-24)
+
+**Base.** Branch head `861b765e4` (the red record), `git rev-list --count HEAD..main` → `0`: no merge of `main`.
+PATH guard: `command -v wingfoil` → the task's PATH shim; `wingfoil --version` and `node dist/cli.js --version` →
+`0.3.2 (687d693552f3f8b53330e1a40b9b56ae48aedf81)`. Contract: the design, its addendum, the gate rulings (D1–D14 as
+recommended, D12 `dl-241` (b), D6 `npm run setup:hooks`, D8 the `gh api` script), `spec-020` as amended at `bc9c47b6e`,
+`dl-103` as amended at `379955285`, the red `83b77691d` and its notes, whose four ambiguities supervision accepted (the stub
+`gh` answers with `head_sha` equal to the asked commit; the stub checkout links `node_modules`; `wait-governance-check.cjs`
+runs from the repository root; the refusals of the hook and the installer may go to either stream, the installer's success
+line is on stdout).
+
+**Commits.** `16be02bfc` `feat(governance): task-366 — check-governance.cjs runs wingfoil verify, …` (the code, the hook,
+the workflow comments, `CONTRIBUTING.md`, `.wingfoil/`, `docs/cli-reference.md`); `0753125cb` `test(docs): task-366 —
+allowlist the six script predicates spec-020 cites by name, …` (below).
+
+**What changed.**
+- `scripts/check-governance.cjs` (1260 → 717 lines; `wc -l`): `runVerb` spawns `node --no-warnings <dist>/cli.js verify
+  --format json --project <root> [--base <sha>] [--introduced-at <sha>]` (`spawnSync`, `maxBuffer` 1 GiB, `env:
+  process.env`), each revision the full sha the script resolved; parses each stderr line as one JSON document (drops
+  `W_VERIFY_WHOLE_HISTORY:` / `E_VERIFY_FINDINGS:`, prints any other warning as `warning: <text>`, keeps any other error as
+  the error text, a line that is no such document → exit 2 naming it); a completed run is exit 0/1 with a report whose
+  `verdict` is `pass`/`fail`, else exit 2 with the error text or `wingfoil verify exited <n> with no report`; then the
+  unknown id (T-32), missing id and moved-`HEAD` refusals of §6.1 steps 2–3. Findings are re-gated: a base check's by the
+  script's introduction and written without `check`, a later check's by its marker's introduction (`CHECKS`,
+  `markerIntroduction`, unchanged). The three extension checks keep their predicates and messages; `checked`,
+  `otherCommits`, `gatedCommits` are the script's own count, `stateUnchecked` the verb's. Removed: every predicate of the
+  eleven generic checks and the readers only they used (`readRenames`, `readFileChanges` with its dead `C` branch,
+  `readFrontmatterFields`, the state walk, the verb sets and regular expressions). `plan-retrospective` reads the
+  bracket's last state with a reader of its own (`bracketTarget`: the closing bracket, `→` or `->`, as
+  `src/memory/audit.ts` reads it), since the red bans `parseBracketHops` from the script's code; `co-author-identity`
+  keys the approval exclusion on `APPROVER_KEY_RE` (same expression, `/^approver:/i`), since the red bans the old name.
+  `trailerKeysOutsideFinalParagraph` is a delegate to `dist/core`'s (D5). `loadDist` also requires `dist/cli.js`. The
+  header states what the script runs, the three extension checks and the accepted weakness (`spec-020` §6.3).
+- `scripts/check-governance.d.cts`: comments only.
+- `src/core/governance-check.ts`: `trailerKeysOutsideFinalParagraph(body)` exported with TSDoc and used by
+  `checkTrailerParagraph` (no change of behaviour); `renderVerifyConsole`'s three summary lines per `spec-020` §7 as
+  amended (`bug-438`). `src/core/index.ts`: the barrel line. No other hunk (the two places task-378 shares).
+- `.githooks/pre-push` (`bug-417`, D7, D9): `remote="$1"`; candidates `refs/remotes/$remote/main` and
+  `refs/remotes/$remote/release/<n>.<n>` only when `git remote` lists `$remote`; the skipped own ref is under that remote;
+  no `dist/memory/index.js` → exit 1 with the design's refusal line on stderr. Header per §6.4.
+- `scripts/install-hooks.cjs` (new) and `package.json` `"setup:hooks"` (no `prepare`): the design item 5 exits; refusals
+  on stderr, the success and "already" lines on stdout.
+- `scripts/wait-governance-check.cjs` (new): the derivation of `scripts/integration-branch.cjs`, the head of
+  `refs/remotes/<remote>/<branch>` (`--remote`, default `origin`, no fetch), `gh api` polled every `--interval` (default
+  15) up to `--timeout` (default 1800): exit 0 on a completed `governance` run of that sha with `conclusion: success`, 1
+  when every run of it completed otherwise or none completed in time, 2 on a refused kind/version, no tracking ref, `gh`
+  missing or failing, or an answer with no `check_runs` list. It reads the clock only to stop polling.
+- `.github/workflows/governance.yml`: header comments only (§6.4); `git diff 861b765e4 -- .github/workflows/governance.yml`
+  changes no line below `name: governance`.
+- `CONTRIBUTING.md`: "Set up a clone" (`npm ci`, `npm run build`, `npm run setup:hooks`); 27 lines against
+  `COLLABORATION.md`'s 290 (`wc -l`).
+- `.wingfoil/directives/custom/git-conventions.md` 2.9 → 3.0, `**Date:** 2026-11-24`: §1 rule 6's accepted-finding
+  sentence (`bug-448`, D11 (a)); §9: the script runs `wingfoil verify` and adds three checks (the list split in two),
+  "The pre-push hook is required" (`dl-190` (a), `npm run setup:hooks`), the hook's base from the remote pushed to
+  (`bug-417`), the tag's wait (`dl-190` (c)); the sentence `git config core.hooksPath .githooks` kept
+  (`test/cli/git-hooks.test.ts`). Its history entry names `task-366`, `bug-448` and keeps `(prev 2.9`.
+- `.wingfoil/workflows/custom/release-publishing.yaml` 2.4 → 2.5 (`tag`'s fifth pre-check, its description) and
+  `.wingfoil/workflows/bindings.yaml` 3.2 → 3.3 (the `governance-check-passed` binding), each entry naming `task-366` and
+  `dl-190`.
+- `docs/cli-reference.md`: the `verify` example's three summary lines, and one sentence in "What it cannot prove" that a
+  merge commit's own resolution of a Memory document is judged by no check (`dl-241` (b), as `spec-020` §0 words it).
+- **A file the design did not name:** `test/docs/name-resolvability.allowlist.ts` (`0753125cb`), six `historical`
+  entries for `spec-020`: its Context table and §4 cite the old script's `AGENT_TRAILER_RE`, `approverGrammarFindings`,
+  `authorityFindings`, `checkBodyAndAuthority`, `checkSubjectAndBracket` and `verbEdgeFinding` by name and line, and the
+  green removed them, so `test/docs/name-resolvability.test.ts` failed with those six unlisted names (the run below). The
+  design's "no allowlist row" was measured before the removal. Not a red file.
+
+**red → green** (the task's PATH shim first, `--maxWorkers=2`):
+- `npx jest test/cli/check-governance-extension.test.ts test/core/governance-check.test.ts --maxWorkers=2` → `Test
+  Suites: 2 passed`, `Tests: 127 passed` (red: extension 29 failed / 2 passed, governance-check 2 failed / 94 passed).
+- `bash waitslot.sh && npm test -- <the 16 script suites of the design> test/core/governance-check-script-cases.test.ts
+  --maxWorkers=2` → `Test Suites: 17 passed, 17 total`, `Tests: 323 passed, 323 total`.
+- After `16be02bfc` (the `.wingfoil/` pins read `HEAD`): `bash waitslot.sh && npm test --
+  test/core/release-publishing-governance-wait.test.ts test/cli/wait-governance-check.test.ts test/cli/install-hooks.test.ts
+  test/cli/git-hooks.test.ts test/cli/governance-workflow.test.ts test/directives test/core/workflow-integration-branch.test.ts
+  test/cli/evidence-only-tag.test.ts test/cli/check-governance-extension.test.ts test/core/governance-check.test.ts
+  test/core/governance-check-git-reader.test.ts test/core/governance-check-structure.test.ts
+  test/core/verify-registration.test.ts test/cli/verify.integration.test.ts test/core/release-publishing-merge-forward.test.ts
+  test/core/workflow-repository-conformance.test.ts test/cli/workflow-unbound-none.integration.test.ts test/docs test/lint
+  --maxWorkers=2` → `Test Suites: 1 failed, 90 passed, 91 total`, `Tests: 1 failed, 1448 passed, 1449 total`, the one
+  failure `name-resolvability` › "finds no unresolved name the allowlist does not list" with the six names above; after
+  `0753125cb`, `npx jest test/docs/name-resolvability.test.ts --maxWorkers=2` → `11 passed`.
+
+**Per AC.**
+- AC 1 (red-first) — `check-governance-extension.test.ts`'s argv, re-gating, `check`-key, `stateUnchecked`, stderr and
+  ten structural cases pass; `--json` keys (characterization) pass; `grep -nE 'verifyTransitionConsistency|…|WINGFOIL_TRAILER_RE'
+  scripts/check-governance.cjs` → nothing.
+- AC 2 (red-first) — the eight T-32/T-33/could-not-run cases pass.
+- AC 3 (characterization) — `governance-check-script-cases.test.ts` and every `test/cli/check-governance*.test.ts` pass
+  (the 17-suite run).
+- AC 4 (red-first) — the three header cases pass (extension, `git-hooks`, `governance-workflow`).
+- AC 5 (red-first) — `install-hooks.test.ts` (6) and the two `git-conventions` §9 cases pass; the `dl-103` amendment was
+  recorded at the design gate (`379955285`).
+- AC 6 (red-first) — `release-publishing-governance-wait.test.ts` (6), `wait-governance-check.test.ts` (7) and the two
+  exact `tag` pins pass. No test or run of mine called the real `gh`; I ran no `gh`.
+- AC 7 — the `git-hooks.test.ts` cases 1–3, the build guard (red-first) and case 4 (characterization) pass.
+- AC 8 (red-first) — the two verb console cases and the two script cases pass; `--json` unchanged (T-30 below).
+- AC 9 (red-first) — the four rule-6 cases pass.
+
+**`.wingfoil/` on the pinned build** (after `16be02bfc`, in the worktree): `npm run -s check:mcp` → exit `0` (`pinned
+wingfoil 0.3.2 … (prompts: 9, resources: 4, tools: 0)`; the build under development `(prompts: 9, resources: 5, tools:
+7)`); `npm run -s wingfoil -- workflow show release-publishing --format json` → exit `0`, `tag`'s fifth pre-check listed
+as `{"token":"governance-check-passed(kind: \"{release.kind}\", version: \"{release.version}\")","binding":{"kind":"run",
+"source":"project","argv":["node","scripts/wait-governance-check.cjs","--kind","{kind}","--version","{version}"],
+"severity":"reject"},"evaluated":false}`; `workflow list` → exit `0`; both print on stderr only the one `…:.wingfoil/dna.yaml:
+unknown field(s) ignored: team.roles[4].human_only, …` line the design recorded at its head (the pinned 0.3.2 predates
+`human_only`); `directives list --format json` → exit `0`, `git-conventions` at `"version":"3.0"`.
+
+**T-30 parity** (`spec-020` as amended; no whole-history run). Before: `node scripts/check-governance.cjs --base origin/main
+--json` at `861b765e4` with the old script (`origin/main` = `fb5b73e01`, 61 commits) → exit `0`, 20 s, `checked` 27,
+`otherCommits` 28, `gatedCommits` 27, 0 findings, 0 `stateUnchecked`, `introducedAt` `fcd435695`. After, on the same head
+and range: a scratch clone of the worktree outside it, detached at `861b765e4`, its `scripts/check-governance.cjs` replaced
+by the new one and `dist`/`node_modules` linked to the worktree's, `node scripts/check-governance.cjs --base
+fb5b73e0149df92ccb03bf305ccdb0c171cdf29a --json` → exit `0`, 36 s, and the two JSON reports compared with `node -e`
+(`JSON.stringify` of both) → `equal: true`: the same verdict, `gated` (none) after §6.1 step 3, `stateUnchecked`, counts
+and introductions. In the worktree at `0753125cb`: `node scripts/check-governance.cjs --base origin/main --json` → exit `0`,
+43 s, 0 findings, `otherCommits` 30 (this phase's two commits).
+
+### refactor (developer, 2026-11-24)
+
+No restructuring beyond green was needed: the extension checks keep their predicates and messages verbatim (the
+17-suite run and T-30 above), and the script's one new reader is `bracketTarget`. Gates, in the worktree at `0753125cb`,
+the three pending bug amendments in the working tree, one `bash waitslot.sh` (it printed nothing; `ps -eo pid,etime,args` showed it at `01:22` elapsed when this task's jest started), then in sequence:
+- `npm run build` → exit `0`;
+- `npm test -- --maxWorkers=2` → exit `0`, `Test Suites: 745 passed, 745 total`, `Tests: 13744 passed, 13744 total`
+  (`test/cli/workflow-unbound-none.integration.test.ts`, the document-parity suites, `test/docs/cli-reference.test.ts` and
+  `test/lint` among them: no `bug-534` failure with the bug amendments uncommitted);
+- `npm run -s test:coverage -- --maxWorkers=2` → exit `0`, `All files | 99.07 | 97.02 | 98.77 | 99.54` (statements,
+  branches, functions, lines), the same 745 suites and 13744 tests;
+- `npm run -s typecheck`, `npm run -s lint`, `npm run -s docs:api` → each exit `0`.
+
+**Coverage against the baseline** `169ecd71b` (`sha256sum -c coverage-summary.json.sha256` in its directory → `OK`),
+covered/total (uncovered): lines 10777/10834 (57) → 11523/11576 (53); statements 12925/13072 (147) → 13881/14011 (130);
+functions 2546/2582 (36) → 2737/2771 (34); branches 8051/8333 (282) → 9039 total, 8770 covered (269). Per changed source
+file: `src/core/index.ts` lines 683/686 (3) → 744/747 (3), statements 852/866 (14) → 927/936 (9), functions 191/209
+(18) → 222/240 (18), branches 387/403 (16) → 431/442 (11); `src/core/governance-check.ts` postdates the baseline (not in
+it), at HEAD lines 532/532, statements 682/683, functions 114/114, branches 554/557, and its uncovered branches are
+`BRDA` lines 408, 585 and 1162 of `coverage/lcov.info`, none in this task's two hunks (`:822-865`, `:1225-1250`).
+Uncovered grows nowhere.
+
+**`scripts/` branches (outside jest's coverage) and the test reaching each.** `check-governance.cjs`: usage errors and
+unresolvable revisions (`check-governance.test.ts` › "as a command"); verb exit 0/1 with a report (every fixture suite);
+exit 1 with no report, exit 2, no stderr (`check-governance-extension` AC 2); a non-JSON stderr line; a dropped warning,
+a dropped error, a kept warning (AC 1 stderr case); unknown id in `checks` and in a finding (T-32); missing id; moved
+`HEAD`; re-gating base / marker / fallback (AC 1 findings cases, `check-governance-enforcement`); `check` dropped or kept
+(AC 1); `config-version` with and without `--base` (`check-governance-enforcement`, `config-version-raise.integration`);
+`plan-retrospective` with and without an entry, `bracketTarget` on `[active → done]` (`check-governance-plan-retrospective`,
+`p02-plan-retrospective`); `co-author-identity` every message (`check-governance-co-author-identity*`); the sort's trailer
+branch (`check-governance-workflow-records`); `formatReport`'s zero and non-zero lines (AC 8); the
+`trailerKeysOutsideFinalParagraph` delegate (`check-phase-report`). Not reached by a test: `dist/cli.js` missing while
+`dist/memory/index.js` exists (the stub checkout always has a `cli.js`), a kept `error` document on a completed run, a
+signal-killed child (`exited <signal>`), `bracketTarget`'s `->` form. `install-hooks.cjs`: every exit of AC 5's table
+(unset, already, `.husky`, an active hook, outside a work tree); not reached: a failing `git config --local` write.
+`wait-governance-check.cjs`: every exit of AC 6's table; not reached: `gh` exiting non-zero, an answer with no
+`check_runs`, a missing tracking ref, a usage error.
+
+### self-review (developer, 2026-11-24)
+
+- AC 1–9 met, each by the pins named under green, which pass in the full run above. Absences with their positives: the
+  ten generic identifiers are absent from the script's code (`grep -cE …` → `0`) while the three extension checks' messages
+  are still produced (their suites pass); `.github/workflows/governance.yml` changes no step (`git diff 861b765e4 --
+  .github/workflows/governance.yml`, non-comment lines → nothing) while its header names `wingfoil verify`.
+- T4: `git log --first-parent --no-merges --format=%h 861b765e4..HEAD -- <the sixteen red files>` → nothing (exit `0`).
+- Scope: the design's files, plus `test/docs/name-resolvability.allowlist.ts` (green, named there). `src/core/governance-check.ts`
+  changed in its two places only (`git diff 861b765e4 -- src/core/governance-check.ts`: the trailer reader and
+  `renderVerifyConsole`'s summary). `scripts/check-phase-report.cjs` and `scripts/release-health/measure.cjs` unchanged
+  (their suites pass).
+- Same-class instances in the files touched: the verb's and the script's summaries now use the same words; the hook's
+  only other `origin` read was its candidate loop (`grep -n origin .githooks/pre-push` → comment lines only).
+- `git rev-list --count HEAD..main` → `0` at the start and at the end of refactor: no merge of `main`.
+- Invisible-character grep over the changed files → no hit, before each commit.
+- **Stopped before submit, as ruled:** `task-378` merges first; after it, `git merge --no-edit main`, `CHECKS` gains its
+  marker (D13), the gates are rerun, then `memory submit` and the three bug syncs.
+
+### Checkpoint hand-off (developer, 2026-11-24)
+
+- **The first push after the merge.** CI's `governance` job keeps its steps (`npm ci`, `npm run build`, `node
+  scripts/check-governance.cjs --base "$BASE"`); the script now spawns `node --no-warnings dist/cli.js verify --format json
+  --project <checkout> --base <BASE> --introduced-at fcd435695…`, re-gates with its introductions and adds its three
+  checks. On this branch's range that gives the old script's report byte for byte (T-30); the run took 36–43 s here
+  against the old script's 20 s.
+- **The hook** runs only in a clone that ran `npm run setup:hooks`: in this repository the approver's shared clone, once,
+  after the merge (worktrees share the setting; agents never run it). From then on a push from a checkout without
+  `dist/` is refused, and a push runs the check over the commits not yet on the remote's line.
+- **A contributor** runs once per clone: `npm ci && npm run build && npm run setup:hooks` (`CONTRIBUTING.md`).
+- **The next tag** (`v0.4.0`): after pushing `main`, `release-publishing.tag`'s pre-check `governance-check-passed` runs
+  `node scripts/wait-governance-check.cjs --kind minor --version v0.4` (`gh` authenticated).
+- **After `task-378`'s merge** the verb reports a twelfth check; until this task adds its marker to `CHECKS` the script
+  exits `2` with T-32's message, by design.
+
+### Pending amendments (approver)
+
+Prepared in the worktree, left uncommitted (`git status --short` lists the three bug files), each a `### Retrospective`
+entry replacing the bug's capture-time `- None.`, to be recorded with `memory amend` before the bugs close; the bug
+syncs `[in-progress → in-review]` follow at submit, after the resume:
+
+- `bug-417-the-pre-push-hook-takes-its-base-candidates-from-the-remote-named-origin-whatever-remote-is-pushed-to-and-no-test-pins-a-local-branch-named-origin-main` — `--reason "Record the retrospective of the fix: task-366 makes the pre-push hook read the remote it pushes to and pins the look-alike local branch in test/cli/git-hooks.test.ts."`
+- `bug-438-check-governance-s-console-summary-says-on-n-commits-for-the-commits-with-findings-so-a-clean-gate-log-reads-0-findings-on-0-commits` — `--reason "Record the retrospective of the fix: task-366 makes the summary lines of the script and of wingfoil verify name what they count, as spec-020 section 7 now pins."`
+- `bug-448-git-conventions-rule-6-runs-check-governance-in-the-merge-forward-but-says-nothing-of-findings-the-approver-already-accepted-so-the-merge-forward-of-v0.3.2-reports-the-two-q-10-assign-subjects-with-no-rule-for-carrying-them` — `--reason "Record the retrospective of the fix: task-366 adds to git-conventions rule 6 how a finding the approver accepted is carried at the merge forward."`
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -659,3 +859,10 @@ asked about, as the API does (see Ambiguities).
   them the prototype's own. Proposal: a design that swaps a component's engine runs the old suites against a prototype.
 - `name-resolvability` reads a full task id containing `.cjs` as a configuration key, so a Revision heading cannot cite
   this task by its full id; it cites `task-366`.
+- The design's "no allowlist row" for `test/docs/name-resolvability.test.ts` was measured before green removed the
+  script's predicates, which `spec-020`'s Context table cites by name: the green's targeted run failed it with six
+  unlisted names (`0753125cb`). Proposal: a design that deletes code also greps the specs for the names it deletes.
+- The heavy-gate slot dominated the phase: the two green batches waited behind another task's full suite and coverage run
+  (`ps -eo pid,etime,args` → `3396957 10:09 … task-374/node_modules/jest/bin/jest.js --maxWorkers=2`, later `3913423 05:45
+  … task-374/… --coverage --maxWorkers=2`, each with this task's `waitslot.sh` still waiting), then the refactor's
+  24-minute full suite (`Time: 1449.425 s`) and its coverage run.
