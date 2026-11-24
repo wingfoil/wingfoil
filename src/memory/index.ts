@@ -117,6 +117,7 @@ export {
   formatMemoryCommitMessage,
   normalizeReason,
   parseApproverTrailerLine,
+  parseCarriesContent,
   parseReasonBlock,
   parseVersionTrailer,
   reasonDefect,
@@ -132,7 +133,18 @@ export {
   verifyFrontmatterEdit,
 } from './frontmatter-edit';
 export type { DocumentScope } from './frontmatter-edit';
-export { describeSubmitContent, LINE_ENDINGS_ITEM, missingRequiredFields, notApplicableRefusals, REJECTION_REASON_FIELD, renderSubmitDocument, withLineEndingsOf } from './submit';
+export {
+  describeCommittedSubmitContent,
+  describeSubmitContent,
+  isCarriesItem,
+  LINE_ENDINGS_ITEM,
+  missingRequiredFields,
+  notApplicableRefusals,
+  orderCarriesItems,
+  REJECTION_REASON_FIELD,
+  renderSubmitDocument,
+  withLineEndingsOf,
+} from './submit';
 export type { NotApplicableProblem, NotApplicableRefusal } from './submit';
 export { renderRejectDocument } from './reject';
 export {
@@ -145,6 +157,7 @@ export {
   parseBracketHops,
   parseMemoryOperation,
   reconstructMemoryTransitions,
+  transitionConsistencyFindings,
   verifyTransitionConsistency,
 } from './audit';
 export type {

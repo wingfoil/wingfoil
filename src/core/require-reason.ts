@@ -41,9 +41,9 @@ const MISSING_REASON_ERROR = 'missing required argument: --reason';
 
 /**
  * The given reason in its declared normal form, or a `UsageError` (exit 2) naming the defect that
- * makes it unrecordable — blank, carrying a control character other than tab or newline, carrying a
- * reserved trailer line, or ending in a paragraph shaped like one (`reasonRefusalMessage`,
- * `src/memory/commit-message.ts`).
+ * makes it unrecordable — blank, carrying a control character other than tab or newline, stating
+ * nothing (only a `<placeholder>`, or no word: `bug-498`, `task-378`), carrying a reserved trailer
+ * line, or ending in a paragraph shaped like one (`reasonRefusalMessage`, `src/memory/commit-message.ts`).
  *
  * The message is deliberately NOT {@link MISSING_REASON_ERROR}: that string answers the *omitted*
  * case, and `spec-008-cli-grammar` §2 plus the `P1.7`/`P1.8` BDD features quote it verbatim for that

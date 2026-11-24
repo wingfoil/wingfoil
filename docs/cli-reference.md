@@ -1016,6 +1016,12 @@ Other modified or staged files are left as they are and are not committed.
   separators (U+2028, U+2029). The refusal exits `2` and names the first one by code point, e.g.
   `error: invalid flag value: --reason must not contain a control character other than tab or newline
   (found U+001B)`.
+- New in 0.4: it must state a reason. A reason that is only one placeholder token in angle brackets (`<the reply>`,
+  nothing else around it) or holds no letter or digit at all (`...`, `-`) is refused at exit `2` with
+  `error: invalid flag value: --reason must state a reason: it holds no word, or only a <placeholder>`, before anything
+  is written. `<a> and <b>`, `ok` and `1` are accepted. The rule holds on every command that takes `--reason`
+  (`workflow finalize`, `adopt` and `rekey` included), and `wingfoil verify`'s `body` check reports a recorded reason
+  of that shape.
 - Trailing whitespace is stripped, runs of blank lines collapse to one, and leading/trailing blank lines
   are dropped.
 
@@ -1041,6 +1047,39 @@ New in 0.3: `operation` is one of eleven declared verbs, the five above plus `st
 `finalize`, `sync`, `amend`, `park` and `assign`. A subject with any other verb reads as `null`, and so does a
 configuration commit such as `wf(dna): …`, `wf(directive): …` or `wf(workflow): …`, whatever its
 verb.
+
+New in 0.4: every entry also carries `carries`, after `reason`: the items the commit's `Carries content:` line
+declares (see [`memory submit`](#wingfoil-memory-submit)), such as `["frontmatter field 'severity'", "the body"]`, read
+back as `memory submit` wrote them, or `null` when the commit has no such line — a pure transition, every other verb,
+and a submit written before the line existed.
+
+New in 0.4: an entry whose commit `wingfoil verify` would flag carries one more key, `unverified`, after `wingfoil`:
+the findings of the governance checks on that commit for this document, each `{rule, check, message}`, in the order
+`verify` reports them. The checks run on the commits the history lists, judge the commit's subject, body, trailers and
+authority and this document's own transition, and treat every commit as gated (as `verify` with neither option does);
+a finding about another document of the same commit does not mark the entry. An entry with no `unverified` key is one
+every check verified, so a hand edit that moved the status (`docs: tidy`) or an approval forged by hand reads as
+marked, never as a genuine operation:
+
+```json
+{
+  "sha": "…",
+  "operation": null,
+  "from": "pending",
+  "to": "backlog",
+  "subject": "docs: tidy",
+  "wingfoil": null,
+  "unverified": [
+    {
+      "rule": "state",
+      "check": "status-outside-wf",
+      "message": "docs/memory/task/t-1.md: its status went pending → backlog in a commit that is not a wf() Memory operation (dl-139)"
+    }
+  ]
+}
+```
+
+`--format console` prints the same value as indented JSON, and `--format yaml` the same structure.
 
 ```console
 $ wingfoil memory history task-001-my-first-task
@@ -1093,7 +1132,7 @@ this WingFoil reads up to format 1: upgrade WingFoil"`, and the warning naming t
 Find documents by keyword and/or metadata.
 
 ```
-wingfoil memory search [<keyword>] [--type <type>] [--status <status>] [--tag <tag>]
+wingfoil memory search [<keyword>] [--type <type>] [--status <status>] [--tag <tag>] [--verify]
 ```
 
 The keyword is a case-insensitive substring matched against each document's title, id, tags and body
@@ -1123,6 +1162,12 @@ $ wingfoil memory search --status approved --type task
 
 No match is still a success (exit `0`), with `"matches": []` and
 `"message": "no documents matched the query"`.
+
+New in 0.4: `--verify` reads each match's history as [`memory history`](#wingfoil-memory-history) does and marks a
+match whose history holds a commit the governance checks of `wingfoil verify` flag: such a match carries
+`unverified`, the shas of those commits, oldest first (the entries `memory history <id>` marks). A match with no
+flagged commit, and every match without `--verify`, has no such key. It reads every match's history, so it is slower
+than a plain search.
 
 New in 0.3: every match is a Memory element, with an `id` and a `type`. A Markdown file under a
 Memory directory with neither, such as an old plan with no frontmatter, is left out. A file whose
@@ -1948,16 +1993,18 @@ With neither option every commit reachable from `HEAD` is judged and gated, and 
 `warning: W_VERIFY_WHOLE_HISTORY: no --base and no --introduced-at, so every commit reachable from HEAD is judged and
 gated; pass --base <rev> to judge a range, or --introduced-at <rev> to report older history without failing`.
 
-The checks, each with the version that first ships it (`0.4.0` for all eleven): `subject` (the
+The checks, each with the version that first ships it (`0.4.0` for all twelve): `subject` (the
 `wf({type}): {verb} {ids}` grammar), `bracket` (the `[from → to]` bracket each verb takes), `body` (the `Approver:` and
 `Reason:` lines), `authority` (an approval is authored by an `approver` of the first parent's `dna.yaml`, and its
 `Approver:` line names that author), `state` (every hop is an edge of the machine and matches the frontmatter),
 `verb-edge` (each verb moves along its own kind of edge), `status-outside-wf` (a commit that is no Memory operation
 changes no Memory document's status), `supersedes-pair` (an approve that supersedes another element is followed by
 the other's `finalize`), `approval-agent-trailer` (an approval carries no `Co-Authored-By:` or `AI-Model:` line),
-`workflow-record-authority` (an `Approver:` line on a `workflow:` record is held to the same grammar and authority)
-and `trailer-paragraph` (every `WingFoil-*` line sits in the body's final paragraph). A commit the shipped verbs write
-passes every one of them; a finding is a commit written by hand, or by a tool, against a contract it breaks.
+`workflow-record-authority` (an `Approver:` line on a `workflow:` record is held to the same grammar and authority),
+`trailer-paragraph` (every `WingFoil-*` line sits in the body's final paragraph) and `carries-content` (a
+submit's `Carries content:` line is written once, by a submit only, names only the items `memory submit` declares and
+equals what the commit carries; once an ancestor carries such a line, a submit that carries content declares it). A
+commit the shipped verbs write passes every one of them; a finding is a commit written by hand, or by a tool, against a contract it breaks.
 
 `--format json` prints the report on one line, whatever the verdict: `head`, `base` and `introducedAt` (full shas, or
 `null`), `checks` (each `{check, rule, since}`), `commits` (`range`, `memory`, `other`, `gated`), `findings` (each
@@ -1968,7 +2015,7 @@ what could not be judged, such as a commit made before `.wingfoil/memory.yaml` e
 ```console
 $ wingfoil verify --base origin/main
 wingfoil verify: 1 wf() commits and 0 other commits in f1d56a84c17b58ef6da54125c19ecdb5db1c8ad8..HEAD (1 gated; every commit gated)
-checks: subject 0.4.0, bracket 0.4.0, body 0.4.0, authority 0.4.0, state 0.4.0, verb-edge 0.4.0, status-outside-wf 0.4.0, supersedes-pair 0.4.0, approval-agent-trailer 0.4.0, workflow-record-authority 0.4.0, trailer-paragraph 0.4.0
+checks: subject 0.4.0, bracket 0.4.0, body 0.4.0, authority 0.4.0, state 0.4.0, verb-edge 0.4.0, status-outside-wf 0.4.0, supersedes-pair 0.4.0, approval-agent-trailer 0.4.0, workflow-record-authority 0.4.0, trailer-paragraph 0.4.0, carries-content 0.4.0
 FAIL — gated:
   ae5b0fd46b380a04c64e05d9f35b9cc01bd00685 authority/authority: the author <stranger@example.invalid> holds no approver role in team.members (dl-094)
       wf(task): approve task-1 [pending → backlog]

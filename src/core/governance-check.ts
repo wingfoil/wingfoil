@@ -29,13 +29,17 @@ import {
   CONFIGURATION_SCOPES,
   computeMemoryContentRoots,
   DEPRECATED_STATE,
+  describeCommittedSubmitContent,
+  isCarriesItem,
   isMachineEdge,
   loadMemoryDocumentsAtRev,
   MEMORY_OPERATIONS,
   type MemoryTransition,
   MemoryYaml,
+  orderCarriesItems,
   parseApprovalMetadata,
   parseBracketHops,
+  parseCarriesContent,
   parseCommitReason,
   parseMemoryOperation,
   reasonRefusalMessage,
@@ -43,8 +47,8 @@ import {
   resolveStateMachine,
   SUPERSEDED_STATE,
   supersedesEdgeFrom,
+  transitionConsistencyFindings,
   type TransitionFinding,
-  verifyTransitionConsistency,
 } from '../memory';
 import type { MemoryYaml as MemoryYamlValue, StateMachine } from '../memory/schema';
 import { AGENT_TRAILER_LINE_RE, APPROVER_LINE_RE, readBlobs, readRevisionPaths, requireCommitName, runGitRead, splitFrontmatter } from '../storage';
@@ -116,6 +120,11 @@ export interface HistoryReader {
   isRejectCommit(token: string): boolean;
   /** The `status:` of the document whose `id` is `id` at `HEAD`: `null` without one, `undefined` when no document has the id. */
   headDocumentStatus(id: string): string | null | undefined;
+  /**
+   * Whether a proper ancestor of `sha` carries a body line starting exactly `Carries content: ` (`spec-020` §4.14,
+   * `task-378`): from then on a submit that carries content and declares none is a finding.
+   */
+  carriesLineBefore(sha: string): boolean;
 }
 
 /** What a check knows of the commit beyond the history: whether it is gated under the starting mode (§5.1). */
@@ -201,6 +210,7 @@ export const GOVERNANCE_CHECKS: readonly GovernanceCheckEntry[] = Object.freeze(
       ['approval-agent-trailer', 'body'],
       ['workflow-record-authority', 'body'],
       ['trailer-paragraph', 'body'],
+      ['carries-content', 'body'],
     ] as const
   ).map(([check, rule]) => Object.freeze({ check, rule, since: SINCE })),
 );
@@ -430,6 +440,18 @@ interface MemoryReading {
   readonly documents: ReadonlyMap<string, TouchedDocument>;
 }
 
+/**
+ * §4.5's naming rule: whether the subject of a commit names the document at a path. Every token of the subject, not
+ * only the parsed id list `ids`, names a document: by its full id or by its short id.
+ */
+function subjectNames(subject: string, ids: readonly string[]): (path: string) => boolean {
+  const named = new Set([...ids, ...subject.split(/[\s,[\]]+/)]);
+  return (path) => {
+    const id = basename(path, '.md');
+    return named.has(id) || [...named].some((token) => token !== '' && id.startsWith(`${token}-`));
+  };
+}
+
 /** The state reading of `commit`, or `null` when it is no Memory `wf()` commit with a `wf()` head. */
 function readMemoryCommit(commit: HistoryCommit, reader: HistoryReader): MemoryReading | null {
   if (!isMemoryCommit(commit)) return null;
@@ -441,12 +463,7 @@ function readMemoryCommit(commit: HistoryCommit, reader: HistoryReader): MemoryR
   const machine = memoryYaml !== null && memoryYaml.ok && hasOwn(memoryYaml.value.types, type) ? resolveStateMachine(memoryYaml.value, type) : undefined;
   const bracketed = ANY_BRACKET_RE.test(commit.subject);
   const hops = bracketed ? parseBracketHops(commit.subject) : null;
-  // Every token of the subject, not only the parsed id list, names a document: by its full id or by its short id.
-  const named = new Set([...ids, ...commit.subject.split(/[\s,[\]]+/)]);
-  const isNamed = (path: string): boolean => {
-    const id = basename(path, '.md');
-    return named.has(id) || [...named].some((token) => token !== '' && id.startsWith(`${token}-`));
-  };
+  const isNamed = subjectNames(commit.subject, ids);
   const documents = new Map<string, TouchedDocument>();
   for (const path of reader.touchedPaths(commit.sha).filter((candidate) => candidate.endsWith('.md'))) {
     const atHead = reader.pathAtHead(path);
@@ -844,6 +861,73 @@ export const checkTrailerParagraph: GovernanceCheckFn = (commit) => {
   );
 };
 
+/** A `Carries content:` key line, any letter case (`spec-020` §4.14). */
+const CARRIES_KEY_RE = /^carries content:/i;
+/** The key as `memory submit` writes it, and the text it is followed by (`spec-008` §2). */
+const CARRIES_KEY = 'Carries content:';
+const CARRIES_KEY_TEXT_RE = /^carries content:[ \t]?/i;
+const CARRIES_REF = '(spec-008 §2, bug-287)';
+
+/**
+ * `carries-content` (`spec-020` §4.14, `bug-287`, category `body`): on a non-merge Memory `wf()` commit whose verb
+ * parsed, a `Carries content:` line is a submit's alone, written once, with its key spelled `Carries content:` and
+ * items of `spec-008` §2's five forms that equal what the commit carries — computed from the named documents' blobs at
+ * the first parent and at the commit ({@link describeCommittedSubmitContent}, their union in the declared order); a
+ * submit that carries content declares it, once an ancestor of the commit carries a line
+ * ({@link HistoryReader.carriesLineBefore}). A named document absent at either revision is not compared.
+ */
+export const checkCarriesContent: GovernanceCheckFn = (commit, reader) => {
+  if (isMerge(commit) || !isMemoryCommit(commit)) return EMPTY;
+  const op = WF_HEAD_RE.test(commit.subject) ? parseMemoryOperation(commit.subject) : null;
+  if (op === null) return EMPTY;
+  const keyLines = commit.body.split('\n').filter((line) => CARRIES_KEY_RE.test(line));
+  const messages: string[] = [];
+  if (op !== 'submit') {
+    if (keyLines.length > 0) messages.push(`'${op}' declares no carried content: only a submit writes a Carries content: line ${CARRIES_REF}`);
+    return outcome(messages.map((message) => ({ rule: 'body', check: 'carries-content', message })));
+  }
+  if (keyLines.length > 1) messages.push(`${keyLines.length} Carries content: lines; a submit declares one ${CARRIES_REF}`);
+  if (keyLines.some((line) => !line.startsWith(CARRIES_KEY))) messages.push(`the Carries content: key is written \`Carries content:\` ${CARRIES_REF}`);
+
+  // The declaration, read from the first key line whatever its spelling (the spelling is the row above's).
+  const first = keyLines[0];
+  const declared = first === undefined ? null : (parseCarriesContent(first.replace(CARRIES_KEY_TEXT_RE, `${CARRIES_KEY} `)) as string[]);
+  let wellFormed = true;
+  if (declared !== null && first !== undefined) {
+    const index = declared.findIndex((item) => !isCarriesItem(item));
+    if (index !== -1) {
+      const written = first.replace(CARRIES_KEY_TEXT_RE, '').split(', ')[index] as string;
+      messages.push(`the Carries content: line names '${written}', which is not an item spec-008 §2 declares (bug-287)`);
+      wellFormed = false;
+    }
+  }
+
+  // What the commit carries: the named documents present at the first parent and at the commit.
+  const parent = firstParent(commit);
+  const isNamed = subjectNames(commit.subject, subjectIds(commit.subject, op) ?? []);
+  const items: string[] = [];
+  let compared = false;
+  for (const change of parent === null ? [] : reader.fileChanges(commit.sha)) {
+    if (change.from === null || change.to === null || !change.to.endsWith('.md') || !(isNamed(change.to) || isNamed(change.from))) continue;
+    const before = reader.blob(parent as string, change.from);
+    const after = reader.blob(commit.sha, change.to);
+    if (before === null || after === null) continue;
+    const carried = describeCommittedSubmitContent(before, after);
+    if (carried === null) continue;
+    compared = true;
+    items.push(...carried);
+  }
+  const computed = orderCarriesItems(items);
+  if (compared && declared === null && computed.length > 0 && reader.carriesLineBefore(commit.sha)) {
+    messages.push(`'submit' carries ${computed.join(', ')} but declares no Carries content: line ${CARRIES_REF}`);
+  }
+  if (compared && declared !== null && wellFormed && JSON.stringify(declared) !== JSON.stringify(computed)) {
+    const carries = computed.length === 0 ? 'nothing beyond its state move' : computed.join(', ');
+    messages.push(`the Carries content: line declares ${declared.join(', ')}, but the commit carries ${carries} ${CARRIES_REF}`);
+  }
+  return outcome(messages.map((message) => ({ rule: 'body', check: 'carries-content', message })));
+};
+
 /** Every check, in the order `governanceCheck` runs them on a commit (§4's order). */
 const CHECK_FUNCTIONS: readonly GovernanceCheckFn[] = [
   checkSubject,
@@ -857,6 +941,7 @@ const CHECK_FUNCTIONS: readonly GovernanceCheckFn[] = [
   checkApprovalAgentTrailer,
   checkWorkflowRecordAuthority,
   checkTrailerParagraph,
+  checkCarriesContent,
 ];
 
 // --- The git reader ------------------------------------------------------------------------------------------------
@@ -869,6 +954,18 @@ export interface GitHistoryRange {
   readonly base?: string;
   /** The full sha `--introduced-at` resolved to: it and its ancestors are history (§5.1). */
   readonly introducedAt?: string;
+  /**
+   * The commits to read instead of a range, in this order (`git log --no-walk=unsorted`): `memory history`'s mark
+   * (`spec-020` §4.13, `task-378`). Exclusive with `base`.
+   */
+  readonly commits?: readonly string[];
+  /**
+   * Per sha, the only paths {@link HistoryReader.touchedPaths} and {@link HistoryReader.fileChanges} report (a file
+   * change when either side is one of them): the mark's element's document, at the commit and at its first parent.
+   */
+  readonly paths?: ReadonlyMap<string, readonly string[]>;
+  /** Frontmatter walks already read, by path at `HEAD`, which answer {@link HistoryReader.transitions} for those paths. */
+  readonly walks?: ReadonlyMap<string, readonly MemoryTransition[]>;
 }
 
 /** A `<rev>:<path>` read the git reader can batch ahead of the checks. */
@@ -899,10 +996,18 @@ export interface GitHistoryReader extends HistoryReader {
 export function createGitHistoryReader(root: string, range: GitHistoryRange): GitHistoryReader {
   const git = (args: readonly string[], input?: string): string =>
     runGitRead(root, ['-c', 'core.quotePath=false', ...args], input === undefined ? {} : { input }).stdout;
-  const revisions = range.base === undefined ? [range.head] : [`${range.base}..${range.head}`];
+  if (range.commits !== undefined && range.base !== undefined) throw new Error('a history reader reads a range or a list of commits, not both');
+  const listed = range.commits;
+  // A list of commits is read in its own order (`--no-walk=unsorted`, the shas on stdin); a range oldest first.
+  const reverse = listed === undefined ? ['--reverse'] : [];
+  const revisions = listed !== undefined ? ['--no-walk=unsorted', '--stdin'] : range.base === undefined ? [range.head] : [`${range.base}..${range.head}`];
+  const stdin = listed === undefined ? undefined : `${listed.join('\n')}\n`;
+  const logOf = (args: readonly string[]): string => (listed !== undefined && listed.length === 0 ? '' : git(['log', '--no-show-signature', ...args, ...revisions], stdin));
+  const only = range.paths;
+  const kept = (sha: string, path: string | null): boolean => only === undefined || (path !== null && (only.get(sha) ?? []).includes(path));
 
-  // The range's commits, oldest first.
-  const fields = git(['log', '--no-show-signature', '--reverse', '--format=%H%x00%P%x00%an%x00%ae%x00%s%x00%b%x00', ...revisions]).split('\0');
+  // The range's commits, oldest first (a list: in its order).
+  const fields = logOf([...reverse, '--format=%H%x00%P%x00%an%x00%ae%x00%s%x00%b%x00']).split('\0');
   const commits: HistoryCommit[] = [];
   for (let index = 0; index + 6 <= fields.length; index += 6) {
     const [sha, parents, authorName, authorEmail, subject, body] = fields.slice(index, index + 6) as [string, string, string, string, string, string];
@@ -919,20 +1024,28 @@ export function createGitHistoryReader(root: string, range: GitHistoryRange): Gi
   // The paths each commit touches, a rename as two paths.
   const touched = new Map<string, string[]>();
   let current: string[] | null = null;
-  for (const line of git(['log', '--no-show-signature', '--no-renames', '--name-only', '--format=%x01%H', ...revisions]).split('\n')) {
+  let currentSha = '';
+  for (const line of logOf(['--no-renames', '--name-only', '--format=%x01%H']).split('\n')) {
     if (line.startsWith('\u0001')) {
       current = [];
-      touched.set(requireCommitName(line.slice(1), 'git log --name-only'), current);
-    } else if (line !== '' && current !== null) {
+      currentSha = requireCommitName(line.slice(1), 'git log --name-only');
+      touched.set(currentSha, current);
+    } else if (line !== '' && current !== null && kept(currentSha, line)) {
       current.push(line);
     }
   }
 
   // Where each path renamed inside the range ended up.
   const forward = new Map<string, string>();
-  for (const line of git(['-c', 'diff.renameLimit=0', 'log', '--no-show-signature', '--reverse', '-M', '--diff-filter=R', '--name-status', '--format=', ...revisions]).split('\n')) {
+  const renames = listed !== undefined && listed.length === 0 ? '' : git(['-c', 'diff.renameLimit=0', 'log', '--no-show-signature', ...reverse, '-M', '--diff-filter=R', '--name-status', '--format=%x01%H', ...revisions], stdin);
+  let renameSha = '';
+  for (const line of renames.split('\n')) {
+    if (line.startsWith('\u0001')) {
+      renameSha = line.slice(1);
+      continue;
+    }
     const [status, from, to] = line.split('\t');
-    if (status !== undefined && status.startsWith('R') && from && to) forward.set(from, to);
+    if (status !== undefined && status.startsWith('R') && from && to && (kept(renameSha, from) || kept(renameSha, to))) forward.set(from, to);
   }
 
   const atHead = new Set(git(['ls-tree', '-r', '--name-only', range.head]).split('\n'));
@@ -944,17 +1057,24 @@ export function createGitHistoryReader(root: string, range: GitHistoryRange): Gi
     if (changes === undefined) {
       changes = new Map();
       let list: FileChange[] | null = null;
-      for (const line of git(['-c', 'diff.renameLimit=0', 'log', '--no-show-signature', '--no-merges', '-M', '--name-status', '--format=%x01%H', ...revisions]).split('\n')) {
+      let sha = '';
+      const log = listed !== undefined && listed.length === 0 ? '' : git(['-c', 'diff.renameLimit=0', 'log', '--no-show-signature', '--no-merges', '-M', '--name-status', '--format=%x01%H', ...revisions], stdin);
+      for (const line of log.split('\n')) {
         if (line.startsWith('\u0001')) {
           list = [];
-          changes.set(requireCommitName(line.slice(1), 'git log --name-status'), list);
+          sha = requireCommitName(line.slice(1), 'git log --name-status');
+          changes.set(sha, list);
         } else if (line !== '' && list !== null) {
           // `-M` detects renames only: git reports no copy (`C`) here, `diff.renames=copies` included.
           const [status, first, second] = line.split('\t') as [string, string, string | undefined];
-          if (status.startsWith('R')) list.push({ from: first, to: second as string });
-          else if (status === 'A') list.push({ from: null, to: first });
-          else if (status === 'D') list.push({ from: first, to: null });
-          else list.push({ from: first, to: first });
+          const change: FileChange = status.startsWith('R')
+            ? { from: first, to: second as string }
+            : status === 'A'
+              ? { from: null, to: first }
+              : status === 'D'
+                ? { from: first, to: null }
+                : { from: first, to: first };
+          if (kept(sha, change.from) || kept(sha, change.to)) list.push(change);
         }
       }
     }
@@ -1029,7 +1149,27 @@ export function createGitHistoryReader(root: string, range: GitHistoryRange): Gi
   };
   const consistencyWalks = new Map<string, { value: readonly TransitionFinding[] } | { error: unknown }>();
   const frontmatterWalks = new Map<string, { value: readonly MemoryTransition[] } | { error: unknown }>();
+  for (const [path, walk] of range.walks ?? []) frontmatterWalks.set(path, { value: walk });
+  const transitions = (path: string): readonly MemoryTransition[] =>
+    memo(frontmatterWalks, path, () => reconstructMemoryTransitions(root, path, { strict: true }));
   const rejectCommits = new Map<string, boolean>();
+
+  // The commits a proper ancestor of which carries a `Carries content: ` line, read on the first question.
+  let afterLine: Set<string> | undefined;
+  const carriesLineBefore = (sha: string): boolean => {
+    if (afterLine === undefined) {
+      const found = new Set<string>();
+      const lines = git(['log', '--no-show-signature', '--format=%H', '--grep=^Carries content: ', range.head]).split('\n').filter(Boolean).reverse();
+      for (const line of lines) {
+        if (found.has(line)) continue;
+        for (const descendant of git(['rev-list', '--ancestry-path', `${line}..${range.head}`]).split('\n')) {
+          if (descendant !== '') found.add(descendant);
+        }
+      }
+      afterLine = found;
+    }
+    return afterLine.has(sha);
+  };
 
   let headStatuses: Map<string, string | null> | undefined;
 
@@ -1049,9 +1189,11 @@ export function createGitHistoryReader(root: string, range: GitHistoryRange): Gi
     prefetch,
     memoryYamlAt: (rev) => configAt(rev, MEMORY_YAML_PATH, MemoryYaml),
     dnaYamlAt: (rev) => configAt(rev, DNA_YAML_PATH, DnaYaml),
+    // The consistency walk is computed from the frontmatter walk of the same path, one walk per document (`task-378`).
     transitionFindings: (path, machine) =>
-      memo(consistencyWalks, `${path}\0${JSON.stringify(machine ?? null)}`, () => verifyTransitionConsistency(root, path, machine)),
-    transitions: (path) => memo(frontmatterWalks, path, () => reconstructMemoryTransitions(root, path, { strict: true })),
+      memo(consistencyWalks, `${path}\0${JSON.stringify(machine ?? null)}`, () => transitionConsistencyFindings(transitions(path), machine)),
+    transitions,
+    carriesLineBefore,
     isRejectCommit: (token) => {
       let cited = rejectCommits.get(token);
       if (cited === undefined) {
@@ -1106,6 +1248,20 @@ function statusOutsideWfRequests(reader: HistoryReader, commits: readonly Histor
 }
 
 /**
+ * §3's order of the findings of one commit, as a comparator over `findings` (listed in the order written): by category,
+ * a `trailer-paragraph` finding after the other `body` findings and among them in the order written, the others by
+ * message.
+ */
+function commitFindingOrder<T extends CheckFinding>(findings: readonly T[]): (a: T, b: T) => number {
+  const written = new Map(findings.map((finding, index) => [finding, index]));
+  const isTrailer = (finding: T): number => (finding.check === 'trailer-paragraph' ? 1 : 0);
+  return (a, b) =>
+    RULES.indexOf(a.rule) - RULES.indexOf(b.rule) ||
+    isTrailer(a) - isTrailer(b) ||
+    (isTrailer(a) === 1 ? (written.get(a) as number) - (written.get(b) as number) : a.message < b.message ? -1 : a.message > b.message ? 1 : 0);
+}
+
+/**
  * Judge every commit `reader` lists with every check, and assemble `spec-020` §7's report: findings de-duplicated by
  * commit, category and message (the first kept), sorted by commit order, category and message — a commit's
  * `trailer-paragraph` findings after its other `body` findings in the order written (§3); `gated` iff the commit is not
@@ -1139,15 +1295,8 @@ export function buildGovernanceReport(
     if (!unique.has(key)) unique.set(key, finding);
   }
   const deduplicated = [...unique.values()];
-  const written = new Map(deduplicated.map((finding, index) => [finding, index]));
-  const isTrailer = (finding: GovernanceFinding): number => (finding.check === 'trailer-paragraph' ? 1 : 0);
-  const findings = deduplicated.sort(
-    (a, b) =>
-      (order.get(a.sha) as number) - (order.get(b.sha) as number) ||
-      RULES.indexOf(a.rule) - RULES.indexOf(b.rule) ||
-      isTrailer(a) - isTrailer(b) ||
-      (isTrailer(a) === 1 ? (written.get(a) as number) - (written.get(b) as number) : a.message < b.message ? -1 : a.message > b.message ? 1 : 0),
-  );
+  const withinCommit = commitFindingOrder(deduplicated);
+  const findings = deduplicated.sort((a, b) => (order.get(a.sha) as number) - (order.get(b.sha) as number) || withinCommit(a, b));
 
   return {
     head: reader.head,
@@ -1182,6 +1331,68 @@ export function governanceCheck(root: string, options: GovernanceCheckOptions = 
   const reader = createGitHistoryReader(root, { head, ...(base === undefined ? {} : { base }), ...(introducedAt === undefined ? {} : { introducedAt }) });
   reader.prefetch(statusOutsideWfRequests(reader, reader.commits()));
   return buildGovernanceReport(reader, { base: base ?? null, introducedAt: introducedAt ?? null }, reader.history);
+}
+
+/** One commit `memory history` lists for an element: its sha, and the element's path there and at its first parent. */
+export interface UnverifiedEntry {
+  readonly sha: string;
+  readonly path: string;
+  readonly parentPath: string | null;
+}
+
+/** The element whose history {@link unverifiedFindings} marks. */
+export interface UnverifiedElement {
+  /** The full sha of `HEAD`; resolved from the repository when absent. */
+  readonly head?: string;
+  /** The element's document, at `HEAD`. */
+  readonly path: string;
+  /** The commits `memory history` lists, oldest first. */
+  readonly entries: readonly UnverifiedEntry[];
+  /** The frontmatter walk `memory history` read at `path` (`reconstructMemoryTransitions`), reused when no revision of it is unreadable. */
+  readonly walk?: readonly MemoryTransition[];
+}
+
+/**
+ * `memory history`'s unverified mark (`spec-020` §4.13, `task-378`, `bug-496`): every check of §4 run with
+ * `gated: true` on each commit the element's history lists, through the git reader created for those commits
+ * ({@link GitHistoryRange.commits}) and limited, within each commit, to the element's own document
+ * ({@link GitHistoryRange.paths}); the history's walk answers the element's frontmatter walk. The answer maps each sha
+ * whose commit the checks flag to its findings, de-duplicated by category and message and ordered as §3 orders one
+ * commit's; a sha with none is absent, and a `stateUnchecked` reason is not a mark. Map order: the entries' order.
+ *
+ * @throws `StorageError` when git cannot answer.
+ */
+export function unverifiedFindings(root: string, element: UnverifiedElement): ReadonlyMap<string, readonly CheckFinding[]> {
+  const marks = new Map<string, readonly CheckFinding[]>();
+  if (element.entries.length === 0) return marks;
+  const head = element.head ?? resolveRevision(root, 'HEAD');
+  const paths = new Map<string, string[]>();
+  for (const entry of element.entries) {
+    const list = paths.get(entry.sha) ?? [];
+    for (const path of [entry.path, entry.parentPath]) if (path !== null && !list.includes(path)) list.push(path);
+    paths.set(entry.sha, list);
+  }
+  const walk = element.walk;
+  const reader = createGitHistoryReader(root, {
+    head,
+    commits: [...paths.keys()],
+    paths,
+    ...(walk !== undefined && walk.every((transition) => transition.unreadable === undefined) ? { walks: new Map([[element.path, walk]]) } : {}),
+  });
+  reader.prefetch(statusOutsideWfRequests(reader, reader.commits()));
+  for (const commit of reader.commits()) {
+    const unique = new Map<string, CheckFinding>();
+    for (const check of CHECK_FUNCTIONS) {
+      for (const { rule, check: name, message } of check(commit, reader, { gated: true }).findings) {
+        const key = `${rule}\0${message}`;
+        if (!unique.has(key)) unique.set(key, { rule, check: name, message });
+      }
+    }
+    if (unique.size === 0) continue;
+    const findings = [...unique.values()];
+    marks.set(commit.sha, findings.sort(commitFindingOrder(findings)));
+  }
+  return marks;
 }
 
 /** `rule count, …` of `findings`, in §3's category order, the categories with none left out. */

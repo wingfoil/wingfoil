@@ -84,6 +84,12 @@ function firstControlCharacter(text: string): string | null {
   return null;
 }
 
+/** A reason that is one placeholder token, the whole text (`bug-498`): `<`, then no `<`, `>` or line break, then `>`. */
+const PLACEHOLDER_REASON_RE = /^<[^<>\n]+>$/u;
+
+/** A Unicode letter or digit: a reason holding none states nothing (`bug-498`). */
+const WORD_CHARACTER_RE = /[\p{L}\p{N}]/u;
+
 /** The `Reason:` key, at the start of a line. */
 const REASON_KEY_RE = /^Reason:[ \t]*/;
 
@@ -100,6 +106,13 @@ export type ReasonDefect =
    * point ({@link reasonRefusalMessage}).
    */
   | 'control-character'
+  /**
+   * States nothing (`bug-498`, `task-378`, `spec-008` §2's sixth case): the whole normalized text is one
+   * angle-bracketed placeholder token (`<the reply>`: no `<`, `>` or line break inside), or it holds no Unicode
+   * letter or digit (`...`, `-`). Judged after the control characters and before the reserved trailer keys, by
+   * shape as every other case (`dl-070` (A)), never against a dictionary of words.
+   */
+  | 'placeholder'
   /**
    * Carries a line starting `Approver:`, `Reason:` or `WingFoil-Version:`, in any letter case — a
    * forged trailer line (bug-042 F3; `dl-111` Q1 (A)).
@@ -124,6 +137,7 @@ export type ReasonDefect =
 const REASON_DEFECT_MESSAGES: Readonly<Record<ReasonDefect, string>> = {
   blank: 'invalid flag value: --reason must not be blank',
   'control-character': 'invalid flag value: --reason must not contain a control character other than tab or newline',
+  placeholder: 'invalid flag value: --reason must state a reason: it holds no word, or only a <placeholder>',
   'reserved-trailer-line':
     'invalid flag value: --reason must not contain a line starting with "Approver:", "Reason:" or "WingFoil-Version:"',
   'trailing-trailer-paragraph':
@@ -219,6 +233,7 @@ export function reasonDefect(reason: string, context: ReasonContext = {}): Reaso
   const normalized = normalizeReason(reason);
   if (normalized === '') return 'blank';
   if (firstControlCharacter(normalized) !== null) return 'control-character';
+  if (PLACEHOLDER_REASON_RE.test(normalized) || !WORD_CHARACTER_RE.test(normalized)) return 'placeholder';
 
   const lines = normalized.split('\n');
   if (lines.some((line) => RESERVED_TRAILER_LINE_RE.test(line))) return 'reserved-trailer-line';
@@ -390,6 +405,36 @@ function escapeCarriesItem(item: string): string {
     else escaped += asCode ? `\\u{${code.toString(16).toUpperCase().padStart(4, '0')}}` : character;
   }
   return escaped;
+}
+
+/** The inverse of {@link escapeCarriesItem}: `\\` reads as one backslash, `\u{XXXX}` as the character it names. */
+function unescapeCarriesItem(item: string): string {
+  return item.replace(/\\(?:\\|u\{([0-9A-Fa-f]{1,6})\})/gu, (escape: string, code: string | undefined) => {
+    if (code === undefined) return '\\';
+    const point = Number.parseInt(code, 16);
+    // No writer escapes a code point beyond Unicode's last one: such a text is kept as written, never thrown on.
+    return point > 0x10ffff ? escape : String.fromCodePoint(point);
+  });
+}
+
+/** The prefix of the content declaration line, exactly as {@link formatMemoryCommitMessage} writes it. */
+const CARRIES_LINE_PREFIX = `${CARRIES_KEY} `;
+
+/**
+ * The items a submit's `Carries content:` line declares (`spec-008` §2, `bug-287`, `task-378`), or `null` when the
+ * body has no line starting exactly `Carries content: ` — a pure transition, every verb other than `submit`, and a
+ * submit written before the line existed. The first such line counts; its text is split on `, ` and each item
+ * unescaped, the inverse of the writer's escape, so an item reads back exactly as `formatMemoryCommitMessage` was
+ * given it. The reader of `memory history`'s `carries` and of `wingfoil verify`'s `carries-content` check
+ * (`spec-020` §4.14). Pure (REQ-SYS-07).
+ */
+export function parseCarriesContent(body: string): string[] | null {
+  const line = body
+    .replace(/\r\n?/g, '\n')
+    .split('\n')
+    .find((candidate) => candidate.startsWith(CARRIES_LINE_PREFIX));
+  if (line === undefined) return null;
+  return line.slice(CARRIES_LINE_PREFIX.length).split(', ').map(unescapeCarriesItem);
 }
 
 /**
