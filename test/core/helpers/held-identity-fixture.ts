@@ -10,6 +10,10 @@
  * - {@link writeTwoRunsProject}: two marked mains, `sw-life-cycle` (iterating the release lines, then their releases)
  *   and `hotfix` (iterating the releases), both with `release-1`'s `sprint-planning` on their frontier, so both hold
  *   `bug-1-crash` (`release: "release-1"`); `order` says which of the two starts last.
+ * - {@link writeNestedHeldProject} (fix round 2, the re-review's ancestor variant): one marked main `sw-life-cycle`
+ *   iterating the release lines (`release-line-cycle` with no `approve` phase), then their releases through the
+ *   `produces:`-first `sprint`; `rl-1` sits at its `planning` gate and scopes, with `release-1`, the frontier step
+ *   `sprint.sprint-goal@release:release-1`, whose trail is `rl-1` then `release-1`.
  *
  * Not a `.test.ts` file, so Jest never collects it as a suite.
  */
@@ -97,16 +101,19 @@ phases:
     produces: [ docs/sunset.md ]
 `;
 
-const RELEASE_LINE_CYCLE = `name: release-line-cycle
-includable: true
-element: release-line
-phases:
-  - name: approve
+/** The release-line cycle; with `approveFirst`, an approval phase comes before its releases. */
+function releaseLineCycle(approveFirst: boolean): string {
+  const approve = approveFirst ? `  - name: approve
     role: tech-lead
     actions:
       - memory.approve
     approval: { by_role: approver }
-  - name: releases
+` : '';
+  return `name: release-line-cycle
+includable: true
+element: release-line
+phases:
+${approve}  - name: releases
     include: sprint
     iterate_over: release
     where: { release-line: "{release-line.id}", status: [ planning, in-development ] }
@@ -115,6 +122,7 @@ phases:
     actions:
       - element.set_state(done)
 `;
+}
 
 const HOTFIX = `name: hotfix
 startable: true
@@ -173,11 +181,14 @@ function startMarked(root: string, id: string, workflow: string): void {
   git(root, ['commit', '--quiet', '-m', `wf(plan): add ${id}`, '-m', `WingFoil-Start: ${workflow}`]);
 }
 
-/** The release lines, the releases and the two bugs every variant shares; `release1Extra` adds fields to `release-1`. */
-function writeMemory(root: string, release1Extra: string): void {
+/**
+ * The release lines, the releases and the two bugs every variant shares; `release1Extra` adds fields to `release-1`,
+ * `rl1Status` is `rl-1`'s status (`active` unless a variant says otherwise).
+ */
+function writeMemory(root: string, release1Extra: string, rl1Status = 'active'): void {
   writeFixtureFile(root, 'docs/vision.md', '# Vision\n');
   writeFixtureFile(root, 'docs/stories.md', '# Stories\n');
-  writeFixtureFile(root, 'docs/planning/rl-1.md', element('release-line', 'rl-1', 'active'));
+  writeFixtureFile(root, 'docs/planning/rl-1.md', element('release-line', 'rl-1', rl1Status));
   writeFixtureFile(root, 'docs/planning/rl-2.md', element('release-line', 'rl-2', 'planning'));
   writeFixtureFile(root, 'docs/planning/releases/release-1.md', element('release', 'release-1', 'planning', `release-line: "rl-1"\n${release1Extra}`));
   writeFixtureFile(root, 'docs/planning/releases/release-2.md', element('release', 'release-2', 'releasing', 'release-line: "rl-1"\n'));
@@ -206,7 +217,7 @@ export const TWO_RUNS = { lifeCycle: 'sw-life-cycle-1-plan', hotfix: 'hotfix-1-p
 export function writeTwoRunsProject(root: string, options: { readonly startedLast: 'hotfix' | 'sw-life-cycle' }): void {
   writeConfiguration(root, {
     'workflows/custom/sw-life-cycle.yaml': SW_LIFE_CYCLE,
-    'workflows/custom/release-line-cycle.yaml': RELEASE_LINE_CYCLE,
+    'workflows/custom/release-line-cycle.yaml': releaseLineCycle(true),
     'workflows/custom/sprint.yaml': sprint(false),
     'workflows/custom/hotfix.yaml': HOTFIX,
   });
@@ -217,4 +228,21 @@ export function writeTwoRunsProject(root: string, options: { readonly startedLas
   const ordered = options.startedLast === 'hotfix' ? starts : [...starts].reverse();
   for (const [id, workflow] of ordered) startMarked(root, id, workflow);
   writeMemory(root, '');
+}
+
+/** The instance {@link writeNestedHeldProject} opens. */
+export const NESTED_INSTANCE = 'sw-life-cycle-1-plan';
+
+/**
+ * Write and commit the nested project at `root`: `rl-1` (`planning`) and `release-1` (`planning`, `release-line:
+ * "rl-1"`) scope the frontier step `sprint.sprint-goal@release:release-1`, whose trail is `rl-1` then `release-1`.
+ */
+export function writeNestedHeldProject(root: string): void {
+  writeConfiguration(root, {
+    'workflows/custom/sw-life-cycle.yaml': SW_LIFE_CYCLE,
+    'workflows/custom/release-line-cycle.yaml': releaseLineCycle(false),
+    'workflows/custom/sprint.yaml': sprint(true),
+  });
+  startMarked(root, NESTED_INSTANCE, 'sw-life-cycle');
+  writeMemory(root, '', 'planning');
 }
