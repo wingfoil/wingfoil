@@ -496,6 +496,37 @@ and `unverifiedFindings(root, { path, entries: [{ sha, path, parentPath }] })` (
 2>/dev/null | head -0`, chained to a test-file grep while checking an existing test's imports. Its output was discarded
 (`head -0`) and no source file was opened; no expected value comes from it. Recorded here as the directive asks.
 
+### red send-back (qa, 2026-11-24)
+
+**Send-back commit `8a490d630`** (`git log -1 --format='%H %s'` → `8a490d630664265127c72141dc837b8767e0dbee test(memory):
+task-378 — qa send-back: memory search --verify passes the flag as the CLI builds it`), one file:
+`test/core/memory-search-verify.test.ts`. Base unchanged: `git rev-list --count HEAD..main` → `0`, no merge. PATH guard:
+`command -v wingfoil` → the task's PATH shim; `wingfoil --version` and `node dist/cli.js --version` → `0.3.2
+(bcf10f3c48a2e639836b0fe631dc7efd7637772a-dirty)`.
+
+**What changed and why.** The red's helper called the registered `memory search` fn as `fn({ root, options: { verify: true } })`.
+`--verify` is a boolean flag (`spec-008`'s grammar: a flag takes no value), and `options` holds the string-valued options only:
+a flag reaches the fn at the top level of the params under its own name, the shape `test/core/directive-assign.test.ts` uses for
+`force: true` (`directiveAssignFn()({ root: repo, options: { directive: 'testing', role: 'developer' }, force: true })`). The
+helper is now `search(root, flags = {})`, calling `fn({ root, options: {}, ...flags })`; every `--verify` call passes
+`{ verify: true }` at the top level, so the "with the flag" half of the T-1 case now exercises the flag. Both cases keep their
+intent and expected values; the "For the developer" line of the red above (`memorySearch` with `options: { verify: true }`)
+reads `memorySearch` with `verify: true` beside `options`.
+
+**Runs.** `npx jest test/core/memory-search-verify.test.ts test/cli/memory-history-mark.integration.test.ts --maxWorkers=2
+--noStackTrace --json --outputFile=<scratch>` → `Tests: 10 failed, 1 passed, 11 total`: `memory-search-verify` 1/2,
+`memory-history-mark.integration` 9/9, as at red. `npx tsc --noEmit -p tsconfig.json` → exit `2`, the nine intended errors the
+red lists (TS2305 `checkCarriesContent`, `unverifiedFindings`, `parseCarriesContent` twice, `isCarriesItem`,
+`orderCarriesItems`; TS2724 `describeCommittedSubmitContent`; TS2339 and TS2353 `carriesLineBefore`), no new one.
+`npx jest test/lint --maxWorkers=2` → `1 failed, 164 passed`: `typecheck.clean`, the same intended errors.
+`npx jest test/validation/secret-scan.test.ts --maxWorkers=2` → `85 passed`. The invisible-character grep on the file → no hit.
+
+**Class.**
+- T-9's case stays **red-first** and fails on the assertion: `verified.map((match) => [match.id, match.unverified])` received
+  `[["t-1", undefined]]` where `[["t-1", ["40174b32754bd56e3f65125b1bc700baee243595"]]]` (the `docs: tidy` sha) is expected.
+- T-1's case is a **characterization guard**: it passes today and must keep passing (the flag marks no match on T-1's shape and
+  changes nothing else); it now passes with the flag actually reaching the fn.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
