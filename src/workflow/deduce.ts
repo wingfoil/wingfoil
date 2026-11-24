@@ -475,8 +475,10 @@ export interface InstanceDeduction {
  * An element sitting at a gate (`spec-017` §5.1, §8 `UngatedElement`, from `minor-v0.4`, `bug-487`), and the open
  * instance that **holds** it, if one does: one of its frontmatter fields is named after the type of an element `S` that
  * scopes an entry of the trail of a frontier step of that instance, with a value equal to `S`'s id or to `S`'s own
- * `version` field — or the element is itself such an `S`, held whatever its fields, `heldBy.element` naming it. Absent
- * when no open instance holds it.
+ * `version` field — or the element is itself such an `S`, held whatever its fields. `heldBy` records the first holder in
+ * instance, frontier and trail order (see `holderOf`): the element itself, unless an earlier entry of that trail holds it
+ * by a field (a nested iteration element whose own field names its parent is held by that ancestor). Absent when no
+ * open instance holds it.
  */
 export interface GatedElement extends ElementRef {
   readonly heldBy?: { readonly instance: string; readonly element: ElementRef };
