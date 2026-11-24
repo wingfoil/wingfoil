@@ -22,7 +22,9 @@
  * - `isRejectCommit(token)` — a hex token of 7 to 40 characters that prefixes a known commit whose subject reads as a
  *   `reject`;
  * - `headDocumentStatus(id)` — the `status:` of the document whose frontmatter `id` is `id` at `HEAD` (`null` without a
- *   status), `undefined` when no document has that id.
+ *   status), `undefined` when no document has that id;
+ * - `carriesLineBefore(sha)` (task-378, `spec-020` §4.14) — whether a proper ancestor of `sha` (any parent, recursively)
+ *   has a body line starting exactly `Carries content: `.
  *
  * Deterministic: shas are derived from the commit's position, never random. Not a `.test.ts` file.
  */
@@ -147,6 +149,8 @@ export interface ReaderOptions {
 }
 
 const FRONTMATTER_RE = /^---\n([\s\S]*?)\n---/;
+/** A body line starting exactly `Carries content: ` (`spec-020` §4.14: what `carriesLineBefore` looks for, case kept). */
+const CARRIES_LINE_RE = /^Carries content: /m;
 const CONFIGURATION_SCOPES = new Set(['dna', 'directive', 'workflow']);
 const DECLARED_VERBS = new Set(['add', 'submit', 'approve', 'reject', 'deprecate', 'start', 'finalize', 'sync', 'amend', 'park', 'assign']);
 
@@ -312,6 +316,19 @@ export class HistoryModel {
           if (frontmatterField(tree[path], 'id') === id) return frontmatterField(tree[path], 'status');
         }
         return undefined;
+      },
+      carriesLineBefore: (sha: string) => {
+        const seen = new Set<string>();
+        const pending = [...model(sha).commit.parents];
+        while (pending.length > 0) {
+          const next = pending.pop() as string;
+          if (seen.has(next)) continue;
+          seen.add(next);
+          const ancestor = model(next).commit;
+          if (CARRIES_LINE_RE.test(ancestor.body)) return true;
+          pending.push(...ancestor.parents);
+        }
+        return false;
       },
     };
   }

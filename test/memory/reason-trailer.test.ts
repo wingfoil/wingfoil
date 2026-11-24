@@ -515,3 +515,48 @@ describe('the existing corpus — a real approve commit from this repository rea
     expect(live).toBe(FIXTURE_BODY);
   });
 });
+
+/**
+ * `task-378` AC 5 (red-first; `bug-498`; `spec-008` §2's sixth case, amended at the design gate, `53026cc8d`; design
+ * item 1, D3 (a)) — a reason that states nothing: the whole normalized text one placeholder token (`<`, then no `<`,
+ * `>` or line break, then `>`), or text holding no Unicode letter or digit. Judged after the control characters and
+ * before the reserved trailer keys, with its own message. Expected red: `reasonDefect` returns `null` for these today,
+ * `reasonRefusalMessage` returns `null`, and `formatMemoryCommitMessage` writes the reason instead of throwing.
+ */
+describe('task-378 AC 5 — the sixth case: a reason that states nothing (spec-008 §2, bug-498)', () => {
+  const PLACEHOLDER_MESSAGE = 'invalid flag value: --reason must state a reason: it holds no word, or only a <placeholder>';
+
+  it.each(['<the reply>', '  <x>  ', '...', '-', '?!'])('refuses %j as a placeholder', (reason) => {
+    expect(reasonDefect(reason)).toBe('placeholder');
+  });
+
+  it.each(['<a> and <b>', 'ok', 'é', '1'])('accepts %j: it holds a word, or is more than one token', (reason) => {
+    expect(reasonDefect(reason)).toBeNull();
+  });
+
+  it('judges the control characters first: a lone BEL is a control character, not a placeholder', () => {
+    expect(reasonDefect('\x07')).toBe('control-character');
+  });
+
+  it('keeps a blank reason blank: whitespace only is the first case, not the sixth', () => {
+    expect(reasonDefect('   ')).toBe('blank');
+  });
+
+  it('gives the case its own message, the one spec-008 §2 pins', () => {
+    expect(reasonRefusalMessage('<the reply>')).toBe(PLACEHOLDER_MESSAGE);
+    expect(reasonRefusalMessage('...')).toBe(PLACEHOLDER_MESSAGE);
+  });
+
+  it('formatMemoryCommitMessage refuses a placeholder reason with that message rather than writing it', () => {
+    expect(() =>
+      formatMemoryCommitMessage({
+        type: 'task',
+        op: 'approve',
+        ids: ['task-1'],
+        transition: { from: 'pending', to: 'backlog' },
+        approver: APPROVER,
+        reason: '<x>',
+      }),
+    ).toThrow(PLACEHOLDER_MESSAGE);
+  });
+});
