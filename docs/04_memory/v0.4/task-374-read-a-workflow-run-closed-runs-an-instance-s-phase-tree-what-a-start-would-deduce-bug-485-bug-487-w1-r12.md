@@ -567,6 +567,121 @@ members "as a pending approval's line names them (§5.3)".
   `release-health/measure`, `memory-store-location-text`) → `Tests: 0 failed, 314 passed, 314 total`.
 - The invisible-character grep over the ten changed files → no hit (exit 1).
 
+### green (developer, 2026-11-24)
+
+**Base.** Head `56963ae4d` (the red record), `git rev-list --count HEAD..main` → `0`, so no merge. PATH guard:
+`command -v wingfoil` → the task's PATH shim; `wingfoil --version` and `node dist/cli.js --version` → `0.3.2
+(af0cdd667ad561fcfc5cd05a25640d6ee285d309)`. Scope: part A only (D1 (a)); nothing of `workflow tree` was written.
+
+**Commit** `7d48a9d4c` (`feat(workflow): task-374 — …`), the files the design names, plus two:
+- `src/workflow/deduce.ts`: `GatedElement` (`ElementRef` plus optional `heldBy`); `Deduction.gated` is
+  `GatedElement[]`. `scopeHolders` lists the element scope of every trail entry of every frontier step, in instance,
+  frontier and trail order, with that element's own `version`; `holderOf` returns the first holder whose type names a
+  frontmatter field of the gated element whose value is the holder's id or `version` (`spec-017` §5.1). A collection
+  entry scopes no element and holds nothing. The `heldBy.element` is the scope's `{ type, id, status }`.
+- `src/core/workflow-status.ts`: `UngatedElement` (= `GatedElement`), `UngatedCount`, `StatusConsoleCall`;
+  `StatusResult.ungated: UngatedElement[]`, `ungatedByType` (ascending type, code-unit order);
+  `renderStatusConsole(result, call?)`: the summary line by default, `ungated elements: <n>` and one line each under
+  `call.flags.full`, the held line naming its holder. Pending approvals unchanged (AC 5 half 1 is characterization).
+- `src/core/registry.ts`: `renderConsole?: (value, call?: { flags }) => string` (`spec-006` §2 as amended).
+- `src/cli/registrar.ts`: the one call site passes `{ flags: operationFlags ?? {} }`; the `result.failed` line of
+  `task-365` and `verify`'s one-argument renderer are untouched (a one-parameter function is assignable).
+- `src/core/index.ts`: `workflowStatus` declares `flags: [{ name: 'full', … }]`; `workflowShow`'s positional says
+  "the id of a workflow instance plan, open or closed"; the barrel exports the three new types.
+- `src/core/workflow-list-show.ts`: `ShowInputs.instancePlans` (every instance plan at the snapshot, any status, with
+  its `workflow` field, from `instancePlanIds` per document); `showWorkflow` resolves a workflow name first, else an
+  instance plan's id to its workflow, and adds `instance: { id, workflow, open }` (`open` from the deduction's
+  instances); an instance plan naming an unloaded workflow is `unknown workflow: <that name>`, a blank `workflow`
+  field or a phase plan's id `unknown workflow: <ref>`; `ShowResult.instance?` and `ShowInstance`.
+- Not in the design's list: `test/docs/name-resolvability.allowlist.ts` — the two rows `heldBy` and `ungatedByType`
+  (`plannedBy: ['task-374']`) are removed, since both names now ship (the prompt's rule: "a row naming `task-374` goes
+  when its name ships"); the `task-383` rows stay as they are. And one new test file of mine,
+  `test/core/workflow-show-instance-edges.test.ts` (a closed instance plan with a blank `workflow` field →
+  `unknown workflow: blank-1-plan`, the branch the red suite does not reach; it passes before and after green, a
+  characterization of the new branch).
+- `src/mcp/workflow-resource.ts` is unchanged (`git diff --name-only main...HEAD -- src/mcp` → empty).
+
+**red → green** (this worktree, targeted): `npx jest test/core/workflow-status-held.test.ts
+test/cli/workflow-status-full.integration.test.ts test/core/workflow-show-instance.test.ts
+test/mcp/workflow-state-resources.test.ts test/core/workflow-status.test.ts test/core/workflow-status-render.test.ts
+test/core/workflow-list-show.test.ts --maxWorkers=2` → `Test Suites: 7 passed`, `Tests: 99 passed, 99 total` (red:
+25 failed, 74 passed). `npx tsc --noEmit -p tsconfig.json` → exit 0 (red: TS2554 ×3, TS2353 ×1).
+
+**Docs commit** `2dd7742f6` (`docs(cli): task-374 — …`): `docs/cli-reference.md`, only inside the `workflow status`
+entry (synopsis `[--full]`, the summary line, `--full`, the held element and its line, `ungatedByType` / `heldBy` in
+the payload, the Resource unaffected by `--full`, why several candidates' approvals are pending at once) and the
+`workflow show` entry (any instance plan's id, `instance`, the unloaded-workflow error);
+`docs/01_vision/X_cli-cmds.md` 2.8 → **2.9** (2026-11-24, revision entry above 2.8): the `workflow status` row gains
+`[--full]` and the held wording, the Pillar 4 parameters gain a `--full` row, the `workflow show` row names the
+instance id; `docs/01_vision/00_index.md`: `Last indexed` 2026-11-24, the row 2.9 / 2026-11-24 / 555 lines, the
+section line map re-synced (Pillar 4 onwards shifted by the one added parameter row, the revision entry by six).
+
+### refactor (developer, 2026-11-24)
+
+No code change beyond green: the renderer, the holder search and the show resolution are each one small function;
+nothing duplicated was found in the files touched. Gates (this worktree, head `2dd7742f6`, tree clean):
+- `npm run lint` → exit 0. `npm run docs:api` → exit 0, no warning printed. `npm run typecheck` (both tsc configs,
+  after `waitslot.sh`, which returned at once) → exit 0.
+- `npm run build` then `npm test -- --maxWorkers=2` (after `waitslot.sh`, which printed nothing; `ps -eo
+  pid,etime,args` then listed no heavy gate) → `Test Suites: 744 passed, 744 total`, `Tests: 13705 passed, 13705
+  total`, exit 0. `workflow-unbound-none` passed: the tree held no uncommitted deduction input (no pending amendment).
+- `npm run test:coverage -- --maxWorkers=2` (after `waitslot.sh`) → `744 passed`, `13705 passed`, exit 0; `All files`
+  statements 99.07 · branches 97.03 · functions 98.77 · lines 99.54. Against the `169ecd71b` baseline
+  (`sha256sum -c coverage-summary.json.sha256` → `coverage-summary.json: OK`), by the kit's comparison script, covered/total
+  and the change in uncovered: totals statements 13913/14043 (−17), branches 8797/9066 (−13), functions 2750/2784 (−2),
+  lines 11546/11599 (−4); `src/workflow/deduce.ts` 744/745 · 588/591 · 172/173 · 597/598 (+0 each);
+  `src/core/workflow-status.ts` 93/93 · 60/60 · 25/25 · 72/72 (+0); `src/core/workflow-list-show.ts` 165/165 · 177/179 ·
+  49/49 · 127/127 (+0); `src/core/registry.ts` 104/104 · 86/88 · 24/24 · 88/88 (+0); `src/cli/registrar.ts` 99/100 ·
+  93/93 · 18/19 · 87/88 (+0); `src/core/index.ts` 926/935 · 431/442 · 221/239 · 743/746 (−5 · −5 · +0 · +0). Uncovered
+  grew nowhere.
+- `docs.parity` and CLI docs (targeted, before the docs commit's gates): `npx jest test/docs/name-resolvability.test.ts
+  test/docs/cli-reference.test.ts test/docs/x-cli-cmds.test.ts test/docs/vision-index.test.ts
+  test/docs/commands-parity.test.ts test/docs/command-surface-specs.test.ts test/docs/enumeration-parity.allowlist.test.ts
+  test/docs/mcp-surface-parity.test.ts test/core/parity.test.ts --maxWorkers=2` → `9 passed`, `Tests: 66 passed`; all
+  of them ran again in the full suite above.
+- Neighbours of the changed contract (targeted): `npx jest test/cli/registrar.test.ts
+  test/cli/console-format-fallback.integration.test.ts test/core/production-registry.test.ts
+  test/core/verify-registration.test.ts test/core/agent-show.test.ts test/core/approval-authority-baseline.test.ts
+  test/cli/e2e-smoke-workflow-reads.test.ts test/cli/e2e-smoke-workflow-reads-edges.test.ts
+  test/cli/workflow-list-show.integration.test.ts test/core/workflow-ref-not-open.test.ts
+  test/cli/workflow-ref-not-open.integration.test.ts test/cli/workflow-status.integration.test.ts
+  test/mcp/workflow-state-resources-review-fixes.test.ts test/core/workflow-deduction.test.ts --maxWorkers=2` → `14
+  passed`, `Tests: 217 passed`; `npx jest test/workflow/deduce.test.ts --maxWorkers=2` → `16 passed`.
+- `git rev-list --count HEAD..main` at the end of refactor → `0`: no merge.
+- Invisible characters: the prompt's `grep -nP` over every changed file before each commit → no hit (exit 1).
+
+**For `task-370` (the one console renderer).** `CoreOperation.renderConsole` now takes `(value, call?)`, `call =
+{ flags }`, the invocation's parsed boolean flags (`{}` when the operation declares none); `workflow status` is the one
+renderer that reads it (`flags.full`). Its ungated block has two forms, both after the pending approvals and neither
+printed when nothing is ungated: by default one line `ungated elements: <n> (<type> <count>, …) — routed to <members>;
+--full lists them` (with no approver: `routed to no approver found for role 'approver' in dna.yaml; --full lists
+them`); under `--full` the line `ungated elements: <n>`, then per element `  human needed: approve or reject <id>
+(<type>, <status>; no open workflow carries it) — routed to <members>`, or for a held one `… (<type>, <status>; held by
+<instance>'s <S type> <S id>, no step of it approves it now) — routed to <members>`. The exact bytes are pinned by
+`test/cli/workflow-status-full.integration.test.ts` and `test/core/workflow-status-held.test.ts`. `json`/`yaml` and the
+Resource never see `--full`.
+
+### self-review (developer, 2026-11-24)
+
+- AC 1: the design's (no test). AC 5: half 1 pinned by "half 1 (characterization) …", passing at red and now; half 2
+  by the three "half 2 —" tests, green. AC 6: `ungatedByType`, the summary, `--full`, json/yaml bytes, `--help`, `next
+  --full` exit 2 — the AC 6 tests of both files, green. AC 7: the `workflow-show-instance.test.ts` cases and
+  `workflow-list-show.test.ts`'s open `rc-plan`, green; a phase plan's id still `unknown workflow: phase-1-plan`. AC 8
+  (status half): the Resource case of `workflow-state-resources.test.ts` green, `src/mcp/workflow-resource.ts`
+  unchanged; `spec-017` already states it (amend `0e259033c`), `docs/cli-reference.md` now does.
+- Positive case of the absence claims: `heldBy` is absent on `bug-2-other` (its `release` names `release-9`, no such
+  element) and present on `bug-1-crash` in the same payload (`workflow-status-held.test.ts`, "half 2 — bug-1-crash …").
+- T4: `git log --first-parent --no-merges --format=%h 56963ae4d..HEAD --` over the ten red files → empty (exit 0).
+- Same class in the files touched: the only other per-element console line of `workflow-status.ts` is the pending
+  approval's, unchanged by contract; no other renderer reads flags.
+- Decision taken in green (for the reviewer): a gated element can in principle be held by an element it scopes itself;
+  `spec-017` §5.1 does not exclude it and the code does not either (no repository type has a field named after its
+  own type).
+
+### Pending amendments (approver)
+
+None: no element past its first state was edited (`git status --short` → empty before the notes).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -574,3 +689,4 @@ members "as a pending approval's line names them (§5.3)".
      printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
      Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
      here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+- The full suite (`npm test -- --maxWorkers=2`) took 2031 s and `npm run test:coverage -- --maxWorkers=2` 2348 s (`Time: 2031.062 s`, `Time: 2348.355 s`), both running the same 13705 tests: over 70 minutes in two sequential heavy gates; a coverage run alone would serve as both gates.
