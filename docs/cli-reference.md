@@ -1551,12 +1551,15 @@ Last, the **ungated elements**: elements sitting in a gate state of their type t
 workflow carries, routed to the holders of the `approver` role. Changed in 0.4, the console prints them as one summary
 line by default, their count and the count of each type, then the members and a hint:
 `ungated elements: <n> (<type> <count>, …) — routed to <members>; --full lists them`. With `--full` it prints instead
-`ungated elements: <n>` and one "human needed" line per element. `--full` changes the console only: `--format json`
-and `--format yaml` print the same bytes with or without it.
+`ungated elements: <n>` and one "human needed" line per element. With no member holding the `approver` role, the
+summary line and every `--full` line say `no approver found for role 'approver' in dna.yaml` where the members go.
+`--full` changes the console only: `--format json` and `--format yaml` print the same bytes with or without it.
 
 New in 0.4, an ungated element may be **held** by an open workflow: one of its fields is named after the type of an
 element a frontier step of that workflow runs on, with that element's id or its `version` as value (a bug whose
-`release` is `minor-v0.4`, or `v0.4`, while a release cycle over `minor-v0.4` is on the frontier). It stays ungated —
+`release` is `minor-v0.4`, or `v0.4`, while a release cycle over `minor-v0.4` is on the frontier). The element a
+frontier step runs on is held by that workflow too, whatever its fields, when it sits at its gate on a step that does
+not approve it (a release in `planning` while its cycle's first phase writes a document). It stays ungated —
 no step approves it now — and its `--full` line says who holds it instead of `no open workflow carries it`:
 
 ```console
