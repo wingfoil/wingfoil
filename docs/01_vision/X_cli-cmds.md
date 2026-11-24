@@ -1,7 +1,7 @@
 # CLI Commands Reference — WingFoil
 
-**Version:** 2.7
-**Date:** 2026-11-22  
+**Version:** 2.8
+**Date:** 2026-11-23  
 **Status:** Approved
 
 ---
@@ -36,6 +36,7 @@ level.
 | `wingfoil memory park <id> --reason <text>` | Return a started document to an earlier state along its type's declared `returns` edge | Morgan, Alex, Jordan | 2, 4 | For a task, in-progress → backlog (`dl-110`). The reason is recorded in the commit (`task-180`) |
 | `wingfoil memory amend <id> --reason <text>` | Record an uncommitted correction to a document as an amendment, leaving its state unchanged | Morgan | 2, 4 | For types `memory.yaml` declares `amendable`. Needs the approver role; the reason is recorded in the commit (`task-127`) |
 | `wingfoil memory history <id>` | View audit trail of Memory document (commits, approvals, state changes) | Morgan, Casey | 2, 3, 5 | Shows full git history + state transitions from frontmatter |
+| `wingfoil verify [--base <rev>] [--introduced-at <rev>]` | Check a commit range against the Memory and approval contracts | Morgan, Casey | 4, 5 | P1.14, from v0.4 (`spec-020`). A flat command that only reads committed history, never the working tree: every commit of `<rev>..HEAD` (without `--base`, every commit reachable from `HEAD`) is judged against the `dna.yaml` and `memory.yaml` committed before it — the subject and bracket grammar, the `Approver:` / `Reason:` body, approver authority, the state machine, a status changed outside a Memory operation, an approval carrying an agent trailer. Exits `1` on a gated finding, with the report still printed; `--introduced-at <rev>` reports `<rev>` and its older history without failing. CLI only: no MCP Tool or Resource |
 
 ### Parameters for Pillar 1 Commands
 
@@ -52,6 +53,7 @@ level.
 | `[<path>]` | string (path) | Positional source path on `memory import` (*Not built*) | Provided in command | Path to existing doc(s) to scan/import | N/A (input to import; imported doc saved at its type's `path` in `.wingfoil/memory.yaml`) |
 | `--action` | enum | Import action on `memory import` (*Not built*): copy, move, link | User input (flag or interactive prompt) | copy (new file), move (original deleted), link (symlink) | N/A (affects how imported file is placed) |
 | `--reason` | string | Reason on `memory approve`/`reject`/`deprecate`/`park`/`amend` (required except on `deprecate`) | User input (flag) | Recorded with the transition as the commit's `Reason:` block (`dl-067`) | Git commit message (and `rejection_reason` on reject) |
+| `--base`, `--introduced-at` | string (revision) | On `verify`: the commit whose descendants up to `HEAD` are judged, and the commit at and before which findings are history | User input (flag) | Each resolved as one revision (a sha, a branch, a tag); a blank value exits `2` | N/A (query parameters only) |
 | `status` | enum | Document state (type-dependent per `.wingfoil/memory.yaml`; default: draft, pending, approved, plus `deprecated` from any state) — type-specific states (e.g., `backlog`, `in-review`) also exist per `.wingfoil/memory.yaml` | Auto-tracked in frontmatter | Per-type state machine transitions (submit, approve, reject, deprecate, park) | Frontmatter `status:` field, tracked via git commits |
 
 ---
@@ -338,7 +340,7 @@ Every command accepts these, except `--dry-run`, which only the commands that ch
 
 **v0.4 (Jul 31):**
 
-- Pillar 1: `memory import`
+- Pillar 1: `memory import`, `verify`
 - Pillar 2: `dna infer`
 - Pillar 5: `audit`, `init --mode infer`, `init --template`, `capabilities`
 
@@ -398,6 +400,11 @@ Every command accepts these, except `--dry-run`, which only the commands that ch
 ---
 
 ## Revision history
+
+**Version 2.8 (2026-11-23) — `wingfoil verify`, per `task-365` (`spec-020` §2, P1.14).**
+Pillar 1 gains the `verify` row: the check of a commit range against the Memory and approval contracts, read from
+committed history only, CLI only; its parameters table gains `--base` and `--introduced-at`, and the v0.4 release
+timeline names the command.
 
 **Version 2.7 (2026-11-22) — the global `--no-interactive`, per `task-380` (`bug-514`, `spec-008` §2).**
 The note on interactivity names the global the program registers, `--no-interactive`, where it said "the negatable

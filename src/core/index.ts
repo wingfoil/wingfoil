@@ -15,7 +15,7 @@ import { join, relative, sep } from 'path';
 
 import { dump } from 'js-yaml';
 
-import { type Diagnostic, DiagnosticsError, diagnosticWarning, formatDiagnostic, generateId, isNewerFormatError, parseYaml, patternTokens, raiseConfigVersion, toValidationError, ValidationError } from '../validation';
+import { type Diagnostic, DiagnosticsError, diagnosticWarning, formatDiagnostic, generateId, isNewerFormatError, parseYaml, patternTokens, raiseConfigVersion, reportWarning, toValidationError, ValidationError } from '../validation';
 import { DnaYaml, Paths } from '../dna/schema';
 import { applyDnaEditInText } from '../dna/edit';
 import { applyDnaMutation, type DnaMutationRequest, type DnaMutationVerb } from '../dna/mutate';
@@ -133,9 +133,11 @@ import { agentListFn, renderAgentListConsole } from './agent-list';
 import { agentShowFn, renderAgentShowConsole } from './agent-show';
 import { UsageError } from './usage-error';
 import { buildCapabilitiesDocument, renderCapabilitiesConsole, type CapabilitiesDocument } from './capabilities';
+import { governanceCheck, renderVerifyConsole, VERIFY_WHOLE_HISTORY, verifyFindingsMessage, type GovernanceReport } from './governance-check';
+import { resolveRevision, RevisionError } from './revision';
 import type { CoreFlag, CoreFn, CoreModule, CoreOption } from './registry';
 import { missingOperandReason } from './registry';
-import { coreErr, coreOk } from './types';
+import { coreErr, coreFailed, coreOk } from './types';
 import type { CoreError, CoreResult } from './types';
 
 /** This module's `dna.yaml` name (`core`) — the stable identifier surfaces and tests key it by. */
@@ -217,6 +219,47 @@ export {
   RESERVED_CAPABILITY_NAMES,
 } from './capabilities';
 export type { BuildIdentity, CapabilitiesDocument, CapabilityEntry } from './capabilities';
+// task-365: `wingfoil verify`, the governance check of committed history (`spec-020`); the operation is `CORE_MODULES`'
+// `verify` ({@link verifyFn}).
+export {
+  buildGovernanceReport,
+  checkApprovalAgentTrailer,
+  checkAuthority,
+  checkBody,
+  checkBracket,
+  checkState,
+  checkStatusOutsideWf,
+  checkSubject,
+  checkSupersedesPair,
+  checkTrailerParagraph,
+  checkVerbEdge,
+  checkWorkflowRecordAuthority,
+  createGitHistoryReader,
+  GOVERNANCE_CHECKS,
+  governanceCheck,
+  renderVerifyConsole,
+  VERIFY_WHOLE_HISTORY,
+  verifyFindingsMessage,
+} from './governance-check';
+export type {
+  BlobRequest,
+  CheckContext,
+  CheckFinding,
+  CheckOutcome,
+  ConfigRead,
+  FileChange,
+  GitHistoryRange,
+  GitHistoryReader,
+  GovernanceCheckEntry,
+  GovernanceCheckFn,
+  GovernanceCheckOptions,
+  GovernanceFinding,
+  GovernanceReport,
+  GovernanceRule,
+  HistoryCommit,
+  HistoryReader,
+  StateUncheckedEntry,
+} from './governance-check';
 export { renderStatusConsole, statusWorkflow, workflowStatusAtHead } from './workflow-status';
 export type { PendingApproval, StatusEntry, StatusResult } from './workflow-status';
 export { W_WORKFLOW_CHECKS_NOT_RUN, workflowCoreDiagnostics } from './workflow-core-checks';
@@ -2702,6 +2745,65 @@ const workflowStatusFn: CoreFn<unknown, StatusResult> = async (params) => {
 export const capabilitiesFn: CoreFn<unknown, CapabilitiesDocument> = async () =>
   coreOk(buildCapabilitiesDocument(CORE_MODULES, readBuildIdentity()));
 
+/** `wingfoil verify`'s two options (`spec-020` §2.2): each a revision naming one commit, resolved by `resolveRevision`. */
+const VERIFY_OPTIONS: readonly CoreOption[] = [
+  { name: 'base', valueName: 'rev', description: 'judge only the commits reachable from HEAD and not from <rev> (default: every commit reachable from HEAD)' },
+  { name: 'introduced-at', valueName: 'rev', description: 'report the findings on <rev> and its ancestors as history, not failing (default: every finding is gated)' },
+];
+
+/** `verifyFn`'s params: the root and the two options under their CLI spelling (`ParamsContext.options`). */
+interface VerifyParams {
+  readonly root: string;
+  readonly options?: Readonly<Record<string, string | readonly string[]>>;
+}
+
+/**
+ * `wingfoil verify` (task-365, `spec-020` §2, §5.1, §8): judge the commit range against the checks of
+ * `./governance-check.ts` and return its report.
+ *
+ * In order (§2.2): a blank `--base` or `--introduced-at` is the `UsageError` `invalid flag value: --<option> must not
+ * be blank` (exit `2`); then `HEAD`, `--base` and `--introduced-at` are resolved, a `RevisionError` returned as the
+ * `CoreError` of its code and message with `details: { rev, flag }` (`flag` absent for `HEAD`, design D9 (a)); with
+ * neither option, `W_VERIFY_WHOLE_HISTORY` is raised through the warning sink before the range is read (§5.1, D4 (a)).
+ * A report with a gated finding is `coreFailed(report, E_VERIFY_FINDINGS…)` (exit `1` after the report, §8.1), any
+ * other `coreOk(report)`. It writes nothing and reads committed history only.
+ */
+export const verifyFn: CoreFn<unknown, GovernanceReport> = async (params) => {
+  const { root, options = {} } = params as VerifyParams;
+  const optionValue = (name: string): string | undefined => {
+    const value = options[name];
+    return typeof value === 'string' ? value : undefined;
+  };
+  const base = optionValue('base');
+  const introducedAt = optionValue('introduced-at');
+  for (const [name, value] of [
+    ['base', base],
+    ['introduced-at', introducedAt],
+  ] as const) {
+    if (value !== undefined && value.trim().length === 0) throw new UsageError(`invalid flag value: --${name} must not be blank`);
+  }
+  const resolve = (rev: string, flag?: string): CoreResult<string> => {
+    try {
+      return coreOk(resolveRevision(root, rev));
+    } catch (error) {
+      if (!(error instanceof RevisionError)) throw error;
+      return coreErr({ code: error.code, message: error.message, details: { rev, ...(flag === undefined ? {} : { flag }) } });
+    }
+  };
+  const head = resolve('HEAD');
+  if (!head.ok) return head;
+  const resolvedBase = base === undefined ? undefined : resolve(base, '--base');
+  if (resolvedBase !== undefined && !resolvedBase.ok) return resolvedBase;
+  const resolvedIntroducedAt = introducedAt === undefined ? undefined : resolve(introducedAt, '--introduced-at');
+  if (resolvedIntroducedAt !== undefined && !resolvedIntroducedAt.ok) return resolvedIntroducedAt;
+  if (base === undefined && introducedAt === undefined) reportWarning(VERIFY_WHOLE_HISTORY);
+  const report = governanceCheck(root, {
+    ...(resolvedBase === undefined ? {} : { base: resolvedBase.value }),
+    ...(resolvedIntroducedAt === undefined ? {} : { introducedAt: resolvedIntroducedAt.value }),
+  });
+  return report.verdict === 'fail' ? coreFailed(report, verifyFindingsMessage(report)) : coreOk(report);
+};
+
 /**
  * The production `CoreModule` registry (spec-006 §2, §4). `src/cli`'s command registrar and
  * `src/mcp`'s Tool/Resource registrar both import this exact array — see spec-006 §4.1: "no
@@ -3088,6 +3190,24 @@ export const CORE_MODULES: readonly CoreModule[] = [
         flags: [{ name: 'list', description: 'accepted for the planned drill-down view; it does not change the output yet' }],
         example: 'wingfoil paths sources',
         fn: pathsFn,
+      },
+    },
+  },
+  // task-365 (`spec-020` §2.1): the flat, self-named `wingfoil verify`, read-only and CLI only — the production MCP
+  // server derives only Tools from `CORE_MODULES` and serves it on no channel (design D5 (a)). Its console text is its
+  // own (§7).
+  {
+    name: 'verify',
+    operations: {
+      verify: {
+        name: 'verify',
+        mutates: false,
+        description: 'check a commit range against the Memory and approval contracts',
+        options: VERIFY_OPTIONS,
+        example: 'wingfoil verify --base origin/main',
+        // The function itself, not a wrapper, so a caller can tell which renderer the command uses.
+        renderConsole: renderVerifyConsole as (value: unknown) => string,
+        fn: verifyFn,
       },
     },
   },

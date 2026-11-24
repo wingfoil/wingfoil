@@ -194,8 +194,8 @@ wingfoil verify [--base <rev>] [--introduced-at <rev>] [global flags]
 - **`--introduced-at <rev>`** — a value option, resolved the same way: the commit from which findings are gated
   (§5.1); `<rev>` and its ancestors are history.
 - **Global flags** apply as spec-008 §2 lists them for every command: `--help`, `--version`, `--format
-  console|json|yaml`, `--verbose`, `--color` (negatable), `--interactive` (negatable; the command prompts for
-  nothing) and `--project <dir>`. `--dry-run`, `--reason`, `--co-author` and `--ai-model` are not taken (exit `2`,
+  console|json|yaml`, `--verbose`, `--no-color`, `--no-interactive` (the command prompts for nothing) and
+  `--project <dir>`. `--dry-run`, `--reason`, `--co-author` and `--ai-model` are not taken (exit `2`,
   unknown option): spec-008 §2 gives them to commands that write, and this one does not.
 - **Order of checks** is spec-008 §1's: `--format`, the operand count, a blank `--project`, the project root, then the
   operation's own: a blank `--base` or `--introduced-at` (exit `2`, §8.2), then `HEAD`, then `--base`, then
@@ -977,3 +977,10 @@ authority (§4.4); L1 signed approvals (the `authority` check then reads a signa
   command is missing from that Context (`commands-parity` runs in warn mode).
 - N9 — fixed: the capability question is written "spec-019 OQ-4" wherever it is meant, so it is not read as this spec's
   own OQ-4 (starting mode).
+
+**Revision (2026-11-21, `task-365-ship-wingfoil-verify-with-the-generic-authority-and-state-checks-spec-020`)
+— §2.2 names the registered negated global flags.** The program registers `--no-color` and `--no-interactive` only, and
+their positive forms are refused as unknown options (`bug-514`; `task-380`'s design gate, D1 (b), which aligns `spec-008`
+§2, and D5 (a), which aligns this spec). §2.2's list of global flags named `--color` and `--interactive` as negatable;
+it now names `--no-color` and `--no-interactive`. No other line of the spec changes. Edited in place without a supersede
+or a state change (`dl-047`), pending the approver's `memory amend`.

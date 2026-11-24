@@ -203,6 +203,11 @@ describe('REQ-SYS-05 parity — production registry (src/core/index.ts CORE_MODU
       'wingfoil://dna/show',
       'wingfoil://memory/search',
       'wingfoil://paths',
+      // task-365's `verify.verify` is `mutates: false` and self-named: the test-only mechanical registrar derives the
+      // static `wingfoil://verify`, as it derives `wingfoil://agent/list`; the production server does not run
+      // `registerCoreModules` and serves it on no channel (`spec-020` §1, T-35, design D5 (a);
+      // `test/mcp/verify-not-served.test.ts`).
+      'wingfoil://verify',
       'wingfoil://workflow/list',
       // task-216's `workflow.workflowNext` (read-only): the mechanical test-only Resource; the production
       // server serves `wingfoil://workflows/-/next` instead (task-239, spec-017 §9).

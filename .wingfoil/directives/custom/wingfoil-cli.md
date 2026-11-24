@@ -6,13 +6,13 @@ kind: custom
 title: "Which WingFoil build runs which command in this repository"
 tags: [custom, process, cli, determinism]
 scope: global
-version: "1.7"   # 1.7 §3: the tag is added later only by a memory amend the approver runs from their own terminal, never by an agent; §2: approvals, rejections and amendments are the approver's own, never an agent's (spec-018 §3, task-367); 1.6 §2: a form the pinned build cannot read is used at once and declared before red (dl-205 Q2 (ii), task-348) (prev 1.5 §1: the pin is per line (dl-159 A2 item 5): a line whose pin is 0.3.1 or later runs the workflow reads on the pinned build, a line still pinned at 0.3.0 on the code build; main moved its pin to 0.3.2 at v0.4 planning (release-planning v0.4) (prev 1.4 §1: the pin is 0.3.1, which reads the `manual: true` check binding, so the workflow reads and the `wingfoil://workflows` Resources are back on the pinned build; `workflow adopt` and `rekey` named with the workflow commands that write a commit (release-planning v0.3.2, advance-pinned-build to 0.3.1) (prev 1.3 §1: while the pin is 0.3.0 the workflow reads run on the code build, because 0.3.0 refuses the `manual: true` check binding (`dl-172` (a), task-298), until the pin reaches 0.3.1 (prev 1.2 §1: the workflow reads (`workflow list`, `show`, `next`, `status`) return to the pinned build, which reads this repository's `{ type, path }` produces from 0.3.0; the workflow commands that write a commit (`start`, `finalize`, `end`, `create`, `remove`) stay on the code build with the Memory operations (release-planning v0.3.1, advance-pinned-build to 0.3.0) (prev 1.1 §1: the workflow commands, `workflow list` included, run on the code build (the pinned 0.2.2 refuses this repository's `{ type, path }` produces); a fix reaches the code build of its integration branch, `main` or `release/X.Y` (task-252, dl-159; approver ruling 2026-10-17))))))
+version: "1.8"   # 1.8 §1: `verify` runs on the code build until the pin has it, and the governance script always runs it on the code build, so it is not a pinned-build read (spec-020 §6.3, OQ-6 (a), task-365); 1.7 §3: the tag is added later only by a memory amend the approver runs from their own terminal, never by an agent; §2: approvals, rejections and amendments are the approver's own, never an agent's (spec-018 §3, task-367); 1.6 §2: a form the pinned build cannot read is used at once and declared before red (dl-205 Q2 (ii), task-348) (prev 1.5 §1: the pin is per line (dl-159 A2 item 5): a line whose pin is 0.3.1 or later runs the workflow reads on the pinned build, a line still pinned at 0.3.0 on the code build; main moved its pin to 0.3.2 at v0.4 planning (release-planning v0.4) (prev 1.4 §1: the pin is 0.3.1, which reads the `manual: true` check binding, so the workflow reads and the `wingfoil://workflows` Resources are back on the pinned build; `workflow adopt` and `rekey` named with the workflow commands that write a commit (release-planning v0.3.2, advance-pinned-build to 0.3.1) (prev 1.3 §1: while the pin is 0.3.0 the workflow reads run on the code build, because 0.3.0 refuses the `manual: true` check binding (`dl-172` (a), task-298), until the pin reaches 0.3.1 (prev 1.2 §1: the workflow reads (`workflow list`, `show`, `next`, `status`) return to the pinned build, which reads this repository's `{ type, path }` produces from 0.3.0; the workflow commands that write a commit (`start`, `finalize`, `end`, `create`, `remove`) stay on the code build with the Memory operations (release-planning v0.3.1, advance-pinned-build to 0.3.0) (prev 1.1 §1: the workflow commands, `workflow list` included, run on the code build (the pinned 0.2.2 refuses this repository's `{ type, path }` produces); a fix reaches the code build of its integration branch, `main` or `release/X.Y` (task-252, dl-159; approver ruling 2026-10-17))))))
 ref: [P3.5, P3.7, REQ-SYS-08]
 ---
 
 # Directive — Which WingFoil build runs which command in this repository
 
-**Date:** 2026-11-20
+**Date:** 2026-11-21
 
 Custom WingFoil rule. Applies to **every role**: whoever runs a `wingfoil` command in this repository —
 a `developer` submitting a task, the `approver` whose approve commit is written by a verb, a
@@ -64,6 +64,11 @@ run WingFoil from its own source, so the rule has no meaning in a project scaffo
   keeps `main`'s pin (`git-conventions` §1 rule 5). Two lines can therefore pin different builds at once —
   `release/0.3` moved to 0.3.1 while `main` stayed at 0.3.0 until v0.4's planning — so read the pin of
   the branch you are on, never another line's, before choosing the build for a read.
+- **`verify` is not a pinned-build read.** `wingfoil verify` (`spec-020`) only reads, but it runs on the **code
+  build** until the pin has it (it first ships in 0.4.0), and `scripts/check-governance.cjs` — CI, the pre-push hook,
+  `npm run check:governance` — always runs it on the code build, `dist/cli.js` of the checkout, after the pin advances
+  too (`spec-020` §6.3, OQ-6 (a) for v0.4, open again at the first pin advance past 0.4.0): the build that writes the
+  Memory operations judges them, and a check and its writer change in the same task.
 - **Never `npx wingfoil`.** Once `dist/` is built it runs this checkout's own CLI, so the command no
   longer says which build it is.
 

@@ -883,6 +883,8 @@ has no Memory or file evidence to deduce it from.
   the same check `memory approve` makes) and `--reason` is required, non-blank and shaped as
   `dl-067`'s `Reason:` block; the body carries `Approver: <name> <email> (approver)` and
   `Reason: …`, as `memory approve` writes them (P1.7). Without `approval:`, `--reason` is optional.
+  `wingfoil verify`'s `workflow-record-authority` check judges that `Approver:` line as an approval's: its grammar,
+  the `approver` role and the author's authority in the first parent's `dna.yaml` (`spec-020` §4.10).
 - Writes one commit with no file change: subject `workflow: finalize <instance-id> <key>`, which is
   outside the `wf({type})` grammar (`spec-003` verb table, closing paragraph) so `memory history`
   does not read it as a Memory operation; the trailer block carries `spec-003`'s phase-record
@@ -956,7 +958,8 @@ element counts as created by, without changing the element or rewriting history.
 - **The commit** (`dl-187` "The commit", D4). No file change: subject `workflow: adopt <instance-id> <key>
   <type>:<id>`, outside the `wf({type})` grammar like `finalize`'s; body `Reason: …` (and `Approver: <name>
   <email> (approver)` on a bulk application); the trailers of §4.8 in the final paragraph with `WingFoil-Version:`
-  last (`spec-008` §2). Made with `git commit --only --allow-empty`, refused while the index holds staged changes
+  last (`spec-008` §2). A bulk application's `Approver:` line is judged by `wingfoil verify`'s
+  `workflow-record-authority` check (`spec-020` §4.10). Made with `git commit --only --allow-empty`, refused while the index holds staged changes
   (`dl-106`); a git identity is required (REQ-SEC-01).
 - **Readers.** Dates and authorship of an adopted element come from its own commits, never from the adoption; an
   adopted instance stays distinguishable from a created one (`dl-187` "Constraints on every reader").
@@ -976,7 +979,7 @@ git identity, approver authority (before the instance, so the answer does not de
 `<from>` still declared, `<to>` not declared, `<to>` outside the instance's workflow and the workflows it includes,
 the mapping already recorded (exit `0`), `<from>` named by no record, a staged index. One commit with no file change:
 subject `workflow: rekey <instance-id> <from> <to>`, the trailers of §4.8, `Approver:` and `Reason:` as on a bulk
-adoption. Output: `remapped`, the number of the instance's entries the commit remaps (one per element a linkage
+adoption, the `Approver:` line judged by `wingfoil verify`'s `workflow-record-authority` check (`spec-020` §4.10). Output: `remapped`, the number of the instance's entries the commit remaps (one per element a linkage
 names, one per record, one per adoption), and the instance's new next step.
 
 ### 8. Output shapes
@@ -1931,3 +1934,10 @@ stdout half of the approver's ruling at `task-345`'s design gate, `D1` (a), by t
 payload are unchanged. No payload field, diagnostic code, message or exit code changes. Edited in
 place without a supersede or a state change (`dl-047`), pending the approver's `memory amend` at `task-373`'s design
 gate.
+
+**Revision (2026-11-21, `task-365-ship-wingfoil-verify-with-the-generic-authority-and-state-checks-spec-020`)
+— §7.9, §7.11, §7.12: the records' `Approver:` line is judged by `wingfoil verify`.** `spec-020` (`approved`, §4.10,
+"Amendments owed") ships the check `workflow-record-authority`, which holds the `Approver:` line of a `workflow:
+finalize|adopt|rekey` record to an approval's grammar and authority (`bug-444`). §7.9, §7.11 and §7.12 each say so
+where they describe the record's body. No record, trailer, refusal or deduction rule changes. Edited in place without
+a supersede or a state change (`dl-047`), pending the approver's `memory amend`.

@@ -23,7 +23,7 @@
  * Pure and deterministic (REQ-SYS-07): the output is a function of the input alone; ids keep the order
  * the caller gives.
  */
-import { WINGFOIL_VERSION_TRAILER_KEY } from '../storage';
+import { AGENT_TRAILER_LINE_RE, WINGFOIL_VERSION_TRAILER_KEY } from '../storage';
 
 import type { TransitionOp } from './state-machine';
 
@@ -53,13 +53,6 @@ const TRAILER_LINE_RE = /^[A-Za-z][A-Za-z0-9-]*:[ \t]\S/;
  * style (dl-067 E5).
  */
 const RESERVED_TRAILER_LINE_RE = /^(?:Approver|Reason|WingFoil-Version):/i;
-
-/**
- * The agent trailer keys (`spec-018` §0, §3.3): reserved too, but only in a reason recorded under an `Approver:`
- * line, because an approval never carries an agent trailer (`dl-212` D1). Any letter case, as the governance
- * check's `approval-agent-trailer` rule matches them; elsewhere such a line is ordinary prose.
- */
-const AGENT_TRAILER_LINE_RE = /^(?:Co-Authored-By|AI-Model):/i;
 
 /** What the caller says about where a reason is recorded (`spec-018` §3.3). */
 export interface ReasonContext {
@@ -229,6 +222,10 @@ export function reasonDefect(reason: string, context: ReasonContext = {}): Reaso
 
   const lines = normalized.split('\n');
   if (lines.some((line) => RESERVED_TRAILER_LINE_RE.test(line))) return 'reserved-trailer-line';
+  // The agent trailer keys (`spec-018` §0, §3.3) are reserved too, but only in a reason recorded under an `Approver:`
+  // line, because an approval never carries an agent trailer (`dl-212` D1); elsewhere such a line is ordinary prose.
+  // The pattern is the commit primitive's own (`src/storage/commit.ts`), shared with `wingfoil verify`'s
+  // `approval-agent-trailer` check (`spec-020` §4.9, AC-4, task-365).
   if (context.approval === true && lines.some((line) => AGENT_TRAILER_LINE_RE.test(line))) return 'agent-trailer-on-approval';
 
   const paragraphs = paragraphsOf(normalized);

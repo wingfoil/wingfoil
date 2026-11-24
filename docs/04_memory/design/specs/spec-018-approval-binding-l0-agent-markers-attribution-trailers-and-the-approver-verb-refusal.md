@@ -351,8 +351,8 @@ any case, refused at exit `2` with `invalid flag value: --reason must not contai
 
 ### 4. The check rule (for the shipped check)
 
-The shipped governance check (`dl-222` (a); its own v0.4 task owns the verb, its grammar and output) carries one rule
-from this spec,
+The shipped governance check — `wingfoil verify` (`dl-222` (a); `spec-020`, whose §4.9 realizes this rule and owns the
+command, its grammar and its output) — carries one rule from this spec,
 replacing `approval-ai-trailer`'s scope (`scripts/check-governance.cjs:66-69`, `:135`):
 
 - **`approval-agent-trailer`**: on every non-merge commit of the range, if the message has a line starting
@@ -360,7 +360,10 @@ replacing `approval-ai-trailer`'s scope (`scripts/check-governance.cjs:66-69`, `
   finding, naming the key. It covers `wf(…): approve|reject|amend`, a gated `deprecate`, a routed `reject`, and every
   `workflow:` record with an `Approver:` line — the set §0 defines, keyed on the `Approver:` line, not on a verb list,
   so an approver-gated verb added later is covered without a change to the rule.
-- **Starting mode** as every later rule (`git-conventions` §9): it gates only commits after its introduction; older
+- **Starting mode.** In the verb, the population is the invocation's (`spec-020` §5.1): every finding of a `--base`
+  range is gated, `--introduced-at <rev>` makes `<rev>` and its ancestors history, and a whole-history run gates every
+  commit and warns. In this repository's script, the extension of the verb, the rule keeps its per-check introduction
+  (`git-conventions` §9, `spec-020` §6.1 step 3): it gates only commits after its introduction. Either way older
   approval commits with AI trailers, this repository's amend commits among them (`36c7c6a9f`), are reported and never
   rewritten.
 - The check cannot see markers — they are facts of an invocation, not of a commit — so it judges trailers only. A
@@ -470,8 +473,9 @@ choice by name alone. "Who applies it": `wingfoil` writes them on its own commit
   Memory operations run on the code build, compiled from the worktree (AGENTS.md §3, the `wingfoil-cli` directive), so
   approvals an agent ran on the approver's instruction stop working as soon as the L0 task is merged into the
   integration branch and the code build is rebuilt from it — not later, when the pin advances.
-- **The shipped governance check** (`dl-222` (a), its own v0.4 task) ships §4; this repository's script narrows
-  `approval-ai-trailer` to §4's rule or keeps both, at the L0 task's choice, with starting mode for the new scope.
+- **The shipped governance check** (`dl-222` (a)) ships §4 as `wingfoil verify`'s `approval-agent-trailer` check
+  (`spec-020` §4.9, realized by `task-365`); this repository's script narrowed `approval-ai-trailer` to §4's rule at
+  the L0 task, with starting mode for the new scope, and runs the verb's check as its extension (`spec-020` §6).
 - **Docs.** `docs/user-guide.md` §8.3 ("Approve or reject", `docs/user-guide.md:505`) states D4's wording — "approvals
   with a name and a reason", "agent commits are marked" — the refusal and what to do, and L0's limit (§5) in plain
   words; §9 ("Connect an AI agent", `:591`) states that commits an agent causes carry its trailers and that it never
@@ -529,3 +533,12 @@ how a Tool commit is attributed (the server's environment, no `--co-author` or `
 call's model; §2.6 names what the registrar passes; §3.2 gains the row's phrase and id. No rule of the four existing markers,
 of the refusal's text and hint or of the CLI is amended; the Context and the Process Notes keep the state they
 recorded. Edited in place without a supersede or a state change (`dl-047`), pending the approver's `memory amend`.
+
+**Revision (2026-11-21, `task-365-ship-wingfoil-verify-with-the-generic-authority-and-state-checks-spec-020`)
+— §4 points to `wingfoil verify`, and its starting mode is the verb's.** `spec-020` (`approved`, "Amendments owed")
+specifies the shipped governance check as the read-only command `wingfoil verify`, whose §4.9 realizes §4's rule with
+its predicate and scope unchanged. §4's opening names the command and `spec-020` §4.9; its starting-mode bullet says
+that the verb gates the invocation's population (`spec-020` §5.1: the `--base` range, `--introduced-at`) while this
+repository's script keeps the per-check introduction; the Consequences bullet on the shipped check says it is
+realized. The predicate, the scope and every other section are unchanged. Edited in place without a supersede or a
+state change (`dl-047`), pending the approver's `memory amend`.

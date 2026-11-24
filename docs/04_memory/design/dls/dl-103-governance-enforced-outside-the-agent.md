@@ -137,8 +137,11 @@ machine-verifiable, once the workflow engine exists.**
 1. **Ratify, choosing the options in §1 and §2.** Owner: approver. The choices go in the approve
    commit's `Reason:`.
 2. **Add `.github/workflows/governance.yml` and its script** (or a read-only audit command) under
-   §1 (A), and, under (B), a tracked hook directory running the same script. **Amend
-   `spec-015-packaging-publishing`** if the script ships in the package; it should not.
+   §1 (A), and, under (B), a tracked hook directory running the same script. The generic rules
+   ship in the package as the read-only command `wingfoil verify` (`dl-222` (a),
+   `spec-020-the-governance-check-verb-the-authority-and-state-rules-over-a-commit-range`); the
+   script stays out of the package, as this repository's extension of that command, and
+   `spec-015-packaging-publishing` says so (Amendment 2026-11-21).
 3. **Under §1 (C): configure branch protection on `main`** (approver action), recorded as a
    `service` element per `dl-088`.
 4. **Under §2: amend `.wingfoil/dna.yaml`** (team, approval policy) as `dl-094` and the
@@ -164,3 +167,13 @@ machine-verifiable, once the workflow engine exists.**
 - **Traceability:** REQ-SEC-02 (complete, attributable audit trail), REQ-SEC-03 (role-based
   approval authority), REQ-SEC-04 (mandatory justification on decision verbs), REQ-SEC-09 (human
   approval before inferred writes), P1.2 (versioning and audit trail).
+
+## Amendments
+
+**Amendment (2026-11-21, `task-365-ship-wingfoil-verify-with-the-generic-authority-and-state-checks-spec-020`)
+— Actions 2: the generic rules ship as a verb, the script stays out.** Action 2 said to amend `spec-015` "if the script
+ships in the package; it should not". `dl-222` (`ready`, option (a), Action 2) reconciled that sentence with `dl-212` D1,
+which assumes a governance check shipped to projects: the generic authority and state rules of §1 ship as the read-only
+command `wingfoil verify` (`spec-020`, `approved`), inside `dist/` like every command, and `scripts/check-governance.cjs`
+stays out of the package as this repository's extension of it (`spec-020` §6). Action 2 now says so, and `spec-015`
+states the reason the script is not shipped. §1's rules, §2's policy and the other Actions are unchanged.
