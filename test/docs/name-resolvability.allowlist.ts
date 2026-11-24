@@ -232,8 +232,6 @@ export const NAME_ALLOWLIST: readonly AllowlistEntry[] = [
   { document: 'docs/04_memory/design/specs/spec-017-workflow-commands-and-state-deduction.md', nameClass: 'symbol', name: 'E_AGENT_CONTEXT', reason: PLANNED, plannedBy: ['task-333'] },
   { document: 'docs/04_memory/design/specs/spec-017-workflow-commands-and-state-deduction.md', nameClass: 'symbol', name: 'W_MEMORY_UNREADABLE', reason: PLANNED, plannedBy: ['task-171', 'task-198'] },
   { document: 'docs/04_memory/design/specs/spec-017-workflow-commands-and-state-deduction.md', nameClass: 'symbol', name: 'allowedModes', reason: PLANNED, plannedBy: ['task-216'] },
-  { document: 'docs/04_memory/design/specs/spec-017-workflow-commands-and-state-deduction.md', nameClass: 'symbol', name: 'heldBy', reason: PLANNED, plannedBy: ['task-374'] },
-  { document: 'docs/04_memory/design/specs/spec-017-workflow-commands-and-state-deduction.md', nameClass: 'symbol', name: 'ungatedByType', reason: PLANNED, plannedBy: ['task-374'] },
   { document: 'docs/04_memory/design/specs/spec-017-workflow-commands-and-state-deduction.md', nameClass: 'symbol', name: 'workflowCreate', reason: UNTRIAGED },
   { document: 'docs/04_memory/design/specs/spec-017-workflow-commands-and-state-deduction.md', nameClass: 'symbol', name: 'workflowEnd', reason: UNTRIAGED },
   { document: 'docs/04_memory/design/specs/spec-017-workflow-commands-and-state-deduction.md', nameClass: 'symbol', name: 'workflowFinalize', reason: UNTRIAGED },
