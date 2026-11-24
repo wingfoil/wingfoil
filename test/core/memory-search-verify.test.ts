@@ -7,6 +7,10 @@
  * - on T-1's shape no match has the key;
  * - without the flag no match has the key, on either repository (the match reads as without the flag).
  *
+ * `--verify` is a boolean flag (`spec-008`'s grammar: a flag takes no value), so it reaches the fn at the top level of
+ * the params under its own name, beside `options` (which holds the string-valued options only), as the CLI builds it and
+ * as `test/core/directive-assign.test.ts` passes `force: true`.
+ *
  * Expected red: the flag is ignored today, so `t-1`'s match has no `unverified` (jest: `undefined` where the sha list
  * is expected).
  */
@@ -35,8 +39,8 @@ function memorySearchFn(): CoreFn<unknown, SearchValue> {
   return operation.fn as CoreFn<unknown, SearchValue>;
 }
 
-async function search(root: string, options: Record<string, unknown>): Promise<readonly Match[]> {
-  const result = await memorySearchFn()({ root, options });
+async function search(root: string, flags: { readonly verify?: true } = {}): Promise<readonly Match[]> {
+  const result = await memorySearchFn()({ root, options: {}, ...flags });
   if (!result.ok) throw new Error(`memory search failed: ${JSON.stringify(result)}`);
   return result.value.matches;
 }
@@ -47,7 +51,7 @@ describe('task-378 AC 1 — memory search --verify marks the matches whose histo
     roots.push(f.root);
     const verified = await search(f.root, { verify: true });
     expect(verified.map((match) => [match.id, match.unverified])).toEqual([['t-1', [tidy]]]);
-    const plain = await search(f.root, {});
+    const plain = await search(f.root);
     expect(plain.map((match) => match.id)).toEqual(['t-1']);
     expect(plain.filter((match) => 'unverified' in match)).toEqual([]);
   });
@@ -56,7 +60,7 @@ describe('task-378 AC 1 — memory search --verify marks the matches whose histo
     const f = t1();
     roots.push(f.root);
     const verified = await search(f.root, { verify: true });
-    const plain = await search(f.root, {});
+    const plain = await search(f.root);
     expect(verified.map((match) => match.id)).toEqual(plain.map((match) => match.id));
     expect(verified.map((match) => match.id)).toEqual(expect.arrayContaining(['task-001-approve-me', 'task-002-reject-me']));
     expect(verified.filter((match) => 'unverified' in match)).toEqual([]);
