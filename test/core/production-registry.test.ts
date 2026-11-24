@@ -54,6 +54,9 @@ describe('CORE_MODULES — production registry', () => {
       'memory.memorySearch',
       'memory.memorySubmit',
       'paths.paths',
+      // task-365 (`spec-020` §2.1, T-35): `wingfoil verify`, read-only, CLI only (the production MCP server serves it on
+      // no channel, design D5 (a)).
+      'verify.verify',
       // task-294 (`spec-017` §7.11): mutating — empty provenance-record commits (`--plan` alone writes nothing).
       'workflow.workflowAdopt',
       // task-211 (`spec-017` §7.7): mutating — the workflow file and `workflows.yaml`.

@@ -316,6 +316,12 @@ deliverables and update workflow state"). `wingfoil workflow next` only reads in
 (§2.1). A Tool that advances the active step belongs with v1.0's step advancement (`spec-017`
 Consequences; open question 1 of `spec-006`'s 2026-09-30 Revision note), and this table gains its row then.
 
+`wingfoil verify` (`spec-020`, from v0.4) is a read-only query with **no Tool and no Resource**. It mutates nothing,
+so §4.2's bijection does not cover it, and it is not a Resource either: a range check is an invocation with arguments
+over the whole history, which takes minutes on a long one, not a document an agent reads to orient itself; an agent
+runs the CLI (`spec-020` §1). The production server registers nothing for it, as it registers nothing for
+`agent list`; the test-only registrar's mechanical `wingfoil://verify` (§2.1, `spec-006` §3) is not served.
+
 #### 4.2 Parity requirement (REQ-SYS-05)
 
 Every CLI command that mutates state MUST have a corresponding Tool, and vice versa — no Tool exists
@@ -716,3 +722,9 @@ warnings include those raised while the operation runs; the `memory.approve` exa
 refusal. §1 states that a JSON-RPC error's message is the reason alone (`bug-034`). No rule of the Resources, the
 Prompts or the argument check is amended. Edited in place without a supersede or a state change (`dl-047`), pending the approver's
 `memory amend`.
+
+**Revision (2026-11-21, `task-365-ship-wingfoil-verify-with-the-generic-authority-and-state-checks-spec-020`)
+— §4.1: `wingfoil verify` has no Tool and no Resource.** `spec-020` (`approved`, §1, "Amendments owed") adds the
+read-only command `wingfoil verify`; §4.1 gains the paragraph that names it among the read-only queries with no Tool
+and says why it is no Resource, and that the production server registers nothing for it. No URI, Tool or rule
+changes. Edited in place without a supersede or a state change (`dl-047`), pending the approver's `memory amend`.

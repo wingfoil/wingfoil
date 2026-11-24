@@ -114,6 +114,8 @@ path, `Usage: wingfoil help [command]` (`Usage: wingfoil memory help [command]` 
 When the refusal names a file or explains itself, indented lines follow the `error:` line, one per
 finding (`<file>: <detail>`); under `--format json`/`yaml` they are a `details` array of
 `{"file", "detail"}` entries beside `error`.
+New in 0.4: [`wingfoil verify`](#wingfoil-verify) is the one command that prints its payload on a non-zero exit — a
+completed check whose verdict fails prints its report on stdout, then its `error:` line, and exits `1`.
 
 New in 0.3: when a Memory verb cannot move a document from its current state, the line is
 `error: illegal transition <from> -> (none) for type '<type>'` — the verb reaches nothing from
@@ -325,7 +327,7 @@ The document has five keys, in this order: `format` (the document's own format, 
 `commit`, the two halves of `wingfoil --version`), `formats` (each file kind — `agent-adapter`, `bindings`,
 `directive`, `dna`, `memory`, `memory-template`, `roles`, `workflow`, `workflows` — mapped to the `lowest` and
 `highest` format this build reads), `commands` (every command, without the `wingfoil ` prefix) and `capabilities`
-(`agent-execute`, `directive-verbs`, `dna-verbs`, `mcp-server`, `memory-verbs`, `workflow-tracking`: each present
+(`agent-execute`, `directive-verbs`, `dna-verbs`, `governance-check`, `mcp-server`, `memory-verbs`, `workflow-tracking`: each present
 when every command it requires ships). Every list is sorted. `--format json` prints it on one line, `--format yaml`
 as YAML, and `--format console` (the default) as text:
 
@@ -338,12 +340,12 @@ formats read (kind: lowest..highest):
   …
   workflows: 1..1
 
-commands (36):
+commands (37):
   agent execute
   …
   workflow status
 
-capabilities (6):
+capabilities (7):
   agent-execute
   …
   workflow-tracking
@@ -1918,6 +1920,92 @@ adoption).
   a key that is not `<workflow>.<phase>` → `invalid flag value: --from must be <workflow>.<phase>` (or `--to`);
   a missing or blank `--reason`.
 - **Commit:** `workflow: rekey <instance> <from> <to>`, no file changed.
+
+## Governance — checking committed history
+
+### `wingfoil verify`
+
+Check a commit range against the Memory and approval contracts. New in 0.4.
+
+```
+wingfoil verify [--base <rev>] [--introduced-at <rev>]
+```
+
+The command reads committed history only — the commits of the range, and for each commit the blobs committed at it,
+at its first parent and at `HEAD` — and never the working tree or the index, so an uncommitted edit can neither cause
+nor hide a finding. It writes nothing and needs no git identity, only a git repository; no WingFoil configuration in
+the working tree is read. Each commit is judged against the `.wingfoil/memory.yaml` and `.wingfoil/dna.yaml` of its
+first parent, the configuration in force when it was written: a commit cannot grant itself the role it exercises, nor
+widen the machine it moves along.
+
+- **`--base <rev>`** — judge `<rev>..HEAD`, the commits reachable from `HEAD` and not from `<rev>` (a sha or its
+  prefix, a branch, a tag, `origin/main`). Without it every commit reachable from `HEAD` is judged.
+- **`--introduced-at <rev>`** — report the findings on `<rev>` and its ancestors as history, which do not fail the
+  run; every other finding is gated. Without it every finding of the range is gated. A project whose history predates
+  its adoption of WingFoil passes it once, naming the commit it adopted WingFoil at.
+
+With neither option every commit reachable from `HEAD` is judged and gated, and stderr first carries the warning
+`warning: W_VERIFY_WHOLE_HISTORY: no --base and no --introduced-at, so every commit reachable from HEAD is judged and
+gated; pass --base <rev> to judge a range, or --introduced-at <rev> to report older history without failing`.
+
+The checks, each with the version that first ships it (`0.4.0` for all eleven): `subject` (the
+`wf({type}): {verb} {ids}` grammar), `bracket` (the `[from → to]` bracket each verb takes), `body` (the `Approver:` and
+`Reason:` lines), `authority` (an approval is authored by an `approver` of the first parent's `dna.yaml`, and its
+`Approver:` line names that author), `state` (every hop is an edge of the machine and matches the frontmatter),
+`verb-edge` (each verb moves along its own kind of edge), `status-outside-wf` (a commit that is no Memory operation
+changes no Memory document's status), `supersedes-pair` (an approve that supersedes another element is followed by
+the other's `finalize`), `approval-agent-trailer` (an approval carries no `Co-Authored-By:` or `AI-Model:` line),
+`workflow-record-authority` (an `Approver:` line on a `workflow:` record is held to the same grammar and authority)
+and `trailer-paragraph` (every `WingFoil-*` line sits in the body's final paragraph). A commit the shipped verbs write
+passes every one of them; a finding is a commit written by hand, or by a tool, against a contract it breaks.
+
+`--format json` prints the report on one line, whatever the verdict: `head`, `base` and `introducedAt` (full shas, or
+`null`), `checks` (each `{check, rule, since}`), `commits` (`range`, `memory`, `other`, `gated`), `findings` (each
+`{sha, subject, rule, check, message, gated}`, oldest commit first), `stateUnchecked` (each `{sha, subject, reason}`:
+what could not be judged, such as a commit made before `.wingfoil/memory.yaml` existed) and `verdict` (`pass` or
+`fail`). `--format yaml` is the same structure. `--format console` (the default) prints it as text:
+
+```console
+$ wingfoil verify --base origin/main
+wingfoil verify: 1 wf() commits and 0 other commits in f1d56a84c17b58ef6da54125c19ecdb5db1c8ad8..HEAD (1 gated; every commit gated)
+checks: subject 0.4.0, bracket 0.4.0, body 0.4.0, authority 0.4.0, state 0.4.0, verb-edge 0.4.0, status-outside-wf 0.4.0, supersedes-pair 0.4.0, approval-agent-trailer 0.4.0, workflow-record-authority 0.4.0, trailer-paragraph 0.4.0
+FAIL — gated:
+  ae5b0fd46b380a04c64e05d9f35b9cc01bd00685 authority/authority: the author <stranger@example.invalid> holds no approver role in team.members (dl-094)
+      wf(task): approve task-1 [pending → backlog]
+gated: 1 findings on 1 commits (authority 1)
+history: 0 findings on 0 commits
+state not checked: 0 entries on 0 commits (history with no machine, no named document, a document gone at HEAD, or a revision that does not parse or is in a newer format)
+error: E_VERIFY_FINDINGS: 1 findings on 1 commits fail the governance check (authority 1)
+```
+
+In CI, check the commits a push or a pull request brings, on a checkout with the whole history: in a shallow clone
+the parents and blobs the checks read are missing.
+
+```yaml
+- uses: actions/checkout@v4
+  with:
+    fetch-depth: 0
+- run: npx wingfoil verify --base "$BASE"
+```
+
+What it cannot prove: the `authority` check compares a commit's author email with `dna.yaml`, and anyone can set any
+email in their own git configuration. It finds a commit no WingFoil verb would have written, or one written by an
+identity the committed team does not authorize; it authenticates no one.
+
+- **Exit:** `0` — the run completed and no finding is gated (history findings may be listed); `1` — the run completed
+  and a finding is gated: the report on stdout, then on stderr `error: E_VERIFY_FINDINGS: <n> findings on <m> commits
+  fail the governance check (<rule> <count>, …)` (under `--format json`/`yaml`, the `{"error": …}` document, after the
+  warning document when there is one).
+- **Errors, exit `1`, no report:** a `--base` or `--introduced-at` that names no commit (`error: revision "<rev>" does
+  not name a commit`) or is malformed (`error: malformed revision "<rev>": …`), each followed by `  flag: --base` (or
+  `--introduced-at`); a repository with no commit (`error: revision "HEAD" does not name a commit`); a directory that is
+  no git repository.
+- **Errors, exit `2`:** an operand (`error: wingfoil verify takes no positional (got 1 positional)`), a blank `--base`
+  or `--introduced-at` (`error: invalid flag value: --base must not be blank`), an unsupported `--format`, an unknown
+  option such as `--dry-run`.
+- **Commit:** none.
+
+---
 
 ## Agent
 

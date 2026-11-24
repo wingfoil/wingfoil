@@ -43,6 +43,8 @@ export const DETAIL_KEYS: Readonly<Record<string, 'entry' | 'labelled' | 'stated
   element: 'stated',
   exit_status: 'stated',
   file: 'labelled',
+  // task-365 (`spec-020` §8.2, design D9 (a)): the option that carried a refused revision; the reason does not name it.
+  flag: 'labelled',
   frontier: 'labelled',
   id: 'stated',
   instance: 'stated',

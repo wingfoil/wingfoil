@@ -13,7 +13,7 @@
  * - AC 5 (red-first; T-4, T-5): `commands` is the code-unit-sorted union of `enumerateOperations(CORE_MODULES)` and
  *   `BOOTSTRAP_COMMANDS`, and equals, as a set, the leaf commands of `buildProgram(CORE_MODULES, …)`.
  * - AC 6 (red-first; T-7, T-8): each capability is present iff every command it requires is; the reserved names of
- *   §4.3 are declared and never reported; §4.2's six names and their `requires` are the one literal list here.
+ *   §4.3 are declared and never reported; §4.2's names (seven since task-365's `governance-check`) and their `requires` are the one literal list here.
  * - AC 7 (red-first; T-10): the document without `wingfoil`, `JSON.stringify` plus `\n`, equals the committed
  *   fixture `test/core/fixtures/capabilities-document.json`, written at red from `spec-019` §3.5's lists (1018 bytes).
  *
@@ -69,6 +69,9 @@ const SPEC_CAPABILITIES: readonly { name: string; requires: readonly string[] }[
   { name: 'agent-execute', requires: ['agent execute'] },
   { name: 'directive-verbs', requires: ['directive create', 'directive assign', 'directive remove', 'directives list'] },
   { name: 'dna-verbs', requires: ['dna show', 'dna set', 'dna add', 'dna update', 'dna remove'] },
+  // task-365 (`spec-019` OQ-4 (a), §4.2 as amended; design D6 (a)): the seventh capability, between `dna-verbs` and
+  // `mcp-server` in code-unit order.
+  { name: 'governance-check', requires: ['verify'] },
   { name: 'mcp-server', requires: ['mcp'] },
   {
     name: 'memory-verbs',
@@ -290,7 +293,7 @@ describe('task-362 AC 5 — T-4, T-5: the command list (spec-019 §3.3)', () => 
 });
 
 describe('task-362 AC 6 — T-7, T-8: the capabilities (spec-019 §4)', () => {
-  it('T-8 — CAPABILITIES is §4.2\'s list: the six names in code-unit order, each `requires` as the table lists it, frozen', () => {
+  it('T-8 — CAPABILITIES is §4.2\'s list: the seven names in code-unit order, each `requires` as the table lists it, frozen', () => {
     expect(CAPABILITIES.map((entry) => ({ name: entry.name, requires: [...entry.requires] }))).toEqual(
       SPEC_CAPABILITIES.map((entry) => ({ name: entry.name, requires: [...entry.requires] })),
     );

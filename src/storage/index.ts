@@ -19,7 +19,7 @@ export type { RealPathResolution } from './confinement';
 export { extractFrontmatter, splitFrontmatter } from './frontmatter';
 export type { FrontmatterSplit } from './frontmatter';
 export { readDocument, documentExists, removeDocument, writeDocument } from './document';
-export { changedPathsBetween, CommitFailure, commitFailureSummary, commitEmpty, commitParent, commitPaths, committedBlobMatches, stagedPaths, writeAndCommit, EMPTY_TREE_SHA, listBlobEntriesAtRev, listBlobsAtRevs, listPathsAtRev, listPathsAtRevs, mergeBasesWith, pathPorcelainStatus, readBlobs, readPathAtRev, readPathsAtRev, readRevisionPaths, resolveCommitAtRev, storesAsBlob } from './commit';
+export { AGENT_TRAILER_LINE_RE, APPROVER_LINE_RE, changedPathsBetween, CommitFailure, commitFailureSummary, commitEmpty, commitParent, commitPaths, committedBlobMatches, stagedPaths, writeAndCommit, EMPTY_TREE_SHA, listBlobEntriesAtRev, listBlobsAtRevs, listPathsAtRev, listPathsAtRevs, mergeBasesWith, pathPorcelainStatus, readBlobs, readPathAtRev, readPathsAtRev, readRevisionPaths, resolveCommitAtRev, storesAsBlob } from './commit';
 export type { BlobAtRev, BlobEntry, RevisionPath } from './commit';
 export type { CommitAttribution, CommitOptions, PathChange } from './commit';
 export { captureDryRun, isDryRunActive, planDiff } from './dry-run';

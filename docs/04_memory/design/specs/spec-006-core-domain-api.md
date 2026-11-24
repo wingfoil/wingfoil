@@ -78,7 +78,8 @@ returned as `CoreResult.error`, so both the CLI's exit-code/stderr rendering and
 ```ts
 // src/core/types.ts
 export type CoreResult<T> =
-  | { ok: true; value: T; commit?: { sha: string; message: string }; warnings?: readonly string[] }
+  | { ok: true; value: T; commit?: { sha: string; message: string }; warnings?: readonly string[];
+      failed?: { message: string } }       // a completed run whose verdict fails: exit 1 after the payload (spec-020 §8.1)
   | { ok: false; error: CoreError };
 
 export interface CoreError {
@@ -124,6 +125,17 @@ kept out of `value` so it never becomes part of the payload a caller parses. It 
 is nothing to say. The CLI writes each warning to stderr (`spec-008` §6), an MCP Tool result carries
 them as `structuredContent` (`spec-004` §4.3 item 5). A failure has no `warnings`: its reason and
 details are the whole message.
+
+`failed` marks a **completed run whose verdict fails** (`spec-020` §8.1, OQ-2 (a)): the operation ran to the end, its
+`value` is the whole answer — a report a caller reads in every verdict — and the answer says the check did not pass.
+It is not an error: there is no `CoreError` and no refusal, and `value` is printed as on any success. `message` is the
+one-line reason the CLI prints after the payload, as its `error:` line (`spec-005` §1, §3), and `exitCodeForResult`
+(`src/core/exit-code.ts`) maps a result carrying it to exit `1`, so both surfaces read the code from the same
+function. Absent — every other success — the result exits `0`, as it always has. Only `verify` sets it (§3); it is
+never set on a result that carries a `commit`. The production MCP server serves `verify` on neither channel (§3), so
+no MCP response renders `failed` in v0.4; the test-only registrar's mechanical Resource returns the `value` as its
+content, as for any success. A later revision that serves such an operation over MCP states how that channel flags
+the failing verdict (`spec-004`).
 
 `mutates: true` operations MUST be exposed by `src/mcp` only as MCP **Tools** (never Resources, which
 are read-only per REQ-INT-01: "MCP Resources are read-only — mutations only via
@@ -260,6 +272,7 @@ for cell):
 | `runMcp` *(CLI entry, `src/cli/mcp-command.ts`)*   | — *(bootstrap command, not a `CoreModule`: wired directly in `src/cli/program.ts`)* | false   | `wingfoil mcp`    | — *(bootstrap; it hosts the MCP surface, `spec-014` §1)* |
 | `audit`      | `audit` *(planned — self-named flat operation, BDD P5.1.3)*             | false   | `wingfoil audit`  | Resource `wingfoil://audit` |
 | `capabilities` | `capabilities` *(self-named flat operation, P5.1.5, `spec-019`)*      | false   | `wingfoil capabilities` | Resource `wingfoil://capabilities` |
+| `verify`     | `verify` *(self-named flat operation, P1.14, `spec-020`)*               | false   | `wingfoil verify` | — *(CLI only, `spec-020` §1)* |
 
 - **The bootstrap commands are not on MCP** (`dl-046-bootstrap-commands-in-spec-006-section-3` A(a)).
   `init` must run before a WingFoil project exists, and `mcp` starts the server an agent is connected
@@ -276,6 +289,13 @@ for cell):
   (`spec-019` §3), built by `buildCapabilitiesDocument` (`src/core/capabilities.ts`) from `CORE_MODULES`, which
   `src/core/index.ts` passes at call time. The production server serves its Resource `wingfoil://capabilities`,
   hand-registered (`spec-004` §2.1, `spec-019` §6); it is the URI the registrar derives for the operation.
+- **`verify` is a flat, self-named operation, CLI only** (`spec-020` §1, §2, P1.14): module `verify`, op `verify`,
+  `mutates: false`, the value options `--base <rev>` and `--introduced-at <rev>`, no positional. Its value is the
+  governance report (`spec-020` §7), built by `governanceCheck` (`src/core/governance-check.ts`); a report with a
+  gated finding sets `failed` (§2). The production server serves no Resource for it — a range check is an invocation
+  over the whole history, not a document an agent reads to orient itself (`spec-020` §1) — as it serves none for
+  `agentList`; the test-only registrar derives `wingfoil://verify` mechanically, as it derives
+  `wingfoil://agent/list`, and serves nothing in production.
 
 **Agent execution** (P5.3, `src/agent` *(planned module, `spec-016` §1)*, `CoreModule.name` `agent`)
 — the v0.3 surface (`minor-v0.3` `features:` P5.3.1–P5.3.3; run tracking per `dl-135`; normative
@@ -445,6 +465,13 @@ Normatively, for every `CoreOperation`:
    Resource `wingfoil://capabilities` read only what the build ships — `CORE_MODULES`, the format constants,
    `package.json` and `dist/build-info.json` — and no file of a project, no git and no current directory; the
    operation declares `readsProject: false` (§2). Items 1–7 have nothing to bind there.
+9. **A check of committed history reads committed history only** (`spec-020` §2.3, §4.1). `verify` judges each
+   commit of its range against the state committed when the commit was written: the commit objects, and for each
+   commit the blobs at it, at its first parent and at `HEAD`, as each check declares. Neither the working tree nor
+   the index is read, so an uncommitted state can neither cause a finding nor hide one, and `HEAD` alone would not
+   do, because a commit is judged against the configuration in force before it. A configuration blob read this way
+   is validated against its schema without the unknown-field warning of `spec-009` §2. The baseline decides the
+   read's exit code (`failed`, §2) and gates no write.
 
 Which shipped and v0.3 operation reads which baseline, by the items above (the per-command form for
 users is `spec-008-cli-grammar` §11):
@@ -456,6 +483,7 @@ users is `spec-008-cli-grammar` §11):
 | working tree, gating nothing (item 4) | `dnaShow`, `paths`, `directivesList`, `memorySearch`, `memoryHistory` (its log is git's, its `memory.yaml` the working tree's), the shipped MCP Resources and the role Prompts |
 | filesystem, predicting an effect (item 5) | the confinement and symlink guards of every writing or deleting operation, and `directiveCreate`'s check that its target file does not exist |
 | none: the build only (item 8) | `capabilities` and its Resource `wingfoil://capabilities` (`spec-019` §3.2) |
+| committed history (item 9) | `verify` (`spec-020` §2.3, §4.1) |
 
 Symbols in this section read at `9642ab5f`; items 4–6 and the table at `e942e8e9`, except `directiveRemove`'s directive
 read (item 5 and the table's `HEAD`, gating row, `loadDirectiveInventoryAtHead`), read at `77749a0b2` (`task-311`).
@@ -1055,3 +1083,12 @@ gains item 8, "an operation that reads no project reads no baseline", and the ta
 `X_cli-cmds.md` by a line range now names its Pillar 3 command table by section heading (`bug-513`, `dl-075`). No
 other row's function, module or `mutates` changes. Edited in place without a supersede or a state change
 (`dl-047`), pending the approver's `memory amend`.
+
+**Revision (2026-11-21, `task-365-ship-wingfoil-verify-with-the-generic-authority-and-state-checks-spec-020`)
+— `verify`, the check of committed history, and the `failed` field.** `spec-020` (`approved`, OQ-1 to OQ-7 ruled as
+recommended, "Amendments owed") adds the flat, self-named read operation `verify` (P1.14). §2's `CoreResult` gains the
+optional `failed: { message }` on a success, with a paragraph on what it means and how `exitCodeForResult` maps it
+(OQ-2 (a)); §3 gains the `verify` row under *Project bootstrap & audit*, CLI only, and a bullet saying why no channel
+serves it; §6 gains item 9, "a check of committed history reads committed history only", and the table's row
+"committed history". No other row's function, module or `mutates` changes, and no exit code of another operation.
+Edited in place without a supersede or a state change (`dl-047`), pending the approver's `memory amend`.

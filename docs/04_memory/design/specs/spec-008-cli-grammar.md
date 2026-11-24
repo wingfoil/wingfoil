@@ -29,17 +29,17 @@ surface:
 
 ```
 wingfoil [global-flags] <noun> <verb> [args] [flags]      # pillar/verb form, e.g. `memory add`
-wingfoil [global-flags] <noun> [args] [flags]              # flat command: `init`, `mcp`, `paths`, `capabilities`, `audit`
+wingfoil [global-flags] <noun> [args] [flags]              # flat command: `init`, `mcp`, `paths`, `capabilities`, `verify`, `audit`
 ```
 
 - `<noun>` is a pillar namespace (`memory`, `dna`, `directive`, `directives`, `workflow`, `agent`) or a
-  flat command (`init`, `mcp`, `paths`, `capabilities`, `audit`). `init` and `mcp` are the **bootstrap commands**: they
+  flat command (`init`, `mcp`, `paths`, `capabilities`, `verify`, `audit`). `init` and `mcp` are the **bootstrap commands**: they
   are not `CORE_MODULES` operations but are wired directly onto the program (`src/cli/program.ts`),
   because `init` runs before a WingFoil configuration exists and `mcp` hosts the MCP surface itself
   (`spec-014-mcp-server-entry-point` §1). Neither is exposed on MCP (REQ-SYS-05's bootstrap exemption,
   `dl-046-bootstrap-commands-in-spec-006-section-3` A(a)), and both obey this grammar: global flags,
-  the at-most-one-positional rule below, and §5's exit codes. `paths` and `capabilities` (`spec-019` §1, from
-  `minor-v0.4`) are self-named `CORE_MODULES` operations, and `audit` is planned as one (BDD `P5.1.3-audit.feature`, `dl-046` B(a)). The DNA pillar's verbs are `show`, `set`, and the three
+  the at-most-one-positional rule below, and §5's exit codes. `paths`, `capabilities` (`spec-019` §1, from
+  `minor-v0.4`) and `verify` (`spec-020` §2, from `minor-v0.4`) are self-named `CORE_MODULES` operations, and `audit` is planned as one (BDD `P5.1.3-audit.feature`, `dl-046` B(a)). The DNA pillar's verbs are `show`, `set`, and the three
   mutation verbs `add`, `remove` and `update` (§9) — the collection they act on travels in their
   `<path>` argument, not in the verb name, so the verb list does not grow as `spec-002`'s schema does
   (`dl-081-dna-mutation-surface-shape`). The Directives pillar deliberately exposes two nouns —
@@ -86,7 +86,9 @@ wingfoil [global-flags] <noun> [args] [flags]              # flat command: `init
   checks. A command that reads no project — `capabilities` (`spec-019` §1, `spec-006` §2 `readsProject: false`) —
   keeps every check up to the blank-`--project` refusal and stops there, like `--help` and `--version`: it skips
   the root step, so a non-blank `--project` is accepted and not checked, whatever directory it names, and the
-  command runs outside every git repository.
+  command runs outside every git repository. `verify`'s own checks come after the root step, in `spec-020` §2.2's
+  order: a blank `--base` or `--introduced-at` (exit `2`), then `HEAD`, `--base` and `--introduced-at`, each resolved
+  as a revision (§6).
 - **One id per call.** The Memory transition verbs (`memory submit`, `approve`, `reject`, `deprecate`),
   `memory amend`, `memory park` and `memory history` act on exactly one document per invocation;
   transitioning several documents takes one invocation, and one commit, each. The multi-id commit subject `wf({type}): {verb} {id1},
@@ -455,6 +457,15 @@ malformed `--timeout` (§12) — is exit `2`, the row's **usage error**, like a 
 message, not the code. An MCP Tool has no exit code: it reports either as an `isError` result (`spec-004` §4.3 item 4),
 so no client needs the code to change.
 
+A fourth: a **completed check whose verdict fails** — `verify` (`spec-020` §8.1) — is exit `1`, the row's
+**user/logic error**, although the operation succeeded: it prints its whole report on stdout, as on a pass, then the
+`error:` line on stderr (§6), so the report is never lost on the run that needs it (`spec-006` §2's `failed`). A reader
+tells the two exit-`1` cases of `verify` apart by stdout: a report whose `verdict` is `fail`, or nothing. A revision
+that names no commit, or a malformed one (`--base`, `--introduced-at`), is `resolveRevision`'s refusal (`spec-020`
+§8.2), exit `1` like a document not found: the value is read as a revision, by the resolver every revision reader
+uses, and that resolver decides it, as it does where a revision reaches the MCP surface (`spec-004` §3.4); a blank
+value stays the third case's exit `2`.
+
 ### 6. Error format (REQ-INT-08)
 
 Every user-facing error, on stderr, in `--format console` (default):
@@ -503,6 +514,9 @@ Q2 option 1):
 | `memory approve`, `reject`, `amend`; `workflow finalize` on an `approval:` phase, `workflow adopt --plan --apply`, `workflow rekey` | `1` | The authority refusal (REQ-SEC-03) keeps its reason word for word — `user not authorized to approve type '<type>'`, `user not authorized to apply adoptions in bulk`, `user not authorized to rekey` — and, when **no** `team.members` entry of the `dna.yaml` committed at `HEAD` holds the `approver` role, gains a `hint:` line saying how to grant it (`dl-071` (B), S3: an appended hint, the pinned string untouched): with `team.members` empty (the `init` scaffold), `no team member holds the 'approver' role yet: add one with 'wingfoil dna add team.members --value "<name>" --entry-email <email> --entry-roles approver', then retry`, `<name>` and `<email>` the git identity the check judged; with members, none an approver, `no team member holds the 'approver' role yet: add approver to the roles of a team.members entry with 'wingfoil dna update', then retry`. The hint is the `hint` field of the error object under `--format json`/`yaml` (`spec-005` §3.2). There is no hint when a member holds `approver` (the refusal is then a denial), nor when the working tree's `dna.yaml` would grant it to the identity, whose reason already names the remedy (commit it). Nothing is written. |
 | every command that writes (§2 `--dry-run`'s list) | `1` | `E_AGENT_TRAILER_ON_APPROVAL: the commit '<subject>' records an approval and would carry an agent trailer (<key>:), which an approval never carries (dl-212, git-conventions §7); nothing was written` — the commit primitive's backstop (`spec-018` §3.3): a message with an `Approver:` line and a `Co-Authored-By:` or `AI-Model:` line, any case. |
 | the commands that take `--co-author` (§2) | `1` | `unknown team.agents entry '<name>' (from <--co-author\|WINGFOIL_AGENT>): the committed dna.yaml declares <comma-separated names, or "none">` — `--co-author`, or a non-blank `WINGFOIL_AGENT`, names no entry of `team.agents` at `HEAD` (`spec-018` §2.5); nothing is written. Not on an approver-gated command, which is refused with `E_AGENT_CONTEXT` first (`spec-018` §2.6). |
+| `verify` | `1` | `E_VERIFY_FINDINGS: <n> findings on <m> commits fail the governance check (<rule> <count>, …)` — the run completed and at least one finding is gated; written after the report, which stdout carries in every verdict (§5, `spec-020` §7, §8.2). Under `json` / `yaml` it is the error document of `spec-005` §3.2 |
+| `verify` | `1` | `revision "<rev>" does not name a commit` and `malformed revision "<rev>": a revision is a non-empty name with no leading '-', no whitespace or control character, no ':' and no '..'` — `resolveRevision`'s two messages, word for word, for `HEAD` (an unborn `HEAD`) and for the values of `--base` and `--introduced-at`; `details` carries `rev` and, for a flag's value, `flag` (`--base` or `--introduced-at`) (`spec-020` §8.2) |
+| `verify` | `2` | `invalid flag value: --base must not be blank`, or `--introduced-at` — before any revision is resolved (`spec-020` §8.2) |
 | the commands that take `--co-author` (§2) | `1` | `team.agents entry '<name>' has no email, and a commit it co-authors must name one; declare it first (wingfoil dna update team.agents.<name> --entry-email <address>), then retry` — the signing entry declares no `email` (`spec-018` §2.5, `dl-158` Rule 2 (ii)); nothing is written. |
 
 **Warnings on a successful command.** A command that succeeds may also have something to tell the
@@ -543,8 +557,13 @@ and dry-run terminal warnings, the run registry's and `--log`'s, the start-up hi
 | `agent execute`, per headless output that `usage.from` names `output` for and that yields no usage (`spec-016` §2.6) | `adapter '<name>': <reason>: model and tokens not read from it`, `<reason>` being `the headless output is not one JSON document` or `the headless output is over 1 MiB`; or `adapter '<name>': the headless output's <key> is not a non-negative integer: not read from it` (`model`: `the headless output's model is not a non-empty string: not read from it`) |
 | `agent execute`, per headless output that `session.id: output` reads and that yields no session id (`spec-016` §2.6) | `adapter '<name>': <reason>: session recorded as not-reported`, `<reason>` being `the headless output carries no session id`, `the headless output is not one JSON document` or `the headless output is over 1 MiB` |
 | `agent execute`, per transcript source (`usage.from` names `transcript`) that yields no usage or a value of the wrong type (`spec-016` §2.6) | `adapter '<name>': usage.transcript: ` followed by `the session id is not-reported: the transcript is not read`, `the path does not render as an absolute path: the transcript is not read`, `the transcript of session <session> <reason>` (`<reason>` is `is absent`, `is unreadable (<code>)` or `was not read within <ms> ms`), `<key> is not a non-negative integer in a message: not read from it` or `model is not a string in a message: not read from it` |
+| `verify` with neither `--base` nor `--introduced-at` (`spec-020` §5.1, §8.2) | `W_VERIFY_WHOLE_HISTORY: no --base and no --introduced-at, so every commit reachable from HEAD is judged and gated; pass --base <rev> to judge a range, or --introduced-at <rev> to report older history without failing` — raised once `HEAD` is resolved and before the range is read, so it precedes the report and the `E_VERIFY_FINDINGS` line; an unborn `HEAD` is refused without it |
 | the commands that take `--co-author` (§2), in an agent's session, when no entry is named for the agent (`spec-018` §2.3 rule 4) | `W_AGENT_ENTRY_GUESSED: Attributed to the first team.agents entry, <name>: no entry is named for this agent.` — the same text the commit body's first paragraph carries |
 | the commands that take `--co-author` (§2), in an agent's session, when `team.agents` at `HEAD` is empty or absent (`spec-018` §2.3) | `W_NO_AGENT_ENTRY: this command runs in an agent's session (<markers>) but dna.yaml declares no team.agents entry, so its commit names no AI co-author; declare one (wingfoil dna add team.agents …)` — `<markers>` as in §6's `E_AGENT_CONTEXT` row |
+
+`verify` reads `dna.yaml` and `memory.yaml` blobs from the history it judges (`spec-020` §4.1): it validates each
+against its schema and writes **no** unknown-field warning for one, so its stderr does not depend on what an old
+blob holds; the "any command" row above does not apply to those reads.
 
 **Notices and a payload on stderr** (`spec-016` §3.4, task-228). A command that hands its stdout to a
 child process — `agent execute`, whose agent owns the terminal — writes nothing on stdout (`spec-005`
@@ -806,6 +825,7 @@ CLI reference's *Git side effects* says the same to users.
 | **committed at `HEAD`, declared** (v0.3, as each ships) | `workflow status`, `workflow list`, `workflow show`, `workflow adopt --plan` (`patch-v0.3.1`), `agent list` (its `--active` section excepted: from v0.4 it reads the git-ignored active registry in the working tree, `spec-016` §5.1, §7), `agent show` | approver ruling R15: one deduction, one baseline; a working tree that differs is reported as the warning `W_UNCOMMITTED_INPUTS`, and never decides the answer (`spec-006` §6 item 6, `spec-017` §1.2) |
 | **working tree** | `dna show`, `paths`, `directives list`, `memory search`, `memory history` | a read that gates nothing: a draft you have not committed is what `memory search` exists to find (`spec-006` §6 item 4). `memory history` reads git's log for the entries and the working tree's `memory.yaml` |
 | **filesystem** | the confinement and symlink guards of every command that writes or deletes a file; `directive create`'s and `workflow create`'s check that its target does not exist | the read predicts where a syscall will land, which no commit records (`spec-006` §6 item 5, `dl-086`) |
+| **committed history** (from `minor-v0.4`) | `verify` | a check of the history judges each commit against the state committed when it was written: the commit objects of the range and, per commit, the blobs at it, at its first parent and at `HEAD`; never the working tree or the index, so an uncommitted edit neither causes nor hides a finding (`spec-020` §2.3, `spec-006` §6 item 9) |
 | **the build, no project** (from `minor-v0.4`) | `capabilities` | the document is a property of the build: it reads `CORE_MODULES`, the format constants, `package.json` and `dist/build-info.json`, and no project, git or current directory, so it answers the same anywhere (`spec-019` §3.2, `spec-006` §6 item 8) |
 
 `init` and `mcp` read no committed configuration: `init` writes the scaffold, and `mcp` starts the
@@ -831,6 +851,7 @@ has no reference entry.
 | Command | Flag | Behaviour |
 |---------|------|-----------|
 | `paths` | `--list` | Accepted for the planned drill-down view; it does not change the output yet. |
+| `verify` | `--base <rev>`, `--introduced-at <rev>` | From `minor-v0.4` (`spec-020` §2.2): value options, each one revision resolved by `resolveRevision` (§6's `verify` rows). `--base` judges `<rev>..HEAD`, the commits reachable from `HEAD` and not from `<rev>`; without it every commit reachable from `HEAD` is judged. `--introduced-at` makes `<rev>` and its ancestors history, reported and not failing; without it every finding of the range is gated, and without either the command warns (`W_VERIFY_WHOLE_HISTORY`, §6). No positional (§1's surplus refusal); `--dry-run`, `--reason`, `--co-author` and `--ai-model` are not taken (unknown option, exit `2`). |
 | `capabilities` | — | No flag, no option and no positional (`spec-019` §1, from `minor-v0.4`): an operand is refused at exit `2` (§1), and so is any option §2 does not list for it. |
 | `workflow start` | `--element <type>:<id>\|none`, `--title <t>`, `--set <name>=<value>` | `spec-017` §7.1, §3.4, §3.5: `--element` names the element a workflow that declares `element:` runs on (§7's element-ref; default: the active instance's bound element of that type; `none` is refused, exit `1`, `workflow '<name>' needs a <type> element: give --element <type>:<id>`). On a workflow that declares none it names the plan's context element, of any type, which must exist at `HEAD`, and `--element none` records no context (default: the active instance's bound element when that instance's workflow declares `element:`, else none; from `minor-v0.4`, `bug-413`). `--title` is the plan's title (default `<workflow> — <phase>`). `--set` is repeatable and overrides a derived plan value: only `phase=<v>` and `scope=<v>` are accepted — `phase` whether or not the plan type's patterns hold a `{phase}` token (written as a field when they do not), `scope` only as a token (`spec-017` §7.1, from `minor-v0.4`); any other name is a usage error (exit `2`, `invalid flag value: --set <name>: workflow start sets only phase and scope`), and §10's spelling errors apply unchanged. The `<id>` of `--element` may be a short reference (§7); the plan binds the full id. |
 | `memory add` | `--workflow <ref>` | A value option: links the added document to a step of the open instance `<ref>` names — an instance id, or a workflow name (its most recently started open instance) — through the add commit's trailers `WingFoil-Instance: <instance-id>` and `WingFoil-Step: <key>` (`spec-017` §4.8, §7.10, ruling R16). The step is the one frontier step whose phase declares `memory.add` of the `--type` given; none, or several without `--step`, is refused (`CONFLICT`, exit `1`, `spec-017` §10). Without it, `memory add` links nothing and its commit is unchanged. |
@@ -1683,3 +1704,14 @@ reach the exit-`2` row: a help path with an operand naming no command, `wingfoil
 state change (`dl-047`), pending the approver's `memory amend` at `task-380`'s design gate. At `task-380`'s review,
 §8 also states that the help command's path ends at the first option token, and §12's `agent execute --interactive`
 row says that §2's global `--no-interactive` has no positive form.
+
+**Revision (2026-11-21, `task-365-ship-wingfoil-verify-with-the-generic-authority-and-state-checks-spec-020`)
+— `verify`, the check of committed history.** `spec-020` (`approved`, OQ-1 to OQ-7 ruled as recommended, "Amendments
+owed") adds the flat command `wingfoil verify` (P1.14). §1 names it in the grammar comment, the `<noun>` bullet and
+beside `paths` and `capabilities` as a self-named operation, and "one order of usage checks" places its own checks
+after the root step; §5 gains the fourth case, a completed check whose verdict fails exits `1` after its report, and
+says that its revision values are `resolveRevision`'s (exit `1`), a blank one exit `2`; §6 gains `verify`'s three
+refusal rows and its warning `W_VERIFY_WHOLE_HISTORY`, and the sentence that it prints no unknown-field warning for a
+configuration blob read from history; §11 gains the row "committed history"; §12 the row of `--base` and
+`--introduced-at`. The command count is not written here; the `user-docs` phase writes it. Edited in place without a
+supersede or a state change (`dl-047`), pending the approver's `memory amend`.

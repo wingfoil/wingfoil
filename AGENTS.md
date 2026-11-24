@@ -32,9 +32,9 @@ Layer (CLI + MCP)**.
 > an MCP server (`wingfoil mcp`), all covered by a full Jest suite (`npm test`). Read, run, test and reason about
 > `src/` as you would in any other codebase.
 >
-> **The command surface** is derived mechanically from `CORE_MODULES` (`src/core/index.ts`) — 36 commands,
+> **The command surface** is derived mechanically from `CORE_MODULES` (`src/core/index.ts`) — 37 commands,
 > each with an entry in `docs/cli-reference.md`:
-> - top level: `capabilities`, `init`, `mcp`, `paths`;
+> - top level: `capabilities`, `init`, `mcp`, `paths`, `verify`;
 > - `dna`: `show`, `set`, `add`, `update`, `remove`;
 > - `memory`: `add` (with `--set <name>=<value>` for `id_pattern` tokens), `submit`, `approve`, `reject`,
 >   `deprecate`, `amend`, `park`, `history`, `search`;

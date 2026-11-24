@@ -149,11 +149,20 @@ function withNote(message: string, note: string | undefined): string {
 /** The code of {@link ApprovalTrailerError} (`spec-018` §3.3). */
 export const E_AGENT_TRAILER_ON_APPROVAL = 'E_AGENT_TRAILER_ON_APPROVAL';
 
-/** A line that makes a commit an approval commit: `Approver:`, any letter case (`spec-018` §0). */
-const APPROVER_LINE_RE = /^approver:/im;
+/**
+ * A line that makes a commit an approval commit: `Approver:`, any letter case (`spec-018` §0). One of the pair
+ * `spec-020` §4.9 shares (AC-4, task-365): the commit primitive's refusal here, the `--reason` defect of
+ * `src/memory/commit-message.ts` and `wingfoil verify`'s `approval-agent-trailer` check
+ * (`src/core/governance-check.ts`) read this one object. No `g` flag, so `test` keeps no state; with `m` it serves a
+ * whole message and a single line alike.
+ */
+export const APPROVER_LINE_RE = /^approver:/im;
 
-/** An agent trailer line, any letter case, anywhere in the message (`spec-018` §0) — the governance check's pattern. */
-const AGENT_TRAILER_LINE_RE = /^(co-authored-by|ai-model):/im;
+/**
+ * An agent trailer line, any letter case, anywhere in the message (`spec-018` §0) — the other half of the pair
+ * {@link APPROVER_LINE_RE} documents, read by the same three readers.
+ */
+export const AGENT_TRAILER_LINE_RE = /^(co-authored-by|ai-model):/im;
 
 /** Each agent trailer key in its canonical spelling, as the refusal names it. */
 const AGENT_TRAILER_KEYS: Readonly<Record<string, string>> = { 'co-authored-by': 'Co-Authored-By', 'ai-model': 'AI-Model' };

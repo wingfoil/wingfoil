@@ -102,6 +102,8 @@ describe('every git log reader in src/ and scripts/ passes --no-show-signature (
     const files = [...new Set(results.flatMap((result) => result.readers).map((at) => at.replace(/:\d+$/, '')))];
     expect(files).toEqual([
       'src/core/agent-show.ts',
+      // task-365: `wingfoil verify`'s history reader (`createGitHistoryReader`, `spec-020` §3, T-27).
+      'src/core/governance-check.ts',
       'src/core/workflow-deduction.ts',
       'src/memory/git-log.ts',
       'src/memory/history.ts',
