@@ -9,6 +9,9 @@
  *   covers both handlers: a read, a `resources/write` and a read carrying a write intent each leave the files,
  *   the status, `HEAD` and every ref unchanged; the two write shapes are refused with spec-004 §2.3's string.
  *
+ * - task-374 AC 8 (`spec-017` §9 as amended): on the held-ungated fixture the status Resource still equals `workflow
+ *   status --format json`, and so carries `ungatedByType` and a held element's `heldBy` (`bug-341`, `bug-487`).
+ *
  * The server is `createMcpServer` — what `wingfoil mcp` serves — over the SDK's in-memory transport; the CLI side
  * is the compiled `dist/cli.js` that jest's `globalSetup` builds.
  */
@@ -19,6 +22,7 @@ import { McpError } from '@modelcontextprotocol/sdk/types.js';
 import { WRITE_REFUSAL_MESSAGE } from '../../src/mcp';
 import { createMcpServer } from '../../src/mcp/server';
 import { runCliEntry } from '../cli/helpers/spawn-cli';
+import { HELD_INSTANCE, writeHeldUngatedProject } from '../core/helpers/held-ungated-fixture';
 import { commitAll, git, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
 import { assertFilesUnchanged, attemptEveryResourceWrite, snapshotFiles } from './helpers/channel-enumeration';
 
@@ -231,6 +235,32 @@ describe('task-239 — a refusal reaches the client as the CLI prints it', () =>
           expect(error.message).toContain(cli.error);
           expect(error.data).toEqual(cli.details === undefined ? undefined : { details: cli.details });
         }
+      } finally {
+        await client.close();
+      }
+    } finally {
+      removeTempDir(repo);
+    }
+  });
+});
+
+describe('task-374 AC 8 — the status Resource carries ungatedByType and heldBy (spec-017 §9)', () => {
+  it('on the held-ungated fixture: the Resource text is `workflow status --format json`, with ungatedByType and bug-1-crash\'s heldBy', async () => {
+    const repo = makeTempGitRepo();
+    try {
+      writeHeldUngatedProject(repo);
+      const client = await connect(repo);
+      try {
+        const run = runCliEntry(repo, ['workflow', 'status', '--format', 'json']);
+        expect([run.status, run.stderr]).toEqual([0, '']);
+        const read = await readText(client, STATUS_URI);
+        expect(read.text).toBe(run.stdout.replace(/\n$/, ''));
+        const value = JSON.parse(read.text) as { ungated: { id: string; heldBy?: unknown }[]; ungatedByType: unknown };
+        expect(value.ungatedByType).toEqual([{ type: 'bug', count: 2 }]);
+        expect(value.ungated.find((entry) => entry.id === 'bug-1-crash')?.heldBy).toEqual({
+          instance: HELD_INSTANCE,
+          element: { type: 'release', id: 'release-1', status: 'planning' },
+        });
       } finally {
         await client.close();
       }
