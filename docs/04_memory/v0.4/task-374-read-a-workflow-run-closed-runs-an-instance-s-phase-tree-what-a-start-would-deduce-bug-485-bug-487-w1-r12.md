@@ -842,6 +842,46 @@ Unchanged in number (`git status --short` lists exactly these two), the `spec-01
 - `bug-487-workflow-status-read-as-the-approver-s-queue-offers-approvals-no-open-run-s-frontier-reaches-and-calls-a-bug-triaged-into-an-open-run-s-release-uncarried`
   — `--reason` as proposed in the fix round above; its Retrospective line names no `heldBy` element and stays true.
 
+
+### fix round 3 after the light re-review (developer, 2026-11-24)
+
+**Base.** The light re-review of the round-2 delta (`41a54ae95`) returned APPROVE WITH FIXES (0 blockers, 1
+should-fix, 0 follow-up); text only. At start: HEAD `41a54ae95`, `git rev-list --count HEAD..main` → `0`,
+`git status --short` → exactly the two pending amendments; `node --version` → `v22.21.0`.
+
+**The correction.** Round 2 narrowed the exception to "an earlier entry of that trail". `holderOf`
+(`src/workflow/deduce.ts`) walks one flat list in instance, then frontier, then trail order, so an earlier instance or
+an earlier frontier step that holds the element by a field also wins over identity (the reviewer's two-runs case,
+`sw-life-cycle-1-plan` started last: hotfix's `release-1` prints `held by sw-life-cycle-1-plan's release-line rl-1`).
+The code is right and kept; one wording, "an earlier holder in that order", in the five places, the nested ancestor kept
+as an example:
+- pending `spec-017` §5.1: "…which is the element itself unless an earlier entry of that trail holds it by a field." →
+  "…which is the element itself unless an earlier holder in that order holds it by a field.";
+- pending `spec-017` Revision paragraph: "…unless an earlier entry of that trail holds it by a field (a nested iteration
+  element whose own field names its parent is held by that ancestor)…" → "…unless an earlier holder in that order holds
+  it by a field (for example, a nested iteration element whose own field names its parent is held by that ancestor)…";
+- `GatedElement` TSDoc (`4a67802c2`): "the element itself, unless an earlier entry of that trail holds it by a field (a
+  nested iteration element …)" → "the element itself, unless an earlier holder in that order holds it by a field (for
+  example, a nested iteration element …)";
+- module doc of `test/core/workflow-status-held-identity.test.ts` (`4a67802c2`): "unless an earlier entry of that trail
+  holds it by a field" → "unless an earlier holder in that order holds it by a field"; its line "Here the trail has one
+  entry, so `heldBy.element` is `release-1` itself." is kept (true of its single-instance fixture);
+- module doc of `test/core/workflow-status-held-nested.test.ts` (`4a67802c2`): "…in instance, frontier and trail order.
+  When an earlier entry of the trail holds the element by a field, that ancestor is the holder, not the element itself."
+  → "…in instance, frontier and trail order: the element itself unless an earlier holder in that order holds it by a
+  field. Here, for example, an earlier entry of the trail (the ancestor) holds the element by a field, so that ancestor
+  is the holder, not the element itself."
+- `grep -rn "earlier entry of that trail" src test docs` → hits only in the round-2 section of this file (history).
+  `git diff 41a54ae95 HEAD -- src test` changes only comment lines.
+
+**The two `--reason`s** stay as proposed in the first fix round: neither names a holder order or a `heldBy` element,
+so both are still true; the `bug-487` Retrospective line is unchanged and still true.
+
+**T4.** `git log --first-parent --no-merges --format=%h 56963ae4d..HEAD --` over the ten red files → empty (exit 0),
+before this notes commit.
+
+**Checks.** Run on the head that carries this commit; results in the phase report.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
