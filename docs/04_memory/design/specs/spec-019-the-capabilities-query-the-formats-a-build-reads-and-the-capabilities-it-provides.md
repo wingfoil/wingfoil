@@ -777,7 +777,7 @@ approver's `memory amend`.
 — §4.2 gains `governance-check`, as OQ-4 (a) rules.** OQ-4 was ruled (a) at this spec's approval: the task that merges
 second of `task-362` and `task-365` adds the capability, and `task-362` merged first. §4.2's table gains the row
 `governance-check`, `requires` `verify` (`spec-020`'s OQ-1 (a)); §4.1's sentence and OQ-4 say it is ruled; the sentence
-under the table counts seven; T-7 reads "every capability of §4.2" instead of a count; §5's 0.4.0 `Capabilities:`
+under the table counts seven; T-7 reads "every capability of §4.2" instead of a count; §8's 0.4.0 `Capabilities:`
 line names it. §3.5's examples keep their surface "without any other w1 command", which they state, so their counts
 stay. The amendment touches neither the derivation nor §4.3's names nor any format. Edited in place without a supersede or a state
 change (`dl-047`), pending the approver's `memory amend`.
