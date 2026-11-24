@@ -409,6 +409,93 @@ refactor waits and runs it again; it never skips it, and never loosens a budget.
 - `spec-008-cli-grammar` — `--reason "Add the sixth case of the reason rule in section 2, refusing a reason that is only a placeholder or holds no word, say where the Carries content line is read back, name the committed-history read of the unverified mark in section 11, and add to section 12 the memory history row, memory search --verify and the missing rows of memory search's shipped --type, --status and --tag, as task-378's design gate rules for bug-498, bug-287 and bug-496."`
 - `spec-020-…` and `spec-006-core-domain-api` — unchanged from the design's list.
 
+### red (qa, 2026-11-24)
+
+**Red commit `e440ba99b`** (`git log -1 --format='%H %s'` → `e440ba99b5b887b89a42271a7f3d9e1e28af3299 test(memory): task-378 —
+failing test: …`), test files only. Base unchanged: `git rev-list --count HEAD..main` → `0`, no merge. PATH guard: `command -v
+wingfoil` → the task's PATH shim; `wingfoil --version` and `node dist/cli.js --version` → `0.3.2
+(47c743deb70040900e2d2ab00c63c989720d16fe)`.
+
+**Files.** New: `test/memory/carries-content.test.ts`, `test/memory/submit-committed-content.test.ts`,
+`test/core/carries-content-check.test.ts`, `test/core/memory-history-mark.test.ts`, `test/core/memory-search-verify.test.ts`,
+`test/cli/memory-history-mark.integration.test.ts`, `test/cli/reason-placeholder.integration.test.ts`, and the fixture helper
+`test/core/helpers/history-mark-fixture.ts` (T-1's shape built with the verbs, T-8, T-9, T-37 and a commit before any
+`memory.yaml`; `MARK_DNA` adds the fixture's git identity as a developer so a spawned `memory submit` runs). Extended:
+`test/core/helpers/in-memory-history-reader.ts` (`carriesLineBefore`: a proper ancestor's body has a line starting exactly
+`Carries content: `), `test/core/governance-check.test.ts` (`GOVERNANCE_CHECKS` twelve; the console `CHECKS_LINE` constant
+gains `carries-content 0.4.0`, a hunk outside the summary lines task-366 edits; a new `describe` for the `body` row of a
+placeholder, inserted before the console `describe`), `test/cli/verify.integration.test.ts` (§7's twelve `checks` in T-28; a new
+`describe` with T-38 to T-40 and the P1.14 scenario, appended), `test/memory/reason-trailer.test.ts` and
+`test/core/require-reason.test.ts` (a `describe` each, appended). `test/memory/commit-message.test.ts` is unchanged: it pins no
+defect list. No `.d.cts` is needed: every new export is TypeScript.
+
+**Expected values.** `spec-020` §4.4, §4.5, §4.7 and §4.14's tables and `spec-008` §2's sixth case, word for word at `47c743deb`.
+The T-8, T-9, T-37 and pre-`memory.yaml` messages were also printed by real runs on scratch repositories of the same commits,
+`node dist/cli.js verify --format json --project <scratch>` (exit `1` each): T-8 the two `authority` messages
+(`the Approver: line names <nobody@example.invalid>, but <stranger@example.invalid> authored the commit (dl-094)`, then `the
+author <stranger@example.invalid> holds no approver role in team.members (dl-094)`); T-9 `docs/memory/task/t-1.md: its status
+went pending → backlog in a commit that is not a wf() Memory operation (dl-139)`; T-37 `docs/memory/task/t-2.md: the bracket
+declares pending → backlog, the frontmatter went pending → in-progress` (that one finding only); the early `add` `no
+.wingfoil/memory.yaml is committed at this commit: its state cannot be checked`. A scratch hand-submit fixture and a
+`memory submit` fixture gave `verdict: pass` with no finding, so the T-38/T-40 fixtures carry no other finding. The integration
+tests also compare each mark with the verb's own report on the same repository. Current shapes read with `node dist/cli.js
+memory history t-1 --format json|console|yaml` and `memory search --format json|console` on the scratch T-9 repository (the
+entry keys `sha … reason, subject, wingfoil`; console is the pretty JSON form), and `memory search --verify` → exit `2`
+`unknown option '--verify'`.
+
+**Runs** (each `npx jest <file> --maxWorkers=2 --noStackTrace --json --outputFile=<scratch>`, failed/total):
+`carries-content` 8/8, `submit-committed-content` 19/19, `reason-trailer` 7/68, `require-reason` 4/13, `governance-check`
+5/99, `carries-content-check` 24/24, `memory-history-mark` (core) 8/9, `memory-search-verify` 1/2,
+`memory-history-mark.integration` 9/9, `reason-placeholder.integration` 7/7, `verify.integration` 5/53.
+`npx tsc --noEmit -p tsconfig.json` → exit `2`, only the intended: TS2305 `checkCarriesContent`, `unverifiedFindings`
+(`src/core/governance-check`), `parseCarriesContent` (`src/memory/commit-message`, two files), `isCarriesItem`,
+`orderCarriesItems` (`src/memory/submit`); TS2724 `describeCommittedSubmitContent` (the TS2305 case with a "did you mean"); TS2339
+`carriesLineBefore` on `GitHistoryReader`; TS2353 `carriesLineBefore` in the in-memory reader's object literal. No TS2339 for
+`carries`/`unverified`: the history and search tests type the values locally, as `test/core/memory-history.test.ts` does, so that
+red is at runtime. `npx jest test/lint --maxWorkers=2` → `1 failed, 164 passed`: `typecheck.clean`, the same intended errors;
+`eslint` on the thirteen files → clean. `npx jest test/validation/secret-scan.test.ts` → `85 passed`. `npx jest test/docs
+test/directives --maxWorkers=2` → `916 passed, 916 total`. The invisible-character grep → no hit (one raw U+2028 the editor wrote
+was rewritten as `\u2028` before the commit).
+
+**Per AC** (first failing assertion):
+- **AC 1 (red-first).** `test/core/memory-history-mark.test.ts`: T-9 → `entry.unverified` expected the `status-outside-wf` mark,
+  received `undefined`; T-1's shape → `Object.keys(entry)` lacks `carries`; T-37 → the second task's `unverified` `undefined`;
+  `gated: true` → `undefined` where §4.5's first row is expected; `unverifiedFindings` → `TypeError: … is not a function`.
+  Passes today: "is deterministic" (a guard). `test/core/memory-search-verify.test.ts`: T-9 → `[["t-1", undefined]]` for
+  `[["t-1", [<tidy sha>]]]`; T-1's shape (no key, the flag changes nothing) passes today, a guard. Spawned
+  (`test/cli/memory-history-mark.integration.test.ts`): history on T-9 → `[]` marked entries; every `memory search --verify` case
+  and the P1.5 scenario "Mark the matches whose history no check verified" → `{status: 2, stderr: {"error":"unknown option
+  '--verify'",…}}`; `memory search --help` → no `--verify` line; T-37 → `undefined`; P1.10 "Edge - an entry no check verified is
+  marked" → `undefined` for the two `authority` marks.
+- **AC 2 (red-first).** Same integration file, T-34 → marked shas `[]`, expected `[<the forged approve's sha>]`.
+- **AC 3 (red-first).** `test/memory/carries-content.test.ts` → `parseCarriesContent is not a function` (8/8). History:
+  `memory-history-mark` (core) T-38 cases → `carries` `undefined` for `null` / `["the body"]`; P1.10 "Each entry reports the
+  content its submit declared" → `[["add", undefined], ["submit", undefined], …]`.
+- **AC 4 (red-first).** `test/core/carries-content-check.test.ts` → `checkCarriesContent is not a function` (18) and
+  `reader.carriesLineBefore is not a function` (6, the git reader over a line commit, a side branch forked before it and the
+  merge); `test/memory/submit-committed-content.test.ts` → `parseCarriesContent` / `describeCommittedSubmitContent` /
+  `isCarriesItem` / `orderCarriesItems is not a function`; `governance-check.test.ts` → `GOVERNANCE_CHECKS` lacks the
+  twelfth entry, and the two console tests' `checks:` line lacks `carries-content 0.4.0`; `verify.integration.test.ts` → T-28's
+  `checks` lacks it, T-38, T-39, T-40 and the P1.14 scenario "Error - a submit that does not declare the content it carries" →
+  the filtered `carries-content` findings `[]`.
+- **AC 5 (red-first).** `reason-trailer.test.ts` → `reasonDefect('<the reply>')` expected `"placeholder"`, received `null` (five
+  inputs), `reasonRefusalMessage` `null`, `formatMemoryCommitMessage` "did not throw"; the accepted inputs (`'<a> and <b>'`,
+  `'ok'`, `'é'`, `'1'`), BEL before the placeholder and a blank reason pass today. `require-reason.test.ts` → the received
+  value is `undefined`, not a `UsageError` (4). `governance-check.test.ts` body row → `[]` for the placeholder finding (2; the
+  two-token reason passes). `reason-placeholder.integration.test.ts`: P1.7 "Error - a reason that states nothing" and `reject`,
+  `amend`, `park`, `deprecate`, `workflow finalize`, a padded `approve` → `status: 0`, the verb's JSON on stdout, where exit
+  `2` and `error: invalid flag value: --reason must state a reason: it holds no word, or only a <placeholder>` are expected.
+
+**For the developer.** Interfaces the tests call: `parseCarriesContent(body)`; `describeCommittedSubmitContent(parent, commit)`,
+`isCarriesItem(item)`, `orderCarriesItems(items)` from `src/memory/submit`; `checkCarriesContent(commit, reader, { gated })`
+and `unverifiedFindings(root, { path, entries: [{ sha, path, parentPath }] })` (a map from sha to findings carrying `rule`,
+`check`, `message`) and `createGitHistoryReader(root, { head }).carriesLineBefore(sha)` from `src/core/governance-check`;
+`memorySearch` with `options: { verify: true }`. Spawned verbs run with `withoutAgentMarkers(process.env)`.
+
+**Process slip (black box, T3).** Before the red commit one command named a `src/` path: `grep -n "reasonRefusalMessage" src
+2>/dev/null | head -0`, chained to a test-file grep while checking an existing test's imports. Its output was discarded
+(`head -0`) and no source file was opened; no expected value comes from it. Recorded here as the directive asks.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
