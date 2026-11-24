@@ -171,6 +171,8 @@ describe('task-288 AC 3 — release-publishing `tag` on the integration branch (
       'phase-branch-merged-to-integration-branch',
       `staging-rehearsal-passed(transcript: ${TRANSCRIPT_PATH})`,
       `evidence-only-since-candidate(transcript: ${TRANSCRIPT_PATH})`,
+      // task-366 AC 6 (dl-190 (c), design item 8, D8): the tag waits for the required governance check, last.
+      'governance-check-passed(kind: "{release.kind}", version: "{release.version}")',
     ]);
   });
 

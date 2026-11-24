@@ -2,6 +2,11 @@
  * task-208 (`dl-103` §1 (B)) — a tracked hook directory, `.githooks/`, opted into per clone with
  * `git config core.hooksPath .githooks` (documented in `git-conventions`), runs the same governance
  * check before a push. A local convenience: `--no-verify` skips it, CI (`governance.yml`) is binding.
+ *
+ * task-366 (`dl-190` (a), `bug-417`, `spec-020` §6.4; design items 4, D7, D9) — the hook becomes required
+ * (`npm run setup:hooks`, `git-conventions` §9), its header says it runs the script, which runs `wingfoil verify`
+ * (AC 4, red-first, D14), it refuses a push when `dist/` is not built (D7, red-first), and its base candidates come
+ * from the tracking refs of the remote it pushes to, `$1` (AC 7, D9).
  */
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync } from 'node:fs';
@@ -44,6 +49,20 @@ describe('tracked git hooks (task-208, dl-103 §1 (B))', () => {
     });
     expect({ status: run.status, stderr: run.stderr }).toEqual({ status: 0, stderr: '' });
     expect(run.stdout).toMatch(/governance check: 0 wf\(\) commits/);
+  });
+
+  it('task-366 AC 4 (red-first): the header names wingfoil verify, npm run setup:hooks and git-conventions §9, and no longer says "Opt in once per clone"', () => {
+    const lines = readFileSync(join(REPO_ROOT, HOOK), 'utf-8').split('\n');
+    const end = lines.findIndex((line) => !line.startsWith('#'));
+    const header = (end < 0 ? lines : lines.slice(0, end))
+      .map((line) => line.replace(/^#!?\s?/, ''))
+      .join(' ')
+      .replace(/`/g, '')
+      .replace(/\s+/g, ' ');
+    expect(header).toContain('wingfoil verify');
+    expect(header).toContain('npm run setup:hooks');
+    expect(header).toContain('git-conventions §9');
+    expect(header).not.toContain('Opt in once per clone');
   });
 
   it('is documented in git-conventions, with the opt-in command', () => {
@@ -105,11 +124,14 @@ describe('task-291 — the base of a new remote ref (dl-185 C3 (i))', () => {
     writeFixtureFile(repo, 'dist/memory/index.js', '');
   }
 
-  /** Check out `branch`, run the hook for a push creating `refs/heads/<branch>`, return its exit and the stub's --base. */
-  function pushNew(repo: string, branch: string): { status: number | null; base: string | undefined; stdout: string; stderr: string } {
+  /**
+   * Check out `branch`, run the hook for a push creating `refs/heads/<branch>` to `remote` (the hook's `$1`: a remote
+   * name, or a URL that names none; task-366 AC 7), return its exit and the stub's --base.
+   */
+  function pushNew(repo: string, branch: string, remote = 'origin'): { status: number | null; base: string | undefined; stdout: string; stderr: string } {
     git(repo, ['checkout', '--quiet', branch]);
     const head = git(repo, ['rev-parse', 'HEAD']).trim();
-    const run = spawnSync('sh', [join(REPO_ROOT, HOOK), 'origin', 'https://example.invalid/r.git'], {
+    const run = spawnSync('sh', [join(REPO_ROOT, HOOK), remote, 'https://example.invalid/r.git'], {
       cwd: repo,
       encoding: 'utf-8',
       env: cleanEnv(),
@@ -190,6 +212,124 @@ describe('task-291 — the base of a new remote ref (dl-185 C3 (i))', () => {
       } finally {
         git(work, ['update-ref', '-d', 'refs/remotes/origin/release/0.4']);
       }
+    });
+
+    it('task-366 AC 7 case 4 (characterization, bug-417): a local branch `origin/main` at another commit neither hides nor replaces refs/remotes/origin/main', () => {
+      // The local branch points at A, off M1: a rule that read it in place of the tracking ref would take A, one that
+      // lost the tracking ref would pass no --base. Removed again in `finally`, so the other cases never see it.
+      git(work, ['branch', '--quiet', 'origin/main', shaA]);
+      try {
+        const short = git(work, ['for-each-ref', '--format=%(refname:short)', 'refs/remotes/origin/main']).trim();
+        expect(short).toBe('remotes/origin/main');
+        const expected = mergeBase(work, 'task/main-x', 'refs/remotes/origin/main');
+        expect(expected).toBe(shaM1);
+        expect(expected).not.toBe(shaA);
+        const run = pushNew(work, 'task/main-x');
+        expect({ status: run.status, base: run.base }).toEqual({ status: 0, base: expected });
+      } finally {
+        git(work, ['branch', '--quiet', '-D', 'origin/main']);
+      }
+    });
+  });
+
+  /**
+   * task-366 AC 7 cases 1–3 (red-first, `bug-417`, design D9 (a)): the candidates are the tracking refs of the remote
+   * the hook pushes to, `$1`, when `git remote` lists it; a push to a URL that names no remote has no candidate.
+   */
+  describe('task-366 AC 7 — the remote pushed to: `origin` renamed `upstream` (bug-417)', () => {
+    let work: string;
+    let shaM1: string;
+
+    beforeAll(() => {
+      work = clone(bareOrigin());
+      commit(work, 'a.txt');
+      git(work, ['push', '--quiet', 'origin', 'main']);
+      shaM1 = commit(work, 'm1.txt');
+      git(work, ['push', '--quiet', 'origin', 'main']);
+      git(work, ['checkout', '--quiet', '-b', 'task/main-x', shaM1]);
+      commit(work, 't1.txt');
+      git(work, ['checkout', '--quiet', '-b', 'release/0.4', shaM1]);
+      commit(work, 'r04.txt');
+      git(work, ['remote', 'rename', 'origin', 'upstream']);
+      plantStub(work);
+    });
+
+    it('case 1: a branch of `main` pushed to `upstream` takes refs/remotes/upstream/main', () => {
+      expect(git(work, ['for-each-ref', '--format=%(refname)', 'refs/remotes/origin/']).trim()).toBe('');
+      const expected = mergeBase(work, 'task/main-x', 'refs/remotes/upstream/main');
+      expect(expected).toBe(shaM1);
+      const run = pushNew(work, 'task/main-x', 'upstream');
+      expect({ status: run.status, base: run.base }).toEqual({ status: 0, base: expected });
+    });
+
+    it("the pushed ref's own tracking ref under `upstream` is skipped", () => {
+      const ownHead = git(work, ['rev-parse', 'release/0.4']).trim();
+      git(work, ['update-ref', 'refs/remotes/upstream/release/0.4', ownHead]);
+      try {
+        const expected = mergeBase(work, 'release/0.4', 'refs/remotes/upstream/main');
+        expect(expected).toBe(shaM1);
+        expect(expected).not.toBe(ownHead);
+        const run = pushNew(work, 'release/0.4', 'upstream');
+        expect({ status: run.status, base: run.base }).toEqual({ status: 0, base: expected });
+      } finally {
+        git(work, ['update-ref', '-d', 'refs/remotes/upstream/release/0.4']);
+      }
+    });
+  });
+
+  describe('task-366 AC 7 — two remotes: `origin` with a release/0.3 line, `fork` with only main (bug-417)', () => {
+    let work: string;
+    let shaA: string;
+    let shaR1: string;
+
+    beforeAll(() => {
+      work = clone(bareOrigin());
+      shaA = commit(work, 'a.txt');
+      git(work, ['push', '--quiet', 'origin', 'main']);
+      git(work, ['checkout', '--quiet', '-b', 'release/0.3', shaA]);
+      shaR1 = commit(work, 'r1.txt');
+      git(work, ['push', '--quiet', 'origin', 'release/0.3']);
+      git(work, ['checkout', '--quiet', 'main']);
+      commit(work, 'm1.txt');
+      git(work, ['push', '--quiet', 'origin', 'main']);
+      git(work, ['remote', 'add', 'fork', bareOrigin()]);
+      git(work, ['push', '--quiet', 'fork', 'main']);
+      git(work, ['fetch', '--quiet', 'fork']);
+      git(work, ['checkout', '--quiet', '-b', 'task/patch-x', shaR1]);
+      commit(work, 't2.txt');
+      plantStub(work);
+    });
+
+    it("case 2: a branch of the patch line pushed to `fork` takes fork's main merge-base, not origin's release/0.3", () => {
+      const expected = mergeBase(work, 'task/patch-x', 'refs/remotes/fork/main');
+      expect(expected).toBe(shaA);
+      expect(expected).not.toBe(shaR1);
+      const run = pushNew(work, 'task/patch-x', 'fork');
+      expect({ status: run.status, base: run.base }).toEqual({ status: 0, base: expected });
+    });
+
+    it('case 3: `$1` a URL that names no remote — no --base', () => {
+      expect(git(work, ['remote']).trim().split('\n').sort()).toEqual(['fork', 'origin']);
+      const run = pushNew(work, 'task/patch-x', 'https://example.invalid/r.git');
+      expect({ status: run.status, base: run.base }).toEqual({ status: 0, base: undefined });
+      expect(run.stdout).toContain('[');
+    });
+  });
+
+  describe('task-366 design D7 — the build guard (red-first)', () => {
+    it('with no dist/ the push is refused, exit 1, with the refusal line; the check is not run', () => {
+      const work = clone(bareOrigin());
+      commit(work, 'a.txt');
+      git(work, ['push', '--quiet', 'origin', 'main']);
+      git(work, ['checkout', '--quiet', '-b', 'task/main-x']);
+      commit(work, 't1.txt');
+      writeFixtureFile(work, 'scripts/check-governance.cjs', STUB);
+      const run = pushNew(work, 'task/main-x');
+      expect(run.status).toBe(1);
+      expect(run.stdout + run.stderr).toContain(
+        'pre-push: dist/ is not built (npm run build): the governance check cannot run, so the push is refused; build, or push with --no-verify',
+      );
+      expect(run.stdout.split('\n').some((line) => line.startsWith('['))).toBe(false);
     });
   });
 

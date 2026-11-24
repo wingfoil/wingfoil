@@ -80,8 +80,14 @@ describe('task-294 AC 4 / task-328 — check-governance treats workflow: adopt /
     return git(root, ['rev-parse', 'HEAD']).trim();
   }
 
+  // task-366 AC 3 (design D1 (a)): the configuration is committed first. The root commit used to carry memory.yaml
+  // with the wf(task): add, which the script judged against its own memory.yaml; spec-020 §4.1 reads the first
+  // parent's, so that root commit is a gated state finding there — the case moved to
+  // test/core/governance-check-script-cases.test.ts, and this fixture keeps the records' cases apart from it.
   writeFixtureFile(root, '.wingfoil/memory.yaml', MEMORY_YAML);
   writeFixtureFile(root, '.wingfoil/dna.yaml', DNA_YAML);
+  git(root, ['add', '-A']);
+  git(root, ['commit', '--quiet', '-m', 'chore: configure']);
   writeFixtureFile(root, 'docs/memory/task/t-1.md', '---\nid: "t-1"\ntype: task\ntitle: "T"\nstatus: draft\n---\n\nBody.\n');
   git(root, ['add', '-A']);
   git(root, ['commit', '--quiet', '-m', 'wf(task): add t-1']);
@@ -108,9 +114,9 @@ describe('task-294 AC 4 / task-328 — check-governance treats workflow: adopt /
     }
   });
 
-  it('checks only the wf() commit, counts the three records among the other commits, and exits 1', () => {
+  it('checks only the wf() commit, counts the configuration commit and the three records among the other commits, and exits 1', () => {
     expect(report.checked).toBe(1);
-    expect(report.otherCommits).toBe(3);
+    expect(report.otherCommits).toBe(4);
     expect(report.findings).toHaveLength(2);
     expect(exitCodeFor(report)).toBe(1);
   });

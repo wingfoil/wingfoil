@@ -5,6 +5,8 @@
  *
  * Asserted offline, as `ci-workflow.test.ts` does for `ci.yml`: the file is parsed from the working tree.
  * Nothing here runs the workflow — its first real run is the first push to `main` after the merge.
+ *
+ * task-366 AC 4 (`spec-020` §6.4): the header says the script runs `wingfoil verify` on the code build.
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -183,5 +185,17 @@ describe('governance workflow (task-208) — dl-103 §1 (A): the check runs outs
     expect(range).toContain('whole history');
     expect(headerParagraph(header, '# Kept equal to ci.yml')).toContain('release/X.Y');
     expect(header).toContain('dl-159');
+  });
+
+  // task-366 AC 4 (red-first, design item 9, D14; spec-020 §6.3, §6.4, AC-11): comments only, the steps unchanged.
+  it('task-366 AC 4: its header says the script runs wingfoil verify on the code build (dist/cli.js), citing spec-020 §6', () => {
+    const header = headerOf(read(GOVERNANCE_PATH).raw, 'governance')
+      .replace(/^#\s?/gm, '')
+      .replace(/`/g, '')
+      .replace(/\s+/g, ' ');
+    expect(header).toContain('wingfoil verify');
+    expect(header).toContain('dist/cli.js');
+    expect(header).toContain('code build');
+    expect(header).toContain('spec-020 §6');
   });
 });
