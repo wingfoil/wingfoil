@@ -46,3 +46,335 @@ made only of a placeholder.
 ## Execution Notes
 
 <!-- Filled by the dev-loop. -->
+
+### design (architect, 2026-11-24)
+
+**Base and inputs.** Branch `task/task-378-…` at `1cf54ff85` (the orchestrator's `wf(task): start` `6307038b5` and the three
+bug syncs on `main` `2fbc5afab`, `task-365`'s merge). PATH guard: `command -v wingfoil` → the task's PATH shim;
+`wingfoil --version` and `node dist/cli.js --version` → `0.3.2 (2fbc5afab57d8d37d202ce36f49e5c6f747551a8)`. Contract read at
+this head: `spec-020` (with its one Revision, `task-365`'s §2.2), `spec-008` §2, §11, §12, `spec-006` §6, `dl-067` (`ready`;
+clause 1 refuses a blank reason and says nothing of a non-blank one, so the new refusal extends it without contradicting it),
+P1.7, P1.10, P1.5 and P1.14 with their BDD files, REQ-SEC-02 and REQ-PERF-02, and the three bugs. The red to come is real:
+`node dist/cli.js memory history minor-v0.4 --format json` prints entries with no `carries` and no mark key, and
+`grep -rn "Carries content" src/memory/audit.ts src/memory/history.ts src/core/governance-check.ts` prints nothing.
+
+**dl-015 — what `task-365` (`done`, merged `2fbc5afab`) lets this task rely on.** The eleven check functions of
+`src/core/governance-check.ts`, each `(commit, reader, { gated }) → { findings, stateUnchecked }`; `HistoryReader` and its one
+git implementation `createGitHistoryReader(root, { head, base?, introducedAt? })`, which reads a whole range (one `git log` per
+question) and memoizes walks; `GOVERNANCE_CHECKS` (`since: '0.4.0'` each); the `body` check's `dl-067` row calling
+`reasonRefusalMessage` (`:536`), so a new refusal also judges recorded reasons; the AST test that only
+`createGitHistoryReader` calls git (`test/core/governance-check-structure.test.ts`); the in-memory reader of
+`test/core/helpers/in-memory-history-reader.ts`; and its parity figures (whole history with `--introduced-at fcd435695`:
+1704 findings, 1212 `stateUnchecked`, 81 min).
+
+#### What this repository's history says (measured at design)
+
+- **Placeholder reasons (AC 5, the `body` check).** A scratch scan of every commit reachable from any ref (`git log --all`,
+  12285 commits), reading each `Reason:` block with the built `parseCommitReason` and testing it with the proposed rule
+  (whole text one `<…>` token, or no Unicode letter or digit) → `{"withReason":2558,"hits":0}`; the shortest `Reason:` line
+  on any ref is 39 characters (`git log --all --format=%B | grep -E '^Reason:' | awk '{print length($0)}' | sort -n | head -1`).
+  So the refusal adds no `body` finding to this repository's history, under the verb or the script (which also calls
+  `reasonRefusalMessage`, `scripts/check-governance.cjs:555`), and needs no `since` of its own: it ships in `0.4.0` with the
+  check.
+- **`Carries content:` over the past submits (AC 4).** A scratch scan of the 1483 `wf(<memory type>): submit` commits
+  reachable from `HEAD` (non-merge, `-M`), comparing each line with `describeSubmitContent` of the named documents' parent
+  and commit blobs (the built `src/memory`), plus `the line endings` from the blobs: 561 lines agree; 336 pure transitions
+  carry no line; 584 submits without the line predate it (all ancestors of `7c155fe21`, `task-209`'s writer; 506 by hand,
+  78 tool-written); after it, one submit without the line (`7a48bc2f0`, a plan submitted by hand, 2026-10-11) and one line
+  naming items no writer writes (`0aa55f0c0`: `frontmatter fields 'version', 'element', …`). Of the 584, 150 descend from
+  `fcd435695`, the script's introduction. The trailer cannot tell old from new: of the 562 commits carrying the line
+  (`git log --grep='^Carries content: ' HEAD`), 210 name `0.2.2` (`--format='%(trailers:key=WingFoil-Version,valueonly)'`),
+  the version of the builds that did not write it as well. Every one of the 562 is a submit (the same log, `grep -v ':
+  submit '` → nothing), and all of them descend from the first, `cbf4e0dea` (`git rev-list --ancestry-path cbf4e0dea..HEAD`,
+  6706 commits, contains each), measured in 0.19 s (the `--grep` log) and 0.035 s (the `rev-list`).
+- **Range parity (`--base main`).** `node dist/cli.js verify --base main --format json` → exit `0`, `commits {range 4, memory 4,
+  other 0, gated 4}`, 0 findings, 0 `stateUnchecked`, `verdict: pass` (6.9 s); `--format console` prints the same counts and
+  the eleven `checks`; `node scripts/check-governance.cjs --base main --json` → exit `0`, `checked 4`, 0 findings (7.5 s).
+- **The cost of the mark (performance).** `memory history` today: `spec-008-cli-grammar` (89 entries) 2.00 s and 1.71 s,
+  `task-365` (12 entries) 1.94 s (`/usr/bin/time`, load average 6.8). A scratch prototype running the eleven built checks
+  on each listed commit, at load 6.3:
+  - naive (a reader over the listed commits, every path, no shared walk): `spec-008` +29.3 s (527 git calls, 25 extra
+    walks; two 12-document `wf(tech-spec)` commits cost 8.7 s each in `checkState`, `33f47dd1c` 3.8 s in
+    `status-outside-wf`'s unbatched blob reads);
+  - with the blobs batched and the history's walk reused: `spec-008` +13.1 s, `minor-v0.4` +4.7 s (four walks of the
+    sibling releases its 5-id commits name), `task-365` +0.38 s, `bug-496` +0.31 s;
+  - limited to the element's own document (Design item 4): `spec-008` +1.7 s (158 git calls, most of them configuration
+    blobs the green reader batches), `minor-v0.4` +0.30 s, `task-365` +0.29 s, 0 extra walks.
+  No run reads the whole history: the reader lists the history's commits (`git log --no-walk=unsorted`), and the one
+  whole-history read, the `--grep` of `carriesLineBefore`, runs only when a submit without a line carries content.
+  REQ-PERF-02's reference target (4 commits, one of them adding 1000 documents) then costs one `--no-walk` log, one
+  `ls-tree`, one batched blob read and one or two `memory.yaml` parses: estimated +60 to +150 ms, against a 1000 ms p95
+  budget whose current figure the latency suites hold (not run here: load 6.3, and the in-process suites refuse a loaded
+  run).
+
+#### Design (green)
+
+1. **`src/memory/commit-message.ts`** — `ReasonDefect` gains `'placeholder'`, judged after `control-character` and before
+   `reserved-trailer-line`: the normalized reason matches `/^<[^<>\n]+>$/u` (one angle-bracketed token, the whole text) or
+   holds no `\p{L}` or `\p{N}` character; message `invalid flag value: --reason must state a reason: it holds no word, or
+   only a <placeholder>`. Every caller already goes through `reasonDefect` (`requireReason`, `optionalReason`,
+   `formatMemoryCommitMessage`'s throw, the verb's `body` row), so `approve`, `reject`, `amend`, `park`, `deprecate`,
+   `workflow finalize`, `workflow adopt` and `workflow rekey` refuse it at exit `2`, and `verify` reports a recorded one as
+   `the Reason: block must state a reason: it holds no word, or only a <placeholder> (dl-067)`. New export
+   `parseCarriesContent(body): string[] | null`: the items of the body's first line starting exactly `Carries content: `,
+   split on `, ` and unescaped (`\\` → `\`, `\u{XXXX}` → the character: the inverse of `escapeCarriesItem`), `null` without
+   such a line. `CARRIES_KEY` stays private.
+2. **`src/memory/submit.ts`** — `describeCommittedSubmitContent(parent: string, commit: string): string[] | null`: the
+   commit blob's frontmatter `status` as the target (`null` when it has none or the frontmatter does not parse), then
+   `describeSubmitContent(parent, commit, target)`, then `LINE_ENDINGS_ITEM` when `commit !==
+   renderSubmitDocument(parent, target)` (nothing else changed) or `commit !== withLineEndingsOf(commit, parent)`
+   (otherwise) — `memory submit`'s rule decided from the two stored blobs. `isCarriesItem(item): boolean` (the five forms
+   of `spec-008` §2) and `orderCarriesItems(items): string[]` (fields by name, then the frontmatter text, the body, the file
+   content, the line endings; duplicates dropped) for a submit naming several documents.
+3. **`src/memory/audit.ts`** — `MemoryTransition` gains `carries: readonly string[] | null` (`parseCarriesContent` of the
+   body, read where `reason` and `wingfoil` are), `path: string` and `parentPath: string | null` (the walk's, already on each
+   history entry). `transitionConsistencyFindings(transitions, machine?)` is the pure half of `verifyTransitionConsistency`,
+   which becomes `transitionConsistencyFindings(reconstructMemoryTransitions(root, path, { strict: true }), machine)`, the
+   same answer.
+4. **`src/core/governance-check.ts`**
+   - `GOVERNANCE_CHECKS` gains `{ check: 'carries-content', rule: 'body', since: '0.4.0' }`, last (`spec-020` §4.14);
+     `checkCarriesContent` (§4.14's six rows) joins `CHECK_FUNCTIONS` last.
+   - `HistoryReader.carriesLineBefore(sha): boolean` is new (whether a proper ancestor of `sha` carries a `Carries content: `
+     line). Git reader: lazily, one `git log --no-show-signature --format=%H --grep=^Carries content: <head>` and one
+     `git rev-list --ancestry-path <L>..<head>` per such commit `L` not already in the set, oldest first.
+   - `GitHistoryRange` gains `commits?: readonly string[]` (read those commits, `git log --no-walk=unsorted`, in that order,
+     instead of a range; exclusive with `base`), `paths?: ReadonlyMap<string, readonly string[]>` (per sha, the only paths
+     `touchedPaths` and `fileChanges` report) and `walks?: ReadonlyMap<string, readonly MemoryTransition[]>` (answers
+     `transitions(path)` for those paths). The configuration blobs of every first parent are located in one batch, as for a
+     range; `transitionFindings` is computed from the `transitions` memo (`transitionConsistencyFindings`), one walk per
+     path in every mode.
+   - `unverifiedFindings(root, element: { head?: string; path: string; entries: readonly { sha: string; path: string;
+     parentPath: string | null }[]; walk?: readonly MemoryTransition[] }): ReadonlyMap<string, readonly CheckFinding[]>`:
+     builds the reader with `commits` = the entries' shas, `paths` = each entry's `path` and `parentPath`, `walks` = the
+     walk at `path` when no transition of it is `unreadable`; prefetches the `status-outside-wf` blobs; runs
+     `CHECK_FUNCTIONS` with `{ gated: true }`; keeps, per sha, the findings de-duplicated by `(rule, message)` and sorted as
+     `buildGovernanceReport` sorts one commit's; omits a sha with none. It calls no git itself (the AST test holds).
+5. **`src/core/index.ts`**
+   - `MemoryHistoryEntryView` gains `carries: readonly string[] | null` (always present, after `reason`) and
+     `unverified?: readonly { rule: string; check: string; message: string }[]` (present only when the mark has findings,
+     after `wingfoil`, before `unreadable`); `memoryHistoryFn` calls `unverifiedFindings` once, after the walk, when
+     `entries` is not empty, a `StorageError` from it being `IO` as the walk's is.
+   - `memorySearch` gains the flag `{ name: 'verify', description: 'mark each match whose history holds a commit the
+     governance checks flag (spec-020)' }`; with it, each match is walked (`reconstructMemoryTransitions`) and marked, and a
+     match with flagged entries carries `unverified: readonly string[]` (their shas, oldest first). The barrel re-exports the
+     new names.
+6. **`docs/cli-reference.md`** — the `memory history` entry (`carries`, `unverified`), the `memory search` entry (`--verify`),
+   the `verify` entry's check list (twelve), and the `--reason` refusal list (the sixth case).
+7. Unchanged: `src/memory/history.ts` (the walk already carries `path`, `parentPath` and the body; the task file lists it,
+   no edit is needed), `src/core/require-reason.ts` (behaviour through `reasonDefect`; its TSDoc list of defects gains the
+   placeholder, comment only), `src/mcp/*`, `scripts/check-governance.cjs` (`task-366`), AGENTS.md (no new command; its §5.1
+   reason paragraph is `align-agent-docs`').
+
+#### Acceptance criteria — classification and what qa pins
+
+All five stay red-first: none of `parseCarriesContent`, `describeCommittedSubmitContent`, `checkCarriesContent`,
+`unverifiedFindings`, `transitionConsistencyFindings`, `carriesLineBefore` exists (`grep -rn "<name>" src` → nothing for each),
+`memory history` prints no `carries` or mark, and `memory approve <id> --reason '<the reply>'` commits today (`bug-498`'s
+reproduction). Expected reds: `npx tsc --noEmit -p tsconfig.json` → TS2305 for the new exports (import them from the leaf
+modules `src/memory/commit-message`, `src/memory/submit`, `src/memory/audit`, `src/core/governance-check`), TS2339 for
+`carries` / `unverified` on the result types, TS2353 for `carriesLineBefore` in the in-memory reader's object literal;
+jest → `TypeError: … is not a function` and `undefined` fields. Fixtures: throwaway repositories
+(`test/storage/helpers/git-fixture.ts`), fixed dates, an identity per commit; the `MEMORY_YAML` / `DNA` / `taskDoc` of
+`test/core/helpers/in-memory-history-reader.ts` or `test/cli/verify.integration.test.ts` (T-8, T-9) reused; spawned runs
+through `test/cli/helpers/spawn-cli.ts` with `withoutAgentMarkers(process.env)` (`test/agent-markers.cjs`), which every
+approve/reject/amend case needs. Expected texts are the amended `spec-020` §4.14 table and `spec-008` §2 row word for word;
+the T-8 messages are taken from a real `verify --format json` run on the fixture, the command named in the red notes.
+
+| AC | Class | Test file (qa) | What it pins |
+|----|-------|----------------|--------------|
+| 1 | red-first | `test/core/memory-history-mark.test.ts` (new), `test/cli/memory-history-mark.integration.test.ts` (new), `test/core/memory-search-verify.test.ts` (new) | T-36: on T-9's fixture the `docs: tidy` entry's `unverified` deep-equals `[{ rule: 'state', check: 'status-outside-wf', message: <§4.7's message> }]`; on T-1's fixture no entry has the key and `Object.keys(entry)` is `['sha','author','timestamp','operation','from','to','approver','reason','carries','subject','wingfoil']`; T-37: the two-task approve marks only the document whose bracket disagrees; a commit before any `memory.yaml` is marked with §4.5 row 1 (`gated: true`). `memory search --verify` (in-process and spawned): T-9's task carries `unverified: [<docs: tidy sha>]`, T-1's tasks no key; without the flag no match has the key; `memory search --help` lists `--verify`; `--format console` prints the JSON form with the same keys, `yaml` parses to the json |
+| 2 | red-first | `test/cli/memory-history-mark.integration.test.ts` | T-34: on T-8's fixture the set of marked entries' shas equals the set of shas of `verify --format json`'s `authority` findings, and the entry's messages equal those findings' messages, in §3's order |
+| 3 | red-first | `test/memory/carries-content.test.ts` (new), `test/core/memory-history-mark.test.ts` | `parseCarriesContent`: `null` without a line; `["frontmatter field 'severity'", 'the body']`; an escaped comma and a doubled backslash read back as written by `formatMemoryCommitMessage` (a round trip through the writer); only the exact key. History (T-38): `memory submit` after a body edit → `carries: ['the body']`; a pure submit, every `add`/`approve` → `null` |
+| 4 | red-first | `test/core/governance-check.test.ts` (extended: `GOVERNANCE_CHECKS` twelve), `test/core/carries-content-check.test.ts` (new, in-memory reader), `test/memory/submit-committed-content.test.ts` (new), `test/cli/verify.integration.test.ts` (extended: §7's twelve `checks`, T-38 to T-40, the P1.14 scenario) | each of §4.14's six rows once with its exact message; not judged: a merge, a non-`wf()` commit, a submit with no line and no ancestor line (`carriesLineBefore` false), a named document absent at the parent; multi-document union order; `describeCommittedSubmitContent` equals what `memory submit` wrote for a body edit, a field edit, a pure transition and a CRLF conversion (`core.autocrlf=false`); the git reader's `carriesLineBefore` over a fixture with a line commit and a side branch forked before it |
+| 5 | red-first | `test/memory/reason-trailer.test.ts` and `test/core/require-reason.test.ts` (extended), `test/cli/reason-placeholder.integration.test.ts` (new), `test/core/governance-check.test.ts` (the `body` row) | `reasonDefect`: `'<the reply>'`, `'  <x>  '`, `'...'`, `'-'`, `'?!'` → `'placeholder'`; `'<a> and <b>'`, `'ok'`, `'é'`, `'1'` → `null`; `'\u0007'` → `'control-character'` (order); the exact message; spawned `memory approve` (BDD P1.7) and `reject`, `amend`, `park`, `deprecate --reason '...'`, `workflow finalize --reason '<x>'` → exit `2`, the message, `git rev-parse HEAD` unchanged, working tree clean; `formatMemoryCommitMessage({ …, reason: '<x>' })` throws it; the verb's `body` finding on a hand commit whose reason is `<x>` |
+
+qa runs `npx tsc --noEmit -p tsconfig.json` and `npx jest test/lint --maxWorkers=2` before the red commit.
+
+#### Existing tests that pin what changes
+
+- `test/core/governance-check.test.ts` (`GOVERNANCE_CHECKS is §7's eleven …`, `:89`; the console `checks:` line, `:649`, if
+  it reads the constant), `test/cli/verify.integration.test.ts` (`report.checks` toEqual, `:545`) — the twelfth entry, qa.
+- `test/core/helpers/in-memory-history-reader.ts` — `carriesLineBefore`, qa. `test/core/governance-check-structure.test.ts`
+  — its list of git-running calls holds for the new reader code inside `createGitHistoryReader`; unchanged unless green adds
+  a call.
+- `test/memory/reason-trailer.test.ts`, `test/memory/commit-message.test.ts`, `test/core/require-reason.test.ts` — the defect
+  list, qa.
+- `test/docs/cli-reference.test.ts`, `test/cli/help-describes-every-command.test.ts`, `test/docs/api-docs.test.ts` — follow
+  green's text, flag description and TSDoc.
+- `test/core/query-latency.test.ts`, `test/cli/command-latency.test.ts` (REQ-PERF-02, `memory history` on the reference
+  repository; latency suites, `npm run test:latency`, idle machine) — must stay green at refactor; never loosened.
+- Run here and unchanged in behaviour: the suites below; no workflow file changes, so no phase or step list is pinned.
+
+#### Tests run at design (targeted, `--maxWorkers=2`, the task's PATH shim first, in the worktree)
+
+- `npx jest test/memory/commit-message.test.ts test/memory/reason-trailer.test.ts test/core/require-reason.test.ts
+  test/core/reason-trailer-verbs.test.ts test/memory/audit.test.ts test/core/memory-history.test.ts test/memory/history.test.ts
+  test/core/memory-submit-content.test.ts test/memory/submit-commit-body.test.ts test/memory/submit.test.ts
+  test/core/memory-search.test.ts test/core/memory-search-type-warnings.test.ts --maxWorkers=2` → `Test Suites: 12 passed`,
+  `Tests: 276 passed, 276 total` (before the amendments).
+- `npx jest test/core/governance-check.test.ts test/core/governance-check-structure.test.ts
+  test/core/governance-check-git-reader.test.ts test/cli/verify.integration.test.ts
+  test/cli/history-scaffold-phantom.integration.test.ts test/cli/history-show-signature.integration.test.ts
+  test/cli/memory-history-newer-format.integration.test.ts test/cli/reason-control-chars.integration.test.ts
+  test/core/query-latency.test.ts --maxWorkers=2` → `Test Suites: 8 passed, 8 total`, `Tests: 196 passed` (the latency suite
+  is ignored by `jest.config.js`, so 8 of the 9 ran).
+- With the amendments in the tree: `npx jest test/docs/name-resolvability.test.ts test/docs/enumeration-parity.allowlist.test.ts
+  test/docs/commands-parity.test.ts test/docs/command-surface-specs.test.ts test/docs/spec-008-section-6.test.ts --maxWorkers=2`
+  → first `1 failed, 35 passed`: `name-resolvability` listed `HistoryReader.carriesLineBefore`, `parseCarriesContent` and
+  `transitionConsistencyFindings` (`spec-020`), now allowlisted as planned by `task-378`. Then `bash waitslot.sh` and
+  `npm test -- test/docs test/directives test/lint --maxWorkers=2` → exit `0`, `Test Suites: 75 passed, 75 total`,
+  `Tests: 1081 passed, 1081 total`; `npx jest test/validation/secret-scan.test.ts --maxWorkers=2` → `85 passed`.
+- `node scripts/lint-claims.cjs <the 8 amended Markdown and feature files>` → `53 warnings in 6 files`; the same files without
+  the amendments (`git stash`, run, `git stash pop`) → `54 warnings`: none added.
+- `.wingfoil/` read on the pinned build (the `command-baseline` directive changes): `npm run -s check:mcp` → exit `0` (`… pinned
+  wingfoil 0.3.2 … (prompts: 9, resources: 4, tools: 0)`; the build under development `(prompts: 9, resources: 5, tools: 7)`);
+  `npm run -s wingfoil -- directives list --format json` → exit `0`, no warning, `command-baseline` at `2.1`;
+  `npm run -s wingfoil -- workflow list` and `workflow show dev-loop` → exit `0`, stderr the one pre-existing line
+  `warning: 1cf54ff8…:.wingfoil/dna.yaml: unknown field(s) ignored: team.roles[4].human_only, …` (the pinned 0.3.2 reading
+  `HEAD`'s `dna.yaml`, recorded by `task-365` too).
+- `bug-534`: with these amendments uncommitted, a full suite here is expected to fail
+  `test/cli/workflow-unbound-none.integration.test.ts` alone (not run: no full suite at design).
+
+#### Files expected to change, and versions
+
+- green: `src/memory/commit-message.ts`, `src/memory/submit.ts`, `src/memory/audit.ts`, `src/memory/index.ts`,
+  `src/core/governance-check.ts`, `src/core/index.ts`, `src/core/require-reason.ts` (TSDoc), `docs/cli-reference.md`; the
+  allowlist rows that go stale once the names ship.
+- red (qa): the new suites above; `test/core/governance-check.test.ts`, `test/cli/verify.integration.test.ts`,
+  `test/core/helpers/in-memory-history-reader.ts`, `test/memory/reason-trailer.test.ts`, `test/core/require-reason.test.ts`.
+- design (uncommitted, approved at the gate): the three Memory amendments below; the non-Memory files of D7.
+- **Version bumps:** `.wingfoil/directives/custom/command-baseline.md` `2.0 → 2.1` (first edit on this branch against `main`,
+  `git show main:.wingfoil/directives/custom/command-baseline.md | grep -m1 '^version'` → `2.0`), with its `**Date:**` and a
+  Revision 2.1 entry. The specs carry no `version:` (a Revision note each); the BDD files have none. None of the four
+  configuration files of `test/lint/version-bump.test.ts` changes.
+
+#### Decisions for the approver (design gate)
+
+- **D1 — the mark's form, and the flag.** (a) `memory history`: an entry the checks flag carries `unverified`, a list of
+  `{ rule, check, message }` in `spec-020` §3's order; a verified entry has no such key and reads as today (the
+  `unreadable` precedent). `memory search --verify`: a flagged match carries `unverified`, its flagged commits' shas, oldest
+  first. The same keys under `console` (today's console form of both is the generic JSON rendering), `json` and `yaml`. No
+  MCP change: the production server serves neither command (`grep -rn "memory/search\|memory/history" src/mcp` → nothing;
+  `task-367` serves only the Tools), the test-only derived `wingfoil://memory/history/{id}` returns the operation's value and
+  so carries the mark by construction, and `readsProject` stays absent (both read a project). (b) An always-present
+  `unverified: null | […]` (the `approver` precedent): every entry's shape changes. (c) A boolean `verified`: the reader
+  cannot see why. (d) A filter `--unverified` on search instead of a mark. **Recommend (a).**
+- **D2 — what the mark judges.** (a) Every check of §4 on each listed commit, with `gated: true`, through a reader over the
+  listed commits limited to the element's own document (`spec-020` §4.13 as amended): the commit's subject, body, trailers
+  and authority, and the element's transition, never another document of the commit; the history's walk reused; measured
+  +0.3 s on a 12-entry element, +1.7 s on `spec-008`'s 89. (b) Every finding of the commit, any document: the verb's
+  per-commit verdict exactly, but +13 s on `spec-008` and +4.7 s on `minor-v0.4` even with the walk reused, and an entry
+  marked for a sibling's defect. (c) As (a) with `gated: false`: commits made before any `memory.yaml` existed are not marked
+  (on `spec-008`, the scoped prototype marks 18 entries instead of 20, in +0.9 s at load 6). **Recommend (a).**
+- **D3 — the placeholder (AC 5).** (a) Refused: the whole normalized reason one `<…>` token (no `<`, `>` or line break inside),
+  or text holding no Unicode letter or digit, judged after the control characters, by `reasonDefect`, so every verb that
+  takes `--reason` refuses it at exit `2` and the verb's `body` row reports a recorded one; message `invalid flag value:
+  --reason must state a reason: it holds no word, or only a <placeholder>`; `spec-008` §2 amended, `dl-067` not (its clause
+  1 sets a floor this raises; `bug-498`'s triage left the choice open and AC 5 names `spec-008` only). (b) Also `{…}`,
+  `${…}` and words such as `TODO`, `TBD`: a dictionary, against `dl-067`'s judging by shape (`dl-070` (A)). (c) As (a) with
+  a `dl-067` Amendment too. **Recommend (a).**
+- **D4 — the history's `carries` (AC 3).** (a) Always present: the declaration as recorded, items unescaped, `null` on a
+  pure transition, every other verb and a submit written before the line existed; never the diff recomputed. (b) Present
+  only on submit entries. **Recommend (a)** (the `approver`, `reason`, `wingfoil` precedent: always present).
+- **D5 — the check (AC 4).** (a) Id `carries-content`, category `body`, `since` `0.4.0`, last in `GOVERNANCE_CHECKS` as
+  `spec-020` §4.14 (no renumbering of the §4.13 that other documents cite); an absent line is judged only on a submit with
+  an ancestor carrying the line (`carriesLineBefore`), every other row on every commit. On this repository: two findings,
+  `7a48bc2f0` and `0aa55f0c0`, and none of the 584 submits written before the line. This is not §5.2's rejected
+  first-appearance gating: it decides which commits a row's predicate applies to, not which findings fail, and a forger
+  cannot remove the ancestry. (b) An absent line judged on gated commits only (`checkState`'s `context.gated` precedent):
+  under `--introduced-at fcd435695` 150 pre-line submits become gated findings, and history findings through the script.
+  (c) Keyed on the commit's `WingFoil-Version:`: impossible (210 line commits name `0.2.2`). **Recommend (a).**
+- **D6 — historical placeholder reasons.** (a) A recorded placeholder is a `body` finding like every `dl-067` defect, gated
+  by §5.1 (a project passes `--introduced-at` for older history); no `since` and no introduction of its own, since it ships
+  in `0.4.0` with the check and this repository has none on any ref. (b) Exempt recorded reasons from the new rule.
+  **Recommend (a).**
+- **D7 — the amendments, and when the non-Memory files are committed.** The three Memory amendments below, by `memory
+  amend`. The non-Memory files, approved here: `.wingfoil/directives/custom/command-baseline.md` (2.1), the BDD scenarios in
+  `P1.10-memory-history.feature` (two), `P1.7-memory-approve.feature`, `P1.5-memory-search.feature` and
+  `P1.14-verify.feature` (one each), and `test/docs/name-resolvability.allowlist.ts` (three rows planned by `task-378`).
+  (a) The orchestrator commits them after the amends and before red, by kind (`task-365`'s D8 (a)); (b) green commits them.
+  **Recommend (a).**
+- **D8 — a whole-history run.** (a) None: `spec-020` T-41 is checked at refactor by running the built `checkCarriesContent`
+  over every submit and line commit reachable from `HEAD` through the reader's `commits` mode (the check reads only the
+  commit, its parent and its ancestry), the placeholder scan over every ref, and the range parity (`--base main`, the
+  verb and the script); minutes, not the 44 to 105 of a whole-history run. (b) One whole-history run with
+  `--introduced-at fcd435695` under `waitslot.sh`, on a clone pinned at the candidate. **Recommend (a).**
+- **D9 — the verb's reader changes too.** (a) `transitionFindings` computed from the `transitions` memo
+  (`transitionConsistencyFindings`, `src/memory/audit.ts`, not in the task's file list): one walk per document instead of one
+  per document and machine plus one, the same findings; it is what lets the mark reuse the history's walk. (b) Keep the
+  verb's reader and give the mark a second code path. **Recommend (a).**
+
+#### What `task-366` (W1-07) may rely on
+
+- From this task's merge, `node dist/cli.js verify --format json` reports twelve `checks`, the twelfth `{ "check":
+  "carries-content", "rule": "body", "since": "0.4.0" }`. Its §6.1 step 3 (T-32) exits `2` on a check id with no marker, so
+  `task-366` adds the marker `carries-content` to the script's `CHECKS` when it takes `main` (its introduction is the commit
+  that adds the marker, by `markerIntroduction`, so this repository's older history stays history). Then a whole-history
+  script run gains two history findings, `7a48bc2f0` (`'submit' carries … but declares no Carries content: line …`) and
+  `0aa55f0c0` (`the Carries content: line names 'frontmatter fields 'version''…`); a `--base origin/main` run gains none
+  unless a pushed hand submit misdeclares.
+- The script's own `body` check calls the built `reasonRefusalMessage` (`scripts/check-governance.cjs:555`), so it gains the
+  placeholder refusal with no edit and no finding on this history.
+- `HistoryReader` gains `carriesLineBefore`; `GitHistoryRange` gains the optional `commits`, `paths` and `walks`; new exports
+  `checkCarriesContent` and `unverifiedFindings`. `buildGovernanceReport`, the report's shape and the exit codes are
+  unchanged.
+- Both tasks amend `spec-020`: this task's Revision paragraph and §4.12, §4.13, §4.14, §7, §9, §10 edits merge first; at the
+  tail the two Revision paragraphs are the union, this one first.
+
+#### Risks for the other open tasks
+
+- `task-374` (design gate, taking `main`) amends `spec-008` §1, §5–§6, §11, §12 and its tail (its pending `--reason`). Both
+  tasks touch **§11** (different rows: this one the working-tree and committed-history rows, `task-374` the `workflow tree`
+  row), **§12** (different rows: `memory history`, `memory search` here) and the **Revision tail**; this task's §2 change is a
+  separate Revision paragraph. Whichever records second rebases its rows on the other's text.
+- `task-366` (design, parallel): above.
+- `task-370` (console renderer, `dl-043`, not open): `memory history` and `memory search` print the generic JSON form under
+  `console` today; its renderer must show `carries` (a list or `null`), `unverified` (a list of `{rule, check, message}`)
+  and search's `unverified` (a list of shas); the tests here pin the console text only as that JSON form, and `task-370`
+  rewrites them with its renderer.
+- `task-377` (W1-18, after `task-366`) edits the same check functions; it relies on `CHECK_FUNCTIONS` and
+  `GOVERNANCE_CHECKS` holding twelve.
+
+#### Coverage baseline
+
+The worktree's base `2fbc5afab` has no stored baseline. The nearest is `169ecd71b19f1e2321051ee2070c59986de784e0`
+(`sha256sum -c coverage-summary.json.sha256` from inside it → `coverage-summary.json: OK`), an ancestor 324 commits back
+(`git rev-list --count 169ecd71b..2fbc5afab`), which predates `src/core/governance-check.ts` (absent from it). Its figures
+for the files this task changes (covered/total): `src/memory/commit-message.ts` lines 104/104, branches 99/99;
+`src/memory/audit.ts` lines 104/104, branches 70/71; `src/memory/submit.ts` 37/37, 28/28; `src/core/require-reason.ts` 15/15,
+7/7; `src/memory/history.ts` 58/58, 26/26; `src/core/index.ts` lines 683/686, branches 387/403. For
+`src/core/governance-check.ts` the review compares with `task-365`'s refactor figures at `99149beaa` (lines 528/528,
+statements 679/680, functions 113/113, branches 552/555) or measures the base itself.
+
+#### Candidate findings (not fixed, not filed)
+
+- `spec-008` §12 says its table "also lists a command's value options", but `memory search`'s `--tag`, `--status` and
+  `--type` (`src/core/index.ts`, the `memorySearch` options) have no row (`awk '/^### 12\./,/^## Consequences/' <spec-008> | grep -c
+  '^| `memory search`'` → `1`, this design's `--verify` row). Expected: a row per option. Suggested severity: low.
+- AGENTS.md §5.1 *The `Reason:` block* lists what a reason may not be ("It may never be blank") and does not name the
+  `Carries content:` read-back; after this task both lag `spec-008` §2. Not a defect today; owed by `align-agent-docs` at
+  `user-docs`.
+
+### Pending amendments (approver)
+
+Prepared in the worktree, left uncommitted (`git diff --stat` lists them), each to be recorded with `memory amend` at this
+design gate, before red:
+
+- `spec-020-the-governance-check-verb-the-authority-and-state-rules-over-a-commit-range` — `--reason "Add the carries-content check as section 4.14 with its since 0.4.0, its row in section 4.12 and the checks list of section 7, state the reader of the memory history mark in section 4.13 and how the placeholder refusal reaches the body row in section 4.4, and add T-36 to T-41 and AC-14, as task-378's design gate rules for bug-287, bug-496 and bug-498."`
+- `spec-008-cli-grammar` — `--reason "Add the sixth case of the reason rule in section 2, refusing a reason that is only a placeholder or holds no word, say where the Carries content line is read back, name the committed-history read of the unverified mark in section 11, and add the memory history and memory search --verify rows of section 12, as task-378's design gate rules for bug-498, bug-287 and bug-496."`
+- `spec-006-core-domain-api` — `--reason "Name the unverified mark of memory history and memory search --verify in the committed-history row of section 6's table, as spec-020 section 4.13 states it at task-378's design gate for bug-496."`
+
+Approved at this gate, committed per D7 (not Memory elements, no `memory amend`): `.wingfoil/directives/custom/command-baseline.md`
+(2.1), the five BDD scenarios, `test/docs/name-resolvability.allowlist.ts` (three rows).
+
+### Retrospective
+
+<!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
+     reconstructed afterwards. One line per item: what happened, the evidence (a command and what it
+     printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
+     Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
+     here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+
+- `spec-020` §4.13's "the same checks, through the same reader" would have cost `memory history` +29 s on `spec-008` taken
+  literally (a scratch prototype over the built checks, 527 git calls); the design limits the reader to the element's
+  document. Proposal: a spec that names a second consumer of a module states its cost budget there.
