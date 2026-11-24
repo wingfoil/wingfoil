@@ -46,7 +46,14 @@ operations run on the code build of `main` (the `wingfoil-cli` directive); the p
 
 - capture: `dl-241` add `f602909cd`, submit `be546c240`. The reproduction is the reviewer's scratch repository; the
   definitions are quoted from `spec-020` at `fb5b73e01`.
+- approve: the approver ruled option (b) at `task-366`'s design gate, `8df6754ca` (`in-discussion → ready`), on
+  `task-366`'s branch, so `dl-241`'s `ready` state and this plan's end reach `main` together with `task-366`'s merge.
+  `spec-020` §0 states the rule in `task-366`'s amendment (`bc9c47b6e`); the user guide states it at the next
+  `user-docs` phase.
 
 ### Retrospective
 
-- None yet.
+- The decision was taken at the first gate the plan named, with measured evidence from `task-366`'s design: 81
+  resolved Memory files across 835 merges, three of them with a status that differs from both parents, all from
+  `task-111`'s move. Ruling it on the task's branch rather than on `main` kept the decision and the spec text that
+  applies it in one merge.
