@@ -271,6 +271,36 @@ function trailerParagraphStart(lines: readonly string[]): number {
   return lines.slice(start, end).every((line) => TRAILER_LINE_RE.test(line)) ? start : lines.length;
 }
 
+/** A commit body's lines, a CRLF or a lone CR read as a line break. */
+function bodyLines(body: string): string[] {
+  return body.replace(/\r\n?/g, '\n').split('\n');
+}
+
+/**
+ * Where the `Reason:` block of a body's `lines` begins and ends (`[start, end)`), or `null` when it records none: from
+ * the first line starting `Reason:` up to (exclusive) git's trailing trailer paragraph or the end of the body, the
+ * `Reason:` line itself always inside. The one reading of the block's extent, shared by {@link parseReasonBlock} and
+ * {@link linesOutsideReasonBlock}.
+ */
+function reasonBlockRange(lines: readonly string[]): readonly [number, number] | null {
+  const start = lines.findIndex((line) => REASON_KEY_RE.test(line));
+  if (start === -1) return null;
+  return [start, Math.max(trailerParagraphStart(lines), start + 1)];
+}
+
+/**
+ * The lines of a commit body outside its `Reason:` block, in order: every line when it records no reason, otherwise
+ * the lines before the `Reason:` line and the trailing trailer paragraph after the block, as {@link parseReasonBlock}
+ * bounds it. A key read from these lines is a line the commit writes, never text some reason happens to contain:
+ * the `Carries content:` declaration (`spec-020` §4.14, `task-378`) is read from them alone, so an `approve` whose
+ * reason holds such a line declares nothing. Pure (REQ-SYS-07).
+ */
+export function linesOutsideReasonBlock(body: string): string[] {
+  const lines = bodyLines(body);
+  const range = reasonBlockRange(lines);
+  return range === null ? lines : [...lines.slice(0, range[0]), ...lines.slice(range[1])];
+}
+
 /**
  * The `Reason:` a commit body records, read as a BLOCK (`dl-067` clause 2): the remainder of the
  * `Reason:` line plus every following body line, up to (exclusive) git's trailing trailer paragraph or
@@ -287,11 +317,11 @@ function trailerParagraphStart(lines: readonly string[]): number {
  * paragraph made entirely of trailer lines does (dl-067 E5).
  */
 export function parseReasonBlock(body: string): string | null {
-  const lines = body.replace(/\r\n?/g, '\n').split('\n');
-  const start = lines.findIndex((line) => REASON_KEY_RE.test(line));
-  if (start === -1) return null;
+  const lines = bodyLines(body);
+  const range = reasonBlockRange(lines);
+  if (range === null) return null;
 
-  const end = Math.max(trailerParagraphStart(lines), start + 1);
+  const [start, end] = range;
   const block = [(lines[start] as string).replace(REASON_KEY_RE, ''), ...lines.slice(start + 1, end)].join('\n');
 
   const normalized = normalizeReason(block);
@@ -422,17 +452,15 @@ const CARRIES_LINE_PREFIX = `${CARRIES_KEY} `;
 
 /**
  * The items a submit's `Carries content:` line declares (`spec-008` §2, `bug-287`, `task-378`), or `null` when the
- * body has no line starting exactly `Carries content: ` — a pure transition, every verb other than `submit`, and a
- * submit written before the line existed. The first such line counts; its text is split on `, ` and each item
+ * body has no line starting exactly `Carries content: ` outside its `Reason:` block ({@link linesOutsideReasonBlock}) —
+ * a pure transition, every verb other than `submit`, and a submit written before the line existed. A line inside the
+ * block is text the reason holds, never a declaration. The first such line counts; its text is split on `, ` and each item
  * unescaped, the inverse of the writer's escape, so an item reads back exactly as `formatMemoryCommitMessage` was
  * given it. The reader of `memory history`'s `carries` and of `wingfoil verify`'s `carries-content` check
  * (`spec-020` §4.14). Pure (REQ-SYS-07).
  */
 export function parseCarriesContent(body: string): string[] | null {
-  const line = body
-    .replace(/\r\n?/g, '\n')
-    .split('\n')
-    .find((candidate) => candidate.startsWith(CARRIES_LINE_PREFIX));
+  const line = linesOutsideReasonBlock(body).find((candidate) => candidate.startsWith(CARRIES_LINE_PREFIX));
   if (line === undefined) return null;
   return line.slice(CARRIES_LINE_PREFIX.length).split(', ').map(unescapeCarriesItem);
 }

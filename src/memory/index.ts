@@ -115,6 +115,7 @@ export {
 export type { AddDocumentFields, IdTokenSources, ParsedSetOptions } from './add';
 export {
   formatMemoryCommitMessage,
+  linesOutsideReasonBlock,
   normalizeReason,
   parseApproverTrailerLine,
   parseCarriesContent,

@@ -32,6 +32,7 @@ import {
   describeCommittedSubmitContent,
   isCarriesItem,
   isMachineEdge,
+  linesOutsideReasonBlock,
   loadMemoryDocumentsAtRev,
   MEMORY_OPERATIONS,
   type MemoryTransition,
@@ -121,8 +122,8 @@ export interface HistoryReader {
   /** The `status:` of the document whose `id` is `id` at `HEAD`: `null` without one, `undefined` when no document has the id. */
   headDocumentStatus(id: string): string | null | undefined;
   /**
-   * Whether a proper ancestor of `sha` carries a body line starting exactly `Carries content: ` (`spec-020` §4.14,
-   * `task-378`): from then on a submit that carries content and declares none is a finding.
+   * Whether a proper ancestor of `sha` carries a body line starting exactly `Carries content: ` outside its `Reason:`
+   * block (`spec-020` §4.14, `task-378`): from then on a submit that carries content and declares none is a finding.
    */
   carriesLineBefore(sha: string): boolean;
 }
@@ -863,14 +864,19 @@ export const checkTrailerParagraph: GovernanceCheckFn = (commit) => {
 
 /** A `Carries content:` key line, any letter case (`spec-020` §4.14). */
 const CARRIES_KEY_RE = /^carries content:/i;
-/** The key as `memory submit` writes it, and the text it is followed by (`spec-008` §2). */
+/** The key as `memory submit` writes it (`spec-008` §2), and the line's prefix with the one space after it. */
 const CARRIES_KEY = 'Carries content:';
-const CARRIES_KEY_TEXT_RE = /^carries content:[ \t]?/i;
+const CARRIES_LINE_PREFIX = `${CARRIES_KEY} `;
+/** The key as `memory submit` writes it, followed by exactly one space and then the items (row 3's spelling). */
+const CARRIES_PREFIX_RE = /^Carries content: (?![ \t])/;
+/** A key line's key and the blanks after it, any letter case: what the items are read after. */
+const CARRIES_KEY_TEXT_RE = /^carries content:[ \t]*/i;
 const CARRIES_REF = '(spec-008 §2, bug-287)';
 
 /**
  * `carries-content` (`spec-020` §4.14, `bug-287`, category `body`): on a non-merge Memory `wf()` commit whose verb
- * parsed, a `Carries content:` line is a submit's alone, written once, with its key spelled `Carries content:` and
+ * parsed, a `Carries content:` line outside the `Reason:` block ({@link linesOutsideReasonBlock}) is a submit's alone,
+ * written once, with its key spelled `Carries content:` and followed by exactly one space, and
  * items of `spec-008` §2's five forms that equal what the commit carries — computed from the named documents' blobs at
  * the first parent and at the commit ({@link describeCommittedSubmitContent}, their union in the declared order); a
  * submit that carries content declares it, once an ancestor of the commit carries a line
@@ -880,14 +886,15 @@ export const checkCarriesContent: GovernanceCheckFn = (commit, reader) => {
   // `parseMemoryOperation` reads the `wf()` head as `WF_HEAD_RE` does, so a subject without one is no operation.
   const op = isMerge(commit) || !isMemoryCommit(commit) ? null : parseMemoryOperation(commit.subject);
   if (op === null) return EMPTY;
-  const keyLines = commit.body.split('\n').filter((line) => CARRIES_KEY_RE.test(line));
+  // Only the lines the commit writes outside its `Reason:` block: a reason's text never declares content (F1).
+  const keyLines = linesOutsideReasonBlock(commit.body).filter((line) => CARRIES_KEY_RE.test(line));
   const messages: string[] = [];
   if (op !== 'submit') {
     if (keyLines.length > 0) messages.push(`'${op}' declares no carried content: only a submit writes a Carries content: line ${CARRIES_REF}`);
     return outcome(messages.map((message) => ({ rule: 'body', check: 'carries-content', message })));
   }
   if (keyLines.length > 1) messages.push(`${keyLines.length} Carries content: lines; a submit declares one ${CARRIES_REF}`);
-  if (keyLines.some((line) => !line.startsWith(CARRIES_KEY))) messages.push(`the Carries content: key is written \`Carries content:\` ${CARRIES_REF}`);
+  if (keyLines.some((line) => !CARRIES_PREFIX_RE.test(line))) messages.push(`the Carries content: key is written \`Carries content:\` ${CARRIES_REF}`);
 
   // The declaration, read from the first key line whatever its spelling (the spelling is the row above's).
   const first = keyLines[0];
@@ -1155,12 +1162,20 @@ export function createGitHistoryReader(root: string, range: GitHistoryRange): Gi
     memo(frontmatterWalks, path, () => reconstructMemoryTransitions(root, path, { strict: true }));
   const rejectCommits = new Map<string, boolean>();
 
-  // The commits a proper ancestor of which carries a `Carries content: ` line, read on the first question.
+  // The commits a proper ancestor of which carries a `Carries content: ` line outside its `Reason:` block, read on the
+  // first question: `--grep` finds every body holding the text, and a hit whose only such line sits in a reason is no
+  // line commit ({@link linesOutsideReasonBlock}).
   let afterLine: Set<string> | undefined;
   const carriesLineBefore = (sha: string): boolean => {
     if (afterLine === undefined) {
       const found = new Set<string>();
-      const lines = git(['log', '--no-show-signature', '--format=%H', '--grep=^Carries content: ', range.head]).split('\n').filter(Boolean).reverse();
+      const hits = git(['log', '--no-show-signature', '--format=%H%x00%b%x00', '--grep=^Carries content: ', range.head]).split('\0');
+      const lines: string[] = [];
+      for (let index = 0; index + 2 <= hits.length; index += 2) {
+        const body = hits[index + 1] as string;
+        if (linesOutsideReasonBlock(body).some((line) => line.startsWith(CARRIES_LINE_PREFIX))) lines.push((hits[index] as string).trim());
+      }
+      lines.reverse();
       for (const line of lines) {
         if (found.has(line)) continue;
         for (const descendant of git(['rev-list', '--ancestry-path', `${line}..${range.head}`]).split('\n')) {
