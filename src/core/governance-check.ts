@@ -820,12 +820,16 @@ export const checkWorkflowRecordAuthority: GovernanceCheckFn = (commit, reader) 
 };
 
 /**
- * `trailer-paragraph` (`spec-020` §4.11, `bug-391`, category `body`): on a non-merge commit, each distinct `WingFoil-*`
- * key (any case, first spelling kept) written before the body's final paragraph is one finding, in the order written.
+ * The `WingFoil-*` keys a commit body writes outside its final paragraph (`spec-020` §4.11, `git-conventions` §8,
+ * `bug-391`): each distinct key (any letter case, first spelling kept), in the order written, on the lines before the
+ * body's final paragraph — the lines after its last blank line, the paragraph the workflow deduction reads.
+ * `scripts/check-governance.cjs` re-exports it for `scripts/check-phase-report.cjs` (`task-366` D5).
+ *
+ * @param body - the commit's body, without its subject.
+ * @returns the keys as first written, in the order written; `[]` when every `WingFoil-*` line is in the final paragraph.
  */
-export const checkTrailerParagraph: GovernanceCheckFn = (commit) => {
-  if (isMerge(commit)) return EMPTY;
-  const lines = commit.body.split('\n');
+export function trailerKeysOutsideFinalParagraph(body: string): string[] {
+  const lines = body.split('\n');
   let lastBlank = -1;
   lines.forEach((line, index) => {
     if (line.trim() === '') lastBlank = index;
@@ -835,8 +839,17 @@ export const checkTrailerParagraph: GovernanceCheckFn = (commit) => {
     const key = WINGFOIL_TRAILER_RE.exec(line)?.[1];
     if (key !== undefined && !keys.has(key.toLowerCase())) keys.set(key.toLowerCase(), key);
   }
+  return [...keys.values()];
+}
+
+/**
+ * `trailer-paragraph` (`spec-020` §4.11, `bug-391`, category `body`): on a non-merge commit, each distinct `WingFoil-*`
+ * key (any case, first spelling kept) written before the body's final paragraph is one finding, in the order written.
+ */
+export const checkTrailerParagraph: GovernanceCheckFn = (commit) => {
+  if (isMerge(commit)) return EMPTY;
   return outcome(
-    [...keys.values()].map((key) => ({
+    trailerKeysOutsideFinalParagraph(commit.body).map((key) => ({
       rule: 'body',
       check: 'trailer-paragraph',
       message: `a ${key}: line sits outside the commit's final paragraph, where the workflow deduction does not read it (git-conventions §8, bug-391)`,
@@ -1221,11 +1234,14 @@ export function renderVerifyConsole(report: GovernanceReport): string {
   const line = (finding: GovernanceFinding): string => `  ${finding.sha} ${finding.rule}/${finding.check}: ${finding.message}\n      ${finding.subject}`;
   if (gated.length > 0) lines.push('FAIL — gated:', ...gated.map(line));
   if (history.length > 0) lines.push('history — reported, not failing:', ...history.map(line));
-  const counts = (findings: readonly GovernanceFinding[]): string => (findings.length > 0 ? ` (${countByRule(findings)})` : '');
+  // bug-438: each count says what it counts, and a line with no entry drops its commit count and its count list.
+  const summary = (findings: readonly GovernanceFinding[]): string =>
+    findings.length === 0 ? '0 findings' : `${findings.length} findings on ${commitCount(findings)} commits with a finding (${countByRule(findings)})`;
+  const unchecked = report.stateUnchecked.length;
   lines.push(
-    `gated: ${gated.length} findings on ${commitCount(gated)} commits${counts(gated)}`,
-    `history: ${history.length} findings on ${commitCount(history)} commits${counts(history)}`,
-    `state not checked: ${report.stateUnchecked.length} entries on ${commitCount(report.stateUnchecked)} commits ` +
+    `gated: ${summary(gated)}`,
+    `history: ${summary(history)}`,
+    `state not checked: ${unchecked === 0 ? '0 entries' : `${unchecked} entries on ${commitCount(report.stateUnchecked)} commits with an entry`} ` +
       '(history with no machine, no named document, a document gone at HEAD, or a revision that does not parse or is in a newer format)',
   );
   return `${lines.join('\n')}\n`;

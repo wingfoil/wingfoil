@@ -6,13 +6,13 @@ kind: custom
 title: "Git conventions: branches, sync, tags, subjects, identity, id allocation, attribution"
 tags: [custom, git, process, security]
 scope: global
-version: "2.9"   # 2.9 §7: `dna.yaml` also refuses an agent email on `example.com`, `example.net`, `example.org` or a subdomain of one (RFC 2606 §3); §9: the rule `co-author-identity`, a non-approval commit's `Co-Authored-By:` names a `team.agents` or `team.members` entry of the `dna.yaml` committed before it, merges included, and its final paragraph carries the attribution pair once (task-352, bug-475, bug-193, bug-535) (prev 2.8 §7, §8: the mutating verbs write the agent's `Co-Authored-By:` and `AI-Model:` themselves in an agent's session, after `WingFoil-Version:`, the signing entry by `spec-018` §2.3's precedence and the model from `--ai-model` or `WINGFOIL_AGENT_MODEL`, else `not-reported`; an agent never adds them again to such a commit (task-334, spec-018 §2) (prev 2.7 §9: the agent-trailer rule `approval-agent-trailer` replaces `approval-ai-trailer`, on every commit with an `Approver:` line, not only `approve` and `reject`; §7, §8 and the preamble: agents never run an approval, the verbs refuse an agent's session (task-333, spec-018 §3, §4) (prev 2.6 §9: two checks on pushed commits, an `Approver:` line on a `workflow:` record and a `WingFoil-*` trailer outside the final paragraph (task-328, bug-444, bug-391; release-planning v0.3.2 R8) (prev 2.5 §1 rule 6: the merge forward is `release-publishing`'s `merge-forward` phase, its sequence in a detached worktree at origin/main, the push, the fast-forward of the shared working tree, and a minor recording the phase with `workflow finalize` (task-306, bug-428; release-planning v0.3.2 R8) (prev 2.4 §1: a triage's line is keyed on the release it gives, the eligibility test `git log --no-merges release/X.Y..main`, the re-capture on the line of an element that exists only on main; rule 5: the dl-095 pin keeps main's value in a merge forward with no conflict too (task-305, dl-206 Q1 (i), Q2 (i); release-planning v0.3.2 R8) (prev 2.3 §4, §8: the `workflow: rekey <instance-id> <from> <to>` record subject and its `WingFoil-Rekey-From:` / `WingFoil-Rekey-To:` trailers (task-295, dl-187 C5) (prev 2.2 §4, §8: the non-Memory record subjects `workflow: finalize`, `workflow: adopt`, `agent: record`, and the `WingFoil-Adopted:` trailer of an adoption (task-294, dl-187) (prev 2.1 §9: the pre-push hook takes a new remote ref's base from the line the branch was cut from, the nearest merge-base among `origin/main` and each `origin/release/X.Y`, and CI stays the enforcing check (task-291, dl-185 C3 (i)) (prev 2.0 §1: the merge forward of a release line — rule 5's two kinds of colliding file and the bump in the merge commit, who runs it, when and where, the release/X.Y counterpart of the direct-commit list (task-290, dl-185 C1 (a)–(d); approver design-gate rulings 2026-10-22) (prev 1.9 §8: the trailer paragraph also carries the workflow `WingFoil-*` trailers (`-Instance`, `-Step`, `-Phase`, `-Element`, `-Item`), which a separate paragraph would unlink from their step (task-252, bug-236 amendment of 2026-10-11) (prev 1.8 §1: the quotation of `dev-loop.yaml`'s `done` merges into the task's integration branch, `git.merge(to: integration_branch, ff: false)`, which carries the on-branch commits into it (task-288, dl-159 A1.8, approver ruling D6) (prev 1.7 §1–§3, §6, §9: the release/X.Y maintenance line, the integration branch, the merge forward, a tag per line, push the add on both lines, the release worktree (task-286, dl-159 A1.6, dl-092 Action 3) (prev 1.6 §1: `dev-loop.yaml`'s `done` declares the on-branch order, approve, finalize and the bugs' sync before the merge (task-281, bug-313, approver ruling 2026-10-12 D6) (prev 1.5 §1: one worktree per task, no task commit in the shared working tree, a dev-loop task's approve/reject/finalize on its branch, `ingest/` for a `vision-change` run; §4: code-commit subjects (task-276, approver rulings 2026-10-10) (prev 1.4 §9: the governance check in CI, the opt-in pre-push hook, and which §§ the check enforces (task-208, dl-103 §1); 1.3 §2: who runs each main-sync in dev-loop and who resolves its conflicts (task-205 review F3, approver ruling 2026-10-09, option 2); 1.2 §7, task-260)))))))))))))))
+version: "3.0"   # 3.0 §9: the pre-push hook is required, installed once per clone by `npm run setup:hooks`, and refuses a push without a build; its base comes from the tracking refs of the remote pushed to (`bug-417`); the script runs `wingfoil verify` for the shipped checks and adds this repository's three; the tag waits for the required check (`dl-190` (a), (c)); §1 rule 6: a gated finding the approver accepted before is named in the go-ahead's `--reason`, any other aborts the merge forward (`bug-448`; task-366) (prev 2.9 §7: `dna.yaml` also refuses an agent email on `example.com`, `example.net`, `example.org` or a subdomain of one (RFC 2606 §3); §9: the rule `co-author-identity`, a non-approval commit's `Co-Authored-By:` names a `team.agents` or `team.members` entry of the `dna.yaml` committed before it, merges included, and its final paragraph carries the attribution pair once (task-352, bug-475, bug-193, bug-535) (prev 2.8 §7, §8: the mutating verbs write the agent's `Co-Authored-By:` and `AI-Model:` themselves in an agent's session, after `WingFoil-Version:`, the signing entry by `spec-018` §2.3's precedence and the model from `--ai-model` or `WINGFOIL_AGENT_MODEL`, else `not-reported`; an agent never adds them again to such a commit (task-334, spec-018 §2) (prev 2.7 §9: the agent-trailer rule `approval-agent-trailer` replaces `approval-ai-trailer`, on every commit with an `Approver:` line, not only `approve` and `reject`; §7, §8 and the preamble: agents never run an approval, the verbs refuse an agent's session (task-333, spec-018 §3, §4) (prev 2.6 §9: two checks on pushed commits, an `Approver:` line on a `workflow:` record and a `WingFoil-*` trailer outside the final paragraph (task-328, bug-444, bug-391; release-planning v0.3.2 R8) (prev 2.5 §1 rule 6: the merge forward is `release-publishing`'s `merge-forward` phase, its sequence in a detached worktree at origin/main, the push, the fast-forward of the shared working tree, and a minor recording the phase with `workflow finalize` (task-306, bug-428; release-planning v0.3.2 R8) (prev 2.4 §1: a triage's line is keyed on the release it gives, the eligibility test `git log --no-merges release/X.Y..main`, the re-capture on the line of an element that exists only on main; rule 5: the dl-095 pin keeps main's value in a merge forward with no conflict too (task-305, dl-206 Q1 (i), Q2 (i); release-planning v0.3.2 R8) (prev 2.3 §4, §8: the `workflow: rekey <instance-id> <from> <to>` record subject and its `WingFoil-Rekey-From:` / `WingFoil-Rekey-To:` trailers (task-295, dl-187 C5) (prev 2.2 §4, §8: the non-Memory record subjects `workflow: finalize`, `workflow: adopt`, `agent: record`, and the `WingFoil-Adopted:` trailer of an adoption (task-294, dl-187) (prev 2.1 §9: the pre-push hook takes a new remote ref's base from the line the branch was cut from, the nearest merge-base among `origin/main` and each `origin/release/X.Y`, and CI stays the enforcing check (task-291, dl-185 C3 (i)) (prev 2.0 §1: the merge forward of a release line — rule 5's two kinds of colliding file and the bump in the merge commit, who runs it, when and where, the release/X.Y counterpart of the direct-commit list (task-290, dl-185 C1 (a)–(d); approver design-gate rulings 2026-10-22) (prev 1.9 §8: the trailer paragraph also carries the workflow `WingFoil-*` trailers (`-Instance`, `-Step`, `-Phase`, `-Element`, `-Item`), which a separate paragraph would unlink from their step (task-252, bug-236 amendment of 2026-10-11) (prev 1.8 §1: the quotation of `dev-loop.yaml`'s `done` merges into the task's integration branch, `git.merge(to: integration_branch, ff: false)`, which carries the on-branch commits into it (task-288, dl-159 A1.8, approver ruling D6) (prev 1.7 §1–§3, §6, §9: the release/X.Y maintenance line, the integration branch, the merge forward, a tag per line, push the add on both lines, the release worktree (task-286, dl-159 A1.6, dl-092 Action 3) (prev 1.6 §1: `dev-loop.yaml`'s `done` declares the on-branch order, approve, finalize and the bugs' sync before the merge (task-281, bug-313, approver ruling 2026-10-12 D6) (prev 1.5 §1: one worktree per task, no task commit in the shared working tree, a dev-loop task's approve/reject/finalize on its branch, `ingest/` for a `vision-change` run; §4: code-commit subjects (task-276, approver rulings 2026-10-10) (prev 1.4 §9: the governance check in CI, the opt-in pre-push hook, and which §§ the check enforces (task-208, dl-103 §1); 1.3 §2: who runs each main-sync in dev-loop and who resolves its conflicts (task-205 review F3, approver ruling 2026-10-09, option 2); 1.2 §7, task-260))))))))))))))))
 ref: [P3.5, P3.7, REQ-SEC-01, REQ-SYS-08]
 ---
 
 # Directive — Git conventions
 
-**Date:** 2026-11-12
+**Date:** 2026-11-24
 
 Custom WingFoil rule. Applies to **every role**: whoever writes a commit or names a branch in this
 repository — a `developer` on a task branch, the `approver` running an `approve` from their own terminal, a
@@ -163,7 +163,12 @@ per commit, REQ-SEC-02) stays there; this directive adds the git-specific rules 
      `npx jest test/lint/version-bump.test.ts` and `node scripts/check-governance.cjs --base origin/main`;
      (4) there `git push origin HEAD:main`; (5) back in the shared working tree
      `git merge --ff-only origin/main`, so the local `main` is the merge commit and the next merge into it
-     does not diverge from `origin/main`, then `git worktree remove <path>`. A minor has no merge forward:
+     does not diverge from `origin/main`, then `git worktree remove <path>`. A gated finding of step (3) stops
+     the merge forward unless the approver accepted it before (`bug-448`): each accepted finding is named — its
+     sha, its check and the record of its acceptance — in the `--reason` of the `merge-forward` phase's
+     `workflow finalize`, the go-ahead, which precedes the merge. The check is still run, and any other gated
+     finding aborts the merge forward: the merge commit is not pushed, the worktree is removed, and the finding
+     is recorded in the run's plan. A minor has no merge forward:
      its integration branch is `main`, and the approver records the phase with `workflow finalize`, the
      `--reason` saying so (`spec-017` §4.10: an optional last phase is never skipped).
 - **One clone, a long-lived worktree for the maintenance line** (`dl-159` Decision 5, `dl-101` §2 (a)).
@@ -327,8 +332,12 @@ limits:
 
 - **CI is the enforcement point.** `.github/workflows/governance.yml` runs
   `scripts/check-governance.cjs` over every range pushed to `main` or to a `release/X.Y` line and every
-  pull request into either (`task-267`). It
-  checks §4's `wf()` subjects and brackets (not its code-commit subjects), the `Reason:`/`Approver:`
+  pull request into either (`task-267`). The script runs `wingfoil verify` on the code build (`node dist/cli.js
+  verify`, `spec-020` §6) for the checks WingFoil ships, and adds this repository's three: `config-version`,
+  `plan-retrospective` and `co-author-identity` (`spec-020` §4.12). The shipped checks are §4's subject and
+  bracket, `body`, `authority`, `state`, `verb-edge`, `status-outside-wf`, `supersedes-pair`,
+  `approval-agent-trailer`, `workflow-record-authority` and `trailer-paragraph`. Together they
+  check §4's `wf()` subjects and brackets (not its code-commit subjects), the `Reason:`/`Approver:`
   shape (`dl-067`), approval authority (§5, `dl-094`), state legality and the verb each transition
   uses, status changes outside a `wf()` operation (`dl-139`), an approve whose `supersedes:` target is
   not `superseded` at `HEAD` (`bug-218`), and §7's exclusion of approvals from AI co-authorship (`bug-307`,
@@ -351,21 +360,30 @@ limits:
   the Memory documents the range changed.
 - **Branch protection makes it binding.** Requiring the `governance` status on `main` is a repository
   setting only the approver changes (`dl-103` §1 (C)), recorded as a `service` element.
-- **The pre-push hook is a local convenience** (`dl-103` §1 (B)). Opt in once per clone with
-  `git config core.hooksPath .githooks`; `.githooks/pre-push` then runs the same check over the commits
-  about to be pushed (it needs `npm run build`). It is per clone and `git push --no-verify` skips it, so
-  it never replaces CI. In this repository's worktrees the setting is shared configuration: the approver
-  decides whether it is set.
-- **The hook's base** (`dl-185` C3 (i)). For a remote ref that already exists the hook checks from the commit
-  it replaces. For a new remote ref it takes its base from the line the branch was cut from (§1): the
-  merge-base of `HEAD` nearest to it among `origin/main` and each `origin/release/X.Y` (local tracking refs,
-  no fetch; the pushed ref's own tracking ref is skipped; a tie keeps `origin/main`) — so `origin/main` for a
-  branch of `main`, `origin/release/X.Y` for a branch of a patch line, and `origin/main` for a new
-  `release/X.Y` itself. CI has no range on a branch-creating push and checks the whole history; the
-  difference is accepted, because the hook is a convenience and CI stays the enforcing check.
+- **The pre-push hook is required** (`dl-103` §1 (B) as amended, `dl-190` (a)). Every clone installs it once,
+  with `npm ci`, `npm run build` and `npm run setup:hooks` (`CONTRIBUTING.md`): `scripts/install-hooks.cjs` runs
+  `git config core.hooksPath .githooks` in the clone's local configuration when no hooks path and no hook of the
+  clone's own is set, and otherwise names what is set and changes nothing. `.githooks/pre-push` then runs the same
+  check over the commits about to be pushed, and refuses the push when a gated finding is found or when `dist/` is
+  not built (`npm run build`), since the check cannot run without it. `git push --no-verify` skips it and is never
+  used to push past a finding. The hook is per clone, so it never replaces CI. In this repository's worktrees the
+  setting is shared configuration: the approver runs `npm run setup:hooks` once in the shared clone, and agents
+  never run it.
+- **The hook's base** (`dl-185` C3 (i), `bug-417`). For a remote ref that already exists the hook checks from the
+  commit it replaces. For a new remote ref it takes its base from the line the branch was cut from (§1): the
+  merge-base of `HEAD` nearest to it among the tracking refs of the remote being pushed to — its `main` and each
+  of its `release/X.Y` (local tracking refs, no fetch, read only when `git remote` lists the remote, so a push to
+  a URL has none; the pushed ref's own tracking ref is skipped; a tie keeps `main`). For a push to `origin` that is
+  `origin/main` for a branch of `main`, `origin/release/X.Y` for a branch of a patch line, and `origin/main` for a
+  new `release/X.Y` itself. CI has no range on a branch-creating push and checks the whole history; the
+  difference is accepted, because CI stays the enforcing check.
+- **The tag waits for the required check** (`dl-190` (c)). `release-publishing`'s `tag` step pre-checks
+  `governance-check-passed`: `scripts/wait-governance-check.cjs` polls the `governance` check run of the pushed
+  integration branch's head (`gh api`) and passes only once it has completed with success.
 
 > Source: `dl-119-a-git-conventions-directive` (Actions 2–4), `dl-117-ai-attribution-policy` (Action 2),
 > `dl-158` (Action 2), `dl-159` (Action A1.6, §1–§3, §6), `dl-185` (C1, §1), `dl-206` (Q1 (i), Q2 (i), §1),
 > `dl-101-id-allocation-across-refs` (Action 2),
-> `dl-103-governance-enforced-outside-the-agent` §1 (§9), `dl-185` C3 (i) (§9, the hook's base). Features P3.5, P3.7; REQ-SEC-01 (every state change
+> `dl-103-governance-enforced-outside-the-agent` §1 (§9), `dl-185` C3 (i) (§9, the hook's base), `dl-190` items 2 (a)
+> and 2 (c) (§9, the required hook and the tag's wait). Features P3.5, P3.7; REQ-SEC-01 (every state change
 > carries a git identity), REQ-SYS-08 (bindings by role).

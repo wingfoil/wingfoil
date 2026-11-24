@@ -5,7 +5,11 @@
  */
 export type GovernanceRule = 'subject' | 'bracket' | 'body' | 'authority' | 'state' | 'config';
 
-/** A check added after the script itself (task-208): each gates only the commits after its own introduction. */
+/**
+ * A check added after the script itself (task-208): each gates only the commits after its own introduction. All but
+ * `config-version`, `plan-retrospective` and `co-author-identity` (the script's own, `spec-020` §4.12) are
+ * `wingfoil verify`'s, which the script runs and re-gates (`spec-020` §6.1, task-366).
+ */
 export type GovernanceCheck = 'verb-edge' | 'status-outside-wf' | 'supersedes-pair' | 'config-version' | 'approval-agent-trailer' | 'workflow-record-authority' | 'trailer-paragraph' | 'plan-retrospective' | 'co-author-identity';
 
 /**
@@ -78,7 +82,11 @@ export interface GovernanceOptions {
   readonly introducedAt?: string;
 }
 
-/** Check every `wf()` commit of `base..HEAD` (or of the whole history) in the repository at `root`. */
+/**
+ * Check the commits of `base..HEAD` (or of the whole history) in the repository at `root`: the code build's
+ * `wingfoil verify` (`dist/cli.js`, run as a child process), its findings re-gated by the script's introductions,
+ * and the script's three extension checks (`spec-020` §6.1). Throws when the check cannot run (the command's exit 2).
+ */
 export function checkGovernance(root: string, options?: GovernanceOptions): GovernanceReport;
 
 /** `1` when any finding is gated, else `0`. */
@@ -89,6 +97,7 @@ export function formatReport(report: GovernanceReport): string;
 
 /**
  * The `WingFoil-*` keys a commit body writes outside its final (last blank-line-separated) paragraph, each once, as
- * first written (`git-conventions` §8, `bug-391`); exported for `scripts/check-phase-report.cjs` (task-344 D4).
+ * first written (`git-conventions` §8, `bug-391`); exported for `scripts/check-phase-report.cjs` (task-344 D4), a
+ * delegate to `src/core/governance-check.ts`'s reader of the same name (`spec-020` §4.11, task-366 D5).
  */
 export function trailerKeysOutsideFinalParagraph(body: string): string[];

@@ -238,6 +238,7 @@ export {
   GOVERNANCE_CHECKS,
   governanceCheck,
   renderVerifyConsole,
+  trailerKeysOutsideFinalParagraph,
   VERIFY_WHOLE_HISTORY,
   verifyFindingsMessage,
 } from './governance-check';
