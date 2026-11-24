@@ -682,6 +682,99 @@ Resource never see `--full`.
 
 None: no element past its first state was edited (`git status --short` → empty before the notes).
 
+
+### independent review (2026-11-24) and fixes (developer)
+
+**Base.** The review of `db99a9235` returned APPROVE WITH FIXES (0 blockers, 4 should-fix, 0 follow-up); the approver
+ruled on the four on 2026-11-24. A fresh developer agent, fix round: the task and `bug-341`, `bug-359`, `bug-487` stay
+`in-review`; no submit, no sync, no record. Head at start `db99a9235`, `git rev-list --count HEAD..main` → `0` (no
+merge). PATH guard: `command -v wingfoil` → the task's PATH shim; `wingfoil --version` and `node dist/cli.js --version`
+→ `0.3.2 (8a2dcde74ea2e9143d98692f796124d310a80d8c)` (the dist of the last build; `8a2dcde74..db99a9235` changes no file
+under `src/`).
+
+**F2 — the identity rule (code `47e47a6bb`, tests `6dbf786aa`).**
+- Reproduced first, on the review's fixtures rebuilt outside the worktree from its fixture script, with the dist above:
+  without a field naming itself, `workflow status --full` → `  human needed: approve or reject release-1 (release,
+  planning; no open workflow carries it) — routed to WingFoil Test <wf-test@example.invalid>`, while the run's one
+  frontier step is `sprint.sprint-goal@release:release-1`; with `release: "release-1"` on it → `… release-1 (release,
+  planning; held by hotfix-1-plan's release release-1, no step of it approves it now) …`.
+- `src/workflow/deduce.ts` `holderOf`: per holder, in the holders' order, it first matches when the holder's scope
+  element IS the element (`keyOf(holder.element) === keyOf(element)`), then the field test as before; so the first
+  holder in instance, frontier and trail order still wins (§5.1), and `heldBy.element` names the element itself. The
+  doc comments of `GatedElement` (`deduce.ts`) and `UngatedElement` (`src/core/workflow-status.ts`) state the rule.
+- **Render point: the §7.4 held form is kept.** The form `held by <instance>'s <S type> <S id>, no step of it approves
+  it now` names the instance and the element `S` scoping its frontier step; it names no field. In the identity case it
+  reads `approve or reject release-1 (release, planning; held by hotfix-1-plan's release release-1, no step of it approves
+  it now)`: `hotfix-1-plan`'s release is `release-1` (it scopes the frontier step `sprint.sprint-goal@release:release-1`)
+  and no step of the run approves it now (`pendingApprovals` is `[]`): both halves are true, so no new form is needed.
+  `json`/`yaml` keep §5.1's `heldBy` shape, no new key.
+- `docs/cli-reference.md` (`303deb662`, a file the design lists): the `workflow status` entry says the element a frontier
+  step runs on is held whatever its fields, and (F1, same paragraph) that with no approver the summary and the `--full`
+  lines name the routing error where the members go.
+- Test `test/core/workflow-status-held-identity.test.ts` (new, helper `test/core/helpers/held-identity-fixture.ts`, new),
+  both forms of `release-1` (`describe.each`): the frontier and the empty `pendingApprovals`, the json `ungated` with
+  `heldBy: { instance: 'hotfix-1-plan', element: { type: 'release', id: 'release-1', status: 'planning' } }`, the
+  console `--full` line (core renderer and `workflow status --full` on the CLI), `--format json`'s `ungated`; positive
+  controls `release-2` (`releasing`, outside the entry filter) and `rl-2` (a type the run never iterates) without
+  `heldBy` and with the "no open workflow carries it" line.
+- Red → green, targeted (`npx jest test/core/workflow-status-held-identity.test.ts test/core/workflow-status-held-order.test.ts
+  --maxWorkers=2`): with the two `src/` files checked out at `db99a9235` → `Tests: 3 failed, 11 passed, 14 total` (the
+  json, console and CLI cases of the form without a self field; the received line `… release-1 (release, planning; no
+  open workflow carries it) …`); with the fix → `Tests: 14 passed, 14 total`. The form with a self field and every F3
+  case pass at both: characterization.
+
+**F3 — the two determinism clauses (test `6dbf786aa`).** `test/core/workflow-status-held-order.test.ts` (new):
+`ungatedByType` equals `[bug 2, release 2, release-line 1]` on the self-held project and equals its own default
+`sort()` (code-unit order), and the summary line reads `ungated elements: 5 (bug 2, release 2, release-line 1) — routed
+to …; --full lists them`; on the two-runs project, both runs carry `sprint.sprint-planning@release:release-1` on their
+frontier and `bug-1-crash` is held by the run started last — `hotfix-1-plan` when it starts last,
+`sw-life-cycle-1-plan` when the order is reversed — with the same `ungated` on two calls.
+
+**F1 — the no-approver console form.** Spec only: the sentence is in the pending amendment of `spec-017` §7.4 below. No
+code change: `fx/noapprover` with the dist above → `ungated elements: 2 (bug 2) — routed to no approver found for role
+'approver' in dna.yaml; --full lists them`, the form the sentence states; it is pinned by `test/core/workflow-status-render.test.ts`
+(red's), in the summary and under `--full`.
+
+**Existing suites on the changed contract** (targeted, this worktree): `npx jest test/core/workflow-status-held.test.ts
+test/cli/workflow-status-full.integration.test.ts test/core/workflow-show-instance.test.ts
+test/mcp/workflow-state-resources.test.ts test/core/workflow-status.test.ts test/core/workflow-status-render.test.ts
+test/core/workflow-list-show.test.ts test/workflow/deduce.test.ts test/core/workflow-status-held-identity.test.ts
+test/core/workflow-status-held-order.test.ts --maxWorkers=2` → `Test Suites: 10 passed`, `Tests: 129 passed, 129 total`;
+`npx tsc --noEmit -p tsconfig.json` → exit 0. No red assertion fails under the identity rule. `grep -rln 'no open workflow
+carries it\|heldBy' test/` lists only those suites.
+
+**T4.** `git log --first-parent --no-merges --format=%h 56963ae4d..HEAD --` over the ten red files → empty (exit 0),
+before this notes commit.
+
+**Gates.** Run on the head that carries this commit, with the pending amendments below in the working tree; their
+results are recorded in the phase report, not here, since they run after this commit.
+
+#### For task-383
+
+`task-383` (part B, `workflow tree`) builds on this head: `GatedElement` (`src/workflow/deduce.ts`, `Deduction.gated`,
+with `heldBy` under the identity rule and the field rule of `spec-017` §5.1), `ShowInputs.instancePlans`
+(`src/core/workflow-list-show.ts`, every instance plan at the snapshot, any status, with its `workflow` field), and the
+`renderConsole(value, call?)` seam (`src/core/registry.ts`, `call = { flags }`, passed by the one call site of
+`src/cli/registrar.ts`), which a `workflow tree` console renderer may read. `readDeductionSnapshotAtCommit` was NOT
+built here: `grep -rn readDeductionSnapshotAtCommit src test` → no hit (exit 1); it stays `task-383`'s seam, as the
+design's part B states.
+
+### Pending amendments (approver)
+
+Left uncommitted in this worktree (`git status --short` lists exactly these two):
+- `spec-017-workflow-commands-and-state-deduction` — §5.1 gains the identity sentence, placed after the sentence that ends
+  with its example ("… is on the frontier."), since the ruled anchor ("… `S`'s own `version` field") is followed in the
+  same sentence by that example; wording as ruled. §7.4 gains the no-approver sentence after "… names them (§5.3)."; one
+  new Revision paragraph (2026-11-24, this task, review) after every existing one. `--reason "State in §5.1 that a gated
+  element which itself scopes a frontier step of an open instance is held by that instance whatever its fields, so it is
+  never reported as carried by no open workflow, and in §7.4 the console form of the ungated elements when no member
+  holds the approver role (task-374 review, bug-487)."` (as proposed; the render point adds no §7.4 sentence).
+- `bug-487-workflow-status-read-as-the-approver-s-queue-offers-approvals-no-open-run-s-frontier-reaches-and-calls-a-bug-triaged-into-an-open-run-s-release-uncarried`
+  — its `### Retrospective` `- None.` becomes one line: the false statement's second form (a run's own iteration element),
+  found by the review, closed by the identity rule. `--reason "Record in the retrospective that the false statement had
+  a second form, a run's own iteration element at its gate on a frontier step that approves nothing, found by task-374's
+  independent review and closed by the identity rule of spec-017 §5.1."`
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
