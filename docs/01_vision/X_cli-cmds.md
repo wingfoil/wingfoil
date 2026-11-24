@@ -1,7 +1,7 @@
 # CLI Commands Reference — WingFoil
 
-**Version:** 2.8
-**Date:** 2026-11-23  
+**Version:** 2.9
+**Date:** 2026-11-24  
 **Status:** Approved
 
 ---
@@ -27,7 +27,7 @@ level.
 | Command | Description | Actors | Journeys | Notes |
 |---------|-------------|--------|----------|-------|
 | `wingfoil memory add --type <type> --title <title> [--tags <t1,t2>] [--set <name>=<value> ...] [--workflow <ref> [--step <key>]]` | Create new Memory document (draft state) with specified type | Morgan, Alex, Casey | 0a, 0b, 5 | Creates the document from its type's template at the path the type declares in `.wingfoil/memory.yaml`, inside the project root, with frontmatter state. The id comes from the type's `id_pattern`; `--set` fills an `id_pattern`/`path` token. `--workflow` (and `--step`) links the document to a step of an open workflow instance (`spec-017` §7.10) |
-| `wingfoil memory search [<keyword>] [--type <type>] [--status <status>] [--tag <tag>]` | Query Memory by keyword, type, status and tag | Casey, Alex, Jordan | 1, 3, 5 | Keyword search only. Filters by type (adr, task, etc.) and status (states are type-dependent — see `.wingfoil/memory.yaml`; e.g. draft, pending, approved, deprecated) |
+| `wingfoil memory search [<keyword>] [--type <type>] [--status <status>] [--tag <tag>] [--verify]` | Query Memory by keyword, type, status and tag | Casey, Alex, Jordan | 1, 3, 5 | Keyword search only. Filters by type (adr, task, etc.) and status (states are type-dependent — see `.wingfoil/memory.yaml`; e.g. draft, pending, approved, deprecated). `--verify` marks a match whose history holds a commit the checks of `wingfoil verify` flag (`spec-020` §4.13) |
 | `wingfoil memory import [<path>] [--action copy\|move\|link]` | Scan existing docs and import into Memory | Morgan, Alex | 0b | *Not built* (v0.4). Interactive if `--action` not specified. Prevents duplicates by checking filename hash. Supports: copy (new file), move (original deleted), link (symlink, avoids duplication) |
 | `wingfoil memory submit <id>` | Submit Memory document for approval (advances per the type's "submit" edge) | Morgan, Alex | 2, 4, 5 | Performs the type's legal submit transition (e.g. task draft → pending). Recorded in frontmatter + git commit |
 | `wingfoil memory approve <id> --reason <text>` | Approve Memory document (advances per the type's "accept" edge) | Morgan, Casey, Sam | 2, 4, 5 | Destination state depends on type + current state (e.g. task: pending → backlog, in-review → approved). Needs the approver role. Records approver, timestamp, reason. Creates git commit |
@@ -35,7 +35,7 @@ level.
 | `wingfoil memory deprecate <id> [--reason <text>]` | Mark Memory document as deprecated (any state → deprecated) | Morgan, Casey | 2, 3, 5 | Document remains in repo (not deleted) but marked as obsolete. Reason recorded. Agents ignore deprecated docs in context loading |
 | `wingfoil memory park <id> --reason <text>` | Return a started document to an earlier state along its type's declared `returns` edge | Morgan, Alex, Jordan | 2, 4 | For a task, in-progress → backlog (`dl-110`). The reason is recorded in the commit (`task-180`) |
 | `wingfoil memory amend <id> --reason <text>` | Record an uncommitted correction to a document as an amendment, leaving its state unchanged | Morgan | 2, 4 | For types `memory.yaml` declares `amendable`. Needs the approver role; the reason is recorded in the commit (`task-127`) |
-| `wingfoil memory history <id>` | View audit trail of Memory document (commits, approvals, state changes) | Morgan, Casey | 2, 3, 5 | Shows full git history + state transitions from frontmatter |
+| `wingfoil memory history <id>` | View audit trail of Memory document (commits, approvals, state changes) | Morgan, Casey | 2, 3, 5 | Shows full git history + state transitions from frontmatter; each entry carries the content its submit declared, and an entry the checks of `wingfoil verify` flag is marked `unverified` (`spec-020` §4.13) |
 | `wingfoil verify [--base <rev>] [--introduced-at <rev>]` | Check a commit range against the Memory and approval contracts | Morgan, Casey | 4, 5 | P1.14, from v0.4 (`spec-020`). A flat command that only reads committed history, never the working tree: every commit of `<rev>..HEAD` (without `--base`, every commit reachable from `HEAD`) is judged against the `dna.yaml` and `memory.yaml` committed before it — the subject and bracket grammar, the `Approver:` / `Reason:` body, approver authority, the state machine, a status changed outside a Memory operation, an approval carrying an agent trailer. Exits `1` on a gated finding, with the report still printed; `--introduced-at <rev>` reports `<rev>` and its older history without failing. CLI only: no MCP Tool or Resource |
 
 ### Parameters for Pillar 1 Commands
@@ -400,6 +400,10 @@ Every command accepts these, except `--dry-run`, which only the commands that ch
 ---
 
 ## Revision history
+
+**Version 2.9 (2026-11-24) — `memory search --verify` and the history mark, per `task-378` (`bug-496`, `bug-287`,
+`spec-020` §4.13).** The `memory search` row gains `--verify`, and the `memory history` row says each entry carries
+its declared content and the `unverified` mark of the governance checks.
 
 **Version 2.8 (2026-11-23) — `wingfoil verify`, per `task-365` (`spec-020` §2, P1.14).**
 Pillar 1 gains the `verify` row: the check of a commit range against the Memory and approval contracts, read from

@@ -877,8 +877,8 @@ const CARRIES_REF = '(spec-008 §2, bug-287)';
  * ({@link HistoryReader.carriesLineBefore}). A named document absent at either revision is not compared.
  */
 export const checkCarriesContent: GovernanceCheckFn = (commit, reader) => {
-  if (isMerge(commit) || !isMemoryCommit(commit)) return EMPTY;
-  const op = WF_HEAD_RE.test(commit.subject) ? parseMemoryOperation(commit.subject) : null;
+  // `parseMemoryOperation` reads the `wf()` head as `WF_HEAD_RE` does, so a subject without one is no operation.
+  const op = isMerge(commit) || !isMemoryCommit(commit) ? null : parseMemoryOperation(commit.subject);
   if (op === null) return EMPTY;
   const keyLines = commit.body.split('\n').filter((line) => CARRIES_KEY_RE.test(line));
   const messages: string[] = [];
@@ -956,7 +956,7 @@ export interface GitHistoryRange {
   readonly introducedAt?: string;
   /**
    * The commits to read instead of a range, in this order (`git log --no-walk=unsorted`): `memory history`'s mark
-   * (`spec-020` §4.13, `task-378`). Exclusive with `base`.
+   * (`spec-020` §4.13, `task-378`). When given, `base` is not read.
    */
   readonly commits?: readonly string[];
   /**
@@ -996,13 +996,14 @@ export interface GitHistoryReader extends HistoryReader {
 export function createGitHistoryReader(root: string, range: GitHistoryRange): GitHistoryReader {
   const git = (args: readonly string[], input?: string): string =>
     runGitRead(root, ['-c', 'core.quotePath=false', ...args], input === undefined ? {} : { input }).stdout;
-  if (range.commits !== undefined && range.base !== undefined) throw new Error('a history reader reads a range or a list of commits, not both');
   const listed = range.commits;
   // A list of commits is read in its own order (`--no-walk=unsorted`, the shas on stdin); a range oldest first.
   const reverse = listed === undefined ? ['--reverse'] : [];
   const revisions = listed !== undefined ? ['--no-walk=unsorted', '--stdin'] : range.base === undefined ? [range.head] : [`${range.base}..${range.head}`];
   const stdin = listed === undefined ? undefined : `${listed.join('\n')}\n`;
-  const logOf = (args: readonly string[]): string => (listed !== undefined && listed.length === 0 ? '' : git(['log', '--no-show-signature', ...args, ...revisions], stdin));
+  // An empty list reads nothing: `git log` with no revision would read `HEAD`.
+  const logOf = (args: readonly string[], config: readonly string[] = []): string =>
+    listed !== undefined && listed.length === 0 ? '' : git([...config, 'log', '--no-show-signature', ...args, ...revisions], stdin);
   const only = range.paths;
   const kept = (sha: string, path: string | null): boolean => only === undefined || (path !== null && (only.get(sha) ?? []).includes(path));
 
@@ -1037,7 +1038,7 @@ export function createGitHistoryReader(root: string, range: GitHistoryRange): Gi
 
   // Where each path renamed inside the range ended up.
   const forward = new Map<string, string>();
-  const renames = listed !== undefined && listed.length === 0 ? '' : git(['-c', 'diff.renameLimit=0', 'log', '--no-show-signature', ...reverse, '-M', '--diff-filter=R', '--name-status', '--format=%x01%H', ...revisions], stdin);
+  const renames = logOf(['-M', '--diff-filter=R', '--name-status', '--format=%x01%H', ...reverse], ['-c', 'diff.renameLimit=0']);
   let renameSha = '';
   for (const line of renames.split('\n')) {
     if (line.startsWith('\u0001')) {
@@ -1058,7 +1059,7 @@ export function createGitHistoryReader(root: string, range: GitHistoryRange): Gi
       changes = new Map();
       let list: FileChange[] | null = null;
       let sha = '';
-      const log = listed !== undefined && listed.length === 0 ? '' : git(['-c', 'diff.renameLimit=0', 'log', '--no-show-signature', '--no-merges', '-M', '--name-status', '--format=%x01%H', ...revisions], stdin);
+      const log = logOf(['--no-merges', '-M', '--name-status', '--format=%x01%H'], ['-c', 'diff.renameLimit=0']);
       for (const line of log.split('\n')) {
         if (line.startsWith('\u0001')) {
           list = [];
@@ -1247,6 +1248,13 @@ function statusOutsideWfRequests(reader: HistoryReader, commits: readonly Histor
   return requests;
 }
 
+/** `items` with only the first item of each `key` kept, in their order. */
+function firstOfEach<T>(items: readonly T[], key: (item: T) => string): T[] {
+  const unique = new Map<string, T>();
+  for (const item of items) if (!unique.has(key(item))) unique.set(key(item), item);
+  return [...unique.values()];
+}
+
 /**
  * §3's order of the findings of one commit, as a comparator over `findings` (listed in the order written): by category,
  * a `trailer-paragraph` finding after the other `body` findings and among them in the order written, the others by
@@ -1289,12 +1297,7 @@ export function buildGovernanceReport(
     }
   }
 
-  const unique = new Map<string, GovernanceFinding>();
-  for (const finding of collected) {
-    const key = `${finding.sha}\0${finding.rule}\0${finding.message}`;
-    if (!unique.has(key)) unique.set(key, finding);
-  }
-  const deduplicated = [...unique.values()];
+  const deduplicated = firstOfEach(collected, (finding) => `${finding.sha}\0${finding.rule}\0${finding.message}`);
   const withinCommit = commitFindingOrder(deduplicated);
   const findings = deduplicated.sort((a, b) => (order.get(a.sha) as number) - (order.get(b.sha) as number) || withinCommit(a, b));
 
@@ -1381,15 +1384,9 @@ export function unverifiedFindings(root: string, element: UnverifiedElement): Re
   });
   reader.prefetch(statusOutsideWfRequests(reader, reader.commits()));
   for (const commit of reader.commits()) {
-    const unique = new Map<string, CheckFinding>();
-    for (const check of CHECK_FUNCTIONS) {
-      for (const { rule, check: name, message } of check(commit, reader, { gated: true }).findings) {
-        const key = `${rule}\0${message}`;
-        if (!unique.has(key)) unique.set(key, { rule, check: name, message });
-      }
-    }
-    if (unique.size === 0) continue;
-    const findings = [...unique.values()];
+    const collected = CHECK_FUNCTIONS.flatMap((check) => check(commit, reader, { gated: true }).findings.map(({ rule, check: name, message }): CheckFinding => ({ rule, check: name, message })));
+    const findings = firstOfEach(collected, (finding) => `${finding.rule}\0${finding.message}`);
+    if (findings.length === 0) continue;
     marks.set(commit.sha, findings.sort(commitFindingOrder(findings)));
   }
   return marks;

@@ -13,7 +13,7 @@
  * Deterministic (REQ-SYS-07): results follow the declared field order, never object-key order.
  */
 import { splitFrontmatter } from '../storage';
-import { parseYaml, ValidationError } from '../validation';
+import { parseYaml } from '../validation';
 
 import { describeDocumentChanges, removeFrontmatterField, setFrontmatterField } from './frontmatter-edit';
 
@@ -210,8 +210,8 @@ function recordedStatus(content: string): string | null {
   let parsed: unknown;
   try {
     parsed = parseYaml(frontmatter, 'frontmatter');
-  } catch (error) {
-    if (!(error instanceof ValidationError)) throw error;
+  } catch {
+    // `parseYaml` throws only `ValidationError.yamlParse`: a frontmatter that does not parse records no target.
     return null;
   }
   if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return null;

@@ -1281,18 +1281,13 @@ const memorySearchFn: CoreFn<unknown, MemorySearchResult> = async (params) => {
     .map(({ path, id, title, type: docType, status: docStatus, tags }) => ({ path, id, title, type: docType, status: docStatus, tags }));
 
   // task-378 (`bug-496`, `spec-020` §4.13): under `--verify`, each match's history is walked and marked as `memory
-  // history` marks it; a match whose history the checks flag carries the flagged shas, oldest first.
+  // history` marks it; a match whose history the checks flag carries the flagged shas, oldest first. A git read that
+  // fails throws its `StorageError`, exit `1`, as the scan's own reads do.
   if (verify === true) {
     for (const [index, match] of matches.entries()) {
-      let flagged: string[];
-      try {
-        const walk = reconstructMemoryTransitions(root, match.path);
-        const marks = unverifiedFindings(root, { path: match.path, entries: walk, walk });
-        flagged = walk.map((transition) => transition.sha).filter((sha, at, shas) => marks.has(sha) && shas.indexOf(sha) === at);
-      } catch (error) {
-        if (!(error instanceof StorageError)) throw error;
-        return coreErr({ code: 'IO', message: error.message });
-      }
+      const walk = reconstructMemoryTransitions(root, match.path);
+      const marks = unverifiedFindings(root, { path: match.path, entries: walk, walk });
+      const flagged = [...marks.keys()];
       if (flagged.length > 0) matches[index] = { ...match, unverified: flagged };
     }
   }
@@ -1470,23 +1465,18 @@ const memoryHistoryFn: CoreFn<unknown, MemoryHistoryResult> = async (params) => 
   }
 
   let transitions: ReturnType<typeof reconstructMemoryTransitions>;
+  // task-378 (`bug-496`, `spec-020` §4.13): the checks of `wingfoil verify` over the commits the walk lists, the walk
+  // reused — read in the same guard, so a git read that fails is `IO` either way.
+  let marks: ReadonlyMap<string, readonly CheckFinding[]>;
   try {
     transitions = reconstructMemoryTransitions(root, found.path);
+    marks = unverifiedFindings(root, { path: found.path, entries: transitions, walk: transitions });
   } catch (error) {
     // A git read that failed is `IO`, never an empty trail (task-142, `bug-072`): the walk throws
     // rather than answering "no history" for a history it could not read. Since task-171 the tolerant
     // reconstruction throws nothing else (a revision that does not parse is an entry, `bug-188`), so
     // what reaches here is a `StorageError`.
     return coreErr({ code: 'IO', message: (error as StorageError).message });
-  }
-  // task-378 (`bug-496`, `spec-020` §4.13): the checks of `wingfoil verify` over the commits the walk lists, the walk
-  // reused; a git read that fails is `IO`, as the walk's is.
-  let marks: ReadonlyMap<string, readonly CheckFinding[]>;
-  try {
-    marks = unverifiedFindings(root, { path: found.path, entries: transitions, walk: transitions });
-  } catch (error) {
-    if (!(error instanceof StorageError)) throw error;
-    return coreErr({ code: 'IO', message: error.message });
   }
   const entries: MemoryHistoryEntryView[] = transitions.map((transition) => ({
     sha: transition.sha,
