@@ -59,3 +59,393 @@ base candidates come from the remote named `origin`), `bug-438` (a clean gate re
 ## Execution Notes
 
 <!-- Filled by the dev-loop. -->
+
+### design (architect, 2026-11-24)
+
+**Base and inputs.** Branch at `d9bbaf240` (start `a7e6e76de` and the three bug syncs on `main` `2fbc5afab`, the merge of
+`task-365`). PATH guard: `command -v wingfoil` → the task's PATH shim; `wingfoil --version` and `node dist/cli.js
+--version` → `0.3.2 (2fbc5afab57d8d37d202ce36f49e5c6f747551a8)`. Contract read at this head: `spec-020` (`approved`, its
+one Revision paragraph, `task-365`'s §2.2), `dl-190` and `dl-103` (`ready`, `dl-103` with `task-365`'s Actions 2
+amendment), `dl-241` (`in-discussion`), `git-conventions` 2.9 (§1 rule 6, §9), `bug-417`, `bug-438`, `bug-448`
+(`in-progress`). dl-015: `task-365`'s notes read whole — "What task-366 may rely on" (the command, its report and stderr
+documents, exit codes), its parity runs (whole history with `--introduced-at fcd435695`: the same 1704 findings and 1212
+`stateUnchecked` as the script, the verb gating 781 where the script gates 2), its candidate finding on `waitslot.sh`, and
+its approve `54a80954e`, whose reason leaves the T-30 wording to this gate and records `dl-241`.
+
+**What the code does at this head** (read in this worktree).
+- `scripts/check-governance.cjs` (1260 lines) still holds every predicate: the five base rules, the six later generic
+  checks and the three extension checks; its exports are `CHECKS`, `checkGovernance`, `exitCodeFor`, `formatReport`,
+  `trailerKeysOutsideFinalParagraph` (`:1256`). `scripts/check-phase-report.cjs:100` and
+  `test/cli/check-phase-report.test.ts:32` import `trailerKeysOutsideFinalParagraph` from it (`task-344` D4);
+  `scripts/release-health/measure.cjs:189` and 14 test files call `checkGovernance` in-process (`grep -rln check-governance test`).
+- `readFileChanges` (`:383-405`) is read only by `status-outside-wf`, so its dead `C` branch (`:397`, `task-365`'s
+  refactor note: `git log -M` prints no copy) leaves with the whole function when that check moves to the verb.
+- `bug-438` reproduces on both texts: `node scripts/check-governance.cjs --base main` → exit `0`, `governance check: 4
+  wf() commits in 2fbc5afab…..HEAD (4 after the introduction commit fcd435695…), and 0 other commits` then `gated: 0
+  findings on 0 commits`, `history: 0 findings on 0 commits`, `state not checked: 0 entries on 0 commits (…)`; `node
+  dist/cli.js verify --base main` → exit `0`, the same three summary lines under `wingfoil verify: 4 wf() commits and 0
+  other commits in 2fbc5afab…..HEAD (4 gated; every commit gated)`.
+- `.githooks/pre-push` reads `refs/remotes/origin/…` literally (`:34`, `:36`) and never `$1` (`bug-417`); it lets a push
+  through when `dist/memory/index.js` is missing (`:24-27`). `package.json` has no `prepare` and no hook script.
+- `release-publishing.yaml` is `2.4` on `main` (`task-363`), `bindings.yaml` `3.2`, `git-conventions.md` `2.9`
+  (`grep -n "^version:"`), so this branch bumps each once: `2.5`, `3.3`, `3.0`.
+
+#### Design (green)
+
+1. **`scripts/check-governance.cjs` — the extension (`spec-020` §6.1, AC 1, AC 2).** Kept: `git`, `requireCommitName`,
+   `resolveCommit` (its own exit-2 messages for `HEAD`, `--base`, `--introduced-at`), the introduction and
+   `markerIntroduction`, `CHECKS` with every marker string exactly once, `readCommits`, `readTouchedPaths`,
+   `readBlobIds`, `readBlobTexts`, `configReader`, `finalParagraphLines`, `isTeamIdentity`, `coAuthorFindings`, the
+   `plan-retrospective` detection (a `wf(plan): finalize` into the last state of the machine of the `memory.yaml` at
+   the commit, its named touched plan, as today), `config-version`, the sort, `exitCodeFor`, `formatReport`, `parseArgs`,
+   `main`. Removed: every predicate of the eleven generic checks and the readers only they use (`readRenames`,
+   `readFileChanges` with its `C` branch, `edgeKinds`, `verbEdgeFinding`, `subjectIds`, `checkSubjectAndBracket`,
+   `checkBodyAndAuthority`, `approverGrammarFindings`, `authorityFindings`, `describeTransitionFinding`, the state walk,
+   `APPROVAL_LINE_RE`, `AGENT_TRAILER_RE`, `WORKFLOW_RECORD_RE`, `WINGFOIL_TRAILER_RE`, the verb sets). New:
+   - `runVerb(root, { base, introducedAt })` — `spawnSync(process.execPath, ['--no-warnings', <cli>, 'verify',
+     '--format', 'json', '--project', root, …])`, `<cli>` = `join(__dirname, '..', 'dist', 'cli.js')` (D2), each revision
+     the full sha the script resolved, `--introduced-at` omitted when the script has no introduction, `maxBuffer` 1 GiB,
+     `env: process.env`. Stderr: each non-empty line parsed as one JSON document; `{"warning"}` starting
+     `W_VERIFY_WHOLE_HISTORY:` and `{"error"}` starting `E_VERIFY_FINDINGS:` dropped, any other written `warning: <text>` /
+     kept as the error text; a line that is not such a document → exit `2` naming it. Stdout: exit `0`/`1` with a
+     parseable report whose `verdict` is `pass`/`fail` is a completed run; otherwise exit `2` with the error document's
+     text, else `wingfoil verify exited <n> with no report`.
+   - Validation of the report (§6.1 steps 2–3 as amended): the known generic ids are the five base checks plus every
+     `CHECKS` key that is not an extension check (`EXTENSION_CHECKS = config-version, plan-retrospective,
+     co-author-identity`); a `checks` entry or finding `check` outside them → `the verb reports check '<id>', which has
+     no introduction in scripts/check-governance.cjs: add its marker to CHECKS`; a known id missing from `checks` →
+     `the verb's report lacks the checks scripts/check-governance.cjs gates: <id>, …`; `report.head` other than the
+     resolved `HEAD` → `HEAD moved from <sha> to <sha> while the verb ran`. Each exit `2`.
+   - Re-gating: a base check's finding by the script's introduction, a later check's by `checkIntroductions[check]`
+     (`historyOf`, unchanged); a finding of a base check written without `check`, as today. Then the extension's
+     findings, the de-duplication by `(sha, rule, message)`, the sort and the report object as today
+     (`head, base, introducedAt, checkIntroductions, checked, otherCommits, gatedCommits, findings, stateUnchecked`):
+     `checked`, `otherCommits` and `gatedCommits` computed by the script from its own `readCommits` as today, and
+     `stateUnchecked` the verb's, in commit order.
+   - `loadDist` also requires `dist/cli.js`; the header says the script runs `wingfoil verify` on the code build, lists
+     the three extension checks, and states the accepted weakness of `spec-020` §6.3 (AC 4).
+   - `trailerKeysOutsideFinalParagraph` stays exported as a delegate to the `src` one (D5), so
+     `scripts/check-phase-report.cjs` and its test change nothing.
+   - `scripts/check-governance.d.cts`: comments only (the report shape does not change); after `task-378`'s merge its
+     `GovernanceCheck` union gains that check's id.
+2. **`src/core/governance-check.ts`** — `renderVerifyConsole`'s three summary lines per `spec-020` §7 as amended
+   (`bug-438`, D10); `trailerKeysOutsideFinalParagraph(body): string[]` exported with TSDoc and used by
+   `checkTrailerParagraph` (no change of behaviour), re-exported by the `src/core` barrel. `verifyFindingsMessage`
+   unchanged.
+3. **The script's summary lines** (`formatReport`) — the same three lines as the verb's (`bug-438`): `gated: <n>
+   findings on <m> commits with a finding (<rule> <count>, …)`, `history: …` likewise, `state not checked: <n> entries
+   on <m> commits with an entry (…)`; with `<n>` `0`: `gated: 0 findings`, `history: 0 findings`, `state not checked: 0
+   entries (…)`. Its first two lines, its blocks and `--json` do not change.
+4. **`.githooks/pre-push`** (`bug-417`, D7, D9) — `remote="$1"`; the candidates are `refs/remotes/$remote/main` and
+   `refs/remotes/$remote/release/<n>.<n>` only when `git remote` lists `$remote` (a push to a URL has none: no base, as a
+   remote with no tracking refs today); the skipped own ref is `refs/remotes/$remote/<pushed branch>`; the look-alike
+   guard by full refname is kept. Without `dist/` it refuses the push (exit `1`, `pre-push: dist/ is not built (npm run
+   build): the governance check cannot run, so the push is refused; build, or push with --no-verify`). Header: required
+   by `git-conventions` §9, installed by `npm run setup:hooks`, runs the script, which runs `wingfoil verify` (AC 4).
+5. **`scripts/install-hooks.cjs`** (new) and `package.json` `"setup:hooks": "node scripts/install-hooks.cjs"` (AC 5, D6):
+   outside a git work tree → exit `2`; `git config --get core.hooksPath` unset and no active hook in `git rev-parse
+   --git-path hooks` (a file not ending `.sample`) → `git config --local core.hooksPath .githooks`, exit `0`, one line
+   `core.hooksPath set to .githooks: .githooks/pre-push runs the governance check before every push (git-conventions §9)`;
+   already `.githooks` → exit `0`, `core.hooksPath is already .githooks`, config untouched; another value, or active
+   hooks → exit `1` naming it (`core.hooksPath is <value>, not .githooks: …` / `<path> would stop running once
+   core.hooksPath is set: …`), config untouched. No `--force`, no `prepare`.
+6. **`CONTRIBUTING.md`** — a short "Set up a clone" section: `npm ci`, `npm run build`, `npm run setup:hooks`, what the
+   hook does and that CI stays binding (kept under half of `COLLABORATION.md`, `test/docs/community-health.test.ts`).
+7. **`git-conventions` 3.0** (`version:` entry naming `task-366`, `bug-417`, `bug-448`, `dl-190`; `**Date:**`
+   2026-11-24 or later) — §1 rule 6 (`bug-448`, D11): a gated finding stops the merge forward unless the approver
+   accepted it before; each accepted finding is named, by sha, check and the record of its acceptance, in the
+   `--reason` of the `merge-forward` phase's `workflow finalize` (the go-ahead, which precedes the merge); the check is
+   still run, and any other gated finding aborts the merge forward — the merge commit is not pushed, the worktree is
+   removed and the finding recorded in the run's plan. §9: the script runs `wingfoil verify` (the code build) for the
+   shipped checks and adds this repository's three, the list split in two (`spec-020` Consequences); "The pre-push hook
+   is required" (`dl-190` (a), `npm run setup:hooks`, the refusal without a build, `--no-verify` never used to pass a
+   finding); the hook's base from the tracking refs of the remote being pushed to, keeping the sentence "`origin/main`
+   for a branch of `main`, `origin/release/X.Y` for a branch of a patch line, and `origin/main` for a new
+   `release/X.Y` itself" as the example of a push to `origin`; the tag waits for the required check (`dl-190` (c),
+   `governance-check-passed`). The phrases `test/directives/*.test.ts` pin stay ("§4's `wf()` subjects and brackets",
+   "`release/X.Y`", "CI is the enforcement point", "CI stays the enforcing check", the `bug-444` and `bug-391` sentences,
+   rule 6's six commands in order).
+8. **`release-publishing.yaml` 2.5, `bindings.yaml` 3.3** (AC 6, D8) — `tag`'s `checks.pre` gains, last,
+   `'governance-check-passed(kind: "{release.kind}", version: "{release.version}")'`, and its description says the tag
+   waits until the required `governance` check of the pushed integration branch's head has passed; the binding
+   `governance-check-passed: { run: [node, scripts/wait-governance-check.cjs, --kind, "{kind}", --version, "{version}"],
+   severity: reject, args: <on-integration-branch's two patterns> }`. **`scripts/wait-governance-check.cjs`** (new):
+   the integration branch from `scripts/integration-branch.cjs`'s derivation; the head of `refs/remotes/origin/<branch>`
+   (`--remote <name>`, default `origin`; no fetch); `gh api "repos/{owner}/{repo}/commits/<sha>/check-runs?check_name=governance"`
+   polled every `--interval` seconds (default 15) up to `--timeout` (default 1800): exit `0` when a run `completed` with
+   `conclusion: success`, `1` on another conclusion or none after the timeout, `2` when `gh` is missing or fails, or a
+   kind/version the derivation refuses. `governance` is the job `svc-022` requires.
+9. **`.github/workflows/governance.yml`** — header comments only (AC 4): the script runs `node dist/cli.js verify` (the
+   code build of the checkout, `spec-020` §6.3) and adds the three extension checks; the steps do not change.
+10. **`docs/cli-reference.md`** — the `verify` example's summary lines (`gated: 1 findings on 1 commits with a finding
+    (authority 1)`, `history: 0 findings`, `state not checked: 0 entries (…)`), and in "What it cannot prove" one
+    sentence that a merge commit's own resolution of a Memory document is judged by no check (`dl-241` (b), if ruled).
+11. **When `task-378` is merged** (before this task's green ends, as ruled): `git merge --no-edit main`; `CHECKS` gains
+    `'<its check id>': 'governance-check:<its check id>'` (D13); `scripts/check-governance.d.cts`'s union follows.
+
+Not changed: `scripts/check-phase-report.cjs` (D5), `scripts/release-health/measure.cjs` (it calls `checkGovernance`,
+whose shape stays: the prototype run below passes its suite), `src/core/index.ts` beyond the barrel line,
+`.wingfoil/WORKFLOW.md`, `AGENTS.md` (§2's `.githooks` row "opt-in", §2's `scripts/` row: owed to `align-agent-docs`).
+
+#### Acceptance criteria — classification and what qa pins
+
+Corrections: AC 4 and AC 9 are **red-first**, not characterization: the texts they name do not exist (`grep -n "wingfoil
+verify" .githooks/pre-push .github/workflows/governance.yml` → nothing; rule 6 has no accepted-finding sentence), so a test
+pinning them fails today — a genuine red. The others stand. Spawned runs use `test/cli/helpers/spawn-cli.ts`; fixtures
+from `test/storage/helpers/git-fixture.ts` (identity per commit, fixed dates), the `MEMORY_YAML`/`DNA` shapes of
+`test/cli/check-governance.test.ts`. Text pins are substrings of whitespace-flattened text (task-276), each absence beside
+its positive; version pins "≥" plus the history entry naming the task (bug-314). **The stub `<cli>` (D3):** a helper
+copies `scripts/check-governance.cjs` and `scripts/check-retrospective.cjs` into a scratch directory's `scripts/`, and
+builds its `dist/` as one symlink per entry of this repository's `dist/` except `cli.js`, a stub that writes its argv to a
+file named by an environment variable, prints a canned report on stdout and canned lines on stderr, and exits with a given
+code. Canned reports are copied from a real run (`node dist/cli.js verify --format json --project <fixture>` on the
+fixture, the command named in the red notes) and edited only where the case needs it.
+
+| AC | Class | Test file (qa) | What it pins |
+|----|-------|----------------|--------------|
+| 1 | red-first | `test/cli/check-governance-extension.test.ts` (new) | Stub: the argv is exactly `--no-warnings <dir>/dist/cli.js verify --format json --project <root> --base <full sha> --introduced-at <full sha>` for a fixture that committed `scripts/check-governance.cjs` (the shas the script resolved from `--base HEAD~1` and the adding commit), and without `--introduced-at` for one that did not; a finding the stub invents on a real commit appears in the script's report; an `approval-agent-trailer` finding the stub reports `gated: true` on a commit before that check's marker introduction (the fixture commits the marker later, as `check-governance-enforcement.test.ts` does) comes out `gated: false`, a base-check finding gated by the script's introduction; a `subject` finding comes out with no `check` key, a `verb-edge` one with it; stderr: the stub's `{"warning":"W_VERIFY_WHOLE_HISTORY: …"}` and `{"error":"E_VERIFY_FINDINGS: …"}` lines absent from the script's stderr, a `{"warning":"x: y"}` line printed `warning: x: y`. Real build: on a fixture, `Object.keys` of the `--json` report equal `head, base, introducedAt, checkIntroductions, checked, otherCommits, gatedCommits, findings, stateUnchecked` (characterization). Structural, over the script's text: none of `verifyTransitionConsistency`, `reconstructMemoryTransitions`, `parseApprovalMetadata`, `isMachineEdge`, `parseBracketHops`, `readFileChanges`, `APPROVAL_LINE_RE`, `AGENT_TRAILER_RE`, `WORKFLOW_RECORD_RE`, `WINGFOIL_TRAILER_RE` (each present today: the red), and every value of `CHECKS` occurs exactly once (characterization, the `git log -S` invariant) |
+| 2 | red-first | `test/cli/check-governance-extension.test.ts` | T-32: the stub's `checks` gains `{check: 'no-such-check', rule: 'body', since: '0.4.0'}` → exit `2`, stderr `error: the verb reports check 'no-such-check', which has no introduction in scripts/check-governance.cjs: add its marker to CHECKS\n`, stdout empty. T-33: stub exit `1`, empty stdout, stderr `{"error":"revision \"x\" does not name a commit","details":[{"detail":"flag: --base"}]}` (copied from `node dist/cli.js verify --base x --format json` in a fixture) → exit `2`, stderr `error: revision "x" does not name a commit\n`. Also: stub exit `2` (its error text), stub exit `1` with no stderr (`error: wingfoil verify exited 1 with no report`), a non-JSON stderr line (exit `2`, the line named), a report missing `trailer-paragraph` from `checks` (`error: the verb's report lacks the checks scripts/check-governance.cjs gates: trailer-paragraph`), a report whose `head` differs (`error: HEAD moved from <a> to <b> while the verb ran`) |
+| 3 | characterization | moved: `test/core/governance-check-script-cases.test.ts` (new); edited: `test/cli/check-governance.test.ts`, `test/cli/check-governance-provenance.test.ts` | D1 (a). The two script cases that assert the script's own reading of `memory.yaml` at the commit, which `spec-020` §4.1 replaces by the first parent's (found by the prototype run below), move to `test/core/` against `governanceCheck`: (i) `check-governance.test.ts` › "configuration a gated commit cannot be checked without" › "keeps history lenient": the commit that removes `memory.yaml` and approves `t-1` together is judged against its parent's machine — no finding and no `stateUnchecked` entry for it; (ii) `check-governance-provenance.test.ts`'s root commit carrying `memory.yaml` with `wf(task): add t-1`: a gated `state` finding `no .wingfoil/memory.yaml is committed at this commit: its state cannot be checked` with no introduction. In `test/cli/`, case (i) is removed and the provenance fixture commits its configuration first (`chore: configure`), its counts restated (`checked` 1, `otherCommits` 4, two findings). Every other script suite passes unchanged |
+| 4 | red-first | `test/cli/governance-workflow.test.ts`, `test/cli/git-hooks.test.ts`, `test/cli/check-governance-extension.test.ts` | `governance.yml`'s header names `wingfoil verify`, `dist/cli.js`, "code build" and `spec-020` §6; the hook's header names `wingfoil verify`, `npm run setup:hooks` and `git-conventions` §9 and no longer says "Opt in once per clone"; the script's leading comment names `wingfoil verify`, the three extension checks and "accepted weakness" with `spec-020` §6.3, and no longer says "against five rules" |
+| 5 | red-first | `test/cli/install-hooks.test.ts` (new); `test/docs/community-health.test.ts` or the new file; `test/directives/git-conventions.test.ts` | `package.json` `scripts['setup:hooks']` is `node scripts/install-hooks.cjs` and there is no `prepare`; in a scratch clone (`cloneTempRepo`, no inherited `GIT_*`): unset → exit `0`, `git config --local --get core.hooksPath` → `.githooks`, the stdout line; rerun → exit `0`, "already"; `core.hooksPath .husky` → exit `1`, value unchanged; an executable `.git/hooks/pre-push` → exit `1`, hooksPath still unset; a non-repository directory → exit `2`. `CONTRIBUTING.md` contains `npm run setup:hooks`. §9 contains "The pre-push hook is required", "`npm run setup:hooks`", "`dl-190` (a)"; the task-291 characterization `'The pre-push hook is a local convenience'` is replaced by that pin (it asserts the text this AC removes). The `dl-103` amendment is the approver's, below |
+| 6 | red-first | `test/core/release-publishing-governance-wait.test.ts` (new), `test/cli/wait-governance-check.test.ts` (new); edited: `test/core/workflow-integration-branch.test.ts:168-174`, `test/cli/evidence-only-tag.test.ts:244-251` | `tag.checks.pre` is the four existing entries then `governance-check-passed(kind: "{release.kind}", version: "{release.version}")` (the two exact pins gain the fifth entry); the binding's argv, `severity: reject` and `args` as Design item 8; `release-publishing.yaml` ≥ 2.5 and `bindings.yaml` ≥ 3.3, each entry naming `task-366` and `dl-190`; the tag description names `governance-check-passed`; `resolveToken` of the token is kind `run`. Script, with a stub `gh` first on `PATH` printing the real response saved from `gh api 'repos/wingfoil/wingfoil/commits/fb5b73e0149df92ccb03bf305ccdb0c171cdf29a/check-runs?check_name=governance'` (`total_count` 1, `status: completed`, `conclusion: success`): exit `0`; the same with `conclusion: failure` → `1`; `status: in_progress` then completed (a stub that counts its calls) → `0` after the second poll, `--interval 0`; no run until `--timeout 0` → `1`; no `gh` on `PATH` → `2`; `--kind patch --version v0.4` → `2`; the commit asked is the head of `refs/remotes/origin/main` of the scratch clone |
+| 7 | red-first (cases 1–3), characterization (case 4) | `test/cli/git-hooks.test.ts` | `pushNew` takes the remote name. (1) A clone whose remote is renamed `upstream`: a new branch of `main` pushed to `upstream` takes `git merge-base HEAD refs/remotes/upstream/main`; (2) two remotes, `origin` with a `release/0.3` line and `fork` with only `main`: a branch of the patch line pushed to `fork` takes fork's `main` merge-base, not origin's `release/0.3`; (3) `$1` a URL that names no remote: no `--base`; also the pushed ref's own tracking ref under `upstream` skipped; (4) a local branch `refs/heads/origin/main` at another commit neither hides nor replaces `refs/remotes/origin/main` (beside the `origin/release/0.3` F12 case). And the build guard: no `dist/` → exit `1` with the refusal line, the stub not run (red-first, D7) |
+| 8 | red-first | `test/core/governance-check.test.ts:684-711`; `test/cli/check-governance-extension.test.ts` | The verb's console: the failing report's lines `gated: 2 findings on 1 commits with a finding (authority 2)`, `history: 1 findings on 1 commits with a finding (body 1)`, `state not checked: 1 entries on 1 commits with an entry <tail>`; the passing report's `gated: 0 findings`, `history: 0 findings`, `state not checked: 0 entries <tail>`; `verifyFindingsMessage` unchanged (`E_VERIFY_FINDINGS: 2 findings on 1 commits …`). The script's `formatReport` on two hand-written reports, the same lines, its first two lines unchanged. `--json`: the key list of AC 1 |
+| 9 | red-first | `test/directives/git-conventions.test.ts` (new `task-366` block) | Rule 6 holds "unless the approver accepted it before", "`bug-448`", "the `--reason` of the `merge-forward` phase's `workflow finalize`", "aborts the merge forward"; the existing rule-6 commands and their order still pinned; version ≥ 3.0, its entry naming `task-366`, `bug-448` and keeping `(prev 2.9`; `**Date:**` ≥ 2026-11-24 |
+
+`test/cli/check-governance-enforcement.test.ts:333-347` ("pins every marker exactly"): qa rewrites it so it survives
+`task-378`'s merge with no change to a red file (D13): the nine markers pinned exactly as today, and every
+`GOVERNANCE_CHECKS` id (`src/core/governance-check`) other than the five base checks has `CHECKS[id] ===
+'governance-check:<id>'`, and `CHECKS` has no other key. qa runs `npx tsc --noEmit -p tsconfig.json` and `npx jest test/lint
+--maxWorkers=2` before the red commit. Expected reds of the new export: TS2305 / `TypeError` for
+`trailerKeysOutsideFinalParagraph` from `src/core/governance-check` if a test imports it (AC 1 does not need to).
+
+#### Existing tests that pin what changes
+
+- Verb console (AC 8): `test/core/governance-check.test.ts:696-697`, `:708-709` (and the `state not checked` lines through
+  `UNCHECKED_TAIL`). `test/cli/verify.integration.test.ts` pins only `E_VERIFY_FINDINGS` (`:181`), which does not change,
+  and compares the console with `renderVerifyConsole` itself; `test/core/verify-registration.test.ts:126` the same
+  `E_VERIFY_FINDINGS`. No test pins the script's summary lines (`grep -rln "findings on" test/` → the three verb files only).
+- `tag`'s pre-checks (AC 6): `test/core/workflow-integration-branch.test.ts:168-174`, `test/cli/evidence-only-tag.test.ts:244-251`
+  (exact lists; the yaml proof below fails exactly these two). The phase list (`workflow-integration-branch.test.ts:167`)
+  does not change.
+- §9 (AC 5): `test/directives/git-conventions.test.ts` › task-291 › "the hook is a local convenience" (`:225`).
+- `CHECKS` (D13): `test/cli/check-governance-enforcement.test.ts:333-347`.
+- The two §4.1 cases (AC 3) above.
+- Kept as they are, and run here: every `test/cli/check-governance*.test.ts`, `config-version-raise.integration`,
+  `workflow-rekey.integration`, `check-phase-report` (D4 `trailerKeysOutsideFinalParagraph`), `test/release-health/measure.test.ts`,
+  `p02-plan-retrospective`, `git-hooks` (its header test reads `governance check: 0 wf() commits`, the first line, which
+  does not change), `governance-workflow`, `community-health` (`CONTRIBUTING.md` under half of `COLLABORATION.md`: 19 of
+  290 lines today).
+
+#### Files expected to change, and versions
+
+- green: `scripts/check-governance.cjs`, `scripts/check-governance.d.cts`, `scripts/install-hooks.cjs` (new),
+  `scripts/wait-governance-check.cjs` (new), `src/core/governance-check.ts`, `src/core/index.ts` (barrel line),
+  `package.json` (`setup:hooks`), `.githooks/pre-push`, `.github/workflows/governance.yml`, `CONTRIBUTING.md`,
+  `.wingfoil/directives/custom/git-conventions.md`, `.wingfoil/workflows/custom/release-publishing.yaml`,
+  `.wingfoil/workflows/bindings.yaml`, `docs/cli-reference.md`.
+- red (qa): the new and edited test files of the table, and the response fixture of `gh`.
+- design (this phase, uncommitted, approved at the gate): `spec-020` and `dl-103` (below).
+- **Version bumps** (first edit on this branch, against `main`): `git-conventions.md` `2.9 → 3.0`, `release-publishing.yaml`
+  `2.4 → 2.5` (after `task-363`'s 2.4, `fb5b73e01`), `bindings.yaml` `3.2 → 3.3`. None of the four files of
+  `test/lint/version-bump.test.ts`; `CONTRIBUTING.md`, `docs/cli-reference.md`, the hook and the workflow declare no
+  version. The specs and the DL carry a Revision / Amendment paragraph instead.
+
+**`.wingfoil/` proved on the pinned build** (the AC 6 shape, in a scratch clone of this head with Design item 8's two YAML
+edits committed, the script not written): `node node_modules/wingfoil-released/dist/cli.js workflow show release-publishing
+--format json` → exit `0`, the token listed with `"binding":{"kind":"run","source":"project","argv":["node",
+"scripts/wait-governance-check.cjs","--kind","{kind}","--version","{version}"],"severity":"reject"}`; `workflow list` →
+exit `0`; stderr in both the one line `…:.wingfoil/dna.yaml: unknown field(s) ignored: team.roles[4].human_only, …`, which
+the same commands print in this worktree unchanged (`npm run -s wingfoil -- workflow list` / `workflow show
+release-publishing --format json` → exit `0`, the same line): the pinned 0.3.2 predates `human_only`. The code build's
+`workflow list` there → exit `0`, stderr empty (no `W_WORKFLOW_UNBOUND_TOKEN`). `npm run -s check:mcp` → exit `0` in the
+worktree and in the clone (`pinned wingfoil 0.3.2 … (prompts: 9, resources: 4, tools: 0)`; the build under development
+`(prompts: 9, resources: 5, tools: 7)`). In the clone, `npx jest test/core/workflow-integration-branch.test.ts
+test/cli/evidence-only-tag.test.ts test/cli/workflow-unbound-none.integration.test.ts test/core/workflow-repository-conformance.test.ts
+test/core/release-publishing-merge-forward.test.ts test/core/release-publishing-changelog-lines.test.ts
+test/core/workflow-optional-last-phase.test.ts test/core/workflow-agent-role-check.test.ts test/core/workflow-status.test.ts
+test/core/workflow-pack-adoption.test.ts test/cli/integration-branch.test.ts test/cli/publish-pipeline.test.ts
+test/cli/staging-rehearsal.test.ts test/core/bindings*.test.ts test/lint --maxWorkers=2` → `2 failed, 27 passed` suites,
+`2 failed, 499 passed` tests: the two exact `tag` pins above, nothing else.
+
+#### Tests run at design (targeted, `--maxWorkers=2`, the task's PATH shim first)
+
+- In the worktree, before the amendments: the script's suites — `npx jest test/cli/check-governance-agent-trailer-article.test.ts
+  test/cli/check-governance-approval-agent-trailer.test.ts test/cli/check-governance-co-author-identity-review.test.ts
+  test/cli/check-governance-co-author-identity.test.ts test/cli/check-governance-enforcement.test.ts
+  test/cli/check-governance-parent-state.test.ts test/cli/check-governance-plan-retrospective.test.ts
+  test/cli/check-governance-provenance.test.ts test/cli/check-governance-show-signature.test.ts test/cli/check-governance.test.ts
+  test/cli/check-governance-workflow-records.test.ts test/cli/config-version-raise.integration.test.ts
+  test/cli/workflow-rekey.integration.test.ts test/cli/check-phase-report.test.ts test/release-health/p02-plan-retrospective.test.ts
+  test/release-health/measure.test.ts --maxWorkers=2` → `16 passed`, `321 passed`, 106.8 s; the verb, hook, workflow,
+  directive and docs suites — `npx jest test/core/governance-check.test.ts test/core/governance-check-git-reader.test.ts
+  test/core/governance-check-structure.test.ts test/core/verify-registration.test.ts test/cli/verify.integration.test.ts
+  test/cli/git-hooks.test.ts test/cli/governance-workflow.test.ts test/directives test/core/workflow-integration-branch.test.ts
+  test/cli/evidence-only-tag.test.ts test/core/release-publishing-merge-forward.test.ts test/core/release-publishing-changelog-lines.test.ts
+  test/core/workflow-repository-conformance.test.ts test/core/workflow-optional-last-phase.test.ts
+  test/cli/workflow-unbound-none.integration.test.ts test/docs/community-health.test.ts test/docs/cli-reference.test.ts
+  test/docs/workflow-md.test.ts test/docs/name-resolvability.test.ts --maxWorkers=2` → `34 passed`, `623 passed`.
+- **Prototype of §6.1** (scratch clone of this head, not this worktree): a throwaway `scripts/check-governance.cjs` that
+  takes the generic findings and `stateUnchecked` from `node dist/cli.js verify --format json` (gating re-decided by the
+  script's introductions, `check` dropped on the base five) and the three extension checks from the old script, then the
+  same 16 suites plus `test/cli/git-hooks.test.ts` → `2 failed, 15 passed` suites, `4 failed, 333 passed` tests. Two
+  failures are the prototype's own (its `main` has no usage-error handling: `as a command: exit 2 …` and `exit 2 on a bad
+  option`); the two others are AC 3's cases (i) and (ii), each the §4.1 parent reading (the provenance report holds a
+  third finding, `no .wingfoil/memory.yaml is committed at this commit: its state cannot be checked` on the root `wf(task):
+  add t-1`). So under the switch every other script suite, `measure.test.ts` and `git-hooks` pass unchanged.
+- With the amendments in the tree: `npx jest test/docs/name-resolvability.test.ts test/docs/commands-parity.test.ts
+  test/docs/enumeration-parity.allowlist.test.ts test/docs/spec-008-section-6.test.ts test/docs/exit-codes-parity.test.ts
+  test/docs/vision-change-w1-rows.test.ts --maxWorkers=2` → first `1 failed`: `name-resolvability` read the full task id
+  in the Revision heading (`…check-governance.cjs-…`) as a configuration key; the heading now cites `task-366` → `6 passed`,
+  `73 passed`. No allowlist row is needed: every name the amendments add resolves. Then `bash waitslot.sh` and `npm test --
+  test/docs --maxWorkers=2` → exit `0`, `43 passed`, `671 passed`. `node scripts/lint-claims.cjs <spec-020> <dl-103>` →
+  `10 warnings`, the same count as without the amendments (`git stash`, re-run, `git stash pop`), after two "unchanged"
+  were reworded.
+- Not run: a whole-history governance run (`task-365`'s parity at `99149beaa` already gives verb against script over the
+  whole history; T-30's before/after of the script is green's, one run under `waitslot.sh` on a clone pinned at a sha),
+  and the full suite (`bug-534`: with the amendments uncommitted `workflow-unbound-none` would fail alone).
+
+#### Coverage
+
+Baseline `169ecd71b19f1e2321051ee2070c59986de784e0` (`sha256sum -c coverage-summary.json.sha256` → `OK`; totals lines
+10777/10834, statements 12925/13072, functions 2546/2582, branches 8051/8333); it is an ancestor of this head and predates
+`src/core/governance-check.ts` (not in it). The merge base `2fbc5afab` has no stored baseline. `src/` changes are small
+(`renderVerifyConsole`'s lines, one export). `scripts/` is outside jest's coverage; the branches of the new script and the
+test reaching each: usage errors and unresolvable revisions (`check-governance.test.ts` › "as a command"); no build,
+`dist/cli.js` missing (`check-governance-extension`); verb exit `0`/`1` with a report (every fixture suite), exit `1` with
+no report and exit `2` (T-33 cases), unparseable stdout, each stderr line kind (dropped warning, dropped error, kept
+warning, kept error, not JSON), missing ids, unknown id (T-32), moved `HEAD` (stub cases); re-gating base / marker /
+fallback (`check-governance-enforcement` › per-check introduction, `check-governance-extension`); `check` dropped or kept
+(AC 1 stub case); `config-version` with and without `--base`, no increase (`check-governance-enforcement` › config
+versions, `config-version-raise.integration`); `plan-retrospective` with and without an entry
+(`check-governance-plan-retrospective`); `co-author-identity` every message (`check-governance-co-author-identity*`); the
+sort's trailer branch (`check-governance-workflow-records` › AC 2); `formatReport`'s zero and non-zero lines (AC 8).
+`install-hooks.cjs` and `wait-governance-check.cjs`: every exit of the AC 5 and AC 6 tables.
+
+#### Decisions for the approver (design gate)
+
+- **D1 — which tests "move under `test/core/`" (AC 3).** (a) Only the cases that assert the script's own reading where the
+  verb's differs: the two §4.1 cases above move to `test/core/` against `governanceCheck`; every suite that drives
+  `checkGovernance` stays in `test/cli/` and proves end to end that the extension returns today's findings. (b) Every case
+  that asserts a generic check's finding moves to `test/core/` and drives `governanceCheck`: about 60 cases duplicating
+  `task-365`'s `governance-check.test.ts` and `verify.integration.test.ts`, and the script loses its end-to-end evidence.
+  **Recommend (a).**
+- **D2 — which build the script runs (OQ-6), and how CI and the hook find it.** (a) The code build: `dist/cli.js` beside
+  the script (`join(__dirname, '..', 'dist', 'cli.js')`), the `dist/` `loadDist` already requires, which CI builds
+  (`npm run build`) and the hook's guard tests; no `PATH`, no `npx`. (b) The pinned build: 0.3.2 has no `verify`. **Recommend
+  (a)**, as `spec-020` §6.3 rules for v0.4; OQ-6 stays open for the first pin advance past 0.4.0.
+- **D3 — how T-32/T-33 reach a stub `<cli>`.** (a) No seam in the script: the tests copy it beside a `dist/` of links to the
+  real build with a stub `cli.js`. (b) An environment variable naming `<cli>`: simpler tests, but a production switch that
+  redirects the governance check. **Recommend (a).**
+- **D4 — the child's details (§6.1 steps 1–2, amended).** `node --no-warnings` (Node's own process warnings are not the
+  verb's documents and would make every stderr line unparseable, exit `2`); full shas; and a report whose `head` is not the
+  `HEAD` resolved before the run is exit `2` (`task-365`'s retrospective: a long run saw `HEAD` move). **Recommend as
+  stated.**
+- **D5 — `trailerKeysOutsideFinalParagraph` (`task-344` D4).** (a) `src/core/governance-check.ts` exports it (used by
+  `checkTrailerParagraph`), and the script re-exports a delegate to it, so `check-phase-report.cjs` and its D4 test stay
+  unchanged and the script defines no predicate. (b) `check-phase-report.cjs` loads it from `dist/` itself: its D4 test
+  changes. (c) The script keeps its own copy: against AC-9. **Recommend (a).**
+- **D6 — the contributor setup (AC 5).** (a) `npm run setup:hooks` (`scripts/install-hooks.cjs`), documented in
+  `CONTRIBUTING.md` and required by §9: sets `core.hooksPath .githooks` locally when nothing is set; idempotent; refuses
+  (exit `1`, unchanged) another hooks path or a hook the clone already runs; no `--force`. (b) The `prepare` lifecycle
+  script: automatic, but it runs on every `npm ci` — CI, `publish.yml`'s gate, the e2e smoke and the staging rehearsal's
+  pack — and in every task worktree, silently writing the clone's shared configuration the approver decides (§9), and it
+  would overwrite a contributor's hooks path. (c) Documentation only (`git config core.hooksPath .githooks`): nothing checks
+  an existing setting. **Recommend (a).** In this repository the approver runs it once in the shared clone (worktrees share
+  the setting); agents never run it.
+- **D7 — the hook without a build.** (a) Refuse the push (exit `1`, the message names `npm run build` and `--no-verify`),
+  since the gate is now required and `dl-190` (a) wants a malformed commit refused before the push. (b) Keep today's skip.
+  **Recommend (a).**
+- **D8 — how `tag` waits for the required check (AC 6).** (a) A bound `run` pre-check `governance-check-passed` and
+  `scripts/wait-governance-check.cjs`, which polls the `governance` check run of the pushed integration branch's head with
+  `gh api` (Design item 8): the wait is a command; the pinned build reads the token and its binding (proved above); no
+  check is evaluated by the engine before v1.0. (b) A prose check bound `manual: true` "until a command": no code, but the
+  step that failed in F2 stays a human reading. (c) Re-run the script locally over the released range: offline and
+  deterministic, but it is not the required check, and the previous tag is no placeholder the engine has. **Recommend (a).**
+- **D9 — `bug-417`'s remote.** (a) `$1` when `git remote` lists it, else no candidates (a push to a URL gets no base and
+  checks the whole history, as a remote with no tracking refs does today); git names the remote even for a branch with no
+  upstream, and refuses a push with neither before the hook runs. (b) Fall back to `origin`. (c) Fall back to the current
+  branch's `branch.<name>.remote`. **Recommend (a).**
+- **D10 — `bug-438`'s wording and which texts.** Both summaries change, the script's `formatReport` and the verb's
+  `renderVerifyConsole`, in the same words (`spec-020` §7 as amended): `… on <m> commits with a finding`, and a line with no
+  finding reads `gated: 0 findings`. `E_VERIFY_FINDINGS` keeps its words (written only when a finding is gated), so
+  `spec-008` §6 is not touched (it is in `task-374`'s amendments). Alternative: drop the commit count everywhere — one
+  number fewer than the bug's first proposal keeps. **Recommend as stated.**
+- **D11 — `bug-448`'s rule 6 text.** (a) Rule 6 says how an accepted finding is carried: named in the go-ahead's
+  `--reason` (sha, check, the record of its acceptance), the check still run, any other gated finding aborting the merge
+  forward (Design item 7). (b) A script option accepting findings by sha: code for a once-per-patch step. **Recommend (a).**
+- **D12 — `dl-241`.** Costs in this task's terms. (a) Judge a merge's own status changes against both parents: a new check
+  in `src/core/governance-check.ts` with its own id and `since` (a widened `status-outside-wf` would gate merges after
+  `b9591e08c`, its marker's introduction), a reader of each merge's diff against both parents that follows renames, a
+  `spec-020` revision (§0, §4, §7 `checks`, T-cases), three test cases, its marker in `CHECKS` (introduction: this task's
+  merge), and a whole-history run to show it gates nothing old (44–105 min per run in `task-365`). (b) Keep skipping and say
+  so: one `spec-020` §0 sentence (prepared below) and one `docs/cli-reference.md` sentence; no parity change. (c) List such
+  merges under `stateUnchecked`: the same reader as (a), a report change, and T-30's `stateUnchecked` comparison follows. On
+  this repository: `git log --merges --cc --name-only HEAD -- docs/04_memory docs/05_plans` lists 81 (merge, file) pairs
+  that a resolution produced, among 835 merges (`git rev-list --merges --count HEAD`); in 3 the merged `status:` differs
+  from both parents' at the same path (`ee1c21a49` twice, `27623d863`), all `task-111`'s move from `docs/self/`, where the
+  second parent held the same status under the old path: no status was ever invented by a merge. **Recommend (b)** now, and
+  (a) as a later revision of `spec-020` if a merge ever does. The approver's ruling goes in `dl-241`'s approve reason.
+- **D13 — `task-378`'s check and its marker.** `task-378` merges first and adds a check to the verb; it does not touch the
+  script. This task, at its merge of `main`, adds `governance-check:<id>` to `CHECKS`, so that check's introduction is
+  this task's merge on `main` and its findings on the commits between the two merges are history; the CHECKS pin is
+  structural (above), so no red file changes then. If the order were reversed, `task-378` would add the marker itself
+  (`spec-020` §6.3: a check and its marker in the same commit). **Recommend as stated.**
+- **D14 — AC 4 and AC 9 red-first** (corrected above): the texts are new and their tests fail today. **Recommend.**
+
+#### Interaction with the parallel tasks
+
+- **`task-378`** (design, merges first). Both change: `spec-020` (its revision for the new check with its `since`; here
+  §0, §6.1, §7, T-30 and a tail Revision paragraph — two tail paragraphs at one spot resolve as the union, `task-378`'s
+  first); `src/core/governance-check.ts` (its new check function and `GOVERNANCE_CHECKS` entry; here
+  `renderVerifyConsole` and the new export — different hunks); `test/core/governance-check.test.ts` (its check's cases;
+  here the console cases at `:684-711`); `test/cli/verify.integration.test.ts` (T-28's `checks` list is `task-378`'s; not
+  touched here). After its merge the verb reports twelve checks: without the marker of D13 the script exits `2`, by design.
+- **`task-374`** (design gate): no file in common in code; both may touch `docs/cli-reference.md` (its `workflow`
+  entries; here only the `verify` entry) and the name-resolvability allowlist (here no row); its amendments are `spec-006`,
+  `spec-008`, `spec-017`, none of which this task amends.
+- **`task-363`** (merged `fb5b73e01`): `release-publishing.yaml` is 2.4 on `main`; this branch makes it 2.5.
+
+#### Checkpoint hand-off (this task's merge)
+
+- **CI**, on the first push after the merge: the `governance` job's steps are unchanged (`npm ci`, `npm run build`, `node
+  scripts/check-governance.cjs --base "$BASE"`); the script now spawns `node --no-warnings dist/cli.js verify --format
+  json --project <checkout> --base <BASE> --introduced-at fcd435695…`, re-decides the gating with its introductions and
+  adds its three checks. The verdict over the pushed range is the old script's (T-30); its time is about the verb's
+  (`task-365`: 42 s for a 229-commit range).
+- **The hook**: only in clones that ran `npm run setup:hooks` — in this repository the approver's shared clone, once, after
+  the merge (worktrees share it). From then on every push from a checkout without `dist/` is refused (D7), and a push runs
+  the check over the commits not yet on the remote's line.
+- **A contributor** runs once per clone: `npm ci && npm run build && npm run setup:hooks`.
+- **The next release** (`v0.4.0`): after pushing `main`, the tech-lead runs `node scripts/wait-governance-check.cjs --kind
+  minor --version v0.4` before the tag (`gh` authenticated).
+
+#### Candidate findings (not fixed, not filed)
+
+- None new. `waitslot.sh` not seeing a running `check-governance` is `task-365`'s, already reported.
+
+### Pending amendments (approver)
+
+Prepared in the worktree, left uncommitted (`git diff --stat` lists the two files), each to be recorded with `memory amend`
+at this design gate, before red:
+
+- `spec-020-the-governance-check-verb-the-authority-and-state-rules-over-a-commit-range` — `--reason "Record task-366's design in sections 0, 6.1, 7 and T-30: the summary lines name what they count (bug-438), T-30 compares gated after section 6.1 step 3 re-decides it, the script's child runs with --no-warnings and refuses a report that lacks a check or names another HEAD, and a merge commit's own changes are judged by no check (dl-241 (b))."`
+- `dl-103-governance-enforced-outside-the-agent` — `--reason "Amend section 1 (B) as dl-190 item 2 (a) requires: the contributor setup installs the pre-push hook with npm run setup:hooks and git-conventions section 9 requires it, while CI with branch protection stays the enforcement point (task-366)."`
+
+`dl-241` is ruled by its approve (`in-discussion → ready`), whose `--reason` names the option; if (a) or (c) is ruled
+instead of (b), the `spec-020` §0 sentence is dropped and the design is revised before red.
+
+### Retrospective
+
+<!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
+     reconstructed afterwards. One line per item: what happened, the evidence (a command and what it
+     printed, or a sha) and, optionally, a proposal. "None" is a valid entry.
+     Friction met on this task (a blocker, a rework, a tooling gap, a rule that did not fit) goes
+     here, not only in the log above. The retrospective's `explore` reads this subsection first. -->
+
+- A throwaway prototype of `spec-020` §6.1 in a scratch clone (verb findings plus the old script's extension) found the
+  two script cases the §4.1 parent reading changes, which reading the 14 suites had not: `4 failed, 333 passed`, two of
+  them the prototype's own. Proposal: a design that swaps a component's engine runs the old suites against a prototype.
+- `name-resolvability` reads a full task id containing `.cjs` as a configuration key, so a Revision heading cannot cite
+  this task by its full id; it cites `task-366`.
