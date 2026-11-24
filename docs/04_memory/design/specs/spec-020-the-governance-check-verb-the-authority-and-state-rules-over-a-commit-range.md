@@ -103,6 +103,10 @@ shipped command cannot be the script's, whose introductions are commits of WingF
   scope (`CONFIGURATION_SCOPES`, `src/memory/audit.ts:240`: `dna`, `directive`, `workflow`).
 - **Other commit** — a non-merge commit of the range that is not a Memory `wf()` commit (configuration scopes, the
   `workflow:` and `agent:` records, code and documentation commits).
+- **Merge commit** — a commit with more than one parent. It is never an other commit, and what it changes itself — a
+  conflict it resolves in a Memory document — is judged by no check of §4 (`dl-241` (b)): each parent's commits are
+  judged on their own line, and a status a resolution writes is the merging person's responsibility (`git-conventions`
+  §2). A merge whose subject is a Memory `wf()` subject is judged as §4.2–§4.6 say.
 - **Approval commit** — `spec-018` §0's term, unchanged: a commit whose message has a line starting `Approver:` (any
   letter case).
 - **Agent trailer** — `spec-018` §0's term, unchanged: a line whose key, in any letter case, is `Co-Authored-By` or
@@ -433,6 +437,10 @@ one finding, in the order written:
 `a <key>: line sits outside the commit's final paragraph, where the workflow deduction does not read it
 (git-conventions §8, bug-391)` (one line).
 
+The key reader is exported from the module as `trailerKeysOutsideFinalParagraph(body)`, with TSDoc, and
+`checkTrailerParagraph` uses it; `scripts/check-governance.cjs` re-exports it as a delegate for
+`scripts/check-phase-report.cjs`, so the script defines no predicate of this check (§4.13, AC-9).
+
 **Why it ships although `dl-222` (a) does not name it.** `dl-222` (a) names "the authority and state rules of
 `dl-103` §1 (and `dl-212` D1's agent-trailer rule)", and `dl-103` §1's "Body shape" bullet covers `Approver:`,
 `Reason:` and `dl-067` only, so this check is not in either text. It ships because what it protects is state: the
@@ -537,7 +545,9 @@ passes `--introduced-at` for that run. This repository's own per-check introduct
 and becomes a thin extension of the verb:
 
 1. It runs the verb as a child process, synchronously like its other reads (`execFileSync`, `:224-233`):
-   `node <cli> verify --format json --project <root> [--base <rev>] [--introduced-at <rev>]` (`<cli>` per §6.3).
+   `node --no-warnings <cli> verify --format json --project <root> [--base <rev>] [--introduced-at <rev>]` (`<cli>`
+   per §6.3; `--no-warnings` keeps Node's own process warnings, which are none of the verb's documents, off the stream
+   read below), each revision passed as the full sha the script resolved.
    `--introduced-at` carries the script's own `--introduced-at` when given, else the script's introduction commit —
    the first-parent commit that added `scripts/check-governance.cjs`, as today (`:706-719`); when there is neither (a
    fixture repository that never committed the script: `introducedAt` is `null`, `:718`), the flag is omitted. The
@@ -550,8 +560,11 @@ and becomes a thin extension of the verb:
    script's stdout, stderr and report read as they do today (AC-9).
 2. It reads the verb's stdout as the report of §7. Exit `0` or `1` with a report whose `verdict` is `pass` or `fail`
    is a completed run; anything else — exit `2`, an exit `1` without a parseable report (a refusal, §8), a report whose
-   `checks` lack a check id the script gates — is the script's exit `2`, "could not run", with the text of the verb's
-   `error` document (step 1) or the missing ids.
+   `checks` lack a check id the script gates, a report whose `head` is not the `HEAD` the script resolved before the
+   run — is the script's exit `2`, "could not run", with the text of the verb's `error` document (step 1), else
+   `wingfoil verify exited <n> with no report`; for missing ids `the verb's report lacks the checks
+   scripts/check-governance.cjs gates: <id>, …`; for a moved `HEAD` `HEAD moved from <sha> to <sha> while the verb
+   ran`.
 3. It **re-decides `gated`** on every finding of the verb with its own per-check introductions (`CHECKS` and
    `markerIntroduction`, unchanged: each generic check keeps its marker string in the script, exactly once, so
    `git log -S` finds the same introduction commits as before). The five base checks keep the script's own
@@ -562,7 +575,9 @@ and becomes a thin extension of the verb:
    their current predicates, messages and introductions, reading committed state as today.
 5. It merges the findings in §3's order, the `config` category last within a commit as today, and prints its report
    in today's text form or with `--json` today's JSON shape (`checkGovernance`'s return value, `:1172-1182`), so the
-   CI log and `test/cli/check-governance*.test.ts` read the same. Its exit codes are unchanged: `0`, `1` a gated
+   CI log and `test/cli/check-governance*.test.ts` read the same; the one change to the text form is its three summary
+   lines, which name what each count counts in the words of §7 (`bug-438`). A finding of the verb carries `check` in
+   the script's report only for a check other than the five base checks, as today. Its exit codes are unchanged: `0`, `1` a gated
    finding and nothing else, `2` could not run.
 
 The script imports nothing of the verb's rules: its own requires of `dist/` shrink to the parsers its three
@@ -667,12 +682,16 @@ FAIL — gated:
 history — reported, not failing:
   <sha> <rule>/<check>: <message>
       <subject>
-gated: <n> findings on <m> commits (<rule> <count>, …)
-history: <n> findings on <m> commits (<rule> <count>, …)
-state not checked: <n> entries on <m> commits (history with no machine, no named document, a document gone at HEAD, or a revision that does not parse or is in a newer format)
+gated: <n> findings on <m> commits with a finding (<rule> <count>, …)
+history: <n> findings on <m> commits with a finding (<rule> <count>, …)
+state not checked: <n> entries on <m> commits with an entry (history with no machine, no named document, a document gone at HEAD, or a revision that does not parse or is in a newer format)
 ```
 
-The `FAIL` and `history` blocks are omitted when empty, and so is a parenthesised count list after `0 findings`.
+The `FAIL` and `history` blocks are omitted when empty. A summary line whose `<n>` is `0` drops its commit count and
+its count list: `gated: 0 findings`, `history: 0 findings`, `state not checked: 0 entries (history with no machine, …)`
+with the same parenthesis. The header already says how many commits were judged and gated (`bug-438`: `0 findings on 0
+commits` read as though nothing was checked). The `E_VERIFY_FINDINGS` reason (§8.2) keeps its words: it is written only when
+a finding is gated, so its `<m>` is never `0`.
 
 **Under `--format json` / `yaml`, stdout carries only the report**, whatever the verdict (spec-005 §2). The
 `E_VERIFY_FINDINGS` line of a failing run (§8.1) and the `W_VERIFY_WHOLE_HISTORY` warning (§8.2) go to stderr in the
@@ -761,7 +780,7 @@ in a child process with the `spec-018` §1 environment markers removed. "Gated" 
 | T-27 | two runs over the same repository, `--format json`, and under `LC_ALL=C` vs the default locale and `log.showSignature=true` | byte-identical stdout |
 | T-28 | `--format json` and `--format yaml` on T-6's repository, without `--base` | stdout: only the report, the §7 keys in order, `verdict: fail`; exit 1; stderr: `{"warning": "W_VERIFY_WHOLE_HISTORY: …"}` then `{"error": "E_VERIFY_FINDINGS: …"}` (under `yaml`, the two as `---`/`...` documents); the yaml report parses to the json one |
 | T-29 | `verify extra`; `verify --base ''`; `verify --base nosuchrev`; `verify --base -x`, `--base 'a b'`, `--base HEAD:x`, `--base a..b`; `verify --introduced-at nosuchrev`; an empty repository (unborn `HEAD`); `verify --dry-run` | exit 2 (surplus); 2 (blank); 1 `revision "nosuchrev" does not name a commit`, `details.flag` `--base`; 1 `malformed revision …` for each of the four; 1 with `details.flag` `--introduced-at`; 1 `revision "HEAD" does not name a commit`; 2 (unknown option); no stdout payload in any |
-| T-30 | **parity**: on this repository at the task's merge candidate, `node scripts/check-governance.cjs --base origin/main --json` before and after the change, and over the whole history with the script's introduction | the same `findings` (sha, rule, message, gated) and `stateUnchecked`, except T-31's commits |
+| T-30 | **parity**: on this repository at the task's merge candidate, `node scripts/check-governance.cjs --base origin/main --json` before and after the change, and over the whole history with the script's introduction | the same `findings` (sha, rule, message, and `gated` after §6.1 step 3 re-decides it with the script's per-check introductions) and `stateUnchecked`, except T-31's commits; the verb's own `gated`, decided by one introduction for every check (§5.1), differs on the findings of a check whose marker introduction is later than the script's |
 | T-31 | every commit of that range that touches `.wingfoil/memory.yaml` (`git log --format=%H <range> -- .wingfoil/memory.yaml`): Memory `wf()` commits that also change a document, a `wf(<newtype>): add` in the commit that declares `<newtype>`, and other commits that change a status together with `memory.yaml` | each listed in the task's Execution Notes, with its findings under both readings and each difference explained by §4.1 |
 | T-32 | the script, given a verb report holding a check id with no marker in `CHECKS` (a stub `<cli>`) | exit 2 with §6.1 step 3's message |
 | T-33 | the script with the verb exiting 1 and no report on stdout (a stub `<cli>`) | exit 2, the verb's `error:` line |
@@ -984,3 +1003,16 @@ their positive forms are refused as unknown options (`bug-514`; `task-380`'s des
 §2, and D5 (a), which aligns this spec). §2.2's list of global flags named `--color` and `--interactive` as negatable;
 it now names `--no-color` and `--no-interactive`. No other line of the spec changes. Edited in place without a supersede
 or a state change (`dl-047`), pending the approver's `memory amend`.
+
+**Revision (2026-11-24, `task-366`, the task that makes `scripts/check-governance.cjs` the extension of `wingfoil verify`)
+— the summary lines, T-30's `gated`, the script's refusals, the merge commit and the key reader.** Five changes, prepared at `task-366`'s
+design gate. (1) `bug-438`: §7's three summary lines say what each count counts (`… on <m> commits with a finding`), and
+a line with no finding drops its counts (`gated: 0 findings`); §6.1 step 5 says the script's summary lines change with
+them, and nothing else of its text form or its JSON. `E_VERIFY_FINDINGS` (§8.2, `spec-008` §6) keeps its words. (2) T-30
+compares `gated` after §6.1 step 3 re-decides it: over this repository's whole history with `--introduced-at fcd435695`
+the verb gates 781 findings (779 `approval-agent-trailer`, 2 `subject`) where the script gates 2, because the verb uses
+one introduction for every check (`task-365`'s notes, the parity runs). (3) §6.1 steps 1–2: the child runs with Node's
+`--no-warnings` and the revisions as full shas, and the script also refuses, at exit `2`, a report that lacks a check it
+gates or names another `HEAD`, each with its message. (4) `dl-241` (b): §0 says a merge commit's own changes are judged
+by no check. (5) §4.11: the module exports the key reader, which the script re-exports for
+`scripts/check-phase-report.cjs`. Edited in place without a supersede or a state change (`dl-047`), pending the approver's `memory amend`.
