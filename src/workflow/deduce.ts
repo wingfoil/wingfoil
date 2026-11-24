@@ -475,7 +475,8 @@ export interface InstanceDeduction {
  * An element sitting at a gate (`spec-017` §5.1, §8 `UngatedElement`, from `minor-v0.4`, `bug-487`), and the open
  * instance that **holds** it, if one does: one of its frontmatter fields is named after the type of an element `S` that
  * scopes an entry of the trail of a frontier step of that instance, with a value equal to `S`'s id or to `S`'s own
- * `version` field. Absent when no open instance holds it.
+ * `version` field — or the element is itself such an `S`, held whatever its fields, `heldBy.element` naming it. Absent
+ * when no open instance holds it.
  */
 export interface GatedElement extends ElementRef {
   readonly heldBy?: { readonly instance: string; readonly element: ElementRef };
@@ -1853,11 +1854,14 @@ function scopeHolders(instances: readonly InstanceDeduction[], elements: readonl
 }
 
 /**
- * The first holder of `element` (`spec-017` §5.1): one whose element's type names a frontmatter field of `element`
- * whose value is that element's id or its `version`; `null` when none does.
+ * The first holder of `element` (`spec-017` §5.1): one whose element IS `element` (it scopes a frontier step itself,
+ * held whatever its fields), or whose element's type names a frontmatter field of `element` whose value is that
+ * element's id or its `version`; `null` when none does. Both tests run per holder, so the holders' order decides.
  */
 function holderOf(element: Element, holders: readonly ScopeHolder[]): GatedElement['heldBy'] | null {
+  const self = keyOf(element);
   for (const holder of holders) {
+    if (keyOf(holder.element) === self) return { instance: holder.instance, element: holder.element };
     const value = scalarText(element.frontmatter[holder.element.type]);
     if (value !== null && (value === holder.element.id || value === holder.version)) return { instance: holder.instance, element: holder.element };
   }

@@ -84,7 +84,8 @@ export interface StatusEntry {
 
 /**
  * An ungated element (`spec-017` §5.1, §8 `UngatedElement`): with `heldBy` when an open instance holds it — a field of
- * it names an element scoping one of that instance's frontier steps — though no step of it approves it now (`bug-487`).
+ * it names an element scoping one of that instance's frontier steps, or it scopes one itself — though no step of it
+ * approves it now (`bug-487`).
  */
 export type UngatedElement = GatedElement;
 
