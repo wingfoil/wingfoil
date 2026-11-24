@@ -88,7 +88,10 @@ Where it runs: the approver chooses one or more of these options.
 - **(B) Versioned git hooks.** A tracked hook directory is enabled with `core.hooksPath`. Feedback
   comes at commit time. It is opt-in per clone and bypassed by `--no-verify`, so it cannot be the
   enforcement point. `dl-074` rejected hooks for a tag check on the ground that they are not
-  versioned. `core.hooksPath` answers the versioning half, but not the enforcement half.
+  versioned. `core.hooksPath` answers the versioning half, but not the enforcement half. Since `dl-190` (a) the
+  hook is no longer only offered: the contributor setup installs it (`npm run setup:hooks`) and `git-conventions` §9
+  requires it in every clone that pushes, so a malformed commit is refused before the push; it stays per clone and
+  `--no-verify` skips it, so (A) with (C) remains the enforcement point (Amendment 2026-11-24).
 - **(C) Branch protection on `main`**, requiring (A)'s status before a push or merge is accepted.
   This is a GitHub repository setting, recorded as a `service` element once `dl-088` exists.
 
@@ -177,3 +180,13 @@ which assumes a governance check shipped to projects: the generic authority and 
 command `wingfoil verify` (`spec-020`, `approved`), inside `dist/` like every command, and `scripts/check-governance.cjs`
 stays out of the package as this repository's extension of it (`spec-020` §6). Action 2 now says so, and `spec-015`
 states the reason the script is not shipped. §1's rules, §2's policy and the other Actions are unchanged.
+
+**Amendment (2026-11-24, `task-366-make-check-governance.cjs-the-extension-of-wingfoil-verify-and-install-the-pre-push-gate-dl-190`)
+— §1 (B): the hook is installed and required.** §1 (B) offered the versioned hook as a local convenience, opt-in per
+clone. `dl-190` (`ready`, item 2 (a), with (c)) makes it a gate: the contributor setup installs `.githooks/pre-push`
+with `npm run setup:hooks` (`CONTRIBUTING.md`), which sets `core.hooksPath` and refuses to replace a hooks path or a
+hook the clone already uses, and `git-conventions` §9 requires it in every clone that pushes to this repository. What
+§1 (B) says of hooks still holds: the hook runs per clone and `git push --no-verify` skips it, so it cannot be the
+enforcement point, which stays (A), CI, made binding by (C). (B) now catches a malformed commit before the push, where
+(A) catches it after; `dl-190` (c) adds the wait for (A)'s required check before `release-publishing`'s tag. §1's
+rules, the Recommendation, §2's policy and the Actions are otherwise unchanged.
