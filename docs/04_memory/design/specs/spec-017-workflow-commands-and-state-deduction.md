@@ -591,6 +591,19 @@ type that no pending approval of an open instance carries. A state that is also 
 forward edge has no verb, so a workflow action advances it, not the approver (`memory approve` refuses it). They are the "human needed" set that
 exists outside any started workflow.
 
+A pending approval is always a frontier step (§4.9): no approval of a phase the frontier has not reached is reported.
+An `iterate_over` phase puts one step per open candidate on the frontier (§4.6), so the approvals of several candidates
+— a release in `planning` and another already `releasing`, a second release line's `approve` — are pending at once,
+each under its own scope; whether those iterations should be ordered is not this section's (`bug-483`).
+
+An ungated element is **held** by an open instance (`bug-487`, from `minor-v0.4`) when one of its frontmatter fields is
+named after the type of an element `S` that scopes a step of that instance's frontier — `S` is the scope of an entry of
+the step's `trail` — and the field's value is `S`'s id or the value of `S`'s own `version` field: a bug whose `release`
+is `minor-v0.4`, or `v0.4` when `minor-v0.4` declares `version: "v0.4"`, while a `release-cycle` iteration over
+`minor-v0.4` is on the frontier. A held element stays ungated — no step of the frontier approves it — and records the
+first such instance and `S`, in instance order (§3.3), then frontier order, then trail order; it is never reported as
+carried by no open workflow.
+
 **5.2 Fallback** (P4.15). After a reject, §4.8 makes the `fallback.step` the current step; `next`
 reports it with `reentered: true`, the reject commit, and the `fallback.set_state` the phase
 declares — in the step's `fallback`, which on a re-entered step is the fallback that re-entered it (the
@@ -612,7 +625,10 @@ output: `workflow status` prints every pending approval and every ungated elemen
 line naming the required action (`approve or reject`, or `finalize` for an approval record), the
 element id(s) or step key, and the routed members; `workflow next` prints the same line when its first
 step awaits approval. An ungated element belongs to no step, so its line names the holders of the
-`approver` role, the one role that may decide it (REQ-SEC-03); `StatusResult.ungatedRoutedTo` carries them. Steps between automated states print none (X1.1 sc. 2). Role routing is §5.1's
+`approver` role, the one role that may decide it (REQ-SEC-03); `StatusResult.ungatedRoutedTo` carries them. From
+`minor-v0.4` (`bug-341`) the console prints the ungated elements as one summary line by default — their count, the
+count of each type in type order, the routed members and the hint that `--full` lists them — and one line per element
+under `--full` (§7.4); the payload carries both forms whatever the flag. Steps between automated states print none (X1.1 sc. 2). Role routing is §5.1's
 (X1.2 sc. 1). Delivery through git hooks, the "notifications enabled" setting, delivery failure
 (X1.1 sc. 3) and decision-type routing (X1.2 sc. 2) are v0.4 (ruling R13).
 
@@ -718,7 +734,7 @@ Grammar (`spec-008` §1; target positional per `dl-082`; the shared selector `<r
 wingfoil workflow start    <name> [--element <type>:<id>|none] [--title <t>] [--set phase=<v>] [--set scope=<v>]
 wingfoil workflow end      [<ref>]
 wingfoil workflow next     [<ref>] [--assigned-to <who>]
-wingfoil workflow status   [<ref>]
+wingfoil workflow status   [<ref>] [--full]
 wingfoil workflow finalize [<ref>] [--step <key>] [--reason <text>]
 wingfoil workflow list     [--all]
 wingfoil workflow show     <ref>
@@ -727,11 +743,15 @@ wingfoil workflow remove   <ref>
 wingfoil workflow adopt    <ref> [--step <key>] [--element <type>:<id>] --reason <text>
 wingfoil workflow adopt    <ref> --plan [--apply --reason <text>]
 wingfoil workflow rekey    <ref> --from <workflow>.<phase> --to <workflow>.<phase> --reason <text>
+wingfoil workflow tree     <ref>
+wingfoil workflow tree     <name> --preview [--element <type>:<id>|none]
 ```
 
 `create` requires `--kind` or at least one of `--startable` / `--includable` (`spec-003`
-`E_WORKFLOW_NEITHER_STARTABLE_NOR_INCLUDABLE`), never both forms. On `show` and `remove`, `<ref>`
-resolves to a workflow: a name, or an open instance id standing for its workflow. All accept the
+`E_WORKFLOW_NEITHER_STARTABLE_NOR_INCLUDABLE`), never both forms. On `remove`, `<ref>`
+resolves to a workflow: a name, or an open instance id standing for its workflow; on `show`, any instance plan's id
+stands for its workflow, open or not (§7.6). On `tree`, `<ref>` names a run: an open instance (a name or an id, §3.3)
+or a closed instance plan's id (§7.13). All accept the
 global flags of `spec-008` §2, including `--format console|json|yaml` (REQ-INT-05). No `--name`
 option exists (§ Consequences, BDD amendment).
 
@@ -804,6 +824,17 @@ instance that only that rule keeps open carries `W_INSTANCE_PRE_MARKER` (§2), t
 diagnostics, so its stderr line is the last of them; with a `<ref>`, only for the instance it selects. Exit `0` as
 before.
 
+*The ungated elements* (from `minor-v0.4`, `bug-341`, `bug-487`). The payload lists every ungated element in
+`ungated`, ascending `(type, id)`, a held one with its `heldBy` (§5.1), and counts them per type in `ungatedByType`,
+ascending by type in byte order, one entry per type that has one. The console prints them as one line by default,
+after the pending approvals: `ungated elements: <n> (<type> <count>, …) — routed to <members>; --full lists them`, the
+members as a pending approval's line names them (§5.3). The boolean flag `--full` prints instead the line `ungated
+elements: <n>` and one line per element in `ungated`'s order: `human needed: approve or reject <id> (<type>, <status>;
+no open workflow carries it) — routed to <members>`, or for a held element `human needed: approve or reject <id>
+(<type>, <status>; held by <instance>'s <S type> <S id>, no step of it approves it now) — routed to <members>`. `--full`
+changes the console only: the `json` and `yaml` payloads, and the MCP Resource (§9), are the same with or without it.
+With no ungated element neither form prints a line.
+
 **7.5 `list`** (P4.6). Without `--all`: the startable workflows, plus every includable workflow that
 is the current phase's sub on some open instance's frontier (P4.6 sc. 1–2). With `--all`: every
 loaded workflow (P4.6 sc. 3). Each entry: `name`, `startable`, `includable`, `description`, and
@@ -825,6 +856,13 @@ the whole command of §6.1 with placeholders: `wingfoil memory submit <id>`, `wi
 <key>`. An argument the action declares as a literal stays as declared; one that interpolates a value is written
 `<<name>>` as a whole, a list included. Unknown name:
 `unknown workflow: <name>` (P4.7 sc. 3). No instance state is involved.
+
+*An instance plan's id* (from `minor-v0.4`, `bug-359`). `<ref>` may be the id of any instance plan at `HEAD` (type
+`plan`, `parent` empty, §3.1), in any status: it stands for the workflow its `workflow` field names, and the payload
+says so in `instance: { id, workflow, open }`, `open` true when the plan is an open instance (§3.2). The field is
+absent when `<ref>` is a workflow name. An instance plan naming a workflow the registry does not load is `unknown
+workflow: <that name>`; a phase plan's id stays `unknown workflow: <ref>` (§10).
+
 
 **7.7 `create`** (P4.8). Writes `.wingfoil/workflows/custom/<name>.yaml` — never under `built-in/`
 (REQ-SEC-07's structural discriminator) — with `name`, the startable/includable declaration (`--kind`
@@ -982,6 +1020,45 @@ subject `workflow: rekey <instance-id> <from> <to>`, the trailers of §4.8, `App
 adoption, the `Approver:` line judged by `wingfoil verify`'s `workflow-record-authority` check (`spec-020` §4.10). Output: `remapped`, the number of the instance's entries the commit remaps (one per element a linkage
 names, one per record, one per adoption), and the instance's new next step.
 
+**7.13 `tree`** (P4.5, `bug-485`; from `minor-v0.4`). Reads one workflow run as a tree and writes nothing. Three forms:
+
+- **An open run.** `<ref>` selects an open instance as §3.3 does (a workflow name or an open instance id; `tree` has
+  no default `<ref>`). The tree is the instance's deduction at `HEAD` (§4).
+- **A closed run.** `<ref>` is the id of an instance plan at `HEAD` (§3.1) that is not an open instance. Its **end
+  commit** is the newest commit reachable from `HEAD` that changed the plan's file and at which the plan's status is
+  not an open plan's while at that commit's first parent it is (`wf(plan): finalize <id> [active → done]` from
+  `workflow end`, or a `memory deprecate`). The run is deduced at that first parent — the state `end` judged complete,
+  or the one the deprecate abandoned — on the snapshot §1.1 reads, read at that commit instead of `HEAD`, where the
+  plan must be an open instance (§3.2). A plan with no end commit (one never open, a `done` plan written as `done`) or
+  that is no instance at its end commit's parent answers `workflow run never opened: <ref>` (`NOT_FOUND`, exit `1`).
+- **A preview** (`--preview`). `<ref>` is a startable workflow's name, and `--element` is read as `start` reads it
+  (§3.4, §3.5, §7.1), with `start`'s refusals but those of the git identity and the write guard: the tree is the
+  deduction at `HEAD` with the instance `workflow start <ref>` would record added as the active instance, its plan id
+  the one §7.1 derives, its start marker set (§3.1) and its walk empty — no linkage, record or adoption yet. Nothing
+  is written; the output says `preview: true`.
+
+Each **phase node** carries its `phase` and its state (`complete` | `current` | `pending` | `skipped`, §4.4, §4.10),
+`vacuous` as §8's `PhaseProgress` does; a phase the deduction evaluated (complete or current) also carries its
+content: a leaf, its step key (§4.9) and its `evidence` — the kinds and the missing ones (§4.3), the element and the
+commit that put it in its status for `state` evidence (§4.8), the created elements (§4.8 linkage or adoption), each
+`produces` entry with its resolved paths and whether they exist, and the record commit (§7.9) when a record counts; a
+plain `include`, its sub's tree (§4.5); an `iterate_over`, its counts (§4.6) and one entry per complete, entered or
+eligible candidate, in iteration order, each with its scope, its state and its sub's tree. A pending or skipped phase
+carries nothing more: deduction does not evaluate it. The run itself carries the instance (§8 `Instance`), `open`, the
+plan's status at `HEAD`, its start commit and its end commit (`null` for an open run and a preview), and the commit the
+tree was deduced at; then the frontier (§8 `Step`, as `next` builds it; `[]` for a closed run) and the **adoptions**
+the frontier needs — each frontier step blocked on a `created` evidence with no linkage, its type and its candidates,
+as `adopt --plan` lists them (§7.11; `[]` for a closed run). WingFoil records no parent step for an instance: the
+element a run was started in is its `context` (§3.5).
+
+`<ref>` resolution, in order: an open instance; a closed instance plan; a phase plan's id — `<ref> is a phase plan of
+<parent>, not a workflow run` (`NOT_FOUND`, exit `1`), naming the plan's `parent`; a loaded workflow with no open
+instance — `workflow is not open: <ref>` with the hint `wingfoil workflow tree <ref> --preview shows what a start
+would deduce`; otherwise `unknown workflow: <ref>`. Under `--preview`, `<ref>` is a workflow name only. `--element`
+without `--preview` is a usage error (exit `2`). Its diagnostics are presented as `status`'s (§7.4, `dl-176` (a)).
+Exit `0` for every run read; `1` for a `spec-003` error at the commit read and for the refusals above.
+
+
 ### 8. Output shapes
 
 `--format json|yaml` carry these values on stdout (`spec-005` §2); errors follow `spec-005` §3.
@@ -1038,11 +1115,31 @@ interface PhaseProgress { phase: string; state: "complete" | "current" | "pendin
                           iterations?: { eligible: number; entered: number; complete: number; late: number; note?: string } }
 interface PendingApproval { step: string | null; instance: string | null; trail: TrailEntry[];
                             awaiting: Extract<Awaiting, { kind: "approval" }> }
+interface UngatedElement extends ElementRef { heldBy?: { instance: string; element: ElementRef } }   // §5.1, from minor-v0.4
 interface StatusResult { baseline: Baseline; active: string | null;
                          open: { instance: Instance; complete: boolean; phases: PhaseProgress[]; frontier: Step[];
                                  late: ElementRef[] }[];
-                         pendingApprovals: PendingApproval[]; ungated: ElementRef[]; ungatedRoutedTo: Member[];
+                         pendingApprovals: PendingApproval[]; ungated: UngatedElement[];
+                         ungatedByType: { type: string; count: number }[];             // §7.4, from minor-v0.4
+                         ungatedRoutedTo: Member[];
                          message?: string; diagnostics: Diagnostic[] }
+interface PhaseEvidence  { kinds: EvidenceKind[]; missing: EvidenceKind[];
+                           state: { element: ElementRef; commit: string | null } | null;   // null without `state` evidence
+                           created: ElementRef[];
+                           produces: { pattern: string; resolved: string[]; exists: boolean }[];
+                           record: string | null }                                          // the record commit (§7.9)
+interface PhaseNode      { phase: string; state: "complete" | "current" | "pending" | "skipped"; vacuous?: boolean;
+                           step?: string; evidence?: PhaseEvidence;                         // an evaluated leaf
+                           sub?: RunTree;                                                   // an evaluated plain include
+                           iterations?: { counts: { eligible: number; entered: number; complete: number; late: number; note?: string };
+                                          entries: { scope: ScopeRef; state: "complete" | "entered" | "eligible"; tree: RunTree }[] } }
+interface RunTree        { workflow: string; scope: ScopeRef | null; phases: PhaseNode[] }
+interface TreeResult     { baseline: Baseline;
+                           run: { instance: Instance; open: boolean; planStatus: string | null;   // null: a preview
+                                  startCommit: string | null; endCommit: string | null; deducedAt: string };
+                           preview: boolean; tree: RunTree; frontier: Step[];
+                           adoptions: { step: string; type: string; candidates: ElementRef[] }[];
+                           diagnostics: Diagnostic[] }                                      // §7.13, from minor-v0.4
 interface StartResult    { baseline: Baseline; instance: Instance; next: Step | null; commits: string[];   // the add commit
                            submit: string }                     // "wingfoil memory submit <id>" (§7.1)
 interface EndResult      { baseline: Baseline; ended: Instance; active: Instance | null; commit: string }
@@ -1077,7 +1174,10 @@ interface PhaseView      { name: string; description: string | null; role: strin
                            include: string | null; sub: WorkflowView | null }
 interface WorkflowView   { name: string; file: string; startable: boolean; includable: boolean; description: string | null;
                            element: string | null; phases: PhaseView[] }
-interface ShowResult     { baseline: Baseline; workflow: WorkflowView; diagnostics: Diagnostic[] }
+interface ShowResult     { baseline: Baseline; workflow: WorkflowView;
+                           instance?: { id: string; workflow: string; open: boolean };      // `<ref>` an instance plan's id (§7.6)
+                           diagnostics: Diagnostic[] }
+
 ```
 
 `show` returns the resolved declaration of §7.6 with the `Baseline` and `diagnostics`: `ShowResult`. A
@@ -1087,8 +1187,11 @@ where the shown workflow, or its includer, binds it; `mode` is the declared mode
 `list` or `show` payload carries the same `diagnostics` the deduction of §4 reports at that commit, since
 both resolve against it (`executableNow`, an instance id as `<ref>`). Console
 rendering is free-form (`spec-005` §2) but always prints, for `next`, the step's key, trail, role,
-scope, the actions with their bindings, the directive ids and any "human needed" line (§5.3), and, for `next`
-and `status`, no diagnostic: those are stderr warnings (§7.3, §7.4);
+scope, the actions with their bindings, the directive ids and any "human needed" line (§5.3), and, for `next`,
+`status` and `tree`, no diagnostic: those are stderr warnings (§7.3, §7.4, §7.13); for `tree`, one line per phase node,
+indented by its depth, with its state and, for an evaluated leaf, its missing evidence kinds, an iteration entry as
+its scope and state with its sub indented under it, a complete iteration entry on one line, then the frontier keys
+and the adoptions;
 `dl-043`'s generic console renderer is v0.4 scope.
 
 ### 9. Core API and MCP exposure
@@ -1109,6 +1212,7 @@ reconcile `workflowList` in place.
 | `workflowRemove` | `workflow` | true | `wingfoil workflow remove` | Tool `workflow.remove` *(v0.4)* |
 | `workflowAdopt` | `workflow` | true | `wingfoil workflow adopt` (`--plan` alone writes nothing) | Tool `workflow.adopt` *(v0.4)* — from `patch-v0.3.1` |
 | `workflowRekey` | `workflow` | true | `wingfoil workflow rekey` | Tool `workflow.rekey` *(v0.4)* — from `patch-v0.3.1` |
+| `workflowTree` | `workflow` | false | `wingfoil workflow tree` | none served (below) — from `minor-v0.4` |
 
 **The two v0.3 Resources** (ruling R12) extend the already-shipping `wingfoil://workflows…` family
 (`src/mcp/workflow-resource.ts:34-37`) without colliding with `wingfoil://workflows/{name}`: their
@@ -1124,7 +1228,16 @@ only `registerReadOnlyResources` (`src/mcp/server.ts:19-26`), both are registere
 `wingfoil://workflows/{name}` keep their payload and their working-tree baseline (`spec-006` §6
 item 4), so v0.3 introduces no breaking change on the MCP surface; aligning them with `ListResult` and
 `show`'s view belongs with the URI unification (`dl-040`, v0.4). The mutating operations' Tools arrive
-with P5.2.3 (v0.4); the production server serves no Tool today.
+with P5.2.3 (v0.4): since `task-367` the production server serves the Memory Tools (`memory.add`, `amend`, `approve`,
+`deprecate`, `park`, `reject`, `submit`; `registerCoreTools`, `spec-014` §3), and no workflow Tool yet.
+
+**From `minor-v0.4`** (`task-374`): `wingfoil://workflows/-/status` serves the `StatusResult` of `status` with no
+operand and no flag, so it carries `ungatedByType` and every ungated element with its `heldBy` (§7.4), unchanged
+otherwise; `--full` is a console flag and has no Resource. `workflowTree` is not served: its required `<ref>` derives
+`wingfoil://workflow/tree/{ref}` (`spec-006` §4, `task-364`), which the production server does not register, as for
+every operation it does not hand-register (`spec-014` §3); serving it waits for the workflow URI unification
+(`dl-040`).
+
 
 ### 10. Errors and exit codes (REQ-INT-04, `spec-005` §1, `spec-008` §5)
 
@@ -1139,7 +1252,9 @@ with P5.2.3 (v0.4); the production server serves no Tool today.
 | `--element` short reference matching several elements (`start`, `adopt`) | `ambiguous reference: <id> matches <N> elements` (`spec-008` §6; every full id in `details`, id order) | `CONFLICT` | 1 |
 | `--set phase=` collides (`start`) | `plan id already exists: <id>` | `CONFLICT` | 1 |
 | no open instance (`end`) | `no active workflow to end` | `NOT_FOUND` | 1 |
-| `<ref>` names a loaded workflow with no open instance, or an instance plan (`plan`, `parent` empty) at `HEAD` that is no open instance (§3.2: closed, added without the start marker after a marked start, or naming a workflow the registry does not load) — `next`, `status`, `finalize`, `end` and `memory add --workflow <ref>` alike | `workflow is not open: <ref>` | `NOT_FOUND` | 1 |
+| `<ref>` names a loaded workflow with no open instance, or an instance plan (`plan`, `parent` empty) at `HEAD` that is no open instance (§3.2: closed, added without the start marker after a marked start, or naming a workflow the registry does not load) — `next`, `status`, `finalize`, `end` and `memory add --workflow <ref>` alike; `tree` on a loaded workflow with no open instance, with the hint `wingfoil workflow tree <ref> --preview shows what a start would deduce` (a closed instance plan is a run `tree` reads, §7.13) | `workflow is not open: <ref>` | `NOT_FOUND` | 1 |
+| a phase plan's id (`tree`, §7.13) | `<ref> is a phase plan of <parent>, not a workflow run` | `NOT_FOUND` | 1 |
+| an instance plan with no end commit, or no open instance at its end commit's first parent (`tree`, §7.13) | `workflow run never opened: <ref>` | `NOT_FOUND` | 1 |
 | plan in `draft` at `end` | `workflow '<name>' was not submitted: run wingfoil memory submit <id>` | `INVALID_TRANSITION` | 1 |
 | incomplete at `end` | `workflow '<name>' is not complete: current step <key>` — with an empty frontier, `…: it is abandoned: its element <type>:<id> is <status>`; the hint `wingfoil memory deprecate <id> abandons it` | `CONFLICT` | 1 |
 | step not on the frontier (`finalize`, `memory add --step`, `adopt --step`, `agent execute --step`) | `step '<key>' is not on the frontier of <instance>`; `details.frontier` holds the frontier's keys in frontier order (`task-330`, `bug-340`) | `CONFLICT` | 1 |
@@ -1168,9 +1283,9 @@ with P5.2.3 (v0.4); the production server serves no Tool today.
 | `--from` still declared, or named by no record of the instance; `--to` not declared (`rekey`) | `cannot rekey <from>: it is still declared` / `no record of <instance> names <from>` / `unknown step: <to>` | `CONFLICT` | 1 |
 | `--to` is not a step of the instance's workflow or of a workflow it includes, directly or indirectly (`rekey`) | `<to> is not a step of <workflow> or of a workflow it includes` | `CONFLICT` | 1 |
 | dirty write target, missing git identity, an identity outside `team.members` (`start`, `end`, `finalize`, `adopt` but `--plan` alone, `rekey`, `create`, `remove`) | the existing messages of `write-guard.ts` and REQ-SEC-01; `E_NOT_A_MEMBER: …` (`spec-006` §7, "Membership") | as today; `VALIDATION` | 1 |
-| missing `<name>`; malformed `--element` (`spec-008` §7); a `--set` name other than `phase` / `scope` on `start`; invalid `<name>` syntax; `--kind` with `--startable`/`--includable`; `create` with neither; unknown flag; on `adopt`, `--apply` without `--plan`, `--plan` with `--step` or `--element`, a missing or blank `--reason` (`dl-067`) where one is required; on `rekey`, a missing `--from`, `--to` or `--reason` | `spec-008` §2/§5/§12 messages | — | 2 |
+| missing `<name>`; malformed `--element` (`spec-008` §7); a `--set` name other than `phase` / `scope` on `start`; invalid `<name>` syntax; `--kind` with `--startable`/`--includable`; `create` with neither; unknown flag; on `adopt`, `--apply` without `--plan`, `--plan` with `--step` or `--element`, a missing or blank `--reason` (`dl-067`) where one is required; on `rekey`, a missing `--from`, `--to` or `--reason`; on `tree`, a missing `<ref>` or `--element` without `--preview` | `spec-008` §2/§5/§12 messages | — | 2 |
 
-`next`, `status`, `list` and `show` exit `0` for every deduced outcome and `1` only for a `spec-003`
+`next`, `status`, `list`, `show` and `tree` exit `0` for every deduced outcome and `1` only for a `spec-003`
 error or an unresolvable `<ref>`/name (`spec-005` §1's read-only rule).
 
 ### 11. Command baseline
@@ -1188,6 +1303,8 @@ error or an unresolvable `<ref>`/name (`spec-005` §1's read-only rule).
 | `rekey` (§7.12) | registry, deduction, `dna.yaml` (authority) | — | nothing (an empty commit) |
 | `next` | everything, at `HEAD` (§1.1, gating) | working-tree diff, for `W_UNCOMMITTED_INPUTS` only | — |
 | `status`, `list`, `show`, the two Resources | everything, at `HEAD` (§1.1, declared exception, ruling R15) | working-tree diff, for `W_UNCOMMITTED_INPUTS` only | — |
+| `tree` (§7.13) | everything, at `HEAD` (as `status`); for a closed run, everything at its end commit's first parent too, the one commit besides `HEAD` it reads | working-tree diff, for `W_UNCOMMITTED_INPUTS` only | — |
+
 
 ### 12. Conformance of this repository
 
@@ -1941,3 +2058,33 @@ gate.
 finalize|adopt|rekey` record to an approval's grammar and authority (`bug-444`). §7.9, §7.11 and §7.12 each say so
 where they describe the record's body. No record, trailer, refusal or deduction rule changes. Edited in place without
 a supersede or a state change (`dl-047`), pending the approver's `memory amend`.
+
+**Revision (2026-11-23, `task-374-read-a-workflow-run-closed-runs-an-instance-s-phase-tree-what-a-start-would-deduce-bug-485-bug-487-w1-r12`)
+— §5.1, §5.3, §7, §7.4, §7.6, §8 and §9: the ungated elements and an instance plan's id.** `bug-487`, reproduced at the
+task's design on a scratch project: every pending approval is a frontier step, and §5.1 now says so and says why an
+iterating phase offers the approvals of several candidates at once (`bug-483` owns their order); an ungated element
+whose field names an element scoping an open instance's frontier is **held** (`heldBy`) and is no longer reported as
+carried by no open workflow. `bug-341`: `status` counts the ungated elements per type (`ungatedByType`) and prints that
+summary by default, one line per element under the new console flag `--full`; the payload, and so the
+`wingfoil://workflows/-/status` Resource, carries both. `bug-359`: `show` takes any instance plan's id and says which
+workflow it is an instance of (`instance`). Every payload field added is additive; no exit code, diagnostic code or
+deduction rule changes. Edited in place without a supersede or a state change (`dl-047`), pending the approver's
+`memory amend` at `task-374`'s design gate.
+
+**Revision (2026-11-23, `task-374-read-a-workflow-run-closed-runs-an-instance-s-phase-tree-what-a-start-would-deduce-bug-485-bug-487-w1-r12`,
+the run reader) — §7, §7.13, §8, §9, §10 and §11: `workflow tree`.** `bug-485`: one read answers the three questions
+no command answered — a closed run, deduced at its end commit's first parent; an open instance's nested tree, per
+included workflow and iteration entry, each evaluated phase with its evidence; and, under `--preview`, what `workflow
+start` would deduce, with the adoptions its frontier needs, committing nothing. `workflowTree` is a read
+(`mutates: false`) that the production MCP server does not serve until `dl-040`. Its refusals are two new `NOT_FOUND`
+rows and the `workflow is not open` row's hint; no deduction rule changes. `workflow tree` is implemented by
+the task split from `task-374` at its design gate (D1 (a)).
+ Edited in place without a supersede or a
+state change (`dl-047`), pending the approver's `memory amend` at `task-374`'s design gate.
+
+**Revision (2026-11-23, `task-374-read-a-workflow-run-closed-runs-an-instance-s-phase-tree-what-a-start-would-deduce-bug-485-bug-487-w1-r12`,
+design gate) — §9: the Tools the production server serves.** §9 said "the production server serves no Tool today",
+wrong since `task-367` registered the Memory Tools on it (`registerCoreTools`, `src/mcp/tools.ts`); it now names them
+and says no workflow Tool is served yet (W0-R10, a same-class instance in a section this task amends). No Tool,
+Resource or rule changes. Edited in place without a supersede or a state change (`dl-047`), pending the approver's
+`memory amend` at `task-374`'s design gate.
