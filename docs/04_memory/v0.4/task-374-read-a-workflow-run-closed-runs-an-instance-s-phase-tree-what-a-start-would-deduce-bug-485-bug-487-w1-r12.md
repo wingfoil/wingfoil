@@ -473,6 +473,100 @@ uncommitted with them and are committed once the amendments are, before red.
     `registrar.ts` still has the single `operation.renderConsole(result.value)` call site, now followed by a
     `result.failed` line, and `verify`'s console renderer takes one argument, so the planned second (flags) argument
     does not break it. The line offsets the design cites in `spec-008` (§1, §11) moved with the merge.
+
+### red (qa, 2026-11-24)
+
+**Base.** Head `af0cdd667` (`git log --oneline -1`), `git rev-list --count HEAD..main` → `0`, so no merge. PATH guard:
+`command -v wingfoil` → the task's PATH shim; `wingfoil --version` and `node dist/cli.js --version` → `0.3.2
+(6750bc0ca29b5cae2f3fea6a6e968a1ed1ee725d)`. Black box: no file under `src/` or `scripts/` was opened or named in a
+command before the red commit; expected values come from the amended `spec-017` §5.1, §5.3, §7.4, §7.6, §8 and §9, the
+design above, the gate rulings and the real runs below. Part B (`workflow tree`, AC 2–4) is `task-383`'s: no test here
+calls `workflow.workflowTree`.
+
+**Red commit:** `f7d12ed49` (`test(workflow): task-374 — failing test: …`).
+
+**Files.**
+- New: `test/core/helpers/held-ungated-fixture.ts` (the design's AC 1 scratch project, written verbatim, plus
+  `bug-2-other` `triaged` with `release: "release-9"` and the `version` variant; the instance plan
+  `sw-life-cycle-1-plan` committed `draft` with `WingFoil-Start: sw-life-cycle` as its add commit's final trailer
+  paragraph), `test/core/workflow-status-held.test.ts`, `test/cli/workflow-status-full.integration.test.ts`,
+  `test/core/workflow-show-instance.test.ts`.
+- Edited: `test/mcp/workflow-state-resources.test.ts` (one case on the held fixture), `test/core/workflow-status.test.ts`
+  (the console test: the summary line by default, the per-element line under `--full`; the exact keys gain
+  `ungatedByType`, with `[{ type: 'task', count: 1 }]`; the no-open-workflows case's line is the summary),
+  `test/core/workflow-status-render.test.ts` (`RESULT` gains `ungatedByType`; the no-approver line is checked in the
+  summary and under `--full`; the exact empty value gains `ungatedByType: []`), `test/core/workflow-list-show.test.ts`
+  (the open `rc-plan` gains `instance: { id: 'rc-plan', workflow: 'release-cycle', open: true }`).
+- BDD: `P4.5-workflow-status.feature` gains "The ungated elements are counted by type, --full lists them" and "An
+  element whose release is an open run's iteration is held, not uncarried"; `P4.7-workflow-show.feature` gains "Show
+  names the workflow of an instance plan's id"; each with a revision comment, its title pinned and its behaviour bound
+  in the suites below.
+
+**Fixture outputs, from a real run of the code build.** The helper compiled to a scratch directory outside the worktree
+(`npx tsc --ignoreConfig --outDir <scratch>/build … test/core/helpers/held-ungated-fixture.ts`), the project written by
+`writeHeldUngatedProject` into a `makeTempGitRepo` directory, then in it:
+- `node <worktree>/dist/cli.js workflow status` → exit 0, stderr empty, stdout byte-identical in content to the
+  design's AC 1 output (the same phases line, the three frontier steps, `pending approvals: 3` with the same three
+  lines, `ungated elements: 2`), the member `WingFoil Test <wf-test@example.invalid>`, plus the line `  human needed:
+  approve or reject bug-2-other (bug, triaged; no open workflow carries it) — routed to WingFoil Test
+  <wf-test@example.invalid>`, which the AC 5 tests keep as today's;
+- `… workflow status --format json` → exit 0, stderr empty; keys `baseline, active, open, pendingApprovals, ungated,
+  ungatedRoutedTo, diagnostics`; `pendingApprovals[].step` the three frontier keys; `ungated`
+  `[{"type":"bug","id":"bug-1-crash","status":"triaged"},{"type":"bug","id":"bug-2-other","status":"triaged"}]`;
+  `diagnostics` `[]` (the marked start: no `W_INSTANCE_PRE_MARKER`); the `version` variant prints the same `ungated`;
+- `… workflow status --full` → `error: unknown option '--full'`, exit 2 (also with `--format json`); `… workflow next
+  --full` → the same, exit 2; `… workflow status --help` → `Options:` lists only `-h, --help`.
+- On `writeRefProject`: `… workflow show old-1-plan --format json` → stderr `{"error":"unknown workflow: old-1-plan"}`,
+  exit 1; `… show phase-1-plan --format json` → stderr `{"error":"unknown workflow: phase-1-plan"}`, exit 1; `… show
+  release-cycle --format json` → exit 0.
+
+**Per AC.**
+
+| AC | Class | Tests (file → title) | Red evidence |
+|---|---|---|---|
+| 5 half 1 | characterization | `workflow-status-held.test.ts` → "half 1 (characterization) — the three pending approvals are the three frontier steps of the one open run, in frontier order" | passes on first run |
+| 5 half 2 | red-first | `workflow-status-held.test.ts` → "half 2 — bug-1-crash … is held by sw-life-cycle-1-plan; bug-2-other has no heldBy", "half 2 — the value may be the scoping element's version …", "half 2 — under --full the held element's line names its holder …" | `expect(received).toEqual(expected)`, `- "heldBy": Object {` missing (both); `expect(received).toContain(expected)` on the held line (the two-argument render is a runtime no-op) |
+| 6 | red-first | `workflow-status-held.test.ts` → "the payload counts … in ungatedByType", "StatusResult carries spec-017 §8's fields …", "console by default: one summary line …", "console under --full …", "with no ungated element …"; `workflow-status-full.integration.test.ts` → "default console …", "--full: …", "the pending approvals block is the same …", "--format json: the same bytes …", "--format yaml: the same bytes …", "workflow status --help lists --full" | `Expected: [{"count": 2, "type": "bug"}]` / `Received: undefined`; keys `- "ungatedByType"`; `toContain` of the summary line; under `--full` the held line received as `… (bug, triaged; no open workflow carries it) …`; `Expected: []` / `Received: undefined`; CLI: `[0, ""]` expected, `[2, "error: unknown option '--full'\n"]` received; `[0, 0]` expected, `[0, 2]` received (×3); `Expected pattern: /^\s+--full\b/m` against today's help |
+| 6 | characterization | `workflow-status-held.test.ts` → "the pending approvals print the same with and without --full"; `workflow-status-full.integration.test.ts` → "workflow next takes no --full: exit 2, unknown option" | pass on first run |
+| 7 | red-first | `workflow-show-instance.test.ts` → "a closed instance plan's id stands for its workflow …", "CLI: workflow show old-1-plan --format json exits 0 …", "an open instance's id: instance { id, workflow, open: true }", "an instance plan naming a workflow the registry does not load …"; `workflow-list-show.test.ts` → "<ref> may name an open instance, standing for its workflow (spec-017 §7)" | `Error: workflow show refused: NOT_FOUND: unknown workflow: old-1-plan`; `[0, ""]` expected, `[1, "{\"error\":\"unknown workflow: old-1-plan\"}\n"]` received; `Expected: {"id": "sw-life-cycle-1-plan", "open": true, "workflow": "sw-life-cycle"}` / `Received: undefined`; `- "message": "unknown workflow: retired-cycle"` / `+ "message": "unknown workflow: gone-1-plan"`; `Expected: {"id": "rc-plan", …}` / `Received: undefined` |
+| 7 | characterization | `workflow-show-instance.test.ts` → "a workflow name gives no instance key", "a phase plan's id stays NOT_FOUND …", "CLI: a phase plan's id still exits 1 …" | pass on first run |
+| 8 (status half) | characterization of Resource = CLI json; red on its content | `workflow-state-resources.test.ts` → "on the held-ungated fixture: the Resource text is `workflow status --format json`, with ungatedByType and bug-1-crash's heldBy" | `Expected: [{"count": 2, "type": "bug"}]` / `Received: undefined` (the text equality before it holds today) |
+| BDD | — | `workflow-status-held.test.ts` and `workflow-show-instance.test.ts`, the "carries the … scenario(s)" tests | pass (the scenarios are in this commit) |
+
+The updated pins of the existing suites fail for the same reasons: `workflow-status.test.ts` (3: the console summary,
+the keys, the no-open-workflows summary line), `workflow-status-render.test.ts` (2: the no-approver summary line,
+`ungatedByType: []`).
+
+The AC 7 case "an instance plan naming a workflow the registry does not load" is not in the design's list of qa pins;
+it pins `spec-017` §7.6's sentence "An instance plan naming a workflow the registry does not load is `unknown workflow:
+<that name>`". The no-approver summary line of `workflow-status-render.test.ts` reads `routed to no approver found for
+role 'approver' in dna.yaml`, the routed-members text today's ungated line prints, as §7.4 says the summary names the
+members "as a pending approval's line names them (§5.3)".
+
+**Runs (this worktree, targeted, no heavy gate).**
+- `npx jest test/core/workflow-status-held.test.ts test/cli/workflow-status-full.integration.test.ts
+  test/core/workflow-show-instance.test.ts test/mcp/workflow-state-resources.test.ts test/core/workflow-status.test.ts
+  test/core/workflow-status-render.test.ts test/core/workflow-list-show.test.ts --maxWorkers=2` → `Tests: 25 failed,
+  74 passed, 99 total`: `workflow-status-held` 8 failed / 3 passed, `workflow-status-full.integration` 6 / 1,
+  `workflow-show-instance` 4 / 4, `workflow-state-resources` 1 failed (the new case), `workflow-status` 3,
+  `workflow-status-render` 2, `workflow-list-show` 1; every failure an assertion, listed above.
+- `npx tsc --noEmit -p tsconfig.json` → exit 2, the four expected errors only:
+  `test/core/workflow-status-held.test.ts(44,80): error TS2554: Expected 1 arguments, but got 2.`,
+  `test/core/workflow-status-render.test.ts(68,3): error TS2353: Object literal may only specify known properties, and
+  'ungatedByType' does not exist in type 'StatusResult'.`, `test/core/workflow-status-render.test.ts(95,40): error
+  TS2554 …`, `test/core/workflow-status.test.ts(378,58): error TS2554 …` (the second `renderConsole` argument and the
+  new `StatusResult` field, both green's).
+- `npx jest test/lint --maxWorkers=2` → `Tests: 1 failed, 164 passed, 165 total`: `typecheck.clean … tsconfig.json
+  typechecks with zero diagnostics`, failing with exactly the four errors above (expected until green).
+- `npx jest test/validation/secret-scan.test.ts test/docs/name-resolvability.test.ts test/docs/commands-parity.test.ts
+  test/docs/command-surface-specs.test.ts test/docs/enumeration-parity.allowlist.test.ts test/docs/mcp-surface-parity.test.ts
+  test/docs/vision-index.test.ts test/docs/x-cli-cmds.test.ts test/cli/workflow-unbound-none.integration.test.ts
+  --maxWorkers=2` → `Tests: 0 failed, 144 passed, 144 total`.
+- The suites that read the BDD tree (`grep -rl "02_bdd" test/docs test/release-health`: `l0-traceability`,
+  `vision-change-w1-rows`, `story-map-coverage`, `bdd-dna-sections`, `req-sec-06-confinement-text`,
+  `release-health/measure`, `memory-store-location-text`) → `Tests: 0 failed, 314 passed, 314 total`.
+- The invisible-character grep over the ten changed files → no hit (exit 1).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
