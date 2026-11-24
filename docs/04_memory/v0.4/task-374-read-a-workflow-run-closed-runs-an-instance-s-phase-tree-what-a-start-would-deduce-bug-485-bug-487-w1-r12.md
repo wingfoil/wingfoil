@@ -8,7 +8,7 @@ kind: "feature"               # REQUIRED — feature | fix (dl-133 Q1 (b)): `fix
 priority: "medium"           # optional — high | medium | low
 tags: ["v0.4","w1","cli","workflow"]               # optional — additional labels, e.g. [architecture, backend]
 ref: "bug-485"                # optional — backlog item ID, e.g. "TASK-001"
-bug: [bug-341, bug-359, bug-485, bug-487]                # optional — LIST of bug ids this task closes (dl-045). Two cases: a fix task derived from a bug
+bug: [bug-341, bug-359, bug-487]                # optional — LIST of bug ids this task closes (dl-045). Two cases: a fix task derived from a bug
                        # by release-planning, and a bug ABSORBED into an existing task's Acceptance Criteria because that
                        # task already owns the ground. `bug.sync_state` iterates this list; a bug with no task naming it
                        # here never advances past `triaged` (only a reject to `closed`, dl-123). A single string is still accepted for documents predating dl-045.
@@ -29,19 +29,15 @@ reported to offer approvals no open run's frontier reaches. `bug-341`: it lists 
 
 1. (characterization) **Before the design**, `bug-487` is reproduced in a scratch project and the commands and output are in the Execution
    Notes (W1-R12). If it does not reproduce, the task drops criterion 5 and the bug is closed by the usual route.
-2. (red-first) A read command returns a closed run: its workflow, parent step, element, start and end commits, and each phase with its
-   state, record commit and created elements (`bug-485`).
-3. (red-first) A read command returns an open instance's nested tree: per included workflow and iteration element, each phase's state and
-   its evidence (`bug-485`).
-4. (red-first) A read-only preview returns what a start would deduce: the tree, the adoptions it would need with their candidates, and the
-   frontier, committing nothing (`bug-485`).
+   Criteria 2, 3 and 4 (the closed run, the nested tree and the start preview, `bug-485`) and the `workflow tree` half of criterion 8
+   moved to `task-383` at this task's design gate (D1 (a), 2026-11-23); the remaining criteria keep their numbers.
 5. (red-first) `pendingApprovals` holds only the approvals reachable from an open run's frontier, and an element whose `release` is the
    element of an open run's iteration is not reported as carried by no open workflow (`bug-487`).
 6. (red-first) `workflow status` prints a by-type count of the ungated elements by default and the full list on request, and the routing
    line stays (`bug-341`).
 7. (red-first) `workflow show <instance plan id>` says that the id is an instance of a named workflow (`bug-359`).
-8. (characterization) The MCP status Resource is aligned with the new answers, and `spec-017` and `docs/cli-reference.md` state them: the
-   amendments are prepared for the design gate.
+8. (characterization) The MCP status Resource is aligned with the new `workflow status` answers, and `spec-017` and
+   `docs/cli-reference.md` state them: the amendments are prepared for the design gate.
 
 ## Implementation Notes
 
@@ -49,6 +45,9 @@ reported to offer approvals no open run's frontier reaches. `bug-341`: it lists 
   **Bugs:** `bug-341`, `bug-359`, `bug-485`, `bug-487`. **Depends on** `task-373`.
 - **`bug-487` needs a project built from the Scrum packs,** which `w3` delivers: the design records how the scratch project is built today.
 - **W1-R11:** the closed-run read stays in `w1`.
+- **Split (D1 (a), 2026-11-23):** the `workflow tree` read and `bug-485` are `task-383` (`depends_on: [task-374]`); this task keeps
+  the `workflow status` and `workflow show` changes, with `bug-341`, `bug-359` and `bug-487`.
+
 - **Files:** `src/core/workflow-status.ts`, `src/core/workflow-list-show.ts`, `src/core/workflow-start-end.ts`,
   `src/core/workflow-deduction.ts`, `src/mcp/workflow-resource.ts`, `spec-017`, `docs/cli-reference.md`.
 
