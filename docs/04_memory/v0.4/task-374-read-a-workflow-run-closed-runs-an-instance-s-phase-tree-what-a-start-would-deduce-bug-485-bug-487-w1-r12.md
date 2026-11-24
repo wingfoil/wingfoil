@@ -775,6 +775,73 @@ Left uncommitted in this worktree (`git status --short` lists exactly these two)
   a second form, a run's own iteration element at its gate on a frontier step that approves nothing, found by task-374's
   independent review and closed by the identity rule of spec-017 §5.1."`
 
+
+### fix round 2 after re-review (developer, 2026-11-24)
+
+**Base.** The re-review of `3ec4e4463` returned APPROVE WITH FIXES (0 blockers, 1 should-fix, 0 follow-up); the
+approver ruled on 2026-11-24: keep the code, correct the text. A fresh developer agent; the task and its bugs stay
+`in-review`, no submit, no sync, no record. At start: `git rev-list --count HEAD..main` → `0`; `git status --short` →
+exactly the two pending amendments below; `command -v wingfoil` → the task's PATH shim; `wingfoil --version` and
+`node dist/cli.js --version` → `0.3.2 (3ec4e44632b4625206f89b88e48d09681512d52c)`, the same after `npm run build`.
+
+**The correction.** The phrase "`heldBy.element` naming the element itself", stated in the F2 bullets above and in the
+pending `spec-017` §5.1 sentence, is false as a general rule. `holderOf` (`src/workflow/deduce.ts`) runs both tests on
+each holder, in the holders' order (instance, frontier, trail, from the outermost entry); a nested iteration element
+whose own frontmatter names its parent (`release-line: "rl-1"`, the usual shape) is matched first by the field rule, on
+the ancestor. That is right by §5.1's first-match order, and the code is kept: `git diff 3ec4e4463 HEAD --stat -- src`
+→ only `src/workflow/deduce.ts`, 4 insertions and 2 deletions, all in one doc comment. Corrected in:
+- the pending `spec-017` §5.1 sentence: "…is held by that instance whatever its fields, `heldBy.element` naming the
+  element itself." → "…is held by that instance whatever its fields; its `heldBy` records the first holder in the order
+  below, which is the element itself unless an earlier entry of that trail holds it by a field." (the ruled wording,
+  unchanged: "the order below" is the next sentence's instance, frontier and trail order);
+- the pending `spec-017` Revision paragraph: "`heldBy` keeps its shape, its `element` naming the element itself" →
+  "`heldBy` keeps its shape and records the first holder in §5.1's order, which is the element itself unless an earlier
+  entry of that trail holds it by a field (a nested iteration element whose own field names its parent is held by that
+  ancestor)";
+- the `GatedElement` TSDoc (`src/workflow/deduce.ts`, `67471088f`): "held whatever its fields, `heldBy.element` naming
+  it." → "held whatever its fields. `heldBy` records the first holder in instance, frontier and trail order (see
+  `holderOf`): the element itself, unless an earlier entry of that trail holds it by a field (a nested iteration element
+  whose own field names its parent is held by that ancestor).";
+- the module doc of `test/core/workflow-status-held-identity.test.ts` (`67471088f`): "whatever its fields,
+  `heldBy.element` naming the element itself." → "whatever its fields; `heldBy` records the first holder in §5.1's
+  order, which is the element itself unless an earlier entry of that trail holds it by a field (the nested case is
+  pinned by `./workflow-status-held-nested.test.ts`)." plus "Here the trail has one entry, so `heldBy.element` is
+  `release-1` itself." (true of that suite's fixture).
+- `grep -rn "naming the element itself\|heldBy.element. naming" src test docs` outside this task file → no hit;
+  `docs/cli-reference.md`'s `workflow status` entry never stated it (its held sentence names no `heldBy` element).
+
+**The nested case pinned (`18e31ddf1`).** `test/core/workflow-status-held-nested.test.ts` (new), on
+`writeNestedHeldProject` (added to `test/core/helpers/held-identity-fixture.ts`, the re-review's ancestor variant:
+`sw-life-cycle` → `release-line-cycle` with no `approve` phase → the `produces:`-first `sprint`, `rl-1` at `planning`):
+the frontier step `sprint.sprint-goal@release:release-1` with the trail scopes `[null, rl-1, release-1]` and no pending
+approval; json `release-1` (`release-line: "rl-1"`) → `heldBy.element = {type: release-line, id: rl-1}`, by the field on
+the ancestor; `rl-1` → the same `heldBy.element`, by identity; the console `--full` lines (core renderer and
+`workflow status --full`) `… release-1 (release, planning; held by sw-life-cycle-1-plan's release-line rl-1, no step of
+it approves it now) …` and `… rl-1 (release-line, planning; held by sw-life-cycle-1-plan's release-line rl-1, …) …`,
+and `--format json`'s `heldBy`. Characterization: `npx jest test/core/workflow-status-held-nested.test.ts --maxWorkers=2`
+→ `Tests: 4 passed, 4 total` on the first run, with `src/` differing from `3ec4e4463` only by the doc comment above. The
+same lines and `heldBy` are what the re-review's fixture printed with the `3ec4e4463` dist. With the helper refactor
+(`releaseLineCycle(approveFirst)`, `writeMemory`'s `rl1Status`): `npx jest test/core/workflow-status-held-nested.test.ts
+test/core/workflow-status-held-identity.test.ts test/core/workflow-status-held-order.test.ts
+test/core/workflow-status-held.test.ts --maxWorkers=2` → `Tests: 29 passed, 29 total`; `npx tsc --noEmit -p
+tsconfig.json` → exit 0.
+
+**The `spec-017` `--reason`** below stays as proposed: it states that such an element is held whatever its fields and
+never reported as carried by no open workflow, and names no `heldBy` element, so it is still true.
+
+**T4.** `git log --first-parent --no-merges --format=%h 56963ae4d..HEAD --` over the ten red files → empty (exit 0),
+before this notes commit.
+
+**Gates.** Run on the head that carries this commit, with the two pending amendments in the working tree; their results
+are recorded in the phase report.
+
+### Pending amendments (approver)
+
+Unchanged in number (`git status --short` lists exactly these two), the `spec-017` edit corrected in place as above:
+- `spec-017-workflow-commands-and-state-deduction` — `--reason` as proposed in the fix round above.
+- `bug-487-workflow-status-read-as-the-approver-s-queue-offers-approvals-no-open-run-s-frontier-reaches-and-calls-a-bug-triaged-into-an-open-run-s-release-uncarried`
+  — `--reason` as proposed in the fix round above; its Retrospective line names no `heldBy` element and stays true.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
