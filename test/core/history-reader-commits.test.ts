@@ -52,6 +52,13 @@ describe('task-378 — createGitHistoryReader reading a list of commits (spec-02
     expect(reader.fileChanges(b)).toEqual([{ from: 'docs/old/t-1.md', to: 'docs/new/t-1.md' }]);
     expect(reader.fileChanges(c)).toEqual([{ from: 'docs/new/t-1.md', to: 'docs/new/t-1.md' }]);
     expect(reader.pathAtHead('docs/old/t-1.md')).toBe('docs/new/t-1.md');
+    expect(reader.fileChanges(a)).toEqual([{ from: null, to: 'docs/old/t-1.md' }]);
+  });
+
+  it('follows a rename when only its target is a given path', () => {
+    const reader = createGitHistoryReader(root, { head, commits: [b], paths: new Map([[b, ['docs/new/t-1.md']]]) });
+    expect(reader.pathAtHead('docs/old/t-1.md')).toBe('docs/new/t-1.md');
+    expect(reader.fileChanges(b)).toEqual([{ from: 'docs/old/t-1.md', to: 'docs/new/t-1.md' }]);
   });
 
   it('reads nothing for an empty list (git log with no revision would read HEAD)', () => {
