@@ -827,11 +827,23 @@ describe('task-378 AC 4 — carries-content (spec-020 §4.14; T-38 to T-40)', ()
       f.commit(`wf(task): add ${id}`, { [TASK(id)]: taskDoc('draft', '', id) });
       expected.push(CC(f.commit(`wf(task): submit ${id}\n\n${line}`, files), message));
     }
-    const approve = f.commit(`wf(task): approve t-1 [pending → backlog]\n\n${approvalBody('Ready.')}\n\nCarries content: the body`, { [TASK('t-1')]: taskDoc('backlog') }, APPROVER);
+    // Hand-shaped (no verb writes a line between `Approver:` and `Reason:`): the line sits OUTSIDE the `Reason:` block
+    // (AGENTS.md §5.1), so it declares carried content and row 1 fires (approver's ruling on the review, F1 (a)).
+    const approve = f.commit(`wf(task): approve t-1 [pending → backlog]\n\n${approverLine()}\nCarries content: the body\nReason: Ready.`, { [TASK('t-1')]: taskDoc('backlog') }, APPROVER);
     expected.push(CC(approve, "'approve' declares no carried content: only a submit writes a Carries content: line (spec-008 §2, bug-287)"));
     const run = verify(f.root, ['--base', base, '--format', 'json']);
     expect(carriesFindings(reportOf(run))).toEqual(expected);
     expect(run.status).toBe(1);
+  });
+
+  it('T-39 — an approve whose Reason: block holds a Carries content: line declares nothing: no carries-content finding (F1 (a))', () => {
+    // The `Reason:` block runs from the `Reason:` line to the trailing trailer paragraph or the end of the body
+    // (AGENTS.md §5.1); the last paragraph here is not trailer-shaped (`Carries content` is no trailer key), so the
+    // line is part of the reason.
+    const { f, base } = governed(MARK_DNA);
+    const approve = f.commit(`wf(task): approve t-1 [pending → backlog]\n\n${approvalBody('Ready.')}\n\nCarries content: the body`, { [TASK('t-1')]: taskDoc('backlog') }, APPROVER);
+    const run = verify(f.root, ['--base', base, '--format', 'json']);
+    expect(carriesFindings(reportOf(run)).filter((entry) => entry.sha === approve)).toEqual([]);
   });
 
   it('T-40 — a memory submit that only converts to CRLF declares the line endings: no finding; a hand submit converting another: the fifth row', () => {

@@ -24,7 +24,7 @@
  * - `headDocumentStatus(id)` — the `status:` of the document whose frontmatter `id` is `id` at `HEAD` (`null` without a
  *   status), `undefined` when no document has that id;
  * - `carriesLineBefore(sha)` (task-378, `spec-020` §4.14) — whether a proper ancestor of `sha` (any parent, recursively)
- *   has a body line starting exactly `Carries content: `.
+ *   has a body line starting exactly `Carries content: ` outside its `Reason:` block (F1 (a), AGENTS.md §5.1).
  *
  * Deterministic: shas are derived from the commit's position, never random. Not a `.test.ts` file.
  */
@@ -150,7 +150,32 @@ export interface ReaderOptions {
 
 const FRONTMATTER_RE = /^---\n([\s\S]*?)\n---/;
 /** A body line starting exactly `Carries content: ` (`spec-020` §4.14: what `carriesLineBefore` looks for, case kept). */
-const CARRIES_LINE_RE = /^Carries content: /m;
+const CARRIES_LINE_RE = /^Carries content: /;
+/** A line starting `Reason:`: where the `Reason:` block opens (AGENTS.md §5.1). */
+const REASON_LINE_RE = /^Reason:/;
+/** A git trailer line, `<token>: <value>` with a token of letters, digits and `-`. */
+const TRAILER_LINE_RE = /^[A-Za-z0-9-]+: /;
+
+/**
+ * Whether `body` declares carried content: a line starting exactly `Carries content: ` OUTSIDE the `Reason:` block
+ * (approver's ruling on task-378's review, F1 (a)). The block, as AGENTS.md §5.1 defines it, runs from the first line
+ * starting `Reason:` to the end of the body, less a trailing trailer paragraph: a last paragraph, after the one holding
+ * the `Reason:` line, made only of trailer lines (`WingFoil-Version:`, `Co-Authored-By:` and friends).
+ */
+function declaresCarriedContent(body: string): boolean {
+  const lines = body.split('\n');
+  const reasonAt = lines.findIndex((line) => REASON_LINE_RE.test(line));
+  if (reasonAt === -1) return lines.some((line) => CARRIES_LINE_RE.test(line));
+  let blockEnd = lines.length;
+  let last = lines.length;
+  while (last > 0 && (lines[last - 1] as string).trim() === '') last -= 1;
+  let first = last;
+  while (first > 0 && (lines[first - 1] as string).trim() !== '') first -= 1;
+  let reasonParagraphStart = reasonAt;
+  while (reasonParagraphStart > 0 && (lines[reasonParagraphStart - 1] as string).trim() !== '') reasonParagraphStart -= 1;
+  if (first > reasonParagraphStart && first < last && lines.slice(first, last).every((line) => TRAILER_LINE_RE.test(line))) blockEnd = first;
+  return lines.some((line, index) => (index < reasonAt || index >= blockEnd) && CARRIES_LINE_RE.test(line));
+}
 const CONFIGURATION_SCOPES = new Set(['dna', 'directive', 'workflow']);
 const DECLARED_VERBS = new Set(['add', 'submit', 'approve', 'reject', 'deprecate', 'start', 'finalize', 'sync', 'amend', 'park', 'assign']);
 
@@ -325,7 +350,7 @@ export class HistoryModel {
           if (seen.has(next)) continue;
           seen.add(next);
           const ancestor = model(next).commit;
-          if (CARRIES_LINE_RE.test(ancestor.body)) return true;
+          if (declaresCarriedContent(ancestor.body)) return true;
           pending.push(...ancestor.parents);
         }
         return false;

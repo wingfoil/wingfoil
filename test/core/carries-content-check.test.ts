@@ -6,6 +6,8 @@
  * repository.
  *
  * - Each of §4.14's six rows once, with its exact message (`rule` `body`, `check` `carries-content`).
+ * - A `Carries content:` line inside the `Reason:` block declares nothing (approver's ruling on the review, F1 (a)): row 1
+ *   fires on a line outside it only.
  * - Not judged: a merge; a commit that is no Memory `wf()` operation (an other commit, a configuration scope, a verb that
  *   did not parse); a submit with no line and no ancestor line (`carriesLineBefore` false); a named document absent at
  *   the first parent; a document the subject does not name.
@@ -22,7 +24,7 @@
  * `carriesLineBefore` (jest `TypeError: … is not a function`).
  */
 import { checkCarriesContent, createGitHistoryReader, type HistoryCommit, type HistoryReader } from '../../src/core/governance-check';
-import { APPROVER, TASK, approvalBody, governedModel, taskDoc } from './helpers/in-memory-history-reader';
+import { APPROVER, TASK, approvalBody, approverLine, governedModel, taskDoc } from './helpers/in-memory-history-reader';
 import { git, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
 
 interface Finding {
@@ -62,11 +64,26 @@ describe('task-378 AC 4 — carries-content: each row of spec-020 §4.14 once, w
     const model = base(true);
     const commit = model.commit({
       subject: 'wf(task): approve t-1 [pending → backlog]',
-      body: `${approvalBody()}\nCarries content: the body`,
+      // Hand-shaped (no verb writes a line between `Approver:` and `Reason:`): the line sits OUTSIDE the `Reason:` block
+      // (AGENTS.md §5.1), so it declares carried content and row 1 fires (approver's ruling on the review, F1 (a)).
+      body: `${approverLine()}\nCarries content: the body\nReason: Ready.`,
       author: APPROVER,
       files: { [TASK('t-1')]: taskDoc('backlog') },
     });
     expect(carriesFindings(commit, model.reader())).toEqual([C("'approve' declares no carried content: only a submit writes a Carries content: line (spec-008 §2, bug-287)")]);
+  });
+
+  it('not row 1 — the same approve with the Carries content: line INSIDE its Reason: block declares nothing (F1 (a))', () => {
+    // The `Reason:` block runs from the `Reason:` line to the trailing trailer paragraph or the end of the body
+    // (AGENTS.md §5.1): a line inside it is part of the reason, not a declaration.
+    const model = base(true);
+    const commit = model.commit({
+      subject: 'wf(task): approve t-1 [pending → backlog]',
+      body: `${approvalBody()}\nCarries content: the body`,
+      author: APPROVER,
+      files: { [TASK('t-1')]: taskDoc('backlog') },
+    });
+    expect(carriesFindings(commit, model.reader())).toEqual([]);
   });
 
   it('row 2 — two Carries content: lines on a submit', () => {
