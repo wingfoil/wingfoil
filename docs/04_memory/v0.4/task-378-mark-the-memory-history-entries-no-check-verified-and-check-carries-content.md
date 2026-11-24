@@ -527,6 +527,166 @@ red lists (TS2305 `checkCarriesContent`, `unverifiedFindings`, `parseCarriesCont
 - T-1's case is a **characterization guard**: it passes today and must keep passing (the flag marks no match on T-1's shape and
   changes nothing else); it now passes with the flag actually reaching the fn.
 
+### green (developer, 2026-11-24)
+
+**Base.** Branch at `bcf10f3c4` when green started (`git rev-list --count HEAD..main` → `0`, no merge), then at
+`960aba6a6` after the qa send-back below; `git rev-list --count HEAD..main` → `0` again before refactor, no merge. PATH
+guard: `command -v wingfoil` → the task's PATH shim; `wingfoil --version` and `node dist/cli.js --version` → `0.3.2
+(e440ba99b…)` at the start, `0.3.2 (960aba6a6…-dirty)` after the resume's `npm run -s build`.
+
+**Stop and send-back.** The first green run (`npx jest test/core/memory-history-mark.test.ts
+test/core/memory-search-verify.test.ts test/cli/memory-history-mark.integration.test.ts
+test/cli/reason-placeholder.integration.test.ts --maxWorkers=2` → `1 failed, 26 passed`) left one case red that no
+correct implementation could pass: `test/core/memory-search-verify.test.ts` passed the flag as `options: { verify: true }`,
+while the one params builder (`buildCoreParams`, `src/core/registry.ts`) spreads a declared flag at the top level
+(`verify: true`), as `test/core/directive-assign.test.ts` passes `force: true`. The spawned `--verify` cases passed. The
+phase stopped with the green uncommitted; the qa's send-back `8a490d630` passes the flag as the CLI builds it.
+
+**Green commit `7b5eb7000`** (`fix(memory): task-378 — mark the memory history entries …`), the design's files:
+- `src/memory/commit-message.ts` — `ReasonDefect` `'placeholder'` (one `<…>` token, `/^<[^<>\n]+>$/u`, or no `\p{L}`/`\p{N}`),
+  judged after `control-character`, with `spec-008` §2's message; `parseCarriesContent(body)`, the first line starting
+  exactly `Carries content: `, split on `, `, unescaped (`\\` and `\u{XXXX}`; an escape beyond U+10FFFF is kept as written).
+- `src/memory/submit.ts` — `describeCommittedSubmitContent(parent, commit)`, `isCarriesItem`, `orderCarriesItems` (fields
+  sorted by name, then the four fixed items, an undeclared item last).
+- `src/memory/audit.ts` — `MemoryTransition` gains `carries`, `path`, `parentPath`; `transitionConsistencyFindings`
+  (D9), which `verifyTransitionConsistency` now returns over its strict walk.
+- `src/core/governance-check.ts` — `HistoryReader.carriesLineBefore`; `checkCarriesContent` and the twelfth
+  `GOVERNANCE_CHECKS` entry, last; the git reader's `commits` (`git log --no-walk=unsorted --stdin`), `paths` and `walks`;
+  `transitionFindings` computed from the `transitions` memo; `unverifiedFindings`. The console summary lines of
+  `renderVerifyConsole` are untouched (`git diff main -- src/core/governance-check.ts | grep -n "gated: \|history: \|state not checked"` → no hunk).
+- `src/core/index.ts` — `carries` and `unverified` on the history entry; the `memorySearch` flag `verify`; the barrel.
+- `src/core/require-reason.ts` — TSDoc only. `docs/cli-reference.md` — `memory history`'s `carries` and `unverified`,
+  `memory search --verify`, the placeholder rule under *Rules for `--reason`*, `verify`'s twelve checks and its
+  example `checks:` line. `test/docs/name-resolvability.allowlist.ts` — the three `plannedBy: ['task-378']` rows removed:
+  `npx jest test/docs/name-resolvability.test.ts --maxWorkers=2` without them → `11 passed`.
+- `src/memory/history.ts` unchanged, as the design says (`git diff main --stat -- src/memory/history.ts` → nothing).
+
+**Choices inside the design, for the reviewer.** `carries-content` on a verb other than `submit` reports row 1 and
+judges nothing else; a misspelled key (row 3) is still read as the declaration, so its items are judged (an absent
+line would otherwise also fire row 5); row 4 names the item as written (escaped) and suppresses row 6; rows 5 and 6
+need at least one named document present at both revisions (none compared: not judged). `unverifiedFindings` resolves
+`HEAD` with `resolveRevision` when `head` is not given, as `governanceCheck` does (approver's ruling (b), 2026-11-24):
+that one read is outside `createGitHistoryReader`, and `test/core/governance-check-structure.test.ts` (whose list holds
+no `resolveRevision`) passes.
+
+**Red → green.** `bash waitslot.sh && npm test -- <the eleven red test files> --maxWorkers=2` → `Test Suites: 11
+passed, 11 total`, `Tests: 311 passed, 311 total` (red: 97 failing cases over the same files, the sum of the red notes' runs).
+`npx tsc --noEmit -p tsconfig.json` → exit `0`. `npx jest test/cli/verify.integration.test.ts
+test/core/governance-check-structure.test.ts test/core/governance-check-git-reader.test.ts --maxWorkers=2` → `90 passed`.
+
+### refactor (developer, 2026-11-24)
+
+**Commits.** `ef0381254` (`refactor(memory): …`): `memory history` reads the walk and the mark under the one `IO`
+guard it had; `memory search --verify` takes the mark's keys (already oldest first) and lets a `StorageError` throw,
+exit `1`, as its scan's reads do; the reader's three list-mode logs share one helper (an empty list reads nothing:
+`git log` with no revision would read `HEAD`); the report and the mark share `firstOfEach`; `recordedStatus` relies on
+`parseYaml` throwing only `ValidationError`. New tests of mine, `test/core/history-reader-commits.test.ts` (the list
+mode's order, `paths` with a rename, an empty list, `carriesLineBefore` over two line commits, an empty mark, three
+`carries-content` cases it cannot compare) and `test/memory/carries-content-edges.test.ts` → `11 passed`.
+`docs/01_vision/X_cli-cmds.md` 2.8 → 2.9 (`git show main:docs/01_vision/X_cli-cmds.md | sed -n 3p` → `2.8`): the
+`memory search` row gains `--verify` and the `memory history` row the mark — a file outside the design's list, which
+`test/docs/x-cli-cmds.test.ts` pins (`30 (memory search): … — missing --verify` in the first coverage run).
+`8e7bc2368` (`docs(vision): …`): `docs/01_vision/00_index.md` follows it (`test/docs/vision-index.test.ts`, 4 failures in
+the second coverage run, then `29 passed` with `x-cli-cmds`).
+
+`2a230b98d` (`test(memory): …`) adds two cases to `test/core/history-reader-commits.test.ts` (an addition under
+`paths`, a rename kept by its target).
+
+**Gates** (each after `bash waitslot.sh`, `--maxWorkers=2`, with the four pending amendments in the tree):
+- `npm run -s typecheck` → exit `0`; `npm run -s build` → exit `0`.
+- `npm test -- --maxWorkers=2` at `8e7bc2368` → exit `0`, `Test Suites: 749 passed, 749 total`, `Tests: 13805 passed,
+  13805 total`. `test/cli/workflow-unbound-none.integration.test.ts` passed in the worktree with the amendments in it
+  (`bug-534` did not trip), so no clean-clone run was needed.
+- `npm run test:coverage -- --maxWorkers=2` at `2a230b98d` → exit `0`, `Test Suites: 749 passed, 749 total`, `Tests: 13806
+  passed, 13806 total`; `All files` statements 99.09 %, branches 97.06 %, functions 98.78 %, lines 99.54 %. Two earlier runs
+  exited `1` on the two vision documents above, then on one uncovered branch pair of the list reader's `paths` filter,
+  which `2a230b98d` covers (`test(memory): … the list reader's paths …`).
+- `npm run -s lint` → exit `0`; `npm run -s docs:api` → exit `0`.
+- docs parity: `npx jest test/docs/cli-reference.test.ts test/cli/help-describes-every-command.test.ts
+  test/docs/name-resolvability.test.ts test/docs/llms-txt.test.ts --maxWorkers=2` → `49 passed`; the `test/docs` suites
+  ran in the full suite above.
+- `node scripts/lint-claims.cjs <spec-020>` → `11 warnings`, the committed version (`git show HEAD:<spec-020>` to the
+  scratch dir) → `11 warnings`: none added; the three bugs → `0 warnings` with and without the Retrospective.
+
+**Coverage** against the baseline `169ecd71b19f1e2321051ee2070c59986de784e0` (`sha256sum -c coverage-summary.json.sha256`
+from inside it → `coverage-summary.json: OK`), covered/total, uncovered in brackets:
+- `totals`: base 10777/10834 [57], 12925/13072 [147], 2546/2582 [36], 8051/8333 [282]; head 11662/11715 [53], 14056/14185 [129], 2771/2805 [34], 8905/9174 [269]
+- `src/memory/commit-message.ts`: base 104/104 [0], 129/129 [0], 22/22 [0], 99/99 [0]; head 116/116 [0], 144/144 [0], 26/26 [0], 109/109 [0]
+- `src/memory/submit.ts`: base 37/37 [0], 49/49 [0], 13/13 [0], 28/28 [0]; head 66/66 [0], 83/83 [0], 22/22 [0], 45/45 [0]
+- `src/memory/audit.ts`: base 104/104 [0], 123/123 [0], 14/14 [0], 70/71 [1]; head 105/105 [0], 124/124 [0], 15/15 [0], 70/71 [1]
+- `src/core/governance-check.ts`: base absent from the baseline; head 619/619 [0], 796/796 [0], 132/132 [0], 656/659 [3]
+- `src/core/index.ts`: base 683/686 [3], 852/866 [14], 191/209 [18], 387/403 [16]; head 753/756 [3], 937/946 [9], 224/242 [18], 437/448 [11]
+- `src/core/require-reason.ts`: base 15/15 [0], 15/15 [0], 3/3 [0], 7/7 [0]; head 15/15 [0], 15/15 [0], 3/3 [0], 7/7 [0]
+- `src/core/governance-check.ts` is absent from the baseline; against `task-365`'s refactor figures at `99149beaa`
+  (lines 528/528, statements 679/680, functions 113/113, branches 552/555) the uncovered count is 0, 0, 0, 3 → 0, 0, 0, 3.
+  No total and no changed file has more uncovered than its base.
+
+**REQ-PERF-02.** `bash waitslot.sh && npm run test:latency`, started at load `4,16` (`uptime`): exit `0`, `Tests: 34
+passed`; `P1.10 memory history: p95 259 ms (n=25, min 150 ms, max 265 ms)` (`test/core/query-latency.test.ts`, in
+process, budget 1000 ms); `test/cli/command-latency.test.ts` measures no `memory history` (its spawned figure is `workflow
+next`: total p95 818 ms, marginal p95 600 ms). Two earlier runs were refused for load, not counted: the suite's
+`agent execute` idle check (`the 1-minute load reaches 6 (half of 12 cores)`) at 4.26 → 7.36 and at 6.97 → 8.15; the
+second of them started while the waiting script failed to parse (an edit in progress), so it ran without the slot.
+The mark's cost on this repository, spawned (`/usr/bin/time`, load 13): `memory history spec-008-cli-grammar` 3.88 s on the
+code build (90 entries, 20 marked) against 1.78 s on the pinned 0.3.2; `minor-v0.4` 2.72 s (12, 2 marked) against 1.95 s;
+`task-365-…` 3.05 s (12, none); `bug-496-…` 3.66 s (7, none).
+
+**T-41 (spec-020 §9, D8 (a)).** A scratch script over the built `dist/` (`createGitHistoryReader(root, { head, commits })`
+over every non-merge `wf(<type>): submit` commit and every commit with a `Carries content:` line in any letter case
+reachable from `HEAD` `2a230b98d`, then `checkCarriesContent` on each): `submits 1483, lineCommits 562, judged 1483`,
+two findings — `0aa55f0c0` `the Carries content: line names 'frontmatter fields 'version'', which is not an item spec-008
+§2 declares (bug-287)` and `7a48bc2f0` `'submit' carries frontmatter field 'element', frontmatter field 'release',
+frontmatter field 'version', the body but declares no Carries content: line (spec-008 §2, bug-287)` — in 21.6 s (the same two at the green
+commit `7b5eb7000`). The placeholder scan (`git log --all --format=%H%x00%B`, `parseCommitReason`, `reasonDefect`): `12337` commits, `2572` with a
+reason, `0` placeholders. Range parity: `node dist/cli.js verify --format json --base origin/main` → exit `0`, `checks` 12
+(the last `{"check":"carries-content","rule":"body","since":"0.4.0"}`), `commits {range 68, memory 26, other 36, gated
+68}`, 0 findings, 0 `stateUnchecked`, `verdict: pass`; `node scripts/check-governance.cjs --base origin/main
+--json` → exit `0`, `checked 26`, 0 findings, 0 `stateUnchecked`, both at `2a230b98d`. No whole-history `verify` run.
+
+**Multi-document submits (approver's ruling (a), 2026-11-24).** The mark judges the element's own document only, so a
+submit naming several documents whose line describes another document's content can be marked where the verb reports
+nothing. This history has no such submit: `git log --no-merges --grep='^Carries content: ' --format='%h %s' HEAD | grep -E
+'submit [^ ]+, '` → nothing (74 multi-id submits exist, none carrying a line). `spec-020` §4.13 says so, a pending
+amendment below.
+
+**What `task-366` (W1-07) may rely on** — unchanged at this head: the check id `carries-content`, `rule` `body`, `since`
+`0.4.0`, last of twelve (the range run above); the two history findings `7a48bc2f0` and `0aa55f0c0` (T-41 above);
+`HistoryReader.carriesLineBefore`; `GitHistoryRange.commits`, `paths`, `walks` (`base` is not read when `commits` is
+given); the exports `checkCarriesContent`, `unverifiedFindings`; `buildGovernanceReport`'s report shape unchanged.
+
+**Console text for `task-370`.** `memory history --format console` and `memory search --verify --format console` print
+the generic indented JSON of the value, the keys and values of `--format json`
+(`test/cli/memory-history-mark.integration.test.ts`, "console prints the json form, yaml parses to it", passing): a
+history entry's `carries` is a list of strings or `null`, after `reason`; `unverified`, after `wingfoil` and only on a
+flagged entry, a list of `{rule, check, message}`; a search match's `unverified` is a list of shas.
+
+### self-review (developer, 2026-11-24)
+
+- AC 1 — `unverified` on a flagged entry, absent otherwise, and `memory search --verify`: `test/core/memory-history-mark.test.ts`,
+  `test/core/memory-search-verify.test.ts` (after `8a490d630`) and the integration suite pass; on this repository
+  `memory history spec-008-cli-grammar` marks 20 of 90 entries (the design's prototype: 20).
+- AC 2 — T-34 passes (`test/cli/memory-history-mark.integration.test.ts`).
+- AC 3 — `carries`: `test/memory/carries-content.test.ts`, the T-38 cases pass.
+- AC 4 — `carries-content`: `test/core/carries-content-check.test.ts` 24, `test/memory/submit-committed-content.test.ts`,
+  `test/cli/verify.integration.test.ts` pass; T-41 above.
+- AC 5 — the placeholder: `test/memory/reason-trailer.test.ts`, `test/core/require-reason.test.ts`,
+  `test/cli/reason-placeholder.integration.test.ts` pass; 0 recorded placeholders on any ref.
+- T4: `git log --first-parent --no-merges --format=%h bcf10f3c4..HEAD -- <the 13 red files>` → `8a490d630` only, the qa's
+  send-back.
+- Same class in the files touched: every caller of the placeholder rule goes through `reasonDefect` (`grep -rn
+  "reasonRefusalMessage\|reasonDefect(" src` → `require-reason.ts`, `commit-message.ts`, `governance-check.ts`); the
+  `Carries content:` key is read in `commit-message.ts` and `governance-check.ts` only.
+- Invisible-character grep on every file of each commit → no hit.
+
+### Pending amendments (approver)
+
+Left uncommitted (`git status --short` lists the four), to be recorded with `memory amend`:
+
+- `spec-020-the-governance-check-verb-the-authority-and-state-rules-over-a-commit-range` — `--reason "State in section 4.13 that the memory history mark judges the element's own document only, so a multi-document submit whose Carries content line describes another document's content can be marked where wingfoil verify reports nothing, and extend task-378's Revision paragraph, as the approver ruled at task-378's green; this history has no such submit."`
+- `bug-287-nothing-reads-or-checks-a-submit-commit-s-carries-content-line-against-the-diff-the-commit-carries` — `--reason "Add the Retrospective subsection task-378 owes before the bug closes: the fix, the two findings T-41 measured, and a proposal for a writer added without its reader."`
+- `bug-496-memory-history-reports-a-hand-committed-status-change-with-a-cli-shaped-subject-as-a-genuine-approval-with-no-mark-that-nothing-verified-it` — `--reason "Add the Retrospective subsection task-378 owes before the bug closes: the unverified mark of memory history and memory search, and what its cost taught the design."`
+- `bug-498-memory-approve-accepts-a-reason-made-only-of-a-placeholder-such-as-the-reply-and-records-it-permanently` — `--reason "Add the Retrospective subsection task-378 owes before the bug closes: the placeholder refusal, judged by shape, and the scan that found no recorded placeholder."`
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
@@ -538,3 +698,9 @@ red lists (TS2305 `checkCarriesContent`, `unverifiedFindings`, `parseCarriesCont
 - `spec-020` §4.13's "the same checks, through the same reader" would have cost `memory history` +29 s on `spec-008` taken
   literally (a scratch prototype over the built checks, 527 git calls); the design limits the reader to the element's
   document. Proposal: a spec that names a second consumer of a module states its cost budget there.
+- The first green stopped on a red case that called a flag through `options` (`test/core/memory-search-verify.test.ts`)
+  while the params builder spreads flags at the top level (`buildCoreParams`); the spawned cases passed, the in-process
+  one could not. Proposal: the qa brief names `buildCoreParams` as the shape an in-process test calls an operation with.
+- Two vision documents pin the command surface beside `docs/cli-reference.md` (`test/docs/x-cli-cmds.test.ts`,
+  `test/docs/vision-index.test.ts`); the design's file list named neither, and each cost a 25-minute coverage run to find.
+  Proposal: a design that adds a flag lists `docs/01_vision/X_cli-cmds.md` and its index.
