@@ -367,6 +367,48 @@ design gate, before red:
 Approved at this gate, committed per D7 (not Memory elements, no `memory amend`): `.wingfoil/directives/custom/command-baseline.md`
 (2.1), the five BDD scenarios, `test/docs/name-resolvability.allowlist.ts` (three rows).
 
+### design addendum (architect, 2026-11-24)
+
+**Rulings (approver, 2026-11-24).** D3 as proposed (the placeholder: one `<…>` token or no word, judged after the control
+characters, the pinned message); D5 the ancestor rule (`carriesLineBefore`); D1 and D2 the mark as proposed; D4, D6, D7, D8
+and D9 as recommended. **New ruling (W0-R10):** the design's first candidate finding is fixed in this task, not filed:
+`spec-008` §12 had no rows for `memory search`'s `--type`, `--status` and `--tag`, and this task adds `--verify` to the same
+table.
+
+**The change.** Three rows added to the uncommitted `spec-008` amendment, before the `--verify` row, each worded from the
+shipped option (`memorySearchFn`, `src/core/index.ts`; `searchMemoryDocuments`, `src/memory/query.ts`; the CLI reference's
+`wingfoil memory search` entry), and checked with the code build at `8c1ed9aa7`:
+- all three are optional value options with no default; a missing value is exit `2`, `option '--<name> <value>' argument
+  missing` (`node dist/cli.js memory search --type`, `--status`, `--tag` → those three messages, exit `2`);
+- an unknown or empty `--type` or `--status` matches nothing, exit `0`, `no documents matched the query` (`--type nosuchtype`,
+  `--type ''`, `--status nosuch`, `--status ''` → `0` matches, exit `0`); an empty `--tag` filters nothing (`--tag ''` →
+  1370 matches, the unfiltered count);
+- given twice, the last value counts (`--type release --type tech-spec` → 20, the tech-spec count, `--type release` alone
+  → 8; `--tag w1 --tag v0.4 --type task` → 50, the same as `--tag v0.4 --type task`);
+- `--type` also scopes the `W_MEMORY_UNREADABLE` warnings (`task-314`); an archived `--status` lifts the default exclusion of
+  archived documents (`--status deprecated` → 6 matches; without `--status`, 0 `deprecated` among the matches).
+The Revision paragraph says the rows were added by the approver's ruling at this gate. The `spec-008` pending amendment's
+`--reason` is replaced by the one below; the other two are unchanged.
+
+**Checks, with the amendment in the tree** (targeted, `--maxWorkers=2`, the task's PATH shim first): the docs suites that
+read `spec-008` (`grep -rln spec-008 test/docs/*.ts`) — `npx jest test/docs/dry-run-documented.test.ts
+test/docs/agent-output-secrets.test.ts test/docs/commands-parity.test.ts test/docs/spec-008-section-6.test.ts
+test/docs/command-surface-specs.test.ts test/docs/exit-codes-parity.test.ts test/docs/spec-008-negatable-globals.test.ts
+test/docs/warning-prefix.test.ts test/docs/name-resolvability.test.ts test/docs/enumeration-parity.allowlist.test.ts
+--maxWorkers=2` → `Test Suites: 10 passed`, `Tests: 55 passed, 55 total`; `npx jest test/docs/llms-txt.test.ts --maxWorkers=2`
+→ `22 passed`. `node scripts/lint-claims.cjs <spec-008>` → `16 warnings`; without the amendments (`git stash`, run,
+`git stash pop`) → `17 warnings`: none added.
+
+**Refactor duty (REQ-PERF-02).** Refactor runs `npm run test:latency` after `bash waitslot.sh`, with the load average at most
+14 when the run starts, and writes the measured `memory history` figure (total and marginal p95, from
+`test/cli/command-latency.test.ts` and `test/core/query-latency.test.ts`) in its notes. If the suite refuses a loaded run,
+refactor waits and runs it again; it never skips it, and never loosens a budget.
+
+### Pending amendments (approver) — replacement
+
+- `spec-008-cli-grammar` — `--reason "Add the sixth case of the reason rule in section 2, refusing a reason that is only a placeholder or holds no word, say where the Carries content line is read back, name the committed-history read of the unverified mark in section 11, and add to section 12 the memory history row, memory search --verify and the missing rows of memory search's shipped --type, --status and --tag, as task-378's design gate rules for bug-498, bug-287 and bug-496."`
+- `spec-020-…` and `spec-006-core-domain-api` — unchanged from the design's list.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
