@@ -436,6 +436,52 @@ at this design gate, before red:
 `dl-241` is ruled by its approve (`in-discussion → ready`), whose `--reason` names the option; if (a) or (c) is ruled
 instead of (b), the `spec-020` §0 sentence is dropped and the design is revised before red.
 
+### design addendum (architect, 2026-11-24)
+
+**Rulings (approver, 2026-11-24).** D12 (b): `dl-241` keeps skipping merges (its approve is the approver's, at the gate).
+D6: `npm run setup:hooks`. D8: the `gh api` script `scripts/wait-governance-check.cjs`. D1–D5, D7, D9–D11, D13 and D14
+as recommended in the design above.
+
+**D5 — where the export of `trailerKeysOutsideFinalParagraph` is recorded.** In `spec-020`, which already describes
+`src/core/governance-check.ts`'s exports (§4.13: the checks, `HistoryReader`, `governanceCheck`); `spec-006` names the
+module only once, in passing (`grep -n "governance-check\|governanceCheck" <spec-006>` → line 294, the report built by
+`governanceCheck`), and lists none of its functions, so it needs no amendment — and stays clear of `task-374`'s
+`spec-006` amendment. The pending `spec-020` amendment now also carries it: §4.11 gains the sentence that the module
+exports `trailerKeysOutsideFinalParagraph(body)`, with TSDoc, used by `checkTrailerParagraph`, and that the script
+re-exports it as a delegate for `scripts/check-phase-report.cjs` (so the script defines no predicate, §4.13, AC-9); the
+Revision paragraph gains item (5), and its `--reason` below names it. The export carries TSDoc: `npm run docs:api` (the
+API-docs gate, `test/docs/api-docs.test.ts`) fails on an undocumented export. No allowlist row: `npx jest
+test/docs/name-resolvability.test.ts test/docs/api-docs.test.ts --maxWorkers=2` with the amendment in the tree → `2
+passed`, `12 passed` (the name already resolves: the script defines it today). `node scripts/lint-claims.cjs <spec-020>` →
+`10 warnings`, unchanged.
+
+**D8 — the tests of `scripts/wait-governance-check.cjs` never reach the real `gh` or the network.**
+- Every case runs the script with a stub `gh` (a small executable in a scratch directory) that prints the committed
+  fixture, or a copy edited only in `status` / `conclusion`; the stub is first on `PATH`.
+- An explicit case pins it: the run's `PATH` is the stub's directory plus the directory of `process.execPath` only (no
+  `/usr/bin`), the stub records each call's argv, and the case asserts the recorded argv is
+  `api repos/{owner}/{repo}/commits/<sha>/check-runs?check_name=governance`; and an environment guard — the run's
+  environment has `GH_TOKEN`, `GITHUB_TOKEN` and `GH_HOST` removed and `GH_CONFIG_DIR` set to an empty scratch
+  directory — so a real `gh` that slipped in would find no credentials. A case with no `gh` on that `PATH` pins exit `2`.
+- The fixture is the response captured once by design, `gh api
+  'repos/wingfoil/wingfoil/commits/fb5b73e0149df92ccb03bf305ccdb0c171cdf29a/check-runs?check_name=governance'`, a public
+  repository's check run.
+- Secret scan of it, with the repository's scanner (`src/validation/secret-scan.ts`, the build): `node -e
+  'const {scanText}=require("./dist/validation");…scanText(<file text>, "test/cli/fixtures/gh-check-runs.json")'` →
+  `{"blocking":[],"warnings":[],"info":[],"filesScanned":1}`, exit `0`.
+- Fields carrying URLs or node ids (a walk of the JSON): `check_runs[0].node_id`, `.url`, `.html_url`, `.details_url`,
+  `.output.annotations_url`, `.app.node_id`, `.app.external_url`, `.app.html_url`, `.app.owner.node_id`, and the owner's
+  `avatar_url`, `url`, `html_url`, `followers_url`, `following_url`, `gists_url`, `starred_url`, `subscriptions_url`,
+  `organizations_url`, `repos_url`, `events_url`, `received_events_url` (21 fields). The script reads only `total_count`
+  and, per run, `name`, `status`, `conclusion` and `head_sha`. **The committed fixture is trimmed to those five fields**,
+  values as captured (`total_count: 1`; `name: governance`, `status: completed`, `conclusion: success`, `head_sha`
+  `fb5b73e0149df92ccb03bf305ccdb0c171cdf29a`), the trim and the capture command named in the red notes; qa keeps that
+  file's name `test/cli/fixtures/gh-check-runs-governance.json`.
+
+**Pending amendment (approver), replacing the `spec-020` line above** — the `dl-103` line is unchanged:
+
+- `spec-020-the-governance-check-verb-the-authority-and-state-rules-over-a-commit-range` — `--reason "Record task-366's design in sections 0, 4.11, 6.1, 7 and T-30: the summary lines name what they count (bug-438), T-30 compares gated after section 6.1 step 3 re-decides it, the script's child runs with --no-warnings and refuses a report that lacks a check or names another HEAD, a merge commit's own changes are judged by no check (dl-241 (b)), and the module exports the trailer key reader that the script re-exports."`
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
