@@ -733,6 +733,181 @@ failed, 248 passed, 250 total`; the two failures are the two new negatives. `npx
 - The helper change is observed by no current case (every suite above passes as before); it aligns the in-memory reader with
   the ruled reading the git reader takes.
 
+### fix round after review (developer, 2026-11-24)
+
+**Scope.** The independent review of `560c86b24` returned approve with fixes: three should-fix findings, F1 to F3, ruled by
+the approver on 2026-11-24. This round fixes them; the task and its three bugs stay `in-review`. No submit, no bug sync, no
+record, no merge of `main` (`git rev-list --count HEAD..main` → `0` at the start and before each commit). PATH guard:
+`command -v wingfoil` → the task's PATH shim; `wingfoil --version` and `node dist/cli.js --version` → `0.3.2 (560c86b24…)`
+at the start, and `0.3.2 (2c928ae48…)` after the gates' `npm run -s build`.
+
+**First stop (a qa send-back).** Under F1 (a), two T4 row-1 cases put the line inside the `Reason:` block:
+- `test/core/carries-content-check.test.ts`: `${approvalBody()}\nCarries content: the body`;
+- T-39 of `test/cli/verify.integration.test.ts`: `…${approvalBody('Ready.')}\n\nCarries content: the body`.
+
+With the fix they failed (`npx jest test/core/carries-content-check.test.ts test/cli/verify.integration.test.ts … --maxWorkers=2`
+→ `2 failed, 105 passed`). The phase stopped with the fix uncommitted. The qa's send-back `b54a86f1e` moved both lines before
+`Reason:` and added the ruled negatives. The fix then re-applied unchanged.
+
+**Commits.**
+- `1158b2f70` `fix(memory): …` (`src/memory/commit-message.ts`, `src/memory/index.ts`, `src/core/governance-check.ts`):
+  - F1: `parseReasonBlock`'s block extent is now the private `reasonBlockRange`. The new export `linesOutsideReasonBlock(body)`
+    reuses it, so there is no second parser.
+  - `parseCarriesContent` (`memory history`'s `carries`) and `checkCarriesContent` read only the lines outside the block, as
+    does the git reader's `carriesLineBefore`. The reader's `--grep` hits are now read with `%H%x00%b%x00` and kept only when
+    the line sits outside the block; the number of git calls is unchanged.
+  - F2: row 3 fires unless the key is followed by exactly one space (`/^Carries content: (?![ \t])/`). The items are read
+    after any blanks (`CARRIES_KEY_TEXT_RE` `[ \t]*`), so rows 4 and 6 still judge them.
+- `7261b2ed1` `docs(cli): …`: `docs/cli-reference.md`. `memory history`'s `carries` and `verify`'s `carries-content` say the
+  line is read outside the `Reason:` block, and the check names the one space. `docs/cli-reference.md` has no `version:`.
+  §4.12's "passes by construction" is true again: a verb-written approve or deprecate with such a reason passes (below).
+- `2c928ae48` `test(memory): …`: a new file of mine, `test/cli/carries-content-reason-block.integration.test.ts`, with 20 cases.
+  My earlier-green tests (`test/core/history-reader-commits.test.ts`, `test/memory/carries-content-edges.test.ts`) needed no
+  change.
+
+**Red → green, per finding.** The new file was run on the pre-fix `src` (`git diff -- src` saved to the scratch dir,
+`git checkout -- src`, run, `git apply`): `npx jest test/cli/carries-content-reason-block.integration.test.ts --maxWorkers=2`
+→ `9 failed, 1 passed` (its first 10 cases).
+- F1, spawned through the real dist (`memory approve` and `memory deprecate`, reason
+  `Approve it: the submit wrote the line\nCarries content: the body\nas memory submit declares it.`, `withoutAgentMarkers`):
+  - pre-fix, `verify` listed the two row-1 findings (`'approve' declares no carried content: …`, `'deprecate' declares …`);
+  - after the fix, there are no `carries-content` findings, `memory history` reads `carries: null` on both entries, and the
+    approve carries no `unverified`;
+  - positive control: `memory submit`'s own line reads `['the body']`;
+  - `carriesLineBefore` over such an approve was `true` before the fix and is `false` after;
+  - in process, `parseCarriesContent('Reason: Approve.\nCarries content: the body')` was `["the body"]` and is now `null`;
+  - a line before `Reason:` is still row 1.
+- F2, as `checkCarriesContent` case → before → after:
+  - no space → `[]` → row 3;
+  - two spaces → row 4 (`names ' the body'`) → row 3 alone;
+  - a tab → `[]` → row 3;
+  - no space with a disagreeing item → row 6 alone → row 3 then row 6;
+  - one space → no finding, both times.
+- After the fix: the file passes `20 passed` (including the ten parity cases below).
+- The qa's suites plus mine: `bash waitslot.sh && npm test -- test/core/carries-content-check.test.ts
+  test/cli/verify.integration.test.ts test/core/governance-check.test.ts test/core/memory-history-mark.test.ts
+  test/core/memory-search-verify.test.ts test/cli/memory-history-mark.integration.test.ts test/core/verify-registration.test.ts
+  test/core/history-reader-commits.test.ts test/core/governance-check-git-reader.test.ts
+  test/cli/carries-content-reason-block.integration.test.ts --maxWorkers=2` → `Test Suites: 10 passed`, `Tests: 260 passed`;
+  the qa's two negatives pass.
+
+**Block-rule parity.** The code's `Reason:` block is `parseReasonBlock`'s:
+- it starts at the first line matching `/^Reason:[ \t]*/`;
+- it ends before the body's last paragraph when that paragraph follows a blank line and every line of it matches
+  `/^[A-Za-z][A-Za-z0-9-]*:[ \t]\S/`; otherwise it runs to the end;
+- the `Reason:` line is always inside;
+- CR and CRLF are read as line breaks.
+
+The in-memory reader's `declaresCarriedContent` (test helper, not edited) differs from it in three places:
+- its trailer token is `[A-Za-z0-9-]+` followed by `: `;
+- it never ends the block inside the reason's own paragraph;
+- it splits on `\n` only.
+
+These change where the block ends only inside a last paragraph whose every line is trailer-shaped under one of the two rules.
+No line starting `Carries content: ` is trailer-shaped under either rule (the token holds a space), so both readers always
+agree on the declaration and on the row-5 ancestry, whose prefix in both is exactly `Carries content: `. Ten edge bodies pin
+it: `model.reader().carriesLineBefore` equals `linesOutsideReasonBlock(body).some(startsWith 'Carries content: ')`:
+- no `Reason:`;
+- the line inside the reason, or in a later paragraph of it;
+- the line before `Reason:`;
+- a trailer paragraph after the reason;
+- a last paragraph with a digit-led token;
+- the reason paragraph last and trailer-shaped;
+- a miscased key;
+- no space after the key;
+- CRLF.
+
+They differ in one place: the reason TEXT, not the declaration. For `Carries content: the body\n\nReason: r\nKey: v`, the code
+reads the reason `r`, while the helper's block would also take `Key: v`. The helper reads no reason, and `parseReasonBlock`'s
+rule (`dl-067`) is unchanged here. No code needed aligning.
+
+**Row 5's grep and F2.** `carriesLineBefore` keeps the exact, case-kept `^Carries content: ` prefix. The §4.14 sentence
+defines the line rows 2 to 6 judge on the judged commit. The ancestry asks where the writer began, and the writer writes
+only the exact prefix. A miscased or unspaced ancestor line is a hand line, not the writer's.
+
+**Same class (W0-R10).** Searched with `grep -n "commit.body\|\.body\b\|body\.split\|body)" src/core/governance-check.ts`,
+and the body readers of `src/memory/commit-message.ts`:
+- fixed: `carriesLineBefore` (above), the same defect;
+- not defects:
+  - `approverLinesOf` and `checkBody`'s `reasonLines`: `Approver:` and `Reason:` are reserved in a reason, any case;
+  - `checkApprovalAgentTrailer`: a reason under `Approver:` refuses the agent keys;
+  - `checkState`'s `SHA_TOKEN_RE`: it is meant to read a reason, where the reject sha is cited;
+  - `parseApproverTrailerLine`: first non-empty line only;
+  - `parseVersionTrailer`: the final paragraph only, and a reserved key;
+  - `checkTrailerParagraph`: `WingFoil-*` keys, excepted by the ruling.
+
+**Gates** (this worktree, the task's PATH shim, each after `bash waitslot.sh`, `--maxWorkers=2`, one at a time, the four
+pending amendments in the tree, all started after the 19:47 reboot):
+- `npm run -s build` → exit `0`; `node dist/cli.js --version` → `0.3.2 (2c928ae484aa5391b9bd7a36ea4c8413dd4aeef8)`.
+- `npm test -- --maxWorkers=2` → exit `0`, `Test Suites: 750 passed, 750 total`, `Tests: 13831 passed, 13831 total`.
+  `test/cli/workflow-unbound-none.integration.test.ts` passed with the amendments in the tree (`bug-534` did not trip).
+- `npm run test:coverage -- --maxWorkers=2` → exit `0`, `750 passed`, `13831 passed`. `All files`: statements 99.09 %,
+  branches 97.06 %, functions 98.78 %, lines 99.54 %.
+- `npm run -s lint`, `npm run -s docs:api`, `npm run -s typecheck` → exit `0` each.
+- `npm run -s check:governance -- --base origin/main` → exit `0`: `gated: 0 findings`, `history: 0 findings`.
+- `node dist/cli.js verify --base origin/main --format json` → exit `0`: 12 `checks`, the last
+  `{"check":"carries-content","rule":"body","since":"0.4.0"}`, `commits {range 80, memory 30, other 44, gated 80}`,
+  0 findings, `verdict: pass`.
+- docs parity: the `test/docs` suites, `test/docs/cli-reference.test.ts` and `test/docs/name-resolvability.test.ts` (which
+  reads the amended `spec-020` names `linesOutsideReasonBlock` and `parseReasonBlock`) ran green in the full suite.
+
+**Coverage** against the merge base's baseline `2fbc5afab57d8d37d202ce36f49e5c6f747551a8` (`sha256sum -c
+coverage-summary.json.sha256` from inside it → `coverage-summary.json: OK`). Figures are covered/total, uncovered in
+brackets, in the order lines; statements; functions; branches:
+- totals: base 11518/11571 [53]; 13877/14007 [130]; 2735/2769 [34]; 8768/9037 [269]. Head 11676/11729 [53];
+  14075/14204 [129]; 2775/2809 [34]; 8911/9180 [269].
+- `src/core/governance-check.ts`: base 528/528 [0]; 679/680 [1]; 113/113 [0]; 552/555 [3]. Head 626/626 [0]; 806/806 [0];
+  133/133 [0]; 658/661 [3].
+- `src/memory/commit-message.ts`: base 103/103 [0]; 128/128 [0]; 22/22 [0]; 99/99 [0]. Head 123/123 [0]; 153/153 [0];
+  29/29 [0]; 113/113 [0].
+- the other files the task changes: `src/memory/submit.ts` 0 uncovered both; `src/memory/audit.ts` branches [1] → [1];
+  `src/core/index.ts` [3]/[9]/[18]/[11] → the same; `src/core/require-reason.ts` 0 both. `src/memory/index.ts` is a barrel,
+  absent from both summaries.
+- No uncovered count grows.
+
+**T-41.** A copy of the review's script, run under the slot on the built `dist/` at `2c928ae48`:
+`submits 1484, lineCommits 562, judged 1484`, 19.3 s. The same two findings as before:
+- `0aa55f0c0` `the Carries content: line names 'frontmatter fields 'version'', …`;
+- `7a48bc2f0` `'submit' carries frontmatter field 'element', … but declares no Carries content: line …`.
+
+F1 and F2 change neither the count nor the findings. No submit of this history has its line inside a reason or after an
+unspaced key, and no line commit is dropped from the ancestry. The one more submit than at refactor (1484 against 1483) is this task's own `6be52e94a`
+(`git log --no-merges -E --grep='^wf\([a-z-]+\): submit ' 2a230b98d..HEAD`), which passes. The placeholder scan finds `12363` commits, `2575` with a reason and
+`0` placeholders.
+
+**Downstream** (`git merge-tree --write-tree --name-only HEAD <head>`):
+- against `task-374` `3ec4e4463`: conflicts in `docs/01_vision/00_index.md`, `docs/01_vision/X_cli-cmds.md`, `spec-006`
+  and `spec-008`. These are the known four. `docs/cli-reference.md` and `src/core/index.ts` auto-merge.
+- against `task-366` `fa3a1ca0c`: conflicts in `spec-020` (the tail Revisions), `src/core/index.ts` (exports) and
+  `test/core/governance-check.test.ts` (describes). These are the known three. `src/core/governance-check.ts`, with this
+  round's fix, auto-merges.
+- The uncommitted `spec-020` edit adds hunks at §4.14 and at T-39's row, which `task-366` does not touch (`git diff
+  <merge-base> fa3a1ca0c -- <spec-020>`: no hunk in §4.14), plus the tail Revision, which is already a known conflict.
+
+**What `task-366` may rely on — changed by this round.** The check id, `rule`, `since`, position and the two history
+findings are unchanged. Two things change:
+- `HistoryReader.carriesLineBefore` counts an ancestor only when its exact `Carries content: ` line sits outside its
+  `Reason:` block;
+- `linesOutsideReasonBlock(body)` is a new export of `src/memory`, the reader a script can share for the same question.
+
+The report's shape and the exit codes are unchanged.
+
+**T4.** `git log --first-parent --no-merges --format=%h bcf10f3c4..HEAD -- <the 13 red files and the qa's 3>` → `b54a86f1e`
+and `8a490d630` only, the qa's two send-backs.
+
+**Invisible characters.** The grep on every file of each commit → no hit.
+
+**Pending amendments — the `spec-020` reason replaces the earlier one.**
+- `spec-020-the-governance-check-verb-the-authority-and-state-rules-over-a-commit-range` — `--reason "State in section
+  4.13 that the memory history mark judges the element's own document only, so a multi-document submit whose Carries
+  content line describes another document's content can be marked where wingfoil verify reports nothing, and close
+  section 4.14 with the sentence that reads the declaration only outside the Reason: block, reports by row 3 a key not
+  followed by a single space and judges rows 5 and 6 only when a named document was compared, reading the fifth row's
+  ancestry outside the Reason: block too and extending task-378's Revision paragraph, as the approver ruled at task-378's
+  green and on its review."`
+- The three bugs' `--reason`s are unchanged. None of their Retrospective sentences became false: the T-41 figures above
+  still name the same two commits.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
