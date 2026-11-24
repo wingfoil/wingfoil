@@ -687,6 +687,52 @@ Left uncommitted (`git status --short` lists the four), to be recorded with `mem
 - `bug-496-memory-history-reports-a-hand-committed-status-change-with-a-cli-shaped-subject-as-a-genuine-approval-with-no-mark-that-nothing-verified-it` — `--reason "Add the Retrospective subsection task-378 owes before the bug closes: the unverified mark of memory history and memory search, and what its cost taught the design."`
 - `bug-498-memory-approve-accepts-a-reason-made-only-of-a-placeholder-such-as-the-reply-and-records-it-permanently` — `--reason "Add the Retrospective subsection task-378 owes before the bug closes: the placeholder refusal, judged by shape, and the scan that found no recorded placeholder."`
 
+### red send-back after review (qa, 2026-11-24)
+
+**Send-back commit `b54a86f1e`** (`git log -1 --format='%H %s'` → `b54a86f1e44d2843fe545e753edb77351ee5c3dc test(memory):
+task-378 — qa send-back after review: a Carries content line inside the Reason block declares nothing (F1)`), three files:
+`test/core/carries-content-check.test.ts`, `test/cli/verify.integration.test.ts`, `test/core/helpers/in-memory-history-reader.ts`.
+Base unchanged: `git rev-list --count HEAD..main` → `0`, no merge. PATH guard: `command -v wingfoil` → the task's PATH shim;
+`wingfoil --version` and `node dist/cli.js --version` → `0.3.2 (560c86b24fa12eb8893173577dbbb5219e757c3a)`. The four pending
+amendments stayed uncommitted and untouched (`git commit --only`).
+
+**What changed and why.** The approver ruled on the review (finding F1, option (a)) that a `Carries content:` line inside the
+`Reason:` block is not a declaration: the block runs from the `Reason:` line up to the commit's trailing trailer paragraph or
+the end of the body (AGENTS.md §5.1), and only a line outside it declares carried content. The two row-1 cases put the line
+inside the block, so under the ruling they pinned the behaviour it removes.
+- `test/core/carries-content-check.test.ts`, "row 1 — a verb other than submit…": the body is now
+  `${approverLine()}\nCarries content: the body\nReason: Ready.`, the line before `Reason:`; the expected row-1 finding and
+  message are unchanged. New case "not row 1 — the same approve with the Carries content: line INSIDE its Reason: block
+  declares nothing (F1 (a))": the old body `${approvalBody()}\nCarries content: the body` → no finding.
+- `test/cli/verify.integration.test.ts`, T-39: the hand approve is now `${approverLine()}\nCarries content: the body\nReason:
+  Ready.`, the expected list unchanged. New case "T-39 — an approve whose Reason: block holds a Carries content: line declares
+  nothing: no carries-content finding (F1 (a))": the old approve, `${approvalBody('Ready.')}\n\nCarries content: the body` (its
+  last paragraph is not trailer-shaped: `Carries content` is no trailer key), → no `carries-content` finding on its sha.
+- Both moved positives are hand-shaped: no verb writes a line between `Approver:` and `Reason:`; each case's comment says so.
+- `test/core/helpers/in-memory-history-reader.ts`: `carriesLineBefore` matched `/^Carries content: /m` over the whole body. It
+  now counts an ancestor only when a line starting exactly `Carries content: ` sits outside its `Reason:` block
+  (`declaresCarriedContent`, implemented in the helper from AGENTS.md §5.1's definition, no import from the code under test:
+  the block opens at the first line starting `Reason:` and ends before a last paragraph, after the reason's own, made only of
+  `<token>: <value>` trailer lines; a body with no `Reason:` line keeps the old reading).
+
+**Runs.** `npx jest test/core/carries-content-check.test.ts test/cli/verify.integration.test.ts test/core/governance-check.test.ts
+test/core/memory-history-mark.test.ts test/core/memory-search-verify.test.ts test/cli/memory-history-mark.integration.test.ts
+test/core/verify-registration.test.ts test/core/history-reader-commits.test.ts test/core/governance-check-git-reader.test.ts
+--maxWorkers=2 --noStackTrace --json --outputFile=<scratch>` (every suite importing the helper: `grep -rln
+in-memory-history-reader test`, plus `test/core/helpers/history-mark-fixture.ts`, which no suite runs alone) → `Tests: 2
+failed, 248 passed, 250 total`; the two failures are the two new negatives. `npx tsc --noEmit -p tsconfig.json` → exit `0`.
+`npx jest test/lint --maxWorkers=2` → `165 passed, 165 total`. `npx jest test/validation/secret-scan.test.ts --maxWorkers=2` →
+`85 passed`. The invisible-character grep on the three files → no hit.
+
+**Class.**
+- The two moved row-1 cases are **characterization**: they pass at `560c86b24` and must keep passing.
+- The two negatives are **red-first** at `560c86b24`, failing on the assertion: the unit case `expect(received).toEqual(expected)`
+  received `[{ check: 'carries-content', message: "'approve' declares no carried content: only a submit writes a Carries
+  content: line (spec-008 §2, bug-287)", rule: 'body' }]` for `[]`; the integration case received the same finding with
+  `gated: true` and the approve's sha for `[]`.
+- The helper change is observed by no current case (every suite above passes as before); it aligns the in-memory reader with
+  the ruled reading the git reader takes.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
