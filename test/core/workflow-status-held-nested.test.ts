@@ -1,8 +1,9 @@
 /**
  * task-374, fix round 2 after the re-review — the first-match order of `spec-017` §5.1 on a nested trail (`bug-487`):
  * a gated element that is itself `S`, the scope of an entry of a frontier step's trail, is held by that instance
- * whatever its fields, but `heldBy` records the FIRST holder in instance, frontier and trail order. When an earlier
- * entry of the trail holds the element by a field, that ancestor is the holder, not the element itself.
+ * whatever its fields, but `heldBy` records the FIRST holder in instance, frontier and trail order: the element itself
+ * unless an earlier holder in that order holds it by a field. Here, for example, an earlier entry of the trail (the
+ * ancestor) holds the element by a field, so that ancestor is the holder, not the element itself.
  *
  * On `./helpers/held-identity-fixture.ts`'s nested project: `sw-life-cycle-1-plan`'s frontier step
  * `sprint.sprint-goal@release:release-1` has the trail `rl-1` then `release-1`. `release-1` (`release-line: "rl-1"`,

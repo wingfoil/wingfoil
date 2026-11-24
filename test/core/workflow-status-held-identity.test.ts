@@ -2,7 +2,7 @@
  * task-374, fix round after the independent review — the identity rule of `spec-017` §5.1 (`bug-487`): a gated element
  * that is itself `S`, the scope of an entry of a frontier step's trail of an open instance, is held by that instance
  * whatever its fields; `heldBy` records the first holder in §5.1's order, which is the element itself unless an earlier
- * entry of that trail holds it by a field (the nested case is pinned by `./workflow-status-held-nested.test.ts`). Without
+ * holder in that order holds it by a field (the nested case is pinned by `./workflow-status-held-nested.test.ts`). Without
  * the rule, a run's own iteration element, sitting at its gate on a frontier step that approves nothing, was reported as
  * carried by no open workflow. Here the trail has one entry, so `heldBy.element` is `release-1` itself.
  *
