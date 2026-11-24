@@ -1527,7 +1527,7 @@ next step: dev-loop.green@task:task-130
 Print every open workflow, its pending approvals and who they are routed to, and the elements waiting at a gate, as committed at HEAD.
 
 ```
-wingfoil workflow status [<ref>]
+wingfoil workflow status [<ref>] [--full]
 ```
 
 Read-only, and it reads `HEAD` from the same deduction as `workflow next`: an uncommitted
@@ -1548,14 +1548,30 @@ reports who is asked: a routed member without the `approver` role is flagged
 `W_APPROVAL_ROLE_WITHOUT_AUTHORITY`, and only an approver can decide. Nothing is written.
 
 Last, the **ungated elements**: elements sitting in a gate state of their type that no pending approval of an open
-workflow carries, routed to the holders of the `approver` role.
+workflow carries, routed to the holders of the `approver` role. Changed in 0.4, the console prints them as one summary
+line by default, their count and the count of each type, then the members and a hint:
+`ungated elements: <n> (<type> <count>, …) — routed to <members>; --full lists them`. With `--full` it prints instead
+`ungated elements: <n>` and one "human needed" line per element. `--full` changes the console only: `--format json`
+and `--format yaml` print the same bytes with or without it.
+
+New in 0.4, an ungated element may be **held** by an open workflow: one of its fields is named after the type of an
+element a frontier step of that workflow runs on, with that element's id or its `version` as value (a bug whose
+`release` is `minor-v0.4`, or `v0.4`, while a release cycle over `minor-v0.4` is on the frontier). It stays ungated —
+no step approves it now — and its `--full` line says who holds it instead of `no open workflow carries it`:
+
+```console
+  human needed: approve or reject bug-1-crash (bug, triaged; held by sw-life-cycle-1-plan's release release-1, no step of it approves it now) — routed to Morgan <morgan@example.invalid>
+```
+
+A pending approval is always a frontier step: an `iterate_over` phase puts one step per open candidate on the
+frontier, so the approvals of several candidates can be pending at once.
 
 An instance opened before `workflow start` wrote its `WingFoil-Start:` trailer (see `workflow start`) stays open
 for now, and status warns about it (new in 0.4): a `warning: W_INSTANCE_PRE_MARKER (<plan file>): instance <id> is
 kept by the pre-marker rule: restart it with workflow start` line on stderr, the last of its warnings, and the entry
 in `diagnostics`. End it and start it again with `workflow start` to clear the warning.
 
-Each pending approval and ungated element prints a **"human needed"** line naming the action
+Each pending approval, and under `--full` each ungated element, prints a **"human needed"** line naming the action
 (`approve or reject`, or `finalize` for a phase record), the element ids or the step key, and the members it is
 routed to. In v0.3 this output is the notification channel; hook delivery comes later. `workflow next` prints the
 same line when its next step awaits an approval.
@@ -1576,8 +1592,10 @@ pending approvals: 1
 ```
 
 `--format json|yaml` prints the full payload, `{"baseline": {…}, "active": …, "open": [{"instance", "complete",
-"phases", "frontier", "late"}], "pendingApprovals": [{"step", "instance", "trail", "awaiting"}], "ungated": […],
-"ungatedRoutedTo": […], "diagnostics": […]}`.
+"phases", "frontier", "late"}], "pendingApprovals": [{"step", "instance", "trail", "awaiting"}], "ungated": [{"type",
+"id", "status", "heldBy"?}], "ungatedByType": [{"type", "count"}], "ungatedRoutedTo": […], "diagnostics": […]}`. New
+in 0.4: `ungatedByType` counts the ungated elements per type, ascending by type, and a held element carries
+`heldBy: {"instance", "element"}`.
 Changed in 0.4: each entry of `diagnostics` is also written on stderr, one
 `warning: <code> (<file>): <message>` line each (under `--format json` one `{"warning": …}` document, under `yaml`
 one YAML document), as `agent list` does; the console no longer ends with an `<n> diagnostic(s): --format json lists
@@ -1590,7 +1608,8 @@ them` line, so stdout carries only the answer.
   included) → `unknown workflow: <ref>`; both exit `1`; an error in the workflow files → exit
   `1`, as `workflow list`; more than one `<ref>` → exit `2`.
 - **Commit:** none.
-- **MCP:** the Resource `wingfoil://workflows/-/status` returns the same `--format json` payload (no `<ref>`).
+- **MCP:** the Resource `wingfoil://workflows/-/status` returns the same `--format json` payload (no `<ref>`, and
+  `--full` has no Resource: the payload is the same either way).
 
 ### `wingfoil workflow show`
 
@@ -1601,7 +1620,9 @@ wingfoil workflow show <ref>
 ```
 
 Read-only, and it reads `HEAD` as `workflow list` does. `<ref>` is a workflow name, or
-the id of an open workflow instance (its `plan` document), which stands for that instance's workflow.
+the id of a workflow instance (its `plan` document), which stands for that instance's workflow. Changed in 0.4, the
+instance may be closed (a `done` plan) as well as open, and the payload then says which instance the id names:
+`"instance": {"id", "workflow", "open"}`, `open` true for an open instance; a workflow name gives no `instance`.
 
 For each phase it prints its `role` and that role's directives (`id` and `title`, the role's own and the
 global ones, as `directives list --role` resolves them), its `actions` and `checks` with the binding each
@@ -1611,7 +1632,7 @@ checks are listed, never run: `"evaluated": false`), `produces` with the Memory 
 alone), `mode`, `allowedModes` and `distinctFrom`, `cadence`, the kinds of evidence that complete the phase
 (`state`, `created`, `produces`, `selection`, `include`, `awaits`, `record`), and, for a phase that includes
 another workflow, that workflow resolved the same way under `sub`. The payload is
-`{"baseline": {…}, "workflow": {…}, "diagnostics": […]}`, the diagnostics as `workflow list` reports them, except
+`{"baseline": {…}, "workflow": {…}, "instance"?: {…}, "diagnostics": […]}`, the diagnostics as `workflow list` reports them, except
 `W_ACTION_ARGUMENT_NOT_PASSED`, which `workflow list` alone reports.
 
 New in 0.4, a built-in binding's `argv` is the whole command `workflow next` offers, with placeholders where no
@@ -1621,7 +1642,7 @@ memory reject <id> --reason <reason>`, `wingfoil memory deprecate <id>`, `wingfo
 the action declares literally is printed as declared; one that takes a value from an element is the placeholder of its
 name as a whole, a list included (`--title <title>`, `--tags <tags>`, `--set release=<release>`).
 
-- **Errors:** a name no workflow at `HEAD` has and no open instance holds → `unknown workflow: <ref>`, exit `1`; an error in the workflow files → exit `1`, as `workflow list`; no `<ref>`, or more than one → exit `2`.
+- **Errors:** a name no workflow at `HEAD` has and no instance plan holds (a phase plan's id included) → `unknown workflow: <ref>`, exit `1`; an instance plan naming a workflow the registry does not load → `unknown workflow: <that workflow>`, exit `1`; an error in the workflow files → exit `1`, as `workflow list`; no `<ref>`, or more than one → exit `2`.
 - **Commit:** none.
 
 ### `wingfoil workflow start`
