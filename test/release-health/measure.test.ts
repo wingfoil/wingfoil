@@ -213,6 +213,8 @@ const STAMP = 'WingFoil-Version: 0.3.0 (abc1234)';
 const CLAUDE = 'Co-Authored-By: Claude <noreply@anthropic.com>\nAI-Model: claude-test';
 
 const TASK_BODY = '**Features:** P1.1, P9.9\n\nImplements REQ-SYS-01 for US-1-01.';
+/** TASK_BODY as the submit leaves it: one more sentence, no new reference. */
+const TASK_FILLED = `${TASK_BODY}\n\nThe alpha module, filled at submit.`;
 const TASK_EXTRA = 'depends_on: ["task-009-missing"]\n';
 
 interface History {
@@ -260,9 +262,11 @@ function historyFixture(): History {
   c.push(r.commit('fix: tweak b', { date: DAY1, files: { 'src/b.ts': 'x\n'.repeat(600) } }));
   c.push(r.commit('Update readme', { author: OUT, date: DAY1, files: { 'README.md': 'Readme.\n' } }));
   c.push(r.commit('wf(decision-log): approve dl-117-ai [in-discussion → ready]', { author: ADA, date: DAY1, body: APPROVAL('Ratified.'), files: { 'docs/memory/dls/dl-117-ai.md': DL_DOC('ready') } }));
-  const doc = (status: string): Record<string, string> => ({ 'docs/memory/task/task-001-alpha.md': taskDoc('task-001-alpha', status, TASK_EXTRA, TASK_BODY) });
+  // The submit fills the body further (TASK_FILLED), so its `Carries content: the body` is true (spec-008 §2): every
+  // document from `pending` on holds the filled body, the `draft` one the body the add wrote.
+  const doc = (status: string): Record<string, string> => ({ 'docs/memory/task/task-001-alpha.md': taskDoc('task-001-alpha', status, TASK_EXTRA, status === 'draft' ? TASK_BODY : TASK_FILLED) });
   c.push(r.commit('wf(task): add task-001-alpha', { date: DAY1, body: STAMP, files: doc('draft') }));
-  c.push(r.commit('wf(task): submit task-001-alpha', { body: `Carries content: the body.\n\n${STAMP}`, files: doc('pending') }));
+  c.push(r.commit('wf(task): submit task-001-alpha', { body: `Carries content: the body\n\n${STAMP}`, files: doc('pending') }));
   c.push(r.commit('wf(task): approve task-001-alpha [pending → backlog]', { author: ADA, body: APPROVAL('Ready.'), files: doc('backlog') }));
   c.push(r.commit('wf(task): start task-001-alpha [backlog → in-progress]', { body: CLAUDE, files: doc('in-progress') }));
   c.push(r.commit('wf(task): approve task-001-alpha [in-progress → in-review]', { author: ADA, body: `Reason: Looks fine.\n\n${CLAUDE}`, files: doc('in-review') }));
