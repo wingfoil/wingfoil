@@ -14,8 +14,8 @@
  * or 1 with a report whose `verdict` is `pass` or `fail` is a completed run; anything else, a report whose `checks`
  * lack a check the script gates, a check id with no marker in `CHECKS`, or a report of another `HEAD` is exit 2.
  * The generic checks — `subject`, `bracket`, `body`, `authority`, `state` and the later `verb-edge`,
- * `status-outside-wf`, `supersedes-pair`, `approval-agent-trailer`, `workflow-record-authority`, `trailer-paragraph`
- * — are defined in `src/core/governance-check.ts` alone; the script defines none of their predicates (AC-9).
+ * `status-outside-wf`, `supersedes-pair`, `approval-agent-trailer`, `workflow-record-authority`, `trailer-paragraph`,
+ * `carries-content` — are defined in `src/core/governance-check.ts` alone; the script defines none of their predicates (AC-9).
  *
  * **The three extension checks** this repository adds (`spec-020` §4.12), with their predicates and messages:
  * - `config-version` (`bug-249`; rule `config`): with `--base`, each of the four versioned config files whose blob
@@ -98,6 +98,7 @@ const CHECKS = Object.freeze({
   'trailer-paragraph': 'governance-check:trailer-paragraph',
   'plan-retrospective': 'governance-check:plan-retrospective',
   'co-author-identity': 'governance-check:co-author-identity',
+  'carries-content': 'governance-check:carries-content',
 });
 
 /** This repository's own checks (`spec-020` §4.12): the verb does not report them. */

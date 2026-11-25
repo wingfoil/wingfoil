@@ -336,7 +336,7 @@ limits:
   verify`, `spec-020` §6) for the checks WingFoil ships, and adds this repository's three: `config-version`,
   `plan-retrospective` and `co-author-identity` (`spec-020` §4.12). The shipped checks are §4's subject and
   bracket, `body`, `authority`, `state`, `verb-edge`, `status-outside-wf`, `supersedes-pair`,
-  `approval-agent-trailer`, `workflow-record-authority` and `trailer-paragraph`. Together they
+  `approval-agent-trailer`, `workflow-record-authority`, `trailer-paragraph` and `carries-content`. Together they
   check §4's `wf()` subjects and brackets (not its code-commit subjects), the `Reason:`/`Approver:`
   shape (`dl-067`), approval authority (§5, `dl-094`), state legality and the verb each transition
   uses, status changes outside a `wf()` operation (`dl-139`), an approve whose `supersedes:` target is

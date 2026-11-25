@@ -7,8 +7,8 @@
 #       this checkout (spec-020 §6.3) — for the shipped checks over the range: the subject, bracket, body,
 #       authority and state rules, verb ↔ edge pairing (bug-192), status changes outside a wf() operation
 #       (dl-139), a supersedes: pair left half-done (bug-218), agent trailers on an approval commit (spec-018 §4),
-#       an Approver: line on a workflow: finalize, adopt or rekey record (bug-444) and a WingFoil-* trailer outside
-#       the final paragraph (bug-391); it then adds this repository's three checks — config versions over the range
+#       an Approver: line on a workflow: finalize, adopt or rekey record (bug-444), a WingFoil-* trailer outside
+#       the final paragraph (bug-391) and a submit's Carries content: line against what it carries (bug-287); it then adds this repository's three checks — config versions over the range
 #       (bug-249), a finalized plan's retrospective entry (bug-320) and the co-author identity (bug-475). Under the
 #       code build a branch that weakens a check passes its own run, the accepted weakness spec-020 §6.3 records;
 #       branch protection on main and the review of the change stand against it. Exit 1 on a finding after a

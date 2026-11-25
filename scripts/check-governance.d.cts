@@ -10,7 +10,7 @@ export type GovernanceRule = 'subject' | 'bracket' | 'body' | 'authority' | 'sta
  * `config-version`, `plan-retrospective` and `co-author-identity` (the script's own, `spec-020` §4.12) are
  * `wingfoil verify`'s, which the script runs and re-gates (`spec-020` §6.1, task-366).
  */
-export type GovernanceCheck = 'verb-edge' | 'status-outside-wf' | 'supersedes-pair' | 'config-version' | 'approval-agent-trailer' | 'workflow-record-authority' | 'trailer-paragraph' | 'plan-retrospective' | 'co-author-identity';
+export type GovernanceCheck = 'verb-edge' | 'status-outside-wf' | 'supersedes-pair' | 'config-version' | 'approval-agent-trailer' | 'workflow-record-authority' | 'trailer-paragraph' | 'plan-retrospective' | 'co-author-identity' | 'carries-content';
 
 /**
  * Each later check's marker: the string whose first appearance in `scripts/check-governance.cjs`, on
