@@ -898,6 +898,87 @@ value, count or message changed (`git diff a776522e2 ac3f6531a -- test/` touches
   `test/memory/carries-content*`), the writer-output assertions (`test/memory/submit-commit-body`,
   `test/core/memory-submit-content`, `test/core/workflow-start-end`) and helper comments.
 
+### green after take-main (developer, 2026-11-25)
+
+**Base.** The interim green stopped before submit at `fa3a1ca0c`, waiting for `task-378` (as ruled). PATH guard:
+`command -v wingfoil` → the task's PATH shim; `node --version` → `v22.21.0`. `task-378`'s notes on `main` read
+whole ("What `task-366` (W1-07) may rely on", its fix rounds after review and re-review) and `task-374`'s notes for
+`src/core/index.ts` (dl-015).
+
+**Take-main** — `f077b1fb8`, `git merge --no-ff --no-commit main` at `4d335fda9`. It had three conflicts and nothing else:
+- `spec-020`: git merged every section hunk of each side; the one conflict, the tail Revision paragraphs, keeps both,
+  `task-378`'s first, then `task-366`'s, unchanged. The merged file differs from this branch by exactly `task-378`'s 8
+  hunks and from `main` by exactly this branch's 8 (`git diff <side> -- <spec-020> | grep '^@@'`).
+- `src/core/index.ts`: the `governance-check` export list keeps `trailerKeysOutsideFinalParagraph` (this task) and
+  `unverifiedFindings` (`task-378`), in alphabetical order.
+- `test/core/governance-check.test.ts`: both sides' blocks kept, `task-378`'s AC 5 describe, then this task's AC 8 comment
+  above the `task-365` console describe; no assertion edited.
+Supervision checked the union of the merge. A later `main` (`d030fc658`, the merge of `design/dl-memory-verbs-integration`)
+adds only `dl-242` and its ingest plan (`git diff --name-only HEAD...main` → those two files); by the orchestrator's note it
+is not taken here: this task's close merges it.
+
+**The marker (D13)** — `a776522e2` `feat(governance): task-366 — the carries-content marker in CHECKS, …`: `CHECKS` gains
+`'carries-content': 'governance-check:carries-content'` (appended last, so the other introductions keep their order), the
+`GovernanceCheck` union of `scripts/check-governance.d.cts` gains `'carries-content'`. Its introduction is this commit
+(`node scripts/check-governance.cjs --base origin/main`, line 2 → `carries-content a776522e2f0784693555d823da55b94ed314cee0`),
+and the script exits `0` on this repository again (at `f077b1fb8` it exited `2`, T-32, by design).
+Same class (`grep -n` over `scripts/check-governance.cjs`, `scripts/*.d.cts` and the tests for the check list): the
+script's header list, `git-conventions` §9's list of shipped checks (the directive is already 3.0 on this branch) and
+`governance.yml`'s header list now name it; `test/cli/check-governance-enforcement.test.ts`'s D13 case derives its markers
+from `GOVERNANCE_CHECKS`, so it passes with twelve and needs no edit; `scripts/check-phase-report.cjs` lists the report
+checks, not the governance checks. No new test: the D13 case and `check-governance-extension`'s real-build reports prove it.
+
+**A stale design bullet.** `task-378`'s independent re-review found that this design's statement "the script's own body
+check calls `reasonRefusalMessage`" is stale since this task's green: the script defines no body predicate any more
+(`grep -c reasonRefusalMessage scripts/check-governance.cjs` → `0`). The effect holds through the verb's `body` check,
+which the script runs and re-gates.
+
+**The stop at the full suite, the ruling and the qa's fixtures.** The first full suite at `a776522e2` exited `1`: `2 failed,
+760 passed` suites, `3 failed, 13983 passed` tests — `test/release-health/measure.test.ts:435` (P01 gained the finding `the
+Carries content: line names 'the body.' …`) and `test/cli/check-governance-plan-retrospective.test.ts:110` and `:121` (a gated
+`carries-content` finding on the fixture's plan submit). The verb's twelfth check found the two fixtures' hand `Carries
+content:` lines malformed, and with no marker in a fixture's history the check's introduction falls back to the fixture's
+script introduction, so the findings were gated, as §6.1 step 3 specifies. Neither file was a red file, so I stopped
+before any test edit. The approver ruled (2026-11-25) that the qa fixes the fixtures, keeping each test's intent and
+expectations; the qa did, in `ac3f6531a` (`measure.test.ts`: the submit fills the body, so `Carries content: the body` is
+true; `check-governance-plan-retrospective.test.ts`: the plan submit writes `Carries content: the body` only when an entry
+is written; no assertion changed) and `44d08a56e` (its notes section). Both are T4 files from then on.
+**Closing-ingest candidate** (the approver files it at the wave's closing ingest; not edited here):
+`test/release-health/p02-plan-retrospective.test.ts:62`, whose fixture submit declares `frontmatter field 'release', the
+body` the same way.
+
+**Gates** (this worktree at `44d08a56e`, the three pending bug Retrospectives uncommitted, each through `waitslot.sh`,
+`--maxWorkers=2`):
+- `npm run build` → exit `0`; `node dist/cli.js --version` → `0.3.2 (44d08a56e9b07076a7b3e43ab1a4fc98df2cd139)`;
+- `npm test` → exit `0`, `Test Suites: 762 passed, 762 total`, `Tests: 13986 passed, 13986 total` (2336 s; no `bug-534`
+  failure);
+- `npm run test:coverage` → exit `0`, `All files | 99.09 | 97.08 | 98.79 | 99.54` (statements, branches, functions, lines),
+  the same 762 suites and 13986 tests;
+- `npm run lint`, `npm run docs:api`, `npm run typecheck` → each exit `0`;
+- `npm run -s check:governance -- --base origin/main` → exit `0`, `gated: 0 findings`, `history: 0 findings`, `state not
+  checked: 0 entries (…)`.
+
+**Coverage against the merge base** `2fbc5afab` (supervision's baseline; `sha256sum -c coverage-summary.json.sha256` → `OK`),
+covered/total (uncovered): lines 11518/11571 (53) → 11711/11764 (53); statements 13877/14007 (130) → 14118/14247 (129);
+functions 2735/2769 (34) → 2792/2826 (34); branches 8768/9037 (269) → 8944/9213 (269). Every source file changed since the
+merge base, this task's and those that came with `main`, compared by path from `src/`: `src/core/governance-check.ts`
+528/528 (0) · 679/680 (1) · 113/113 (0) · 552/555 (3) → 630/630 (0) · 809/809 (0) · 134/134 (0) · 660/663 (3);
+`src/core/index.ts` 743/746 (3) · 926/935 (9) · 221/239 (18) · 431/442 (11) → 754/757 (3) · 938/947 (9) · 225/243 (18) ·
+437/448 (11); `src/cli/registrar.ts`, `src/core/registry.ts`, `src/core/require-reason.ts`, `src/core/workflow-list-show.ts`,
+`src/core/workflow-status.ts`, `src/memory/audit.ts`, `src/memory/commit-message.ts`, `src/memory/submit.ts` and
+`src/workflow/deduce.ts` each keep their uncovered counts in all four columns (`src/memory/index.ts` is a barrel, in
+neither summary). Uncovered grows nowhere. `scripts/`: the marker adds no branch; it is reached by
+`check-governance-extension`'s real-build cases (the verb's report lists `carries-content`, which the script must gate) and
+`check-governance-enforcement`'s D13 case; the other script branches are those listed under refactor.
+
+**T-30.** Before: the interim run `parity-after.json` at `0753125cb` (the interim head but its notes commit), sha256
+`8ebb119f03ec98026af0fdbe9f01c0631e2562c353bc40cc8bbb2fe541da9a3f`. After: `node scripts/check-governance.cjs --base
+origin/main --json` at `44d08a56e` → exit `0`. The verdict is equal: 0 findings, 0 gated after §6.1 step 3, 0
+`stateUnchecked`, the same `base` (`fb5b73e01`) and `introducedAt` (`fcd435695`). The differences, all expected: `head`;
+`checkIntroductions` gains `carries-content: a776522e2` (the other nine unchanged); `checked`, `otherCommits`,
+`gatedCommits` 27/30/27 → 68/81/68, the commits the take-main brought into the range plus this resume's. Against the run at
+the marker commit `a776522e2`, the only differences are `head` and `otherCommits` 79 → 81 (the qa's two commits).
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
