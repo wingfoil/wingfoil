@@ -908,6 +908,40 @@ and `8a490d630` only, the qa's two send-backs.
 - The three bugs' `--reason`s are unchanged. None of their Retrospective sentences became false: the T-41 figures above
   still name the same two commits.
 
+### fix round after re-review (developer, 2026-11-25)
+
+**Scope.** The narrow re-review of `9eb2d9e8d` returned approve with fixes: two should-fix text findings, fixed in this
+round by the approver's ruling (2026-11-25). No code or test changes. PATH guard: `command -v wingfoil` → the task's
+PATH shim; `node --version` → `v22.21.0`; `node dist/cli.js --version` → `0.3.2 (9eb2d9e8d9765ad5654f2d6940dfe212e08e115d)`.
+`git rev-list --count HEAD..main` → `0`.
+
+**Finding 1 — a count stated against a moving `HEAD`.** The first bullet of `bug-287`'s pending `### Retrospective` said
+"no other of the 1483 submits reachable from `HEAD`". That is false at this head:
+- `git log --no-merges -E --grep='^wf\([a-z-]+\): submit ' --format=%h HEAD | wc -l` → `1485`;
+- the same command at `1cf54ff85` → `1483`.
+
+The bullet now reads "no other of the 1483 submits reachable from `HEAD` at `1cf54ff85`", as `spec-020` §4.14 does. The
+line is otherwise unchanged, and the file stays uncommitted. `grep -n "reachable from"` over the four pending files finds
+no other count against a bare `HEAD`:
+- `spec-020` §4.14 already names `1cf54ff85`;
+- the other hits define the range, the warning or T-41, or state that no recorded `Reason:` on any ref is a placeholder,
+  which is still true (T-41's scan at `9eb2d9e8d`: `0` placeholders).
+
+**Finding 2 — the `spec-020` reason left out two hunks.** `git diff -- <spec-020>` holds two hunks the earlier proposed
+reason did not name: §4.14's opening sentence ("… or has a line outside its `Reason:` block starting `Carries content:`
+…") and T-39's row ("… an `approve` with a `Carries content:` line outside its `Reason:` block"). The reason below names
+both and supersedes the one in "fix round after review".
+
+**Pending amendments (approver)** — each reason was checked with `node -e` calling the built `reasonRefusalMessage(<reason>,
+{ approval: true })` from `dist/memory/index.js` at `9eb2d9e8d`. Each printed `null`.
+- `spec-020-the-governance-check-verb-the-authority-and-state-rules-over-a-commit-range` — `--reason "State in section 4.13 that the memory history mark judges the element's own document only, so a multi-document submit whose Carries content line describes another document's content can be marked where wingfoil verify reports nothing, and in section 4.14 read the declaration only outside the Reason: block, in its opening sentence, in the closing sentence after its table, which also reports by row 3 a key not followed by a single space and judges rows 5 and 6 only when a named document was compared, and in the fifth row's ancestry, state in T-39's row that its approve carries the line outside the Reason: block, and extend task-378's Revision paragraph, as the approver ruled at task-378's green and on its review."`
+- `bug-287-nothing-reads-or-checks-a-submit-commit-s-carries-content-line-against-the-diff-the-commit-carries` —
+  `--reason "Add the Retrospective subsection task-378 owes before the bug closes: the fix, the two findings T-41 measured, and a proposal for a writer added without its reader."` (unchanged; still true after finding 1)
+- `bug-496-memory-history-reports-a-hand-committed-status-change-with-a-cli-shaped-subject-as-a-genuine-approval-with-no-mark-that-nothing-verified-it`
+  — `--reason "Add the Retrospective subsection task-378 owes before the bug closes: the unverified mark of memory history and memory search, and what its cost taught the design."` (unchanged)
+- `bug-498-memory-approve-accepts-a-reason-made-only-of-a-placeholder-such-as-the-reply-and-records-it-permanently` —
+  `--reason "Add the Retrospective subsection task-378 owes before the bug closes: the placeholder refusal, judged by shape, and the scan that found no recorded placeholder."` (unchanged)
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
