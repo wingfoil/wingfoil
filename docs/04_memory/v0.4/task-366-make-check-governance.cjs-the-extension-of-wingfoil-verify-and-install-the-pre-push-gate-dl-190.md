@@ -846,6 +846,58 @@ syncs `[in-progress → in-review]` follow at submit, after the resume:
 - `bug-438-check-governance-s-console-summary-says-on-n-commits-for-the-commits-with-findings-so-a-clean-gate-log-reads-0-findings-on-0-commits` — `--reason "Record the retrospective of the fix: task-366 makes the summary lines of the script and of wingfoil verify name what they count, as spec-020 section 7 now pins."`
 - `bug-448-git-conventions-rule-6-runs-check-governance-in-the-merge-forward-but-says-nothing-of-findings-the-approver-already-accepted-so-the-merge-forward-of-v0.3.2-reports-the-two-q-10-assign-subjects-with-no-rule-for-carrying-them` — `--reason "Record the retrospective of the fix: task-366 adds to git-conventions rule 6 how a finding the approver accepted is carried at the merge forward."`
 
+### red send-back during green (qa, 2026-11-25)
+
+A narrow qa send-back during green, on head `a776522e2`: the red (`861b765e4`) and its tests stand, the task stays
+`in-progress`. Test commit: `ac3f6531a` (`test(governance): task-366 — qa send-back during green: well-formed
+Carries content lines in two fixtures the twelfth check now reads`), the two fixture files only.
+
+**Why.** With the governance script running the verb, task-378's `carries-content` check now reads the fixtures of
+two existing suites, and found two `Carries content:` lines malformed or false under `spec-008` §2 and `spec-020`
+§4.14 (3 failing tests at `a776522e2`, per the developer's full-suite run). The approver ruled (2026-11-25): fix the
+fixture, keep each test's intent and expectations; on the first stop, option C for the measure fixture.
+
+**What changed.**
+- `test/release-health/measure.test.ts`, `historyFixture()`. Before, the `draft` and `pending` documents were the
+  same `taskDoc('task-001-alpha', status, TASK_EXTRA, TASK_BODY)`, so the submit moved only `status:`, and its line
+  `Carries content: the body.` named an item spec-008 §2 does not declare (`'the body.'`, P01 +1). The first two
+  candidates both moved an expectation and were stopped on: no line gave G02 `with_body` 9 / `value` 45 (expected 10 /
+  50); `Carries content: the body` gave one more P01 item ("declares the body, but the commit carries nothing beyond
+  its state move"). Now (option C): a new constant `TASK_FILLED` (`TASK_BODY` plus the sentence "The alpha module,
+  filled at submit.", no new reference) is the body of every document from `pending` on, the `draft` document keeps
+  `TASK_BODY`. The submit therefore really changes the body and nothing else besides `status:`, so its line
+  `Carries content: the body` (no trailing period) is true; commit 6 stays "body + signed".
+- `test/cli/check-governance-plan-retrospective.test.ts`, `runPlan()`. `planDocument(id, 'draft', null)` →
+  `planDocument(id, 'active', entry)` sets the same field map (with `release: "v9.9"`) in both, so the declared
+  `frontmatter field 'release'` was false in every test; the body changes only when `entry !== null`. Now the submit
+  writes `Carries content: the body` when `entry !== null` and no line when `entry === null` (a pure transition).
+
+**Classification.** Both changes are characterization: the suites pass again with the same assertions; no expected
+value, count or message changed (`git diff a776522e2 ac3f6531a -- test/` touches only fixture lines and comments).
+
+**Runs** (all in the code-frame form, with the task's PATH shim, node v22.21.0):
+- `npx jest test/release-health/measure.test.ts test/cli/check-governance-plan-retrospective.test.ts --maxWorkers=2` →
+  `Tests: 0 failed, 77 passed, 77 total`.
+- `npx jest test/lint --maxWorkers=2` → `Tests: 0 failed, 165 passed, 165 total`.
+- `npx jest test/validation/secret-scan.test.ts --maxWorkers=2` → `Tests: 0 failed, 85 passed, 85 total`.
+- `npx tsc --noEmit -p tsconfig.json` → exit 0, no error.
+- The invisible-character grep on both files → no hit (exit 1).
+
+**Same class** (`grep -rn "Carries content:" test`):
+- Candidate finding, not edited (the approver files it at the wave's closing ingest):
+  `test/release-health/p02-plan-retrospective.test.ts:62` declares `frontmatter field 'release', the body` on a plan
+  submit whose documents (`planDocument('draft')` → `planDocument('active')`) differ only in `status:`; the line is
+  false. Its suite passes today (`npx jest test/release-health/p02-plan-retrospective.test.ts --maxWorkers=2`, run with
+  two other suites: `Tests: 0 failed, 84 passed, 84 total`), its assertions filtering by check.
+- True to their commits: `test/cli/check-governance-co-author-identity.test.ts:300` and `:321` (`f.task` writes a new
+  `Revision n.` body on each commit).
+- Not judged by the check: `test/cli/check-phase-report.test.ts:53` and `:61`, messages copied verbatim from a real
+  commit and committed over `docs/notes.md` only, so no named document is compared.
+- Not candidates: the suites that test malformed lines on purpose or task-378's own (`test/core/carries-content-check`,
+  `test/core/history-reader-commits`, `test/cli/carries-content-reason-block.integration`, `test/cli/verify.integration`,
+  `test/memory/carries-content*`), the writer-output assertions (`test/memory/submit-commit-body`,
+  `test/core/memory-submit-content`, `test/core/workflow-start-end`) and helper comments.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
