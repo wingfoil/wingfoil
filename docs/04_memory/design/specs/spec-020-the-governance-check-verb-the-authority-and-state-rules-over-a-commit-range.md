@@ -496,7 +496,11 @@ with `commits` (one `git log --no-walk=unsorted` in place of a range) and `paths
 and `fileChanges` report, within each commit, to the element's own document — its path at the commit and at the
 first parent, as the history's walk records them. A check therefore judges the commit's subject, body, trailers and
 authority and the element's transition, and never another document the commit touches: a finding the verb reports
-on another document of the same commit does not mark the element's entry. Renames are followed across the listed
+on another document of the same commit does not mark the element's entry. Because the mark judges the element's own
+document only, a submit naming several documents whose `Carries content:` line describes another document's content
+can be marked (§4.14's sixth row, the element's items against the whole declaration) where `wingfoil verify` reports
+nothing on that commit; the approver accepted that limit (`task-378`), and this repository's history holds no such
+submit. Renames are followed across the listed
 commits, which hold every rename of the element because the walk follows it. The walk `memory history` has already
 read answers `transitions` for the element's path at `HEAD` when none of its revisions is unreadable (`walks`), and
 the consistency walk is computed from the frontmatter walk of the same path (`transitionConsistencyFindings`,
@@ -511,7 +515,7 @@ is the commit on which `wingfoil verify` with neither option reports a finding a
 #### 4.14 `carries-content` (category `body`) — `bug-287`, from `task-378`
 
 Judges every non-merge Memory `wf()` commit of the range whose verb parsed and that is a `submit` or has a line
-starting `Carries content:` (any letter case). The declaration is `spec-008` §2's: one body line
+outside its `Reason:` block starting `Carries content:` (any letter case). The declaration is `spec-008` §2's: one body line
 `Carries content: <item>, <item>`, written by `memory submit` only, each item one of `frontmatter field '<name>'`,
 `the frontmatter text (comments or formatting)`, `the body`, `the file content` and `the line endings`, an item's
 control characters, line breaks and commas written as `\u{XXXX}` and a backslash as `\\` (`parseCarriesContent`,
@@ -536,13 +540,22 @@ document absent at the first parent or at the commit is not compared; the `state
 | a `submit` with no line whose computed items are not empty, and an ancestor of the commit carries a `Carries content:` line | `'submit' carries <items, ", "-joined> but declares no Carries content: line (spec-008 §2, bug-287)` |
 | a line of well-formed items that, unescaped, differ from the computed ones, order included | `the Carries content: line declares <declared, ", "-joined>, but the commit carries <computed, ", "-joined, or "nothing beyond its state move"> (spec-008 §2, bug-287)` |
 
+In rows 2 to 6, a line is a body line outside the `Reason:` block starting `Carries content:` in any letter case, read
+as the declaration; rows 2 to 6 judge a `submit` only, so on any other verb a line is reported by row 1 alone. A
+miscased key, or one not followed by a single space, is reported by row 3, and its items are still judged by rows 4
+and 6, so row 5 does not fire on it. Row 4 suppresses row 6 for the same line. Rows 5 and 6 are judged only when at
+least one named document was compared. The `Reason:` block is the one `parseReasonBlock` reads (`spec-008` §2): from
+the first line starting `Reason:` up to the commit's trailing trailer paragraph or the end of the body
+(`linesOutsideReasonBlock`, `src/memory/commit-message.ts`); a line inside it is text the reason holds, so an
+`approve` whose reason holds a `Carries content:` line declares nothing and passes, as a commit the shipped verbs write.
+
 **Why an absent line is judged only after the history has written one.** The writer learned the line in `task-209`
 (`7c155fe21`); every submit before it, tool-written or by hand, lacks it, and a submit's own `WingFoil-Version:`
 trailer cannot tell those apart: on this repository 210 of the 562 commits that carry the line name `0.2.2`, the
 version of builds that did not write it as well (`git log --grep='^Carries content: '
 --format='%(trailers:key=WingFoil-Version,valueonly)' HEAD`), and §5.2 rejects keying a rule on that trailer anyway. So
-the fifth row needs an ancestor of the commit that carries a `Carries content:` line
-(`HistoryReader.carriesLineBefore`, answered by one `git log --grep` and one `git rev-list --ancestry-path` per oldest
+the fifth row needs an ancestor of the commit that carries a line starting exactly `Carries content: ` outside its
+`Reason:` block (`HistoryReader.carriesLineBefore`, answered by one `git log --grep` and one `git rev-list --ancestry-path` per oldest
 such commit). A project whose history never wrote the line has its first tool-written submit that carries content
 start it. The other rows judge every commit: a line that is present is a declaration whatever its date. Over the 1483
 submits reachable from this repository's `HEAD` at `1cf54ff85` the predicate finds 561 lines that agree, 336 pure
@@ -841,7 +854,7 @@ in a child process with the `spec-018` §1 environment markers removed. "Gated" 
 | T-36 | `memory history` on T-9's repository and on T-1's; `memory search --verify` on both | T-9's `docs: tidy` entry carries the `status-outside-wf` finding as its mark; no T-1 entry carries a mark, and each reads as without the mark; `--verify` marks T-9's task with that commit and no T-1 element |
 | T-37 | one hand commit approving two tasks whose bracket contradicts the frontmatter of the second only; `memory history` of the first, then of the second | no mark on the first's entry; the second's entry is marked with the `mismatch` finding the verb reports |
 | T-38 | `memory submit` after a body edit; a pure `memory submit`; a hand `wf(task): submit` carrying a body edit and no line, first with no ancestor carrying the line, then after a commit that carries it | `memory history`'s `carries`: `["the body"]`, `null`; the first hand submit: no `carries-content` finding; the second: the fifth row's finding |
-| T-39 | hand submits whose line names `frontmatter fields 'x'`; declares `the body` on a pure transition; lists two items out of order; holds two lines; writes `carries content:`; and an `approve` with a `Carries content:` line | one `carries-content` finding each, the §4.14 messages |
+| T-39 | hand submits whose line names `frontmatter fields 'x'`; declares `the body` on a pure transition; lists two items out of order; holds two lines; writes `carries content:`; and an `approve` with a `Carries content:` line outside its `Reason:` block | one `carries-content` finding each, the §4.14 messages |
 | T-40 | `memory submit` of a document whose only change is a CRLF conversion the tool declares as `the line endings`, and, after it, a hand submit that converts another document without declaring it | no finding on the first; the second: the fifth row's finding naming `the line endings` |
 | T-41 | this repository at the task's merge candidate: `carries-content` on every commit reachable from `HEAD` that is a `submit` or carries a `Carries content:` line, read through `createGitHistoryReader` with `commits` (the check reads only the commit, its parent and its ancestry, so the range does not change its answer); every `Reason:` block reachable from any ref under the reason rule of `spec-008` §2; and the range parity of T-30 (`--base`) | `carries-content` findings on `7a48bc2f0` and `0aa55f0c0` only; no `Reason:` block refused; the range's findings unchanged but for the task's own commits |
 
@@ -1072,5 +1085,11 @@ blobs carry and judges an absent line only once the history has written one; §4
 `checks` list gains it. §4.13 states the mark's reader: the commits `memory history` lists, limited to the element's
 own document, the history's walk reused, every check run gated. §4.4 states that `spec-008` §2's new refusal of a
 reason that states nothing reaches the `body` row through `reasonRefusalMessage`, with no row of its own and no
-finding on this repository's history. §1's non-scope bullet points to §4.13; T-36 to T-41 and AC-14 are added. Edited
-in place without a supersede or a state change (`dl-047`), pending the approver's `memory amend`.
+finding on this repository's history. §1's non-scope bullet points to §4.13; T-36 to T-41 and AC-14 are added. At green (approver's ruling, 2026-11-24)
+§4.13 also states the limit of a mark judged on the element's own document: a multi-document submit whose
+`Carries content:` line describes another document's content can be marked where the verb reports nothing on that
+commit. On the review (approver's rulings F1 to F3, 2026-11-24) §4.14 reads the declaration only outside the `Reason:`
+block, as `parseReasonBlock` bounds it, in the check, in `memory history`'s `carries` and in the ancestry of the fifth
+row (F1); reports by the third row a key not followed by exactly one space (F2); and closes its table with the sentence
+that says which lines rows 2 to 6 judge (F3), T-39's `approve` carrying its line outside the block. Edited in place
+without a supersede or a state change (`dl-047`), pending the approver's `memory amend`.
