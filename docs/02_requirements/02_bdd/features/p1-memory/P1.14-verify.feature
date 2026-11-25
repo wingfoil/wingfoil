@@ -69,3 +69,11 @@ Feature: P1.14 (US-4-14) - wingfoil verify
     When I run "wingfoil verify --base BASE --format json"
     Then the report has no finding and "verdict" is "pass"
     And the command exits with code 0
+
+  Scenario: Error - a submit that does not declare the content it carries
+    # spec-020 §4.14 and T-38 (bug-287): judged once the history has written a Carries content: line.
+    Given a commit written by "wingfoil memory submit" that carries a "Carries content:" line
+    And a later hand commit "wf(task): submit task-2" that fills in task-2's body and has no "Carries content:" line
+    When I run "wingfoil verify --format json"
+    Then the report holds the "carries-content" finding "'submit' carries the body but declares no Carries content: line (spec-008 §2, bug-287)" on that commit
+    And the command exits with code 1

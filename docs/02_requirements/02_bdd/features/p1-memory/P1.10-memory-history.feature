@@ -49,3 +49,17 @@ Feature: P1.10 (US-5-08) - wingfoil memory history
     When I run "wingfoil memory history patch-v0.3"
     Then the command exits with code 1 and message "ambiguous reference: patch-v0.3 matches 2 elements"
     And both full ids are listed in id order and nothing is written
+
+  Scenario: Edge - an entry no check verified is marked
+    # spec-020 T-34 and §4.13 (bug-496): a hand commit by a non-member, with the subject and lines the CLI writes.
+    Given "decision-12"'s last transition was committed by hand by an identity outside the team, with the subject "wf(decision-log): approve decision-12 [in-discussion → ready]" and an "Approver:" line naming nobody in the team
+    When I run "wingfoil memory history decision-12 --format json"
+    Then that entry carries "unverified", holding the two "authority" findings "wingfoil verify" reports on its commit
+    And no other entry carries "unverified", and each reads as it did before
+
+  Scenario: Each entry reports the content its submit declared
+    # spec-008 §2 and spec-020 §4.14 (bug-287): the Carries content: line read back.
+    Given "decision-12" was submitted with its body filled in
+    When I run "wingfoil memory history decision-12 --format json"
+    Then the submit entry's "carries" is ["the body"]
+    And every other entry's "carries" is null

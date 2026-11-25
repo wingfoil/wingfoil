@@ -12,6 +12,9 @@
  *
  * Deterministic (REQ-SYS-07): results follow the declared field order, never object-key order.
  */
+import { splitFrontmatter } from '../storage';
+import { parseYaml } from '../validation';
+
 import { describeDocumentChanges, removeFrontmatterField, setFrontmatterField } from './frontmatter-edit';
 
 /** The frontmatter key `memory.reject` sets and `memory.submit` removes (spec-010). */
@@ -166,3 +169,70 @@ export function withLineEndingsOf(text: string, like: string): string {
  * line-ending-normalized text.
  */
 export const LINE_ENDINGS_ITEM = 'the line endings';
+
+/** The `frontmatter field '<name>'` item, the one form of `spec-008` §2 that carries a name. */
+const FIELD_ITEM_RE = /^frontmatter field '([\s\S]*)'$/u;
+
+/** The four fixed items of `spec-008` §2, in the order a declaration lists them after the fields. */
+const FIXED_CARRIES_ITEMS: readonly string[] = ['the frontmatter text (comments or formatting)', 'the body', 'the file content', LINE_ENDINGS_ITEM];
+
+/**
+ * Whether `item` is one of the five forms `spec-008` §2 declares for a `Carries content:` line (`task-378`,
+ * `bug-287`): `frontmatter field '<name>'`, `the frontmatter text (comments or formatting)`, `the body`,
+ * `the file content` or `the line endings`, spelled exactly. `item` is the unescaped text. Pure.
+ */
+export function isCarriesItem(item: string): boolean {
+  return FIELD_ITEM_RE.test(item) || FIXED_CARRIES_ITEMS.includes(item);
+}
+
+/**
+ * `items` in the order a declaration lists them (`spec-020` §4.14): the `frontmatter field '<name>'` items sorted by
+ * name, as `describeDocumentChanges` sorts them, then the frontmatter text, the body, the file content and the line
+ * endings; a duplicate is dropped, and an item of no declared form comes last, in its given order. The union of a
+ * submit naming several documents. Pure and deterministic (REQ-SYS-07).
+ */
+export function orderCarriesItems(items: readonly string[]): string[] {
+  const unique = [...new Set(items)];
+  const fields = unique
+    .map((item) => FIELD_ITEM_RE.exec(item)?.[1])
+    .filter((name): name is string => name !== undefined)
+    .sort()
+    .map((name) => `frontmatter field '${name}'`);
+  const fixed = FIXED_CARRIES_ITEMS.filter((item) => unique.includes(item));
+  const others = unique.filter((item) => !isCarriesItem(item));
+  return [...fields, ...fixed, ...others];
+}
+
+/** The `status` the frontmatter of `content` records, or `null` when it records none or does not parse. */
+function recordedStatus(content: string): string | null {
+  const { frontmatter } = splitFrontmatter(content);
+  if (frontmatter === null) return null;
+  let parsed: unknown;
+  try {
+    parsed = parseYaml(frontmatter, 'frontmatter');
+  } catch {
+    // `parseYaml` throws only `ValidationError.yamlParse`: a frontmatter that does not parse records no target.
+    return null;
+  }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+  const status = (parsed as Record<string, unknown>).status;
+  return typeof status === 'string' ? status : null;
+}
+
+/**
+ * What a committed submit carries besides its state move, decided from the two stored blobs — `parent`, the document
+ * at the first parent, and `commit`, the document the submit stored (`spec-020` §4.14, `task-378`, `bug-287`): the
+ * items `memory submit` declares for that edit. The target is the commit blob's `status`;
+ * {@link describeSubmitContent} gives the content items, then {@link LINE_ENDINGS_ITEM} follows when the stored line
+ * endings are not those the submit's own edit of `parent` stores — compared with {@link renderSubmitDocument} of
+ * `parent` when nothing else changed, else with `commit` written in `parent`'s line endings
+ * ({@link withLineEndingsOf}), the verb's rule (`spec-008` §2). `null` when `commit` records no `status` or its
+ * frontmatter does not parse: there is no target to render against. Pure (REQ-SYS-07).
+ */
+export function describeCommittedSubmitContent(parent: string, commit: string): string[] | null {
+  const target = recordedStatus(commit);
+  if (target === null) return null;
+  const described = describeSubmitContent(parent, commit, target);
+  const baseline = described.length === 0 ? renderSubmitDocument(parent, target) : withLineEndingsOf(commit, parent);
+  return commit === baseline ? described : [...described, LINE_ENDINGS_ITEM];
+}

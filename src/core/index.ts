@@ -133,7 +133,15 @@ import { agentListFn, renderAgentListConsole } from './agent-list';
 import { agentShowFn, renderAgentShowConsole } from './agent-show';
 import { UsageError } from './usage-error';
 import { buildCapabilitiesDocument, renderCapabilitiesConsole, type CapabilitiesDocument } from './capabilities';
-import { governanceCheck, renderVerifyConsole, VERIFY_WHOLE_HISTORY, verifyFindingsMessage, type GovernanceReport } from './governance-check';
+import {
+  type CheckFinding,
+  governanceCheck,
+  renderVerifyConsole,
+  unverifiedFindings,
+  VERIFY_WHOLE_HISTORY,
+  verifyFindingsMessage,
+  type GovernanceReport,
+} from './governance-check';
 import { resolveRevision, RevisionError } from './revision';
 import type { CoreFlag, CoreFn, CoreModule, CoreOption } from './registry';
 import { missingOperandReason } from './registry';
@@ -227,6 +235,7 @@ export {
   checkAuthority,
   checkBody,
   checkBracket,
+  checkCarriesContent,
   checkState,
   checkStatusOutsideWf,
   checkSubject,
@@ -238,6 +247,7 @@ export {
   GOVERNANCE_CHECKS,
   governanceCheck,
   renderVerifyConsole,
+  unverifiedFindings,
   VERIFY_WHOLE_HISTORY,
   verifyFindingsMessage,
 } from './governance-check';
@@ -259,6 +269,8 @@ export type {
   HistoryCommit,
   HistoryReader,
   StateUncheckedEntry,
+  UnverifiedElement,
+  UnverifiedEntry,
 } from './governance-check';
 export { renderStatusConsole, statusWorkflow, workflowStatusAtHead } from './workflow-status';
 export type { PendingApproval, StatusConsoleCall, StatusEntry, StatusResult, UngatedCount, UngatedElement } from './workflow-status';
@@ -1164,6 +1176,8 @@ export interface MemorySearchParams {
   readonly root: string;
   readonly positional?: string;
   readonly options?: Readonly<Record<string, string>>;
+  /** The parsed `--verify` flag (`task-378`, `spec-020` §4.13): mark each match whose history the checks flag. */
+  readonly verify?: boolean;
 }
 
 /**
@@ -1180,6 +1194,11 @@ export interface MemorySearchResultItem {
   readonly type?: string;
   readonly status?: string;
   readonly tags: readonly string[];
+  /**
+   * Present only under `--verify`, on a match whose history holds a commit the governance checks flag (`task-378`,
+   * `bug-496`, `spec-020` §4.13): those commits' shas, oldest first — the entries `memory history` marks.
+   */
+  readonly unverified?: readonly string[];
 }
 
 /**
@@ -1238,7 +1257,7 @@ const NO_MEMORY_SEARCH_MATCHES_MESSAGE = 'no documents matched the query';
  * exclusion.
  */
 const memorySearchFn: CoreFn<unknown, MemorySearchResult> = async (params) => {
-  const { root, positional, options } = params as MemorySearchParams;
+  const { root, positional, options, verify } = params as MemorySearchParams;
 
   if (positional !== undefined) validateSearchQuery(positional);
   const query = positional ?? '';
@@ -1260,6 +1279,18 @@ const memorySearchFn: CoreFn<unknown, MemorySearchResult> = async (params) => {
   const matches: MemorySearchResultItem[] = scanned
     .filter((match) => status === undefined || match.status === status)
     .map(({ path, id, title, type: docType, status: docStatus, tags }) => ({ path, id, title, type: docType, status: docStatus, tags }));
+
+  // task-378 (`bug-496`, `spec-020` §4.13): under `--verify`, each match's history is walked and marked as `memory
+  // history` marks it; a match whose history the checks flag carries the flagged shas, oldest first. A git read that
+  // fails throws its `StorageError`, exit `1`, as the scan's own reads do.
+  if (verify === true) {
+    for (const [index, match] of matches.entries()) {
+      const walk = reconstructMemoryTransitions(root, match.path);
+      const marks = unverifiedFindings(root, { path: match.path, entries: walk, walk });
+      const flagged = [...marks.keys()];
+      if (flagged.length > 0) matches[index] = { ...match, unverified: flagged };
+    }
+  }
 
   // task-171 (`bug-031`): a file the scan could not read is a warning, never the search's failure.
   const warnings = diagnostics.map(formatDiagnostic);
@@ -1321,6 +1352,12 @@ export interface MemoryHistoryEntryView {
   readonly approver: string | null;
   /** The commit's `Reason:` line, or `null` when it carries none. */
   readonly reason: string | null;
+  /**
+   * The items the commit's `Carries content:` line declares, unescaped (`spec-008` §2, `task-378`, `bug-287`): what a
+   * submit brought besides its state move, as recorded — `null` on a pure transition, on every other verb and on a
+   * submit written before the line existed. Always present, like `approver` and `reason`.
+   */
+  readonly carries: readonly string[] | null;
   readonly subject: string;
   /**
    * The WingFoil build that wrote the commit, `<semver> (<sha>)`, from its `WingFoil-Version:` trailer
@@ -1329,6 +1366,12 @@ export interface MemoryHistoryEntryView {
    * 2026-10-05).
    */
   readonly wingfoil: string | null;
+  /**
+   * Present only when the governance checks of `wingfoil verify` flag this commit for the element (`task-378`,
+   * `bug-496`, `spec-020` §4.13): each finding's category, check and message, in §3's order. An entry with no such key
+   * is one every check verified.
+   */
+  readonly unverified?: readonly { readonly rule: string; readonly check: string; readonly message: string }[];
   /**
    * Present only when this commit's revision cannot be read (task-171, `bug-188`): why, as the first
    * line of the parse error, or `E_INVALID_FORMAT: <message>` when the revision is written in a newer
@@ -1422,8 +1465,12 @@ const memoryHistoryFn: CoreFn<unknown, MemoryHistoryResult> = async (params) => 
   }
 
   let transitions: ReturnType<typeof reconstructMemoryTransitions>;
+  // task-378 (`bug-496`, `spec-020` §4.13): the checks of `wingfoil verify` over the commits the walk lists, the walk
+  // reused — read in the same guard, so a git read that fails is `IO` either way.
+  let marks: ReadonlyMap<string, readonly CheckFinding[]>;
   try {
     transitions = reconstructMemoryTransitions(root, found.path);
+    marks = unverifiedFindings(root, { path: found.path, entries: transitions, walk: transitions });
   } catch (error) {
     // A git read that failed is `IO`, never an empty trail (task-142, `bug-072`): the walk throws
     // rather than answering "no history" for a history it could not read. Since task-171 the tolerant
@@ -1442,8 +1489,10 @@ const memoryHistoryFn: CoreFn<unknown, MemoryHistoryResult> = async (params) => 
       ? `${transition.approval.approverName} <${transition.approval.approverEmail}> (${transition.approval.approverRole})`
       : null,
     reason: transition.reason,
+    carries: transition.carries,
     subject: transition.subject,
     wingfoil: transition.wingfoil,
+    ...(marks.has(transition.sha) ? { unverified: (marks.get(transition.sha) as readonly CheckFinding[]).map(({ rule, check, message }) => ({ rule, check, message })) } : {}),
     ...(transition.unreadable !== undefined ? { unreadable: transition.unreadable } : {}),
   }));
 
@@ -3056,6 +3105,7 @@ export const CORE_MODULES: readonly CoreModule[] = [
           { name: 'status', valueName: 'status', description: 'keep documents in this state' },
           { name: 'type', valueName: 'type', description: 'keep documents of this Memory type' },
         ],
+        flags: [{ name: 'verify', description: 'mark each match whose history holds a commit the governance checks flag (spec-020)' }],
         example: 'wingfoil memory search --status approved --type task',
         fn: memorySearchFn,
       },

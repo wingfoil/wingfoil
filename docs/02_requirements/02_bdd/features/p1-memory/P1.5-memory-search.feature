@@ -40,3 +40,11 @@ Feature: P1.5 (US-1-08) - wingfoil memory search
     Then the command exits with code 0
     And a warning "W_MEMORY_UNREADABLE" names "bugs/bug-002-broken.md"
     And no warning names "design/adrs/adr-001-broken.md", a path the "bug" type's path pattern cannot produce
+
+  Scenario: Mark the matches whose history no check verified
+    # spec-008 §12 (bug-496): --verify runs spec-020's checks over each match's history.
+    Given "task-1"'s status was changed by a hand commit "docs: tidy" that is no wf() operation
+    And "task-2" was moved only by the wingfoil verbs
+    When I run "wingfoil memory search --verify --format json"
+    Then "task-1"'s match carries "unverified" holding the sha of the "docs: tidy" commit
+    And "task-2"'s match carries no "unverified"

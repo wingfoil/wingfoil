@@ -1,6 +1,6 @@
 # WingFoil — Product Vision (docs/vision)
 
-**Last indexed:** 2026-11-24
+**Last indexed:** 2026-11-25
 
 This folder holds the **product-vision specification** for WingFoil, produced through a Lean Inception workshop (see
 [`X_lean-inception-plan.md`](X_lean-inception-plan.md)). This README is a **navigation index**: it tells you which
@@ -45,7 +45,7 @@ line count (`awk 'END{print NR}'`).
 | [`06_features.md`](06_features.md)                     | 1.19 | 2026-11-21 | Approved | 554   | 68 features (by pillar + by release) and the data-model / implementation notes                                          |
 | [`07_sequencer.md`](07_sequencer.md)                   | 2.3 | 2026-11-21 | Approved | 491   | Active-day budgets, actuals and calendar forecast; the original 5-week plan; per-release Definition of Done, risks      |
 | [`08_mvp-canvas.md`](08_mvp-canvas.md)                 | 1.14 | 2026-11-19 | Approved | 222   | MVP canvas: problem/solution/value, target users, metrics, success criteria                                             |
-| [`X_cli-cmds.md`](X_cli-cmds.md)                       | 2.9 | 2026-11-24 | Approved | 555   | CLI command reference: signatures, parameters, release timeline, per-persona usage                                      |
+| [`X_cli-cmds.md`](X_cli-cmds.md)                       | 3.0 | 2026-11-25 | Approved | 560   | CLI command reference: signatures, parameters, release timeline, per-persona usage                                      |
 | [`X_lean-inception-plan.md`](X_lean-inception-plan.md) | —   | 2026-06-11 | —        | 42    | Workshop plan: sessions, key decisions, output list                                                                     |
 
 ---
@@ -182,7 +182,7 @@ line count (`awk 'END{print NR}'`).
 - Command-Line Syntax Conventions — L275–314
 - Release Timeline by Command — L315–353
 - Command Reference by Persona (Alex L356, Morgan L365, Casey L375, Jordan L384, Sam L393) — L354–402
-- Revision history — L403–555
+- Revision history — L403–560
 
 ### `X_lean-inception-plan.md`
 

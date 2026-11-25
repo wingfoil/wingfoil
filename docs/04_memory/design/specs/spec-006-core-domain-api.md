@@ -482,10 +482,10 @@ users is `spec-008-cli-grammar` §11):
 |----------|------------|
 | `HEAD`, gating (item 1) | `memoryAdd` (type registry and scaffold; its `{n}` counter reads the wider baseline `command-baseline` declares, which can only raise the id), `memorySubmit`, `memoryApprove`, `memoryReject`, `memoryDeprecate`, `memoryAmend` (the WIP-limit holder count of `memoryAdd`, `memorySubmit` and `memoryApprove` reads the decided commit plus every local and remote-tracking branch tip and its merge-base with that commit, the second baseline `command-baseline` declares, `dl-156` Q1 (a); state machine, the document their `<id>` names and its committed `status` — `findMemoryDocumentByIdAtRev` at the one sha `prepareMemoryTransition` resolves — and approver authority on the gated verbs; the working tree supplies the content `memorySubmit` and `memoryAmend` commit and is checked to be the element `HEAD` records); `dnaSet`, `dnaAdd`, `dnaUpdate`, `dnaRemove` (`dna.yaml`, read only after item 2 has refused any difference from `HEAD`); `directiveAssign` (role catalogue, directive inventory, bindings); `directiveRemove` (the directive its `<name>` names, `loadDirectiveInventoryAtHead`, the working tree only wording a refusal; and its referrer check, `roles.yaml`, `loadRolesYamlAtHead`); `workflowNext`, from the task that ships it in v0.3 |
 | `HEAD`, declared (item 6) | `workflowStatus`, `workflowList`, `workflowShow`, `workflowTree` (`minor-v0.4`), `agentList`, `agentShow`, the two v0.3 workflow Resources — each from the task that ships it in v0.3 |
-| working tree, gating nothing (item 4) | `dnaShow`, `paths`, `directivesList`, `memorySearch`, `memoryHistory` (its log is git's, its `memory.yaml` the working tree's), the shipped MCP Resources and the role Prompts |
+| working tree, gating nothing (item 4) | `dnaShow`, `paths`, `directivesList`, `memorySearch`, `memoryHistory` (its log is git's, its `memory.yaml` the working tree's; its unverified mark is item 9's), the shipped MCP Resources and the role Prompts |
 | filesystem, predicting an effect (item 5) | the confinement and symlink guards of every writing or deleting operation, and `directiveCreate`'s check that its target file does not exist |
 | none: the build only (item 8) | `capabilities` and its Resource `wingfoil://capabilities` (`spec-019` §3.2) |
-| committed history (item 9) | `verify` (`spec-020` §2.3, §4.1) |
+| committed history (item 9) | `verify` (`spec-020` §2.3, §4.1); the unverified mark of `memoryHistory` and of `memorySearch` with `--verify` (`spec-020` §4.13) |
 
 Symbols in this section read at `9642ab5f`; items 4–6 and the table at `e942e8e9`, except `directiveRemove`'s directive
 read (item 5 and the table's `HEAD`, gating row, `loadDirectiveInventoryAtHead`), read at `77749a0b2` (`task-311`).
@@ -1104,3 +1104,10 @@ same gate (`bug-485`), adds the read operation
 among the declared `HEAD` reads, naming the one other commit a closed run is read at. The production MCP server does
 not serve it (`spec-017` §9). No other row's function, module or `mutates` changes. Edited in place without a
 supersede or a state change (`dl-047`), pending the approver's `memory amend` at `task-374`'s design gate.
+
+**Revision (2026-11-24, `task-378-mark-the-memory-history-entries-no-check-verified-and-check-carries-content`) — the
+unverified mark reads committed history.** `memory history`'s mark and `memory search --verify` run `wingfoil verify`'s
+checks over the commits the history lists (`spec-020` §4.13, `bug-496`), so §6's table names them in the row "committed
+history" (item 9), and the `memoryHistory` entry of the working-tree row says its mark is item 9's. Item 9's rule and
+every other row are unchanged. Edited in place without a supersede or a state change (`dl-047`), pending the
+approver's `memory amend`.
