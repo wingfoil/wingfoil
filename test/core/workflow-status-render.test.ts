@@ -65,6 +65,7 @@ const RESULT: StatusResult = {
   ],
   pendingApprovals: [],
   ungated: [{ type: 'task', id: 'task-7', status: 'pending' }],
+  ungatedByType: [{ type: 'task', count: 1 }],
   ungatedRoutedTo: [],
   diagnostics: [{ code: 'W_X', severity: 'warning', file: 'f', path: '', message: 'm' }],
 };
@@ -87,8 +88,11 @@ describe('task-225 — renderStatusConsole on a synthetic StatusResult', () => {
     expect(text).toContain('    late: bug:bug-9 (open)\n');
   });
 
-  it("an ungated element with no approver in dna.yaml says so; no diagnostic and no count of them (task-373, dl-176 (a))", () => {
-    expect(text).toContain("human needed: approve or reject task-7 (task, pending; no open workflow carries it) — routed to no approver found for role 'approver' in dna.yaml");
+  it("an ungated element with no approver in dna.yaml says so, in the summary and under --full; no diagnostic and no count of them (task-373, dl-176 (a))", () => {
+    // task-374 (bug-341, spec-017 §7.4): the default form is one summary line; --full prints one line per element.
+    expect(text.split('\n')).toContain("ungated elements: 1 (task 1) — routed to no approver found for role 'approver' in dna.yaml; --full lists them");
+    expect(text).not.toContain('human needed: approve or reject task-7 (');
+    expect(renderStatusConsole(RESULT, { flags: { full: true } })).toContain("human needed: approve or reject task-7 (task, pending; no open workflow carries it) — routed to no approver found for role 'approver' in dna.yaml");
     // task-373: the diagnostics are stderr warnings of the operation (spec-017 §7.4), never a console line.
     expect(text).not.toContain('W_X');
     expect(text).not.toMatch(/diagnostic\(s\)/);
@@ -122,7 +126,7 @@ describe('task-225 — the status API through the src/core barrel', () => {
     const inputs = { workflows: [], memoryYaml: null, dnaYaml: DNA, bindings: null, rolesYaml: null, directiveFiles: [] };
     expect(statusWorkflow(inputs, deduction)).toEqual({
       ok: true,
-      value: { baseline: deduction.baseline, active: null, open: [], pendingApprovals: [], ungated: [], ungatedRoutedTo: [{ name: 'Morgan', email: '' }], message: 'no open workflows', diagnostics: [] },
+      value: { baseline: deduction.baseline, active: null, open: [], pendingApprovals: [], ungated: [], ungatedByType: [], ungatedRoutedTo: [{ name: 'Morgan', email: '' }], message: 'no open workflows', diagnostics: [] },
     });
   });
 

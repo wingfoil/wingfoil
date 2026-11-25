@@ -34,14 +34,14 @@ import {
   type BindingsYaml,
   type TokenBinding,
 } from '../workflow/bindings';
-import { declaresState, deduceWorkflowState, type Baseline, type Deduction, type EvidenceKind } from '../workflow/deduce';
+import { declaresState, deduceWorkflowState, type Baseline, type Deduction, type DeductionSnapshot, type EvidenceKind } from '../workflow/deduce';
 import { workflowFacts, type Cadence, type LaunchKind, type Phase, type PhaseMode, type Workflow } from '../workflow/schema';
 
 import { resolveRoleDirectives } from './context';
 import { loadDirectivesAtCommit, loadRolesYamlAtCommit, type DirectiveFile } from './loaders';
 import { coreErr, coreOk, type CoreResult } from './types';
 import { isImplicitOwnerProduces } from './workflow-diagnostics';
-import { readDeductionSnapshotAtHead } from './workflow-deduction';
+import { instancePlanIds, readDeductionSnapshotAtHead } from './workflow-deduction';
 import { iterationStartState, workflowExitStates, type ExitStart } from './workflow-exit-state';
 
 /** `ListResult.message` when `HEAD` holds no manifest (BDD P4.6 sc. 4; `spec-003` Layer 1). */
@@ -133,10 +133,22 @@ export interface WorkflowView {
   readonly phases: readonly PhaseView[];
 }
 
+/**
+ * The instance plan a `workflow show <ref>` names (`spec-017` §7.6, §8, from `minor-v0.4`, `bug-359`): its id, the
+ * workflow its `workflow` field names, and whether it is an open instance (§3.2).
+ */
+export interface ShowInstance {
+  readonly id: string;
+  readonly workflow: string;
+  readonly open: boolean;
+}
+
 /** `workflow show`'s payload: the resolved declaration with the baseline and the diagnostics (`spec-017` §8). */
 export interface ShowResult {
   readonly baseline: Baseline;
   readonly workflow: WorkflowView;
+  /** Present when `<ref>` is an instance plan's id, absent when it is a workflow name (§7.6). */
+  readonly instance?: ShowInstance;
   readonly diagnostics: readonly Diagnostic[];
 }
 
@@ -249,6 +261,11 @@ export interface ShowInputs {
   readonly bindings: BindingsYaml | null;
   readonly rolesYaml: RolesYaml | null;
   readonly directiveFiles: readonly DirectiveFile[];
+  /**
+   * Every instance plan at the snapshot's commit (`spec-017` §3.1: type `plan`, `parent` empty), in any status, with
+   * the workflow its `workflow` field names (`null` when blank), in document order (§7.6, `bug-359`).
+   */
+  readonly instancePlans: readonly { readonly id: string; readonly workflow: string | null }[];
 }
 
 /** The modes a phase allows (`spec-017` §6.3): `fresh` always, plus the declared non-fresh one. */
@@ -410,15 +427,35 @@ function rootStart(workflow: Workflow, memoryYaml: MemoryYaml | null): ExitStart
 }
 
 /**
- * `workflow show <ref>`'s answer (`spec-017` §7.6, §10): `ref` names a loaded workflow, or an open instance
- * standing for its workflow; anything else is `NOT_FOUND` `unknown workflow: <ref>`. Pure.
+ * `workflow show <ref>`'s answer (`spec-017` §7.6, §10): `ref` names a loaded workflow, or any instance plan — open or
+ * not — standing for the workflow its `workflow` field names, which the payload's `instance` says (`bug-359`); an
+ * instance plan naming a workflow the registry does not load is `NOT_FOUND` `unknown workflow: <that name>`, anything
+ * else (a phase plan's id included) `NOT_FOUND` `unknown workflow: <ref>`. Pure.
  */
 export function showWorkflow(inputs: ShowInputs, deduction: Deduction, ref: string): CoreResult<ShowResult> {
   const resolver = new Resolver(inputs);
-  const name = resolver.workflow(ref) !== undefined ? ref : (deduction.instances.find((entry) => entry.instance.id === ref)?.instance.workflow ?? ref);
+  const plan = resolver.workflow(ref) === undefined ? inputs.instancePlans.find((candidate) => candidate.id === ref && candidate.workflow !== null) : undefined;
+  const name = plan?.workflow ?? ref;
   const workflow = resolver.workflow(name);
   if (workflow === undefined) return coreErr({ code: 'NOT_FOUND', message: unknownWorkflowMessage(name), details: { ref } });
-  return coreOk({ baseline: deduction.baseline, workflow: resolver.view(workflow, rootStart(workflow, inputs.memoryYaml)), diagnostics: deduction.diagnostics });
+  const instance: ShowInstance | undefined =
+    plan === undefined ? undefined : { id: plan.id, workflow: name, open: deduction.instances.some((entry) => entry.instance.id === plan.id) };
+  return coreOk({
+    baseline: deduction.baseline,
+    workflow: resolver.view(workflow, rootStart(workflow, inputs.memoryYaml)),
+    ...(instance === undefined ? {} : { instance }),
+    diagnostics: deduction.diagnostics,
+  });
+}
+
+/** The instance plans of `documents` with the workflow each names (`spec-017` §3.1, §7.6), in document order. */
+function instancePlansOf(documents: DeductionSnapshot['documents']): ShowInputs['instancePlans'] {
+  return documents.flatMap((document) =>
+    instancePlanIds([document]).map((id) => {
+      const workflow = document.frontmatter['workflow'];
+      return { id, workflow: typeof workflow === 'string' && workflow.trim() !== '' ? workflow : null };
+    }),
+  );
 }
 
 /**
@@ -441,6 +478,7 @@ export function workflowShowAtHead(root: string, ref: string): CoreResult<ShowRe
     bindings: snapshot.bindings ?? null,
     rolesYaml: committed ? loadRolesYamlAtCommit(root, snapshot.commit, 'HEAD') : null,
     directiveFiles: committed ? loadDirectivesAtCommit(root, snapshot.commit, 'HEAD') : [],
+    instancePlans: instancePlansOf(snapshot.documents),
   };
   return showWorkflow(inputs, deduction, ref);
 }

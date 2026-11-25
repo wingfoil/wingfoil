@@ -98,7 +98,7 @@ import {
 import { renderFinalizeConsole, workflowFinalizeAtHead, type FinalizeResult } from './workflow-finalize';
 import { renderAdoptConsole, workflowAdoptAtHead, type AdoptPlanResult, type AdoptResult } from './workflow-adopt';
 import { renderRekeyConsole, workflowRekeyAtHead, type RekeyResult } from './workflow-rekey';
-import { renderStatusConsole, workflowStatusAtHead, type StatusResult } from './workflow-status';
+import { renderStatusConsole, workflowStatusAtHead, type StatusConsoleCall, type StatusResult } from './workflow-status';
 import {
   renderCreateConsole,
   renderRemoveConsole,
@@ -273,7 +273,7 @@ export type {
   UnverifiedEntry,
 } from './governance-check';
 export { renderStatusConsole, statusWorkflow, workflowStatusAtHead } from './workflow-status';
-export type { PendingApproval, StatusEntry, StatusResult } from './workflow-status';
+export type { PendingApproval, StatusConsoleCall, StatusEntry, StatusResult, UngatedCount, UngatedElement } from './workflow-status';
 export { W_WORKFLOW_CHECKS_NOT_RUN, workflowCoreDiagnostics } from './workflow-core-checks';
 export type { CheckedRegistry, WorkflowCoreInputs } from './workflow-core-checks';
 export { iterationStartState, machineStates, workflowExitStates } from './workflow-exit-state';
@@ -3398,15 +3398,18 @@ export const CORE_MODULES: readonly CoreModule[] = [
         mutates: false,
         description: 'print every open workflow, its pending approvals and who they are routed to, and the elements waiting at a gate, as committed at HEAD',
         positional: { name: 'ref', description: 'a workflow name or an open workflow instance id (default: every open instance)' },
+        // task-374 (`bug-341`, `spec-017` §7.4): a console-only flag — the renderer reads it (`spec-006` §2's `call`);
+        // `json`, `yaml` and the MCP Resource are the same with or without it.
+        flags: [{ name: 'full', description: 'list the ungated elements one per line instead of the summary line (console only)' }],
         example: 'wingfoil workflow status',
         fn: workflowStatusFn,
-        renderConsole: renderStatusConsole as (value: unknown) => string,
+        renderConsole: renderStatusConsole as (value: unknown, call?: StatusConsoleCall) => string,
       },
       workflowShow: {
         name: 'workflowShow',
         mutates: false,
         description: 'print one workflow resolved, its included workflows nested under their phases, as committed at HEAD',
-        positional: { name: 'ref', required: true, description: 'a workflow name, or the id of an open workflow instance' },
+        positional: { name: 'ref', required: true, description: 'a workflow name, or the id of a workflow instance plan, open or closed' },
         example: 'wingfoil workflow show release-cycle',
         fn: workflowShowFn,
       },
