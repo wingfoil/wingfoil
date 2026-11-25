@@ -60,3 +60,12 @@ The line is written and never read; a submit that misdeclares its content passes
 
 Captured on 2026-10-07 by `bug-ingest-rel-v0.3-w3b1-review-findings-plan`, from `task-209`'s developer notes (W3 B1,
 `dev-loop-rel-v0.3-plan`), checked against `main` at `0962f85f`.
+
+### Retrospective
+
+- Fixed by `task-378`: `memory history` returns each entry's declared `carries` (`parseCarriesContent`), and `wingfoil
+  verify` gains the twelfth check `carries-content` (`spec-020` §4.14), which recomputes the items from the committed
+  blobs (`describeCommittedSubmitContent`). On this repository it finds the two commits the design measured, `7a48bc2f0`
+  and `0aa55f0c0`, and no other of the 1483 submits reachable from `HEAD` at `1cf54ff85` (`task-378`'s refactor notes, T-41).
+- The line was written from `task-209` on with no reader until `task-378`; a writer added without its reader is a
+  contract nobody holds. Proposal: a spec row that declares a recorded line names its reader in the same task.
