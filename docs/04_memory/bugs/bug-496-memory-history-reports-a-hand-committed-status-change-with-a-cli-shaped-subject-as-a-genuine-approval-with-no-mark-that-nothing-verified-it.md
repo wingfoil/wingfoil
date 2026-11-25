@@ -57,3 +57,11 @@ edit is still taken as the new state (`memory search` reports `approved`, and th
 - `verifyTransitionConsistency` and the attribution audit (`dl-103` Rationale) are the code `memory history` would
   call for the mark.
 - Related: `dl-212` (L0: agent markers on approvals), adr-006 (git identity is attribution, not authentication).
+
+### Retrospective
+
+- Fixed by `task-378`: a `memory history` entry the governance checks flag carries `unverified` (each `{rule, check,
+  message}`), and `memory search --verify` marks the match (`spec-020` §4.13). The mark runs the verb's own checks,
+  limited to the element's document, so the two cannot disagree about the element's transition (T-34, T-36, T-37).
+- Taken literally, "the same checks through the same reader" would have cost `memory history` about +29 s on
+  `spec-008` (the design's prototype); the cost shaped the design more than the predicate did.
