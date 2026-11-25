@@ -42,3 +42,11 @@ The placeholder is recorded as the approval's reason, exit 0.
   decides whether that needs a `dl-067` amendment or only a test-backed rule in the shared reason check.
 - Typical source: a command template copied with its placeholder left in, by a person or an agent.
 - No element covers it (`grep -rliE "placeholder reason|angle-bracket" docs/04_memory` → none).
+
+### Retrospective
+
+- Fixed by `task-378`: `reasonDefect` gains `placeholder` (one `<…>` token, or no letter or digit), so every verb that
+  takes `--reason` refuses it at exit `2`, and `wingfoil verify`'s `body` row reports a recorded one (`spec-008` §2's
+  sixth case). No `Reason:` block on any ref of this repository is such a reason (T-41 scan), so the rule adds no
+  finding to the history.
+- Judged by shape, not by a dictionary of words (`dl-070` (A)): `TODO` and `TBD` stay accepted, by the design gate's D3.
