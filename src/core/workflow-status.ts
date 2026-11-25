@@ -10,11 +10,13 @@
  * top-level phase progress, its frontier (each step built by `workflow next`'s `buildStep`), and its `late`
  * candidates (§4.7); the **pending approvals** of those steps (§5.1), each routed to `dna.yaml` members; then the
  * **ungated elements**: Memory elements sitting in a `gates` state of their type that no pending approval of **any**
- * open instance carries. Nothing is recorded: a pending approval changes nothing in Memory (§5.1).
+ * open instance carries, each with the open instance that **holds** it, if one does (`heldBy`, `bug-487`), counted per
+ * type in `ungatedByType` (`bug-341`). Nothing is recorded: a pending approval changes nothing in Memory (§5.1).
  *
  * **The v0.3 notification channel** (§5.3, ruling R13): the console view prints one "human needed" line per pending
- * approval and per ungated element, naming the action (`approve or reject`, or `finalize` for an approval record),
- * the element id(s) or the step key, and the routed members. An ungated element has no workflow to route it, so its
+ * approval, naming the action (`approve or reject`, or `finalize` for an approval record), the step key, and the
+ * routed members; the ungated elements are one summary line by default and one line each under the console flag
+ * `--full` (`bug-341`, §7.4), the only flag the renderer reads. An ungated element has no workflow to route it, so its
  * line names the holders of the `approver` role, the one role that may decide it (REQ-SEC-03).
  *
  * **The transitory pre-marker rule made visible** (§2, §3.2, task-345): each reported instance whose start commit
@@ -26,7 +28,17 @@
  * success warning, one stderr `warning:` line each, in every format.
  */
 import type { Diagnostic } from '../validation';
-import { deduceWorkflowState, resolveInstanceRef, type Baseline, type Deduction, type ElementRef, type Instance, type PhaseProgress, type TrailEntry } from '../workflow/deduce';
+import {
+  deduceWorkflowState,
+  resolveInstanceRef,
+  type Baseline,
+  type Deduction,
+  type ElementRef,
+  type GatedElement,
+  type Instance,
+  type PhaseProgress,
+  type TrailEntry,
+} from '../workflow/deduce';
 
 import { APPROVER_ROLE } from './approval-authority';
 import { coreOk, type CoreResult } from './types';
@@ -70,6 +82,24 @@ export interface StatusEntry {
   readonly late: readonly ElementRef[];
 }
 
+/**
+ * An ungated element (`spec-017` §5.1, §8 `UngatedElement`): with `heldBy` when an open instance holds it — a field of
+ * it names an element scoping one of that instance's frontier steps, or it scopes one itself — though no step of it
+ * approves it now (`bug-487`).
+ */
+export type UngatedElement = GatedElement;
+
+/** How many ungated elements one type has (`spec-017` §7.4, §8 `ungatedByType`, `bug-341`). */
+export interface UngatedCount {
+  readonly type: string;
+  readonly count: number;
+}
+
+/** The invocation's flags a console rendering reads (`spec-006` §2's `renderConsole` `call`): `full` here. */
+export interface StatusConsoleCall {
+  readonly flags: Readonly<Record<string, boolean>>;
+}
+
 /** `workflow status`'s payload (`spec-017` §8). */
 export interface StatusResult {
   readonly baseline: Baseline;
@@ -79,7 +109,9 @@ export interface StatusResult {
   /** The pending approvals of the listed instances, in frontier order. */
   readonly pendingApprovals: readonly PendingApproval[];
   /** The elements in a gate state that no pending approval of an open instance carries, ascending `(type, id)`. */
-  readonly ungated: readonly ElementRef[];
+  readonly ungated: readonly UngatedElement[];
+  /** {@link ungated} counted per type, ascending by type in byte order, one entry per type that has one (§7.4). */
+  readonly ungatedByType: readonly UngatedCount[];
   /**
    * Whom an ungated element's "human needed" line names (§5.3): no workflow routes it, so the holders of the
    * `approver` role, the one role that may decide it (REQ-SEC-03), ascending `(name, email)`; `[]` when none does.
@@ -99,6 +131,13 @@ export const W_INSTANCE_PRE_MARKER = 'W_INSTANCE_PRE_MARKER';
 /** The message of the {@link W_INSTANCE_PRE_MARKER} entry of instance `id`. */
 function preMarkerMessage(id: string): string {
   return `instance ${id} is kept by the pre-marker rule: restart it with workflow start`;
+}
+
+/** `ungated` counted per type, ascending by type in code-unit order (§7.4). */
+function countByType(ungated: readonly UngatedElement[]): UngatedCount[] {
+  const counts = new Map<string, number>();
+  for (const element of ungated) counts.set(element.type, (counts.get(element.type) ?? 0) + 1);
+  return [...counts.keys()].sort().map((type) => ({ type, count: counts.get(type)! }));
 }
 
 /** `<type>:<id>`. */
@@ -150,6 +189,7 @@ export function statusWorkflow(inputs: NextInputs, deduction: Deduction, ref?: s
     open,
     pendingApprovals,
     ungated,
+    ungatedByType: countByType(ungated),
     ungatedRoutedTo: membersHoldingRole(inputs.dnaYaml, APPROVER_ROLE),
     ...(nothing ? { message: NO_OPEN_WORKFLOWS } : {}),
     diagnostics: [...deduction.diagnostics, ...approvalDiagnostics(steps, inputs.dnaYaml), ...preMarker],
@@ -205,8 +245,21 @@ function instanceLines(entry: StatusEntry): string[] {
   return lines;
 }
 
-/** `workflow status`'s `--format console` rendering (`spec-017` §5.3, §8): the answer only, no diagnostic (§7.4). Pure. */
-export function renderStatusConsole(result: StatusResult): string {
+/** The `--full` line of one ungated element (`spec-017` §7.4): a held one names its holder (`bug-487`). */
+function ungatedLine(element: UngatedElement, routed: string): string {
+  const carried =
+    element.heldBy === undefined
+      ? 'no open workflow carries it'
+      : `held by ${element.heldBy.instance}'s ${element.heldBy.element.type} ${element.heldBy.element.id}, no step of it approves it now`;
+  return `  human needed: approve or reject ${element.id} (${element.type}, ${element.status}; ${carried}) — routed to ${routed}`;
+}
+
+/**
+ * `workflow status`'s `--format console` rendering (`spec-017` §5.3, §7.4, §8): the answer only, no diagnostic.
+ * `call.flags.full` (the console flag `--full`, `spec-006` §2) lists the ungated elements one per line instead of the
+ * summary line. Pure.
+ */
+export function renderStatusConsole(result: StatusResult, call?: StatusConsoleCall): string {
   const lines: string[] = [];
   if (result.message !== undefined) lines.push(result.message);
   else lines.push(`open workflows: ${result.open.length}`); // no message: some instance is open
@@ -216,10 +269,13 @@ export function renderStatusConsole(result: StatusResult): string {
     for (const approval of result.pendingApprovals) lines.push(`  ${approvalLine(approval.awaiting, approval.step!)} (${approval.instance}, ${approval.step})`);
   }
   if (result.ungated.length > 0) {
-    lines.push(`ungated elements: ${result.ungated.length}`);
-    for (const element of result.ungated) {
-      const routed = describeMembers(result.ungatedRoutedTo, noApproverMessage(APPROVER_ROLE));
-      lines.push(`  human needed: approve or reject ${element.id} (${element.type}, ${element.status}; no open workflow carries it) — routed to ${routed}`);
+    const routed = describeMembers(result.ungatedRoutedTo, noApproverMessage(APPROVER_ROLE));
+    if (call?.flags['full'] === true) {
+      lines.push(`ungated elements: ${result.ungated.length}`);
+      for (const element of result.ungated) lines.push(ungatedLine(element, routed));
+    } else {
+      const counts = result.ungatedByType.map((entry) => `${entry.type} ${entry.count}`).join(', ');
+      lines.push(`ungated elements: ${result.ungated.length} (${counts}) — routed to ${routed}; --full lists them`);
     }
   }
   return `${lines.join('\n')}\n`;

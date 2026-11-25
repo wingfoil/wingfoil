@@ -1016,6 +1016,12 @@ Other modified or staged files are left as they are and are not committed.
   separators (U+2028, U+2029). The refusal exits `2` and names the first one by code point, e.g.
   `error: invalid flag value: --reason must not contain a control character other than tab or newline
   (found U+001B)`.
+- New in 0.4: it must state a reason. A reason that is only one placeholder token in angle brackets (`<the reply>`,
+  nothing else around it) or holds no letter or digit at all (`...`, `-`) is refused at exit `2` with
+  `error: invalid flag value: --reason must state a reason: it holds no word, or only a <placeholder>`, before anything
+  is written. `<a> and <b>`, `ok` and `1` are accepted. The rule holds on every command that takes `--reason`
+  (`workflow finalize`, `adopt` and `rekey` included), and `wingfoil verify`'s `body` check reports a recorded reason
+  of that shape.
 - Trailing whitespace is stripped, runs of blank lines collapse to one, and leading/trailing blank lines
   are dropped.
 
@@ -1041,6 +1047,40 @@ New in 0.3: `operation` is one of eleven declared verbs, the five above plus `st
 `finalize`, `sync`, `amend`, `park` and `assign`. A subject with any other verb reads as `null`, and so does a
 configuration commit such as `wf(dna): …`, `wf(directive): …` or `wf(workflow): …`, whatever its
 verb.
+
+New in 0.4: every entry also carries `carries`, after `reason`: the items the commit's `Carries content:` line
+declares (see [`memory submit`](#wingfoil-memory-submit)), such as `["frontmatter field 'severity'", "the body"]`, read
+back as `memory submit` wrote them, or `null` when the commit has no such line outside its `Reason:` block — a pure
+transition, every other verb, and a submit written before the line existed. A `Carries content:` line inside a
+`Reason:` block (an approval's reason that happens to hold one) is text of the reason, never a declaration.
+
+New in 0.4: an entry whose commit `wingfoil verify` would flag carries one more key, `unverified`, after `wingfoil`:
+the findings of the governance checks on that commit for this document, each `{rule, check, message}`, in the order
+`verify` reports them. The checks run on the commits the history lists, judge the commit's subject, body, trailers and
+authority and this document's own transition, and treat every commit as gated (as `verify` with neither option does);
+a finding about another document of the same commit does not mark the entry. An entry with no `unverified` key is one
+every check verified, so a hand edit that moved the status (`docs: tidy`) or an approval forged by hand reads as
+marked, never as a genuine operation:
+
+```json
+{
+  "sha": "…",
+  "operation": null,
+  "from": "pending",
+  "to": "backlog",
+  "subject": "docs: tidy",
+  "wingfoil": null,
+  "unverified": [
+    {
+      "rule": "state",
+      "check": "status-outside-wf",
+      "message": "docs/memory/task/t-1.md: its status went pending → backlog in a commit that is not a wf() Memory operation (dl-139)"
+    }
+  ]
+}
+```
+
+`--format console` prints the same value as indented JSON, and `--format yaml` the same structure.
 
 ```console
 $ wingfoil memory history task-001-my-first-task
@@ -1093,7 +1133,7 @@ this WingFoil reads up to format 1: upgrade WingFoil"`, and the warning naming t
 Find documents by keyword and/or metadata.
 
 ```
-wingfoil memory search [<keyword>] [--type <type>] [--status <status>] [--tag <tag>]
+wingfoil memory search [<keyword>] [--type <type>] [--status <status>] [--tag <tag>] [--verify]
 ```
 
 The keyword is a case-insensitive substring matched against each document's title, id, tags and body
@@ -1123,6 +1163,12 @@ $ wingfoil memory search --status approved --type task
 
 No match is still a success (exit `0`), with `"matches": []` and
 `"message": "no documents matched the query"`.
+
+New in 0.4: `--verify` reads each match's history as [`memory history`](#wingfoil-memory-history) does and marks a
+match whose history holds a commit the governance checks of `wingfoil verify` flag: such a match carries
+`unverified`, the shas of those commits, oldest first (the entries `memory history <id>` marks). A match with no
+flagged commit, and every match without `--verify`, has no such key. It reads every match's history, so it is slower
+than a plain search.
 
 New in 0.3: every match is a Memory element, with an `id` and a `type`. A Markdown file under a
 Memory directory with neither, such as an old plan with no frontmatter, is left out. A file whose
@@ -1527,7 +1573,7 @@ next step: dev-loop.green@task:task-130
 Print every open workflow, its pending approvals and who they are routed to, and the elements waiting at a gate, as committed at HEAD.
 
 ```
-wingfoil workflow status [<ref>]
+wingfoil workflow status [<ref>] [--full]
 ```
 
 Read-only, and it reads `HEAD` from the same deduction as `workflow next`: an uncommitted
@@ -1548,14 +1594,33 @@ reports who is asked: a routed member without the `approver` role is flagged
 `W_APPROVAL_ROLE_WITHOUT_AUTHORITY`, and only an approver can decide. Nothing is written.
 
 Last, the **ungated elements**: elements sitting in a gate state of their type that no pending approval of an open
-workflow carries, routed to the holders of the `approver` role.
+workflow carries, routed to the holders of the `approver` role. Changed in 0.4, the console prints them as one summary
+line by default, their count and the count of each type, then the members and a hint:
+`ungated elements: <n> (<type> <count>, …) — routed to <members>; --full lists them`. With `--full` it prints instead
+`ungated elements: <n>` and one "human needed" line per element. With no member holding the `approver` role, the
+summary line and every `--full` line say `no approver found for role 'approver' in dna.yaml` where the members go.
+`--full` changes the console only: `--format json` and `--format yaml` print the same bytes with or without it.
+
+New in 0.4, an ungated element may be **held** by an open workflow: one of its fields is named after the type of an
+element a frontier step of that workflow runs on, with that element's id or its `version` as value (a bug whose
+`release` is `minor-v0.4`, or `v0.4`, while a release cycle over `minor-v0.4` is on the frontier). The element a
+frontier step runs on is held by that workflow too, whatever its fields, when it sits at its gate on a step that does
+not approve it (a release in `planning` while its cycle's first phase writes a document). It stays ungated —
+no step approves it now — and its `--full` line says who holds it instead of `no open workflow carries it`:
+
+```console
+  human needed: approve or reject bug-1-crash (bug, triaged; held by sw-life-cycle-1-plan's release release-1, no step of it approves it now) — routed to Morgan <morgan@example.invalid>
+```
+
+A pending approval is always a frontier step: an `iterate_over` phase puts one step per open candidate on the
+frontier, so the approvals of several candidates can be pending at once.
 
 An instance opened before `workflow start` wrote its `WingFoil-Start:` trailer (see `workflow start`) stays open
 for now, and status warns about it (new in 0.4): a `warning: W_INSTANCE_PRE_MARKER (<plan file>): instance <id> is
 kept by the pre-marker rule: restart it with workflow start` line on stderr, the last of its warnings, and the entry
 in `diagnostics`. End it and start it again with `workflow start` to clear the warning.
 
-Each pending approval and ungated element prints a **"human needed"** line naming the action
+Each pending approval, and under `--full` each ungated element, prints a **"human needed"** line naming the action
 (`approve or reject`, or `finalize` for a phase record), the element ids or the step key, and the members it is
 routed to. In v0.3 this output is the notification channel; hook delivery comes later. `workflow next` prints the
 same line when its next step awaits an approval.
@@ -1576,8 +1641,10 @@ pending approvals: 1
 ```
 
 `--format json|yaml` prints the full payload, `{"baseline": {…}, "active": …, "open": [{"instance", "complete",
-"phases", "frontier", "late"}], "pendingApprovals": [{"step", "instance", "trail", "awaiting"}], "ungated": […],
-"ungatedRoutedTo": […], "diagnostics": […]}`.
+"phases", "frontier", "late"}], "pendingApprovals": [{"step", "instance", "trail", "awaiting"}], "ungated": [{"type",
+"id", "status", "heldBy"?}], "ungatedByType": [{"type", "count"}], "ungatedRoutedTo": […], "diagnostics": […]}`. New
+in 0.4: `ungatedByType` counts the ungated elements per type, ascending by type, and a held element carries
+`heldBy: {"instance", "element"}`.
 Changed in 0.4: each entry of `diagnostics` is also written on stderr, one
 `warning: <code> (<file>): <message>` line each (under `--format json` one `{"warning": …}` document, under `yaml`
 one YAML document), as `agent list` does; the console no longer ends with an `<n> diagnostic(s): --format json lists
@@ -1590,7 +1657,8 @@ them` line, so stdout carries only the answer.
   included) → `unknown workflow: <ref>`; both exit `1`; an error in the workflow files → exit
   `1`, as `workflow list`; more than one `<ref>` → exit `2`.
 - **Commit:** none.
-- **MCP:** the Resource `wingfoil://workflows/-/status` returns the same `--format json` payload (no `<ref>`).
+- **MCP:** the Resource `wingfoil://workflows/-/status` returns the same `--format json` payload (no `<ref>`, and
+  `--full` has no Resource: the payload is the same either way).
 
 ### `wingfoil workflow show`
 
@@ -1601,7 +1669,9 @@ wingfoil workflow show <ref>
 ```
 
 Read-only, and it reads `HEAD` as `workflow list` does. `<ref>` is a workflow name, or
-the id of an open workflow instance (its `plan` document), which stands for that instance's workflow.
+the id of a workflow instance (its `plan` document), which stands for that instance's workflow. Changed in 0.4, the
+instance may be closed (a `done` plan) as well as open, and the payload then says which instance the id names:
+`"instance": {"id", "workflow", "open"}`, `open` true for an open instance; a workflow name gives no `instance`.
 
 For each phase it prints its `role` and that role's directives (`id` and `title`, the role's own and the
 global ones, as `directives list --role` resolves them), its `actions` and `checks` with the binding each
@@ -1611,7 +1681,7 @@ checks are listed, never run: `"evaluated": false`), `produces` with the Memory 
 alone), `mode`, `allowedModes` and `distinctFrom`, `cadence`, the kinds of evidence that complete the phase
 (`state`, `created`, `produces`, `selection`, `include`, `awaits`, `record`), and, for a phase that includes
 another workflow, that workflow resolved the same way under `sub`. The payload is
-`{"baseline": {…}, "workflow": {…}, "diagnostics": […]}`, the diagnostics as `workflow list` reports them, except
+`{"baseline": {…}, "workflow": {…}, "instance"?: {…}, "diagnostics": […]}`, the diagnostics as `workflow list` reports them, except
 `W_ACTION_ARGUMENT_NOT_PASSED`, which `workflow list` alone reports.
 
 New in 0.4, a built-in binding's `argv` is the whole command `workflow next` offers, with placeholders where no
@@ -1621,7 +1691,7 @@ memory reject <id> --reason <reason>`, `wingfoil memory deprecate <id>`, `wingfo
 the action declares literally is printed as declared; one that takes a value from an element is the placeholder of its
 name as a whole, a list included (`--title <title>`, `--tags <tags>`, `--set release=<release>`).
 
-- **Errors:** a name no workflow at `HEAD` has and no open instance holds → `unknown workflow: <ref>`, exit `1`; an error in the workflow files → exit `1`, as `workflow list`; no `<ref>`, or more than one → exit `2`.
+- **Errors:** a name no workflow at `HEAD` has and no instance plan holds (a phase plan's id included) → `unknown workflow: <ref>`, exit `1`; an instance plan naming a workflow the registry does not load → `unknown workflow: <that workflow>`, exit `1`; an error in the workflow files → exit `1`, as `workflow list`; no `<ref>`, or more than one → exit `2`.
 - **Commit:** none.
 
 ### `wingfoil workflow start`
@@ -1948,16 +2018,19 @@ With neither option every commit reachable from `HEAD` is judged and gated, and 
 `warning: W_VERIFY_WHOLE_HISTORY: no --base and no --introduced-at, so every commit reachable from HEAD is judged and
 gated; pass --base <rev> to judge a range, or --introduced-at <rev> to report older history without failing`.
 
-The checks, each with the version that first ships it (`0.4.0` for all eleven): `subject` (the
+The checks, each with the version that first ships it (`0.4.0` for all twelve): `subject` (the
 `wf({type}): {verb} {ids}` grammar), `bracket` (the `[from → to]` bracket each verb takes), `body` (the `Approver:` and
 `Reason:` lines), `authority` (an approval is authored by an `approver` of the first parent's `dna.yaml`, and its
 `Approver:` line names that author), `state` (every hop is an edge of the machine and matches the frontmatter),
 `verb-edge` (each verb moves along its own kind of edge), `status-outside-wf` (a commit that is no Memory operation
 changes no Memory document's status), `supersedes-pair` (an approve that supersedes another element is followed by
 the other's `finalize`), `approval-agent-trailer` (an approval carries no `Co-Authored-By:` or `AI-Model:` line),
-`workflow-record-authority` (an `Approver:` line on a `workflow:` record is held to the same grammar and authority)
-and `trailer-paragraph` (every `WingFoil-*` line sits in the body's final paragraph). A commit the shipped verbs write
-passes every one of them; a finding is a commit written by hand, or by a tool, against a contract it breaks.
+`workflow-record-authority` (an `Approver:` line on a `workflow:` record is held to the same grammar and authority),
+`trailer-paragraph` (every `WingFoil-*` line sits in the body's final paragraph) and `carries-content` (a
+submit's `Carries content:` line, read outside the `Reason:` block, is written once, by a submit only, spelled
+`Carries content: ` with one space, names only the items `memory submit` declares and equals what the commit carries;
+once an ancestor carries such a line, a submit that carries content declares it). A
+commit the shipped verbs write passes every one of them; a finding is a commit written by hand, or by a tool, against a contract it breaks.
 
 `--format json` prints the report on one line, whatever the verdict: `head`, `base` and `introducedAt` (full shas, or
 `null`), `checks` (each `{check, rule, since}`), `commits` (`range`, `memory`, `other`, `gated`), `findings` (each
@@ -1968,7 +2041,7 @@ what could not be judged, such as a commit made before `.wingfoil/memory.yaml` e
 ```console
 $ wingfoil verify --base origin/main
 wingfoil verify: 1 wf() commits and 0 other commits in f1d56a84c17b58ef6da54125c19ecdb5db1c8ad8..HEAD (1 gated; every commit gated)
-checks: subject 0.4.0, bracket 0.4.0, body 0.4.0, authority 0.4.0, state 0.4.0, verb-edge 0.4.0, status-outside-wf 0.4.0, supersedes-pair 0.4.0, approval-agent-trailer 0.4.0, workflow-record-authority 0.4.0, trailer-paragraph 0.4.0
+checks: subject 0.4.0, bracket 0.4.0, body 0.4.0, authority 0.4.0, state 0.4.0, verb-edge 0.4.0, status-outside-wf 0.4.0, supersedes-pair 0.4.0, approval-agent-trailer 0.4.0, workflow-record-authority 0.4.0, trailer-paragraph 0.4.0, carries-content 0.4.0
 FAIL — gated:
   ae5b0fd46b380a04c64e05d9f35b9cc01bd00685 authority/authority: the author <stranger@example.invalid> holds no approver role in team.members (dl-094)
       wf(task): approve task-1 [pending → backlog]

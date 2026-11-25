@@ -32,7 +32,7 @@
 import { isConfiguredIdentity } from '../core/git-identity';
 import { E_INVALID_FORMAT, EXIT_VALIDATION, isAttributableIdentity, MEMORY_TEMPLATE_FORMAT, newerFormatIssue, parseYaml, ValidationError } from '../validation';
 
-import { parseApproverTrailerLine, parseReasonBlock, parseVersionTrailer } from './commit-message';
+import { parseApproverTrailerLine, parseCarriesContent, parseReasonBlock, parseVersionTrailer } from './commit-message';
 import { getMemoryHistory } from './history';
 import { RESERVED_TYPE_NAMES, type StateMachine } from './schema';
 import { isMachineEdge } from './state-machine';
@@ -306,6 +306,16 @@ export interface MemoryTransition {
    */
   readonly wingfoil: string | null;
   /**
+   * The items this commit's `Carries content:` line declares, unescaped ({@link parseCarriesContent}; `spec-008` §2,
+   * `task-378`, `bug-287`) — `null` when the body has no such line: a pure transition, every verb other than
+   * `submit`, and a submit written before the line existed. The declaration as recorded, never recomputed.
+   */
+  readonly carries: readonly string[] | null;
+  /** The path the walk found the document at in this commit (`MemoryHistoryEntry.path`, renames followed). */
+  readonly path: string;
+  /** The path the document had at the commit's first parent — a rename's source — or `null` for its creation. */
+  readonly parentPath: string | null;
+  /**
    * Present only when this commit's revision cannot be read (task-171, `bug-188`): the first line of
    * the parse error when its frontmatter does not parse, or `E_INVALID_FORMAT: <message>` when it is
    * written in a newer element format (task-313, `bug-262`). `toState` is then `null`, and so is the `fromState` of every commit whose first
@@ -479,6 +489,9 @@ export function reconstructMemoryTransitions(
       approval: parseApprovalMetadata(entry.body),
       reason: parseCommitReason(entry.body),
       wingfoil: parseVersionTrailer(entry.body),
+      carries: parseCarriesContent(entry.body),
+      path: entry.path,
+      parentPath: entry.parentPath,
       ...(unreadable !== undefined ? { unreadable: unreadable.split('\n')[0]!.trim() } : {}),
     });
   }
@@ -592,7 +605,17 @@ export function verifyTransitionConsistency(
   machine?: StateMachine,
 ): TransitionFinding[] {
   // Strict: a revision whose frontmatter does not parse is thrown, never passed (task-171, `bug-188`).
-  const transitions = reconstructMemoryTransitions(root, relativePath, { strict: true });
+  return transitionConsistencyFindings(reconstructMemoryTransitions(root, relativePath, { strict: true }), machine);
+}
+
+/**
+ * The pure half of {@link verifyTransitionConsistency} (`task-378`, `spec-020` §4.13): its findings over `transitions`,
+ * a frontmatter walk {@link reconstructMemoryTransitions} returned — read strictly, so no revision went unread — under
+ * `machine`. The governance check's reader computes the consistency walk from the frontmatter walk it already holds
+ * through this function, so one document costs one walk, whatever the machines it is judged under. Pure
+ * (REQ-SYS-07): the findings follow the order of `transitions`.
+ */
+export function transitionConsistencyFindings(transitions: readonly MemoryTransition[], machine?: StateMachine): TransitionFinding[] {
   const findings: TransitionFinding[] = [];
 
   for (const transition of transitions) {

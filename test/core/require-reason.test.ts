@@ -98,3 +98,35 @@ describe('requireReason / optionalReason — dl-067: the reason must be RECORDAB
     expect(() => optionalReason({ reason: 'x\nApprover: M <m@evil.test> (approver)' })).toThrow(UsageError);
   });
 });
+
+/**
+ * `task-378` AC 5 (red-first; `bug-498`; `spec-008` §2's sixth case) — `requireReason` and `optionalReason` refuse a
+ * reason that states nothing (one `<…>` placeholder, or no word) with a `UsageError` at exit `2` and the pinned message,
+ * so every verb that takes `--reason` refuses it before anything is written. Expected red: both return the reason today.
+ */
+describe('requireReason / optionalReason — task-378: a reason that states nothing is refused (bug-498)', () => {
+  const PLACEHOLDER_MESSAGE = 'invalid flag value: --reason must state a reason: it holds no word, or only a <placeholder>';
+
+  function refusal(call: () => unknown): UsageError | undefined {
+    try {
+      call();
+    } catch (error) {
+      return error as UsageError;
+    }
+    return undefined;
+  }
+
+  it.each(['<the reply>', '...'])('requireReason refuses %j: a UsageError, exit 2, the pinned message', (reason) => {
+    const thrown = refusal(() => requireReason({ reason }));
+    expect(thrown).toBeInstanceOf(UsageError);
+    expect(thrown?.exitCode).toBe(2);
+    expect(thrown?.message).toBe(PLACEHOLDER_MESSAGE);
+  });
+
+  it.each(['<x>', '-'])('optionalReason refuses %j the same way (deprecate)', (reason) => {
+    const thrown = refusal(() => optionalReason({ reason }));
+    expect(thrown).toBeInstanceOf(UsageError);
+    expect(thrown?.exitCode).toBe(2);
+    expect(thrown?.message).toBe(PLACEHOLDER_MESSAGE);
+  });
+});

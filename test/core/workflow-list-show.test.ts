@@ -420,7 +420,10 @@ describe('task-204 AC 2 — BDD P4.7: wingfoil workflow show (spec-017 §7.6)', 
   });
 
   it('<ref> may name an open instance, standing for its workflow (spec-017 §7)', async () => {
-    expect(ok(await show(repo, 'rc-plan')).workflow.name).toBe('release-cycle');
+    const value = ok(await show(repo, 'rc-plan'));
+    expect(value.workflow.name).toBe('release-cycle');
+    // task-374 (bug-359, spec-017 §7.6, §8): the payload says which instance the id names.
+    expect(value.instance).toEqual({ id: 'rc-plan', workflow: 'release-cycle', open: true });
   });
 
   it('sc. 3 — an unknown workflow: NOT_FOUND, "unknown workflow: ghost"', async () => {

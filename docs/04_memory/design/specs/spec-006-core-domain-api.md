@@ -108,7 +108,7 @@ export interface CoreOperation {
   readonly description?: string;               // the one-line --help summary (= cli-reference first sentence)
   readonly positional?: CorePositional;        // the operand it reads (e.g. <id>, [section]) and whether required
   readonly example?: string;                   // one complete invocation shown under "Example:" (spec-008 §8)
-  readonly renderConsole?: (value: unknown) => string; // the command's own --format console text, where its spec defines one (spec-008 §2)
+  readonly renderConsole?: (value: unknown, call?: { flags: Readonly<Record<string, boolean>> }) => string; // the command's own --format console text, where its spec defines one (spec-008 §2); `call` carries the invocation's flags, for a console-only flag (`workflow status --full`, from minor-v0.4)
   readonly readsProject?: false;               // false: it reads no project, so no registrar resolves a root for it (spec-019 §1)
 }
 
@@ -248,6 +248,7 @@ for cell):
 | `workflowRemove`   | `workflow`               | true    | `wingfoil workflow remove`    | Tool `workflow.remove` *(v0.4)*               | P4.9    |
 | `workflowAdopt`    | `workflow`               | true    | `wingfoil workflow adopt`     | Tool `workflow.adopt` *(v0.4)*                | P4.21 (`dl-187`, `patch-v0.3.1`) |
 | `workflowRekey`    | `workflow`               | true    | `wingfoil workflow rekey`     | Tool `workflow.rekey` *(v0.4)*                | P4.21 (`dl-187`, `patch-v0.3.1`) |
+| `workflowTree`     | `workflow`               | false   | `wingfoil workflow tree`      | none served (`spec-017` §9) *(v0.4)*          | P4.5 (`bug-485`, `minor-v0.4`) |
 
 - **Why each `mutates` value.** `workflowStart` / `workflowEnd` open and close a startable workflow
   instance and set or clear the active context (P4.2, P4.3, REQ-STATE-03); `workflowFinalize` writes
@@ -439,7 +440,8 @@ Normatively, for every `CoreOperation`:
    (`bug-108-directive-remove-resolves-its-target-on-the-working-tree`, repaired by `task-311`). The guard leaves a
    time-of-check-to-time-of-use window that no path-based API closes; it turns a self-inflicted loss
    into a refusal and is not an adversarial defence. There is no further category of gating read.
-6. **Declared `HEAD` reads.** `workflowStatus`, `workflowList`, `workflowShow`, `agentList`,
+6. **Declared `HEAD` reads.** `workflowStatus`, `workflowList`, `workflowShow`, `workflowTree` (from `minor-v0.4`;
+   a closed run is also read at its end commit's first parent, `spec-017` §7.13), `agentList`,
    `agentShow` and the two v0.3 workflow Resources `wingfoil://workflows/-/next` and
    `wingfoil://workflows/-/status` resolve at `HEAD`, a declared exception to item 4 and to `dl-084`
    (A), justified by determinism: one deduction answers all of them and must not answer from two
@@ -479,11 +481,11 @@ users is `spec-008-cli-grammar` §11):
 | Baseline | Operations |
 |----------|------------|
 | `HEAD`, gating (item 1) | `memoryAdd` (type registry and scaffold; its `{n}` counter reads the wider baseline `command-baseline` declares, which can only raise the id), `memorySubmit`, `memoryApprove`, `memoryReject`, `memoryDeprecate`, `memoryAmend` (the WIP-limit holder count of `memoryAdd`, `memorySubmit` and `memoryApprove` reads the decided commit plus every local and remote-tracking branch tip and its merge-base with that commit, the second baseline `command-baseline` declares, `dl-156` Q1 (a); state machine, the document their `<id>` names and its committed `status` — `findMemoryDocumentByIdAtRev` at the one sha `prepareMemoryTransition` resolves — and approver authority on the gated verbs; the working tree supplies the content `memorySubmit` and `memoryAmend` commit and is checked to be the element `HEAD` records); `dnaSet`, `dnaAdd`, `dnaUpdate`, `dnaRemove` (`dna.yaml`, read only after item 2 has refused any difference from `HEAD`); `directiveAssign` (role catalogue, directive inventory, bindings); `directiveRemove` (the directive its `<name>` names, `loadDirectiveInventoryAtHead`, the working tree only wording a refusal; and its referrer check, `roles.yaml`, `loadRolesYamlAtHead`); `workflowNext`, from the task that ships it in v0.3 |
-| `HEAD`, declared (item 6) | `workflowStatus`, `workflowList`, `workflowShow`, `agentList`, `agentShow`, the two v0.3 workflow Resources — each from the task that ships it in v0.3 |
-| working tree, gating nothing (item 4) | `dnaShow`, `paths`, `directivesList`, `memorySearch`, `memoryHistory` (its log is git's, its `memory.yaml` the working tree's), the shipped MCP Resources and the role Prompts |
+| `HEAD`, declared (item 6) | `workflowStatus`, `workflowList`, `workflowShow`, `workflowTree` (`minor-v0.4`), `agentList`, `agentShow`, the two v0.3 workflow Resources — each from the task that ships it in v0.3 |
+| working tree, gating nothing (item 4) | `dnaShow`, `paths`, `directivesList`, `memorySearch`, `memoryHistory` (its log is git's, its `memory.yaml` the working tree's; its unverified mark is item 9's), the shipped MCP Resources and the role Prompts |
 | filesystem, predicting an effect (item 5) | the confinement and symlink guards of every writing or deleting operation, and `directiveCreate`'s check that its target file does not exist |
 | none: the build only (item 8) | `capabilities` and its Resource `wingfoil://capabilities` (`spec-019` §3.2) |
-| committed history (item 9) | `verify` (`spec-020` §2.3, §4.1) |
+| committed history (item 9) | `verify` (`spec-020` §2.3, §4.1); the unverified mark of `memoryHistory` and of `memorySearch` with `--verify` (`spec-020` §4.13) |
 
 Symbols in this section read at `9642ab5f`; items 4–6 and the table at `e942e8e9`, except `directiveRemove`'s directive
 read (item 5 and the table's `HEAD`, gating row, `loadDirectiveInventoryAtHead`), read at `77749a0b2` (`task-311`).
@@ -1092,3 +1094,20 @@ optional `failed: { message }` on a success, with a paragraph on what it means a
 serves it; §6 gains item 9, "a check of committed history reads committed history only", and the table's row
 "committed history". No other row's function, module or `mutates` changes, and no exit code of another operation.
 Edited in place without a supersede or a state change (`dl-047`), pending the approver's `memory amend`.
+
+**Revision (2026-11-23, `task-374-read-a-workflow-run-closed-runs-an-instance-s-phase-tree-what-a-start-would-deduce-bug-485-bug-487-w1-r12`)
+— §2, §3 and §6: `workflowTree` and a console-only flag.** §2's `renderConsole` gains an optional second argument, the
+invocation's flags, so a flag that changes only the console text (`workflow status --full`, `spec-017` §7.4, `bug-341`)
+reaches the renderer without changing the payload; the MCP surface never calls it. `spec-017` §7.13, amended at the
+same gate (`bug-485`), adds the read operation
+`workflowTree` (`mutates: false`) under the `workflow` module: §3 gains its row, and §6 item 6 and its table count it
+among the declared `HEAD` reads, naming the one other commit a closed run is read at. The production MCP server does
+not serve it (`spec-017` §9). No other row's function, module or `mutates` changes. Edited in place without a
+supersede or a state change (`dl-047`), pending the approver's `memory amend` at `task-374`'s design gate.
+
+**Revision (2026-11-24, `task-378-mark-the-memory-history-entries-no-check-verified-and-check-carries-content`) — the
+unverified mark reads committed history.** `memory history`'s mark and `memory search --verify` run `wingfoil verify`'s
+checks over the commits the history lists (`spec-020` §4.13, `bug-496`), so §6's table names them in the row "committed
+history" (item 9), and the `memoryHistory` entry of the working-tree row says its mark is item 9's. Item 9's rule and
+every other row are unchanged. Edited in place without a supersede or a state change (`dl-047`), pending the
+approver's `memory amend`.

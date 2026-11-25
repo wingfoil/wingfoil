@@ -86,7 +86,7 @@ const AGENT = 'an approval commit (it has an Approver: line) carries no agent tr
 const NO_NAMED = 'no document it touches is named by its subject';
 
 describe('task-365 AC 6 — GOVERNANCE_CHECKS and VERIFY_WHOLE_HISTORY (spec-020 §7, §8.2)', () => {
-  it('GOVERNANCE_CHECKS is §7\'s eleven { check, rule, since } in §4\'s order, frozen', () => {
+  it('GOVERNANCE_CHECKS is §7\'s twelve { check, rule, since } in §4\'s order, frozen (task-378: carries-content last)', () => {
     expect(GOVERNANCE_CHECKS).toEqual([
       { check: 'subject', rule: 'subject', since: '0.4.0' },
       { check: 'bracket', rule: 'bracket', since: '0.4.0' },
@@ -99,6 +99,7 @@ describe('task-365 AC 6 — GOVERNANCE_CHECKS and VERIFY_WHOLE_HISTORY (spec-020
       { check: 'approval-agent-trailer', rule: 'body', since: '0.4.0' },
       { check: 'workflow-record-authority', rule: 'body', since: '0.4.0' },
       { check: 'trailer-paragraph', rule: 'body', since: '0.4.0' },
+      { check: 'carries-content', rule: 'body', since: '0.4.0' },
     ]);
     expect(Object.isFrozen(GOVERNANCE_CHECKS)).toBe(true);
     for (const entry of GOVERNANCE_CHECKS as readonly object[]) expect(Object.keys(entry)).toEqual(['check', 'rule', 'since']);
@@ -635,6 +636,28 @@ describe('task-365 AC 2 — trailer-paragraph (spec-020 §4.11, category body)',
   });
 });
 
+describe('task-378 AC 5 — body: a recorded Reason: block that states nothing (spec-020 §4.4\'s dl-067 row, spec-008 §2\'s sixth case)', () => {
+  const PLACEHOLDER = 'the Reason: block must state a reason: it holds no word, or only a <placeholder> (dl-067)';
+  const SUBJECT = 'wf(task): approve t-1 [pending → backlog]';
+  const model = governedModel();
+  const token = model.commit({ subject: SUBJECT, body: approvalBody('<x>'), author: APPROVER, files: { [TASK('t-1')]: taskDoc('backlog') } });
+  const dots = model.commit({ subject: 'wf(task): park t-1 [in-progress → backlog]', body: 'Reason: ...' });
+  const words = model.commit({ subject: SUBJECT, body: approvalBody('<a> and <b>'), author: APPROVER });
+  const reader = model.reader();
+
+  it('a hand approve whose reason is the one token <x>: one body finding with the placeholder refusal', () => {
+    expect(findingsOf(checkBody, token, reader)).toEqual([finding('body', 'body', PLACEHOLDER)]);
+  });
+
+  it('a hand park whose reason holds no word (...): the same body finding', () => {
+    expect(findingsOf(checkBody, dots, reader)).toEqual([finding('body', 'body', PLACEHOLDER)]);
+  });
+
+  it('two tokens with a word between them state a reason: no finding', () => {
+    expect(findingsOf(checkBody, words, reader)).toEqual([]);
+  });
+});
+
 // task-366 AC 8 (red-first; `bug-438`, design D10; `spec-020` §7 as amended): the three summary lines name what their
 // commit count counts — "on <m> commits with a finding" / "with an entry" — and a line whose count is 0 drops its commit
 // count and its count list. The E_VERIFY_FINDINGS reason keeps its words.
@@ -649,7 +672,7 @@ describe('task-365 AC 6 / AC 7 — the console form and the E_VERIFY_FINDINGS re
   const M2 = 'the author <developer@example.invalid> holds no approver role in team.members (dl-094)';
   const M3 = `a WingFoil-Instance: line sits outside the commit's final paragraph, where the workflow deduction does not read it ${ANCHOR}`;
   const CHECKS_LINE =
-    'checks: subject 0.4.0, bracket 0.4.0, body 0.4.0, authority 0.4.0, state 0.4.0, verb-edge 0.4.0, status-outside-wf 0.4.0, supersedes-pair 0.4.0, approval-agent-trailer 0.4.0, workflow-record-authority 0.4.0, trailer-paragraph 0.4.0';
+    'checks: subject 0.4.0, bracket 0.4.0, body 0.4.0, authority 0.4.0, state 0.4.0, verb-edge 0.4.0, status-outside-wf 0.4.0, supersedes-pair 0.4.0, approval-agent-trailer 0.4.0, workflow-record-authority 0.4.0, trailer-paragraph 0.4.0, carries-content 0.4.0';
   const UNCHECKED_TAIL = '(history with no machine, no named document, a document gone at HEAD, or a revision that does not parse or is in a newer format)';
 
   const failing = (): GovernanceReport =>

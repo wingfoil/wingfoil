@@ -372,13 +372,19 @@ describe('task-225 AC 1 — BDD P4.5: two open workflows, one pending approval (
     expect(text).toContain('- dev-loop.review@task:task-1 (reviewer)');
     expect(text).toContain('pending approvals: 1');
     expect(text).toContain('human needed: approve or reject task-1 — routed to Morgan <morgan@example.invalid> (rc-1, dev-loop.review@task:task-1)');
-    expect(text).toContain('ungated elements: 1');
-    expect(text).toContain('human needed: approve or reject task-3 (task, pending; no open workflow carries it) — routed to Morgan <morgan@example.invalid>');
+    // task-374 (bug-341, spec-017 §7.4): by default the ungated elements are one summary line; --full lists them.
+    expect(text.split('\n')).toContain('ungated elements: 1 (task 1) — routed to Morgan <morgan@example.invalid>; --full lists them');
+    expect(text).not.toContain('human needed: approve or reject task-3 (');
+    const full = renderStatusConsole(await status(repo), { flags: { full: true } }).split('\n');
+    expect(full).toContain('ungated elements: 1');
+    expect(full).toContain('  human needed: approve or reject task-3 (task, pending; no open workflow carries it) — routed to Morgan <morgan@example.invalid>');
   });
 
   it('StatusResult carries exactly spec-017 §8 fields, plus ungatedRoutedTo (§5.3: an ungated line names its routed members)', async () => {
     const value = JSON.parse(JSON.stringify(await status(repo))) as Record<string, unknown>;
-    expect(Object.keys(value).sort()).toEqual(['active', 'baseline', 'diagnostics', 'open', 'pendingApprovals', 'ungated', 'ungatedRoutedTo']);
+    // task-374 (bug-341, spec-017 §7.4, §8): ungatedByType counts the ungated elements per type.
+    expect(Object.keys(value).sort()).toEqual(['active', 'baseline', 'diagnostics', 'open', 'pendingApprovals', 'ungated', 'ungatedByType', 'ungatedRoutedTo']);
+    expect(value['ungatedByType']).toEqual([{ type: 'task', count: 1 }]);
     expect(value['ungatedRoutedTo']).toEqual([MORGAN]);
     for (const entry of value['open'] as Record<string, unknown>[]) expect(Object.keys(entry).sort()).toEqual(['complete', 'frontier', 'instance', 'late', 'phases']);
     for (const entry of value['pendingApprovals'] as Record<string, unknown>[]) expect(Object.keys(entry).sort()).toEqual(['awaiting', 'instance', 'step', 'trail']);
@@ -410,7 +416,8 @@ describe('task-225 AC 1 — BDD P4.5 sc. 3: no open workflows', () => {
       expect(value.ungated).toEqual([{ type: 'task', id: 'task-1', status: 'pending' }]);
       const lines = renderStatusConsole(value).split('\n');
       expect(lines[0]).toBe('no open workflows');
-      expect(lines).toContain('ungated elements: 1');
+      // task-374 (bug-341, spec-017 §7.4): the default form is the summary line.
+      expect(lines).toContain('ungated elements: 1 (task 1) — routed to Morgan <morgan@example.invalid>; --full lists them');
     } finally {
       removeTempDir(repo);
     }

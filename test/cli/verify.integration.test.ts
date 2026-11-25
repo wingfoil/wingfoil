@@ -56,6 +56,7 @@ import {
   taskDoc,
   type Person,
 } from '../core/helpers/in-memory-history-reader';
+import { MARK_DNA } from '../core/helpers/history-mark-fixture';
 import { buildL0Repo, prepareAmend } from '../core/helpers/l0-fixture';
 import { commitAll, git, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
 import { CLI_ENTRY, spawnCapture, type SpawnedRun } from './helpers/spawn-cli';
@@ -554,6 +555,7 @@ describe('task-365 AC 6 — the report (spec-020 §3, §7; T-27, T-28)', () => {
       { check: 'approval-agent-trailer', rule: 'body', since: '0.4.0' },
       { check: 'workflow-record-authority', rule: 'body', since: '0.4.0' },
       { check: 'trailer-paragraph', rule: 'body', since: '0.4.0' },
+      { check: 'carries-content', rule: 'body', since: '0.4.0' },
     ]);
     expect(Object.keys(report.commits)).toEqual(['range', 'memory', 'other', 'gated']);
     expect(report.commits).toEqual({ range: 4, memory: 3, other: 1, gated: 4 });
@@ -763,5 +765,117 @@ describe('task-365 AC 10 — P1.14-verify.feature (task-360), one test per scena
     expect(report.findings).toEqual([]);
     expect(report.verdict).toBe('pass');
     expect(run.status).toBe(0);
+  });
+});
+
+/**
+ * task-378 AC 4 (red-first; `bug-287`; `spec-020` §4.14, §7 and T-38 to T-40, as amended at the design gate) — the
+ * twelfth check, `carries-content`, through the built CLI: its findings on hand submits, none on the commits
+ * `memory submit` writes, and the absent line judged only once an ancestor carries a `Carries content:` line. The
+ * fixture's `dna.yaml` is `MARK_DNA` (`test/core/helpers/history-mark-fixture.ts`): the repository's git identity is a
+ * developer, so the spawned `memory submit` runs. Expected messages: `spec-020` §4.14's table word for word. Expected
+ * red: no `carries-content` finding today (an empty filtered list, exit 0 where 1 is expected).
+ */
+describe('task-378 AC 4 — carries-content (spec-020 §4.14; T-38 to T-40)', () => {
+  const CC = (sha: string, message: string): Omit<ReportFinding, 'subject'> => gatedFinding(sha, 'body', 'carries-content', message);
+  const carriesFindings = (report: Report): Omit<ReportFinding, 'subject'>[] => findings(report).filter((entry) => entry.check === 'carries-content');
+  const NO_LINE = (items: string): string => `'submit' carries ${items} but declares no Carries content: line (spec-008 §2, bug-287)`;
+  const crlf = (text: string): string => text.replace(/\n/g, '\r\n');
+  const titled = (id: string, status: string, title: string, extra = ''): string =>
+    ['---', `id: "${id}"`, 'type: task', `title: "${title}"`, `status: ${status}`, '---', '', 'Body.', ...(extra ? [extra] : []), ''].join('\n');
+
+  /** Run the real `memory submit <id>` (the markers scrubbed); returns the commit it wrote. */
+  function toolSubmit(f: Fixture, id: string): string {
+    const run = wingfoil(f.root, ['memory', 'submit', id]);
+    expect({ id, status: run.status, stderr: run.stderr }).toEqual({ id, status: 0, stderr: '' });
+    return f.head();
+  }
+
+  it('T-38 — a hand submit carrying the body with no line: no finding before any commit carries one, the fifth row after one', () => {
+    const { f, base } = governed(MARK_DNA);
+    f.commit('wf(task): add t-2', { [TASK('t-2')]: taskDoc('draft', '', 't-2') });
+    const early = f.commit('wf(task): submit t-2', { [TASK('t-2')]: taskDoc('pending', 'More.', 't-2') });
+    f.commit('wf(task): add t-3', { [TASK('t-3')]: taskDoc('draft', '', 't-3') });
+    writeFixtureFile(f.root, TASK('t-3'), taskDoc('draft', 'More.', 't-3'));
+    const tool = toolSubmit(f, 't-3');
+    expect(git(f.root, ['log', '-1', '--format=%B', tool])).toContain('\nCarries content: the body\n');
+    f.commit('wf(task): add t-4', { [TASK('t-4')]: taskDoc('draft', '', 't-4') });
+    const late = f.commit('wf(task): submit t-4', { [TASK('t-4')]: taskDoc('pending', 'More.', 't-4') });
+    const run = verify(f.root, ['--base', base, '--format', 'json']);
+    const report = reportOf(run);
+    expect(carriesFindings(report)).toEqual([CC(late, NO_LINE('the body'))]);
+    expect(report.findings.filter((entry) => entry.sha === early || entry.sha === tool)).toEqual([]);
+    expect(run.status).toBe(1);
+  });
+
+  it('T-39 — one carries-content finding per malformed declaration, the §4.14 messages', () => {
+    const { f, base } = governed(MARK_DNA);
+    const cases: [string, string, Record<string, string>, string][] = [
+      ['t-2', "Carries content: frontmatter fields 'x'", { [TASK('t-2')]: taskDoc('pending', '', 't-2') }, "the Carries content: line names 'frontmatter fields 'x'', which is not an item spec-008 §2 declares (bug-287)"],
+      ['t-3', 'Carries content: the body', { [TASK('t-3')]: taskDoc('pending', '', 't-3') }, 'the Carries content: line declares the body, but the commit carries nothing beyond its state move (spec-008 §2, bug-287)'],
+      [
+        't-4',
+        "Carries content: the body, frontmatter field 'title'",
+        { [TASK('t-4')]: titled('t-4', 'pending', 'A better task', 'More.') },
+        "the Carries content: line declares the body, frontmatter field 'title', but the commit carries frontmatter field 'title', the body (spec-008 §2, bug-287)",
+      ],
+      ['t-5', 'Carries content: the body\nCarries content: the body', { [TASK('t-5')]: taskDoc('pending', 'More.', 't-5') }, '2 Carries content: lines; a submit declares one (spec-008 §2, bug-287)'],
+      ['t-6', 'carries content: the body', { [TASK('t-6')]: taskDoc('pending', 'More.', 't-6') }, 'the Carries content: key is written `Carries content:` (spec-008 §2, bug-287)'],
+    ];
+    const expected: Omit<ReportFinding, 'subject'>[] = [];
+    for (const [id, line, files, message] of cases) {
+      f.commit(`wf(task): add ${id}`, { [TASK(id)]: taskDoc('draft', '', id) });
+      expected.push(CC(f.commit(`wf(task): submit ${id}\n\n${line}`, files), message));
+    }
+    // Hand-shaped (no verb writes a line between `Approver:` and `Reason:`): the line sits OUTSIDE the `Reason:` block
+    // (AGENTS.md §5.1), so it declares carried content and row 1 fires (approver's ruling on the review, F1 (a)).
+    const approve = f.commit(`wf(task): approve t-1 [pending → backlog]\n\n${approverLine()}\nCarries content: the body\nReason: Ready.`, { [TASK('t-1')]: taskDoc('backlog') }, APPROVER);
+    expected.push(CC(approve, "'approve' declares no carried content: only a submit writes a Carries content: line (spec-008 §2, bug-287)"));
+    const run = verify(f.root, ['--base', base, '--format', 'json']);
+    expect(carriesFindings(reportOf(run))).toEqual(expected);
+    expect(run.status).toBe(1);
+  });
+
+  it('T-39 — an approve whose Reason: block holds a Carries content: line declares nothing: no carries-content finding (F1 (a))', () => {
+    // The `Reason:` block runs from the `Reason:` line to the trailing trailer paragraph or the end of the body
+    // (AGENTS.md §5.1); the last paragraph here is not trailer-shaped (`Carries content` is no trailer key), so the
+    // line is part of the reason.
+    const { f, base } = governed(MARK_DNA);
+    const approve = f.commit(`wf(task): approve t-1 [pending → backlog]\n\n${approvalBody('Ready.')}\n\nCarries content: the body`, { [TASK('t-1')]: taskDoc('backlog') }, APPROVER);
+    const run = verify(f.root, ['--base', base, '--format', 'json']);
+    expect(carriesFindings(reportOf(run)).filter((entry) => entry.sha === approve)).toEqual([]);
+  });
+
+  it('T-40 — a memory submit that only converts to CRLF declares the line endings: no finding; a hand submit converting another: the fifth row', () => {
+    const { f, base } = governed(MARK_DNA);
+    git(f.root, ['config', 'core.autocrlf', 'false']);
+    f.commit('wf(task): add t-2', { [TASK('t-2')]: taskDoc('draft', '', 't-2') });
+    f.commit('wf(task): add t-3', { [TASK('t-3')]: taskDoc('draft', '', 't-3') });
+    writeFixtureFile(f.root, TASK('t-2'), crlf(taskDoc('draft', '', 't-2')));
+    const tool = toolSubmit(f, 't-2');
+    expect(git(f.root, ['log', '-1', '--format=%B', tool])).toContain('\nCarries content: the line endings\n');
+    const hand = f.commit('wf(task): submit t-3', { [TASK('t-3')]: crlf(taskDoc('pending', '', 't-3')) });
+    const run = verify(f.root, ['--base', base, '--format', 'json']);
+    expect(carriesFindings(reportOf(run))).toEqual([CC(hand, NO_LINE('the line endings'))]);
+    expect(run.status).toBe(1);
+  });
+});
+
+describe('task-378 — P1.14-verify.feature, the scenario of this task', () => {
+  it('Error - a submit that does not declare the content it carries', () => {
+    const { f } = governed(MARK_DNA);
+    f.commit('wf(task): add t-5', { [TASK('t-5')]: taskDoc('draft', '', 't-5') });
+    writeFixtureFile(f.root, TASK('t-5'), taskDoc('draft', 'More.', 't-5'));
+    const run0 = wingfoil(f.root, ['memory', 'submit', 't-5']);
+    expect([run0.status, run0.stderr]).toEqual([0, '']);
+    expect(git(f.root, ['log', '-1', '--format=%B'])).toMatch(/^Carries content: /m);
+    f.commit('wf(task): add task-2', { [TASK('task-2')]: taskDoc('draft', '', 'task-2') });
+    const bad = f.commit('wf(task): submit task-2', { [TASK('task-2')]: taskDoc('pending', 'The body, filled in.', 'task-2') });
+    const run = verify(f.root, ['--format', 'json']);
+    const report = reportOf(run);
+    expect(report.findings.filter((entry) => entry.check === 'carries-content').map((entry) => [entry.sha, entry.message])).toEqual([
+      [bad, "'submit' carries the body but declares no Carries content: line (spec-008 §2, bug-287)"],
+    ]);
+    expect(run.status).toBe(1);
   });
 });

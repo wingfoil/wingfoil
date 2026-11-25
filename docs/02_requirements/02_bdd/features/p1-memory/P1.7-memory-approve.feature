@@ -76,3 +76,11 @@ Feature: P1.7 (US-2-10) - wingfoil memory approve
     Then the document transitions to the type's post-review approved state
     And the commit carries no "Co-Authored-By:" and no "AI-Model:" line
     And the command exits with code 0
+
+  Scenario: Error - a reason that states nothing
+    # spec-008 §2's sixth case (bug-498): a placeholder left in a copied command, or text with no word.
+    When I run "wingfoil memory approve task-101 --reason '<the reply>'"
+    Then the command exits with code 2 and message "invalid flag value: --reason must state a reason: it holds no word, or only a <placeholder>"
+    And nothing is written
+    When I run "wingfoil memory approve task-101 --reason '...'"
+    Then the command exits with code 2 with the same message, and nothing is written
