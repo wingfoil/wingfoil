@@ -54,4 +54,4 @@ As reported: approvals of later phases are offered, and the triaged bug is repor
 
 ### Retrospective
 
-- None.
+- The false "no open workflow carries it" had a second form the design's reproduction did not reach: a run's own iteration element, at its gate on a frontier step that approves nothing (a `produces:` phase first), carried by no field and so not held; the independent review of `task-374` found it (`workflow status --full` printed `approve or reject release-1 (release, planning; no open workflow carries it)` while `release-1` scoped the frontier step), and the identity rule of `spec-017` §5.1 closes it. A reproduction of a "not carried" report should also try the scope element itself, not only elements that name it.
