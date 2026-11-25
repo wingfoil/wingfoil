@@ -471,6 +471,19 @@ export interface InstanceDeduction {
   readonly late: readonly ElementRef[];
 }
 
+/**
+ * An element sitting at a gate (`spec-017` §5.1, §8 `UngatedElement`, from `minor-v0.4`, `bug-487`), and the open
+ * instance that **holds** it, if one does: one of its frontmatter fields is named after the type of an element `S` that
+ * scopes an entry of the trail of a frontier step of that instance, with a value equal to `S`'s id or to `S`'s own
+ * `version` field — or the element is itself such an `S`, held whatever its fields. `heldBy` records the first holder in
+ * instance, frontier and trail order (see `holderOf`): the element itself, unless an earlier holder in that order holds
+ * it by a field (for example, a nested iteration element whose own field names its parent is held by that ancestor).
+ * Absent when no open instance holds it.
+ */
+export interface GatedElement extends ElementRef {
+  readonly heldBy?: { readonly instance: string; readonly element: ElementRef };
+}
+
 /** The whole answer at one commit. */
 export interface Deduction {
   readonly baseline: Baseline;
@@ -482,9 +495,9 @@ export interface Deduction {
   readonly diagnostics: readonly Diagnostic[];
   /**
    * Every Memory element at `HEAD` sitting in a `gates` state of its type that is not also a `waiting` state (an approver
-   * acts on it), ascending `(type, id)` (§5.1, ungated elements).
+   * acts on it), ascending `(type, id)` (§5.1, ungated elements), a held one with its {@link GatedElement.heldBy}.
    */
-  readonly gated: readonly ElementRef[];
+  readonly gated: readonly GatedElement[];
   /**
    * The open instances kept only by the transitory pre-marker rule (`spec-017` §3.2, task-345): their start commit
    * carries no start marker. In instance order, each with its plan's repository-relative path; `workflow status`
@@ -1793,12 +1806,16 @@ export function deduceWorkflowState(snapshot: DeductionSnapshot): Deduction {
   // declared in `memory.yaml` (`readElements` leaves the others out), so the machine resolves. A gate that is also a
   // `waiting` state is left out: its forward edge is verb-less, so no approver acts on it — a workflow action advances
   // it (dl-123; `memory approve` refuses it).
+  const holders = scopeHolders(instances, elements);
   const gated = elements
     .filter((element) => {
       const machine = resolveStateMachine(snapshot.memoryYaml!, element.type);
       return Object.prototype.hasOwnProperty.call(machine.gates ?? {}, element.status) && !(machine.waiting ?? []).includes(element.status);
     })
-    .map(refOf)
+    .map((element): GatedElement => {
+      const heldBy = holderOf(element, holders);
+      return heldBy === null ? refOf(element) : { ...refOf(element), heldBy };
+    })
     .sort(compareRefs);
 
   return {
@@ -1809,6 +1826,48 @@ export function deduceWorkflowState(snapshot: DeductionSnapshot): Deduction {
     gated,
     ...(preMarker.length === 0 ? {} : { preMarker }),
   };
+}
+
+/** An element scoping a frontier step of an open instance, as {@link holderOf} matches it. */
+interface ScopeHolder {
+  readonly instance: string;
+  readonly element: ElementRef;
+  /** The scoping element's own `version` field, or `null` when it has none. */
+  readonly version: string | null;
+}
+
+/**
+ * Every element scoping an entry of the trail of a frontier step of an open instance (`spec-017` §5.1, `bug-487`), in
+ * instance order (§3.3), then frontier order, then trail order — duplicates kept, the first one wins in
+ * {@link holderOf}. A collection entry scopes no element and holds nothing.
+ */
+function scopeHolders(instances: readonly InstanceDeduction[], elements: readonly Element[]): ScopeHolder[] {
+  const byKey = new Map(elements.map((element) => [keyOf(element), element] as const));
+  return instances.flatMap((entry) =>
+    entry.frontier.flatMap((step) =>
+      step.trail.flatMap((link): ScopeHolder[] => {
+        if (link.scope === null || !('element' in link.scope)) return [];
+        const { type, id, status } = link.scope.element;
+        const version = byKey.get(keyOf({ type, id }))?.frontmatter['version'];
+        return [{ instance: entry.instance.id, element: { type, id, status }, version: scalarText(version) }];
+      }),
+    ),
+  );
+}
+
+/**
+ * The first holder of `element` (`spec-017` §5.1): one whose element IS `element` (it scopes a frontier step itself,
+ * held whatever its fields), or whose element's type names a frontmatter field of `element` whose value is that
+ * element's id or its `version`; `null` when none does. Both tests run per holder, so the holders' order decides.
+ */
+function holderOf(element: Element, holders: readonly ScopeHolder[]): GatedElement['heldBy'] | null {
+  const self = keyOf(element);
+  for (const holder of holders) {
+    if (keyOf(holder.element) === self) return { instance: holder.instance, element: holder.element };
+    const value = scalarText(element.frontmatter[holder.element.type]);
+    if (value !== null && (value === holder.element.id || value === holder.version)) return { instance: holder.instance, element: holder.element };
+  }
+  return null;
 }
 
 /**

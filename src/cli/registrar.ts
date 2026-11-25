@@ -260,7 +260,7 @@ export function buildCliCommands(modules: readonly CoreModule[], options: BuildC
           // every other command keeps `renderSuccess`'s indented JSON (spec-008 §2).
           process.stdout.write(
             format === 'console' && operation.renderConsole !== undefined
-              ? operation.renderConsole(result.value)
+              ? operation.renderConsole(result.value, { flags: operationFlags ?? {} })
               : renderSuccess(result.value, format),
           );
           // A completed run whose verdict fails (task-365, `spec-020` §8.1, `spec-005` §1): the payload above, then its

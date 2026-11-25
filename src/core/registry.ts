@@ -194,9 +194,12 @@ export interface CoreOperation<P = unknown, R = unknown> {
    * The command's own `--format console` rendering of a successful `value`, for an operation whose
    * spec defines one (task-220: `agent show`'s `key: value` lines, `spec-016` §6). Absent, `console`
    * prints the indented JSON `spec-008` §2 declares for every other command until P5.1.4. `json` and
-   * `yaml` never use it, and the MCP surface never calls it. Pure: the same value renders the same text.
+   * `yaml` never use it, and the MCP surface never calls it. Pure: the same value and call render the same text.
+   *
+   * `call` carries the invocation's parsed {@link flags} (`spec-006` §2, from `minor-v0.4`, task-374), for a
+   * console-only flag such as `workflow status --full`; every other renderer ignores it.
    */
-  readonly renderConsole?: (value: R) => string;
+  readonly renderConsole?: (value: R, call?: { readonly flags: Readonly<Record<string, boolean>> }) => string;
   /**
    * For a command that hands its stdout to a child process (`agent execute`, `spec-016` §3.4, task-228):
    * the report its success prints **on stderr**, with nothing on stdout (`spec-005` §2). `document` is

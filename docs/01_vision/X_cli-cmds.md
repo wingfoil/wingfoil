@@ -1,7 +1,7 @@
 # CLI Commands Reference — WingFoil
 
-**Version:** 2.8
-**Date:** 2026-11-23  
+**Version:** 2.9
+**Date:** 2026-11-24  
 **Status:** Approved
 
 ---
@@ -171,13 +171,13 @@ instance and makes the previous one active. The Memory verbs take a document `<i
 
 | Command | Description | Actors | Journeys | Notes |
 |---------|-------------|--------|----------|-------|
-| `wingfoil workflow status [<ref>]` | Show state of all open workflows and pending approvals | Morgan, Casey, Sam | 2, 3, 4, 5, 6 | Dashboard view; the active instance first and marked, each with its phase progress, frontier and pending approvals and who they are routed to; then the elements waiting at a gate (`spec-017` §7.4) |
+| `wingfoil workflow status [<ref>] [--full]` | Show state of all open workflows and pending approvals | Morgan, Casey, Sam | 2, 3, 4, 5, 6 | Dashboard view; the active instance first and marked, each with its phase progress, frontier and pending approvals and who they are routed to; then the elements waiting at a gate, counted per type on one line, one line each with `--full`, an element an open workflow holds naming its holder (`spec-017` §5.1, §7.4) |
 | `wingfoil workflow next [<ref>] [--assigned-to <who>]` | Show next step of the active workflow, its element + directives | Alex, Morgan, Jordan | 1, 4 | Reports the **element of the current step** (e.g. REL in planning, TASK in implementation), next action, and auto-loaded directives for the role. `--assigned-to` keeps the steps whose role `me`, a member or a role holds |
 | `wingfoil workflow start <name> [--element <type>:<id>] [--title <title>] [--set phase=<v>] [--set scope=<v>]` | Open a startable workflow; set it as the active context; init first step | Morgan, Alex | 0a, 0b | Only startable workflows are startable. Records the instance as a `plan` element (an `add` and a `submit` commit). `--set` overrides a derived plan token (`spec-017` §7.1) |
 | `wingfoil workflow end [<ref>]` | Close the active (or selected) workflow; restore previous context | Morgan, Alex | 0a, 0b | Refused while the instance is not complete. Moves its plan `active → done`; the previous open instance becomes active. Creates git commit |
 | `wingfoil workflow finalize [<ref>] [--step <key>] [--reason <text>]` | Record that a step with no Memory or file evidence is complete | Morgan, Sam | 2, 4 | One empty commit with the phase-record trailers; on a phase that declares `approval:`, needs the approver role and `--reason` (`spec-017` §7.9) |
 | `wingfoil workflow list [--all]` | List workflows **executable now** (`--all` for every defined workflow) | All | 0a, 0b | Context-aware: startable workflows + an includable one when it is the next executable step. `--all` shows every defined workflow. Shows name, startable, includable, description |
-| `wingfoil workflow show <ref>` | Display details of a workflow (phases, steps, directives, Memory structure) | All | 0a, 0b | Shows the workflow resolved: phases, roles and their directives, actions, checks, `produces`, approvals, included workflows nested under their phases |
+| `wingfoil workflow show <ref>` | Display details of a workflow (phases, steps, directives, Memory structure) | All | 0a, 0b | Shows the workflow resolved: phases, roles and their directives, actions, checks, `produces`, approvals, included workflows nested under their phases; `<ref>` may be any instance plan's id, open or closed, and the answer names that instance (`spec-017` §7.6) |
 | `wingfoil workflow create <name> (--kind main\|sub \| [--startable] [--includable]) [--element <type>] [--description <text>]` | Create new custom workflow file | Morgan, Alex | 2, 4, 6 | Creates `.wingfoil/workflows/custom/<name>.yaml` with one phase and includes it in `workflows.yaml`. Flag-based; interactive creation is post-v0.3 (P4.8). Not auto-removed on DNA change |
 | `wingfoil workflow remove <ref>` | Remove custom workflow after verifying it's not included elsewhere | Morgan, Alex | 2, 4, 6 | Only removes custom workflows (built-in ones cannot be removed). The check always runs: refused while another workflow includes it or an open instance runs it (`spec-017` §7.8) |
 | `wingfoil workflow adopt <ref> [--step <key>] [--element <type:id>] [--plan] [--apply] [--reason <text>]` | Record which step an existing element counts as created by (`--plan` proposes every adoption, `--plan --apply` writes them) | Morgan | 2, 4 | One empty commit per adoption with the provenance trailers; the single form needs `--reason` and any role, `--plan --apply` needs the approver role (`spec-017` §7.11, `dl-187`; new in 0.3.1) |
@@ -196,6 +196,7 @@ instance and makes the previous one active. The Memory verbs take a document `<i
 | `--from`, `--to` | `<workflow>.<phase>` | On `rekey`: the renamed step key, no longer declared, and the key it was renamed to, a declared step of the instance's workflow or of a workflow it includes | The workflow file's history; `W_PROVENANCE_ORPHAN` names the old key | `spec-008` §12, `spec-017` §7.12 | The rekey commit's trailers |
 | `--kind`, `--startable`, `--includable`, `--description` | enum / flag / string | On `create`: the declaration (`--kind main\|sub`, or one or both of the two flags) and the description | User specifies via flag | `spec-008` §12 | `.wingfoil/workflows/custom/<name>.yaml` |
 | `--all` | flag | On `workflow list`; shows every defined workflow instead of only executable-now | User specifies via flag | If set, lists all defined workflows; otherwise only executable-now | N/A (affects query scope only) |
+| `--full` | flag | On `workflow status`: lists the ungated elements one per line instead of the summary line | User specifies via flag | Console only: `--format json` and `yaml` are the same with or without it (`spec-017` §7.4) | N/A (affects the console only) |
 
 ---
 
@@ -400,6 +401,11 @@ Every command accepts these, except `--dry-run`, which only the commands that ch
 ---
 
 ## Revision history
+
+**Version 2.9 (2026-11-24) — `workflow status --full` and `workflow show <instance id>`, per `task-374` (`bug-341`, `bug-359`, `bug-487`, `spec-017` §5.1, §7.4, §7.6).**
+The `workflow status` row gains `[--full]`: the ungated elements are counted per type on one line by default and listed
+one per line with the flag, and an element an open workflow holds names its holder; the parameters table gains `--full`.
+The `workflow show` row says that `<ref>` may be any instance plan's id, open or closed.
 
 **Version 2.8 (2026-11-23) — `wingfoil verify`, per `task-365` (`spec-020` §2, P1.14).**
 Pillar 1 gains the `verify` row: the check of a commit range against the Memory and approval contracts, read from
