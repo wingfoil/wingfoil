@@ -600,7 +600,9 @@ An ungated element is **held** by an open instance (`bug-487`, from `minor-v0.4`
 named after the type of an element `S` that scopes a step of that instance's frontier — `S` is the scope of an entry of
 the step's `trail` — and the field's value is `S`'s id or the value of `S`'s own `version` field: a bug whose `release`
 is `minor-v0.4`, or `v0.4` when `minor-v0.4` declares `version: "v0.4"`, while a `release-cycle` iteration over
-`minor-v0.4` is on the frontier. A held element stays ungated — no step of the frontier approves it — and records the
+`minor-v0.4` is on the frontier. An element that is itself `S` — the scope of an entry of such a step's trail — is held
+by that instance whatever its fields; its `heldBy` records the first holder in the order below, which is the element
+itself unless an earlier holder in that order holds it by a field. A held element stays ungated — no step of the frontier approves it — and records the
 first such instance and `S`, in instance order (§3.3), then frontier order, then trail order; it is never reported as
 carried by no open workflow.
 
@@ -828,7 +830,9 @@ before.
 `ungated`, ascending `(type, id)`, a held one with its `heldBy` (§5.1), and counts them per type in `ungatedByType`,
 ascending by type in byte order, one entry per type that has one. The console prints them as one line by default,
 after the pending approvals: `ungated elements: <n> (<type> <count>, …) — routed to <members>; --full lists them`, the
-members as a pending approval's line names them (§5.3). The boolean flag `--full` prints instead the line `ungated
+members as a pending approval's line names them (§5.3). When no member holds the `approver` role, `<members>` is
+§5.1's routing error, `no approver found for role 'approver' in dna.yaml`, the text a pending approval's line prints in
+their place, in the summary line and in each `--full` line alike. The boolean flag `--full` prints instead the line `ungated
 elements: <n>` and one line per element in `ungated`'s order: `human needed: approve or reject <id> (<type>, <status>;
 no open workflow carries it) — routed to <members>`, or for a held element `human needed: approve or reject <id>
 (<type>, <status>; held by <instance>'s <S type> <S id>, no step of it approves it now) — routed to <members>`. `--full`
@@ -2088,3 +2092,14 @@ wrong since `task-367` registered the Memory Tools on it (`registerCoreTools`, `
 and says no workflow Tool is served yet (W0-R10, a same-class instance in a section this task amends). No Tool,
 Resource or rule changes. Edited in place without a supersede or a state change (`dl-047`), pending the approver's
 `memory amend` at `task-374`'s design gate.
+
+**Revision (2026-11-24, `task-374-read-a-workflow-run-closed-runs-an-instance-s-phase-tree-what-a-start-would-deduce-bug-485-bug-487-w1-r12`,
+review) — §5.1 and §7.4: an element that scopes a frontier step itself, and the ungated elements with no approver.**
+F2: a gated element that is itself the scope of a frontier step of an open instance — a run's own iteration element,
+sitting at its gate on a step that approves nothing — is held by that instance whatever its fields, so it is never
+reported as carried by no open workflow; `heldBy` keeps its shape and records the first holder in §5.1's order, which
+is the element itself unless an earlier holder in that order holds it by a field (for example, a nested iteration
+element whose own field names its parent is held by that ancestor), and §7.4's held line is unchanged. F1: §7.4 states the console form of the ungated elements when no member holds the `approver`
+role, §5.1's routing error in place of the members, as the code already prints it. No payload key, exit code,
+diagnostic code or other deduction rule changes. Edited in place without a supersede or a state change (`dl-047`),
+pending the approver's `memory amend`.
