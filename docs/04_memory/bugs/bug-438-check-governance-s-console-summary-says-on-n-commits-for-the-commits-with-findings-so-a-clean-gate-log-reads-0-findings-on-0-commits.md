@@ -65,4 +65,9 @@ checked, but the summary line seems to contradict it.
 
 ### Retrospective
 
-- None.
+- Fixed by `task-366` (design D10, `spec-020` §7 as amended): the three summary lines of both the script
+  (`formatReport`) and `wingfoil verify` (`renderVerifyConsole`) say what they count — `… on <m> commits with a finding`,
+  `… on <m> commits with an entry` — and a line with no entry reads `gated: 0 findings`, `history: 0 findings`,
+  `state not checked: 0 entries (…)`; `--json` and `E_VERIFY_FINDINGS` keep their words. Pinned by
+  `test/core/governance-check.test.ts` and `test/cli/check-governance-extension.test.ts` (task-366 AC 8). Lesson: a count
+  whose noun is shared by two quantities (commits judged, commits with a finding) needs its own noun phrase.
