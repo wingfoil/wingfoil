@@ -82,7 +82,10 @@ function fixture(): Fixture {
 function runPlan(f: Fixture, id: string, entry: string | null): string {
   const path = `docs/05_plans/rl-v9/rel-v9.9/${id}.md`;
   f.commit(`wf(plan): add ${id}\n\n${VERSION_TRAILER}\n${ATTRIBUTION}`, { [path]: planDocument(id, 'draft', null) });
-  f.commit(`wf(plan): submit ${id}\n\nCarries content: frontmatter field 'release', the body\n\n${VERSION_TRAILER}\n${ATTRIBUTION}`, {
+  // spec-008 §2: the submit declares what it carries beyond the state move: the body when an entry is written, and
+  // nothing (no line) when only `status:` changes.
+  const carries = entry === null ? '' : 'Carries content: the body\n\n';
+  f.commit(`wf(plan): submit ${id}\n\n${carries}${VERSION_TRAILER}\n${ATTRIBUTION}`, {
     [path]: planDocument(id, 'active', entry),
   });
   return f.commit(`wf(plan): finalize ${id} [active → done]\n\n${VERSION_TRAILER}\n${ATTRIBUTION}`, { [path]: planDocument(id, 'done', entry) });

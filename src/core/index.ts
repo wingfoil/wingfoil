@@ -247,6 +247,7 @@ export {
   GOVERNANCE_CHECKS,
   governanceCheck,
   renderVerifyConsole,
+  trailerKeysOutsideFinalParagraph,
   unverifiedFindings,
   VERIFY_WHOLE_HISTORY,
   verifyFindingsMessage,

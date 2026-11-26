@@ -403,10 +403,12 @@ describe('state rule — commits without a bracket (review)', () => {
 describe('configuration a gated commit cannot be checked without (review)', () => {
   const f = fixture();
   f.pending('t-1');
-  const historyWithoutConfig = (() => {
-    git(f.root, ['rm', '--quiet', '.wingfoil/memory.yaml']);
-    return f.task('t-1', 'backlog', 'wf(task): approve t-1 [pending → backlog]' + approval(), APPROVER);
-  })();
+  // task-366 AC 3 (design D1 (a)): the case on this commit, "keeps history lenient", asserted the script's own reading
+  // of memory.yaml at the commit; spec-020 §4.1 reads the first parent's, and the case moved to
+  // test/core/governance-check-script-cases.test.ts against governanceCheck. The commit stays: the gated commits
+  // below are judged without the memory.yaml it removes.
+  git(f.root, ['rm', '--quiet', '.wingfoil/memory.yaml']);
+  f.task('t-1', 'backlog', 'wf(task): approve t-1 [pending → backlog]' + approval(), APPROVER);
   const introduction = f.commit('chore: introduce the check', { 'scripts/check-governance.cjs': '// placeholder\n' });
   const gatedWithoutConfig = f.task('t-1', 'in-progress', 'wf(task): start t-1 [backlog → in-progress]');
   f.commit('chore: broken memory.yaml', { '.wingfoil/memory.yaml': 'types: [\n' });
@@ -417,11 +419,6 @@ describe('configuration a gated commit cannot be checked without (review)', () =
     expect(rulesOf(report, gatedWithoutConfig)).toEqual(['state']);
     expect(rulesOf(report, gatedInvalidConfig)).toEqual(['state']);
     expect(exitCodeFor(report)).toBe(1);
-  });
-
-  it('keeps history lenient: no finding, listed as state not checked', () => {
-    expect(rulesOf(report, historyWithoutConfig)).toEqual([]);
-    expect(report.stateUnchecked.some((entry) => entry.sha === historyWithoutConfig)).toBe(true);
   });
 });
 

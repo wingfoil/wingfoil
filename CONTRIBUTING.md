@@ -16,4 +16,12 @@ In short:
 - **A vulnerability:** never in a public issue. Follow [`SECURITY.md`](SECURITY.md).
 - **A pull request:** its template asks for the Memory element the change implements.
 
+## Set up a clone
+
+Once per clone, before your first push: `npm ci`, `npm run build`, then `npm run setup:hooks`. The last one sets
+`core.hooksPath` to `.githooks`, so `.githooks/pre-push` runs the governance check (`wingfoil verify` and this
+repository's own checks) over the commits you are about to push, and refuses the push when one fails or when `dist/`
+is not built. It changes nothing when another hooks path, or a hook of your own, is already set: it names it instead.
+The check on CI stays the binding one (`git-conventions` §9).
+
 Everyone taking part follows the [Code of Conduct](CODE_OF_CONDUCT.md).

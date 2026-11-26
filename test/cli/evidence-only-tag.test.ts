@@ -249,6 +249,8 @@ describe('task-282 AC 4 — the pre-check is bound and declared', () => {
       'phase-branch-merged-to-integration-branch',
       `staging-rehearsal-passed(transcript: ${TRANSCRIPT_PATH})`,
       `evidence-only-since-candidate(transcript: ${TRANSCRIPT_PATH})`,
+      // task-366 AC 6 (dl-190 (c), design item 8, D8): the tag waits for the required governance check, last.
+      'governance-check-passed(kind: "{release.kind}", version: "{release.version}")',
     ]);
     expect(tag?.description).toContain('evidence-only-since-candidate');
     expect(tag?.description).toContain('git diff --name-only');

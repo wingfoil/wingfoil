@@ -1,14 +1,19 @@
 # WingFoil — the governance check on every push and pull request to main or to a release/X.Y line
 # (dl-103 §1 (A); built by task-208; release/X.Y added by task-267, dl-159).
 #
-#   governance → `npm ci`, `npm run build` (the check reads src's parsers from dist/), then:
-#     - `node scripts/check-governance.cjs --base "$BASE"` (task-167, extended by task-208): every `wf()`
-#       commit of the range against the subject, bracket, body, authority and state rules, plus the
-#       later checks — verb ↔ edge pairing (bug-192), status changes outside a wf() operation (dl-139),
-#       a supersedes: pair left half-done (bug-218), config versions over the range (bug-249) and AI
-#       co-author trailers on approve/reject (bug-307), an Approver: line on a workflow: finalize, adopt
-#       or rekey record (bug-444) and a WingFoil-* trailer outside the final paragraph (bug-391). Exit 1 on a finding after a rule's introduction
-#       fails the run; history before it is reported only (dl-103 §1 starting mode, per check).
+#   governance → `npm ci`, `npm run build` (the check runs the code build's dist/cli.js), then:
+#     - `node scripts/check-governance.cjs --base "$BASE"` (task-167, extended by task-208, made the extension of
+#       `wingfoil verify` by task-366, spec-020 §6): the script runs `node dist/cli.js verify` — the code build of
+#       this checkout (spec-020 §6.3) — for the shipped checks over the range: the subject, bracket, body,
+#       authority and state rules, verb ↔ edge pairing (bug-192), status changes outside a wf() operation
+#       (dl-139), a supersedes: pair left half-done (bug-218), agent trailers on an approval commit (spec-018 §4),
+#       an Approver: line on a workflow: finalize, adopt or rekey record (bug-444), a WingFoil-* trailer outside
+#       the final paragraph (bug-391) and a submit's Carries content: line against what it carries (bug-287); it then adds this repository's three checks — config versions over the range
+#       (bug-249), a finalized plan's retrospective entry (bug-320) and the co-author identity (bug-475). Under the
+#       code build a branch that weakens a check passes its own run, the accepted weakness spec-020 §6.3 records;
+#       branch protection on main and the review of the change stand against it. Exit 1 on a finding after a
+#       check's introduction fails the run; history before it is reported only (dl-103 §1 starting mode, per
+#       check).
 #     - `node scripts/lint-claims.cjs --base "$BASE" --format github` (dl-097 §2 (b)): the claim-shape
 #       lint over the Memory documents the range changed, as `::warning` annotations. Warn-only by its own
 #       exit status (always 0 on findings, 2 only when it cannot run) until its false-positive rate has
@@ -31,13 +36,13 @@
 #
 # Why `fetch-depth: 0`: the check finds its introduction commit, and each later check's, on HEAD's
 # first-parent line; in a shallow clone they are missing and every fetched commit would be gated
-# (task-167 handover). Why the build: the check loads `dist/` and exits 2 without it.
+# (task-167 handover). Why the build: the check runs `dist/cli.js` and loads `dist/`, and exits 2 without it.
 #
 # Binding: this workflow makes the check EXIST; branch protection on `main` requiring the `governance`
 # status makes it binding (dl-103 §1 (C)) — a repository setting the approver configures, recorded as a
 # `service` element (`kind: setting`) through service-ingest; a `release/X.Y` line has no such rule until
 # the approver adds one when the line is cut (dl-159). The local twin is `.githooks/pre-push`
-# (dl-103 §1 (B), opt-in: `git config core.hooksPath .githooks`; git-conventions §9).
+# (dl-103 §1 (B), dl-190 (a)): required by git-conventions §9 and installed once per clone by `npm run setup:hooks`.
 #
 # Kept equal to ci.yml, and pinned by `test/cli/governance-workflow.test.ts`: `env.NODE_VERSION`, the
 # runner image, every `uses:` line (full commit SHA, release tag in the trailing comment, dl-057; the

@@ -26,7 +26,13 @@ import { execFileSync } from 'node:child_process';
 
 import { CHECKS, checkGovernance, exitCodeFor } from '../../scripts/check-governance.cjs';
 import type { GovernanceReport, GovernanceRule } from '../../scripts/check-governance.cjs';
+import { GOVERNANCE_CHECKS } from '../../src/core/governance-check';
 import { git, makeTempGitRepo, removeTempDir, writeFixtureFile } from '../storage/helpers/git-fixture';
+
+/** `spec-020` §4.2–§4.5's base checks: gated by the script's own introduction, no marker (task-366 D13). */
+const BASE_CHECKS: readonly string[] = ['subject', 'bracket', 'body', 'authority', 'state'];
+/** `spec-020` §4.12's extension checks, which stay in the script with their markers (task-366 design item 1). */
+const EXTENSION_CHECKS: readonly string[] = ['config-version', 'plan-retrospective', 'co-author-identity'];
 
 const TASK_MACHINE = `  task:
     path: "docs/memory/task/{id}.md"
@@ -330,8 +336,11 @@ describe('config versions over a --base range (bug-249)', () => {
 });
 
 describe('per-check introduction (dl-103 §1 starting mode, per check)', () => {
+  // task-366 D13: written so that a check the verb gains later (task-378's) adds its marker to CHECKS with no change
+  // here — the nine markers stay pinned exactly, every later check of GOVERNANCE_CHECKS has its marker, and CHECKS
+  // holds nothing else (the five base checks keep the script's own introduction and have none).
   it('pins every marker exactly: renaming one would silently move that rule\'s cut-off', () => {
-    expect(CHECKS).toEqual({
+    expect(CHECKS).toMatchObject({
       'verb-edge': 'governance-check:verb-edge',
       'status-outside-wf': 'governance-check:status-outside-wf',
       'supersedes-pair': 'governance-check:supersedes-pair',
@@ -344,6 +353,12 @@ describe('per-check introduction (dl-103 §1 starting mode, per check)', () => {
       // task-352 (bug-475, bug-535): a Co-Authored-By outside team.agents and team.members, or a duplicated pair.
       'co-author-identity': 'governance-check:co-author-identity',
     });
+  });
+
+  it('task-366 D13: every check of GOVERNANCE_CHECKS but the five base checks has its marker in CHECKS, and CHECKS has no other key', () => {
+    const later = GOVERNANCE_CHECKS.map((entry: { check: string }) => entry.check).filter((check: string) => !BASE_CHECKS.includes(check));
+    for (const check of later) expect([check, (CHECKS as Record<string, string>)[check]]).toEqual([check, `governance-check:${check}`]);
+    expect(Object.keys(CHECKS).sort()).toEqual([...later, ...EXTENSION_CHECKS].sort());
   });
 
   it('takes the merge commit as the cut-off when a --no-ff merge brings the marker in, as on main', () => {

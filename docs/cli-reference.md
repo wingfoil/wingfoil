@@ -2045,9 +2045,9 @@ checks: subject 0.4.0, bracket 0.4.0, body 0.4.0, authority 0.4.0, state 0.4.0, 
 FAIL — gated:
   ae5b0fd46b380a04c64e05d9f35b9cc01bd00685 authority/authority: the author <stranger@example.invalid> holds no approver role in team.members (dl-094)
       wf(task): approve task-1 [pending → backlog]
-gated: 1 findings on 1 commits (authority 1)
-history: 0 findings on 0 commits
-state not checked: 0 entries on 0 commits (history with no machine, no named document, a document gone at HEAD, or a revision that does not parse or is in a newer format)
+gated: 1 findings on 1 commits with a finding (authority 1)
+history: 0 findings
+state not checked: 0 entries (history with no machine, no named document, a document gone at HEAD, or a revision that does not parse or is in a newer format)
 error: E_VERIFY_FINDINGS: 1 findings on 1 commits fail the governance check (authority 1)
 ```
 
@@ -2063,7 +2063,9 @@ the parents and blobs the checks read are missing.
 
 What it cannot prove: the `authority` check compares a commit's author email with `dna.yaml`, and anyone can set any
 email in their own git configuration. It finds a commit no WingFoil verb would have written, or one written by an
-identity the committed team does not authorize; it authenticates no one.
+identity the committed team does not authorize; it authenticates no one. A merge commit's own resolution of a Memory
+document is judged by no check: each parent's commits are judged on their own line, and a status the resolution writes
+is the merging person's responsibility (`dl-241` (b)).
 
 - **Exit:** `0` — the run completed and no finding is gated (history findings may be listed); `1` — the run completed
   and a finding is gated: the report on stdout, then on stderr `error: E_VERIFY_FINDINGS: <n> findings on <m> commits

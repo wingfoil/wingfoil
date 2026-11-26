@@ -658,6 +658,9 @@ describe('task-378 AC 5 — body: a recorded Reason: block that states nothing (
   });
 });
 
+// task-366 AC 8 (red-first; `bug-438`, design D10; `spec-020` §7 as amended): the three summary lines name what their
+// commit count counts — "on <m> commits with a finding" / "with an entry" — and a line whose count is 0 drops its commit
+// count and its count list. The E_VERIFY_FINDINGS reason keeps its words.
 describe('task-365 AC 6 / AC 7 — the console form and the E_VERIFY_FINDINGS reason (spec-020 §7, §8.2)', () => {
   const H = 'a'.repeat(40);
   const B = 'b'.repeat(40);
@@ -716,9 +719,9 @@ describe('task-365 AC 6 / AC 7 — the console form and the E_VERIFY_FINDINGS re
         'history — reported, not failing:',
         `  ${S0} body/trailer-paragraph: ${M3}`,
         '      wf(task): submit t-1',
-        'gated: 2 findings on 1 commits (authority 2)',
-        'history: 1 findings on 1 commits (body 1)',
-        `state not checked: 1 entries on 1 commits ${UNCHECKED_TAIL}`,
+        'gated: 2 findings on 1 commits with a finding (authority 2)',
+        'history: 1 findings on 1 commits with a finding (body 1)',
+        `state not checked: 1 entries on 1 commits with an entry ${UNCHECKED_TAIL}`,
       ].join('\n'),
     );
   });
@@ -728,9 +731,9 @@ describe('task-365 AC 6 / AC 7 — the console form and the E_VERIFY_FINDINGS re
       [
         'wingfoil verify: 1 wf() commits and 0 other commits in HEAD (1 gated; every commit gated)',
         CHECKS_LINE,
-        'gated: 0 findings on 0 commits',
-        'history: 0 findings on 0 commits',
-        `state not checked: 0 entries on 0 commits ${UNCHECKED_TAIL}`,
+        'gated: 0 findings',
+        'history: 0 findings',
+        `state not checked: 0 entries ${UNCHECKED_TAIL}`,
       ].join('\n'),
     );
   });

@@ -222,8 +222,10 @@ describe('git-conventions §9 — dl-185 C3 (task-291)', () => {
   const f9 = flat(section('9. Checks on pushed commits'));
   const header = TEXT.slice(0, TEXT.indexOf('\n---', 4));
 
-  it('AC 2 (characterization): the hook is a local convenience and CI is the enforcement point', () => {
-    expect(f9).toContain('The pre-push hook is a local convenience');
+  // task-366 AC 5 (dl-190 (a)) replaces this characterization: it asserted the text that AC removes.
+  it('AC 2, as task-366 AC 5 replaces it: the hook is required and CI is the enforcement point', () => {
+    expect(f9).toContain('The pre-push hook is required');
+    expect(f9).not.toContain('The pre-push hook is a local convenience');
     expect(f9).toContain('CI is the enforcement point');
   });
 
@@ -479,5 +481,65 @@ describe('git-conventions §9 — workflow records and trailer paragraph (task-3
     const date = /\*\*Date:\*\* (\d{4}-\d\d-\d\d)/.exec(TEXT);
     expect(date).not.toBeNull();
     expect((date?.[1] ?? '') >= '2026-10-31').toBe(true);
+  });
+});
+
+/**
+ * task-366 (`dl-190` (a), `bug-448`; design item 7, D6, D11, D14) — red-first, the texts are new:
+ * - AC 5: §9 requires the pre-push hook, installed by `npm run setup:hooks` (`dl-190` (a));
+ * - AC 9: §1 rule 6 says how a gated finding the approver accepted before is carried at the merge forward (`bug-448`):
+ *   named in the `--reason` of the `merge-forward` phase's `workflow finalize`, the check still run, any other gated
+ *   finding aborting the merge forward; rule 6's commands keep their order (task-306's pins, re-asserted here);
+ * - the version is 3.0 or later, its entry naming `task-366` and `bug-448` and keeping `(prev 2.9`; the Date is
+ *   2026-11-24 or later.
+ * Substrings of whitespace-flattened text (task-276), each absence beside its positive; version pins "≥" plus the
+ * entry naming the task (bug-314).
+ */
+describe('git-conventions §1 rule 6 and §9 — dl-190 (a), bug-448 (task-366)', () => {
+  const flat = (s: string): string => s.replace(/\s+/g, ' ');
+  const f1 = flat(section('1. Branches'));
+  const f9 = flat(section('9. Checks on pushed commits'));
+  const header = TEXT.slice(0, TEXT.indexOf('\n---', 4));
+
+  it('AC 5: §9 requires the pre-push hook, installed with npm run setup:hooks, citing dl-190 (a)', () => {
+    expect(f9).toContain('The pre-push hook is required');
+    expect(f9).toContain('`npm run setup:hooks`');
+    expect(f9).toContain('`dl-190` (a)');
+  });
+
+  it('AC 9: rule 6 states how a finding the approver accepted is carried at the merge forward, citing bug-448', () => {
+    expect(f1).toContain('unless the approver accepted it before');
+    expect(f1).toContain('`bug-448`');
+    expect(f1).toContain("the `--reason` of the `merge-forward` phase's `workflow finalize`");
+    expect(f1).toContain('aborts the merge forward');
+  });
+
+  it("AC 9: rule 6's commands are still there, in order", () => {
+    const commands = [
+      '`git worktree add --detach <path> origin/main`',
+      '`git merge --no-ff --no-commit origin/release/X.Y`',
+      '`npx jest test/lint/version-bump.test.ts`',
+      '`node scripts/check-governance.cjs --base origin/main`',
+      '`git push origin HEAD:main`',
+      '`git merge --ff-only origin/main`',
+    ];
+    const at = commands.map((command) => f1.indexOf(command));
+    for (const [i, command] of commands.entries()) expect([command, (at[i] ?? -1) >= 0]).toEqual([command, true]);
+    expect([...at].sort((x, y) => x - y)).toEqual(at);
+  });
+
+  it('the version is 3.0 or later, its entry names task-366 and bug-448 and keeps (prev 2.9; the Date is 2026-11-24 or later', () => {
+    const version = /^version: "(\d+)\.(\d+)"(.*)$/m.exec(header);
+    expect(version).not.toBeNull();
+    expect(Number(version![1]) * 1000 + Number(version![2])).toBeGreaterThanOrEqual(3000);
+    const rest = version![3] ?? '';
+    const prev29 = rest.indexOf('(prev 2.9');
+    expect(prev29).toBeGreaterThan(0);
+    const entry = rest.slice(0, prev29);
+    expect(entry).toContain('task-366');
+    expect(entry).toContain('bug-448');
+    const date = /\*\*Date:\*\* (\d{4}-\d\d-\d\d)/.exec(TEXT);
+    expect(date).not.toBeNull();
+    expect((date?.[1] ?? '') >= '2026-11-24').toBe(true);
   });
 });
