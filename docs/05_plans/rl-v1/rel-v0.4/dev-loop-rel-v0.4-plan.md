@@ -434,6 +434,31 @@ Secret sweep from a checkout with `dist/` (the known false positives of `bug-402
   (`npx jest test/cli/workflow-unbound-none.integration.test.ts` → 4/4). `docs.parity` runs inside the full suite.
 - 2026-11-18: this branch merged into `main` (`2326814fa`). The approver ruled `backlog_committed` = 50: W1-21 is filed with the `w1` tasks and counted in the baseline. Filing it now keeps 7 fix tasks of 23 open, 30.4 %, so the start set of `## Rulings W1` begins with the two fixes.
 - 2026-11-18: `w1` started from `main` `4afbca9db`. The first `red` of `task-376` and `task-379` withdrawn on the approver's ruling (T3, see the Retrospective): reverts `03f0b1b8c` and `6444299db`, new `qa` agents.
+- 2026-11-26: checkpoint after W1-07 (`task-366` merged into `main` as `ed4f45c6d`). `w1` holds 23 tasks (W1-21 included
+  since 2026-11-18): 15 `done`, 8 `backlog` — `task-361`, `task-368`, `task-369`, `task-370`, `task-371`, `task-372`,
+  `task-377` (the one fix) and `task-383`; every `depends_on` of the eight is `done`. Fix share 222 ‰ (open 9, open fix
+  2, `w2`'s `task-382` counted), backlog growth 51 of 62: both clear. `main` is 202 commits ahead of `origin/main`
+  `fb5b73e01`, not pushed. Since this checkpoint the shared clone runs the pre-push gate (`npm run setup:hooks`,
+  `git-conventions` §9).
+  - **Files the eight name** (task bodies): `task-383` and `task-371`/`task-372` share `src/core/index.ts`;
+    `task-368` and `task-369` share `src/mcp/server.ts`; `task-370` (`src/cli/output.ts`, `src/cli/warning.ts`),
+    `task-377` (`src/core/governance-check.ts`, `scripts/check-governance.cjs`, `scripts/lint-claims.cjs`) and
+    `task-361` (`scripts/test-report.cjs`) share no file with another open task. A design that finds another shared
+    file reports it at its gate (R1 below) and the order is re-checked.
+  - **Order** (≤ 3 in progress, W0-R4; no two tasks sharing a file in progress together, R4 below): start `task-377`,
+    `task-383` and `task-370`. Then, as slots free: `task-368`; `task-371` once both `task-370` and `task-383` are
+    merged; `task-369` once `task-368` is merged; `task-361` in any free slot; `task-372` once `task-371` is merged.
+    The checkpoint stops after W1-11 (`task-370`) and W1-12 (`task-371`) stand; `task-370`'s brief renders `carries` and
+    `unverified` (`task-378`).
+  - **Rules from now on** (approver, 2026-11-24), applied to the rest of `w1` and to `w2`:
+    - R1 — the design lists the tests that pin the contract and the files shared with open tasks; green and refactor
+      re-measure coverage after their last change, before submit.
+    - R2 — the fix task of `bug-534` is in `w2`'s first round.
+    - R3 — build-backlog splits a task expected above about 800 lines of `src/` and `test/`, or carrying several spec
+      amendments; applied to the `w2` backlog now.
+    - R4 — tasks that share a file never run in parallel; parallel lines are grouped by shared files.
+    - R5 — each step is sized to fit 45 minutes, or the green is planned split.
+  - The adoption run before `w2` (`dl-242` merged as `d030fc658`) is a decision of its own, outside these lanes.
 
 #### W0 measures
 
