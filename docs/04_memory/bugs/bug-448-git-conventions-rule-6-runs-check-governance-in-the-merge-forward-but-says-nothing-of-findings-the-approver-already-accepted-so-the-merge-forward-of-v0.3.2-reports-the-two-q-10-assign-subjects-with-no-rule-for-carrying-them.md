@@ -52,4 +52,8 @@ Rule 6 says to run the check and stop on a finding; nothing covers an accepted o
 
 ### Retrospective
 
-- None.
+- Fixed by `task-366` (design D11 (a)): `git-conventions` 3.0 §1 rule 6 says that a gated finding of the merge
+  forward's check stops it unless the approver accepted it before, each accepted finding named by sha, check and the
+  record of its acceptance in the `--reason` of the `merge-forward` phase's `workflow finalize`, and that any other gated
+  finding aborts the merge forward. Pinned by `test/directives/git-conventions.test.ts` (task-366 AC 9). Lesson: a rule
+  that runs a check must also say what to do with a finding the approver has already ruled on.
