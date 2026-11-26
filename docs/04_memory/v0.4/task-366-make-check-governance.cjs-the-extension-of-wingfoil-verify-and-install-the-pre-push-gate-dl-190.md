@@ -1032,6 +1032,7 @@ scripts/check-governance.cjs` → `0`; the effect holds through the verb's `body
 Retrospectives uncommitted; `npx tsc --noEmit -p tsconfig.json` → exit `0`; the invisible-character grep over the allowlist,
 spec-020, the three bug files and this task file → no hit; `npm run -s check:governance -- --base origin/main` → exit `0`, `gated: 0 findings`, `history: 0 findings`, `state not checked: 0 entries (…)`.
 
+**Line correction (light re-review).** The stale bullet is at line 316 of `main`'s `task-378` file, under line 307's heading "What `task-366` (W1-07) may rely on", not at line 77 (a parenthetical under line 70's "What this repository's history says"): `git show main:docs/04_memory/v0.4/task-378-mark-the-memory-history-entries-no-check-verified-and-check-carries-content.md | sed -n '70p;77p;307p;316p'`.
 ### Pending amendments (approver) — added by the fix round
 
 - `spec-020-the-governance-check-verb-the-authority-and-state-rules-over-a-commit-range` — `--reason "Record that
