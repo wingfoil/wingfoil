@@ -27,7 +27,7 @@ only in Execution Notes.
 The capture runs through `bug-ingest` (`.wingfoil/workflows/custom/bug-ingest.yaml`) on branch
 `ingest/w1-task-366-followups`, cut from `main` at `d030fc658`. The plan's context element is `task-366`. Memory
 operations run on the code build of `main` (the `wingfoil-cli` directive); the pinned build is
-`npm run -s wingfoil -- --version` → ``.
+`npm run -s wingfoil -- --version` → `0.3.2 (6de2e13c004bbf419acfa7dc4d98d5a7468cd693)`.
 
 ## Phases / Steps
 
@@ -50,6 +50,8 @@ operations run on the code build of `main` (the `wingfoil-cli` directive); the p
 
 - capture: `bug-553` add `372006f5c`, submit `0bf087c7a`; `bug-554` add `56bdfaf00`, submit `270eb3c96`. Their steps
   were re-run by the orchestrator on `task-366`'s branch at `8c43ba747` and on `main` at `d030fc658`.
+- The submit `ab1cc369c` recorded an empty pinned-build version in Context: the worktree had no `node_modules` when
+  the version was read. The line now gives `npm run -s wingfoil -- --version`'s output, read after linking them.
 
 ### Retrospective
 
