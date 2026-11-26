@@ -1125,3 +1125,13 @@ one introduction for every check (`task-365`'s notes, the parity runs). (3) §6.
 gates or names another `HEAD`, each with its message. (4) `dl-241` (b): §0 says a merge commit's own changes are judged
 by no check. (5) §4.11: the module exports the key reader, which the script re-exports for
 `scripts/check-phase-report.cjs`. Edited in place without a supersede or a state change (`dl-047`), pending the approver's `memory amend`.
+
+**Revision (2026-11-26, `task-366`) — the script's predicates are history.** The Context table, §4.4, §4.6 and §4.9
+cite `scripts/check-governance.cjs` by function and line as read at `fa9d5d6e2` (`checkSubjectAndBracket`,
+`checkBodyAndAuthority`, `approverGrammarFindings`, `authorityFindings`, `verbEdgeFinding`, `AGENT_TRAILER_RE` and the
+offsets beside them), and the spec cites other offsets of the script as read there (§4.13's `:316-355` and `:969`, for
+example); since `task-366` the script defines none of those predicates (§6.1, AC-9), and each check is an exported
+function of `src/core/governance-check.ts`, as §4.13 describes (`checkSubject`, `checkBracket`, `checkBody`,
+`checkAuthority`, `checkState`, `checkVerbEdge`, `checkApprovalAgentTrailer`, `checkWorkflowRecordAuthority`), so those
+citations record the code the checks moved from, not the code that runs them. Edited in place without a supersede or a
+state change (`dl-047`), pending the approver's `memory amend`.
