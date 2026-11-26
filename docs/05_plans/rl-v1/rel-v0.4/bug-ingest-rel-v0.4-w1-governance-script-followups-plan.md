@@ -53,6 +53,12 @@ operations run on the code build of `main` (the `wingfoil-cli` directive); the p
 - The submit `ab1cc369c` recorded an empty pinned-build version in Context: the worktree had no `node_modules` when
   the version was read. The line now gives `npm run -s wingfoil -- --version`'s output, read after linking them.
 
+- triage: the approver ran `memory approve` on `bug-553` (`open → triaged`, `87f7e5223`) and `bug-554`
+  (`open → triaged`, `04c06964d`), from their own terminal. The orchestrator then assigned both to `v0.4` with
+  `wf(bug): assign release v0.4 to …` (`10a38a9ea`, `408ea39ae`), the release line only.
+
 ### Retrospective
 
-- None yet.
+- The capture's Context recorded an empty pinned-build version because the new worktree had no `node_modules` when
+  `npm run -s wingfoil -- --version` ran (submit `ab1cc369c`, corrected in `c8b52319e`). Proposal: the ingest recipe
+  links `node_modules` before reading the pin, or stops when the read prints nothing.
