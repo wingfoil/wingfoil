@@ -68,4 +68,9 @@ since `f9fd7447` — but only by hand verification at `task-291`'s re-review, no
 
 ### Retrospective
 
-- None.
+- Fixed by `task-366` (design D9 (a)): `.githooks/pre-push` reads `$1` and takes its candidates from
+  `refs/remotes/<remote>/main` and `refs/remotes/<remote>/release/<n>.<n>` only when `git remote` lists that remote, so a
+  push to a URL gets no base, and the pushed ref's own tracking ref under that remote is skipped. Pinned by
+  `test/cli/git-hooks.test.ts` (task-366 AC 7: a remote renamed `upstream`, two remotes `origin`/`fork`, a URL, and a
+  local branch `refs/heads/origin/main` beside `refs/remotes/origin/main`). Lesson: a hook that reads a fixed remote
+  name works only in the clone it was written in; the remote git passes as `$1` is the one to read.
