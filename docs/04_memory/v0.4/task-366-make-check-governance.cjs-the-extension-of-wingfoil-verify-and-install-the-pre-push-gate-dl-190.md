@@ -979,6 +979,66 @@ origin/main --json` at `44d08a56e` → exit `0`. The verdict is equal: 0 finding
 `gatedCommits` 27/30/27 → 68/81/68, the commits the take-main brought into the range plus this resume's. Against the run at
 the marker commit `a776522e2`, the only differences are `head` and `otherCommits` 79 → 81 (the qa's two commits).
 
+### fix round after review (developer, 2026-11-26)
+
+**Base.** HEAD `8c43ba747` (the refactor record), the task `in-review`; `node --version` → `v22.21.0`; `git status --short`
+→ the three pending bug Retrospectives only. `main` is ahead by the `dl-242` merge (documents only), not taken.
+
+**The review** returned APPROVE WITH FIXES: 0 blockers, 2 should-fix, 2 follow-ups. The approver ruled (2026-11-26) that
+both should-fix items are fixed in this round, followed by a light re-review, and that the two follow-ups become bugs the
+orchestrator files:
+- should-fix 1 — `spec-020` cites, in the present tense, script predicates this task deleted;
+- should-fix 2 — the "green after take-main" section attributes the stale `reasonRefusalMessage` bullet to this task's
+  design;
+- follow-up (filed by the orchestrator, not changed here) — `bracketTarget` in `scripts/check-governance.cjs` duplicates
+  `parseBracketHops`;
+- follow-up (filed by the orchestrator, not changed here) — `git-conventions` §1 rule 6 lacks `npm run build` after
+  `npm ci`.
+
+**Should-fix 1.** Before: `grep -n "AGENT_TRAILER_RE\|approverGrammarFindings\|authorityFindings\|checkBodyAndAuthority\|checkSubjectAndBracket\|verbEdgeFinding"
+<spec-020>` → lines 77, 79, 80, 82 (the Context table), 306 (§4.4), 368 (§4.6) and 428 (§4.9), each in the present tense;
+`grep -c` of each name in `scripts/check-governance.cjs` → `0`. After: a Revision paragraph "(2026-11-26, `task-366`) — the
+script's predicates are history" appended after this task's 2026-11-24 Revision, left uncommitted for the approver's
+`memory amend`. Each clause was checked against the code before use:
+- `fa9d5d6e2` is the read the citations come from: the Context table says "read at `fa9d5d6e2`" (line 37), and
+  `git show fa9d5d6e2:scripts/check-governance.cjs` defines the six names at the cited lines (`AGENT_TRAILER_RE` `:155`,
+  `verbEdgeFinding` `:434`, `checkSubjectAndBracket` `:478`, `checkBodyAndAuthority` `:533`, `approverGrammarFindings`
+  `:564`, `authorityFindings` `:574`);
+- the functions now running the checks exist: `grep -c "export const <fn>: GovernanceCheckFn" src/core/governance-check.ts`
+  → `1` for each of `checkSubject`, `checkBracket`, `checkBody`, `checkAuthority`, `checkState`, `checkVerbEdge`,
+  `checkApprovalAgentTrailer`;
+- which sections cite what: the grep above.
+Changed from the reviewer's draft: §4.13 does not cite any of the six names (its only script citations are the offsets
+`:316-355` and `:969`), so the paragraph names the Context table, §4.4, §4.6 and §4.9 as citing the names, and names
+§4.13's two offsets as an example of the other citations read at `fa9d5d6e2`; §4.13 describes the checks as exported
+functions of the module but names none of them, so the list is introduced "as §4.13 describes" rather than as its
+contents; `checkWorkflowRecordAuthority` joins the list, since `approverGrammarFindings` and `authorityFindings` also
+served the record check (`git show fa9d5d6e2:scripts/check-governance.cjs | grep -n approverGrammarFindings` → `:1032`).
+
+**The allowlist.** I removed the six "historical" rows that `0753125cb` added to `test/docs/name-resolvability.allowlist.ts`.
+Then `npx jest test/docs/name-resolvability.test.ts --maxWorkers=2` → `1 failed, 10 passed`, the six names unlisted again:
+the Context table, §4.4, §4.6, §4.9 and the new Revision still name them. So the rows stay, their reason now saying where
+the spec names them and that the 2026-11-26 Revision records them as history (`b9d2b1a9a`); the same run → `11 passed`.
+
+**Should-fix 2 — the stale-bullet attribution.** Before: the "green after take-main" section says the bullet "the script's
+own body check calls `reasonRefusalMessage`" is "this design's statement". After (this line; that section is not edited):
+the bullet is in `task-378`'s notes, its "What `task-366` (W1-07) may rely on"
+(`git show main:docs/04_memory/v0.4/task-378-mark-the-memory-history-entries-no-check-verified-and-check-carries-content.md | grep -n reasonRefusalMessage`
+→ line 77), not in this task's design; the correction itself stands (`grep -c reasonRefusalMessage
+scripts/check-governance.cjs` → `0`; the effect holds through the verb's `body` check).
+
+**Checks** (no full suite: no code changed): `bash waitslot.sh && npm test -- test/docs test/lint --maxWorkers=2` → exit
+`0`, `Test Suites: 59 passed, 59 total`, `Tests: 836 passed, 836 total`, with the spec-020 Revision and the three bug
+Retrospectives uncommitted; `npx tsc --noEmit -p tsconfig.json` → exit `0`; the invisible-character grep over the allowlist,
+spec-020, the three bug files and this task file → no hit; `npm run -s check:governance -- --base origin/main` → exit `0`, `gated: 0 findings`, `history: 0 findings`, `state not checked: 0 entries (…)`.
+
+### Pending amendments (approver) — added by the fix round
+
+- `spec-020-the-governance-check-verb-the-authority-and-state-rules-over-a-commit-range` — `--reason "Record that
+  spec-020's citations of the old script's predicates are history since task-366, which removed them when the script
+  became the extension of wingfoil verify."` (`node -e` calling `reasonRefusalMessage(<reason>, { approval: true })` from
+  `dist/memory/index.js` at `8c43ba747` → `null`). The three bug Retrospectives above are unchanged.
+
 ### Retrospective
 
 <!-- Notes for the release's retrospective (dl-115 Q1 (A)), written while the work happens, not
